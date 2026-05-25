@@ -9,30 +9,22 @@ function getToken(): string {
   return token
 }
 
-async function fetchPrivateBlob(url: string): Promise<string | null> {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-    cache: 'no-store',
-  })
+async function findBlob(pathname: string) {
+  const { blobs } = await list({ prefix: pathname, token: getToken() })
+  return blobs.find(b => b.pathname === pathname) ?? null
+}
+
+async function fetchDownload(downloadUrl: string): Promise<string | null> {
+  const res = await fetch(downloadUrl, { cache: 'no-store' })
   if (!res.ok) return null
   return res.text()
 }
 
-async function getBlobUrl(pathname: string): Promise<string | null> {
-  try {
-    const { blobs } = await list({ prefix: pathname, token: getToken() })
-    const match = blobs.find(b => b.pathname === pathname)
-    return match ? match.url : null
-  } catch {
-    return null
-  }
-}
-
 export async function readIndex(): Promise<ActivityMeta[]> {
   try {
-    const url = await getBlobUrl(INDEX_PATH)
-    if (!url) return []
-    const text = await fetchPrivateBlob(url)
+    const blob = await findBlob(INDEX_PATH)
+    if (!blob) return []
+    const text = await fetchDownload(blob.downloadUrl)
     if (!text) return []
     return JSON.parse(text) as ActivityMeta[]
   } catch {
@@ -42,7 +34,7 @@ export async function readIndex(): Promise<ActivityMeta[]> {
 
 export async function writeIndex(index: ActivityMeta[]): Promise<void> {
   await put(INDEX_PATH, JSON.stringify(index), {
-    access: 'public',
+    access: 'private' as unknown as 'public',
     addRandomSuffix: false,
     contentType: 'application/json',
     token: getToken(),
@@ -51,12 +43,19 @@ export async function writeIndex(index: ActivityMeta[]): Promise<void> {
 
 export async function readBlobText(pathname: string): Promise<string | null> {
   try {
-    const url = await getBlobUrl(pathname)
-    if (!url) return null
-    return fetchPrivateBlob(url)
+    const blob = await findBlob(pathname)
+    if (!blob) return null
+    return fetchDownload(blob.downloadUrl)
   } catch {
     return null
   }
 }
 
-export { getBlobUrl }
+export async function getBlobUrl(pathname: string): Promise<string | null> {
+  try {
+    const blob = await findBlob(pathname)
+    return blob ? blob.url : null
+  } catch {
+    return null
+  }
+}
