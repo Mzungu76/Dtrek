@@ -1,26 +1,39 @@
-import { put, list, get } from '@vercel/blob'
+import { put, list } from '@vercel/blob'
 import type { ActivityMeta } from '@/lib/blobStore'
 
 export const INDEX_PATH = 'activities/index.json'
 
-async function streamToText(stream: ReadableStream<Uint8Array>): Promise<string> {
-  const reader = stream.getReader()
-  const decoder = new TextDecoder()
-  const chunks: string[] = []
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (value) chunks.push(decoder.decode(value, { stream: true }))
+function getToken(): string {
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN non configurato')
+  return token
+}
+
+async function fetchPrivateBlob(url: string): Promise<string | null> {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return null
+  return res.text()
+}
+
+async function getBlobUrl(pathname: string): Promise<string | null> {
+  try {
+    const { blobs } = await list({ prefix: pathname, token: getToken() })
+    const match = blobs.find(b => b.pathname === pathname)
+    return match ? match.url : null
+  } catch {
+    return null
   }
-  chunks.push(decoder.decode())
-  return chunks.join('')
 }
 
 export async function readIndex(): Promise<ActivityMeta[]> {
   try {
-    const result = await get(INDEX_PATH, { access: 'private' })
-    if (!result || result.statusCode !== 200 || !result.stream) return []
-    const text = await streamToText(result.stream)
+    const url = await getBlobUrl(INDEX_PATH)
+    if (!url) return []
+    const text = await fetchPrivateBlob(url)
+    if (!text) return []
     return JSON.parse(text) as ActivityMeta[]
   } catch {
     return []
@@ -32,15 +45,18 @@ export async function writeIndex(index: ActivityMeta[]): Promise<void> {
     access: 'private',
     addRandomSuffix: false,
     contentType: 'application/json',
+    token: getToken(),
   })
 }
 
-export async function readBlobAsText(pathname: string): Promise<string | null> {
+export async function readBlobText(pathname: string): Promise<string | null> {
   try {
-    const result = await get(pathname, { access: 'private' })
-    if (!result || result.statusCode !== 200 || !result.stream) return null
-    return await streamToText(result.stream)
+    const url = await getBlobUrl(pathname)
+    if (!url) return null
+    return fetchPrivateBlob(url)
   } catch {
     return null
   }
 }
+
+export { getBlobUrl }
