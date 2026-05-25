@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --terra-400: #e08d3c;
+  --terra-600: #c05a17;
+  --forest-500: #378d44;
+  --forest-700: #20592b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background-color: #f8f7f4;
+  color: #2c2520;
+  min-height: 100vh;
+}
+
+.font-display { font-family: 'Playfair Display', serif; }
+.font-mono    { font-family: 'JetBrains Mono', monospace; }
+
+/* Card hover lift */
+.card-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+}
+
+/* Scrollbar sottile */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c4be9d; border-radius: 3px; }
+
+/* Leaflet override z-index */
+.leaflet-container { z-index: 0; }
+
+/* Drag & drop zone */
+.drop-zone {
+  border: 2px dashed #c4be9d;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.drop-zone.active {
+  border-color: #378d44;
+  background-color: #f1f8f2;
+}
+
+/* Stat card */
+.stat-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+/* Page fade-in */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.4s ease forwards; }
+
+/* Chart tooltip */
+.recharts-tooltip-wrapper { font-family: 'DM Sans', sans-serif !important; font-size: 13px !important; }
