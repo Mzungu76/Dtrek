@@ -1,15 +1,27 @@
-import { put, list, head } from '@vercel/blob'
+import { put, list, get } from '@vercel/blob'
 import type { ActivityMeta } from '@/lib/blobStore'
 
 export const INDEX_PATH = 'activities/index.json'
 
+async function streamToText(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  const chunks: string[] = []
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) chunks.push(decoder.decode(value, { stream: true }))
+  }
+  chunks.push(decoder.decode())
+  return chunks.join('')
+}
+
 export async function readIndex(): Promise<ActivityMeta[]> {
   try {
-    const { blobs } = await list({ prefix: INDEX_PATH })
-    if (!blobs.length) return []
-    const res = await fetch(blobs[0].url, { cache: 'no-store' })
-    if (!res.ok) return []
-    return (await res.json()) as ActivityMeta[]
+    const result = await get(INDEX_PATH, { access: 'private' })
+    if (!result || result.statusCode !== 200 || !result.stream) return []
+    const text = await streamToText(result.stream)
+    return JSON.parse(text) as ActivityMeta[]
   } catch {
     return []
   }
@@ -17,17 +29,17 @@ export async function readIndex(): Promise<ActivityMeta[]> {
 
 export async function writeIndex(index: ActivityMeta[]): Promise<void> {
   await put(INDEX_PATH, JSON.stringify(index), {
-    access: 'public',
+    access: 'private',
     addRandomSuffix: false,
     contentType: 'application/json',
   })
 }
 
-export async function blobExists(pathname: string): Promise<string | null> {
+export async function readBlobAsText(pathname: string): Promise<string | null> {
   try {
-    const { blobs } = await list({ prefix: pathname })
-    const match = blobs.find(b => b.pathname === pathname)
-    return match ? match.url : null
+    const result = await get(pathname, { access: 'private' })
+    if (!result || result.statusCode !== 200 || !result.stream) return null
+    return await streamToText(result.stream)
   } catch {
     return null
   }
