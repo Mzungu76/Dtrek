@@ -1,9 +1,3 @@
-/**
- * blobIndex.ts
- * Helper server-side per leggere e scrivere l'indice delle escursioni su Vercel Blob.
- * Separato dai route file perché Next.js non permette export arbitrari in app/api/*/route.ts
- */
-
 import { put, head } from '@vercel/blob'
 import type { ActivityMeta } from '@/lib/blobStore'
 
