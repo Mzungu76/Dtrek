@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { put, del } from '@vercel/blob'
+import { put, del, list } from '@vercel/blob'
 import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
-import { readIndex, writeIndex, blobExists } from '@/lib/blobIndex'
+import { readIndex, writeIndex, readBlobAsText } from '@/lib/blobIndex'
 
 function idToPath(id: string): string {
   const safe = id.replace(/[^a-zA-Z0-9\-_.]/g, '_')
@@ -10,11 +10,19 @@ function idToPath(id: string): string {
 
 async function readActivity(id: string): Promise<StoredActivity | null> {
   try {
-    const url = await blobExists(idToPath(id))
-    if (!url) return null
-    const res = await fetch(url, { cache: 'no-store' })
-    if (!res.ok) return null
-    return (await res.json()) as StoredActivity
+    const text = await readBlobAsText(idToPath(id))
+    if (!text) return null
+    return JSON.parse(text) as StoredActivity
+  } catch {
+    return null
+  }
+}
+
+async function getBlobUrl(pathname: string): Promise<string | null> {
+  try {
+    const { blobs } = await list({ prefix: pathname })
+    const match = blobs.find(b => b.pathname === pathname)
+    return match ? match.url : null
   } catch {
     return null
   }
@@ -28,7 +36,7 @@ export async function GET(req: NextRequest) {
     if (!activity) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json(activity)
   } catch (e) {
-    console.error('GET /api/activity error:', e)
+    console.error('GET /api/activity:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
@@ -38,7 +46,7 @@ export async function POST(req: NextRequest) {
     const activity = (await req.json()) as StoredActivity
 
     await put(idToPath(activity.id), JSON.stringify(activity), {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: false,
       contentType: 'application/json',
     })
@@ -63,14 +71,14 @@ export async function POST(req: NextRequest) {
       fileName: activity.fileName,
     }
 
-    const existing = index.findIndex(a => a.id === activity.id)
-    if (existing >= 0) index[existing] = meta
+    const idx = index.findIndex(a => a.id === activity.id)
+    if (idx >= 0) index[idx] = meta
     else index.unshift(meta)
     await writeIndex(index)
 
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('POST /api/activity error:', e)
+    console.error('POST /api/activity:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
@@ -87,7 +95,7 @@ export async function PATCH(req: NextRequest) {
 
     const updated: StoredActivity = { ...activity, ...patch }
     await put(idToPath(id), JSON.stringify(updated), {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: false,
       contentType: 'application/json',
     })
@@ -101,7 +109,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('PATCH /api/activity error:', e)
+    console.error('PATCH /api/activity:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
@@ -111,7 +119,7 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    const url = await blobExists(idToPath(id))
+    const url = await getBlobUrl(idToPath(id))
     if (url) await del(url)
 
     const index = (await readIndex()).filter(a => a.id !== id)
@@ -119,7 +127,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (e) {
-    console.error('DELETE /api/activity error:', e)
+    console.error('DELETE /api/activity:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
