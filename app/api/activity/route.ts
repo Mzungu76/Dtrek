@@ -3,12 +3,11 @@ import { put, del } from '@vercel/blob'
 import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
 import { readIndex, writeIndex, readBlobText, getBlobUrl } from '@/lib/blobIndex'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const PRIVATE = 'private' as any
+const STORE_ID = process.env.blob2dtrek_STORE_ID
 
 function getToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN non configurato')
+  const token = process.env.blob2dtrek_READ_WRITE_TOKEN ?? process.env.BLOB_READ_WRITE_TOKEN
+  if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
   return token
 }
 
@@ -45,10 +44,10 @@ export async function POST(req: NextRequest) {
     const activity = (await req.json()) as StoredActivity
 
     await put(idToPath(activity.id), JSON.stringify(activity), {
-      access: PRIVATE,
+      access: 'public',
+      storeId: STORE_ID,
       addRandomSuffix: false,
       contentType: 'application/json',
-      token: getToken(),
     })
 
     const index = await readIndex()
@@ -95,10 +94,10 @@ export async function PATCH(req: NextRequest) {
 
     const updated: StoredActivity = { ...activity, ...patch }
     await put(idToPath(id), JSON.stringify(updated), {
-      access: PRIVATE,
+      access: 'public',
+      storeId: STORE_ID,
       addRandomSuffix: false,
       contentType: 'application/json',
-      token: getToken(),
     })
 
     const index = await readIndex()
