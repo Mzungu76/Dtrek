@@ -42,7 +42,7 @@ export async function readIndex(): Promise<ActivityMeta[]> {
 
 export async function writeIndex(index: ActivityMeta[]): Promise<void> {
   await put(INDEX_PATH, JSON.stringify(index), {
-    access: 'private',
+    access: 'public',
     addRandomSuffix: false,
     contentType: 'application/json',
     token: getToken(),
