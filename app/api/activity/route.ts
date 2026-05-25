@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     const activity = (await req.json()) as StoredActivity
 
     await put(idToPath(activity.id), JSON.stringify(activity), {
-      access: 'private',
+      access: 'private' as unknown as 'public',
       addRandomSuffix: false,
       contentType: 'application/json',
       token: getToken(),
@@ -92,7 +92,7 @@ export async function PATCH(req: NextRequest) {
 
     const updated: StoredActivity = { ...activity, ...patch }
     await put(idToPath(id), JSON.stringify(updated), {
-      access: 'private',
+      access: 'private' as unknown as 'public',
       addRandomSuffix: false,
       contentType: 'application/json',
       token: getToken(),
