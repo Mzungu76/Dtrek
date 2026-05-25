@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { put, del, list } from '@vercel/blob'
+import { put, del } from '@vercel/blob'
 import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
-import { readIndex, writeIndex, readBlobAsText } from '@/lib/blobIndex'
+import { readIndex, writeIndex, readBlobText, getBlobUrl } from '@/lib/blobIndex'
+
+function getToken(): string {
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN non configurato')
+  return token
+}
 
 function idToPath(id: string): string {
   const safe = id.replace(/[^a-zA-Z0-9\-_.]/g, '_')
@@ -10,19 +16,9 @@ function idToPath(id: string): string {
 
 async function readActivity(id: string): Promise<StoredActivity | null> {
   try {
-    const text = await readBlobAsText(idToPath(id))
+    const text = await readBlobText(idToPath(id))
     if (!text) return null
     return JSON.parse(text) as StoredActivity
-  } catch {
-    return null
-  }
-}
-
-async function getBlobUrl(pathname: string): Promise<string | null> {
-  try {
-    const { blobs } = await list({ prefix: pathname })
-    const match = blobs.find(b => b.pathname === pathname)
-    return match ? match.url : null
   } catch {
     return null
   }
@@ -49,6 +45,7 @@ export async function POST(req: NextRequest) {
       access: 'private',
       addRandomSuffix: false,
       contentType: 'application/json',
+      token: getToken(),
     })
 
     const index = await readIndex()
@@ -98,6 +95,7 @@ export async function PATCH(req: NextRequest) {
       access: 'private',
       addRandomSuffix: false,
       contentType: 'application/json',
+      token: getToken(),
     })
 
     const index = await readIndex()
@@ -120,7 +118,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
     const url = await getBlobUrl(idToPath(id))
-    if (url) await del(url)
+    if (url) await del(url, { token: getToken() })
 
     const index = (await readIndex()).filter(a => a.id !== id)
     await writeIndex(index)
