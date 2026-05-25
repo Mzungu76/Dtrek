@@ -3,10 +3,10 @@ import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { parseTcx } from '@/lib/tcxParser'
-import { saveActivity } from '@/lib/store'
+import { saveActivity } from '@/lib/blobStore'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain } from 'lucide-react'
 
-type Status = 'idle' | 'parsing' | 'success' | 'error'
+type Status = 'idle' | 'parsing' | 'saving' | 'success' | 'error'
 
 export default function UploadPage() {
   const router = useRouter()
@@ -27,25 +27,29 @@ export default function UploadPage() {
     try {
       const text = await file.text()
       const activity = parseTcx(text)
-      saveActivity({ ...activity, fileName: file.name })
+      setStatus('saving')
+      await saveActivity({ ...activity, fileName: file.name })
       setStatus('success')
       setTimeout(() => router.push(`/escursione/${encodeURIComponent(activity.id)}`), 1200)
     } catch (e) {
+      console.error(e)
       setStatus('error')
-      setErrorMsg('Errore nel parsing del file TCX. Verificate che sia un file valido.')
+      setErrorMsg('Errore nel caricamento. Verificate che il file TCX sia valido e che Vercel Blob sia configurato.')
     }
   }, [router])
 
   const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
+    e.preventDefault(); setDragging(false)
     const file = e.dataTransfer.files[0]
     if (file) processFile(file)
   }, [processFile])
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) processFile(file)
+  const statusLabels: Record<Status, string> = {
+    idle:    '',
+    parsing: 'Analisi file TCX…',
+    saving:  'Salvataggio su Vercel Blob…',
+    success: 'Escursione salvata!',
+    error:   '',
   }
 
   return (
@@ -64,24 +68,17 @@ export default function UploadPage() {
           </p>
         </div>
 
-        {/* Drop zone */}
         <div
-          className={`drop-zone rounded-2xl p-12 text-center cursor-pointer select-none transition-all ${
-            dragging ? 'active scale-[1.01]' : ''
-          } ${status === 'success' ? 'border-forest-400 bg-forest-50' : ''}
-          ${status === 'error' ? 'border-red-300 bg-red-50' : ''}`}
+          className={`drop-zone rounded-2xl p-12 text-center cursor-pointer select-none transition-all
+            ${dragging ? 'active scale-[1.01]' : ''}
+            ${status === 'success' ? 'border-forest-400 bg-forest-50' : ''}
+            ${status === 'error'   ? 'border-red-300 bg-red-50'     : ''}`}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
-          onClick={() => status !== 'success' && inputRef.current?.click()}
+          onClick={() => !['parsing','saving','success'].includes(status) && inputRef.current?.click()}
         >
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".tcx"
-            className="hidden"
-            onChange={onFileChange}
-          />
+          <input ref={inputRef} type="file" accept=".tcx" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
 
           {status === 'idle' && (
             <>
@@ -91,10 +88,10 @@ export default function UploadPage() {
             </>
           )}
 
-          {status === 'parsing' && (
+          {(status === 'parsing' || status === 'saving') && (
             <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 border-3 border-forest-300 border-t-forest-600 rounded-full animate-spin" />
-              <p className="text-stone-600 font-medium">Analisi in corso…</p>
+              <div className="w-10 h-10 border-4 border-forest-200 border-t-forest-600 rounded-full animate-spin" />
+              <p className="text-stone-600 font-medium">{statusLabels[status]}</p>
               <p className="text-stone-400 text-sm font-mono">{fileName}</p>
             </div>
           )}
@@ -102,7 +99,7 @@ export default function UploadPage() {
           {status === 'success' && (
             <div className="flex flex-col items-center gap-3">
               <CheckCircle className="w-12 h-12 text-forest-500" />
-              <p className="text-forest-700 font-semibold text-lg">Escursione importata!</p>
+              <p className="text-forest-700 font-semibold text-lg">Escursione salvata su Blob!</p>
               <p className="text-stone-400 text-sm font-mono">{fileName}</p>
               <p className="text-stone-400 text-xs">Redirect al dettaglio…</p>
             </div>
@@ -112,7 +109,7 @@ export default function UploadPage() {
             <div className="flex flex-col items-center gap-3">
               <AlertCircle className="w-12 h-12 text-red-400" />
               <p className="text-red-600 font-semibold">Errore nel caricamento</p>
-              <p className="text-red-400 text-sm">{errorMsg}</p>
+              <p className="text-red-400 text-sm max-w-xs">{errorMsg}</p>
               <button
                 className="mt-2 px-4 py-2 text-sm bg-white border border-red-200 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
                 onClick={e => { e.stopPropagation(); setStatus('idle'); setErrorMsg('') }}
@@ -123,19 +120,16 @@ export default function UploadPage() {
           )}
         </div>
 
-        {/* Info box */}
         <div className="mt-8 bg-white rounded-xl border border-stone-200 p-5">
           <div className="flex items-start gap-3">
             <FileText className="w-5 h-5 text-terra-500 mt-0.5 shrink-0" />
             <div>
-              <p className="font-medium text-stone-700 text-sm mb-1">Cosa viene estratto dal file TCX</p>
+              <p className="font-medium text-stone-700 text-sm mb-1">Archiviazione su Vercel Blob</p>
               <ul className="text-stone-500 text-sm space-y-0.5 list-disc list-inside">
-                <li>Tracciato GPS completo (latitudine, longitudine, quota)</li>
-                <li>Frequenza cardiaca (media, massima, per secondo)</li>
-                <li>Velocità istantanea e media</li>
-                <li>Distanza, durata e calorie</li>
-                <li>Dislivello positivo e negativo</li>
-                <li>Dati del dispositivo</li>
+                <li>Il file viene analizzato nel browser</li>
+                <li>I dati vengono salvati permanentemente su Vercel Blob</li>
+                <li>Accessibili da qualsiasi dispositivo</li>
+                <li>Tracciato GPS, FC, velocità, altimetria completi</li>
               </ul>
             </div>
           </div>

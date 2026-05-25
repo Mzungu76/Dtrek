@@ -2,24 +2,27 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
-import { getAllActivities, type StoredActivity } from '@/lib/store'
+import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration, msToKmh } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Mountain, Upload, Heart, Route, Clock, ChevronRight, Flame } from 'lucide-react'
+import { Mountain, Upload, Heart, Route, Clock, ChevronRight, Flame, Loader2 } from 'lucide-react'
 
 export default function HomePage() {
-  const [activities, setActivities] = useState<StoredActivity[]>([])
+  const [activities, setActivities] = useState<ActivityMeta[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setActivities(getAllActivities())
+    getAllActivities()
+      .then(setActivities)
+      .finally(() => setLoading(false))
   }, [])
 
   return (
     <div className="min-h-screen bg-stone-50">
       <Navbar />
 
-      {/* Hero header */}
+      {/* Hero */}
       <div className="bg-gradient-to-br from-forest-800 to-forest-900 text-white">
         <div className="max-w-6xl mx-auto px-4 py-10">
           <div className="flex items-end justify-between flex-wrap gap-4">
@@ -29,9 +32,11 @@ export default function HomePage() {
                 <span className="text-forest-300">di trekking</span>
               </h1>
               <p className="text-forest-400 text-sm mt-2">
-                {activities.length > 0
-                  ? `${activities.length} escursion${activities.length === 1 ? 'e' : 'i'} registrat${activities.length === 1 ? 'a' : 'e'}`
-                  : 'Nessuna escursione ancora'}
+                {loading
+                  ? 'Caricamento…'
+                  : activities.length > 0
+                    ? `${activities.length} escursion${activities.length === 1 ? 'e' : 'i'} registrat${activities.length === 1 ? 'a' : 'e'}`
+                    : 'Nessuna escursione ancora'}
               </p>
             </div>
             <Link
@@ -45,8 +50,12 @@ export default function HomePage() {
       </div>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        {activities.length === 0 ? (
-          /* Stato vuoto */
+        {loading ? (
+          <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>Caricamento escursioni…</span>
+          </div>
+        ) : activities.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
               <Mountain className="w-10 h-10 text-forest-400" />
@@ -75,7 +84,6 @@ export default function HomePage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    {/* Titolo + data */}
                     <div className="flex items-center gap-3 mb-1">
                       <span className="text-xs font-mono text-stone-400">
                         {format(new Date(a.startTime), 'dd MMM yy', { locale: it })}
@@ -87,7 +95,7 @@ export default function HomePage() {
                       ))}
                     </div>
                     <h2 className="font-display text-lg font-semibold text-stone-800 truncate">
-                      {a.title ?? a.notes ?? 'Escursione'}
+                      {a.title ?? 'Escursione'}
                     </h2>
                     {a.userNotes && (
                       <p className="text-stone-400 text-sm mt-0.5 line-clamp-1">{a.userNotes}</p>
@@ -95,28 +103,21 @@ export default function HomePage() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-stone-300 shrink-0 mt-1" />
                 </div>
-
-                {/* Metriche inline */}
                 <div className="flex items-center gap-4 mt-3 flex-wrap">
                   <span className="flex items-center gap-1 text-sm text-forest-700 font-medium">
-                    <Route className="w-3.5 h-3.5" />
-                    {(a.distanceMeters / 1000).toFixed(2)} km
+                    <Route className="w-3.5 h-3.5" />{(a.distanceMeters / 1000).toFixed(2)} km
                   </span>
                   <span className="flex items-center gap-1 text-sm text-stone-500">
-                    <Clock className="w-3.5 h-3.5" />
-                    {formatDuration(a.totalTimeSeconds)}
+                    <Clock className="w-3.5 h-3.5" />{formatDuration(a.totalTimeSeconds)}
                   </span>
                   <span className="flex items-center gap-1 text-sm text-red-500">
-                    <Heart className="w-3.5 h-3.5" />
-                    {a.avgHeartRate} bpm
+                    <Heart className="w-3.5 h-3.5" />{a.avgHeartRate} bpm
                   </span>
                   <span className="flex items-center gap-1 text-sm text-terra-600">
-                    <Flame className="w-3.5 h-3.5" />
-                    {a.calories} kcal
+                    <Flame className="w-3.5 h-3.5" />{a.calories} kcal
                   </span>
                   <span className="flex items-center gap-1 text-sm text-forest-600">
-                    <Mountain className="w-3.5 h-3.5" />
-                    ↑ {a.elevationGain.toFixed(0)} m
+                    <Mountain className="w-3.5 h-3.5" />↑ {a.elevationGain.toFixed(0)} m
                   </span>
                 </div>
               </Link>
