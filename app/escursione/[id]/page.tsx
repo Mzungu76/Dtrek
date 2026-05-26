@@ -14,10 +14,11 @@ import {
 import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
+import { exportActivityToGpx } from '@/utils/exportGpx'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
-  ArrowLeft, FileSpreadsheet, FileText,
+  ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
   Pencil, Check, X, Trash2, Loader2,
 } from 'lucide-react'
@@ -143,6 +144,10 @@ export default function EscursionePage() {
               <button onClick={() => exportActivityToDoc(activity)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 hover:bg-forest-600 rounded-lg text-sm transition-colors">
                 <FileText className="w-4 h-4" /> Word
+              </button>
+              <button onClick={() => exportActivityToGpx(activity)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 hover:bg-forest-600 rounded-lg text-sm transition-colors">
+                <Map className="w-4 h-4" /> GPX
               </button>
               <button onClick={handleDelete} disabled={saving}
                 className="flex items-center gap-1.5 px-3 py-2 bg-red-800/50 hover:bg-red-700 rounded-lg text-sm transition-colors">

@@ -1,12 +1,13 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Mountain, Upload, BarChart2, BookOpen } from 'lucide-react'
+import { Mountain, Upload, BarChart2, BookOpen, Map } from 'lucide-react'
 
 const links = [
   { href: '/',             label: 'Diario',      icon: BookOpen   },
   { href: '/upload',       label: 'Carica TCX',  icon: Upload     },
   { href: '/statistiche',  label: 'Statistiche', icon: BarChart2  },
+  { href: '/mappa',        label: 'Mappa',       icon: Map        },
 ]
 
 export default function Navbar() {
