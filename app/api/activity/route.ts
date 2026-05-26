@@ -3,6 +3,8 @@ import { put, del } from '@vercel/blob'
 import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
 import { readIndex, writeIndex, readBlobText, getBlobUrl } from '@/lib/blobIndex'
 
+export const dynamic = 'force-dynamic'
+
 function getToken(): string {
   const token = process.env.blob2dtrek_READ_WRITE_TOKEN
   if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
