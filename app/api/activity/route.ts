@@ -4,8 +4,8 @@ import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
 import { readIndex, writeIndex, readBlobText, getBlobUrl } from '@/lib/blobIndex'
 
 function getToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN non configurato')
+  const token = process.env.blob2dtrek_READ_WRITE_TOKEN
+  if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
   return token
 }
 
@@ -42,10 +42,10 @@ export async function POST(req: NextRequest) {
     const activity = (await req.json()) as StoredActivity
 
     await put(idToPath(activity.id), JSON.stringify(activity), {
-      access: 'private' as unknown as 'public',
+      access: 'public',
+      token: getToken(),
       addRandomSuffix: false,
       contentType: 'application/json',
-      token: getToken(),
     })
 
     const index = await readIndex()
@@ -92,10 +92,10 @@ export async function PATCH(req: NextRequest) {
 
     const updated: StoredActivity = { ...activity, ...patch }
     await put(idToPath(id), JSON.stringify(updated), {
-      access: 'private' as unknown as 'public',
+      access: 'public',
+      token: getToken(),
       addRandomSuffix: false,
       contentType: 'application/json',
-      token: getToken(),
     })
 
     const index = await readIndex()

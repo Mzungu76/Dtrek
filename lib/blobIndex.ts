@@ -4,29 +4,28 @@ import type { ActivityMeta } from '@/lib/blobStore'
 export const INDEX_PATH = 'activities/index.json'
 
 function getToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (!token) throw new Error('BLOB_READ_WRITE_TOKEN non configurato')
+  const token = process.env.blob2dtrek_READ_WRITE_TOKEN
+  if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
   return token
 }
 
-async function findBlob(pathname: string) {
-  const { blobs } = await list({ prefix: pathname, token: getToken() })
-  return blobs.find(b => b.pathname === pathname) ?? null
-}
-
-async function fetchDownload(downloadUrl: string): Promise<string | null> {
-  const res = await fetch(downloadUrl, { cache: 'no-store' })
-  if (!res.ok) return null
-  return res.text()
+async function findBlobUrl(pathname: string): Promise<string | null> {
+  try {
+    const { blobs } = await list({ prefix: pathname, token: getToken() })
+    const match = blobs.find(b => b.pathname === pathname)
+    return match?.url ?? null
+  } catch {
+    return null
+  }
 }
 
 export async function readIndex(): Promise<ActivityMeta[]> {
   try {
-    const blob = await findBlob(INDEX_PATH)
-    if (!blob) return []
-    const text = await fetchDownload(blob.downloadUrl)
-    if (!text) return []
-    return JSON.parse(text) as ActivityMeta[]
+    const url = await findBlobUrl(INDEX_PATH)
+    if (!url) return []
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return []
+    return JSON.parse(await res.text()) as ActivityMeta[]
   } catch {
     return []
   }
@@ -34,28 +33,25 @@ export async function readIndex(): Promise<ActivityMeta[]> {
 
 export async function writeIndex(index: ActivityMeta[]): Promise<void> {
   await put(INDEX_PATH, JSON.stringify(index), {
-    access: 'private' as unknown as 'public',
+    access: 'public',
+    token: getToken(),
     addRandomSuffix: false,
     contentType: 'application/json',
-    token: getToken(),
   })
 }
 
 export async function readBlobText(pathname: string): Promise<string | null> {
   try {
-    const blob = await findBlob(pathname)
-    if (!blob) return null
-    return fetchDownload(blob.downloadUrl)
+    const url = await findBlobUrl(pathname)
+    if (!url) return null
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return null
+    return res.text()
   } catch {
     return null
   }
 }
 
 export async function getBlobUrl(pathname: string): Promise<string | null> {
-  try {
-    const blob = await findBlob(pathname)
-    return blob ? blob.url : null
-  } catch {
-    return null
-  }
+  return findBlobUrl(pathname)
 }
