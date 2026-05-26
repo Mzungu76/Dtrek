@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { put, del } from '@vercel/blob'
 import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
+import type { TrackPoint } from '@/lib/tcxParser'
 import { readIndex, writeIndex, readBlobText, getBlobUrl } from '@/lib/blobIndex'
 
 export const dynamic = 'force-dynamic'
@@ -14,6 +15,20 @@ function getToken(): string {
 function idToPath(id: string): string {
   const safe = id.replace(/[^a-zA-Z0-9\-_.]/g, '_')
   return `activities/${safe}.json`
+}
+
+function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
+  const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
+  if (valid.length === 0) return []
+  const count = Math.min(valid.length, maxPts)
+  const step = (valid.length - 1) / (count - 1 || 1)
+  return Array.from({ length: count }, (_, i) => {
+    const idx = Math.min(Math.round(i * step), valid.length - 1)
+    return [
+      Math.round(valid[idx].lat! * 1e5) / 1e5,
+      Math.round(valid[idx].lon! * 1e5) / 1e5,
+    ]
+  })
 }
 
 async function readActivity(id: string): Promise<StoredActivity | null> {
@@ -68,6 +83,7 @@ export async function POST(req: NextRequest) {
       tags: activity.tags,
       userNotes: activity.userNotes,
       fileName: activity.fileName,
+      routePolyline: downsamplePolyline(activity.trackPoints ?? []),
     }
 
     const idx = index.findIndex(a => a.id === activity.id)

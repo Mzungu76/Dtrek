@@ -35,6 +35,7 @@ export interface ActivityMeta {
   tags?: string[]
   userNotes?: string
   fileName?: string
+  routePolyline?: [number, number][]
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
