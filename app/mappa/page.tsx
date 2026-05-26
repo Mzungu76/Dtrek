@@ -3,13 +3,15 @@ import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
-import { Map, ExternalLink, Loader2, Info } from 'lucide-react'
+import { Map, ExternalLink, Loader2, Info, Share2 } from 'lucide-react'
+import ShareModal from '@/components/ShareModal'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
 
 export default function MappaPage() {
   const [activities, setActivities] = useState<ActivityMeta[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]       = useState(true)
+  const [showShare, setShowShare]   = useState(false)
 
   useEffect(() => {
     getAllActivities()
@@ -35,22 +37,32 @@ export default function MappaPage() {
 
       <main className="max-w-6xl mx-auto px-4 py-8 fade-up">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-forest-100 flex items-center justify-center">
-            <Map className="w-5 h-5 text-forest-700" />
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-forest-100 flex items-center justify-center">
+              <Map className="w-5 h-5 text-forest-700" />
+            </div>
+            <div>
+              <h1 className="font-display text-2xl font-semibold text-stone-800">
+                Mappa generale
+              </h1>
+              <p className="text-stone-500 text-sm mt-0.5">
+                {loading
+                  ? 'Caricamento…'
+                  : routesWithPolyline.length > 0
+                    ? `${routesWithPolyline.length} percors${routesWithPolyline.length === 1 ? 'o' : 'i'} con GPS`
+                    : 'Nessun percorso GPS disponibile'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-display text-2xl font-semibold text-stone-800">
-              Mappa generale
-            </h1>
-            <p className="text-stone-500 text-sm mt-0.5">
-              {loading
-                ? 'Caricamento…'
-                : routesWithPolyline.length > 0
-                  ? `${routesWithPolyline.length} percors${routesWithPolyline.length === 1 ? 'o' : 'i'} con GPS`
-                  : 'Nessun percorso GPS disponibile'}
-            </p>
-          </div>
+          {!loading && activities.length > 0 && (
+            <button
+              onClick={() => setShowShare(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              <Share2 className="w-4 h-4" /> Condividi mappa
+            </button>
+          )}
         </div>
 
         {/* Mappa */}
@@ -129,6 +141,10 @@ export default function MappaPage() {
           </div>
         </section>
       </main>
+
+      {showShare && (
+        <ShareModal kind="map" activities={activities} onClose={() => setShowShare(false)} />
+      )}
     </div>
   )
 }

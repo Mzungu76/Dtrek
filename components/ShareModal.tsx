@@ -1,0 +1,247 @@
+'use client'
+import { useState, useEffect } from 'react'
+import {
+  X, Download, Facebook, Copy, Check, Share2,
+} from 'lucide-react'
+import {
+  ShareFormat,
+  ActivityShareOpts, StatsShareOpts, ComparisonShareOpts, MapShareOpts,
+  generateActivityImage, generateStatsImage, generateComparisonImage, generateMapImage,
+} from '@/utils/shareImage'
+import { ActivityMeta } from '@/lib/blobStore'
+
+// ─── Toggle ────────────────────────────────────────────────────────────────────
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+      <button
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`w-9 h-5 rounded-full relative transition-colors ${checked ? 'bg-forest-500' : 'bg-stone-200'}`}
+      >
+        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${checked ? 'left-4' : 'left-0.5'}`} />
+      </button>
+      <span className="text-sm text-stone-600">{label}</span>
+    </label>
+  )
+}
+
+// ─── Props ─────────────────────────────────────────────────────────────────────
+
+interface ActivityShareProps { kind: 'activity'; activity: ActivityMeta; onClose: () => void }
+interface StatsShareProps    { kind: 'stats';    activities: ActivityMeta[]; onClose: () => void }
+interface CompareShareProps  { kind: 'comparison'; activities: ActivityMeta[]; onClose: () => void }
+interface MapShareProps      { kind: 'map';      activities: ActivityMeta[]; onClose: () => void }
+
+export type ShareModalProps = ActivityShareProps | StatsShareProps | CompareShareProps | MapShareProps
+
+// ─── Modal ─────────────────────────────────────────────────────────────────────
+
+export default function ShareModal(props: ShareModalProps) {
+  const { onClose } = props
+  const [fmt, setFmt]         = useState<ShareFormat>('1:1')
+  const [imageUrl, setImageUrl] = useState('')
+  const [copied, setCopied]   = useState(false)
+
+  const [actOpts, setActOpts] = useState<ActivityShareOpts>({
+    showRoute: true, showDistance: true, showElevation: true,
+    showDuration: true, showHR: true, showCalories: true, showDate: true,
+  })
+  const [statsOpts, setStatsOpts] = useState<StatsShareOpts>({
+    showTotals: true, showStreaks: true, showRecords: true,
+  })
+  const [cmpOpts, setCmpOpts] = useState<ComparisonShareOpts>({
+    showDistance: true, showElevation: true, showDuration: true,
+    showHR: true, showCalories: true, showPace: false,
+  })
+  const [mapOpts, setMapOpts] = useState<MapShareOpts>({ showCount: true })
+
+  // Regenerate image whenever format or options change
+  useEffect(() => {
+    try {
+      let url = ''
+      if (props.kind === 'activity') {
+        url = generateActivityImage(props.activity, actOpts, fmt)
+      } else if (props.kind === 'stats') {
+        url = generateStatsImage(props.activities, statsOpts, fmt)
+      } else if (props.kind === 'comparison') {
+        url = generateComparisonImage(props.activities, cmpOpts, fmt)
+      } else if (props.kind === 'map') {
+        url = generateMapImage(props.activities, mapOpts, fmt)
+      }
+      setImageUrl(url)
+    } catch (e) {
+      console.error('Share image error:', e)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fmt, actOpts, statsOpts, cmpOpts, mapOpts, props.kind,
+      (props as ActivityShareProps).activity,
+      (props as StatsShareProps).activities])
+
+  const handleDownload = () => {
+    const a = document.createElement('a')
+    a.href = imageUrl
+    a.download = `dtrek-${props.kind}-${Date.now()}.png`
+    a.click()
+  }
+
+  const handleFacebook = () => {
+    window.open(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`,
+      '_blank', 'width=600,height=400,noopener',
+    )
+  }
+
+  const handleCopy = async () => {
+    try {
+      const blob = await fetch(imageUrl).then(r => r.blob())
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+    } catch {
+      await navigator.clipboard.writeText(window.location.href).catch(() => {})
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2200)
+  }
+
+  const options = () => {
+    if (props.kind === 'activity') return (
+      <div className="space-y-2.5">
+        <Toggle label="Percorso GPS"       checked={actOpts.showRoute}     onChange={v => setActOpts(o => ({ ...o, showRoute: v }))} />
+        <Toggle label="Data"               checked={actOpts.showDate}      onChange={v => setActOpts(o => ({ ...o, showDate: v }))} />
+        <Toggle label="Distanza"           checked={actOpts.showDistance}  onChange={v => setActOpts(o => ({ ...o, showDistance: v }))} />
+        <Toggle label="Dislivello"         checked={actOpts.showElevation} onChange={v => setActOpts(o => ({ ...o, showElevation: v }))} />
+        <Toggle label="Durata"             checked={actOpts.showDuration}  onChange={v => setActOpts(o => ({ ...o, showDuration: v }))} />
+        <Toggle label="Frequenza cardiaca" checked={actOpts.showHR}        onChange={v => setActOpts(o => ({ ...o, showHR: v }))} />
+        <Toggle label="Calorie"            checked={actOpts.showCalories}  onChange={v => setActOpts(o => ({ ...o, showCalories: v }))} />
+      </div>
+    )
+    if (props.kind === 'stats') return (
+      <div className="space-y-2.5">
+        <Toggle label="Totali (km, tempo, calorie, D+)" checked={statsOpts.showTotals}  onChange={v => setStatsOpts(o => ({ ...o, showTotals: v }))} />
+        <Toggle label="Streak"                           checked={statsOpts.showStreaks} onChange={v => setStatsOpts(o => ({ ...o, showStreaks: v }))} />
+        <Toggle label="Record personali"                 checked={statsOpts.showRecords} onChange={v => setStatsOpts(o => ({ ...o, showRecords: v }))} />
+      </div>
+    )
+    if (props.kind === 'comparison') return (
+      <div className="space-y-2.5">
+        <Toggle label="Distanza"           checked={cmpOpts.showDistance}  onChange={v => setCmpOpts(o => ({ ...o, showDistance: v }))} />
+        <Toggle label="Dislivello"         checked={cmpOpts.showElevation} onChange={v => setCmpOpts(o => ({ ...o, showElevation: v }))} />
+        <Toggle label="Durata"             checked={cmpOpts.showDuration}  onChange={v => setCmpOpts(o => ({ ...o, showDuration: v }))} />
+        <Toggle label="Frequenza cardiaca" checked={cmpOpts.showHR}        onChange={v => setCmpOpts(o => ({ ...o, showHR: v }))} />
+        <Toggle label="Calorie"            checked={cmpOpts.showCalories}  onChange={v => setCmpOpts(o => ({ ...o, showCalories: v }))} />
+        <Toggle label="Passo medio"        checked={cmpOpts.showPace}      onChange={v => setCmpOpts(o => ({ ...o, showPace: v }))} />
+      </div>
+    )
+    if (props.kind === 'map') return (
+      <div className="space-y-2.5">
+        <Toggle label="Numero di percorsi" checked={mapOpts.showCount} onChange={v => setMapOpts(o => ({ ...o, showCount: v }))} />
+      </div>
+    )
+    return null
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 shrink-0">
+          <div className="flex items-center gap-2">
+            <Share2 className="w-5 h-5 text-forest-600" />
+            <h2 className="font-semibold text-stone-800">Condividi</h2>
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Preview */}
+            <div>
+              <p className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-2">Anteprima</p>
+              <div
+                className="rounded-xl overflow-hidden bg-[#1a3c26] flex items-center justify-center"
+                style={{ aspectRatio: fmt === '1:1' ? '1/1' : '16/9' }}
+              >
+                {imageUrl
+                  ? <img src={imageUrl} alt="anteprima condivisione" className="w-full h-full object-contain" />
+                  : <span className="text-stone-500 text-sm">Generazione…</span>
+                }
+              </div>
+            </div>
+
+            {/* Options */}
+            <div className="space-y-5">
+              {/* Format */}
+              <div>
+                <p className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-2">Formato</p>
+                <div className="flex gap-2">
+                  {(['1:1', '16:9'] as ShareFormat[]).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setFmt(f)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all
+                        ${fmt === f
+                          ? 'bg-forest-50 border-forest-400 text-forest-700'
+                          : 'bg-white border-stone-200 text-stone-500 hover:border-stone-300'}`}
+                    >
+                      {f === '1:1' ? '1:1 — Instagram' : '16:9 — Facebook'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Content */}
+              <div>
+                <p className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-3">Contenuto</p>
+                {options()}
+              </div>
+
+              {/* Note */}
+              <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-500 leading-relaxed space-y-1">
+                <p><span className="font-semibold text-stone-700">Instagram:</span> scarica l&apos;immagine e condividila dal Feed o nelle Storie.</p>
+                <p><span className="font-semibold text-stone-700">Facebook:</span> scarica l&apos;immagine oppure usa il pulsante qui sotto per condividere la pagina.</p>
+              </div>
+
+              {/* Actions */}
+              <div className="space-y-2">
+                <button
+                  onClick={handleDownload}
+                  disabled={!imageUrl}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium text-sm transition-colors disabled:opacity-40"
+                >
+                  <Download className="w-4 h-4" /> Scarica immagine (.png)
+                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handleFacebook}
+                    className="flex items-center justify-center gap-2 py-2.5 bg-[#1877f2] hover:bg-[#1464d8] text-white rounded-xl text-sm font-medium transition-colors"
+                  >
+                    <Facebook className="w-4 h-4" /> Facebook
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    disabled={!imageUrl}
+                    className={`flex items-center justify-center gap-2 py-2.5 border rounded-xl text-sm font-medium transition-all disabled:opacity-40
+                      ${copied
+                        ? 'bg-forest-50 border-forest-300 text-forest-700'
+                        : 'bg-white border-stone-200 text-stone-600 hover:border-stone-300'}`}
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied ? 'Copiata!' : 'Copia immagine'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

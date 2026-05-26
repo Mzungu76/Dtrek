@@ -19,8 +19,9 @@ import {
 import {
   FileSpreadsheet, TrendingUp, Mountain, Heart, Route, Flame, Clock,
   Loader2, Trophy, Zap, Target, CalendarDays, Activity, GitCommitHorizontal,
-  ChevronUp, Check,
+  ChevronUp, Check, Share2,
 } from 'lucide-react'
+import ShareModal from '@/components/ShareModal'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Tab = 'panoramica' | 'grafici' | 'confronta'
@@ -187,6 +188,7 @@ export default function StatistichePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [fullData, setFullData]       = useState<Map<string, StoredActivity>>(new Map())
   const [loadingFull, setLoadingFull] = useState(false)
+  const [shareKind, setShareKind]     = useState<'stats' | 'comparison' | null>(null)
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
@@ -328,12 +330,20 @@ export default function StatistichePage() {
             </p>
           </div>
           {!loading && activities.length > 0 && (
-            <button
-              onClick={() => exportAllActivitiesToExcel(activities as any)}
-              className="flex items-center gap-2 px-4 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
-            >
-              <FileSpreadsheet className="w-4 h-4" /> Esporta Excel
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShareKind('stats')}
+                className="flex items-center gap-2 px-4 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
+              >
+                <Share2 className="w-4 h-4" /> Condividi
+              </button>
+              <button
+                onClick={() => exportAllActivitiesToExcel(activities as any)}
+                className="flex items-center gap-2 px-4 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Esporta Excel
+              </button>
+            </div>
           )}
         </div>
 
@@ -624,8 +634,14 @@ export default function StatistichePage() {
                   <div className="space-y-6">
                     {/* Stats table */}
                     <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-                      <div className="px-5 py-4 border-b border-stone-100">
+                      <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
                         <h3 className="font-medium text-stone-700">Confronto statistiche</h3>
+                        <button
+                          onClick={() => setShareKind('comparison')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-forest-700 text-white rounded-lg text-xs hover:bg-forest-600 transition-colors"
+                        >
+                          <Share2 className="w-3.5 h-3.5" /> Condividi
+                        </button>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -772,6 +788,13 @@ export default function StatistichePage() {
           </>
         )}
       </main>
+
+      {shareKind === 'stats' && (
+        <ShareModal kind="stats" activities={activities} onClose={() => setShareKind(null)} />
+      )}
+      {shareKind === 'comparison' && (
+        <ShareModal kind="comparison" activities={selectedMeta} onClose={() => setShareKind(null)} />
+      )}
     </div>
   )
 }
