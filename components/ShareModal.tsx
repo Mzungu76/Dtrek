@@ -1,8 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
-import {
-  X, Download, Facebook, Copy, Check, Share2,
-} from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Download, Facebook, Copy, Check, Share2, Loader2 } from 'lucide-react'
 import {
   ShareFormat,
   ActivityShareOpts, StatsShareOpts, ComparisonShareOpts, MapShareOpts,
@@ -30,23 +28,25 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
-interface ActivityShareProps { kind: 'activity'; activity: ActivityMeta; onClose: () => void }
-interface StatsShareProps    { kind: 'stats';    activities: ActivityMeta[]; onClose: () => void }
-interface CompareShareProps  { kind: 'comparison'; activities: ActivityMeta[]; onClose: () => void }
-interface MapShareProps      { kind: 'map';      activities: ActivityMeta[]; onClose: () => void }
-
+interface ActivityShareProps { kind: 'activity';    activity: ActivityMeta;  onClose: () => void }
+interface StatsShareProps    { kind: 'stats';       activities: ActivityMeta[]; onClose: () => void }
+interface CompareShareProps  { kind: 'comparison';  activities: ActivityMeta[]; onClose: () => void }
+interface MapShareProps      { kind: 'map';         activities: ActivityMeta[]; onClose: () => void }
 export type ShareModalProps = ActivityShareProps | StatsShareProps | CompareShareProps | MapShareProps
 
 // ─── Modal ─────────────────────────────────────────────────────────────────────
 
 export default function ShareModal(props: ShareModalProps) {
   const { onClose } = props
-  const [fmt, setFmt]         = useState<ShareFormat>('1:1')
+  const [fmt, setFmt]           = useState<ShareFormat>('1:1')
   const [imageUrl, setImageUrl] = useState('')
-  const [copied, setCopied]   = useState(false)
+  const [generating, setGen]    = useState(false)
+  const [copied, setCopied]     = useState(false)
+  const cancelRef               = useRef(false)
 
   const [actOpts, setActOpts] = useState<ActivityShareOpts>({
-    showRoute: true, showDistance: true, showElevation: true,
+    showMap: true, showRoute: true,
+    showDistance: true, showElevation: true,
     showDuration: true, showHR: true, showCalories: true, showDate: true,
   })
   const [statsOpts, setStatsOpts] = useState<StatsShareOpts>({
@@ -58,27 +58,39 @@ export default function ShareModal(props: ShareModalProps) {
   })
   const [mapOpts, setMapOpts] = useState<MapShareOpts>({ showCount: true })
 
-  // Regenerate image whenever format or options change
+  // Regenerate image whenever anything relevant changes
   useEffect(() => {
-    try {
-      let url = ''
-      if (props.kind === 'activity') {
-        url = generateActivityImage(props.activity, actOpts, fmt)
-      } else if (props.kind === 'stats') {
-        url = generateStatsImage(props.activities, statsOpts, fmt)
-      } else if (props.kind === 'comparison') {
-        url = generateComparisonImage(props.activities, cmpOpts, fmt)
-      } else if (props.kind === 'map') {
-        url = generateMapImage(props.activities, mapOpts, fmt)
+    cancelRef.current = false
+    setGen(true)
+    setImageUrl('')
+
+    const run = async () => {
+      try {
+        let url = ''
+        if (props.kind === 'activity') {
+          url = await generateActivityImage(props.activity, actOpts, fmt)
+        } else if (props.kind === 'stats') {
+          url = await generateStatsImage(props.activities, statsOpts, fmt)
+        } else if (props.kind === 'comparison') {
+          url = await generateComparisonImage(props.activities, cmpOpts, fmt)
+        } else if (props.kind === 'map') {
+          url = await generateMapImage(props.activities, mapOpts, fmt)
+        }
+        if (!cancelRef.current) { setImageUrl(url); setGen(false) }
+      } catch (e) {
+        console.error('Share image error:', e)
+        if (!cancelRef.current) setGen(false)
       }
-      setImageUrl(url)
-    } catch (e) {
-      console.error('Share image error:', e)
     }
+
+    run()
+    return () => { cancelRef.current = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fmt, actOpts, statsOpts, cmpOpts, mapOpts, props.kind,
-      (props as ActivityShareProps).activity,
-      (props as StatsShareProps).activities])
+  }, [
+    fmt, actOpts, statsOpts, cmpOpts, mapOpts, props.kind,
+    (props as ActivityShareProps).activity?.id,
+    (props as StatsShareProps).activities?.length,
+  ])
 
   const handleDownload = () => {
     const a = document.createElement('a')
@@ -106,17 +118,27 @@ export default function ShareModal(props: ShareModalProps) {
   }
 
   const options = () => {
-    if (props.kind === 'activity') return (
-      <div className="space-y-2.5">
-        <Toggle label="Percorso GPS"       checked={actOpts.showRoute}     onChange={v => setActOpts(o => ({ ...o, showRoute: v }))} />
-        <Toggle label="Data"               checked={actOpts.showDate}      onChange={v => setActOpts(o => ({ ...o, showDate: v }))} />
-        <Toggle label="Distanza"           checked={actOpts.showDistance}  onChange={v => setActOpts(o => ({ ...o, showDistance: v }))} />
-        <Toggle label="Dislivello"         checked={actOpts.showElevation} onChange={v => setActOpts(o => ({ ...o, showElevation: v }))} />
-        <Toggle label="Durata"             checked={actOpts.showDuration}  onChange={v => setActOpts(o => ({ ...o, showDuration: v }))} />
-        <Toggle label="Frequenza cardiaca" checked={actOpts.showHR}        onChange={v => setActOpts(o => ({ ...o, showHR: v }))} />
-        <Toggle label="Calorie"            checked={actOpts.showCalories}  onChange={v => setActOpts(o => ({ ...o, showCalories: v }))} />
-      </div>
-    )
+    if (props.kind === 'activity') {
+      const hasPolyline = !!(props.activity.routePolyline && props.activity.routePolyline.length > 1)
+      return (
+        <div className="space-y-2.5">
+          {hasPolyline && (
+            <>
+              <Toggle label="Mappa geografica (OSM)" checked={actOpts.showMap}     onChange={v => setActOpts(o => ({ ...o, showMap: v, showRoute: v ? false : o.showRoute }))} />
+              {!actOpts.showMap && (
+                <Toggle label="Percorso (astratto)"   checked={actOpts.showRoute}   onChange={v => setActOpts(o => ({ ...o, showRoute: v }))} />
+              )}
+            </>
+          )}
+          <Toggle label="Data"               checked={actOpts.showDate}      onChange={v => setActOpts(o => ({ ...o, showDate: v }))} />
+          <Toggle label="Distanza"           checked={actOpts.showDistance}  onChange={v => setActOpts(o => ({ ...o, showDistance: v }))} />
+          <Toggle label="Dislivello"         checked={actOpts.showElevation} onChange={v => setActOpts(o => ({ ...o, showElevation: v }))} />
+          <Toggle label="Durata"             checked={actOpts.showDuration}  onChange={v => setActOpts(o => ({ ...o, showDuration: v }))} />
+          <Toggle label="Frequenza cardiaca" checked={actOpts.showHR}        onChange={v => setActOpts(o => ({ ...o, showHR: v }))} />
+          <Toggle label="Calorie"            checked={actOpts.showCalories}  onChange={v => setActOpts(o => ({ ...o, showCalories: v }))} />
+        </div>
+      )
+    }
     if (props.kind === 'stats') return (
       <div className="space-y-2.5">
         <Toggle label="Totali (km, tempo, calorie, D+)" checked={statsOpts.showTotals}  onChange={v => setStatsOpts(o => ({ ...o, showTotals: v }))} />
@@ -166,14 +188,24 @@ export default function ShareModal(props: ShareModalProps) {
             <div>
               <p className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-2">Anteprima</p>
               <div
-                className="rounded-xl overflow-hidden bg-[#1a3c26] flex items-center justify-center"
+                className="rounded-xl overflow-hidden bg-[#1a3c26] flex items-center justify-center relative"
                 style={{ aspectRatio: fmt === '1:1' ? '1/1' : '16/9' }}
               >
-                {imageUrl
-                  ? <img src={imageUrl} alt="anteprima condivisione" className="w-full h-full object-contain" />
-                  : <span className="text-stone-500 text-sm">Generazione…</span>
-                }
+                {generating && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-[#1a3c26]">
+                    <Loader2 className="w-8 h-8 text-forest-400 animate-spin" />
+                    <span className="ml-2 text-forest-400 text-sm">Generazione…</span>
+                  </div>
+                )}
+                {imageUrl && !generating && (
+                  <img src={imageUrl} alt="anteprima condivisione" className="w-full h-full object-contain" />
+                )}
               </div>
+              {props.kind === 'activity' && actOpts.showMap && (
+                <p className="text-[10px] text-stone-400 mt-1.5 text-center">
+                  Mappa © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600">OpenStreetMap</a> contributors
+                </p>
+              )}
             </div>
 
             {/* Options */}
@@ -206,14 +238,14 @@ export default function ShareModal(props: ShareModalProps) {
               {/* Note */}
               <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-500 leading-relaxed space-y-1">
                 <p><span className="font-semibold text-stone-700">Instagram:</span> scarica l&apos;immagine e condividila dal Feed o nelle Storie.</p>
-                <p><span className="font-semibold text-stone-700">Facebook:</span> scarica l&apos;immagine oppure usa il pulsante qui sotto per condividere la pagina.</p>
+                <p><span className="font-semibold text-stone-700">Facebook:</span> scarica e carica nel post, oppure usa il pulsante per condividere la pagina.</p>
               </div>
 
               {/* Actions */}
               <div className="space-y-2">
                 <button
                   onClick={handleDownload}
-                  disabled={!imageUrl}
+                  disabled={!imageUrl || generating}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium text-sm transition-colors disabled:opacity-40"
                 >
                   <Download className="w-4 h-4" /> Scarica immagine (.png)
@@ -227,7 +259,7 @@ export default function ShareModal(props: ShareModalProps) {
                   </button>
                   <button
                     onClick={handleCopy}
-                    disabled={!imageUrl}
+                    disabled={!imageUrl || generating}
                     className={`flex items-center justify-center gap-2 py-2.5 border rounded-xl text-sm font-medium transition-all disabled:opacity-40
                       ${copied
                         ? 'bg-forest-50 border-forest-300 text-forest-700'
