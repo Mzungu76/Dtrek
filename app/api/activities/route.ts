@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { readIndex } from '@/lib/blobIndex'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const index = await readIndex()
