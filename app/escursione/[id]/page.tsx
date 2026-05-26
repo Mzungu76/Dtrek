@@ -20,8 +20,10 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2,
+  Pencil, Check, X, Trash2, Loader2, Share2,
 } from 'lucide-react'
+import ShareModal from '@/components/ShareModal'
+import type { ActivityMeta } from '@/lib/blobStore'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -30,14 +32,15 @@ export default function EscursionePage() {
   const router  = useRouter()
   const id      = decodeURIComponent(params.id as string)
 
-  const [activity,  setActivity]  = useState<StoredActivity | null>(null)
-  const [loading,   setLoading]   = useState(true)
-  const [saving,    setSaving]    = useState(false)
-  const [editTitle, setEditTitle] = useState(false)
-  const [editNotes, setEditNotes] = useState(false)
-  const [titleVal,  setTitleVal]  = useState('')
-  const [notesVal,  setNotesVal]  = useState('')
-  const [tagInput,  setTagInput]  = useState('')
+  const [activity,   setActivity]  = useState<StoredActivity | null>(null)
+  const [loading,    setLoading]   = useState(true)
+  const [saving,     setSaving]    = useState(false)
+  const [editTitle,  setEditTitle] = useState(false)
+  const [editNotes,  setEditNotes] = useState(false)
+  const [titleVal,   setTitleVal]  = useState('')
+  const [notesVal,   setNotesVal]  = useState('')
+  const [tagInput,   setTagInput]  = useState('')
+  const [showShare,  setShowShare] = useState(false)
 
   useEffect(() => {
     getActivityById(id)
@@ -149,6 +152,10 @@ export default function EscursionePage() {
                 className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 hover:bg-forest-600 rounded-lg text-sm transition-colors">
                 <Map className="w-4 h-4" /> GPX
               </button>
+              <button onClick={() => setShowShare(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 hover:bg-forest-600 rounded-lg text-sm transition-colors">
+                <Share2 className="w-4 h-4" /> Condividi
+              </button>
               <button onClick={handleDelete} disabled={saving}
                 className="flex items-center gap-1.5 px-3 py-2 bg-red-800/50 hover:bg-red-700 rounded-lg text-sm transition-colors">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
@@ -176,6 +183,33 @@ export default function EscursionePage() {
           </div>
         </div>
       </div>
+
+      {showShare && (() => {
+        const polyline = activity.trackPoints
+          .filter(p => p.lat !== undefined && p.lon !== undefined)
+          .map(p => [p.lat!, p.lon!] as [number, number])
+        const step = Math.max(1, Math.ceil(polyline.length / 250))
+        const actMeta: ActivityMeta = {
+          id: activity.id,
+          title: activity.title ?? activity.notes ?? 'Escursione',
+          startTime: activity.startTime,
+          distanceMeters: activity.distanceMeters,
+          totalTimeSeconds: activity.totalTimeSeconds,
+          calories: activity.calories,
+          avgHeartRate: activity.avgHeartRate,
+          maxHeartRate: activity.maxHeartRate,
+          elevationGain: activity.elevationGain,
+          elevationLoss: activity.elevationLoss,
+          altitudeMax: activity.altitudeMax,
+          avgSpeedMs: activity.avgSpeedMs,
+          maxSpeedMs: activity.maxSpeedMs,
+          tags: activity.tags,
+          userNotes: activity.userNotes,
+          fileName: activity.fileName,
+          routePolyline: polyline.filter((_, i) => i % step === 0),
+        }
+        return <ShareModal kind="activity" activity={actMeta} onClose={() => setShowShare(false)} />
+      })()}
 
       <main className="max-w-6xl mx-auto px-4 py-8 fade-up">
         {/* Stats */}
