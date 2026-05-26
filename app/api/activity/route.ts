@@ -3,8 +3,6 @@ import { put, del } from '@vercel/blob'
 import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
 import { readIndex, writeIndex, readBlobText, getBlobUrl } from '@/lib/blobIndex'
 
-const STORE_ID = process.env.blob2dtrek_STORE_ID
-
 function getToken(): string {
   const token = process.env.blob2dtrek_READ_WRITE_TOKEN ?? process.env.BLOB_READ_WRITE_TOKEN
   if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
@@ -45,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     await put(idToPath(activity.id), JSON.stringify(activity), {
       access: 'public',
-      storeId: STORE_ID,
+      token: getToken(),
       addRandomSuffix: false,
       contentType: 'application/json',
     })
@@ -95,7 +93,7 @@ export async function PATCH(req: NextRequest) {
     const updated: StoredActivity = { ...activity, ...patch }
     await put(idToPath(id), JSON.stringify(updated), {
       access: 'public',
-      storeId: STORE_ID,
+      token: getToken(),
       addRandomSuffix: false,
       contentType: 'application/json',
     })

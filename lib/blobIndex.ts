@@ -3,8 +3,6 @@ import type { ActivityMeta } from '@/lib/blobStore'
 
 export const INDEX_PATH = 'activities/index.json'
 
-const STORE_ID = process.env.blob2dtrek_STORE_ID
-
 function getToken(): string {
   const token = process.env.blob2dtrek_READ_WRITE_TOKEN ?? process.env.BLOB_READ_WRITE_TOKEN
   if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
@@ -36,7 +34,7 @@ export async function readIndex(): Promise<ActivityMeta[]> {
 export async function writeIndex(index: ActivityMeta[]): Promise<void> {
   await put(INDEX_PATH, JSON.stringify(index), {
     access: 'public',
-    storeId: STORE_ID,
+    token: getToken(),
     addRandomSuffix: false,
     contentType: 'application/json',
   })
