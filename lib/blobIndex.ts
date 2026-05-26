@@ -4,7 +4,7 @@ import type { ActivityMeta } from '@/lib/blobStore'
 export const INDEX_PATH = 'activities/index.json'
 
 function getToken(): string {
-  const token = process.env.blob2dtrek_READ_WRITE_TOKEN ?? process.env.BLOB_READ_WRITE_TOKEN
+  const token = process.env.blob2dtrek_READ_WRITE_TOKEN
   if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
   return token
 }
