@@ -201,10 +201,10 @@ export default function PlannedHikePage() {
   const polyline = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
       <Navbar />
 
-      <main className="max-w-[1200px] mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-[1200px] mx-auto px-3 sm:px-4 py-5 sm:py-8 space-y-5 sm:space-y-6">
         {/* Back + delete */}
         <div className="flex items-center justify-between">
           <button
