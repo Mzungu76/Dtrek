@@ -9,22 +9,24 @@ import {
   formatPaceMinkm, difficultyIndex, caloriesPerHour,
   getPersonalRecords, computeStreaks, haversineM, COMPARISON_COLORS,
 } from '@/lib/stats'
+import { computeTrainingLoad, activityStress, currentForm } from '@/lib/trainingLoad'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, ScatterChart, Scatter, ZAxis,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend,
+  ReferenceLine,
 } from 'recharts'
 import {
   FileSpreadsheet, TrendingUp, Mountain, Heart, Route, Flame, Clock,
   Loader2, Trophy, Zap, Target, CalendarDays, Activity, GitCommitHorizontal,
-  ChevronUp, Check, Share2,
+  ChevronUp, Check, Share2, Brain,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Tab = 'panoramica' | 'grafici' | 'confronta'
+type Tab = 'panoramica' | 'grafici' | 'confronta' | 'forma'
 
 // ── Heatmap component ──────────────────────────────────────────────────────────
 function ActivityHeatmap({ activities, year }: { activities: ActivityMeta[]; year: number }) {
@@ -309,11 +311,27 @@ export default function StatistichePage() {
 
   const allFullLoaded = selectedMeta.length >= 2 && selectedMeta.every(m => fullData.has(m.id))
 
+  // ── Training load (F10) ───────────────────────────────────────────────────────
+  const trainingLoadData = useMemo(() => {
+    const events = activities.map(a => ({
+      date:   format(new Date(a.startTime), 'yyyy-MM-dd'),
+      stress: activityStress(a.distanceMeters, a.elevationGain, a.totalTimeSeconds),
+    }))
+    return computeTrainingLoad(events, 90)
+  }, [activities])
+
+  const latestForm = useMemo(() => {
+    if (trainingLoadData.length === 0) return null
+    const last = trainingLoadData[trainingLoadData.length - 1]
+    return { ...last, status: currentForm(last.tsb) }
+  }, [trainingLoadData])
+
   // ── Tab nav ───────────────────────────────────────────────────────────────────
   const TABS: { id: Tab; label: string }[] = [
     { id: 'panoramica', label: 'Panoramica' },
     { id: 'grafici',    label: 'Grafici' },
     { id: 'confronta',  label: 'Confronto' },
+    { id: 'forma',      label: 'Forma' },
   ]
 
   return (
@@ -472,6 +490,16 @@ export default function StatistichePage() {
                     )}
                   </div>
                 </div>
+
+                {/* Peak bagging shortcut */}
+                <a href="/vette"
+                  className="flex items-center gap-4 bg-gradient-to-r from-forest-700 to-forest-800 text-white rounded-2xl p-5 hover:from-forest-600 hover:to-forest-700 transition-all">
+                  <Mountain className="w-8 h-8 text-forest-300 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-lg">Vette Conquistate</p>
+                    <p className="text-forest-300 text-sm">Visualizza tutte le cime raggiunte durante le tue escursioni →</p>
+                  </div>
+                </a>
 
                 {/* Table */}
                 <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
@@ -783,6 +811,103 @@ export default function StatistichePage() {
                     <p className="text-sm">Seleziona almeno 2 escursioni dalla lista per iniziare il confronto.</p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── FORMA (F10) ─────────────────────────────────────────────────── */}
+            {tab === 'forma' && (
+              <div className="space-y-6">
+                {/* Current form status */}
+                {latestForm && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                      <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1 flex items-center gap-1.5">
+                        <Brain className="w-3.5 h-3.5" /> Stato forma attuale
+                      </p>
+                      <p className="text-2xl font-bold mt-1" style={{ color: latestForm.status.color }}>
+                        {latestForm.status.label}
+                      </p>
+                      <p className="text-xs text-stone-500 mt-1">{latestForm.status.description}</p>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                      <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1">CTL — Fitness (τ=42gg)</p>
+                      <p className="text-2xl font-bold text-forest-700">{latestForm.ctl.toFixed(1)}</p>
+                      <p className="text-xs text-stone-500 mt-1">Carico cronico accumulato</p>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                      <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1">ATL — Fatica (τ=7gg)</p>
+                      <p className="text-2xl font-bold text-terra-600">{latestForm.atl.toFixed(1)}</p>
+                      <p className="text-xs text-stone-500 mt-1">Carico acuto recente</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ATL/CTL/TSB chart */}
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                  <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-forest-600" /> Training Load — ultimi 90 giorni
+                  </h3>
+                  <p className="text-xs text-stone-400 mb-4">
+                    CTL (fitness, verde) · ATL (fatica, arancio) · TSB (forma, blu — positivo = fresco, negativo = affaticato)
+                  </p>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={trainingLoadData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 10 }}
+                          tickLine={false}
+                          tickFormatter={d => format(new Date(d), 'dd/MM')}
+                          interval={13}
+                        />
+                        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                          labelFormatter={d => format(new Date(d as string), 'dd MMM yyyy', { locale: it })}
+                          formatter={(v: any, name: string) => {
+                            const labels: Record<string, string> = { ctl: 'Fitness (CTL)', atl: 'Fatica (ATL)', tsb: 'Forma (TSB)' }
+                            return [v, labels[name] ?? name]
+                          }}
+                        />
+                        <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                        <Line type="monotone" dataKey="ctl" stroke="#378d44" strokeWidth={2} dot={false} name="ctl" />
+                        <Line type="monotone" dataKey="atl" stroke="#c05a17" strokeWidth={2} dot={false} name="atl" />
+                        <Line type="monotone" dataKey="tsb" stroke="#0ea5e9" strokeWidth={2} dot={false} name="tsb" />
+                        <Legend wrapperStyle={{ fontSize: 12 }}
+                          formatter={(v: string) => ({ ctl: 'Fitness (CTL)', atl: 'Fatica (ATL)', tsb: 'Forma (TSB)' }[v] ?? v)} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Daily stress bars */}
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                  <h3 className="font-medium text-stone-700 mb-4">Carico giornaliero (TSS stimato)</h3>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={trainingLoadData.filter(d => d.stress > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
+                          tickFormatter={d => format(new Date(d), 'dd/MM')} />
+                        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                        <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                          labelFormatter={d => format(new Date(d as string), 'dd MMM', { locale: it })}
+                          formatter={(v: any) => [v, 'Stress (TSS)']} />
+                        <Bar dataKey="stress" fill="#378d44" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Explanation */}
+                <div className="bg-sky-50 rounded-2xl border border-sky-100 p-5 text-sm text-sky-800 space-y-2">
+                  <p className="font-semibold">Come leggere questi grafici</p>
+                  <p><strong>CTL (Fitness)</strong> sale lentamente con l'allenamento costante — rappresenta la capacità aerobica accumulata.</p>
+                  <p><strong>ATL (Fatica)</strong> sale velocemente dopo un'uscita impegnativa e scende in pochi giorni di riposo.</p>
+                  <p><strong>TSB (Forma)</strong> = CTL − ATL. Positivo significa che sei fresco e pronto; negativo che sei affaticato. Il picco di forma si ottiene dopo alcuni giorni di recupero prima di un evento importante.</p>
+                  <p className="text-xs text-sky-600">I valori TSS sono stimati da distanza, dislivello e durata. Per maggiore precisione usa dati di potenza o FC (funzionalità futura).</p>
+                </div>
               </div>
             )}
           </>

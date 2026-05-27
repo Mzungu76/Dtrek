@@ -1,25 +1,54 @@
 'use client'
 import { useEffect, useRef } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
+import type { PoiItem } from '@/lib/overpass'
+import { POI_META } from '@/lib/overpass'
 
 interface Props {
   trackPoints: TrackPoint[]
   height?: string
+  showGradient?: boolean
+  pois?: PoiItem[]
+  planned?: boolean
 }
 
-export default function MapView({ trackPoints, height = '400px' }: Props) {
-  const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstance = useRef<any>(null)
+// Slope → color (green=easy, yellow=moderate, orange=steep, red=extreme)
+function slopeColor(pct: number): string {
+  const a = Math.abs(pct)
+  if (a < 8)  return '#22c55e'
+  if (a < 15) return '#eab308'
+  if (a < 25) return '#f97316'
+  return '#ef4444'
+}
 
+function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000
+  const f1 = lat1 * Math.PI / 180, f2 = lat2 * Math.PI / 180
+  const df = (lat2 - lat1) * Math.PI / 180
+  const dl = (lon2 - lon1) * Math.PI / 180
+  const a  = Math.sin(df / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export default function MapView({
+  trackPoints,
+  height = '400px',
+  showGradient = false,
+  pois = [],
+  planned = false,
+}: Props) {
+  const mapRef      = useRef<HTMLDivElement>(null)
+  const mapInstance = useRef<any>(null)
+  const poiLayer    = useRef<any>(null)
+
+  // Main map init effect
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
 
     const points = trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
     if (points.length === 0) return
 
-    // Carica Leaflet dinamicamente (solo client)
     import('leaflet').then(L => {
-      // Fix icone Leaflet con Next.js
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -28,7 +57,6 @@ export default function MapView({ trackPoints, height = '400px' }: Props) {
       })
 
       const coords: [number, number][] = points.map(p => [p.lat!, p.lon!])
-
       const map = L.map(mapRef.current!).setView(coords[0], 14)
       mapInstance.current = map
 
@@ -37,42 +65,66 @@ export default function MapView({ trackPoints, height = '400px' }: Props) {
         maxZoom: 19,
       }).addTo(map)
 
-      // Tracciato principale
-      const polyline = L.polyline(coords, {
-        color: '#378d44',
-        weight: 4,
-        opacity: 0.85,
-        smoothFactor: 1.5,
-      }).addTo(map)
+      const baseColor = planned ? '#0ea5e9' : '#378d44'
 
-      // Marcatore start
-      const startIcon = L.divIcon({
-        html: `<div style="background:#378d44;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">S</div>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
-        className: '',
+      if (showGradient && points.some(p => p.altitudeMeters !== undefined)) {
+        // Draw per-segment colored polylines
+        for (let i = 0; i < coords.length - 1; i++) {
+          const p1 = points[i], p2 = points[i + 1]
+          const dist = haversineM(p1.lat!, p1.lon!, p2.lat!, p2.lon!)
+          const dEle = ((p2.altitudeMeters ?? p1.altitudeMeters ?? 0) - (p1.altitudeMeters ?? 0))
+          const slopePct = dist > 0 ? (dEle / dist) * 100 : 0
+          L.polyline([coords[i], coords[i + 1]], {
+            color: slopeColor(slopePct),
+            weight: 4,
+            opacity: 0.9,
+          }).addTo(map)
+        }
+        // Add gradient legend using extend pattern
+        const LegendControl = L.Control.extend({
+          onAdd(): HTMLElement {
+            const d = L.DomUtil.create('div', '')
+            d.style.cssText = 'background:white;padding:6px 10px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,0.2)'
+            d.innerHTML = [
+              '<b>Pendenza</b>',
+              '<span style="color:#22c55e">■</span> &lt;8%',
+              '<span style="color:#eab308">■</span> 8-15%',
+              '<span style="color:#f97316">■</span> 15-25%',
+              '<span style="color:#ef4444">■</span> &gt;25%',
+            ].join('<br>')
+            return d
+          },
+        })
+        new LegendControl({ position: 'bottomright' }).addTo(map)
+      } else {
+        const polyline = L.polyline(coords, {
+          color: baseColor,
+          weight: 4,
+          opacity: 0.85,
+          smoothFactor: 1.5,
+        }).addTo(map)
+        map.fitBounds(polyline.getBounds(), { padding: [20, 20] })
+      }
+
+      // Always fit bounds (for gradient mode, fit after drawing segments)
+      if (showGradient) {
+        map.fitBounds(L.polyline(coords).getBounds(), { padding: [20, 20] })
+      }
+
+      // Start / end markers (always shown)
+      const mkIcon = (label: string, color: string) => L.divIcon({
+        html: `<div style="background:${color};color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${label}</div>`,
+        iconSize: [28, 28], iconAnchor: [14, 14], className: '',
       })
 
-      // Marcatore end
-      const endIcon = L.divIcon({
-        html: `<div style="background:#c05a17;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">A</div>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
-        className: '',
-      })
-
-      L.marker(coords[0], { icon: startIcon }).addTo(map).bindPopup('Partenza')
-      L.marker(coords[coords.length - 1], { icon: endIcon }).addTo(map).bindPopup('Arrivo')
-
-      // Fit bounds
-      map.fitBounds(polyline.getBounds(), { padding: [20, 20] })
+      L.marker(coords[0], { icon: mkIcon('S', baseColor) }).addTo(map).bindPopup('Partenza')
+      L.marker(coords[coords.length - 1], { icon: mkIcon('A', '#c05a17') }).addTo(map).bindPopup('Arrivo')
     })
 
-    // Carica CSS Leaflet
     if (!document.querySelector('#leaflet-css')) {
       const link = document.createElement('link')
-      link.id = 'leaflet-css'
-      link.rel = 'stylesheet'
+      link.id   = 'leaflet-css'
+      link.rel  = 'stylesheet'
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
       document.head.appendChild(link)
     }
@@ -83,7 +135,38 @@ export default function MapView({ trackPoints, height = '400px' }: Props) {
         mapInstance.current = null
       }
     }
-  }, [trackPoints])
+  }, [trackPoints, showGradient, planned])
+
+  // POI layer — separate effect so it can react to pois changing
+  useEffect(() => {
+    if (!mapInstance.current) return
+
+    import('leaflet').then(L => {
+      // Remove previous POI layer
+      if (poiLayer.current) {
+        poiLayer.current.forEach((m: any) => m.remove())
+      }
+      poiLayer.current = []
+
+      for (const poi of pois) {
+        const meta = POI_META[poi.type]
+        const icon = L.divIcon({
+          html: `<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">${meta.emoji}</div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+          className: '',
+        })
+        const popup = [
+          `<b>${poi.name ?? meta.label}</b>`,
+          poi.ele ? `⛰ ${poi.ele} m` : '',
+          `${meta.label} · ${poi.distFromTrack} m dal tracciato`,
+        ].filter(Boolean).join('<br>')
+
+        const m = L.marker([poi.lat, poi.lon], { icon }).addTo(mapInstance.current).bindPopup(popup)
+        poiLayer.current.push(m)
+      }
+    })
+  }, [pois])
 
   const hasGps = trackPoints.some(p => p.lat !== undefined)
 
@@ -93,7 +176,7 @@ export default function MapView({ trackPoints, height = '400px' }: Props) {
         className="flex items-center justify-center rounded-xl bg-stone-100 border border-stone-200 text-stone-400 text-sm"
         style={{ height }}
       >
-        Nessun dato GPS disponibile in questo file TCX
+        Nessun dato GPS disponibile in questo file
       </div>
     )
   }
