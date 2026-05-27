@@ -75,7 +75,7 @@ export default function ProgrammaPage() {
     hike.assessment?.risks.find(r => r.type === 'info')
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
       <Navbar />
 
       <div className="bg-gradient-to-br from-sky-800 to-sky-900 text-white">

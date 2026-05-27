@@ -27,111 +27,140 @@ interface CardProps {
   date: Date
   extra?: number
   showFullDate?: boolean
+  compact?: boolean   // true in the 7-col calendar → shows dot on mobile
 }
 
-function ActivityCard({ activity, date, extra = 0, showFullDate = false }: CardProps) {
+function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false }: CardProps) {
   const isToday = isSameDay(date, new Date())
+  const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
   return (
     <Link
       href={`/escursione/${encodeURIComponent(activity.id)}`}
       className="aspect-square bg-white rounded-2xl border border-stone-200 shadow-sm hover:border-forest-400 hover:shadow-md transition-all overflow-hidden flex flex-col group"
     >
-      <div className="flex-1 relative bg-gradient-to-b from-forest-50 to-stone-50 min-h-0 overflow-hidden">
-        <div className="absolute inset-2">
-          {activity.routePolyline && activity.routePolyline.length > 1 ? (
-            <RouteThumb polyline={activity.routePolyline} color="#2d7a3d" strokeWidth={3} />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Mountain className="w-8 h-8 text-forest-200" />
-            </div>
+      {/* Mobile compact (only when used in calendar grid) */}
+      {compact && (
+        <div className={`sm:hidden w-full h-full flex flex-col items-center justify-center gap-1
+          ${isToday ? 'bg-terra-50' : 'bg-forest-50'}`}>
+          <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center
+            ${isToday ? 'bg-terra-500 text-white' : 'text-forest-800'}`}>
+            {format(date, 'd')}
+          </span>
+          <div className="w-2 h-2 rounded-full bg-forest-500" />
+          {extra > 0 && <span className="text-[8px] font-bold text-forest-600">+{extra}</span>}
+        </div>
+      )}
+
+      {/* Full card (always on desktop; on mobile only if not compact) */}
+      <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
+        <div className="flex-1 relative bg-gradient-to-b from-forest-50 to-stone-50 min-h-0 overflow-hidden">
+          <div className="absolute inset-2">
+            {activity.routePolyline && activity.routePolyline.length > 1 ? (
+              <RouteThumb polyline={activity.routePolyline} color="#2d7a3d" strokeWidth={3} />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Mountain className="w-8 h-8 text-forest-200" />
+              </div>
+            )}
+          </div>
+          <span className={`absolute top-2 right-2 text-[10px] font-bold rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap
+            ${isToday ? 'bg-terra-500 text-white' : 'bg-white/90 text-stone-600'}`}>
+            {dateLabel}
+          </span>
+          {extra > 0 && (
+            <span className="absolute top-2 left-2 text-[10px] font-bold bg-forest-600 text-white rounded-full px-1.5 py-0.5">
+              +{extra}
+            </span>
           )}
         </div>
-        <span
-          className={`absolute top-2 right-2 text-[10px] font-bold rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap
-            ${isToday ? 'bg-terra-500 text-white' : 'bg-white/90 text-stone-600'}`}
-        >
-          {showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')}
-        </span>
-        {extra > 0 && (
-          <span className="absolute top-2 left-2 text-[10px] font-bold bg-forest-600 text-white rounded-full px-1.5 py-0.5">
-            +{extra}
-          </span>
-        )}
-      </div>
-      <div className="shrink-0 px-2.5 pb-2.5 pt-1.5 border-t border-stone-100">
-        <p className="text-xs font-semibold text-stone-800 truncate leading-tight mb-1">
-          {activity.title ?? 'Escursione'}
-        </p>
-        <div className="flex items-center gap-2 text-[10px] flex-wrap">
-          <span className="flex items-center gap-0.5 text-forest-700 font-medium">
-            <Route className="w-2.5 h-2.5" />{(activity.distanceMeters / 1000).toFixed(1)} km
-          </span>
-          <span className="flex items-center gap-0.5 text-forest-600">
-            <TrendingUp className="w-2.5 h-2.5" />{activity.elevationGain.toFixed(0)} m
-          </span>
-        </div>
-        <div className="flex items-center gap-2 text-[10px] mt-0.5">
-          <span className="flex items-center gap-0.5 text-stone-400">
-            <Clock className="w-2.5 h-2.5" />{formatDuration(activity.totalTimeSeconds)}
-          </span>
-          <span className="flex items-center gap-0.5 text-red-400">
-            <Heart className="w-2.5 h-2.5" />{activity.avgHeartRate} bpm
-          </span>
-        </div>
-        <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-terra-500">
-          <Flame className="w-2.5 h-2.5" />{activity.calories} kcal
+        <div className="shrink-0 px-2.5 pb-2.5 pt-1.5 border-t border-stone-100">
+          <p className="text-xs font-semibold text-stone-800 truncate leading-tight mb-1">
+            {activity.title ?? 'Escursione'}
+          </p>
+          <div className="flex items-center gap-2 text-[10px] flex-wrap">
+            <span className="flex items-center gap-0.5 text-forest-700 font-medium">
+              <Route className="w-2.5 h-2.5" />{(activity.distanceMeters / 1000).toFixed(1)} km
+            </span>
+            <span className="flex items-center gap-0.5 text-forest-600">
+              <TrendingUp className="w-2.5 h-2.5" />{activity.elevationGain.toFixed(0)} m
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] mt-0.5">
+            <span className="flex items-center gap-0.5 text-stone-400">
+              <Clock className="w-2.5 h-2.5" />{formatDuration(activity.totalTimeSeconds)}
+            </span>
+            <span className="flex items-center gap-0.5 text-red-400">
+              <Heart className="w-2.5 h-2.5" />{activity.avgHeartRate} bpm
+            </span>
+          </div>
+          <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-terra-500">
+            <Flame className="w-2.5 h-2.5" />{activity.calories} kcal
+          </div>
         </div>
       </div>
     </Link>
   )
 }
 
-// ── Planned hike card (calendar) ──────────────────────────────────────────────
+// ── Planned hike card ─────────────────────────────────────────────────────────
 
 interface PlannedCardProps {
   hike: PlannedHikeMeta
   date: Date
   showFullDate?: boolean
+  compact?: boolean
 }
 
-function PlannedCard({ hike, date, showFullDate = false }: PlannedCardProps) {
+function PlannedCard({ hike, date, showFullDate = false, compact = false }: PlannedCardProps) {
   const isFuture = date > new Date()
+  const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
   return (
     <Link
       href={`/programma/${encodeURIComponent(hike.id)}`}
       className="aspect-square bg-white rounded-2xl border border-dashed border-sky-300 shadow-sm hover:border-sky-500 hover:shadow-md transition-all overflow-hidden flex flex-col group"
     >
-      <div className="flex-1 relative bg-gradient-to-b from-sky-50 to-stone-50 min-h-0 overflow-hidden">
-        <div className="absolute inset-2">
-          {hike.routePolyline && hike.routePolyline.length > 1 ? (
-            <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Mountain className="w-8 h-8 text-sky-200" />
-            </div>
-          )}
-        </div>
-        <span className="absolute top-2 right-2 text-[10px] font-bold bg-white/90 text-sky-700 rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap">
-          {showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')}
-        </span>
-        <span className="absolute top-2 left-2 text-[8px] font-bold bg-sky-600 text-white rounded-full px-1.5 py-0.5 uppercase tracking-wide">
-          {isFuture ? 'Pianif.' : 'Prog.'}
-        </span>
-      </div>
-      <div className="shrink-0 px-2.5 pb-2.5 pt-1.5 border-t border-sky-50">
-        <p className="text-xs font-semibold text-sky-900 truncate leading-tight mb-1">
-          {hike.title}
-        </p>
-        <div className="flex items-center gap-2 text-[10px] flex-wrap">
-          <span className="flex items-center gap-0.5 text-sky-700 font-medium">
-            <Route className="w-2.5 h-2.5" />{(hike.distanceMeters / 1000).toFixed(1)} km
+      {/* Mobile compact */}
+      {compact && (
+        <div className="sm:hidden w-full h-full bg-sky-50 flex flex-col items-center justify-center gap-1">
+          <span className="text-xs font-bold text-sky-700 w-6 h-6 rounded-full flex items-center justify-center">
+            {format(date, 'd')}
           </span>
-          <span className="flex items-center gap-0.5 text-sky-600">
-            <TrendingUp className="w-2.5 h-2.5" />{Math.round(hike.elevationGain)} m
+          <div className="w-2 h-2 rounded-full bg-sky-500" />
+        </div>
+      )}
+
+      {/* Full card */}
+      <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
+        <div className="flex-1 relative bg-gradient-to-b from-sky-50 to-stone-50 min-h-0 overflow-hidden">
+          <div className="absolute inset-2">
+            {hike.routePolyline && hike.routePolyline.length > 1 ? (
+              <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Mountain className="w-8 h-8 text-sky-200" />
+              </div>
+            )}
+          </div>
+          <span className="absolute top-2 right-2 text-[10px] font-bold bg-white/90 text-sky-700 rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap">
+            {dateLabel}
+          </span>
+          <span className="absolute top-2 left-2 text-[8px] font-bold bg-sky-600 text-white rounded-full px-1.5 py-0.5 uppercase tracking-wide">
+            {isFuture ? 'Pianif.' : 'Prog.'}
           </span>
         </div>
-        <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-sky-400">
-          <Clock className="w-2.5 h-2.5" />{formatDuration(hike.estimatedTimeSeconds)} stim.
+        <div className="shrink-0 px-2.5 pb-2.5 pt-1.5 border-t border-sky-50">
+          <p className="text-xs font-semibold text-sky-900 truncate leading-tight mb-1">{hike.title}</p>
+          <div className="flex items-center gap-2 text-[10px] flex-wrap">
+            <span className="flex items-center gap-0.5 text-sky-700 font-medium">
+              <Route className="w-2.5 h-2.5" />{(hike.distanceMeters / 1000).toFixed(1)} km
+            </span>
+            <span className="flex items-center gap-0.5 text-sky-600">
+              <TrendingUp className="w-2.5 h-2.5" />{Math.round(hike.elevationGain)} m
+            </span>
+          </div>
+          <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-sky-400">
+            <Clock className="w-2.5 h-2.5" />{formatDuration(hike.estimatedTimeSeconds)} stim.
+          </div>
         </div>
       </div>
     </Link>
@@ -154,12 +183,9 @@ export default function HomePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // months: earliest activity → max(current month, latest planned date)
   const months = useMemo(() => {
     const now = new Date()
     let curY = now.getFullYear(), curM = now.getMonth()
-
-    // Extend range to cover planned hike dates
     for (const h of planned) {
       if (!h.plannedDate) continue
       const d = new Date(h.plannedDate)
@@ -167,16 +193,13 @@ export default function HomePage() {
         curY = d.getFullYear(); curM = d.getMonth()
       }
     }
-
     if (activities.length === 0 && planned.length === 0)
       return [{ year: now.getFullYear(), month: now.getMonth() }]
-
     const allDates = [
       ...activities.map(a => new Date(a.startTime)),
       ...planned.filter(h => h.plannedDate).map(h => new Date(h.plannedDate!)),
     ]
     const minDate = allDates.length ? new Date(Math.min(...allDates.map(d => d.getTime()))) : now
-
     const result: { year: number; month: number }[] = []
     let y = minDate.getFullYear(), m = minDate.getMonth()
     while (y < curY || (y === curY && m <= curM)) {
@@ -187,9 +210,10 @@ export default function HomePage() {
   }, [activities, planned])
 
   useEffect(() => {
-    if (!loading) setMonthIdx(months.findIndex(
-      mo => mo.year === new Date().getFullYear() && mo.month === new Date().getMonth()
-    ) ?? months.length - 1)
+    if (!loading) {
+      const idx = months.findIndex(mo => mo.year === new Date().getFullYear() && mo.month === new Date().getMonth())
+      setMonthIdx(idx >= 0 ? idx : months.length - 1)
+    }
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const countPerMonth = useMemo(() =>
@@ -218,7 +242,6 @@ export default function HomePage() {
     return map
   }, [activities])
 
-  // Planned hikes indexed by plannedDate
   const plannedByDate = useMemo(() => {
     const map = new Map<string, PlannedHikeMeta[]>()
     for (const h of planned) {
@@ -247,19 +270,21 @@ export default function HomePage() {
     })
   }, [year, month])
 
-  const monthLabel = format(new Date(year, month, 1), 'MMMM yyyy', { locale: it })
-  const totalItems = activities.length + planned.filter(h => h.plannedDate).length
+  const monthLabel  = format(new Date(year, month, 1), 'MMMM yyyy', { locale: it })
+  const totalItems  = activities.length + planned.filter(h => h.plannedDate).length
+  const hasPlanDates = planned.some(h => h.plannedDate)
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    // pb-20: space for mobile bottom nav; md:pb-0: hidden on desktop
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
       <Navbar />
 
       {/* ── Header ── */}
       <div className="bg-gradient-to-br from-forest-800 to-forest-900 text-white">
-        <div className="max-w-[1400px] mx-auto px-4 py-8">
+        <div className="max-w-[1400px] mx-auto px-4 py-6 sm:py-8">
           <div className="flex items-end justify-between flex-wrap gap-4">
             <div>
-              <h1 className="font-display text-4xl font-semibold leading-tight">
+              <h1 className="font-display text-3xl sm:text-4xl font-semibold leading-tight">
                 Il mio diario<br />
                 <span className="text-forest-300">di trekking</span>
               </h1>
@@ -272,7 +297,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* View toggle */}
             {!loading && totalItems > 0 && (
               <div className="flex items-center bg-forest-700/50 rounded-xl p-1 gap-0.5">
                 <button
@@ -298,7 +322,7 @@ export default function HomePage() {
       </div>
 
       {/* ── Main ── */}
-      <main className="max-w-[1400px] mx-auto px-4 py-8">
+      <main className="max-w-[1400px] mx-auto px-3 sm:px-4 py-5 sm:py-8">
         {loading ? (
           <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -306,12 +330,12 @@ export default function HomePage() {
           </div>
 
         ) : activities.length === 0 && planned.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
               <Mountain className="w-10 h-10 text-forest-400" />
             </div>
             <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Inizia il tuo diario</h2>
-            <p className="text-stone-400 text-sm max-w-sm mb-6">
+            <p className="text-stone-400 text-sm max-w-sm mb-6 px-4">
               Carica il tuo primo file TCX per registrare un&#39;escursione, o un GPX per pianificarne una futura.
             </p>
             <Link
@@ -326,25 +350,25 @@ export default function HomePage() {
           /* ────────── CALENDAR VIEW ────────── */
           <div className="fade-up">
 
-            {/* Legend */}
-            {planned.filter(h => h.plannedDate).length > 0 && (
-              <div className="flex items-center gap-4 mb-4 text-xs text-stone-500">
+            {/* Legend — mobile only shows it if there are planned hikes */}
+            {hasPlanDates && (
+              <div className="flex items-center gap-4 mb-3 text-xs text-stone-500">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-4 h-4 rounded bg-forest-100 border border-forest-400" />
+                  <div className="w-3 h-3 rounded bg-forest-100 border border-forest-300" />
                   <span>Registrata</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-4 h-4 rounded bg-sky-50 border border-dashed border-sky-400" />
+                  <div className="w-3 h-3 rounded bg-sky-50 border border-dashed border-sky-300" />
                   <span>Pianificata</span>
                 </div>
               </div>
             )}
 
-            {/* ── Month histogram bar ── */}
+            {/* Month histogram bar */}
             {months.length > 1 && (
               <div
                 ref={monthBarRef}
-                className="flex gap-1 overflow-x-auto mb-5 pb-1"
+                className="flex gap-1 overflow-x-auto mb-4 pb-1"
                 style={{ scrollbarWidth: 'none' }}
               >
                 {months.map(({ year: y, month: m }, i) => {
@@ -352,7 +376,6 @@ export default function HomePage() {
                   const isActive = i === safeIdx
                   const showYear = i === 0 || months[i - 1].year !== y
                   const barH = count > 0 ? Math.max(4, Math.round((count / maxCount) * 22)) : 0
-                  // Check if this month has planned hikes
                   const hasPlan = planned.some(h => {
                     if (!h.plannedDate) return false
                     const d = new Date(h.plannedDate)
@@ -363,15 +386,15 @@ export default function HomePage() {
                     <button
                       key={`${y}-${m}`}
                       onClick={() => setMonthIdx(i)}
-                      title={`${format(new Date(y, m, 1), 'MMMM yyyy', { locale: it })}: ${count} escursion${count !== 1 ? 'i' : 'e'}${hasPlan ? ' + pianificate' : ''}`}
-                      className={`flex flex-col items-center gap-0.5 px-2 pt-1 pb-1.5 rounded-xl shrink-0 transition-all min-w-[44px]
+                      title={`${format(new Date(y, m, 1), 'MMMM yyyy', { locale: it })}: ${count} escursion${count !== 1 ? 'i' : 'e'}`}
+                      className={`flex flex-col items-center gap-0.5 px-2 pt-1 pb-1.5 rounded-xl shrink-0 transition-all min-w-[40px]
                         ${isActive
                           ? 'bg-forest-600 text-white shadow-sm'
                           : count > 0
-                            ? 'bg-white border border-stone-200 text-stone-600 hover:border-forest-300 hover:text-forest-700'
+                            ? 'bg-white border border-stone-200 text-stone-600 hover:border-forest-300'
                             : hasPlan
-                              ? 'bg-sky-50 border border-dashed border-sky-300 text-sky-600 hover:border-sky-400'
-                              : 'bg-stone-50 border border-stone-100 text-stone-300 hover:border-stone-200'}`}
+                              ? 'bg-sky-50 border border-dashed border-sky-300 text-sky-600'
+                              : 'bg-stone-50 border border-stone-100 text-stone-300'}`}
                     >
                       <div className="flex items-end h-6 w-full justify-center gap-0.5">
                         {barH > 0 ? (
@@ -386,7 +409,6 @@ export default function HomePage() {
                           <div className="w-1.5 rounded-t-sm bg-sky-400" style={{ height: '8px' }} />
                         )}
                       </div>
-
                       <span className="text-[10px] font-semibold leading-none whitespace-nowrap capitalize">
                         {format(new Date(y, m, 1), 'MMM', { locale: it })}
                         {showYear && (
@@ -395,7 +417,6 @@ export default function HomePage() {
                           </span>
                         )}
                       </span>
-
                       {count > 0 && (
                         <span className={`text-[9px] font-bold leading-none ${isActive ? 'text-forest-200' : 'text-forest-500'}`}>
                           {count}
@@ -408,37 +429,37 @@ export default function HomePage() {
             )}
 
             {/* Month navigation */}
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between mb-4">
               <button
                 onClick={() => setMonthIdx(i => Math.max(0, i - 1))}
                 disabled={safeIdx === 0}
                 className="flex items-center gap-1 px-3 py-2 rounded-xl bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 text-sm font-medium"
               >
-                <ChevronLeft className="w-4 h-4" /> Prec.
+                <ChevronLeft className="w-4 h-4" /> <span className="hidden sm:inline">Prec.</span>
               </button>
 
-              <p className="font-semibold text-stone-800 capitalize text-lg">{monthLabel}</p>
+              <p className="font-semibold text-stone-800 capitalize text-base sm:text-lg">{monthLabel}</p>
 
               <button
                 onClick={() => setMonthIdx(i => Math.min(months.length - 1, i + 1))}
                 disabled={safeIdx === months.length - 1}
                 className="flex items-center gap-1 px-3 py-2 rounded-xl bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 text-sm font-medium"
               >
-                Succ. <ChevronRight className="w-4 h-4" />
+                <span className="hidden sm:inline">Succ.</span> <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
             {/* Day-of-week headers */}
-            <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 mb-1 sm:mb-1.5">
               {DAY_LABELS.map(d => (
-                <div key={d} className="text-center text-xs font-semibold text-stone-400 uppercase tracking-widest py-1">
+                <div key={d} className="text-center text-[9px] sm:text-xs font-semibold text-stone-400 uppercase tracking-widest py-1">
                   {d}
                 </div>
               ))}
             </div>
 
             {/* Month grid */}
-            <div className="grid grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
               {cells.map((dayNum, i) => {
                 if (dayNum === null) return <div key={`e-${i}`} className="aspect-square" />
                 const date      = new Date(year, month, dayNum)
@@ -450,8 +471,8 @@ export default function HomePage() {
                 const planHike  = planItems[0]
                 const isToday   = isSameDay(date, new Date())
 
-                if (act) return <ActivityCard key={key} activity={act} date={date} extra={extra} />
-                if (planHike) return <PlannedCard key={key} hike={planHike} date={date} />
+                if (act) return <ActivityCard key={key} activity={act} date={date} extra={extra} compact />
+                if (planHike) return <PlannedCard key={key} hike={planHike} date={date} compact />
 
                 return (
                   <div
@@ -459,11 +480,9 @@ export default function HomePage() {
                     className={`aspect-square rounded-xl border flex flex-col
                       ${isToday ? 'border-terra-200 bg-terra-50/40' : 'border-stone-100 bg-stone-50/60'}`}
                   >
-                    <div className="flex justify-end p-1.5">
-                      <span
-                        className={`text-xs font-medium rounded-full w-5 h-5 flex items-center justify-center
-                          ${isToday ? 'bg-terra-500 text-white font-bold' : 'text-stone-300'}`}
-                      >
+                    <div className="flex justify-end p-1 sm:p-1.5">
+                      <span className={`text-[10px] sm:text-xs font-medium rounded-full w-5 h-5 flex items-center justify-center
+                        ${isToday ? 'bg-terra-500 text-white font-bold' : 'text-stone-300'}`}>
                         {dayNum}
                       </span>
                     </div>
@@ -476,7 +495,6 @@ export default function HomePage() {
         ) : (
           /* ────────── LIST VIEW ────────── */
           <div className="fade-up space-y-6">
-            {/* Completed activities */}
             {sortedActivities.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">Registrate</p>
@@ -493,7 +511,6 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Planned hikes */}
             {planned.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">

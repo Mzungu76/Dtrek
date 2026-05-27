@@ -317,14 +317,14 @@ export default function StatistichePage() {
   ]
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
       <Navbar />
-      <main className="max-w-6xl mx-auto px-4 py-8 fade-up">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-5 sm:py-8 fade-up">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6 flex-wrap">
           <div>
-            <h1 className="font-display text-3xl font-semibold text-stone-800">Statistiche</h1>
+            <h1 className="font-display text-2xl sm:text-3xl font-semibold text-stone-800">Statistiche</h1>
             <p className="text-stone-500 text-sm mt-1">
               {loading ? 'Caricamento…' : `${stats.totalActivities} escursioni registrate`}
             </p>
@@ -333,15 +333,15 @@ export default function StatistichePage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setShareKind('stats')}
-                className="flex items-center gap-2 px-4 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
               >
-                <Share2 className="w-4 h-4" /> Condividi
+                <Share2 className="w-4 h-4" /> <span className="hidden sm:inline">Condividi</span>
               </button>
               <button
                 onClick={() => exportAllActivitiesToExcel(activities as any)}
-                className="flex items-center gap-2 px-4 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
               >
-                <FileSpreadsheet className="w-4 h-4" /> Esporta Excel
+                <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Esporta Excel</span>
               </button>
             </div>
           )}
@@ -359,12 +359,12 @@ export default function StatistichePage() {
         ) : (
           <>
             {/* Tabs */}
-            <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-8 w-fit">
+            <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-6 sm:mb-8 w-full sm:w-fit">
               {TABS.map(t => (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex-1 sm:flex-none px-3 sm:px-5 py-2 rounded-lg text-sm font-medium transition-all ${
                     tab === t.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-500 hover:text-stone-700'
                   }`}
                 >

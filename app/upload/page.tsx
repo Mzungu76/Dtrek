@@ -320,9 +320,9 @@ export default function UploadPage() {
   const [tab, setTab] = useState<'tcx' | 'gpx'>('tcx')
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
       <Navbar />
-      <main className="max-w-2xl mx-auto px-4 py-12 fade-up">
+      <main className="max-w-2xl mx-auto px-4 py-8 sm:py-12 fade-up">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-forest-50 border border-forest-200 mb-4">
             <Mountain className="w-8 h-8 text-forest-600" />
