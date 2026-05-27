@@ -1,10 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 const PROVIDERS: Record<string, string> = {
-  // CartoDB Dark Matter — free, no key, great aesthetics for fitness sharing
-  dark:  'https://a.basemaps.cartocdn.com/dark_all',
+  // CartoDB Voyager — mid-tone, shows terrain, great contrast for route lines
+  voyager: 'https://a.basemaps.cartocdn.com/rastertiles/voyager',
+  // CartoDB Dark Matter — free, no key
+  dark:    'https://a.basemaps.cartocdn.com/dark_all',
   // OSM standard — fallback
-  light: 'https://tile.openstreetmap.org',
+  light:   'https://tile.openstreetmap.org',
 }
 
 export async function GET(req: Request) {
@@ -12,13 +14,13 @@ export async function GET(req: Request) {
   const z     = searchParams.get('z')
   const x     = searchParams.get('x')
   const y     = searchParams.get('y')
-  const style = searchParams.get('style') ?? 'dark'
+  const style = searchParams.get('style') ?? 'voyager'
 
   if (!z || !x || !y) return new Response('Missing z/x/y', { status: 400 })
   const zoom = parseInt(z)
   if (isNaN(zoom) || zoom < 0 || zoom > 19) return new Response('Invalid zoom', { status: 400 })
 
-  const base = PROVIDERS[style] ?? PROVIDERS.dark
+  const base = PROVIDERS[style] ?? PROVIDERS.voyager
   const url  = `${base}/${z}/${x}/${y}.png`
 
   try {

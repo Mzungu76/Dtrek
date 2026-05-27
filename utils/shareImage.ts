@@ -218,7 +218,7 @@ async function drawTiledMap(
       const py1 = Math.round(offY + (ty - tyMin + 1) * TILE_PX * scale)
       const p = loadImg(`/api/tile?z=${zoom}&x=${tx}&y=${ty}&style=${style}`)
         .then(img => { ctx.drawImage(img, px0, py0, px1 - px0, py1 - py0) })
-        .catch(() => { ctx.fillStyle = style === 'dark' ? '#1a1a2e' : '#e8f5e9'; ctx.fillRect(px0, py0, px1 - px0, py1 - py0) })
+        .catch(() => { ctx.fillStyle = style === 'dark' ? '#1a1a2e' : '#e8e8e8'; ctx.fillRect(px0, py0, px1 - px0, py1 - py0) })
       fetches.push(p)
     }
   }
@@ -310,24 +310,24 @@ export async function generateActivityImage(
     const tileCtx = await drawTiledMap(
       ctx, [activity.routePolyline!],
       0, 0, w, h,
-      { radius: 0, style: 'dark', fillCanvas: true },
+      { radius: 0, style: 'voyager', fillCanvas: true },
     )
 
     // 2. Route
     drawRouteOnTiles(ctx, activity.routePolyline!, tileCtx.pixelOf, '#3b82f6', 5)
 
-    // 3. Top gradient
+    // 3. Top gradient — stronger to ensure white text reads over Voyager's light tiles
     const topGrad = ctx.createLinearGradient(0, 0, 0, topH)
-    topGrad.addColorStop(0,   'rgba(0,0,0,0.82)')
-    topGrad.addColorStop(0.7, 'rgba(0,0,0,0.35)')
+    topGrad.addColorStop(0,   'rgba(0,0,0,0.88)')
+    topGrad.addColorStop(0.65,'rgba(0,0,0,0.45)')
     topGrad.addColorStop(1,   'rgba(0,0,0,0)')
     ctx.fillStyle = topGrad; ctx.fillRect(0, 0, w, topH)
 
-    // 4. Bottom gradient
+    // 4. Bottom gradient — stronger for the same reason
     const botGrad = ctx.createLinearGradient(0, h - botH, 0, h)
     botGrad.addColorStop(0,   'rgba(0,0,0,0)')
-    botGrad.addColorStop(0.4, 'rgba(0,0,0,0.55)')
-    botGrad.addColorStop(1,   'rgba(0,0,0,0.88)')
+    botGrad.addColorStop(0.35,'rgba(0,0,0,0.60)')
+    botGrad.addColorStop(1,   'rgba(0,0,0,0.92)')
     ctx.fillStyle = botGrad; ctx.fillRect(0, h - botH, w, botH)
 
     // 5. Title
@@ -605,7 +605,7 @@ export async function generateMapImage(
   }
 
   // Full-bleed map
-  const tileCtx = await drawTiledMap(ctx, polylines, 0, 0, w, h, { fillCanvas: true, style: 'dark' })
+  const tileCtx = await drawTiledMap(ctx, polylines, 0, 0, w, h, { fillCanvas: true, style: 'voyager' })
 
   // Draw all routes
   polylines.forEach((poly, i) => {
@@ -615,8 +615,8 @@ export async function generateMapImage(
   // Top header gradient + text
   const headerH = 140
   const topGrad = ctx.createLinearGradient(0, 0, 0, headerH)
-  topGrad.addColorStop(0,   'rgba(0,0,0,0.80)')
-  topGrad.addColorStop(0.8, 'rgba(0,0,0,0.20)')
+  topGrad.addColorStop(0,   'rgba(0,0,0,0.88)')
+  topGrad.addColorStop(0.8, 'rgba(0,0,0,0.25)')
   topGrad.addColorStop(1,   'rgba(0,0,0,0)')
   ctx.fillStyle = topGrad; ctx.fillRect(0, 0, w, headerH)
 
