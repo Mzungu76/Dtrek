@@ -7,6 +7,8 @@ import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
 import AltimetryChart from '@/components/AltimetryChart'
 import SpeedChart from '@/components/SpeedChart'
+import WeatherWidget from '@/components/WeatherWidget'
+import WikiCards from '@/components/WikiCards'
 import {
   getActivityById, updateActivityMeta, deleteActivity,
   type StoredActivity,
@@ -15,12 +17,13 @@ import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
+import { fetchPoisNearTrack, type PoiItem } from '@/lib/overpass'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import type { ActivityMeta } from '@/lib/blobStore'
@@ -32,15 +35,17 @@ export default function EscursionePage() {
   const router  = useRouter()
   const id      = decodeURIComponent(params.id as string)
 
-  const [activity,   setActivity]  = useState<StoredActivity | null>(null)
-  const [loading,    setLoading]   = useState(true)
-  const [saving,     setSaving]    = useState(false)
-  const [editTitle,  setEditTitle] = useState(false)
-  const [editNotes,  setEditNotes] = useState(false)
-  const [titleVal,   setTitleVal]  = useState('')
-  const [notesVal,   setNotesVal]  = useState('')
-  const [tagInput,   setTagInput]  = useState('')
-  const [showShare,  setShowShare] = useState(false)
+  const [activity,     setActivity]    = useState<StoredActivity | null>(null)
+  const [loading,      setLoading]     = useState(true)
+  const [saving,       setSaving]      = useState(false)
+  const [editTitle,    setEditTitle]   = useState(false)
+  const [editNotes,    setEditNotes]   = useState(false)
+  const [titleVal,     setTitleVal]    = useState('')
+  const [notesVal,     setNotesVal]    = useState('')
+  const [tagInput,     setTagInput]    = useState('')
+  const [showShare,    setShowShare]   = useState(false)
+  const [showGradient, setShowGradient] = useState(false)
+  const [pois,         setPois]        = useState<PoiItem[]>([])
 
   useEffect(() => {
     getActivityById(id)
@@ -49,6 +54,13 @@ export default function EscursionePage() {
         setActivity(a)
         setTitleVal(a.title ?? a.notes ?? '')
         setNotesVal(a.userNotes ?? '')
+        // Fetch POIs in background
+        const gpsPoints = a.trackPoints
+          .filter(p => p.lat !== undefined && p.lon !== undefined)
+          .map(p => [p.lat!, p.lon!] as [number, number])
+        if (gpsPoints.length > 0) {
+          fetchPoisNearTrack(gpsPoints, 300).then(setPois).catch(() => {})
+        }
       })
       .finally(() => setLoading(false))
   }, [id, router])
@@ -95,8 +107,12 @@ export default function EscursionePage() {
     router.push('/')
   }
 
-  const dateStr = format(new Date(activity.startTime), "EEEE d MMMM yyyy", { locale: it })
-  const timeStr = `${format(new Date(activity.startTime), 'HH:mm')} – ${format(new Date(activity.endTime), 'HH:mm')}`
+  const dateStr  = format(new Date(activity.startTime), "EEEE d MMMM yyyy", { locale: it })
+  const timeStr  = `${format(new Date(activity.startTime), 'HH:mm')} – ${format(new Date(activity.endTime), 'HH:mm')}`
+  const dateISO  = format(new Date(activity.startTime), 'yyyy-MM-dd')
+  const gpsPoints = activity.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
+  const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
+  const hasGps    = gpsPoints.length > 0
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
@@ -223,10 +239,36 @@ export default function EscursionePage() {
           <StatCard label="Calorie"     value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />
         </div>
 
+        {/* Meteo storico */}
+        {hasGps && (
+          <section className="mb-6">
+            <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />
+          </section>
+        )}
+
         {/* Mappa */}
         <section className="mb-8">
-          <h2 className="font-display text-xl font-semibold text-stone-700 mb-3">Tracciato GPS</h2>
-          <MapView trackPoints={activity.trackPoints} height="280px" />
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display text-xl font-semibold text-stone-700">Tracciato GPS</h2>
+            {hasGps && activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
+              <button
+                onClick={() => setShowGradient(g => !g)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Mappa pendenza</span>
+              </button>
+            )}
+          </div>
+          <MapView
+            trackPoints={activity.trackPoints}
+            height="280px"
+            showGradient={showGradient}
+            pois={pois}
+          />
+          {pois.length > 0 && (
+            <p className="text-xs text-stone-400 mt-1.5">{pois.length} punti di interesse trovati lungo il tracciato</p>
+          )}
         </section>
 
         {/* Grafici */}
@@ -268,6 +310,14 @@ export default function EscursionePage() {
             </dl>
           </div>
         </div>
+
+        {/* Wikipedia nearby */}
+        {hasGps && (
+          <section className="mb-8">
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-3">Luoghi nelle vicinanze</h2>
+            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} />
+          </section>
+        )}
 
         {/* Note */}
         <section className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm mb-8">

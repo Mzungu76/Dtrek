@@ -4,17 +4,20 @@ import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
+import WeatherWidget from '@/components/WeatherWidget'
+import WikiCards from '@/components/WikiCards'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
+import { fetchPoisNearTrack, type PoiItem } from '@/lib/overpass'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers,
 } from 'lucide-react'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
@@ -147,15 +150,17 @@ export default function PlannedHikePage() {
   const router = useRouter()
   const id     = decodeURIComponent(params.id as string)
 
-  const [hike,      setHike]      = useState<PlannedHike | null>(null)
-  const [loading,   setLoading]   = useState(true)
-  const [saving,    setSaving]    = useState(false)
-  const [editTitle, setEditTitle] = useState(false)
-  const [editNotes, setEditNotes] = useState(false)
-  const [editDate,  setEditDate]  = useState(false)
-  const [titleVal,  setTitleVal]  = useState('')
-  const [notesVal,  setNotesVal]  = useState('')
-  const [dateVal,   setDateVal]   = useState('')
+  const [hike,         setHike]        = useState<PlannedHike | null>(null)
+  const [loading,      setLoading]     = useState(true)
+  const [saving,       setSaving]      = useState(false)
+  const [editTitle,    setEditTitle]   = useState(false)
+  const [editNotes,    setEditNotes]   = useState(false)
+  const [editDate,     setEditDate]    = useState(false)
+  const [titleVal,     setTitleVal]    = useState('')
+  const [notesVal,     setNotesVal]    = useState('')
+  const [dateVal,      setDateVal]     = useState('')
+  const [showGradient, setShowGradient] = useState(false)
+  const [pois,         setPois]        = useState<PoiItem[]>([])
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -164,6 +169,13 @@ export default function PlannedHikePage() {
       setTitleVal(h.title)
       setNotesVal(h.userNotes ?? '')
       setDateVal(h.plannedDate ?? '')
+      // Fetch POIs in background
+      const gpsPoints = (h.trackPoints ?? [])
+        .filter(p => p.lat && p.lon)
+        .map(p => [p.lat!, p.lon!] as [number, number])
+      if (gpsPoints.length > 0) {
+        fetchPoisNearTrack(gpsPoints, 300).then(setPois).catch(() => {})
+      }
     }).finally(() => setLoading(false))
   }, [id, router])
 
@@ -197,8 +209,11 @@ export default function PlannedHikePage() {
     finally { setSaving(false) }
   }
 
-  const distKm  = hike.distanceMeters / 1000
-  const polyline = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+  const distKm    = hike.distanceMeters / 1000
+  const polyline  = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+  const gpsPoints = hike.trackPoints?.filter(p => p.lat && p.lon) ?? []
+  const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
+  const hasGps    = gpsPoints.length > 0
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
@@ -302,22 +317,43 @@ export default function PlannedHikePage() {
           )}
         </div>
 
+        {/* Weather forecast */}
+        {hasGps && (
+          <WeatherWidget mode="forecast" lat={centerPt.lat!} lon={centerPt.lon!} days={7} />
+        )}
+
         {/* Map + Elevation side by side on large screens */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Map */}
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-stone-100">
+            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
               <p className="text-sm font-semibold text-stone-700">Tracciato</p>
+              {hasGps && hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
+                <button
+                  onClick={() => setShowGradient(g => !g)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
+                >
+                  <Layers className="w-3 h-3" /> Pendenza
+                </button>
+              )}
             </div>
             <div className="h-80">
               {polyline && polyline.length > 1 ? (
-                <MapView trackPoints={hike.trackPoints ?? []} />
+                <MapView
+                  trackPoints={hike.trackPoints ?? []}
+                  showGradient={showGradient}
+                  pois={pois}
+                  planned
+                />
               ) : (
                 <div className="h-full flex items-center justify-center text-stone-400 text-sm">
                   <Mountain className="w-8 h-8 text-stone-200 mr-2" /> Tracciato non disponibile
                 </div>
               )}
             </div>
+            {pois.length > 0 && (
+              <p className="px-4 pb-2 text-xs text-stone-400">{pois.length} punti di interesse lungo il tracciato</p>
+            )}
           </div>
 
           {/* Elevation profile */}
@@ -342,6 +378,14 @@ export default function PlannedHikePage() {
           <div className="bg-white rounded-2xl border border-stone-200 p-5">
             <p className="text-sm font-semibold text-stone-700 mb-4">Valutazione personalizzata</p>
             <AssessmentPanel a={hike.assessment} distKm={distKm} elevGain={hike.elevationGain} />
+          </div>
+        )}
+
+        {/* Wikipedia nearby */}
+        {hasGps && (
+          <div>
+            <h2 className="font-display text-lg font-semibold text-stone-700 mb-3">Luoghi nelle vicinanze</h2>
+            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} />
           </div>
         )}
 
