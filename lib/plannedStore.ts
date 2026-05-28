@@ -22,6 +22,8 @@ export interface PlannedHike {
   trackPoints?:         TrackPoint[]
   // assessment
   assessment?: HikeAssessment
+  // beauty score (cached after first detail-page visit)
+  cachedBeautyScore?: { overall: number; grade: string; color: string }
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -56,7 +58,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedBeautyScore'>>,
 ): Promise<void> {
   await apiFetch('/api/planned', {
     method: 'PATCH',

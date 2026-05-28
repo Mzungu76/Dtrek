@@ -165,6 +165,16 @@ export default function ProgrammaPage() {
                       </span>
                     )}
 
+                    {/* Beauty score badge */}
+                    {hike.cachedBeautyScore && (
+                      <div
+                        className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-[11px] font-bold rounded-lg px-2 py-1 shadow-sm"
+                        style={{ backgroundColor: hike.cachedBeautyScore.color }}
+                      >
+                        ✦ {hike.cachedBeautyScore.overall.toFixed(1)}
+                      </div>
+                    )}
+
                     {/* Delete button */}
                     <button
                       onClick={e => handleDelete(hike.id, e)}
