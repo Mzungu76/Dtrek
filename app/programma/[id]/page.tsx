@@ -11,6 +11,7 @@ import {
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
 import { fetchPoisNearTrack, type PoiItem } from '@/lib/overpass'
+import type { WikiPage } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -161,6 +162,7 @@ export default function PlannedHikePage() {
   const [dateVal,      setDateVal]     = useState('')
   const [showGradient, setShowGradient] = useState(false)
   const [pois,         setPois]        = useState<PoiItem[]>([])
+  const [wikiPages,    setWikiPages]   = useState<WikiPage[]>([])
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -343,6 +345,7 @@ export default function PlannedHikePage() {
                   trackPoints={hike.trackPoints ?? []}
                   showGradient={showGradient}
                   pois={pois}
+                  wikiPages={wikiPages}
                   planned
                 />
               ) : (
@@ -385,7 +388,7 @@ export default function PlannedHikePage() {
         {hasGps && (
           <div>
             <h2 className="font-display text-lg font-semibold text-stone-700 mb-3">Luoghi nelle vicinanze</h2>
-            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} />
+            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
           </div>
         )}
 

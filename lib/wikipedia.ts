@@ -8,7 +8,9 @@ export interface WikiPage {
   extract:     string
   thumbnail?:  string
   url:         string
-  dist:        number  // meters from query point
+  dist:        number   // meters from query point
+  lat?:        number   // article coordinates (from REST summary, when available)
+  lon?:        number
 }
 
 export async function fetchNearbyWiki(
@@ -55,6 +57,8 @@ export async function fetchNearbyWiki(
           thumbnail:   (s.thumbnail?.source as string | undefined),
           url:         (s.content_urls?.mobile?.page ?? s.content_urls?.desktop?.page ?? '') as string,
           dist:        h.dist,
+          lat:         s.coordinates?.lat as number | undefined,
+          lon:         s.coordinates?.lon as number | undefined,
         } as WikiPage
       } catch {
         return null
