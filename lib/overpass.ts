@@ -92,7 +92,8 @@ export async function fetchTerrainContext(track: [number, number][]): Promise<Te
   way["natural"="scree"](${bbox});
   way["natural"="bare_rock"](${bbox});
   relation["boundary"="national_park"](${bbox});
-  relation["boundary"="protected_area"]["protect_class"~"^(1|2|3|4)$"](${bbox});
+  relation["boundary"="protected_area"](${bbox});
+  way["boundary"="protected_area"](${bbox});
   way["leisure"="nature_reserve"](${bbox});
   relation["leisure"="nature_reserve"](${bbox});
   way["highway"~"path|footway|track"]["sac_scale"](${bbox});
