@@ -7,8 +7,8 @@ export interface CategoryScore {
   key:        string
   label:      string
   emoji:      string
-  score:      number        // 0–10
-  grade:      string        // voto italiano
+  score:      number
+  grade:      string
   gradeLabel: string
   color:      string
   reasons:    string[]
@@ -56,7 +56,7 @@ function scoreNatura(
   let score = 0
   const reasons: string[] = []
 
-  // POI naturali
+  // POI naturali specifici
   const peaks      = pois.filter(p => p.type === 'peak')
   const waterfalls = pois.filter(p => p.type === 'waterfall')
   const caves      = pois.filter(p => p.type === 'cave')
@@ -72,18 +72,38 @@ function scoreNatura(
   else if (elevGain >= 500)  { score += 1.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
   else if (elevGain >= 200)  { score += 1;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
 
-  // Dati terreno da OSM
+  // Dati terreno OSM (way/relation)
   if (terrain.isNationalPark)              { score += 2.5; reasons.push('parco nazionale') }
-  else if (terrain.isProtected)            { score += 1.5; reasons.push('area naturale protetta') }
+  else if (terrain.isProtected)            { score += 2;   reasons.push('area naturale protetta') }
   if (terrain.hasGlacier)                  { score += 3;   reasons.push('ghiacciaio') }
   if (terrain.hasLake)                     { score += 2;   reasons.push('lago') }
   if (terrain.hasForest)                   { score += 1.5; reasons.push('bosco/foresta') }
   if (terrain.openTerrain)                 { score += 1;   reasons.push('terreno aperto') }
   if (terrain.sacScale && terrain.sacScale >= 'T3') { score += 0.5; reasons.push(`sentiero ${terrain.sacScale}`) }
 
-  // Wikipedia naturalistica
-  const natWiki = wikiMatches(wiki, ['lago', 'monte', 'bosco', 'foresta', 'vulcano', 'fiume', 'riserva naturale', 'parco nazionale', 'parco naturale'])
-  if (natWiki.length) { score += Math.min(natWiki.length * 0.6, 1.5); reasons.push(`${natWiki.length} luoghi naturali`) }
+  // Wikipedia — keyword naturalistiche espanse
+  // Prima i parchi/riserve (peso maggiore)
+  const parkWiki = wikiMatches(wiki, [
+    'parco nazionale', 'parco naturale', 'parco regionale', 'parco provinciale',
+    'riserva naturale', 'riserva biogenetica', 'sito di interesse comunitario',
+    'zona speciale di conservazione',
+  ])
+  const parkIds = new Set(parkWiki.map(p => p.title))
+  if (parkWiki.length > 0) {
+    score += Math.min(parkWiki.length * 3, 5)
+    reasons.push(parkWiki[0].title)
+  }
+
+  // Poi habitat e paesaggi naturali
+  const natWiki = wikiMatches(wiki, [
+    'lago', 'monte', 'bosco', 'foresta', 'vulcano', 'fiume', 'torrente',
+    'valle', 'gola', 'forra', 'gorge', 'tufo', 'rupe', 'caldera',
+    'sorgente', 'natura', 'ambiente naturale', 'habitat',
+  ]).filter(p => !parkIds.has(p.title))
+  if (natWiki.length > 0) {
+    score += Math.min(natWiki.length * 1.5, 4)
+    if (parkWiki.length === 0) reasons.push(`${natWiki.length} luoghi naturali`)
+  }
 
   const g = gradeFrom(clamp10(score))
   return { key: 'natura', label: 'Natura', emoji: '🌿', score: clamp10(score), ...g, reasons }
@@ -107,18 +127,26 @@ function scorePaesaggio(
   else if (altMax >= 1000) { score += 1.5; reasons.push(`quota ${Math.round(altMax)} m`) }
   else if (altMax >= 500)  { score += 1;   reasons.push(`quota ${Math.round(altMax)} m`) }
 
-  if (elevGain >= 800) score += 0.5   // escursione verticale ampia
+  if (elevGain >= 800) score += 0.5
 
-  // Dati terreno da OSM
-  if (terrain.hasGlacier)   { score += 2.5; reasons.push('ghiacciaio') }
-  if (terrain.hasLake)      { score += 2;   reasons.push('lago') }
-  if (terrain.hasCoast)     { score += 2;   reasons.push('vista mare/costa') }
-  if (terrain.openTerrain)  { score += 1.5; reasons.push('terreno aperto (panorami)') }
-  if (terrain.isNationalPark) score += 0.5  // bonus qualità paesaggistica validata
+  // Dati terreno OSM
+  if (terrain.hasGlacier)    { score += 2.5; reasons.push('ghiacciaio') }
+  if (terrain.hasLake)       { score += 2;   reasons.push('lago') }
+  if (terrain.hasCoast)      { score += 2;   reasons.push('vista mare/costa') }
+  if (terrain.openTerrain)   { score += 1.5; reasons.push('terreno aperto (panorami)') }
+  if (terrain.isNationalPark) { score += 1;  reasons.push('parco nazionale') }
+  else if (terrain.isProtected) { score += 0.8; reasons.push('area protetta') }
 
-  // Wikipedia panoramica
-  const panWiki = wikiMatches(wiki, ['lago', 'panorama', 'caldera', 'pianura', 'valle', 'costa', 'mare', 'golfo'])
-  if (panWiki.length) { score += Math.min(panWiki.length * 0.6, 1.5); reasons.push(`${panWiki.length} luoghi panoramici`) }
+  // Wikipedia — paesaggi e scenari (peso 1.8, cap 7)
+  const scenicWiki = wikiMatches(wiki, [
+    'lago', 'panorama', 'belvedere', 'caldera', 'pianura', 'costa', 'mare', 'golfo',
+    'valle', 'gola', 'forra', 'rupe', 'dirupo', 'promontorio', 'collina', 'crinale',
+    'tufo', 'altopiano', 'canyon', 'paesaggio', 'scenario',
+  ])
+  if (scenicWiki.length > 0) {
+    score += Math.min(scenicWiki.length * 1.8, 7)
+    reasons.push(`${scenicWiki.length} luoghi panoramici`)
+  }
 
   const g = gradeFrom(clamp10(score))
   return { key: 'paesaggio', label: 'Paesaggio', emoji: '🌄', score: clamp10(score), ...g, reasons }
@@ -131,7 +159,11 @@ function scoreArcheologia(pois: PoiItem[], wiki: WikiPage[]): CategoryScore {
   const ruins = pois.filter(p => p.type === 'ruins')
   if (ruins.length) { score += Math.min(ruins.length * 3, 6); reasons.push(`${ruins.length} sito${ruins.length > 1 ? '/i' : ''} storico${ruins.length > 1 ? '/i' : ''}`) }
 
-  const archWiki = wikiMatches(wiki, ['etrusco', 'romano', 'antico', 'preistorico', 'medievale', 'necropoli', 'archeolog', 'villaggio', 'insediamento', 'età del ferro', 'età del bronzo', 'rinascimento'])
+  const archWiki = wikiMatches(wiki, [
+    'etrusco', 'romano', 'antico', 'preistorico', 'medievale', 'necropoli',
+    'archeolog', 'villaggio', 'insediamento', 'età del ferro', 'età del bronzo',
+    'rinascimento', 'falisco', 'osco', 'sabino', 'longobardo', 'nuragico',
+  ])
   if (archWiki.length) { score += Math.min(archWiki.length * 2.5, 7); reasons.push(archWiki.map(p => p.title).join(', ')) }
 
   const g = gradeFrom(clamp10(score))
@@ -150,7 +182,16 @@ function scoreArchitettura(pois: PoiItem[], wiki: WikiPage[]): CategoryScore {
   if (huts.length)    { score += Math.min(huts.length * 0.7, 2);    reasons.push(`${huts.length} rifugio/i`) }
   if (ruins.length)   { score += Math.min(ruins.length * 1, 2) }
 
-  const archWiki = wikiMatches(wiki, ['chiesa', 'basilica', 'convento', 'abbazia', 'duomo', 'palazzo', 'torre', 'castello', 'santuario', 'cattedrale', 'tempio', 'oratorio', 'cappella', 'monastero'])
+  const archWiki = wikiMatches(wiki, [
+    // religiosi
+    'chiesa', 'basilica', 'convento', 'abbazia', 'duomo', 'santuario',
+    'cattedrale', 'tempio', 'oratorio', 'cappella', 'monastero', 'pieve',
+    // civili e militari
+    'palazzo', 'torre', 'castello', 'rocca', 'fortezza', 'mura', 'porta',
+    // borghi e insediamenti
+    'borgo', 'comune', 'paese', 'centro storico', 'insediamento rupestre',
+    'rupestre', 'villaggio', 'necropoli',
+  ])
   if (archWiki.length) { score += Math.min(archWiki.length * 2.5, 8); reasons.push(archWiki.map(p => p.title).join(', ')) }
 
   const g = gradeFrom(clamp10(score))
@@ -161,7 +202,7 @@ function scoreInteresse(pois: PoiItem[], wiki: WikiPage[]): CategoryScore {
   let score = 0
   const reasons: string[] = []
 
-  if (wiki.length) { score += Math.min(wiki.length * 1.5, 6); reasons.push(`${wiki.length} articoli Wikipedia`) }
+  if (wiki.length) { score += Math.min(wiki.length * 1.5, 7); reasons.push(`${wiki.length} articoli Wikipedia`) }
 
   const types = new Set(pois.map(p => p.type))
   if (types.size > 0) { score += Math.min(types.size * 0.7, 3); reasons.push(`${pois.length} POI (${types.size} tipologie)`) }
