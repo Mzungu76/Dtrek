@@ -34,10 +34,28 @@ interface CardProps {
   onDotClick?: (idx: number) => void
 }
 
+function ratingColor(n: number): string {
+  if (n >= 9) return '#16a34a'
+  if (n >= 7) return '#84cc16'
+  if (n >= 5) return '#f97316'
+  return '#ef4444'
+}
+function ratingLabel(n: number): string {
+  if (n >= 9) return 'Eccellente'
+  if (n >= 8) return 'Ottimo'
+  if (n >= 7) return 'Buono'
+  if (n >= 6) return 'Discreto'
+  if (n >= 5) return 'Sufficiente'
+  return 'Mediocre'
+}
+
 function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, dotCount, dotActive, onDotClick }: CardProps) {
-  const isToday = isSameDay(date, new Date())
+  const isToday   = isSameDay(date, new Date())
   const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
-  const showDots = dotCount && dotCount > 1
+  const showDots  = dotCount && dotCount > 1
+  const rating    = activity.userRating
+  const rColor    = rating ? ratingColor(rating) : null
+
   return (
     <Link
       href={`/escursione/${encodeURIComponent(activity.id)}`}
@@ -51,14 +69,14 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             ${isToday ? 'bg-terra-500 text-white' : 'text-forest-800'}`}>
             {format(date, 'd')}
           </span>
-          <div className="w-2 h-2 rounded-full bg-forest-500" />
-          {/* Mobile dots */}
+          {rating
+            ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: rColor! }}>★{rating}</span>
+            : <div className="w-2 h-2 rounded-full bg-forest-500" />
+          }
           {showDots && (
             <div className="flex gap-0.5">
               {Array.from({ length: dotCount }).map((_, i) => (
-                <div
-                  key={i}
-                  role="button"
+                <div key={i} role="button"
                   onClick={e => { e.preventDefault(); e.stopPropagation(); onDotClick?.(i) }}
                   className={`w-1 h-1 rounded-full ${i === dotActive ? 'bg-forest-700' : 'bg-forest-300'}`}
                 />
@@ -71,6 +89,20 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
 
       {/* Full card (always on desktop; on mobile only if not compact) */}
       <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
+
+        {/* ── Score banner — top of card, visible at first glance ── */}
+        {rating && rColor ? (
+          <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
+            style={{ backgroundColor: rColor + '22', borderBottom: `1.5px solid ${rColor}40` }}>
+            <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}</span>
+            <span className="text-[10px] text-stone-400">/10</span>
+            <span className="text-[10px] font-semibold ml-auto" style={{ color: rColor }}>{ratingLabel(rating)}</span>
+          </div>
+        ) : (
+          <div className="h-1 shrink-0 bg-forest-100" />
+        )}
+
+        {/* Thumbnail */}
         <div className="flex-1 relative bg-gradient-to-b from-forest-50 to-stone-50 min-h-0 overflow-hidden">
           <div className="absolute inset-2">
             {activity.routePolyline && activity.routePolyline.length > 1 ? (
@@ -85,19 +117,11 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             ${isToday ? 'bg-terra-500 text-white' : 'bg-white/90 text-stone-600'}`}>
             {dateLabel}
           </span>
-          {/* User rating badge */}
-          {activity.userRating && (
-            <span className="absolute bottom-2 left-2 text-[10px] font-bold bg-forest-700 text-white rounded-lg px-1.5 py-0.5 shadow-sm">
-              ★ {activity.userRating}/10
-            </span>
-          )}
-          {/* Navigation dots (desktop) */}
+          {/* Navigation dots */}
           {showDots && (
             <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1">
               {Array.from({ length: dotCount }).map((_, i) => (
-                <div
-                  key={i}
-                  role="button"
+                <div key={i} role="button"
                   onClick={e => { e.preventDefault(); e.stopPropagation(); onDotClick?.(i) }}
                   className={`w-2 h-2 rounded-full border border-white/50 shadow-sm transition-colors cursor-pointer
                     ${i === dotActive ? 'bg-forest-700' : 'bg-white/80 hover:bg-forest-200'}`}
@@ -106,6 +130,8 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             </div>
           )}
         </div>
+
+        {/* Stats */}
         <div className="shrink-0 px-2.5 pb-2.5 pt-1.5 border-t border-stone-100">
           <p className="text-xs font-semibold text-stone-800 truncate leading-tight mb-1">
             {activity.title ?? 'Escursione'}

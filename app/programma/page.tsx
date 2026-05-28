@@ -12,6 +12,11 @@ import {
   Loader2, Trash2, Upload, AlertTriangle, Info, ShieldAlert,
 } from 'lucide-react'
 
+const GRADE_LABEL: Record<string, string> = {
+  '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto',
+  '6': 'Sufficiente', '5': 'Mediocre', '4': 'Insufficiente',
+}
+
 const DIFFICULTY_LABEL: Record<string, string> = {
   facile:       'Facile',
   moderata:     'Moderata',
@@ -138,8 +143,45 @@ export default function ProgrammaPage() {
                   href={`/programma/${encodeURIComponent(hike.id)}`}
                   className="bg-white rounded-2xl border border-sky-100 shadow-sm hover:border-sky-400 hover:shadow-md transition-all overflow-hidden flex flex-col group"
                 >
+                  {/* ── Beauty score header — top of card ── */}
+                  {hike.cachedBeautyScore ? (
+                    <div
+                      className="flex items-center gap-2.5 px-3 py-2 shrink-0"
+                      style={{
+                        backgroundColor: hike.cachedBeautyScore.color + '1a',
+                        borderBottom: `1.5px solid ${hike.cachedBeautyScore.color}35`,
+                      }}
+                    >
+                      <span className="text-xl font-bold leading-none" style={{ color: hike.cachedBeautyScore.color }}>
+                        {hike.cachedBeautyScore.overall.toFixed(1)}
+                      </span>
+                      <div className="flex flex-col leading-none">
+                        <span className="text-[9px] uppercase tracking-wide font-semibold text-stone-400">Bellezza</span>
+                        <span className="text-xs font-semibold" style={{ color: hike.cachedBeautyScore.color }}>
+                          {GRADE_LABEL[hike.cachedBeautyScore.grade] ?? hike.cachedBeautyScore.grade}
+                        </span>
+                      </div>
+                      {hike.plannedDate && (
+                        <span className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
+                          <CalendarDays className="w-3 h-3" />
+                          {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between px-3 py-1.5 shrink-0 bg-stone-50 border-b border-stone-100">
+                      <span className="text-[10px] text-stone-400 italic">Apri per la pagella</span>
+                      {hike.plannedDate && (
+                        <span className="flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
+                          <CalendarDays className="w-3 h-3" />
+                          {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Route thumbnail */}
-                  <div className="relative h-36 bg-gradient-to-b from-sky-50 to-stone-50 overflow-hidden">
+                  <div className="relative h-32 bg-gradient-to-b from-sky-50 to-stone-50 overflow-hidden">
                     <div className="absolute inset-2">
                       {hike.routePolyline && hike.routePolyline.length > 1 ? (
                         <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
@@ -155,24 +197,6 @@ export default function ProgrammaPage() {
                       <span className={`absolute top-2 left-2 text-[10px] font-bold rounded-full px-2 py-0.5 ${DIFFICULTY_COLORS[diff]}`}>
                         {DIFFICULTY_LABEL[diff]}
                       </span>
-                    )}
-
-                    {/* Planned date */}
-                    {hike.plannedDate && (
-                      <span className="absolute top-2 right-2 text-[10px] font-semibold bg-white/90 text-sky-700 rounded-full px-1.5 py-0.5 flex items-center gap-0.5">
-                        <CalendarDays className="w-2.5 h-2.5" />
-                        {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
-                      </span>
-                    )}
-
-                    {/* Beauty score badge */}
-                    {hike.cachedBeautyScore && (
-                      <div
-                        className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-[11px] font-bold rounded-lg px-2 py-1 shadow-sm"
-                        style={{ backgroundColor: hike.cachedBeautyScore.color }}
-                      >
-                        ✦ {hike.cachedBeautyScore.overall.toFixed(1)}
-                      </div>
                     )}
 
                     {/* Delete button */}
