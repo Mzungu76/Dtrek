@@ -11,7 +11,7 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { fetchPoisNearTrack, type PoiItem } from '@/lib/overpass'
+import { fetchPoisNearTrack, fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { computeBeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -165,6 +165,7 @@ export default function PlannedHikePage() {
   const [showGradient, setShowGradient] = useState(false)
   const [pois,         setPois]        = useState<PoiItem[]>([])
   const [wikiPages,    setWikiPages]   = useState<WikiPage[]>([])
+  const [terrain,      setTerrain]     = useState<TerrainContext | null>(null)
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -173,22 +174,22 @@ export default function PlannedHikePage() {
       setTitleVal(h.title)
       setNotesVal(h.userNotes ?? '')
       setDateVal(h.plannedDate ?? '')
-      // Fetch POIs in background
       const gpsPoints = (h.trackPoints ?? [])
         .filter(p => p.lat && p.lon)
         .map(p => [p.lat!, p.lon!] as [number, number])
       if (gpsPoints.length > 0) {
         fetchPoisNearTrack(gpsPoints, 300).then(setPois).catch(() => {})
+        fetchTerrainContext(gpsPoints).then(setTerrain).catch(() => {})
       }
     }).finally(() => setLoading(false))
   }, [id, router])
 
   // Must be before early returns — hooks cannot be called conditionally
   const beautyScore = useMemo(
-    () => hike && (pois.length > 0 || wikiPages.length > 0)
-      ? computeBeautyScore(pois, wikiPages, hike.elevationGain, hike.altitudeMax)
+    () => hike && terrain && (pois.length > 0 || wikiPages.length > 0 || terrain.hasLake || terrain.hasForest)
+      ? computeBeautyScore(pois, wikiPages, terrain, hike.elevationGain, hike.altitudeMax)
       : null,
-    [pois, wikiPages, hike],
+    [pois, wikiPages, terrain, hike],
   )
 
   if (loading) return (

@@ -56,16 +56,93 @@ function minDistToTrack(lat: number, lon: number, sample: [number, number][]): n
   return min
 }
 
+export function trackBbox(track: [number, number][], pad = 0.006): string {
+  const lats = track.map(p => p[0])
+  const lons = track.map(p => p[1])
+  return `${Math.min(...lats) - pad},${Math.min(...lons) - pad},${Math.max(...lats) + pad},${Math.max(...lons) + pad}`
+}
+
+export interface TerrainContext {
+  hasForest:      boolean
+  hasLake:        boolean
+  hasGlacier:     boolean
+  hasCoast:       boolean
+  isProtected:    boolean   // riserva naturale / area protetta
+  isNationalPark: boolean
+  openTerrain:    boolean   // fell / heath / grassland / scree / bare_rock
+  sacScale?:      string    // massimo SAC trovato sui sentieri (T1–T6)
+  surfaces:       string[]  // valori unici di surface= sul tracciato
+}
+
+export async function fetchTerrainContext(track: [number, number][]): Promise<TerrainContext> {
+  if (track.length === 0) return emptyTerrain()
+  const bbox  = trackBbox(track, 0.01)  // ~1 km di padding per le aree
+
+  const query = `[out:json][timeout:25];
+(
+  way["natural"="wood"](${bbox});
+  way["landuse"="forest"](${bbox});
+  way["natural"="water"]["water"="lake"](${bbox});
+  relation["natural"="water"]["water"="lake"](${bbox});
+  way["natural"="glacier"](${bbox});
+  way["natural"="coastline"](${bbox});
+  way["natural"="fell"](${bbox});
+  way["natural"="heath"](${bbox});
+  way["natural"="grassland"](${bbox});
+  way["natural"="scree"](${bbox});
+  way["natural"="bare_rock"](${bbox});
+  relation["boundary"="national_park"](${bbox});
+  relation["boundary"="protected_area"]["protect_class"~"^(1|2|3|4)$"](${bbox});
+  way["leisure"="nature_reserve"](${bbox});
+  relation["leisure"="nature_reserve"](${bbox});
+  way["highway"~"path|footway|track"]["sac_scale"](${bbox});
+  way["highway"~"path|footway|track"]["surface"](${bbox});
+);
+out tags;`
+
+  const res = await fetch('/api/overpass', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    `data=${encodeURIComponent(query)}`,
+  })
+  if (!res.ok) return emptyTerrain()
+  const data = await res.json()
+
+  const ctx = emptyTerrain()
+  const sacOrder = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6']
+  const surfaces = new Set<string>()
+  let maxSac = -1
+
+  for (const el of data.elements as any[]) {
+    const t = el.tags ?? {}
+    if (t['natural'] === 'wood'  || t['landuse'] === 'forest')              ctx.hasForest      = true
+    if (t['natural'] === 'water' && t['water'] === 'lake')                  ctx.hasLake        = true
+    if (t['natural'] === 'glacier')                                          ctx.hasGlacier     = true
+    if (t['natural'] === 'coastline')                                        ctx.hasCoast       = true
+    if (['fell','heath','grassland','scree','bare_rock'].includes(t['natural'])) ctx.openTerrain = true
+    if (t['boundary'] === 'national_park')                                  { ctx.isNationalPark = true; ctx.isProtected = true }
+    if (t['boundary'] === 'protected_area' || t['leisure'] === 'nature_reserve') ctx.isProtected = true
+    if (t['sac_scale']) { const i = sacOrder.indexOf(t['sac_scale']); if (i > maxSac) maxSac = i }
+    if (t['surface'])   surfaces.add(t['surface'])
+  }
+
+  if (maxSac >= 0) ctx.sacScale = sacOrder[maxSac]
+  ctx.surfaces = Array.from(surfaces)
+  return ctx
+}
+
+function emptyTerrain(): TerrainContext {
+  return { hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
+           isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [] }
+}
+
 export async function fetchPoisNearTrack(
   track: [number, number][],
   maxDistM = 300,
 ): Promise<PoiItem[]> {
   if (track.length === 0) return []
 
-  const lats = track.map(p => p[0])
-  const lons = track.map(p => p[1])
-  const pad  = 0.006  // ~600m padding
-  const bbox = `${Math.min(...lats) - pad},${Math.min(...lons) - pad},${Math.max(...lats) + pad},${Math.max(...lons) + pad}`
+  const bbox = trackBbox(track)
 
   const query = `[out:json][timeout:30];
 (
