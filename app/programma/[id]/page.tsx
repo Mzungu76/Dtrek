@@ -192,6 +192,15 @@ export default function PlannedHikePage() {
     [pois, wikiPages, terrain, hike],
   )
 
+  // Persist score the first time it's computed (so list cards can show it)
+  useEffect(() => {
+    if (!beautyScore || !hike || hike.cachedBeautyScore) return
+    const { overall, grade, color } = beautyScore
+    const cached = { overall, grade, color }
+    updatePlannedMeta(hike.id, { cachedBeautyScore: cached }).catch(() => {})
+    setHike(prev => prev ? { ...prev, cachedBeautyScore: cached } : prev)
+  }, [beautyScore, hike])
+
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
       <Navbar />
