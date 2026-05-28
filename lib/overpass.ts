@@ -1,7 +1,18 @@
 // Overpass API — OpenStreetMap, 100% gratuita, nessuna chiave
 // https://overpass-api.de/
 
-export type PoiType = 'peak' | 'hut' | 'bivouac' | 'spring' | 'viewpoint' | 'cross'
+export type PoiType =
+  | 'peak'
+  | 'hut'
+  | 'bivouac'
+  | 'spring'
+  | 'viewpoint'
+  | 'cross'
+  | 'pass'
+  | 'waterfall'
+  | 'cave'
+  | 'shelter'
+  | 'ruins'
 
 export interface PoiItem {
   id: number
@@ -14,12 +25,17 @@ export interface PoiItem {
 }
 
 export const POI_META: Record<PoiType, { label: string; emoji: string; color: string }> = {
-  peak:      { label: 'Cima',      emoji: '⛰',  color: '#6b7280' },
-  hut:       { label: 'Rifugio',   emoji: '🏠',  color: '#d97706' },
-  bivouac:   { label: 'Bivacco',   emoji: '⛺',  color: '#92400e' },
-  spring:    { label: 'Acqua',     emoji: '💧',  color: '#0284c7' },
-  viewpoint: { label: 'Belvedere', emoji: '👁',  color: '#7c3aed' },
-  cross:     { label: 'Croce',     emoji: '✝',   color: '#dc2626' },
+  peak:      { label: 'Cima',       emoji: '⛰',  color: '#6b7280' },
+  hut:       { label: 'Rifugio',    emoji: '🏠',  color: '#d97706' },
+  bivouac:   { label: 'Bivacco',    emoji: '⛺',  color: '#92400e' },
+  spring:    { label: 'Acqua',      emoji: '💧',  color: '#0284c7' },
+  viewpoint: { label: 'Belvedere',  emoji: '👁',  color: '#7c3aed' },
+  cross:     { label: 'Croce',      emoji: '✝',   color: '#dc2626' },
+  pass:      { label: 'Valico',     emoji: '🏔',  color: '#4b5563' },
+  waterfall: { label: 'Cascata',    emoji: '💦',  color: '#0369a1' },
+  cave:      { label: 'Grotta',     emoji: '🕳',  color: '#78350f' },
+  shelter:   { label: 'Riparo',     emoji: '🛖',  color: '#a16207' },
+  ruins:     { label: 'Rovine',     emoji: '🏛',  color: '#713f12' },
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -51,7 +67,7 @@ export async function fetchPoisNearTrack(
   const pad  = 0.006  // ~600m padding
   const bbox = `${Math.min(...lats) - pad},${Math.min(...lons) - pad},${Math.max(...lats) + pad},${Math.max(...lons) + pad}`
 
-  const query = `[out:json][timeout:25];
+  const query = `[out:json][timeout:30];
 (
   node["natural"="peak"](${bbox});
   node["amenity"="alpine_hut"](${bbox});
@@ -60,6 +76,15 @@ export async function fetchPoisNearTrack(
   node["amenity"="drinking_water"](${bbox});
   node["tourism"="viewpoint"](${bbox});
   node["historic"="wayside_cross"]["ele"](${bbox});
+  node["mountain_pass"="yes"](${bbox});
+  node["natural"="saddle"](${bbox});
+  node["natural"="waterfall"](${bbox});
+  node["natural"="cave_entrance"](${bbox});
+  node["amenity"="shelter"](${bbox});
+  node["tourism"="lean_to"](${bbox});
+  node["historic"="ruins"](${bbox});
+  node["historic"="castle"](${bbox});
+  node["historic"="archaeological_site"](${bbox});
 );
 out body;`
 
@@ -82,12 +107,18 @@ out body;`
 
     const t = el.tags ?? {}
     let type: PoiType = 'peak'
-    if      (t['natural']    === 'peak')              type = 'peak'
-    else if (t['amenity']    === 'alpine_hut')         type = 'hut'
-    else if (t['tourism']    === 'wilderness_hut')     type = 'bivouac'
-    else if (t['natural']    === 'spring' || t['amenity'] === 'drinking_water') type = 'spring'
-    else if (t['tourism']    === 'viewpoint')          type = 'viewpoint'
-    else if (t['historic']   === 'wayside_cross')      type = 'cross'
+    if      (t['natural']      === 'peak')                                     type = 'peak'
+    else if (t['amenity']      === 'alpine_hut')                               type = 'hut'
+    else if (t['tourism']      === 'wilderness_hut')                           type = 'bivouac'
+    else if (t['natural']      === 'spring' || t['amenity'] === 'drinking_water') type = 'spring'
+    else if (t['tourism']      === 'viewpoint')                                type = 'viewpoint'
+    else if (t['historic']     === 'wayside_cross')                            type = 'cross'
+    else if (t['mountain_pass'] === 'yes' || t['natural'] === 'saddle')        type = 'pass'
+    else if (t['natural']      === 'waterfall')                                type = 'waterfall'
+    else if (t['natural']      === 'cave_entrance')                            type = 'cave'
+    else if (t['amenity']      === 'shelter' || t['tourism'] === 'lean_to')    type = 'shelter'
+    else if (t['historic']     === 'ruins' || t['historic'] === 'castle' ||
+             t['historic']     === 'archaeological_site')                       type = 'ruins'
 
     pois.push({
       id:   el.id,
