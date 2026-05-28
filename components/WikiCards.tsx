@@ -7,9 +7,10 @@ interface Props {
   lat: number
   lon: number
   radiusM?: number
+  onLoaded?: (pages: WikiPage[]) => void
 }
 
-export default function WikiCards({ lat, lon, radiusM = 8000 }: Props) {
+export default function WikiCards({ lat, lon, radiusM = 8000, onLoaded }: Props) {
   const [pages,   setPages]   = useState<WikiPage[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -17,7 +18,7 @@ export default function WikiCards({ lat, lon, radiusM = 8000 }: Props) {
   useEffect(() => {
     setLoading(true)
     fetchNearbyWiki(lat, lon, radiusM)
-      .then(setPages)
+      .then(p => { setPages(p); onLoaded?.(p) })
       .catch(() => setError('Impossibile caricare articoli Wikipedia'))
       .finally(() => setLoading(false))
   }, [lat, lon, radiusM])

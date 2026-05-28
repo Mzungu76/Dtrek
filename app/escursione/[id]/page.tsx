@@ -18,6 +18,7 @@ import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import { fetchPoisNearTrack, type PoiItem } from '@/lib/overpass'
+import type { WikiPage } from '@/lib/wikipedia'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -46,6 +47,7 @@ export default function EscursionePage() {
   const [showShare,    setShowShare]   = useState(false)
   const [showGradient, setShowGradient] = useState(false)
   const [pois,         setPois]        = useState<PoiItem[]>([])
+  const [wikiPages,    setWikiPages]   = useState<WikiPage[]>([])
 
   useEffect(() => {
     getActivityById(id)
@@ -265,6 +267,7 @@ export default function EscursionePage() {
             height="280px"
             showGradient={showGradient}
             pois={pois}
+            wikiPages={wikiPages}
           />
           {pois.length > 0 && (
             <p className="text-xs text-stone-400 mt-1.5">{pois.length} punti di interesse trovati lungo il tracciato</p>
@@ -315,7 +318,7 @@ export default function EscursionePage() {
         {hasGps && (
           <section className="mb-8">
             <h2 className="font-display text-xl font-semibold text-stone-700 mb-3">Luoghi nelle vicinanze</h2>
-            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} />
+            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
           </section>
         )}
 

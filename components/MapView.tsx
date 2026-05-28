@@ -3,12 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 import { POI_META } from '@/lib/overpass'
+import type { WikiPage } from '@/lib/wikipedia'
 
 interface Props {
   trackPoints: TrackPoint[]
   height?: string
   showGradient?: boolean
   pois?: PoiItem[]
+  wikiPages?: WikiPage[]
   planned?: boolean
 }
 
@@ -35,11 +37,13 @@ export default function MapView({
   height = '400px',
   showGradient = false,
   pois = [],
+  wikiPages = [],
   planned = false,
 }: Props) {
-  const mapRef      = useRef<HTMLDivElement>(null)
-  const mapInstance = useRef<any>(null)
-  const poiLayer    = useRef<any[]>([])
+  const mapRef       = useRef<HTMLDivElement>(null)
+  const mapInstance  = useRef<any>(null)
+  const poiLayer     = useRef<any[]>([])
+  const wikiLayer    = useRef<any[]>([])
   const [mapReady, setMapReady] = useState(false)
 
   // Main map init effect
@@ -168,6 +172,42 @@ export default function MapView({
       }
     })
   }, [pois, mapReady])
+
+  // Wikipedia layer — only pages that have coordinates
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+
+    import('leaflet').then(L => {
+      wikiLayer.current.forEach((m: any) => m.remove())
+      wikiLayer.current = []
+
+      for (const page of wikiPages) {
+        if (page.lat == null || page.lon == null) continue
+        const icon = L.divIcon({
+          html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35)">W</div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+          className: '',
+        })
+        const thumb = page.thumbnail
+          ? `<img src="${page.thumbnail}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:right;margin-left:8px">`
+          : ''
+        const popup = `
+          <div style="max-width:220px;font-size:12px;line-height:1.4">
+            ${thumb}
+            <b style="font-size:13px">${page.title}</b>
+            ${page.description ? `<div style="color:#6b7280;margin:2px 0">${page.description}</div>` : ''}
+            <div style="color:#374151;margin-top:4px">${page.extract.slice(0, 120)}…</div>
+            <a href="${page.url}" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;margin-top:6px;display:inline-block">Leggi su Wikipedia →</a>
+          </div>`
+
+        const m = L.marker([page.lat, page.lon], { icon })
+          .addTo(mapInstance.current)
+          .bindPopup(popup, { maxWidth: 240 })
+        wikiLayer.current.push(m)
+      }
+    })
+  }, [wikiPages, mapReady])
 
   const hasGps = trackPoints.some(p => p.lat !== undefined)
 
