@@ -84,6 +84,9 @@ export async function POST(req: NextRequest) {
       userNotes: activity.userNotes,
       fileName: activity.fileName,
       routePolyline: downsamplePolyline(activity.trackPoints ?? []),
+      userRating: activity.userRating,
+      userRatingNote: activity.userRatingNote,
+      linkedBeautyScore: activity.linkedBeautyScore,
     }
 
     const idx = index.findIndex(a => a.id === activity.id)

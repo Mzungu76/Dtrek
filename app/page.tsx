@@ -28,11 +28,16 @@ interface CardProps {
   extra?: number
   showFullDate?: boolean
   compact?: boolean   // true in the 7-col calendar → shows dot on mobile
+  // multi-hike navigation
+  dotCount?: number
+  dotActive?: number
+  onDotClick?: (idx: number) => void
 }
 
-function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false }: CardProps) {
+function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, dotCount, dotActive, onDotClick }: CardProps) {
   const isToday = isSameDay(date, new Date())
   const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
+  const showDots = dotCount && dotCount > 1
   return (
     <Link
       href={`/escursione/${encodeURIComponent(activity.id)}`}
@@ -47,7 +52,20 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             {format(date, 'd')}
           </span>
           <div className="w-2 h-2 rounded-full bg-forest-500" />
-          {extra > 0 && <span className="text-[8px] font-bold text-forest-600">+{extra}</span>}
+          {/* Mobile dots */}
+          {showDots && (
+            <div className="flex gap-0.5">
+              {Array.from({ length: dotCount }).map((_, i) => (
+                <div
+                  key={i}
+                  role="button"
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); onDotClick?.(i) }}
+                  className={`w-1 h-1 rounded-full ${i === dotActive ? 'bg-forest-700' : 'bg-forest-300'}`}
+                />
+              ))}
+            </div>
+          )}
+          {!showDots && extra > 0 && <span className="text-[8px] font-bold text-forest-600">+{extra}</span>}
         </div>
       )}
 
@@ -67,10 +85,25 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             ${isToday ? 'bg-terra-500 text-white' : 'bg-white/90 text-stone-600'}`}>
             {dateLabel}
           </span>
-          {extra > 0 && (
-            <span className="absolute top-2 left-2 text-[10px] font-bold bg-forest-600 text-white rounded-full px-1.5 py-0.5">
-              +{extra}
+          {/* User rating badge */}
+          {activity.userRating && (
+            <span className="absolute bottom-2 left-2 text-[10px] font-bold bg-forest-700 text-white rounded-lg px-1.5 py-0.5 shadow-sm">
+              ★ {activity.userRating}/10
             </span>
+          )}
+          {/* Navigation dots (desktop) */}
+          {showDots && (
+            <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1">
+              {Array.from({ length: dotCount }).map((_, i) => (
+                <div
+                  key={i}
+                  role="button"
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); onDotClick?.(i) }}
+                  className={`w-2 h-2 rounded-full border border-white/50 shadow-sm transition-colors cursor-pointer
+                    ${i === dotActive ? 'bg-forest-700' : 'bg-white/80 hover:bg-forest-200'}`}
+                />
+              ))}
+            </div>
           )}
         </div>
         <div className="shrink-0 px-2.5 pb-2.5 pt-1.5 border-t border-stone-100">
@@ -175,6 +208,7 @@ export default function HomePage() {
   const [loading,    setLoading]    = useState(true)
   const [monthIdx,   setMonthIdx]   = useState(-1)
   const [view,       setView]       = useState<'calendar' | 'list'>('calendar')
+  const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
   const monthBarRef                 = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -465,13 +499,23 @@ export default function HomePage() {
                 const date      = new Date(year, month, dayNum)
                 const key       = format(date, 'yyyy-MM-dd')
                 const acts      = actsByDate.get(key) ?? []
-                const act       = acts[0]
-                const extra     = acts.length - 1
+                const curIdx    = Math.min(dayIdx[key] ?? 0, acts.length - 1)
+                const act       = acts[curIdx]
                 const planItems = plannedByDate.get(key) ?? []
                 const planHike  = planItems[0]
                 const isToday   = isSameDay(date, new Date())
 
-                if (act) return <ActivityCard key={key} activity={act} date={date} extra={extra} compact />
+                if (acts.length > 0) return (
+                  <ActivityCard
+                    key={key}
+                    activity={act}
+                    date={date}
+                    compact
+                    dotCount={acts.length}
+                    dotActive={curIdx}
+                    onDotClick={idx => setDayIdx(prev => ({ ...prev, [key]: idx }))}
+                  />
+                )
                 if (planHike) return <PlannedCard key={key} hike={planHike} date={date} compact />
 
                 return (

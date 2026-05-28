@@ -48,6 +48,9 @@ export default function EscursionePage() {
   const [showGradient, setShowGradient] = useState(false)
   const [pois,         setPois]        = useState<PoiItem[]>([])
   const [wikiPages,    setWikiPages]   = useState<WikiPage[]>([])
+  const [ratingVal,    setRatingVal]   = useState(0)
+  const [ratingNote,   setRatingNote]  = useState('')
+  const [savingRating, setSavingRating] = useState(false)
 
   useEffect(() => {
     getActivityById(id)
@@ -56,6 +59,8 @@ export default function EscursionePage() {
         setActivity(a)
         setTitleVal(a.title ?? a.notes ?? '')
         setNotesVal(a.userNotes ?? '')
+        setRatingVal(a.userRating ?? 0)
+        setRatingNote(a.userRatingNote ?? '')
         // Fetch POIs in background
         const gpsPoints = a.trackPoints
           .filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -92,6 +97,14 @@ export default function EscursionePage() {
 
   const saveTitle = async () => { await patch({ title: titleVal }); setEditTitle(false) }
   const saveNotes = async () => { await patch({ userNotes: notesVal }); setEditNotes(false) }
+  const saveRating = async () => {
+    if (!ratingVal) return
+    setSavingRating(true)
+    try {
+      await updateActivityMeta(id, { userRating: ratingVal, userRatingNote: ratingNote.trim() || undefined })
+      setActivity(prev => prev ? { ...prev, userRating: ratingVal, userRatingNote: ratingNote.trim() || undefined } : prev)
+    } finally { setSavingRating(false) }
+  }
 
   const addTag = async () => {
     if (!tagInput.trim()) return
@@ -321,6 +334,87 @@ export default function EscursionePage() {
             <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
           </section>
         )}
+
+        {/* Pagella dalla pianificazione */}
+        {activity.linkedBeautyScore && (
+          <section className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+            <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">
+              Pagella percorso · dalla pianificazione
+            </p>
+            <div className="flex items-center gap-4">
+              <div
+                className="flex items-center justify-center w-16 h-16 rounded-2xl text-white font-bold text-2xl shrink-0 shadow"
+                style={{ backgroundColor: activity.linkedBeautyScore.color }}
+              >
+                {activity.linkedBeautyScore.overall.toFixed(1)}
+              </div>
+              <div>
+                <p className="font-display text-xl font-bold text-stone-800">
+                  {activity.linkedBeautyScore.grade}/10
+                </p>
+                <p className="text-stone-500 text-sm capitalize">
+                  {({ '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto', '6': 'Sufficiente', '5': 'Mediocre', '4': 'Insufficiente' } as Record<string,string>)[activity.linkedBeautyScore.grade] ?? ''}
+                </p>
+                <p className="text-xs text-stone-400 mt-1">Valutazione automatica pre-escursione (OSM + Wikipedia)</p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Voto personale */}
+        <section className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+          <h2 className="font-display text-lg font-semibold text-stone-700 mb-4">Il tuo voto</h2>
+
+          {/* Grade buttons 1-10 */}
+          <div className="flex gap-1 mb-4">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
+              const isSelected = n === ratingVal
+              const color =
+                n <= 4  ? (isSelected ? '#ef4444' : '')
+                : n <= 6 ? (isSelected ? '#f97316' : '')
+                : n <= 8 ? (isSelected ? '#84cc16' : '')
+                          : (isSelected ? '#16a34a' : '')
+              return (
+                <button
+                  key={n}
+                  onClick={() => setRatingVal(n)}
+                  style={isSelected ? { backgroundColor: color, color: 'white' } : {}}
+                  className={`flex-1 aspect-square rounded-xl text-sm font-bold transition-all
+                    ${isSelected
+                      ? 'shadow-sm scale-105'
+                      : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                    }`}
+                >
+                  {n}
+                </button>
+              )
+            })}
+          </div>
+
+          <textarea
+            value={ratingNote}
+            onChange={e => setRatingNote(e.target.value)}
+            placeholder="Commento sull'escursione (opzionale)…"
+            rows={3}
+            className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm text-stone-700 resize-none outline-none focus:border-forest-400 focus:bg-white bg-stone-50"
+          />
+
+          <div className="flex items-center gap-3 mt-3">
+            <button
+              onClick={saveRating}
+              disabled={savingRating || ratingVal === 0}
+              className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-40"
+            >
+              {savingRating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {activity.userRating ? 'Aggiorna voto' : 'Salva voto'}
+            </button>
+            {activity.userRating && (
+              <span className="text-sm text-stone-500">
+                Voto attuale: <strong className="text-forest-700">★ {activity.userRating}/10</strong>
+              </span>
+            )}
+          </div>
+        </section>
 
         {/* Note */}
         <section className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm mb-8">
