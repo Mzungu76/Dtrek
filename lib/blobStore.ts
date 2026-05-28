@@ -16,6 +16,10 @@ export interface StoredActivity extends TcxActivity {
   title?: string
   tags?: string[]
   fileName?: string
+  userRating?: number          // 1-10, assegnato dall'utente post-escursione
+  userRatingNote?: string      // commento libero
+  linkedPlannedId?: string     // ID percorso pianificato di origine
+  linkedBeautyScore?: { overall: number; grade: string; color: string }
 }
 
 export interface ActivityMeta {
@@ -36,6 +40,9 @@ export interface ActivityMeta {
   userNotes?: string
   fileName?: string
   routePolyline?: [number, number][]
+  userRating?: number
+  userRatingNote?: string
+  linkedBeautyScore?: { overall: number; grade: string; color: string }
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -67,6 +74,9 @@ function toMeta(a: StoredActivity): ActivityMeta {
     tags: a.tags,
     userNotes: a.userNotes,
     fileName: a.fileName,
+    userRating: a.userRating,
+    userRatingNote: a.userRatingNote,
+    linkedBeautyScore: a.linkedBeautyScore,
   }
 }
 
@@ -101,10 +111,10 @@ export async function saveActivity(activity: StoredActivity): Promise<void> {
   })
 }
 
-/** Aggiorna solo i metadati editabili (titolo, note, tag) */
+/** Aggiorna metadati editabili */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'linkedBeautyScore'>>
 ): Promise<void> {
   await apiFetch('/api/activity', {
     method: 'PATCH',
