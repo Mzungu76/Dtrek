@@ -1,17 +1,19 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
+import BeautyReport from '@/components/BeautyReport'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
 import { fetchPoisNearTrack, type PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
+import { computeBeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -217,6 +219,14 @@ export default function PlannedHikePage() {
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
 
+  // Compute beauty score once both POIs and wiki pages are loaded
+  const beautyScore = useMemo(
+    () => (pois.length > 0 || wikiPages.length > 0)
+      ? computeBeautyScore(pois, wikiPages, hike.elevationGain, hike.altitudeMax)
+      : null,
+    [pois, wikiPages, hike.elevationGain, hike.altitudeMax],
+  )
+
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
       <Navbar />
@@ -382,6 +392,11 @@ export default function PlannedHikePage() {
             <p className="text-sm font-semibold text-stone-700 mb-4">Valutazione personalizzata</p>
             <AssessmentPanel a={hike.assessment} distKm={distKm} elevGain={hike.elevationGain} />
           </div>
+        )}
+
+        {/* Beauty report */}
+        {beautyScore && (
+          <BeautyReport score={beautyScore} />
         )}
 
         {/* Wikipedia nearby */}
