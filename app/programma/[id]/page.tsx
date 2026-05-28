@@ -183,6 +183,14 @@ export default function PlannedHikePage() {
     }).finally(() => setLoading(false))
   }, [id, router])
 
+  // Must be before early returns — hooks cannot be called conditionally
+  const beautyScore = useMemo(
+    () => hike && (pois.length > 0 || wikiPages.length > 0)
+      ? computeBeautyScore(pois, wikiPages, hike.elevationGain, hike.altitudeMax)
+      : null,
+    [pois, wikiPages, hike],
+  )
+
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
       <Navbar />
@@ -218,14 +226,6 @@ export default function PlannedHikePage() {
   const gpsPoints = hike.trackPoints?.filter(p => p.lat && p.lon) ?? []
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
-
-  // Compute beauty score once both POIs and wiki pages are loaded
-  const beautyScore = useMemo(
-    () => (pois.length > 0 || wikiPages.length > 0)
-      ? computeBeautyScore(pois, wikiPages, hike.elevationGain, hike.altitudeMax)
-      : null,
-    [pois, wikiPages, hike.elevationGain, hike.altitudeMax],
-  )
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
