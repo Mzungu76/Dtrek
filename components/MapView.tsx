@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 import { POI_META } from '@/lib/overpass'
@@ -39,7 +39,8 @@ export default function MapView({
 }: Props) {
   const mapRef      = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
-  const poiLayer    = useRef<any>(null)
+  const poiLayer    = useRef<any[]>([])
+  const [mapReady, setMapReady] = useState(false)
 
   // Main map init effect
   useEffect(() => {
@@ -59,6 +60,7 @@ export default function MapView({
       const coords: [number, number][] = points.map(p => [p.lat!, p.lon!])
       const map = L.map(mapRef.current!).setView(coords[0], 14)
       mapInstance.current = map
+      setMapReady(true)
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
@@ -133,19 +135,18 @@ export default function MapView({
       if (mapInstance.current) {
         mapInstance.current.remove()
         mapInstance.current = null
+        setMapReady(false)
       }
     }
   }, [trackPoints, showGradient, planned])
 
-  // POI layer — separate effect so it can react to pois changing
+  // POI layer — re-runs when pois arrive OR when map finishes initializing
   useEffect(() => {
-    if (!mapInstance.current) return
+    if (!mapReady || !mapInstance.current) return
 
     import('leaflet').then(L => {
-      // Remove previous POI layer
-      if (poiLayer.current) {
-        poiLayer.current.forEach((m: any) => m.remove())
-      }
+      // Clear previous markers
+      poiLayer.current.forEach((m: any) => m.remove())
       poiLayer.current = []
 
       for (const poi of pois) {
@@ -166,7 +167,7 @@ export default function MapView({
         poiLayer.current.push(m)
       }
     })
-  }, [pois])
+  }, [pois, mapReady])
 
   const hasGps = trackPoints.some(p => p.lat !== undefined)
 
