@@ -183,10 +183,17 @@ export default function MapView({
 
       for (const page of wikiPages) {
         if (page.lat == null || page.lon == null) continue
+
+        const iconHtml = page.thumbnail
+          ? `<div style="width:46px;height:46px;border-radius:50%;overflow:hidden;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.45);background:#3b82f6">
+               <img src="${page.thumbnail}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+             </div>`
+          : `<div style="background:#3b82f6;color:white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:bold;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4)">W</div>`
+
         const icon = L.divIcon({
-          html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35)">W</div>`,
-          iconSize: [26, 26],
-          iconAnchor: [13, 13],
+          html: iconHtml,
+          iconSize: [46, 46],
+          iconAnchor: [23, 23],
           className: '',
         })
         const thumb = page.thumbnail
