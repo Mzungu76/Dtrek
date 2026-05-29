@@ -25,12 +25,13 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 
-const MapView    = dynamic(() => import('@/components/MapView'),    { ssr: false })
-const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
+const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
+const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
+const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 
 const BEAUTY_GRADE: Record<string, string> = {
   '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto',
@@ -66,6 +67,7 @@ export default function EscursionePage() {
   const [savingRating,    setSavingRating]   = useState(false)
   const [showRatingPanel, setShowRatingPanel] = useState(false)
   const [show3D,          setShow3D]          = useState(false)
+  const [showStreetView,  setShowStreetView]  = useState(false)
 
   // Before early returns — hooks cannot be conditional
   const heroPolyline = useMemo((): [number, number][] => {
@@ -405,6 +407,14 @@ export default function EscursionePage() {
               )}
               {hasGps && (
                 <button
+                  onClick={() => setShowStreetView(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors"
+                >
+                  <Images className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Foto zona</span>
+                </button>
+              )}
+              {hasGps && (
+                <button
                   onClick={() => setShow3D(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors"
                 >
@@ -511,6 +521,15 @@ export default function EscursionePage() {
           trackPoints={activity.trackPoints}
           title={activity.title ?? activity.notes}
           onClose={() => setShow3D(false)}
+        />
+      )}
+
+      {showStreetView && centerPt?.lat && centerPt?.lon && (
+        <StreetViewPanel
+          lat={centerPt.lat}
+          lon={centerPt.lon}
+          title={activity.title ?? undefined}
+          onClose={() => setShowStreetView(false)}
         />
       )}
     </div>
