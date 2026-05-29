@@ -3,7 +3,8 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl, { Map as MLMap, Marker } from 'maplibre-gl'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { X, Play, Pause, RotateCcw, Mountain } from 'lucide-react'
+import { X, Play, Pause, RotateCcw, Mountain, Camera, Images } from 'lucide-react'
+import StreetViewPanel from '@/components/StreetViewPanel'
 
 const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
 
@@ -56,14 +57,17 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
   const totalDistRef  = useRef(0)
   const exaggRef      = useRef(1.5)
 
-  const [mapReady,     setMapReady]     = useState(false)
-  const [isPlaying,    setIsPlaying]    = useState(false)
-  const [progress,     setProgress]     = useState(0)
-  const [speedIdx,     setSpeedIdx]     = useState(1)
-  const [styleIdx,     setStyleIdx]     = useState(0)
-  const [exaggeration, setExaggeration] = useState(1.5)
-  const [currentAlt,   setCurrentAlt]   = useState(0)
-  const [coveredKm,    setCoveredKm]    = useState(0)
+  const [mapReady,      setMapReady]     = useState(false)
+  const [isPlaying,     setIsPlaying]    = useState(false)
+  const [progress,      setProgress]     = useState(0)
+  const [speedIdx,      setSpeedIdx]     = useState(1)
+  const [styleIdx,      setStyleIdx]     = useState(0)
+  const [exaggeration,  setExaggeration] = useState(1.5)
+  const [currentAlt,    setCurrentAlt]   = useState(0)
+  const [coveredKm,     setCoveredKm]    = useState(0)
+  const [shareToast,    setShareToast]   = useState('')
+  const [showStreetView, setShowStreetView] = useState(false)
+  const [streetViewPos,  setStreetViewPos]  = useState<[number, number] | null>(null)
 
   const gps = useRef(trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined))
 
@@ -165,6 +169,7 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       pitch: 55,
       bearing: 0,
       antialias: true,
+      preserveDrawingBuffer: true, // needed for canvas.toDataURL()
     }) as MLMap
     mapRef.current = map
 
@@ -316,6 +321,37 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     setIsPlaying(v => !v)
   }
 
+  const handleCapture = useCallback(async () => {
+    const map = mapRef.current
+    if (!map) return
+    const canvas = map.getCanvas()
+    const dataUrl = canvas.toDataURL('image/png')
+    const blob = await (await fetch(dataUrl)).blob()
+    const file = new File([blob], `dtrek-3d-${Date.now()}.png`, { type: 'image/png' })
+    if (typeof navigator !== 'undefined' && (navigator as any).canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ title: title ?? 'Percorso 3D', text: '🏔 DTrek — Vista 3D del percorso', files: [file] })
+        return
+      } catch { /* user cancelled */ }
+    }
+    // Fallback: download
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `dtrek-3d-${Date.now()}.png`
+    a.click()
+    setShareToast('Screenshot salvato!')
+    setTimeout(() => setShareToast(''), 2500)
+  }, [title])
+
+  const handleStreetViewHere = useCallback(() => {
+    const pts = gpsRef.current
+    if (!pts.length) return
+    const rawIdx = progressRef.current * (pts.length - 1)
+    const i0 = Math.min(Math.floor(rawIdx), pts.length - 1)
+    setStreetViewPos([pts[i0].lat!, pts[i0].lon!])
+    setShowStreetView(true)
+  }, [])
+
   const totalKm = +(totalDistRef.current / 1000).toFixed(1)
 
   return (
@@ -344,11 +380,27 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
             )}
           </div>
 
-          {/* Right: close */}
-          <button onClick={onClose}
-            className="pointer-events-auto w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg mt-0.5">
-            <X className="w-5 h-5" />
-          </button>
+          {/* Right: action buttons + close */}
+          <div className="flex items-center gap-2 pointer-events-auto mt-0.5">
+            <button
+              onClick={handleStreetViewHere}
+              title="Foto della zona"
+              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg"
+            >
+              <Images className="w-4.5 h-4.5" style={{ width: '1.1rem', height: '1.1rem' }} />
+            </button>
+            <button
+              onClick={handleCapture}
+              title="Condividi screenshot"
+              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg"
+            >
+              <Camera className="w-4.5 h-4.5" style={{ width: '1.1rem', height: '1.1rem' }} />
+            </button>
+            <button onClick={onClose}
+              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -443,6 +495,23 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
           <div className="w-12 h-12 rounded-full border-2 border-white/20 border-t-white animate-spin" />
           <p className="text-sm font-medium text-white/70">Caricamento mappa 3D…</p>
         </div>
+      )}
+
+      {/* ── Share toast ── */}
+      {shareToast && (
+        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md text-stone-800 text-sm font-semibold px-4 py-2 rounded-full shadow-xl pointer-events-none">
+          ✓ {shareToast}
+        </div>
+      )}
+
+      {/* ── StreetView panel ── */}
+      {showStreetView && streetViewPos && (
+        <StreetViewPanel
+          lat={streetViewPos[0]}
+          lon={streetViewPos[1]}
+          title={title}
+          onClose={() => setShowStreetView(false)}
+        />
       )}
     </div>
   )

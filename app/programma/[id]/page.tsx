@@ -21,11 +21,12 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images,
 } from 'lucide-react'
 
-const MapView    = dynamic(() => import('@/components/MapView'),    { ssr: false })
-const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
+const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
+const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
+const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 
 const EMPTY_TERRAIN: TerrainContext = {
   hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
@@ -153,6 +154,7 @@ export default function PlannedHikePage() {
   const [dateVal,        setDateVal]       = useState('')
   const [showGradient,   setShowGradient]  = useState(false)
   const [show3D,         setShow3D]        = useState(false)
+  const [showStreetView, setShowStreetView] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
@@ -400,6 +402,14 @@ export default function PlannedHikePage() {
                 )}
                 {hasGps && (
                   <button
+                    onClick={() => setShowStreetView(true)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border bg-white text-stone-500 border-stone-200 hover:bg-stone-50 transition-colors"
+                  >
+                    <Images className="w-3 h-3" /> Foto zona
+                  </button>
+                )}
+                {hasGps && (
+                  <button
                     onClick={() => setShow3D(true)}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border bg-white text-stone-500 border-stone-200 hover:bg-stone-50 transition-colors"
                   >
@@ -539,6 +549,15 @@ export default function PlannedHikePage() {
           trackPoints={hike.trackPoints}
           title={hike.title}
           onClose={() => setShow3D(false)}
+        />
+      )}
+
+      {showStreetView && centerPt?.lat && centerPt?.lon && (
+        <StreetViewPanel
+          lat={centerPt.lat}
+          lon={centerPt.lon}
+          title={hike.title}
+          onClose={() => setShowStreetView(false)}
         />
       )}
     </div>
