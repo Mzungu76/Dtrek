@@ -7,6 +7,14 @@ export const dynamic = 'force-dynamic'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function downsampleTrackPoints(pts: TrackPoint[], maxPts = 1500): TrackPoint[] {
+  if (pts.length <= maxPts) return pts
+  const step = (pts.length - 1) / (maxPts - 1)
+  return Array.from({ length: maxPts }, (_, i) =>
+    pts[Math.min(Math.round(i * step), pts.length - 1)]
+  )
+}
+
 function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
   const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
   if (!valid.length) return []
@@ -80,7 +88,7 @@ function activityToRow(a: StoredActivity) {
     linked_planned_id:    a.linkedPlannedId ?? null,
     linked_beauty_score:  a.linkedBeautyScore ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
-    track_points:         a.trackPoints ?? [],
+    track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }
 }
 

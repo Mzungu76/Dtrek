@@ -65,7 +65,7 @@ function TcxUploader() {
       setTimeout(() => router.push(`/escursione/${encodeURIComponent(parsedActivity.id)}`), 1200)
     } catch (e) {
       console.error(e); setStatus('error')
-      setErrorMsg('Errore nel salvataggio. Verificate che Vercel Blob sia configurato.')
+      setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -107,10 +107,10 @@ function TcxUploader() {
         <div className="flex items-start gap-3">
           <FileText className="w-5 h-5 text-terra-500 mt-0.5 shrink-0" />
           <div>
-            <p className="font-medium text-stone-700 text-sm mb-1">Archiviazione su Vercel Blob</p>
+            <p className="font-medium text-stone-700 text-sm mb-1">Archiviazione su Supabase</p>
             <ul className="text-stone-500 text-sm space-y-0.5 list-disc list-inside">
               <li>Il file viene analizzato nel browser</li>
-              <li>I dati vengono salvati permanentemente su Vercel Blob</li>
+              <li>I dati vengono salvati permanentemente su Supabase</li>
               <li>Tracciato GPS, FC, velocità, altimetria completi</li>
             </ul>
           </div>
@@ -324,7 +324,7 @@ function GpxUploader() {
       setTimeout(() => router.push(`/programma/${encodeURIComponent(parsed.id)}`), 1200)
     } catch (e) {
       console.error(e); setStatus('error')
-      setErrorMsg('Errore nel salvataggio. Verificate che Vercel Blob sia configurato.')
+      setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
