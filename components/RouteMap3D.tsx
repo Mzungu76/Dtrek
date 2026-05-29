@@ -56,6 +56,7 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
   const gpsRef        = useRef<TrackPoint[]>([])
   const totalDistRef  = useRef(0)
   const exaggRef      = useRef(1.5)
+  const handleScrubRef = useRef<(p: number) => void>(() => {})
 
   const [mapReady,      setMapReady]     = useState(false)
   const [isPlaying,     setIsPlaying]    = useState(false)
@@ -201,6 +202,24 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
 
       // Fly to overview
       map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 72, pitch: 58, duration: 2200 })
+
+      // Click on route line → jump marker to nearest trackpoint
+      const onRouteClick = (e: any) => {
+        const gps = gpsRef.current
+        if (gps.length < 2) return
+        const { lat, lng } = e.lngLat
+        let minD = Infinity, bestIdx = 0
+        for (let i = 0; i < gps.length; i++) {
+          const d = distM(gps[i].lat!, gps[i].lon!, lat, lng)
+          if (d < minD) { minD = d; bestIdx = i }
+        }
+        handleScrubRef.current(bestIdx / (gps.length - 1))
+      }
+      map.on('click', 'route-casing', onRouteClick)
+      map.on('click', 'route-line',   onRouteClick)
+      map.on('mouseenter', 'route-casing', () => { map.getCanvas().style.cursor = 'pointer' })
+      map.on('mouseleave', 'route-casing', () => { map.getCanvas().style.cursor = '' })
+
       setMapReady(true)
     })
 
@@ -352,6 +371,36 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     setShowStreetView(true)
   }, [])
 
+  // ── Scrub / jump to position ──────────────────────────────────────────────────
+  const handleScrub = useCallback((p: number) => {
+    const pts = gpsRef.current
+    if (!pts.length) return
+    // Pause animation when the user grabs the timeline
+    if (isPlayingRef.current) {
+      isPlayingRef.current = false
+      setIsPlaying(false)
+      cancelAnimationFrame(animRef.current)
+    }
+    progressRef.current = p
+    setProgress(p)
+    const rawIdx = p * (pts.length - 1)
+    const i0 = Math.min(Math.floor(rawIdx), pts.length - 1)
+    const i1 = Math.min(i0 + 1, pts.length - 1)
+    const frac = rawIdx - i0
+    const pt0 = pts[i0], pt1 = pts[i1]
+    const lon = pt0.lon! + (pt1.lon! - pt0.lon!) * frac
+    const lat = pt0.lat! + (pt1.lat! - pt0.lat!) * frac
+    const alt = (pt0.altitudeMeters ?? 0) + ((pt1.altitudeMeters ?? 0) - (pt0.altitudeMeters ?? 0)) * frac
+    markerRef.current?.setLngLat([lon, lat])
+    setCurrentAlt(Math.round(alt))
+    setCoveredKm(+(p * totalDistRef.current / 1000).toFixed(1))
+    const lookIdx = Math.min(i0 + Math.max(3, Math.round(pts.length * 0.015)), pts.length - 1)
+    const bear = bearingDeg(lat, lon, pts[lookIdx].lat!, pts[lookIdx].lon!)
+    mapRef.current?.easeTo({ center: [lon, lat], bearing: bear, pitch: 68, zoom: 14.5, duration: 300 })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { handleScrubRef.current = handleScrub }, [handleScrub])
+
   const totalKm = +(totalDistRef.current / 1000).toFixed(1)
 
   return (
@@ -425,12 +474,22 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
         </div>
       </div>
 
-      {/* ── Progress bar ── */}
-      <div className="absolute left-3 right-3 pointer-events-none" style={{ bottom: '92px' }}>
-        <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
-          <div
-            className="h-full rounded-full transition-none"
-            style={{ width: `${progress * 100}%`, background: 'linear-gradient(90deg, #3b82f6, #60a5fa)' }}
+      {/* ── Progress bar (scrubable) ── */}
+      <div className="absolute left-3 right-3" style={{ bottom: '92px' }}>
+        <div className="relative">
+          <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+            <div
+              className="h-full rounded-full transition-none"
+              style={{ width: `${progress * 100}%`, background: 'linear-gradient(90deg, #3b82f6, #60a5fa)' }}
+            />
+          </div>
+          {/* Transparent range input — same area, captures all pointer events */}
+          <input
+            type="range" min={0} max={1} step={0.0005}
+            value={progress}
+            onChange={e => handleScrub(+e.target.value)}
+            className="absolute w-full opacity-0 cursor-pointer"
+            style={{ height: '32px', top: '50%', transform: 'translateY(-50%)' }}
           />
         </div>
         <div className="flex justify-between mt-1 text-[10px] text-white/50 font-medium px-0.5">
