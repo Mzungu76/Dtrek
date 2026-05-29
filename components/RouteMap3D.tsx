@@ -1,7 +1,7 @@
 'use client'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl, { Map as MLMap, Marker } from 'maplibre-gl'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film, Download, Share2 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
@@ -21,13 +21,14 @@ const STYLES = [
   { label: 'Winter',    url: () => `https://api.maptiler.com/maps/winter-v2/style.json?key=${KEY}` },
 ]
 
+// 1080p output for social-quality video
 const VIDEO_DIMS: Record<string, [number, number]> = {
-  '9:16': [540, 960],
-  '16:9': [960, 540],
-  '1:1':  [720, 720],
+  '9:16': [1080, 1920],
+  '16:9': [1920, 1080],
+  '1:1':  [1080, 1080],
 }
 
-// ── Video helpers ──────────────────────────────────────────────────────────────
+// ── Canvas helpers ─────────────────────────────────────────────────────────────
 
 function coverRect(srcW: number, srcH: number, dstW: number, dstH: number) {
   const srcAr = srcW / srcH
@@ -40,79 +41,259 @@ function coverRect(srcW: number, srcH: number, dstW: number, dstH: number) {
   return { sx: 0, sy: Math.round((srcH - sh) / 2), sw: srcW, sh }
 }
 
+// Cross-browser rounded rect (avoids the newer ctx.roundRect API)
+function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const cr = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + cr, y)
+  ctx.lineTo(x + w - cr, y)
+  ctx.arcTo(x + w, y, x + w, y + cr, cr)
+  ctx.lineTo(x + w, y + h - cr)
+  ctx.arcTo(x + w, y + h, x + w - cr, y + h, cr)
+  ctx.lineTo(x + cr, y + h)
+  ctx.arcTo(x, y + h, x, y + h - cr, cr)
+  ctx.lineTo(x, y + cr)
+  ctx.arcTo(x, y, x + cr, y, cr)
+  ctx.closePath()
+}
+
+// ── Graph helper ───────────────────────────────────────────────────────────────
+
+interface GraphData {
+  series:       number[]
+  label:        string     // e.g. "BPM" or "km/h"
+  icon:         string     // e.g. "♥" or "⚡"
+  strokeColor:  string     // hex
+  fillColor:    string     // rgba string for area fill
+  minVal:       number
+  maxVal:       number
+  currentValue: number
+}
+
+// Sport-cam style mini graph panel
+function drawGraph(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, gw: number, gh: number,
+  sc: number, progress: number, g: GraphData,
+) {
+  if (!g.series.length || g.maxVal <= g.minVal) return
+  ctx.save()
+
+  // Background rounded rect
+  ctx.fillStyle = 'rgba(10,10,10,0.62)'
+  rrect(ctx, x, y, gw, gh, 14 * sc)
+  ctx.fill()
+
+  const pad    = Math.round(16 * sc)
+  const valW   = Math.round(148 * sc)  // left column width
+  const lineX  = x + valW
+  const lineW  = gw - valW - pad
+  const lineY  = y + Math.round(10 * sc)
+  const lineH  = gh - Math.round(20 * sc)
+  const range  = g.maxVal - g.minVal
+
+  // ── Left column: icon / value / unit ──────────────────────────────────────
+
+  // Icon + label
+  ctx.textBaseline = 'top'
+  ctx.textAlign    = 'left'
+  ctx.fillStyle    = g.strokeColor
+  ctx.font         = `bold ${Math.round(19 * sc)}px -apple-system,BlinkMacSystemFont,sans-serif`
+  ctx.fillText(`${g.icon}  ${g.label}`, x + pad, y + Math.round(10 * sc))
+
+  // Large current value
+  ctx.fillStyle    = 'white'
+  ctx.textBaseline = 'bottom'
+  ctx.font         = `bold ${Math.round(46 * sc)}px -apple-system,BlinkMacSystemFont,sans-serif`
+  ctx.fillText(`${Math.round(g.currentValue)}`, x + pad, y + gh - Math.round(10 * sc))
+
+  // Thin divider
+  ctx.fillStyle = 'rgba(255,255,255,0.1)'
+  ctx.fillRect(lineX, y + Math.round(14 * sc), 1, gh - Math.round(28 * sc))
+
+  // ── Right column: line graph ───────────────────────────────────────────────
+
+  const pts = g.series.map((v, i) => ({
+    px: lineX + (i / (g.series.length - 1)) * lineW,
+    py: lineY + lineH - Math.max(0, Math.min(1, (v - g.minVal) / range)) * lineH,
+  }))
+
+  // Area fill
+  const areaGrad = ctx.createLinearGradient(0, lineY, 0, lineY + lineH)
+  areaGrad.addColorStop(0, g.fillColor)
+  areaGrad.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.beginPath()
+  pts.forEach(({ px, py }, i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py))
+  ctx.lineTo(pts[pts.length - 1].px, lineY + lineH)
+  ctx.lineTo(pts[0].px, lineY + lineH)
+  ctx.closePath()
+  ctx.fillStyle = areaGrad
+  ctx.fill()
+
+  // Stroke line
+  ctx.strokeStyle = g.strokeColor
+  ctx.lineWidth   = 2.5 * sc
+  ctx.lineJoin    = 'round'
+  ctx.lineCap     = 'round'
+  ctx.beginPath()
+  pts.forEach(({ px, py }, i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py))
+  ctx.stroke()
+
+  // Cursor dashed line
+  const cursorX = lineX + progress * lineW
+  ctx.save()
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)'
+  ctx.lineWidth   = 1.5 * sc
+  ctx.setLineDash([4 * sc, 4 * sc])
+  ctx.beginPath()
+  ctx.moveTo(cursorX, lineY)
+  ctx.lineTo(cursorX, lineY + lineH)
+  ctx.stroke()
+  ctx.restore()
+
+  // Cursor dot on line
+  const ci  = Math.min(Math.round(progress * (g.series.length - 1)), g.series.length - 1)
+  const cdp = pts[ci]
+  if (cdp) {
+    ctx.fillStyle   = g.strokeColor
+    ctx.strokeStyle = 'white'
+    ctx.lineWidth   = 2.5 * sc
+    ctx.beginPath()
+    ctx.arc(cdp.px, cdp.py, 6 * sc, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  ctx.restore()
+}
+
+// ── HUD overlay ────────────────────────────────────────────────────────────────
+
 interface HUDOpts {
-  showTitle: boolean
-  title: string
-  showStats: boolean
-  coveredKm: number
-  totalKm: number
-  alt: number
-  elevGain: number
+  showTitle:    boolean
+  title:        string
+  showStats:    boolean
+  coveredKm:    number
+  totalKm:      number
+  alt:          number
+  elevGain:     number
   showProgress: boolean
-  progress: number
+  progress:     number
+  showBody:     boolean
+  hrData?:      GraphData
+  speedData?:   GraphData
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opts: HUDOpts) {
-  const sc = w / 540
+  // Scale all elements relative to 1080p base (works for all 3 orientations)
+  const sc = Math.min(w, h) / 1080
 
-  // Bottom gradient overlay
-  const grad = ctx.createLinearGradient(0, h * 0.72, 0, h)
+  const pad     = Math.round(40 * sc)
+  const lineH   = Math.round(52 * sc)
+  const statSz  = Math.round(32 * sc)
+  const labelSz = Math.round(22 * sc)
+  const brandSz = Math.round(22 * sc)
+  const graphH  = Math.round(116 * sc)
+  const graphGap= Math.round(16 * sc)
+
+  const hasBody = opts.showBody && (opts.hrData || opts.speedData)
+  const hasGraphs = hasBody
+
+  // Gradient — extend higher when graphs are shown
+  const gradTop = hasGraphs ? h * 0.58 : h * 0.72
+  const grad = ctx.createLinearGradient(0, gradTop, 0, h)
   grad.addColorStop(0, 'rgba(0,0,0,0)')
-  grad.addColorStop(1, 'rgba(0,0,0,0.85)')
+  grad.addColorStop(0.5, 'rgba(0,0,0,0.55)')
+  grad.addColorStop(1, 'rgba(0,0,0,0.88)')
   ctx.fillStyle = grad
-  ctx.fillRect(0, h * 0.72, w, h * 0.28)
+  ctx.fillRect(0, gradTop, w, h - gradTop)
 
-  const pad  = Math.round(20 * sc)
-  const lineH = Math.round(26 * sc)
+  ctx.textAlign = 'left'
+  let yBase = h - pad
 
-  ctx.textBaseline = 'bottom'
-  let yBase = h - Math.round(16 * sc)
-
-  // Progress bar
+  // ── Progress bar ────────────────────────────────────────────────────────────
   if (opts.showProgress) {
-    const barH = Math.max(3, Math.round(4 * sc))
+    const barH = Math.max(6, Math.round(8 * sc))
     yBase -= barH
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'
-    ctx.fillRect(0, yBase, w, barH)
-    ctx.fillStyle = '#3b82f6'
-    ctx.fillRect(0, yBase, w * opts.progress, barH)
-    yBase -= Math.round(10 * sc)
+    // Track
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'
+    rrect(ctx, 0, yBase, w, barH, barH / 2)
+    ctx.fill()
+    // Fill
+    if (opts.progress > 0) {
+      ctx.fillStyle = '#3b82f6'
+      rrect(ctx, 0, yBase, Math.max(barH, w * opts.progress), barH, barH / 2)
+      ctx.fill()
+    }
+    yBase -= Math.round(20 * sc)
   }
 
-  // Stats row
+  // ── Stats row ───────────────────────────────────────────────────────────────
   if (opts.showStats) {
-    const statSize = Math.round(16 * sc)
-    ctx.font = `bold ${statSize}px -apple-system,BlinkMacSystemFont,sans-serif`
-    ctx.fillStyle = 'white'
+    ctx.textBaseline = 'bottom'
+    ctx.font = `bold ${statSz}px -apple-system,BlinkMacSystemFont,sans-serif`
 
-    const distText = `${opts.coveredKm}/${opts.totalKm} km`
-    ctx.fillText(distText, pad, yBase)
+    ctx.fillStyle = 'white'
+    ctx.fillText(`${opts.coveredKm}/${opts.totalKm} km`, pad, yBase)
 
     const altText = `${opts.alt} m`
     ctx.fillText(altText, (w - ctx.measureText(altText).width) / 2, yBase)
 
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillStyle = 'rgba(255,255,255,0.82)'
     const gainText = `+${opts.elevGain} m`
     ctx.fillText(gainText, w - ctx.measureText(gainText).width - pad, yBase)
 
     yBase -= lineH
   }
 
-  // Title
+  // ── Title ───────────────────────────────────────────────────────────────────
   if (opts.showTitle && opts.title) {
-    ctx.font = `600 ${Math.round(13 * sc)}px -apple-system,BlinkMacSystemFont,sans-serif`
-    ctx.fillStyle = 'rgba(255,255,255,0.75)'
+    ctx.textBaseline = 'bottom'
+    ctx.font = `600 ${labelSz}px -apple-system,BlinkMacSystemFont,sans-serif`
+    ctx.fillStyle = 'rgba(255,255,255,0.78)'
     let t = opts.title
-    const maxW = w - pad * 2
-    while (ctx.measureText(t).width > maxW && t.length > 4) t = t.slice(0, -4) + '…'
+    while (ctx.measureText(t).width > w - pad * 2 && t.length > 4) t = t.slice(0, -4) + '…'
     ctx.fillText(t, pad, yBase)
+    yBase -= lineH
   }
 
-  // Branding
-  ctx.font = `bold ${Math.round(11 * sc)}px -apple-system,BlinkMacSystemFont,sans-serif`
-  ctx.fillStyle = 'rgba(255,255,255,0.4)'
+  // ── Body data graphs ────────────────────────────────────────────────────────
+  if (hasBody) {
+    yBase -= Math.round(22 * sc)  // spacer above graphs
+    const isPortrait = h > w
+
+    if (isPortrait) {
+      // Stack vertically: speed below HR
+      if (opts.speedData) {
+        yBase -= graphH
+        drawGraph(ctx, pad, yBase, w - 2 * pad, graphH, sc, opts.progress, opts.speedData)
+        yBase -= graphGap
+      }
+      if (opts.hrData) {
+        yBase -= graphH
+        drawGraph(ctx, pad, yBase, w - 2 * pad, graphH, sc, opts.progress, opts.hrData)
+      }
+    } else {
+      // Side by side for landscape / square
+      const half = Math.floor((w - 2 * pad - graphGap) / 2)
+      yBase -= graphH
+      if (opts.hrData && opts.speedData) {
+        drawGraph(ctx, pad,            yBase, half, graphH, sc, opts.progress, opts.hrData)
+        drawGraph(ctx, pad + half + graphGap, yBase, half, graphH, sc, opts.progress, opts.speedData)
+      } else if (opts.hrData) {
+        drawGraph(ctx, pad, yBase, w - 2 * pad, graphH, sc, opts.progress, opts.hrData)
+      } else if (opts.speedData) {
+        drawGraph(ctx, pad, yBase, w - 2 * pad, graphH, sc, opts.progress, opts.speedData)
+      }
+    }
+  }
+
+  // ── Branding (bottom-right corner) ──────────────────────────────────────────
+  ctx.textBaseline = 'bottom'
+  ctx.font = `bold ${brandSz}px -apple-system,BlinkMacSystemFont,sans-serif`
+  ctx.fillStyle = 'rgba(255,255,255,0.38)'
   const brand = 'DTrek'
-  ctx.fillText(brand, w - ctx.measureText(brand).width - pad, h - Math.round(8 * sc))
+  ctx.fillText(brand, w - ctx.measureText(brand).width - pad, h - Math.round(10 * sc))
 }
 
 // ── Geo helpers ────────────────────────────────────────────────────────────────
@@ -130,6 +311,14 @@ function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): num
   const y = Math.sin(dLon) * Math.cos(rad(lat2))
   const x = Math.cos(rad(lat1)) * Math.sin(rad(lat2)) - Math.sin(rad(lat1)) * Math.cos(rad(lat2)) * Math.cos(dLon)
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
+}
+
+// Smooth speed using a moving average window
+function smoothArray(arr: number[], half = 4): number[] {
+  return arr.map((_, i) => {
+    const slice = arr.slice(Math.max(0, i - half), Math.min(arr.length, i + half + 1))
+    return slice.reduce((a, b) => a + b, 0) / slice.length
+  })
 }
 
 type VideoState = 'idle' | 'config' | 'recording' | 'done'
@@ -181,10 +370,19 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
   const [videoShowTitle,     setVideoShowTitle]    = useState(true)
   const [videoShowStats,     setVideoShowStats]    = useState(true)
   const [videoShowProgress,  setVideoShowProgress] = useState(true)
+  const [videoShowBody,      setVideoShowBody]     = useState(true)
   const [videoRecordedBlob,  setVideoRecordedBlob] = useState<Blob | null>(null)
   const [videoProgress,      setVideoProgress]     = useState(0)
 
   const gps = useRef(trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined))
+
+  // Whether body data (HR / speed) is available in this track
+  const hasBodyData = useMemo(() => {
+    const pts = gps.current
+    const hasHr   = pts.some(p => (p.heartRateBpm ?? 0) > 0)
+    const hasTime = pts.length > 1 && pts.some(p => !!p.time)
+    return hasHr || hasTime
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Layer setup ──────────────────────────────────────────────────────────────
   const setupLayers = useCallback(() => {
@@ -198,7 +396,7 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       map.addSource('terrain', {
         type: 'raster-dem',
         url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${KEY}`,
-        tileSize: 256,
+        tileSize: 512,   // 512 → sharper terrain mesh
       })
     }
     map.setTerrain({ source: 'terrain', exaggeration: exaggRef.current })
@@ -248,9 +446,7 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
 
     const rawIdx = progressRef.current * (N - 1)
     const i0 = Math.min(Math.floor(rawIdx), N - 1)
-    if (markerRef.current) {
-      markerRef.current.setLngLat([pts[i0].lon!, pts[i0].lat!])
-    }
+    if (markerRef.current) markerRef.current.setLngLat([pts[i0].lon!, pts[i0].lat!])
   }, [])
 
   // ── Map initialisation ───────────────────────────────────────────────────────
@@ -259,7 +455,6 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     if (!containerRef.current || pts.length < 2) return
     gpsRef.current = pts
 
-    // Cumulative distance + elevation stats
     let cum = 0, gain = 0, altMax = pts[0].altitudeMeters ?? 0
     for (let i = 1; i < pts.length; i++) {
       cum += distM(pts[i-1].lat!, pts[i-1].lon!, pts[i].lat!, pts[i].lon!)
@@ -297,8 +492,10 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
         el.style.cssText = `width:14px;height:14px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.5)`
         return el
       }
-      new maplibregl.Marker({ element: mkEl('#22c55e') }).setLngLat([pts[0].lon!, pts[0].lat!]).addTo(map)
-      new maplibregl.Marker({ element: mkEl('#ef4444') }).setLngLat([pts[pts.length-1].lon!, pts[pts.length-1].lat!]).addTo(map)
+      new maplibregl.Marker({ element: mkEl('#22c55e') })
+        .setLngLat([pts[0].lon!, pts[0].lat!]).addTo(map)
+      new maplibregl.Marker({ element: mkEl('#ef4444') })
+        .setLngLat([pts[pts.length-1].lon!, pts[pts.length-1].lat!]).addTo(map)
 
       const el = document.createElement('div')
       el.style.cssText = 'position:relative;width:24px;height:24px;'
@@ -309,8 +506,7 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
         <div style="position:absolute;inset:0;border-radius:50%;background:#3b82f6;border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,.5)"></div>
       `
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
-        .setLngLat([pts[0].lon!, pts[0].lat!])
-        .addTo(map)
+        .setLngLat([pts[0].lon!, pts[0].lat!]).addTo(map)
       markerRef.current = marker
 
       map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 72, pitch: 58, duration: 2200 })
@@ -369,25 +565,19 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
   // ── Normal animation loop ─────────────────────────────────────────────────────
   useEffect(() => {
     isPlayingRef.current = isPlaying
-
-    if (!isPlaying) {
-      cancelAnimationFrame(animRef.current)
-      return
-    }
+    if (!isPlaying) { cancelAnimationFrame(animRef.current); return }
 
     lastTsRef.current = 0
-    const pts   = gpsRef.current
-    const N     = pts.length
+    const pts     = gpsRef.current
+    const N       = pts.length
     const totalKm = totalDistRef.current / 1000
 
     const tick = (ts: number) => {
       if (!isPlayingRef.current) return
-
-      const dt   = lastTsRef.current ? ts - lastTsRef.current : 16
+      const dt = lastTsRef.current ? ts - lastTsRef.current : 16
       lastTsRef.current = ts
 
-      const speed = SPEEDS[speedIdx].v
-      progressRef.current = Math.min(1, progressRef.current + (dt * speed) / 90000)
+      progressRef.current = Math.min(1, progressRef.current + (dt * SPEEDS[speedIdx].v) / 90000)
       setProgress(progressRef.current)
 
       const rawIdx = progressRef.current * (N - 1)
@@ -405,17 +595,12 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
 
       const lookIdx = Math.min(i0 + Math.max(3, Math.round(N * 0.015)), N - 1)
       const bear = bearingDeg(lat, lon, pts[lookIdx].lat!, pts[lookIdx].lon!)
-
       mapRef.current?.easeTo({ center: [lon, lat], bearing: bear, pitch: 68, zoom: 14.5, duration: 180 })
 
-      if (progressRef.current < 1) {
-        animRef.current = requestAnimationFrame(tick)
-      } else {
-        setIsPlaying(false)
-      }
+      if (progressRef.current < 1) { animRef.current = requestAnimationFrame(tick) }
+      else { setIsPlaying(false) }
     }
     animRef.current = requestAnimationFrame(tick)
-
     return () => cancelAnimationFrame(animRef.current)
   }, [isPlaying, speedIdx])
 
@@ -424,15 +609,11 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     cancelAnimationFrame(animRef.current)
     isPlayingRef.current = false
     progressRef.current = 0
-    setProgress(0)
-    setIsPlaying(false)
-
+    setProgress(0); setIsPlaying(false)
     const pts = gpsRef.current
-    if (pts.length === 0) return
+    if (!pts.length) return
     markerRef.current?.setLngLat([pts[0].lon!, pts[0].lat!])
-    setCurrentAlt(pts[0].altitudeMeters ?? 0)
-    setCoveredKm(0)
-
+    setCurrentAlt(pts[0].altitudeMeters ?? 0); setCoveredKm(0)
     let minLon = pts[0].lon!, maxLon = pts[0].lon!, minLat = pts[0].lat!, maxLat = pts[0].lat!
     for (const p of pts) {
       if (p.lon! < minLon) minLon = p.lon!; if (p.lon! > maxLon) maxLon = p.lon!
@@ -441,61 +622,43 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     mapRef.current?.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 72, pitch: 58, duration: 1200 })
   }, [])
 
-  const handlePlay = () => {
-    if (progressRef.current >= 1) reset()
-    setIsPlaying(v => !v)
-  }
+  const handlePlay = () => { if (progressRef.current >= 1) reset(); setIsPlaying(v => !v) }
 
-  // ── Screenshot capture ────────────────────────────────────────────────────────
+  // ── Screenshot ───────────────────────────────────────────────────────────────
   const handleCapture = useCallback(async () => {
     const map = mapRef.current
     if (!map) return
-    const canvas = map.getCanvas()
-    const dataUrl = canvas.toDataURL('image/png')
+    const dataUrl = map.getCanvas().toDataURL('image/png')
     const blob = await (await fetch(dataUrl)).blob()
     const file = new File([blob], `dtrek-3d-${Date.now()}.png`, { type: 'image/png' })
     if (typeof navigator !== 'undefined' && (navigator as any).canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ title: title ?? 'Percorso 3D', text: '🏔 DTrek — Vista 3D del percorso', files: [file] })
-        return
-      } catch { /* user cancelled */ }
+      try { await navigator.share({ title: title ?? 'Percorso 3D', text: 'DTrek — Vista 3D del percorso', files: [file] }); return } catch {}
     }
     const a = document.createElement('a')
-    a.href = dataUrl
-    a.download = `dtrek-3d-${Date.now()}.png`
-    a.click()
-    setShareToast('Screenshot salvato!')
-    setTimeout(() => setShareToast(''), 2500)
+    a.href = dataUrl; a.download = `dtrek-3d-${Date.now()}.png`; a.click()
+    setShareToast('Screenshot salvato!'); setTimeout(() => setShareToast(''), 2500)
   }, [title])
 
   const handleStreetViewHere = useCallback(() => {
     const pts = gpsRef.current
     if (!pts.length) return
-    const rawIdx = progressRef.current * (pts.length - 1)
-    const i0 = Math.min(Math.floor(rawIdx), pts.length - 1)
-    setStreetViewPos([pts[i0].lat!, pts[i0].lon!])
-    setShowStreetView(true)
+    const i0 = Math.min(Math.floor(progressRef.current * (pts.length - 1)), pts.length - 1)
+    setStreetViewPos([pts[i0].lat!, pts[i0].lon!]); setShowStreetView(true)
   }, [])
 
   // ── Scrub ─────────────────────────────────────────────────────────────────────
   const handleScrub = useCallback((p: number) => {
     const pts = gpsRef.current
     if (!pts.length) return
-    if (isPlayingRef.current) {
-      isPlayingRef.current = false
-      setIsPlaying(false)
-      cancelAnimationFrame(animRef.current)
-    }
-    progressRef.current = p
-    setProgress(p)
+    if (isPlayingRef.current) { isPlayingRef.current = false; setIsPlaying(false); cancelAnimationFrame(animRef.current) }
+    progressRef.current = p; setProgress(p)
     const rawIdx = p * (pts.length - 1)
     const i0 = Math.min(Math.floor(rawIdx), pts.length - 1)
     const i1 = Math.min(i0 + 1, pts.length - 1)
     const frac = rawIdx - i0
-    const pt0 = pts[i0], pt1 = pts[i1]
-    const lon = pt0.lon! + (pt1.lon! - pt0.lon!) * frac
-    const lat = pt0.lat! + (pt1.lat! - pt0.lat!) * frac
-    const alt = (pt0.altitudeMeters ?? 0) + ((pt1.altitudeMeters ?? 0) - (pt0.altitudeMeters ?? 0)) * frac
+    const lon = pts[i0].lon! + (pts[i1].lon! - pts[i0].lon!) * frac
+    const lat = pts[i0].lat! + (pts[i1].lat! - pts[i0].lat!) * frac
+    const alt = (pts[i0].altitudeMeters ?? 0) + ((pts[i1].altitudeMeters ?? 0) - (pts[i0].altitudeMeters ?? 0)) * frac
     markerRef.current?.setLngLat([lon, lat])
     setCurrentAlt(Math.round(alt))
     setCoveredKm(+(p * totalDistRef.current / 1000).toFixed(1))
@@ -518,12 +681,10 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       return
     }
 
-    // Stop normal animation, reset to start
+    // Pause normal animation, reset to start
     cancelAnimationFrame(animRef.current)
-    isPlayingRef.current = false
-    setIsPlaying(false)
-    progressRef.current = 0
-    setProgress(0)
+    isPlayingRef.current = false; setIsPlaying(false)
+    progressRef.current = 0; setProgress(0)
     const pts = gpsRef.current
     if (pts.length < 2) return
     markerRef.current?.setLngLat([pts[0].lon!, pts[0].lat!])
@@ -534,8 +695,7 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
 
     const [outW, outH] = VIDEO_DIMS[videoOrientation]
     const composite = document.createElement('canvas')
-    composite.width  = outW
-    composite.height = outH
+    composite.width = outW; composite.height = outH
     compositeCanvasRef.current = composite
     const ctx = composite.getContext('2d')!
 
@@ -543,26 +703,48 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       .find(t => MediaRecorder.isTypeSupported(t)) ?? ''
 
     const stream = (composite as any).captureStream(30) as MediaStream
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    const recorder = new MediaRecorder(stream, {
+      ...(mimeType ? { mimeType } : {}),
+      videoBitsPerSecond: 10_000_000,  // 10 Mbps for social quality
+    })
     videoChunksRef.current = []
-    recorder.ondataavailable = (e: BlobEvent) => {
-      if (e.data.size > 0) videoChunksRef.current.push(e.data)
-    }
+    recorder.ondataavailable = (e: BlobEvent) => { if (e.data.size > 0) videoChunksRef.current.push(e.data) }
     recorder.onstop = () => {
       const blob = new Blob(videoChunksRef.current, { type: mimeType || 'video/webm' })
-      setVideoRecordedBlob(blob)
-      setVideoState('done')
+      setVideoRecordedBlob(blob); setVideoState('done')
     }
     mediaRecorderRef.current = recorder
     recorder.start(100)
 
+    // ── Pre-compute body data series (sampled to 300 points) ─────────────────
     const N = pts.length
-    const totalKm = totalDistRef.current / 1000
+    const SAMPLES = Math.min(300, N)
+    const step = (N - 1) / (SAMPLES - 1)
+
+    const rawHr    = Array.from({ length: SAMPLES }, (_, i) => pts[Math.min(Math.round(i * step), N-1)].heartRateBpm ?? 0)
+    const rawSpeed = Array.from({ length: SAMPLES }, (_, i) => {
+      const idx = Math.min(Math.round(i * step), N-1)
+      if (idx === 0) return 0
+      const prev = Math.max(0, idx - 1)
+      const t0 = pts[prev].time ? new Date(pts[prev].time!).getTime() : 0
+      const t1 = pts[idx].time  ? new Date(pts[idx].time!).getTime()  : 0
+      if (!t0 || !t1 || t1 <= t0) return 0
+      return (distM(pts[prev].lat!, pts[prev].lon!, pts[idx].lat!, pts[idx].lon!) / ((t1 - t0) / 1000)) * 3.6
+    })
+    const smoothSpeed = smoothArray(rawSpeed, 4)
+
+    const hrMax = Math.max(...rawHr); const hrMin = Math.min(...rawHr.filter(v => v > 0), hrMax)
+    const spMax = Math.max(...smoothSpeed); const spMin = 0
+    const hasHr    = hrMax > 0
+    const hasSpeed = spMax > 0
+
+    // ── Per-frame data ────────────────────────────────────────────────────────
+    const totalKm     = totalDistRef.current / 1000
     const { gain: elevGain } = elevStatsRef.current
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
-    const durationMs = videoDuration * 1000
-    const cr = coverRect(srcW, srcH, outW, outH)
-    let startTime = 0
+    const dpr         = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
+    const durationMs  = videoDuration * 1000
+    const cr          = coverRect(srcW, srcH, outW, outH)
+    let startTime     = 0
 
     const tick = (ts: number) => {
       if (!startTime) startTime = ts
@@ -570,68 +752,78 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       setVideoProgress(p)
 
       const rawIdx = p * (N - 1)
-      const i0 = Math.floor(rawIdx)
-      const i1 = Math.min(i0 + 1, N - 1)
+      const i0  = Math.floor(rawIdx)
+      const i1  = Math.min(i0 + 1, N - 1)
       const frac = rawIdx - i0
-      const p0 = pts[i0], p1 = pts[i1]
-      const lon = p0.lon! + (p1.lon! - p0.lon!) * frac
-      const lat = p0.lat! + (p1.lat! - p0.lat!) * frac
-      const alt = (p0.altitudeMeters ?? 0) + ((p1.altitudeMeters ?? 0) - (p0.altitudeMeters ?? 0)) * frac
+      const lon = pts[i0].lon! + (pts[i1].lon! - pts[i0].lon!) * frac
+      const lat = pts[i0].lat! + (pts[i1].lat! - pts[i0].lat!) * frac
+      const alt = (pts[i0].altitudeMeters ?? 0) + ((pts[i1].altitudeMeters ?? 0) - (pts[i0].altitudeMeters ?? 0)) * frac
 
       markerRef.current?.setLngLat([lon, lat])
 
-      // Bird's eye camera: lower pitch, zoom adapts to altitude
-      const lookIdx = Math.min(i0 + Math.max(3, Math.round(N * 0.015)), N - 1)
-      const bear = bearingDeg(lat, lon, pts[lookIdx].lat!, pts[lookIdx].lon!)
-      const zoom = Math.max(12.5, Math.min(14.5, 14.5 - (alt / 2500)))
-      map.easeTo({ center: [lon, lat], bearing: bear, pitch: 32, zoom, duration: 150 })
+      // ── Bird's-eye camera: smooth bearing, closer zoom, higher pitch ────────
+      // Use 4% lookahead for very smooth bearing transitions
+      const lookIdx = Math.min(i0 + Math.max(20, Math.round(N * 0.04)), N - 1)
+      const bear    = bearingDeg(lat, lon, pts[lookIdx].lat!, pts[lookIdx].lon!)
+      // Zoom adapts to terrain altitude: higher mountains → zoom out slightly
+      const zoom    = Math.max(13.0, Math.min(15.2, 15.2 - (alt / 2000)))
+      map.easeTo({ center: [lon, lat], bearing: bear, pitch: 38, zoom, duration: 400 })
 
-      // Composite: map + marker + HUD
+      // ── Draw composite frame ────────────────────────────────────────────────
       ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
 
-      // Draw animated position dot
-      const mp = map.project([lon, lat] as [number, number])
-      const px = mp.x * dpr
-      const py = mp.y * dpr
-      const cx = ((px - cr.sx) / cr.sw) * outW
-      const cy = ((py - cr.sy) / cr.sh) * outH
+      // Position marker dot (projected from map canvas space)
+      const mp  = map.project([lon, lat] as [number, number])
+      const px  = mp.x * dpr
+      const py  = mp.y * dpr
+      const cx  = ((px - cr.sx) / cr.sw) * outW
+      const cy  = ((py - cr.sy) / cr.sh) * outH
       if (cx >= -20 && cx <= outW + 20 && cy >= -20 && cy <= outH + 20) {
-        const ms = outW / 540
-        ctx.beginPath()
-        ctx.arc(cx, cy, 10 * ms, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(59,130,246,0.28)'
-        ctx.fill()
-        ctx.beginPath()
-        ctx.arc(cx, cy, 5 * ms, 0, Math.PI * 2)
-        ctx.fillStyle = '#3b82f6'
-        ctx.fill()
-        ctx.strokeStyle = 'white'
-        ctx.lineWidth = 2 * ms
-        ctx.stroke()
+        const ms = outW / 1080
+        ctx.save()
+        ctx.beginPath(); ctx.arc(cx, cy, 18 * ms, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(59,130,246,0.25)'; ctx.fill()
+        ctx.beginPath(); ctx.arc(cx, cy, 9 * ms, 0, Math.PI * 2)
+        ctx.fillStyle = '#3b82f6'; ctx.fill()
+        ctx.strokeStyle = 'white'; ctx.lineWidth = 3 * ms; ctx.stroke()
+        ctx.restore()
       }
+
+      // Body data for this frame
+      const si = Math.min(Math.round(p * (SAMPLES - 1)), SAMPLES - 1)
+      const hrData: GraphData | undefined = (hasHr && videoShowBody) ? {
+        series: rawHr, label: 'BPM', icon: '♥', strokeColor: '#ef4444',
+        fillColor: 'rgba(239,68,68,0.28)', minVal: Math.max(0, hrMin - 5),
+        maxVal: hrMax + 5, currentValue: rawHr[si],
+      } : undefined
+      const speedData: GraphData | undefined = (hasSpeed && videoShowBody) ? {
+        series: smoothSpeed, label: 'km/h', icon: '⚡', strokeColor: '#60a5fa',
+        fillColor: 'rgba(96,165,250,0.28)', minVal: spMin, maxVal: spMax + 1,
+        currentValue: smoothSpeed[si],
+      } : undefined
 
       drawHUD(ctx, outW, outH, {
-        showTitle: videoShowTitle,
-        title: title ?? '',
-        showStats: videoShowStats,
-        coveredKm: +(p * totalKm).toFixed(1),
-        totalKm: +totalKm.toFixed(1),
-        alt: Math.round(alt),
+        showTitle:    videoShowTitle,
+        title:        title ?? '',
+        showStats:    videoShowStats,
+        coveredKm:    +(p * totalKm).toFixed(1),
+        totalKm:      +totalKm.toFixed(1),
+        alt:          Math.round(alt),
         elevGain,
         showProgress: videoShowProgress,
-        progress: p,
+        progress:     p,
+        showBody:     videoShowBody,
+        hrData,
+        speedData,
       })
 
-      if (p < 1) {
-        videoAnimRef.current = requestAnimationFrame(tick)
-      } else {
-        recorder.stop()
-      }
+      if (p < 1) { videoAnimRef.current = requestAnimationFrame(tick) }
+      else { recorder.stop() }
     }
 
     setVideoState('recording')
     videoAnimRef.current = requestAnimationFrame(tick)
-  }, [videoDuration, videoOrientation, videoShowTitle, videoShowStats, videoShowProgress, title])
+  }, [videoDuration, videoOrientation, videoShowTitle, videoShowStats, videoShowProgress, videoShowBody, title])
 
   const cancelVideoRecording = useCallback(() => {
     cancelAnimationFrame(videoAnimRef.current)
@@ -639,11 +831,8 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       mediaRecorderRef.current.onstop = null
       mediaRecorderRef.current.stop()
     }
-    mediaRecorderRef.current = null
-    compositeCanvasRef.current = null
-    setVideoState('idle')
-    setVideoProgress(0)
-    setVideoRecordedBlob(null)
+    mediaRecorderRef.current = null; compositeCanvasRef.current = null
+    setVideoState('idle'); setVideoProgress(0); setVideoRecordedBlob(null)
   }, [])
 
   const handleVideoDownload = useCallback(() => {
@@ -653,11 +842,8 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     if (videoObjUrlRef.current) URL.revokeObjectURL(videoObjUrlRef.current)
     videoObjUrlRef.current = url
     const a = document.createElement('a')
-    a.href = url
-    a.download = `dtrek-3d-${Date.now()}.${ext}`
-    a.click()
-    setShareToast('Video salvato!')
-    setTimeout(() => setShareToast(''), 2500)
+    a.href = url; a.download = `dtrek-3d-${Date.now()}.${ext}`; a.click()
+    setShareToast('Video salvato!'); setTimeout(() => setShareToast(''), 2500)
   }, [videoRecordedBlob])
 
   const handleVideoShare = useCallback(async () => {
@@ -667,10 +853,8 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     if (typeof navigator !== 'undefined' && (navigator as any).canShare?.({ files: [file] })) {
       try {
         await navigator.share({ title: title ?? 'Percorso DTrek', text: 'DTrek — Video 3D del percorso', files: [file] })
-        setVideoState('idle')
-        setVideoRecordedBlob(null)
-        return
-      } catch { /* user cancelled */ }
+        setVideoState('idle'); setVideoRecordedBlob(null); return
+      } catch {}
     }
     handleVideoDownload()
   }, [videoRecordedBlob, title, handleVideoDownload])
@@ -688,7 +872,6 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       <div className="absolute top-0 inset-x-0 pointer-events-none">
         <div className="flex items-start justify-between p-3 bg-gradient-to-b from-black/65 to-transparent">
 
-          {/* Left: style selector + title */}
           <div className="flex flex-col gap-2 pointer-events-auto">
             <div className="flex gap-1 bg-black/45 backdrop-blur-md rounded-xl p-1 w-fit">
               {STYLES.map((s, i) => (
@@ -704,27 +887,17 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
             )}
           </div>
 
-          {/* Right: action buttons + close */}
           <div className="flex items-center gap-2 pointer-events-auto mt-0.5">
-            <button
-              onClick={handleStreetViewHere}
-              title="Foto della zona"
-              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg"
-            >
+            <button onClick={handleStreetViewHere} title="Foto della zona"
+              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg">
               <Images style={{ width: '1.1rem', height: '1.1rem' }} />
             </button>
-            <button
-              onClick={() => setVideoState('config')}
-              title="Registra video"
-              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg"
-            >
+            <button onClick={() => setVideoState('config')} title="Registra video"
+              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg">
               <Film style={{ width: '1.1rem', height: '1.1rem' }} />
             </button>
-            <button
-              onClick={handleCapture}
-              title="Condividi screenshot"
-              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg"
-            >
+            <button onClick={handleCapture} title="Condividi screenshot"
+              className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg">
               <Camera style={{ width: '1.1rem', height: '1.1rem' }} />
             </button>
             <button onClick={onClose}
@@ -760,22 +933,16 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       <div className="absolute left-3 right-3" style={{ bottom: '92px' }}>
         <div className="relative">
           <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
-            <div
-              className="h-full rounded-full transition-none"
-              style={{ width: `${progress * 100}%`, background: 'linear-gradient(90deg, #3b82f6, #60a5fa)' }}
-            />
+            <div className="h-full rounded-full transition-none"
+              style={{ width: `${progress * 100}%`, background: 'linear-gradient(90deg,#3b82f6,#60a5fa)' }} />
           </div>
-          <input
-            type="range" min={0} max={1} step={0.0005}
-            value={progress}
+          <input type="range" min={0} max={1} step={0.0005} value={progress}
             onChange={e => handleScrub(+e.target.value)}
             className="absolute w-full opacity-0 cursor-pointer"
-            style={{ height: '32px', top: '50%', transform: 'translateY(-50%)' }}
-          />
+            style={{ height: '32px', top: '50%', transform: 'translateY(-50%)' }} />
         </div>
         <div className="flex justify-between mt-1 text-[10px] text-white/50 font-medium px-0.5">
-          <span>0 km</span>
-          <span>{totalKm} km</span>
+          <span>0 km</span><span>{totalKm} km</span>
         </div>
       </div>
 
@@ -787,15 +954,9 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
               className="w-11 h-11 rounded-full bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-colors border border-white/10">
               <RotateCcw className="w-4 h-4" />
             </button>
-            <button
-              onClick={handlePlay}
-              disabled={!mapReady}
-              className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-stone-900 shadow-2xl hover:bg-stone-100 active:scale-95 transition-all disabled:opacity-35"
-            >
-              {isPlaying
-                ? <Pause  className="w-7 h-7" />
-                : <Play   className="w-7 h-7 translate-x-0.5" />
-              }
+            <button onClick={handlePlay} disabled={!mapReady}
+              className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-stone-900 shadow-2xl hover:bg-stone-100 active:scale-95 transition-all disabled:opacity-35">
+              {isPlaying ? <Pause className="w-7 h-7" /> : <Play className="w-7 h-7 translate-x-0.5" />}
             </button>
             <div className="flex gap-0.5 bg-white/15 rounded-xl p-1 border border-white/10">
               {SPEEDS.map((s, i) => (
@@ -809,11 +970,9 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-white/50 whitespace-nowrap font-medium">Rilievo</span>
-            <input type="range" min={1} max={3} step={0.1}
-              value={exaggeration}
+            <input type="range" min={1} max={3} step={0.1} value={exaggeration}
               onChange={e => setExaggeration(+e.target.value)}
-              className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"
-            />
+              className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer" />
             <span className="text-[11px] text-white font-bold w-8 text-right">{exaggeration.toFixed(1)}×</span>
           </div>
         </div>
@@ -827,27 +986,20 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
         </div>
       )}
 
-      {/* ── Share toast ── */}
       {shareToast && (
         <div className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md text-stone-800 text-sm font-semibold px-4 py-2 rounded-full shadow-xl pointer-events-none">
           ✓ {shareToast}
         </div>
       )}
 
-      {/* ── StreetView panel ── */}
       {showStreetView && streetViewPos && (
-        <StreetViewPanel
-          lat={streetViewPos[0]}
-          lon={streetViewPos[1]}
-          title={title}
-          onClose={() => setShowStreetView(false)}
-        />
+        <StreetViewPanel lat={streetViewPos[0]} lon={streetViewPos[1]} title={title} onClose={() => setShowStreetView(false)} />
       )}
 
-      {/* ══ VIDEO CONFIG PANEL ══════════════════════════════════════════════════ */}
+      {/* ══ VIDEO CONFIG ════════════════════════════════════════════════════════ */}
       {videoState === 'config' && (
-        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-end z-20 pointer-events-auto">
-          <div className="w-full bg-stone-900/95 rounded-t-3xl px-5 pt-5 pb-8 space-y-5 shadow-2xl">
+        <div className="absolute inset-0 bg-black/55 backdrop-blur-sm flex items-end z-20 pointer-events-auto">
+          <div className="w-full bg-stone-900/96 rounded-t-3xl px-5 pt-5 pb-8 shadow-2xl space-y-5">
 
             <div className="flex items-center justify-between">
               <h2 className="text-white font-bold text-lg">Registra video</h2>
@@ -898,33 +1050,43 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
               </div>
             </div>
 
-            {/* Elements toggle */}
+            {/* Elements */}
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">ELEMENTI NEL VIDEO</p>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: 'Titolo',      val: videoShowTitle,    set: setVideoShowTitle },
-                  { label: 'Statistiche', val: videoShowStats,    set: setVideoShowStats },
-                  { label: 'Progresso',   val: videoShowProgress, set: setVideoShowProgress },
+                  { label: 'Titolo',       val: videoShowTitle,    set: setVideoShowTitle,    always: true },
+                  { label: 'Statistiche',  val: videoShowStats,    set: setVideoShowStats,    always: true },
+                  { label: 'Progresso',    val: videoShowProgress, set: setVideoShowProgress, always: true },
+                  { label: 'Dati corporei',val: videoShowBody,     set: setVideoShowBody,     always: hasBodyData },
                 ].map(item => (
-                  <button key={item.label} onClick={() => item.set(v => !v)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all
-                      ${item.val ? 'bg-white text-stone-900' : 'bg-white/10 text-white/50'}`}>
+                  <button key={item.label}
+                    onClick={() => item.always && item.set(v => !v)}
+                    disabled={!item.always}
+                    className={`py-2.5 rounded-xl text-sm font-semibold transition-all
+                      ${!item.always ? 'opacity-30 cursor-not-allowed bg-white/5 text-white/40'
+                        : item.val ? 'bg-white text-stone-900' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
                     {item.label}
+                    {!item.always && <span className="block text-[10px] font-normal opacity-60">non disponibile</span>}
                   </button>
                 ))}
               </div>
             </div>
 
+            {/* Quality note */}
+            <p className="text-white/35 text-[11px] text-center">
+              Video 1080p · 10 Mbps · {videoOrientation}
+            </p>
+
             {/* Actions */}
             <div className="flex gap-3">
               <button onClick={() => setVideoState('idle')}
-                className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold transition-colors hover:bg-white/20">
+                className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors">
                 Annulla
               </button>
               <button onClick={startVideoRecording}
                 className="flex-[2] py-3.5 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold flex items-center justify-center gap-2 transition-colors">
-                <div className="w-3 h-3 rounded-full bg-white" />
+                <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
                 Registra
               </button>
             </div>
@@ -935,27 +1097,20 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
       {/* ══ RECORDING OVERLAY ═══════════════════════════════════════════════════ */}
       {videoState === 'recording' && (
         <div className="absolute inset-0 z-20 pointer-events-none flex flex-col">
-          {/* Top recording indicator */}
           <div className="flex items-center justify-between p-4 pointer-events-auto">
-            <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md rounded-full px-3 py-1.5">
+            <div className="flex items-center gap-2 bg-black/65 backdrop-blur-md rounded-full px-3 py-1.5">
               <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
               <span className="text-white text-xs font-bold tracking-widest">REC</span>
               <span className="text-white/70 text-xs tabular-nums">{Math.round(videoProgress * videoDuration)}s / {videoDuration}s</span>
             </div>
-            <button
-              onClick={cancelVideoRecording}
-              className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white text-xs font-semibold px-3 py-1.5 rounded-full transition-colors pointer-events-auto">
+            <button onClick={cancelVideoRecording}
+              className="bg-black/65 backdrop-blur-md hover:bg-black/85 text-white text-xs font-semibold px-3 py-1.5 rounded-full transition-colors pointer-events-auto">
               Annulla
             </button>
           </div>
-
-          {/* Bottom progress bar */}
-          <div className="mt-auto mx-4 mb-6">
-            <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-red-500 transition-none rounded-full"
-                style={{ width: `${videoProgress * 100}%` }}
-              />
+          <div className="mt-auto mx-0 mb-0">
+            <div className="w-full h-1 bg-white/20">
+              <div className="h-full bg-red-500 transition-none" style={{ width: `${videoProgress * 100}%` }} />
             </div>
           </div>
         </div>
@@ -963,37 +1118,31 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
 
       {/* ══ DONE PANEL ══════════════════════════════════════════════════════════ */}
       {videoState === 'done' && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-20 pointer-events-auto">
-          <div className="bg-stone-900/95 rounded-3xl px-6 py-7 mx-4 w-full max-w-sm shadow-2xl space-y-5">
+        <div className="absolute inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-20 pointer-events-auto">
+          <div className="bg-stone-900/96 rounded-3xl px-6 py-7 mx-4 w-full max-w-sm shadow-2xl space-y-5">
             <div className="text-center">
               <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center mx-auto mb-3">
                 <Film className="w-7 h-7 text-green-400" />
               </div>
               <h2 className="text-white font-bold text-lg">Video pronto!</h2>
-              <p className="text-white/50 text-sm mt-1">{videoDuration}s · {videoOrientation}</p>
+              <p className="text-white/50 text-sm mt-1">1080p · {videoDuration}s · {videoOrientation}</p>
             </div>
-
             <div className="flex flex-col gap-2.5">
               <button onClick={handleVideoShare}
                 className="w-full py-3.5 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-bold flex items-center justify-center gap-2 transition-colors">
-                <Share2 className="w-4 h-4" />
-                Condividi
+                <Share2 className="w-4 h-4" />Condividi
               </button>
               <button onClick={handleVideoDownload}
                 className="w-full py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold flex items-center justify-center gap-2 transition-colors">
-                <Download className="w-4 h-4" />
-                Scarica
+                <Download className="w-4 h-4" />Scarica
               </button>
             </div>
-
             <div className="flex gap-2.5">
-              <button
-                onClick={() => { setVideoState('config'); setVideoRecordedBlob(null); setVideoProgress(0) }}
+              <button onClick={() => { setVideoState('config'); setVideoRecordedBlob(null); setVideoProgress(0) }}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors">
                 Ricomincia
               </button>
-              <button
-                onClick={() => { setVideoState('idle'); setVideoRecordedBlob(null); setVideoProgress(0) }}
+              <button onClick={() => { setVideoState('idle'); setVideoRecordedBlob(null); setVideoProgress(0) }}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors">
                 Chiudi
               </button>
