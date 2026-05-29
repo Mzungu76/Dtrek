@@ -1,31 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { put } from '@vercel/blob'
+import { supabase } from '@/lib/supabase'
 import type { PlannedHike, PlannedHikeMeta } from '@/lib/plannedStore'
 import type { TrackPoint } from '@/lib/tcxParser'
-import {
-  readPlannedIndex, writePlannedIndex,
-  readPlannedBlobText, deletePlannedBlob,
-} from '@/lib/plannedIndex'
 import { readIndex } from '@/lib/blobIndex'
 import { assessHike } from '@/lib/hikeAssessment'
 
 export const dynamic = 'force-dynamic'
 
-function getToken(): string {
-  const token = process.env.blob2dtrek_READ_WRITE_TOKEN
-  if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
-  return token
-}
-
-function idToPath(id: string): string {
-  return `planned/${id.replace(/[^a-zA-Z0-9\-_.]/g, '_')}.json`
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
   const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
-  if (valid.length === 0) return []
+  if (!valid.length) return []
   const count = Math.min(valid.length, maxPts)
-  const step = (valid.length - 1) / (count - 1 || 1)
+  const step  = (valid.length - 1) / (count - 1 || 1)
   return Array.from({ length: count }, (_, i) => {
     const idx = Math.min(Math.round(i * step), valid.length - 1)
     return [
@@ -35,29 +23,90 @@ function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] 
   })
 }
 
-function toMeta(hike: PlannedHike): PlannedHikeMeta {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { trackPoints: _tp, ...meta } = hike
-  return meta
+function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedHike {
+  return {
+    id:                    row.id as string,
+    title:                 row.title as string,
+    plannedDate:           row.planned_date as string | undefined,
+    fileName:              row.file_name as string | undefined,
+    userNotes:             row.user_notes as string | undefined,
+    tags:                  row.tags as string[] | undefined,
+    createdAt:             row.created_at as string,
+    distanceMeters:        row.distance_meters as number,
+    elevationGain:         row.elevation_gain as number,
+    elevationLoss:         row.elevation_loss as number,
+    altitudeMax:           row.altitude_max as number,
+    altitudeMin:           row.altitude_min as number,
+    estimatedTimeSeconds:  row.estimated_time_seconds as number,
+    routePolyline:         row.route_polyline as [number, number][] | undefined,
+    trackPoints:           includeTracks ? (row.track_points as TrackPoint[]) ?? [] : undefined,
+    assessment:            row.assessment as PlannedHike['assessment'],
+    cachedBeautyScore:     row.cached_beauty_score as PlannedHike['cachedBeautyScore'],
+  }
 }
 
-// GET /api/planned          → list (PlannedHikeMeta[])
-// GET /api/planned?id=X     → single full PlannedHike
+function hikeToRow(h: PlannedHike) {
+  return {
+    id:                     h.id,
+    title:                  h.title,
+    planned_date:           h.plannedDate ?? null,
+    file_name:              h.fileName ?? null,
+    user_notes:             h.userNotes ?? null,
+    tags:                   h.tags ?? null,
+    created_at:             h.createdAt,
+    distance_meters:        h.distanceMeters,
+    elevation_gain:         h.elevationGain,
+    elevation_loss:         h.elevationLoss,
+    altitude_max:           h.altitudeMax,
+    altitude_min:           h.altitudeMin,
+    estimated_time_seconds: h.estimatedTimeSeconds,
+    route_polyline:         h.routePolyline ?? downsamplePolyline(h.trackPoints ?? []),
+    track_points:           h.trackPoints ?? [],
+    assessment:             h.assessment ?? null,
+    cached_beauty_score:    h.cachedBeautyScore ?? null,
+  }
+}
+
+// Columns for list view — excludes track_points
+const META_COLS = [
+  'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
+  'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
+  'altitude_max', 'altitude_min', 'estimated_time_seconds',
+  'route_polyline', 'assessment', 'cached_beauty_score',
+].join(', ')
+
+// ── GET /api/planned          → PlannedHikeMeta[] ────────────────────────────
+// ── GET /api/planned?id=X     → PlannedHike (full, with trackPoints) ─────────
 export async function GET(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id')
+
     if (id) {
-      const text = await readPlannedBlobText(idToPath(id))
-      if (!text) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-      return NextResponse.json(JSON.parse(text))
+      const { data, error } = await supabase
+        .from('planned_hikes')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      return NextResponse.json(rowToHike(data, true))
     }
-    return NextResponse.json(await readPlannedIndex())
+
+    const { data, error } = await supabase
+      .from('planned_hikes')
+      .select(META_COLS)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return NextResponse.json((data ?? [] as any[]).map((r: any) => rowToHike(r, false) as PlannedHikeMeta))
   } catch (e) {
+    console.error('GET /api/planned:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
 
-// POST /api/planned → create or overwrite
+// ── POST /api/planned → upsert ───────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const hike = (await req.json()) as PlannedHike
@@ -66,8 +115,33 @@ export async function POST(req: NextRequest) {
       hike.routePolyline = downsamplePolyline(hike.trackPoints)
     }
 
-    // Run rule-based assessment with current activities as context
-    const activities = await readIndex()
+    // Personalised assessment using completed activities as context
+    // Falls back to Supabase if blob is gone
+    let activities: Parameters<typeof assessHike>[3] = []
+    try { activities = await readIndex() } catch {}
+    if (!activities.length) {
+      const { data } = await supabase
+        .from('activities')
+        .select('distance_meters, elevation_gain, altitude_max')
+      if (data) {
+        activities = data.map((r: Record<string, unknown>) => ({
+          id: '',
+          title: '',
+          startTime: '',
+          distanceMeters: r.distance_meters as number,
+          totalTimeSeconds: 0,
+          calories: 0,
+          avgHeartRate: 0,
+          maxHeartRate: 0,
+          elevationGain: r.elevation_gain as number,
+          elevationLoss: 0,
+          altitudeMax: r.altitude_max as number,
+          avgSpeedMs: 0,
+          maxSpeedMs: 0,
+        }))
+      }
+    }
+
     hike.assessment = assessHike(
       hike.distanceMeters,
       hike.elevationGain,
@@ -75,16 +149,11 @@ export async function POST(req: NextRequest) {
       activities,
     )
 
-    await put(idToPath(hike.id), JSON.stringify(hike), {
-      access: 'public', token: getToken(), addRandomSuffix: false, contentType: 'application/json',
-    })
+    const { error } = await supabase
+      .from('planned_hikes')
+      .upsert(hikeToRow(hike), { onConflict: 'id' })
 
-    const index = await readPlannedIndex()
-    const meta  = toMeta(hike)
-    const pos   = index.findIndex(h => h.id === hike.id)
-    if (pos >= 0) index[pos] = meta; else index.unshift(meta)
-    await writePlannedIndex(index)
-
+    if (error) throw error
     return NextResponse.json({ ok: true, assessment: hike.assessment })
   } catch (e) {
     console.error('POST /api/planned:', e)
@@ -92,44 +161,54 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PATCH /api/planned → update metadata fields
+// ── PATCH /api/planned → update metadata fields ──────────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
-      id: string; title?: string; userNotes?: string; tags?: string[]; plannedDate?: string
+    const body = (await req.json()) as Record<string, unknown>
+    const { id, ...patch } = body as {
+      id: string
+      title?: string
+      userNotes?: string
+      tags?: string[]
+      plannedDate?: string
+      cachedBeautyScore?: PlannedHike['cachedBeautyScore']
     }
-    const { id, ...patch } = body
 
-    const text = await readPlannedBlobText(idToPath(id))
-    if (!text) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const dbPatch: Record<string, unknown> = {}
+    if (patch.title             !== undefined) dbPatch.title              = patch.title
+    if (patch.userNotes         !== undefined) dbPatch.user_notes         = patch.userNotes
+    if (patch.tags              !== undefined) dbPatch.tags               = patch.tags
+    if (patch.plannedDate       !== undefined) dbPatch.planned_date       = patch.plannedDate || null
+    if (patch.cachedBeautyScore !== undefined) dbPatch.cached_beauty_score = patch.cachedBeautyScore
 
-    const updated: PlannedHike = { ...JSON.parse(text), ...patch }
-    await put(idToPath(id), JSON.stringify(updated), {
-      access: 'public', token: getToken(), addRandomSuffix: false, contentType: 'application/json',
-    })
+    const { error } = await supabase
+      .from('planned_hikes')
+      .update(dbPatch)
+      .eq('id', id)
 
-    const index = await readPlannedIndex()
-    const pos   = index.findIndex(h => h.id === id)
-    if (pos >= 0) { index[pos] = { ...index[pos], ...patch }; await writePlannedIndex(index) }
-
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
+    console.error('PATCH /api/planned:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
 
-// DELETE /api/planned?id=X
+// ── DELETE /api/planned?id=X ─────────────────────────────────────────────────
 export async function DELETE(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    await deletePlannedBlob(idToPath(id))
-    const index = (await readPlannedIndex()).filter(h => h.id !== id)
-    await writePlannedIndex(index)
+    const { error } = await supabase
+      .from('planned_hikes')
+      .delete()
+      .eq('id', id)
 
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
+    console.error('DELETE /api/planned:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
