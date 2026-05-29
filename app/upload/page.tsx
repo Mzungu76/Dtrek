@@ -6,6 +6,8 @@ import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
 import { saveActivity } from '@/lib/blobStore'
 import { parseGpx } from '@/lib/gpxParser'
 import { savePlanned, deletePlanned, getAllPlanned, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
+import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off } from 'lucide-react'
 
@@ -319,6 +321,24 @@ function GpxUploader() {
         fileName:     fileName,
         createdAt:    new Date().toISOString(),
       }
+
+      // Prefetch POIs during save so the detail page shows them immediately.
+      // Uses a 7s timeout — if Overpass is unavailable, saves normally without POIs.
+      const gps = (parsed.trackPoints ?? [])
+        .filter(p => p.lat && p.lon)
+        .map(p => [p.lat!, p.lon!] as [number, number])
+      if (gps.length >= 2) {
+        try {
+          const deadline = new Promise<null>(r => setTimeout(() => r(null), 7000))
+          const pois = await Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline])
+          if (pois?.length) {
+            hike.cachedPois = pois
+            const poiWiki = await Promise.race([fetchWikiForNamedPois(pois), deadline])
+            if (poiWiki?.length) hike.cachedPoiWiki = poiWiki
+          }
+        } catch {} // non-blocking — save proceeds regardless
+      }
+
       await savePlanned(hike)
       setStatus('success')
       setTimeout(() => router.push(`/programma/${encodeURIComponent(parsed.id)}`), 1200)

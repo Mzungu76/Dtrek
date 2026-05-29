@@ -12,7 +12,8 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { fetchPoisNearTrack, fetchTerrainContext, type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
+import { type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
+import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeBeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -158,7 +159,7 @@ export default function PlannedHikePage() {
   const [pois,           setPois]          = useState<PoiItem[]>([])
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
-  const [loadingTerrain, setLoadingTerrain] = useState(false)
+  const [loadingTerrain, setLoadingTerrain] = useState(false)  // kept for beauty-score spinner
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
 
@@ -192,20 +193,22 @@ export default function PlannedHikePage() {
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
         if (h.cachedPois?.length) {
-          // Use cached POI data immediately — no Overpass call needed
+          // Use cached POI data immediately — no API call needed
           setPois(h.cachedPois as PoiItem[])
           if (h.cachedPoiWiki?.length) setPoiWikiEntries(h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[])
         } else {
-          // Fresh fetch from Overpass
-          fetchPoisNearTrack(gps, 300).then(newPois => {
-            setPois(newPois)
-            fetchWikiForNamedPois(newPois)
-              .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
-              .catch(() => { setPoisFullyLoaded(true) })
-          }).catch(() => {})
+          // Fresh fetch from Wikidata (cloud-IP friendly, no proxy needed)
+          setLoadingTerrain(true)
+          fetchHikingPoisFromWikidata(gps, 300)
+            .then(newPois => {
+              setPois(newPois)
+              fetchWikiForNamedPois(newPois)
+                .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
+                .catch(() => { setPoisFullyLoaded(true) })
+            })
+            .catch(() => { setPoisFullyLoaded(true) })
+            .finally(() => setLoadingTerrain(false))
         }
-        setLoadingTerrain(true)
-        fetchTerrainContext(gps).then(setTerrain).catch(() => {}).finally(() => setLoadingTerrain(false))
       }
     }).finally(() => setLoading(false))
   }, [id, router])
