@@ -284,8 +284,10 @@ export async function fetchSurfaceBreakdown(track: [number, number][]): Promise<
   if (track.length < 2) return []
   const bbox = trackBbox(track, 0.002)
 
-  const query = `[out:json][timeout:30];
-way[highway~"^(path|footway|cycleway|track|bridleway|steps|residential|service|unclassified|living_street|pedestrian|road|tertiary|secondary|primary|trunk|motorway|primary_link|secondary_link|tertiary_link|trunk_link|motorway_link)$"](${bbox});
+  // Only the highway types that matter for hiking surface classification;
+  // omitting residential/service/unclassified avoids enormous responses in urban areas.
+  const query = `[out:json][timeout:20][maxsize:1500000];
+way["highway"~"^(path|footway|cycleway|track|bridleway|steps|tertiary|secondary|primary|trunk|motorway|primary_link|secondary_link|tertiary_link|trunk_link|motorway_link)$"](${bbox});
 out geom;`
 
   const res = await fetch('/api/overpass', {

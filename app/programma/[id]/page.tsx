@@ -177,10 +177,13 @@ export default function PlannedHikePage() {
       setDateVal(h.plannedDate ?? '')
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
-        fetchPoisNearTrack(gps, 300).then(setPois).catch(() => {})
-        setLoadingTerrain(true)
-        fetchTerrainContext(gps).then(setTerrain).catch(() => {}).finally(() => setLoadingTerrain(false))
-        fetchSurfaceBreakdown(gps).then(setSurfaceSegments).catch(() => {})
+        // Sequential to avoid Overpass 406 rate-limit (concurrent requests from same IP)
+        ;(async () => {
+          try { setPois(await fetchPoisNearTrack(gps, 300)) } catch {}
+          setLoadingTerrain(true)
+          try { setTerrain(await fetchTerrainContext(gps)) } catch {} finally { setLoadingTerrain(false) }
+          try { setSurfaceSegments(await fetchSurfaceBreakdown(gps)) } catch {}
+        })()
       }
     }).finally(() => setLoading(false))
   }, [id, router])
