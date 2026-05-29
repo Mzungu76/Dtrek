@@ -6,7 +6,7 @@ import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
 import { saveActivity } from '@/lib/blobStore'
 import { parseGpx } from '@/lib/gpxParser'
 import { savePlanned, deletePlanned, getAllPlanned, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
-import { fetchPoisNearTrack } from '@/lib/overpass'
+import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off } from 'lucide-react'
@@ -330,7 +330,7 @@ function GpxUploader() {
       if (gps.length >= 2) {
         try {
           const deadline = new Promise<null>(r => setTimeout(() => r(null), 7000))
-          const pois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline])
+          const pois = await Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline])
           if (pois?.length) {
             hike.cachedPois = pois
             const poiWiki = await Promise.race([fetchWikiForNamedPois(pois), deadline])
