@@ -12,8 +12,8 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { fetchPoisNearTrack, fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
-import type { WikiPage } from '@/lib/wikipedia'
+import { fetchPoisNearTrack, fetchTerrainContext, type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
+import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeBeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
@@ -155,6 +155,7 @@ export default function PlannedHikePage() {
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
   const [loadingTerrain, setLoadingTerrain] = useState(false)
+  const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -164,12 +165,16 @@ export default function PlannedHikePage() {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [hike])
 
-  // Compute as soon as we have ANY data (pois OR wikiPages); terrain enriches but isn't required
+  // Merge geo-wiki + POI-wiki for beauty scoring; terrain enriches but isn't required
+  const allWikiPages = useMemo(
+    () => [...wikiPages, ...poiWikiEntries.map(e => e.wiki)],
+    [wikiPages, poiWikiEntries],
+  )
   const beautyScore = useMemo(
-    () => hike && (pois.length > 0 || wikiPages.length > 0)
-      ? computeBeautyScore(pois, wikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax)
+    () => hike && (pois.length > 0 || allWikiPages.length > 0)
+      ? computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax)
       : null,
-    [pois, wikiPages, terrain, hike],
+    [pois, allWikiPages, terrain, hike],
   )
 
   useEffect(() => {
@@ -181,7 +186,10 @@ export default function PlannedHikePage() {
       setDateVal(h.plannedDate ?? '')
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
-        fetchPoisNearTrack(gps, 300).then(setPois).catch(() => {})
+        fetchPoisNearTrack(gps, 300).then(newPois => {
+          setPois(newPois)
+          fetchWikiForNamedPois(newPois).then(setPoiWikiEntries).catch(() => {})
+        }).catch(() => {})
         setLoadingTerrain(true)
         fetchTerrainContext(gps).then(setTerrain).catch(() => {}).finally(() => setLoadingTerrain(false))
       }
@@ -427,7 +435,47 @@ export default function PlannedHikePage() {
         {/* Beauty report */}
         {beautyScore && <BeautyReport score={beautyScore} />}
 
-        {/* Wikipedia */}
+        {/* POI-focused Wikipedia: articles for named elements physically on the route */}
+        {poiWikiEntries.length > 0 && (
+          <section>
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">Sul percorso</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {poiWikiEntries.map(({ poi, wiki }) => {
+                const meta = POI_META[poi.type]
+                return (
+                  <div key={poi.id} className="bg-white rounded-2xl border border-stone-200 p-4 flex gap-3 shadow-sm hover:border-sky-200 transition-colors">
+                    {wiki.thumbnail && (
+                      <img
+                        src={wiki.thumbnail}
+                        alt={wiki.title}
+                        className="w-16 h-16 object-cover rounded-xl shrink-0"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-base leading-none">{meta.emoji}</span>
+                        <span className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">{meta.label}</span>
+                        {poi.ele && <span className="text-[10px] text-stone-300 ml-auto shrink-0">{Math.round(poi.ele)} m</span>}
+                      </div>
+                      <p className="text-sm font-semibold text-stone-800 leading-tight mb-1">{wiki.title}</p>
+                      <p className="text-xs text-stone-500 leading-relaxed line-clamp-3">{wiki.extract.slice(0, 160)}{wiki.extract.length > 160 ? '…' : ''}</p>
+                      <a
+                        href={wiki.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-sky-600 font-semibold mt-1.5 inline-block hover:text-sky-700"
+                      >
+                        Leggi su Wikipedia →
+                      </a>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Wikipedia geo-search: regional context, places near the route area */}
         {hasGps && (
           <section>
             <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">Luoghi nelle vicinanze</h2>
