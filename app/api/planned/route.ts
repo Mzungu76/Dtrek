@@ -42,6 +42,8 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     trackPoints:           includeTracks ? (row.track_points as TrackPoint[]) ?? [] : undefined,
     assessment:            row.assessment as PlannedHike['assessment'],
     cachedBeautyScore:     row.cached_beauty_score as PlannedHike['cachedBeautyScore'],
+    cachedPois:            row.cached_pois as unknown[] | undefined,
+    cachedPoiWiki:         row.cached_poi_wiki as unknown[] | undefined,
   }
 }
 
@@ -64,6 +66,8 @@ function hikeToRow(h: PlannedHike) {
     track_points:           h.trackPoints ?? [],
     assessment:             h.assessment ?? null,
     cached_beauty_score:    h.cachedBeautyScore ?? null,
+    cached_pois:            h.cachedPois ?? null,
+    cached_poi_wiki:        h.cachedPoiWiki ?? null,
   }
 }
 
@@ -172,6 +176,8 @@ export async function PATCH(req: NextRequest) {
       tags?: string[]
       plannedDate?: string
       cachedBeautyScore?: PlannedHike['cachedBeautyScore']
+      cachedPois?: unknown[]
+      cachedPoiWiki?: unknown[]
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -180,6 +186,8 @@ export async function PATCH(req: NextRequest) {
     if (patch.tags              !== undefined) dbPatch.tags               = patch.tags
     if (patch.plannedDate       !== undefined) dbPatch.planned_date       = patch.plannedDate || null
     if (patch.cachedBeautyScore !== undefined) dbPatch.cached_beauty_score = patch.cachedBeautyScore
+    if (patch.cachedPois       !== undefined) dbPatch.cached_pois         = patch.cachedPois
+    if (patch.cachedPoiWiki    !== undefined) dbPatch.cached_poi_wiki     = patch.cachedPoiWiki
 
     const { error } = await supabase
       .from('planned_hikes')
