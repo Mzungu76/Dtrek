@@ -160,6 +160,7 @@ export default function PlannedHikePage() {
   const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
   const [loadingTerrain, setLoadingTerrain] = useState(false)
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
+  const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -190,10 +191,19 @@ export default function PlannedHikePage() {
       setDateVal(h.plannedDate ?? '')
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
-        fetchPoisNearTrack(gps, 300).then(newPois => {
-          setPois(newPois)
-          fetchWikiForNamedPois(newPois).then(setPoiWikiEntries).catch(() => {})
-        }).catch(() => {})
+        if (h.cachedPois?.length) {
+          // Use cached POI data immediately — no Overpass call needed
+          setPois(h.cachedPois as PoiItem[])
+          if (h.cachedPoiWiki?.length) setPoiWikiEntries(h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[])
+        } else {
+          // Fresh fetch from Overpass
+          fetchPoisNearTrack(gps, 300).then(newPois => {
+            setPois(newPois)
+            fetchWikiForNamedPois(newPois)
+              .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
+              .catch(() => { setPoisFullyLoaded(true) })
+          }).catch(() => {})
+        }
         setLoadingTerrain(true)
         fetchTerrainContext(gps).then(setTerrain).catch(() => {}).finally(() => setLoadingTerrain(false))
       }
@@ -207,6 +217,13 @@ export default function PlannedHikePage() {
     updatePlannedMeta(hike.id, { cachedBeautyScore: cached }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedBeautyScore: cached } : prev)
   }, [beautyScore, hike])
+
+  // Save POI data to DB after first successful Overpass fetch
+  useEffect(() => {
+    if (!poisFullyLoaded || !hike || (hike.cachedPois?.length ?? 0) > 0 || !pois.length) return
+    updatePlannedMeta(hike.id, { cachedPois: pois, cachedPoiWiki: poiWikiEntries }).catch(() => {})
+    setHike(prev => prev ? { ...prev, cachedPois: pois, cachedPoiWiki: poiWikiEntries } : prev)
+  }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
