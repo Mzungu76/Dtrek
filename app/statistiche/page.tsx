@@ -2,7 +2,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import Navbar from '@/components/Navbar'
 import StatCard from '@/components/StatCard'
+import RouteThumb from '@/components/RouteThumb'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta, type StoredActivity } from '@/lib/blobStore'
+import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { exportAllActivitiesToExcel } from '@/utils/exportExcel'
 import { formatDuration, msToKmh } from '@/lib/tcxParser'
 import {
@@ -21,14 +23,15 @@ import {
 import {
   FileSpreadsheet, TrendingUp, Mountain, Heart, Route, Flame, Clock,
   Loader2, Trophy, Zap, Target, CalendarDays, Activity, GitCommitHorizontal,
-  ChevronUp, Check, Share2, Brain,
+  ChevronUp, Check, Share2, Brain, BarChart2, Shuffle,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Tab = 'panoramica' | 'grafici' | 'confronta' | 'forma'
+type CompareMode = 'completate' | 'pianificate'
 
-// ── Heatmap component ──────────────────────────────────────────────────────────
+// ── Heatmap ────────────────────────────────────────────────────────────────────
 function ActivityHeatmap({ activities, year }: { activities: ActivityMeta[]; year: number }) {
   const counts = useMemo(() => {
     const map = new Map<string, number>()
@@ -42,14 +45,12 @@ function ActivityHeatmap({ activities, year }: { activities: ActivityMeta[]; yea
   const cells = useMemo(() => {
     const jan1 = new Date(year, 0, 1)
     const dec31 = new Date(year, 11, 31)
-    // Pad to Monday
     const start = new Date(jan1)
     const dow = start.getDay()
     start.setDate(start.getDate() - (dow === 0 ? 6 : dow - 1))
     const all: Date[] = []
     const d = new Date(start)
     while (d <= dec31) { all.push(new Date(d)); d.setDate(d.getDate() + 1) }
-    // Pad to complete last week
     while (all.length % 7 !== 0) { all.push(new Date(d)); d.setDate(d.getDate() + 1) }
     return all
   }, [year])
@@ -77,7 +78,6 @@ function ActivityHeatmap({ activities, year }: { activities: ActivityMeta[]; yea
 
   return (
     <div className="overflow-x-auto pb-2">
-      {/* Month labels */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weeks}, 12px)`, gap: '2px', marginBottom: '4px' }}>
         {Array.from({ length: weeks }, (_, col) => {
           const lbl = monthLabels.find(l => l.col === col)
@@ -85,13 +85,11 @@ function ActivityHeatmap({ activities, year }: { activities: ActivityMeta[]; yea
         })}
       </div>
       <div className="flex gap-1">
-        {/* Day labels */}
         <div className="flex flex-col gap-0.5 mr-1">
           {['L', '', 'M', '', 'G', '', 'S'].map((d, i) => (
             <div key={i} className="text-[10px] text-stone-400 w-3 h-3 flex items-center justify-center">{d}</div>
           ))}
         </div>
-        {/* Grid: 7 rows × N weeks (column flow) */}
         <div style={{
           display: 'grid',
           gridTemplateRows: 'repeat(7, 12px)',
@@ -125,20 +123,29 @@ function ActivityHeatmap({ activities, year }: { activities: ActivityMeta[]; yea
 }
 
 // ── Record card ────────────────────────────────────────────────────────────────
-function RecordCard({ label, value, sub, icon, href }: {
-  label: string; value: string; sub?: string; icon: React.ReactNode; href?: string
+function RecordCard({ label, value, sub, icon, href, polyline }: {
+  label: string; value: string; sub?: string; icon: React.ReactNode; href?: string; polyline?: [number, number][]
 }) {
   const inner = (
-    <div className="bg-white rounded-xl border border-stone-200 p-4 flex items-start gap-3 hover:border-forest-300 transition-colors">
-      <div className="text-terra-500 mt-0.5">{icon}</div>
-      <div className="min-w-0">
-        <p className="text-xs text-stone-400 uppercase tracking-wide font-medium">{label}</p>
-        <p className="font-display text-lg font-semibold text-stone-800 leading-tight truncate">{value}</p>
-        {sub && <p className="text-xs text-stone-500 truncate mt-0.5">{sub}</p>}
+    <div className="bg-white rounded-xl border border-stone-200 p-4 hover:border-forest-300 transition-colors h-full">
+      <div className="flex items-start gap-3">
+        <div className="text-terra-500 mt-0.5 shrink-0">{icon}</div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-stone-400 uppercase tracking-wide font-medium">{label}</p>
+          <p className="font-display text-xl font-bold text-stone-800 leading-tight mt-0.5">{value}</p>
+          {sub && <p className="text-xs text-stone-700 font-semibold truncate mt-1.5 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-forest-400 shrink-0" />{sub}
+          </p>}
+        </div>
+        {polyline && polyline.length > 1 && (
+          <div className="w-14 h-14 rounded-xl bg-forest-50 border border-forest-100 overflow-hidden shrink-0">
+            <RouteThumb polyline={polyline} color="#2d7a3d" strokeWidth={2.5} />
+          </div>
+        )}
       </div>
     </div>
   )
-  if (href) return <a href={href}>{inner}</a>
+  if (href) return <a href={href} className="block h-full">{inner}</a>
   return inner
 }
 
@@ -161,9 +168,8 @@ function buildElevProfile(activity: StoredActivity, samples = 60): { pct: number
 }
 
 // ── HR zone calculator ─────────────────────────────────────────────────────────
-const ZONE_NAMES = ['Z1 Recupero', 'Z2 Aerobico', 'Z3 Soglia', 'Z4 Lattato', 'Z5 VO₂max']
+const ZONE_NAMES  = ['Z1 Recupero', 'Z2 Aerobico', 'Z3 Soglia', 'Z4 Lattato', 'Z5 VO₂max']
 const ZONE_COLORS = ['#93c5fd', '#6ee7b7', '#fde047', '#fb923c', '#f87171']
-const ZONE_THRESHOLDS = [0.6, 0.7, 0.8, 0.9, 1.0]
 
 function computeHRZones(activity: StoredActivity): { name: string; pct: number; color: string }[] {
   const maxHR = activity.maxHeartRate || 190
@@ -183,18 +189,31 @@ function computeHRZones(activity: StoredActivity): { name: string; pct: number; 
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function StatistichePage() {
-  const [activities, setActivities]   = useState<ActivityMeta[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [tab, setTab]                 = useState<Tab>('panoramica')
-  const [heatmapYear, setHeatmapYear] = useState(new Date().getFullYear())
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [fullData, setFullData]       = useState<Map<string, StoredActivity>>(new Map())
-  const [loadingFull, setLoadingFull] = useState(false)
-  const [shareKind, setShareKind]     = useState<'stats' | 'comparison' | null>(null)
+  const [activities,        setActivities]        = useState<ActivityMeta[]>([])
+  const [loading,           setLoading]           = useState(true)
+  const [tab,               setTab]               = useState<Tab>('panoramica')
+  const [heatmapYear,       setHeatmapYear]       = useState(new Date().getFullYear())
+  const [selectedIds,       setSelectedIds]       = useState<Set<string>>(new Set())
+  const [fullData,          setFullData]          = useState<Map<string, StoredActivity>>(new Map())
+  const [loadingFull,       setLoadingFull]       = useState(false)
+  const [shareKind,         setShareKind]         = useState<'stats' | 'comparison' | null>(null)
+  // Planned comparison
+  const [compareMode,       setCompareMode]       = useState<CompareMode>('completate')
+  const [plannedMetas,      setPlannedMetas]      = useState<PlannedHikeMeta[]>([])
+  const [selectedPlannedIds, setSelectedPlannedIds] = useState<Set<string>>(new Set())
+  const [loadingPlanned,    setLoadingPlanned]    = useState(false)
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
   }, [])
+
+  // Load planned hikes when switching to that compare mode
+  useEffect(() => {
+    if (tab === 'confronta' && compareMode === 'pianificate' && plannedMetas.length === 0) {
+      setLoadingPlanned(true)
+      getAllPlanned().then(setPlannedMetas).finally(() => setLoadingPlanned(false))
+    }
+  }, [tab, compareMode, plannedMetas.length])
 
   const stats   = computeGlobalStats(activities)
   const records = useMemo(() => getPersonalRecords(activities), [activities])
@@ -234,7 +253,85 @@ export default function StatistichePage() {
     }))
   , [activities])
 
-  // ── Comparison ───────────────────────────────────────────────────────────────
+  // ── New chart data ─────────────────────────────────────────────────────────
+  const weekdayData = useMemo(() => {
+    const labels = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+    const counts = [0, 0, 0, 0, 0, 0, 0]
+    for (const a of activities) {
+      const dow = new Date(a.startTime).getDay()
+      counts[dow === 0 ? 6 : dow - 1]++
+    }
+    return labels.map((day, i) => ({ day, count: counts[i] }))
+  }, [activities])
+
+  const annualData = useMemo(() => {
+    const map = new Map<number, { year: number; km: number; gain: number; count: number }>()
+    for (const a of activities) {
+      const y = new Date(a.startTime).getFullYear()
+      const ex = map.get(y) ?? { year: y, km: 0, gain: 0, count: 0 }
+      ex.km += a.distanceMeters / 1000; ex.gain += a.elevationGain; ex.count++
+      map.set(y, ex)
+    }
+    return Array.from(map.values()).sort((a, b) => a.year - b.year)
+      .map(d => ({ year: String(d.year), km: Math.round(d.km), gain: Math.round(d.gain), count: d.count }))
+  }, [activities])
+
+  const distHistogram = useMemo(() => [
+    { label: '0–5 km',   count: activities.filter(a => a.distanceMeters < 5000).length },
+    { label: '5–10 km',  count: activities.filter(a => a.distanceMeters >= 5000  && a.distanceMeters < 10000).length },
+    { label: '10–15 km', count: activities.filter(a => a.distanceMeters >= 10000 && a.distanceMeters < 15000).length },
+    { label: '15–20 km', count: activities.filter(a => a.distanceMeters >= 15000 && a.distanceMeters < 20000).length },
+    { label: '20+ km',   count: activities.filter(a => a.distanceMeters >= 20000).length },
+  ], [activities])
+
+  const weeklyVolumeData = useMemo(() => {
+    const out: { week: string; km: number; gain: number }[] = []
+    for (let i = 15; i >= 0; i--) {
+      const end   = new Date(); end.setDate(end.getDate() - i * 7)
+      const start = new Date(end); start.setDate(start.getDate() - 6)
+      const wActs = activities.filter(a => {
+        const d = new Date(a.startTime); return d >= start && d <= end
+      })
+      out.push({
+        week: format(start, 'dd/MM', { locale: it }),
+        km:   Math.round(wActs.reduce((s, a) => s + a.distanceMeters / 1000, 0) * 10) / 10,
+        gain: Math.round(wActs.reduce((s, a) => s + a.elevationGain, 0)),
+      })
+    }
+    return out
+  }, [activities])
+
+  const weeklyAvg = useMemo(() => {
+    const active = weeklyVolumeData.filter(w => w.km > 0)
+    if (active.length === 0) return null
+    return {
+      avgKm:   Math.round(active.reduce((s, w) => s + w.km, 0) / active.length * 10) / 10,
+      maxKm:   Math.max(...active.map(w => w.km)),
+      avgGain: Math.round(active.reduce((s, w) => s + w.gain, 0) / active.length),
+      maxGain: Math.max(...active.map(w => w.gain)),
+      activeWeeks: active.length,
+    }
+  }, [weeklyVolumeData])
+
+  const monthlyProgressData = useMemo(() => {
+    const last6: { month: string; km: number; gain: number; esc: number }[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(); d.setMonth(d.getMonth() - i)
+      const y = d.getFullYear(); const m = d.getMonth()
+      const mActs = activities.filter(a => {
+        const ad = new Date(a.startTime); return ad.getFullYear() === y && ad.getMonth() === m
+      })
+      last6.push({
+        month: format(new Date(y, m, 1), 'MMM yy', { locale: it }),
+        km:    Math.round(mActs.reduce((s, a) => s + a.distanceMeters / 1000, 0) * 10) / 10,
+        gain:  Math.round(mActs.reduce((s, a) => s + a.elevationGain, 0)),
+        esc:   mActs.length,
+      })
+    }
+    return last6
+  }, [activities])
+
+  // ── Comparison (completate) ────────────────────────────────────────────────
   const selectedMeta = useMemo(() => activities.filter(a => selectedIds.has(a.id)), [activities, selectedIds])
 
   const toggleSelect = (id: string) => {
@@ -311,7 +408,41 @@ export default function StatistichePage() {
 
   const allFullLoaded = selectedMeta.length >= 2 && selectedMeta.every(m => fullData.has(m.id))
 
-  // ── Training load (F10) ───────────────────────────────────────────────────────
+  // ── Comparison (pianificate) ───────────────────────────────────────────────
+  const togglePlannedSelect = (id: string) => {
+    setSelectedPlannedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else if (next.size < 4) next.add(id)
+      return next
+    })
+  }
+
+  const selectedPlannedMeta = useMemo(() =>
+    plannedMetas.filter(h => selectedPlannedIds.has(h.id)),
+    [plannedMetas, selectedPlannedIds]
+  )
+
+  const plannedRadarData = useMemo(() => {
+    if (selectedPlannedMeta.length < 2) return []
+    const metrics = [
+      { label: 'Distanza',    get: (h: PlannedHikeMeta) => h.distanceMeters / 1000 },
+      { label: 'Dislivello',  get: (h: PlannedHikeMeta) => h.elevationGain },
+      { label: 'Durata stim.', get: (h: PlannedHikeMeta) => h.estimatedTimeSeconds / 3600 },
+      { label: 'Quota max',   get: (h: PlannedHikeMeta) => h.altitudeMax },
+      { label: 'D+/km',       get: (h: PlannedHikeMeta) => difficultyIndex(h.elevationGain, h.distanceMeters) },
+      { label: 'Bellezza',    get: (h: PlannedHikeMeta) => (h.cachedBeautyScore?.overall ?? 0) * 10 },
+    ]
+    return metrics.map(m => {
+      const vals = selectedPlannedMeta.map(h => m.get(h))
+      const mx = Math.max(...vals, 1)
+      const row: Record<string, any> = { metric: m.label }
+      selectedPlannedMeta.forEach((h, i) => { row[`a${i}`] = Math.round(vals[i] / mx * 100) })
+      return row
+    })
+  }, [selectedPlannedMeta])
+
+  // ── Training load (Forma) ─────────────────────────────────────────────────
   const trainingLoadData = useMemo(() => {
     const events = activities.map(a => ({
       date:   format(new Date(a.startTime), 'yyyy-MM-dd'),
@@ -326,7 +457,7 @@ export default function StatistichePage() {
     return { ...last, status: currentForm(last.tsb) }
   }, [trainingLoadData])
 
-  // ── Tab nav ───────────────────────────────────────────────────────────────────
+  // ── Tab nav ───────────────────────────────────────────────────────────────
   const TABS: { id: Tab; label: string }[] = [
     { id: 'panoramica', label: 'Panoramica' },
     { id: 'grafici',    label: 'Grafici' },
@@ -416,7 +547,7 @@ export default function StatistichePage() {
                       { label: 'Streak attuale (settimane)', value: streaks.currentWeeks },
                       { label: 'Record streak (settimane)', value: streaks.longestWeeks },
                       { label: 'Giorni attivi totali',   value: streaks.totalActiveDays },
-                      { label: 'Settimane attive totali',value: streaks.totalActiveWeeks },
+                      { label: 'Settimane attive totali', value: streaks.totalActiveWeeks },
                     ].map(({ label, value }) => (
                       <div key={label} className="text-center">
                         <p className="font-display text-3xl font-bold text-forest-700">{value}</p>
@@ -436,6 +567,7 @@ export default function StatistichePage() {
                       <RecordCard label="Più lunga" icon={<Route className="w-4 h-4"/>}
                         value={`${(records.longestKm.distanceMeters/1000).toFixed(2)} km`}
                         sub={records.longestKm.title ?? 'Escursione'}
+                        polyline={records.longestKm.routePolyline}
                         href={`/escursione/${encodeURIComponent(records.longestKm.id)}`}
                       />
                     )}
@@ -443,6 +575,7 @@ export default function StatistichePage() {
                       <RecordCard label="Più dislivello" icon={<Mountain className="w-4 h-4"/>}
                         value={`${Math.round(records.highestGain.elevationGain)} m D+`}
                         sub={records.highestGain.title ?? 'Escursione'}
+                        polyline={records.highestGain.routePolyline}
                         href={`/escursione/${encodeURIComponent(records.highestGain.id)}`}
                       />
                     )}
@@ -450,6 +583,7 @@ export default function StatistichePage() {
                       <RecordCard label="Passo più veloce" icon={<Zap className="w-4 h-4"/>}
                         value={formatPaceMinkm(records.fastestPace.distanceMeters, records.fastestPace.totalTimeSeconds)}
                         sub={records.fastestPace.title ?? 'Escursione'}
+                        polyline={records.fastestPace.routePolyline}
                         href={`/escursione/${encodeURIComponent(records.fastestPace.id)}`}
                       />
                     )}
@@ -457,6 +591,7 @@ export default function StatistichePage() {
                       <RecordCard label="Quota massima" icon={<ChevronUp className="w-4 h-4"/>}
                         value={`${Math.round(records.highestAlt.altitudeMax)} m slm`}
                         sub={records.highestAlt.title ?? 'Escursione'}
+                        polyline={records.highestAlt.routePolyline}
                         href={`/escursione/${encodeURIComponent(records.highestAlt.id)}`}
                       />
                     )}
@@ -464,6 +599,7 @@ export default function StatistichePage() {
                       <RecordCard label="Più lunga (durata)" icon={<Clock className="w-4 h-4"/>}
                         value={formatDuration(records.longestDuration.totalTimeSeconds)}
                         sub={records.longestDuration.title ?? 'Escursione'}
+                        polyline={records.longestDuration.routePolyline}
                         href={`/escursione/${encodeURIComponent(records.longestDuration.id)}`}
                       />
                     )}
@@ -471,6 +607,7 @@ export default function StatistichePage() {
                       <RecordCard label="Più calorie" icon={<Flame className="w-4 h-4"/>}
                         value={`${records.mostCalories.calories} kcal`}
                         sub={records.mostCalories.title ?? 'Escursione'}
+                        polyline={records.mostCalories.routePolyline}
                         href={`/escursione/${encodeURIComponent(records.mostCalories.id)}`}
                       />
                     )}
@@ -478,6 +615,7 @@ export default function StatistichePage() {
                       <RecordCard label="FC massima registrata" icon={<Heart className="w-4 h-4"/>}
                         value={`${records.highestHR.maxHeartRate} bpm`}
                         sub={records.highestHR.title ?? 'Escursione'}
+                        polyline={records.highestHR.routePolyline}
                         href={`/escursione/${encodeURIComponent(records.highestHR.id)}`}
                       />
                     )}
@@ -485,6 +623,7 @@ export default function StatistichePage() {
                       <RecordCard label="Più difficile (D+/km)" icon={<Target className="w-4 h-4"/>}
                         value={`${difficultyIndex(records.highestDifficulty.elevationGain, records.highestDifficulty.distanceMeters)} m/km`}
                         sub={records.highestDifficulty.title ?? 'Escursione'}
+                        polyline={records.highestDifficulty.routePolyline}
                         href={`/escursione/${encodeURIComponent(records.highestDifficulty.id)}`}
                       />
                     )}
@@ -558,6 +697,34 @@ export default function StatistichePage() {
                   <ActivityHeatmap activities={activities} year={heatmapYear} />
                 </div>
 
+                {/* Annual comparison (km + D+ per year) */}
+                {annualData.length > 1 && (
+                  <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                    <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+                      <BarChart2 className="w-4 h-4 text-forest-600" /> Confronto annuale
+                    </h3>
+                    <p className="text-xs text-stone-400 mb-4">Distanza totale e dislivello anno per anno.</p>
+                    <div className="h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={annualData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                          <XAxis dataKey="year" tick={{ fontSize: 12 }} tickLine={false} />
+                          <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" km" width={52} />
+                          <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" m"  width={56} />
+                          <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                            formatter={(v: any, name: string) => [
+                              name === 'km' ? `${v} km` : `${v} m`,
+                              name === 'km' ? 'Distanza' : 'Dislivello D+',
+                            ]} />
+                          <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
+                          <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[4,4,0,0]} />
+                          <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[4,4,0,0]} opacity={0.8} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
                 {/* Monthly km + D+ */}
                 <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
                   <h3 className="font-medium text-stone-700 mb-4">Distanza e dislivello mensili</h3>
@@ -573,6 +740,42 @@ export default function StatistichePage() {
                         <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
                         <Bar yAxisId="km" dataKey="km" fill="#378d44" radius={[4,4,0,0]} />
                         <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[4,4,0,0]} opacity={0.8} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Weekday distribution */}
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                  <h3 className="font-medium text-stone-700 mb-1">Distribuzione per giorno della settimana</h3>
+                  <p className="text-xs text-stone-400 mb-4">In quale giorno esci di più?</p>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={weekdayData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
+                        <XAxis dataKey="day" tick={{ fontSize: 12, fontWeight: 600 }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+                        <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                          formatter={(v: any) => [v, 'Escursioni']} />
+                        <Bar dataKey="count" fill="#378d44" radius={[6,6,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Distance distribution histogram */}
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                  <h3 className="font-medium text-stone-700 mb-1">Distribuzione per lunghezza</h3>
+                  <p className="text-xs text-stone-400 mb-4">Quante escursioni rientrano in ciascuna fascia di distanza?</p>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={distHistogram} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+                        <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                          formatter={(v: any) => [v, 'Escursioni']} />
+                        <Bar dataKey="count" fill="#c05a17" radius={[6,6,0,0]} opacity={0.85} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -631,190 +834,326 @@ export default function StatistichePage() {
             {/* ── CONFRONTO ───────────────────────────────────────────────────── */}
             {tab === 'confronta' && (
               <div className="space-y-6">
-                <div>
-                  <p className="text-sm text-stone-500 mb-4">Seleziona da 2 a 4 escursioni per confrontarle.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
-                    {activities.map(a => {
-                      const sel = selectedIds.has(a.id)
-                      const disabled = !sel && selectedIds.size >= 4
-                      return (
-                        <button key={a.id} disabled={disabled}
-                          onClick={() => toggleSelect(a.id)}
-                          className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all
-                            ${sel ? 'border-forest-400 bg-forest-50' : 'border-stone-200 bg-white hover:border-stone-300'}
-                            ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                        >
-                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0
-                            ${sel ? 'bg-forest-600 border-forest-600' : 'border-stone-300'}`}>
-                            {sel && <Check className="w-3 h-3 text-white" />}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-stone-700 truncate">{a.title ?? 'Escursione'}</p>
-                            <p className="text-xs text-stone-400">{format(new Date(a.startTime), 'dd MMM yy', { locale: it })} · {(a.distanceMeters/1000).toFixed(1)} km · ↑{Math.round(a.elevationGain)} m</p>
-                          </div>
-                        </button>
-                      )
-                    })}
+                {/* Mode toggle */}
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1 bg-stone-100 rounded-xl p-1">
+                    <button onClick={() => { setCompareMode('completate'); setSelectedIds(new Set()); setSelectedPlannedIds(new Set()) }}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${compareMode === 'completate' ? 'bg-white shadow-sm text-forest-700' : 'text-stone-500 hover:text-stone-700'}`}>
+                      <Activity className="w-3.5 h-3.5" /> Completate
+                    </button>
+                    <button onClick={() => { setCompareMode('pianificate'); setSelectedIds(new Set()); setSelectedPlannedIds(new Set()) }}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${compareMode === 'pianificate' ? 'bg-white shadow-sm text-sky-700' : 'text-stone-500 hover:text-stone-700'}`}>
+                      <Shuffle className="w-3.5 h-3.5" /> Pianificate
+                    </button>
                   </div>
                 </div>
 
-                {selectedMeta.length >= 2 && (
-                  <div className="space-y-6">
-                    {/* Stats table */}
-                    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-                      <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
-                        <h3 className="font-medium text-stone-700">Confronto statistiche</h3>
-                        <button
-                          onClick={() => setShareKind('comparison')}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-forest-700 text-white rounded-lg text-xs hover:bg-forest-600 transition-colors"
-                        >
-                          <Share2 className="w-3.5 h-3.5" /> Condividi
-                        </button>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-stone-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs text-stone-400 uppercase tracking-wide font-medium">Metrica</th>
-                              {selectedMeta.map((a, i) => (
-                                <th key={a.id} className="px-4 py-3 text-left text-xs font-medium" style={{ color: COMPARISON_COLORS[i] }}>
-                                  {a.title ?? 'Escursione'}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-stone-100">
-                            {[
-                              { label: 'Data', fmt: (a: ActivityMeta) => format(new Date(a.startTime), 'dd/MM/yyyy') },
-                              { label: 'Distanza', fmt: (a: ActivityMeta) => `${(a.distanceMeters/1000).toFixed(2)} km` },
-                              { label: 'Durata', fmt: (a: ActivityMeta) => formatDuration(a.totalTimeSeconds) },
-                              { label: 'Passo medio', fmt: (a: ActivityMeta) => formatPaceMinkm(a.distanceMeters, a.totalTimeSeconds) },
-                              { label: 'Dislivello ↑', fmt: (a: ActivityMeta) => `${Math.round(a.elevationGain)} m` },
-                              { label: 'Dislivello ↓', fmt: (a: ActivityMeta) => `${Math.round(a.elevationLoss)} m` },
-                              { label: 'Indice difficoltà', fmt: (a: ActivityMeta) => `${difficultyIndex(a.elevationGain, a.distanceMeters)} m/km` },
-                              { label: 'Quota massima', fmt: (a: ActivityMeta) => `${Math.round(a.altitudeMax)} m` },
-                              { label: 'FC media', fmt: (a: ActivityMeta) => `${a.avgHeartRate} bpm` },
-                              { label: 'FC massima', fmt: (a: ActivityMeta) => `${a.maxHeartRate} bpm` },
-                              { label: 'Velocità media', fmt: (a: ActivityMeta) => `${msToKmh(a.avgSpeedMs)} km/h` },
-                              { label: 'Calorie', fmt: (a: ActivityMeta) => `${a.calories} kcal` },
-                              { label: 'Calorie/ora', fmt: (a: ActivityMeta) => `${caloriesPerHour(a.calories, a.totalTimeSeconds)} kcal/h` },
-                            ].map(({ label, fmt }) => (
-                              <tr key={label}>
-                                <td className="px-4 py-2.5 text-stone-500 font-medium text-xs">{label}</td>
-                                {selectedMeta.map((a, i) => (
-                                  <td key={a.id} className="px-4 py-2.5 font-mono text-stone-700 text-xs" style={{ borderLeft: `3px solid ${COMPARISON_COLORS[i]}20` }}>
-                                    {fmt(a)}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Radar chart */}
-                    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-                      <h3 className="font-medium text-stone-700 mb-4">Radar confronto (normalizzato 0-100)</h3>
-                      <div className="h-80">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <RadarChart data={radarData}>
-                            <PolarGrid />
-                            <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
-                            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
-                            {selectedMeta.map((a, i) => (
-                              <Radar key={a.id} name={a.title ?? `Escursione ${i+1}`}
-                                dataKey={`a${i}`} stroke={COMPARISON_COLORS[i]}
-                                fill={COMPARISON_COLORS[i]} fillOpacity={0.15} strokeWidth={2} />
-                            ))}
-                            <Legend wrapperStyle={{ fontSize: 12 }} />
-                            <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
-                          </RadarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    {/* Elevation overlay + HR zones (load on demand) */}
-                    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-medium text-stone-700">Profili altimetrici sovrapposti + Zone FC</h3>
-                        {!allFullLoaded && (
-                          <button onClick={loadFullData} disabled={loadingFull}
-                            className="flex items-center gap-2 px-4 py-2 bg-forest-600 text-white rounded-lg text-sm hover:bg-forest-700 transition-colors disabled:opacity-60">
-                            {loadingFull ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mountain className="w-3.5 h-3.5" />}
-                            Carica dati GPS
-                          </button>
-                        )}
-                      </div>
-                      {!allFullLoaded ? (
-                        <p className="text-sm text-stone-400 text-center py-8">
-                          Clicca "Carica dati GPS" per visualizzare i profili altimetrici e le zone cardiache.
-                        </p>
-                      ) : (
-                        <div className="space-y-6">
-                          {elevMerged.length > 0 && (
-                            <div className="h-56">
-                              <p className="text-xs text-stone-400 mb-2">X: % percorso completato · Y: quota (m slm)</p>
-                              <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={elevMerged} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                                  <XAxis dataKey="pct" unit="%" tick={{ fontSize: 10 }} tickLine={false} />
-                                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m" width={52} />
-                                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
-                                  {selectedMeta.map((a, i) => (
-                                    elevProfiles[i].length > 0 && (
-                                      <Line key={a.id} type="monotone" dataKey={`a${i}`}
-                                        name={a.title ?? `Escursione ${i+1}`}
-                                        stroke={COMPARISON_COLORS[i]} strokeWidth={2} dot={false} />
-                                    )
-                                  ))}
-                                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          )}
-                          {/* HR Zones */}
-                          {hrZones.some(z => z.length > 0) && (
-                            <div>
-                              <p className="text-xs font-medium text-stone-500 mb-3 uppercase tracking-wide">Zone frequenza cardiaca (% del tempo)</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {selectedMeta.map((a, i) => (
-                                  hrZones[i].length > 0 && (
-                                    <div key={a.id}>
-                                      <p className="text-xs font-medium mb-2" style={{ color: COMPARISON_COLORS[i] }}>{a.title ?? `Escursione ${i+1}`}</p>
-                                      <div className="space-y-1.5">
-                                        {hrZones[i].map(z => (
-                                          <div key={z.name} className="flex items-center gap-2">
-                                            <span className="text-xs text-stone-500 w-24 shrink-0">{z.name}</span>
-                                            <div className="flex-1 bg-stone-100 rounded-full h-3">
-                                              <div className="h-3 rounded-full transition-all" style={{ width: `${z.pct}%`, backgroundColor: z.color }} />
-                                            </div>
-                                            <span className="text-xs text-stone-500 w-8 text-right">{z.pct}%</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )
-                                ))}
+                {/* ── Completate mode ── */}
+                {compareMode === 'completate' && (
+                  <>
+                    <div>
+                      <p className="text-sm text-stone-500 mb-4">Seleziona da 2 a 4 escursioni per confrontarle.</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                        {activities.map(a => {
+                          const sel = selectedIds.has(a.id)
+                          const disabled = !sel && selectedIds.size >= 4
+                          return (
+                            <button key={a.id} disabled={disabled}
+                              onClick={() => toggleSelect(a.id)}
+                              className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all
+                                ${sel ? 'border-forest-400 bg-forest-50' : 'border-stone-200 bg-white hover:border-stone-300'}
+                                ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            >
+                              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0
+                                ${sel ? 'bg-forest-600 border-forest-600' : 'border-stone-300'}`}>
+                                {sel && <Check className="w-3 h-3 text-white" />}
                               </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-stone-700 truncate">{a.title ?? 'Escursione'}</p>
+                                <p className="text-xs text-stone-400">{format(new Date(a.startTime), 'dd MMM yy', { locale: it })} · {(a.distanceMeters/1000).toFixed(1)} km · ↑{Math.round(a.elevationGain)} m</p>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {selectedMeta.length >= 2 && (
+                      <div className="space-y-6">
+                        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+                          <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
+                            <h3 className="font-medium text-stone-700">Confronto statistiche</h3>
+                            <button onClick={() => setShareKind('comparison')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-forest-700 text-white rounded-lg text-xs hover:bg-forest-600 transition-colors">
+                              <Share2 className="w-3.5 h-3.5" /> Condividi
+                            </button>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-stone-50">
+                                <tr>
+                                  <th className="px-4 py-3 text-left text-xs text-stone-400 uppercase tracking-wide font-medium">Metrica</th>
+                                  {selectedMeta.map((a, i) => (
+                                    <th key={a.id} className="px-4 py-3 text-left text-xs font-medium" style={{ color: COMPARISON_COLORS[i] }}>
+                                      {a.title ?? 'Escursione'}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-stone-100">
+                                {[
+                                  { label: 'Data', fmt: (a: ActivityMeta) => format(new Date(a.startTime), 'dd/MM/yyyy') },
+                                  { label: 'Distanza', fmt: (a: ActivityMeta) => `${(a.distanceMeters/1000).toFixed(2)} km` },
+                                  { label: 'Durata', fmt: (a: ActivityMeta) => formatDuration(a.totalTimeSeconds) },
+                                  { label: 'Passo medio', fmt: (a: ActivityMeta) => formatPaceMinkm(a.distanceMeters, a.totalTimeSeconds) },
+                                  { label: 'Dislivello ↑', fmt: (a: ActivityMeta) => `${Math.round(a.elevationGain)} m` },
+                                  { label: 'Dislivello ↓', fmt: (a: ActivityMeta) => `${Math.round(a.elevationLoss)} m` },
+                                  { label: 'Indice difficoltà', fmt: (a: ActivityMeta) => `${difficultyIndex(a.elevationGain, a.distanceMeters)} m/km` },
+                                  { label: 'Quota massima', fmt: (a: ActivityMeta) => `${Math.round(a.altitudeMax)} m` },
+                                  { label: 'FC media', fmt: (a: ActivityMeta) => `${a.avgHeartRate} bpm` },
+                                  { label: 'FC massima', fmt: (a: ActivityMeta) => `${a.maxHeartRate} bpm` },
+                                  { label: 'Velocità media', fmt: (a: ActivityMeta) => `${msToKmh(a.avgSpeedMs)} km/h` },
+                                  { label: 'Calorie', fmt: (a: ActivityMeta) => `${a.calories} kcal` },
+                                  { label: 'Calorie/ora', fmt: (a: ActivityMeta) => `${caloriesPerHour(a.calories, a.totalTimeSeconds)} kcal/h` },
+                                ].map(({ label, fmt }) => (
+                                  <tr key={label}>
+                                    <td className="px-4 py-2.5 text-stone-500 font-medium text-xs">{label}</td>
+                                    {selectedMeta.map((a, i) => (
+                                      <td key={a.id} className="px-4 py-2.5 font-mono text-stone-700 text-xs" style={{ borderLeft: `3px solid ${COMPARISON_COLORS[i]}20` }}>
+                                        {fmt(a)}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                          <h3 className="font-medium text-stone-700 mb-4">Radar confronto (normalizzato 0-100)</h3>
+                          <div className="h-80">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <RadarChart data={radarData}>
+                                <PolarGrid />
+                                <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
+                                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                                {selectedMeta.map((a, i) => (
+                                  <Radar key={a.id} name={a.title ?? `Escursione ${i+1}`}
+                                    dataKey={`a${i}`} stroke={COMPARISON_COLORS[i]}
+                                    fill={COMPARISON_COLORS[i]} fillOpacity={0.15} strokeWidth={2} />
+                                ))}
+                                <Legend wrapperStyle={{ fontSize: 12 }} />
+                                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
+                              </RadarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-medium text-stone-700">Profili altimetrici sovrapposti + Zone FC</h3>
+                            {!allFullLoaded && (
+                              <button onClick={loadFullData} disabled={loadingFull}
+                                className="flex items-center gap-2 px-4 py-2 bg-forest-600 text-white rounded-lg text-sm hover:bg-forest-700 transition-colors disabled:opacity-60">
+                                {loadingFull ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mountain className="w-3.5 h-3.5" />}
+                                Carica dati GPS
+                              </button>
+                            )}
+                          </div>
+                          {!allFullLoaded ? (
+                            <p className="text-sm text-stone-400 text-center py-8">Clicca "Carica dati GPS" per visualizzare i profili altimetrici e le zone cardiache.</p>
+                          ) : (
+                            <div className="space-y-6">
+                              {elevMerged.length > 0 && (
+                                <div className="h-56">
+                                  <p className="text-xs text-stone-400 mb-2">X: % percorso completato · Y: quota (m slm)</p>
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={elevMerged} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                                      <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                                      <XAxis dataKey="pct" unit="%" tick={{ fontSize: 10 }} tickLine={false} />
+                                      <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m" width={52} />
+                                      <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
+                                      {selectedMeta.map((a, i) => (
+                                        elevProfiles[i].length > 0 && (
+                                          <Line key={a.id} type="monotone" dataKey={`a${i}`}
+                                            name={a.title ?? `Escursione ${i+1}`}
+                                            stroke={COMPARISON_COLORS[i]} strokeWidth={2} dot={false} />
+                                        )
+                                      ))}
+                                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              )}
+                              {hrZones.some(z => z.length > 0) && (
+                                <div>
+                                  <p className="text-xs font-medium text-stone-500 mb-3 uppercase tracking-wide">Zone frequenza cardiaca (% del tempo)</p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {selectedMeta.map((a, i) => (
+                                      hrZones[i].length > 0 && (
+                                        <div key={a.id}>
+                                          <p className="text-xs font-medium mb-2" style={{ color: COMPARISON_COLORS[i] }}>{a.title ?? `Escursione ${i+1}`}</p>
+                                          <div className="space-y-1.5">
+                                            {hrZones[i].map(z => (
+                                              <div key={z.name} className="flex items-center gap-2">
+                                                <span className="text-xs text-stone-500 w-24 shrink-0">{z.name}</span>
+                                                <div className="flex-1 bg-stone-100 rounded-full h-3">
+                                                  <div className="h-3 rounded-full transition-all" style={{ width: `${z.pct}%`, backgroundColor: z.color }} />
+                                                </div>
+                                                <span className="text-xs text-stone-500 w-8 text-right">{z.pct}%</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    )}
+
+                    {selectedIds.size === 0 && (
+                      <div className="text-center py-12 text-stone-400">
+                        <GitCommitHorizontal className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                        <p className="text-sm">Seleziona almeno 2 escursioni dalla lista per iniziare il confronto.</p>
+                      </div>
+                    )}
+                  </>
                 )}
 
-                {selectedIds.size === 0 && (
-                  <div className="text-center py-12 text-stone-400">
-                    <GitCommitHorizontal className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">Seleziona almeno 2 escursioni dalla lista per iniziare il confronto.</p>
-                  </div>
+                {/* ── Pianificate mode ── */}
+                {compareMode === 'pianificate' && (
+                  <>
+                    {loadingPlanned ? (
+                      <div className="flex items-center justify-center py-16 gap-3 text-stone-400">
+                        <Loader2 className="w-5 h-5 animate-spin" /><span>Caricamento escursioni pianificate…</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-sm text-stone-500 mb-4">Seleziona da 2 a 4 escursioni pianificate per confrontarle.</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                            {plannedMetas.map(h => {
+                              const sel      = selectedPlannedIds.has(h.id)
+                              const disabled = !sel && selectedPlannedIds.size >= 4
+                              return (
+                                <button key={h.id} disabled={disabled}
+                                  onClick={() => togglePlannedSelect(h.id)}
+                                  className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all
+                                    ${sel ? 'border-sky-400 bg-sky-50' : 'border-stone-200 bg-white hover:border-stone-300'}
+                                    ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                >
+                                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0
+                                    ${sel ? 'bg-sky-600 border-sky-600' : 'border-stone-300'}`}>
+                                    {sel && <Check className="w-3 h-3 text-white" />}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-stone-700 truncate">{h.title}</p>
+                                    <p className="text-xs text-stone-400">
+                                      {(h.distanceMeters/1000).toFixed(1)} km · ↑{Math.round(h.elevationGain)} m
+                                      {h.cachedBeautyScore && ` · ★ ${h.cachedBeautyScore.overall.toFixed(1)}`}
+                                    </p>
+                                  </div>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {selectedPlannedMeta.length >= 2 && (
+                          <div className="space-y-6">
+                            {/* Comparison table */}
+                            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+                              <div className="px-5 py-4 border-b border-stone-100">
+                                <h3 className="font-medium text-stone-700">Confronto statistiche — Escursioni pianificate</h3>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-stone-50">
+                                    <tr>
+                                      <th className="px-4 py-3 text-left text-xs text-stone-400 uppercase tracking-wide font-medium">Metrica</th>
+                                      {selectedPlannedMeta.map((h, i) => (
+                                        <th key={h.id} className="px-4 py-3 text-left text-xs font-medium" style={{ color: COMPARISON_COLORS[i] }}>
+                                          {h.title}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-stone-100">
+                                    {[
+                                      { label: 'Data pianif.',    fmt: (h: PlannedHikeMeta) => h.plannedDate ? format(new Date(h.plannedDate), 'dd/MM/yyyy') : '—' },
+                                      { label: 'Distanza',        fmt: (h: PlannedHikeMeta) => `${(h.distanceMeters/1000).toFixed(2)} km` },
+                                      { label: 'Durata stim.',    fmt: (h: PlannedHikeMeta) => formatDuration(h.estimatedTimeSeconds) },
+                                      { label: 'Dislivello ↑',   fmt: (h: PlannedHikeMeta) => `${Math.round(h.elevationGain)} m` },
+                                      { label: 'Dislivello ↓',   fmt: (h: PlannedHikeMeta) => `${Math.round(h.elevationLoss)} m` },
+                                      { label: 'Quota max',       fmt: (h: PlannedHikeMeta) => `${Math.round(h.altitudeMax)} m` },
+                                      { label: 'Indice diff.',    fmt: (h: PlannedHikeMeta) => `${difficultyIndex(h.elevationGain, h.distanceMeters)} m/km` },
+                                      { label: 'Difficoltà',      fmt: (h: PlannedHikeMeta) => h.assessment?.difficulty ?? '—' },
+                                      { label: 'Adatta a te',     fmt: (h: PlannedHikeMeta) => h.assessment ? `${h.assessment.suitabilityScore}%` : '—' },
+                                      { label: 'Bellezza',        fmt: (h: PlannedHikeMeta) => h.cachedBeautyScore ? `${h.cachedBeautyScore.overall.toFixed(1)}/10` : '—' },
+                                    ].map(({ label, fmt }) => (
+                                      <tr key={label}>
+                                        <td className="px-4 py-2.5 text-stone-500 font-medium text-xs">{label}</td>
+                                        {selectedPlannedMeta.map((h, i) => (
+                                          <td key={h.id} className="px-4 py-2.5 font-mono text-stone-700 text-xs capitalize" style={{ borderLeft: `3px solid ${COMPARISON_COLORS[i]}20` }}>
+                                            {fmt(h)}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* Radar chart */}
+                            <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                              <h3 className="font-medium text-stone-700 mb-4">Radar confronto (normalizzato 0-100)</h3>
+                              <div className="h-80">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <RadarChart data={plannedRadarData}>
+                                    <PolarGrid />
+                                    <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
+                                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                                    {selectedPlannedMeta.map((h, i) => (
+                                      <Radar key={h.id} name={h.title}
+                                        dataKey={`a${i}`} stroke={COMPARISON_COLORS[i]}
+                                        fill={COMPARISON_COLORS[i]} fillOpacity={0.15} strokeWidth={2} />
+                                    ))}
+                                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                                    <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
+                                  </RadarChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedPlannedIds.size === 0 && plannedMetas.length === 0 && (
+                          <div className="text-center py-12 text-stone-400">
+                            <Mountain className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">Nessuna escursione pianificata trovata. Carica prima un file GPX.</p>
+                          </div>
+                        )}
+                        {selectedPlannedIds.size === 0 && plannedMetas.length > 0 && (
+                          <div className="text-center py-12 text-stone-400">
+                            <GitCommitHorizontal className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                            <p className="text-sm">Seleziona almeno 2 escursioni pianificate per il confronto.</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             )}
 
-            {/* ── FORMA (F10) ─────────────────────────────────────────────────── */}
+            {/* ── FORMA ───────────────────────────────────────────────────────── */}
             {tab === 'forma' && (
               <div className="space-y-6">
                 {/* Current form status */}
@@ -841,6 +1180,80 @@ export default function StatistichePage() {
                     </div>
                   </div>
                 )}
+
+                {/* Weekly averages summary */}
+                {weeklyAvg && (
+                  <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                    <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-forest-600" /> Medie settimanali (ultime 16 settimane)
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {[
+                        { label: 'Km medi/settimana',  value: `${weeklyAvg.avgKm} km` },
+                        { label: 'Settimana migliore',  value: `${weeklyAvg.maxKm} km` },
+                        { label: 'D+ medi/settimana',   value: `${weeklyAvg.avgGain} m` },
+                        { label: 'Settimane attive',    value: `${weeklyAvg.activeWeeks}/16` },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="text-center">
+                          <p className="font-display text-2xl font-bold text-forest-700">{value}</p>
+                          <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Weekly volume chart */}
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                  <h3 className="font-medium text-stone-700 mb-1">Volume settimanale — ultime 16 settimane</h3>
+                  <p className="text-xs text-stone-400 mb-4">Km percorsi e dislivello per settimana.</p>
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={weeklyVolumeData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                        <XAxis dataKey="week" tick={{ fontSize: 10 }} tickLine={false} interval={1} />
+                        <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" km" width={44} />
+                        <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
+                        <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                          formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello D+']} />
+                        <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
+                        <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[3,3,0,0]} />
+                        <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[3,3,0,0]} opacity={0.8} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Monthly progression table */}
+                <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-stone-100">
+                    <h3 className="font-medium text-stone-700">Progressione mensile — ultimi 6 mesi</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wider">
+                        <tr>
+                          {['Mese', 'Escursioni', 'Distanza', 'Dislivello'].map(h => (
+                            <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {monthlyProgressData.map((m, i) => {
+                          const isLatest = i === monthlyProgressData.length - 1
+                          return (
+                            <tr key={m.month} className={isLatest ? 'bg-forest-50' : ''}>
+                              <td className="px-4 py-3 font-medium text-stone-700 capitalize">{m.month}</td>
+                              <td className="px-4 py-3 font-mono text-stone-600">{m.esc}</td>
+                              <td className="px-4 py-3 font-mono text-forest-700">{m.km} km</td>
+                              <td className="px-4 py-3 font-mono text-terra-600">{m.gain.toLocaleString('it')} m</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
                 {/* ATL/CTL/TSB chart */}
                 <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
