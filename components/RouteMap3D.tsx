@@ -16,7 +16,7 @@ const SPEEDS = [
 
 const STYLES = [
   { label: 'Outdoor',   url: () => `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${KEY}` },
-  { label: 'Satellite', url: () => `https://api.maptiler.com/maps/satellite-v2/style.json?key=${KEY}` },
+  { label: 'Satellite', url: () => `https://api.maptiler.com/maps/hybrid/style.json?key=${KEY}` },
   { label: 'Winter',    url: () => `https://api.maptiler.com/maps/winter-v2/style.json?key=${KEY}` },
 ]
 
@@ -200,7 +200,7 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     })
 
     // Re-add custom layers after style change
-    map.on('style.load', () => { setupLayers() })
+    map.on('style.load', () => { setupLayers(); setMapReady(true) })
 
     return () => {
       cancelAnimationFrame(animRef.current)
@@ -222,6 +222,7 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
   // ── Style switching ───────────────────────────────────────────────────────────
   const switchStyle = useCallback((idx: number) => {
     setStyleIdx(idx)
+    setMapReady(false)
     mapRef.current?.setStyle(STYLES[idx].url())
   }, [])
 
