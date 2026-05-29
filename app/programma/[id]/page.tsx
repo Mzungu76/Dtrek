@@ -7,6 +7,7 @@ import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import BeautyReport from '@/components/BeautyReport'
+import RouteThumb from '@/components/RouteThumb'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
@@ -34,25 +35,15 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   impegnativa: 'bg-orange-100 text-orange-700 border-orange-200',
   estrema:     'bg-red-100 text-red-700 border-red-200',
 }
+const GRADE_LABEL: Record<string, string> = {
+  '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto',
+  '6': 'Sufficiente', '5': 'Mediocre', '4': 'Insufficiente',
+}
 const SUIT_LABEL = (s: number) =>
-  s >= 75 ? 'Ben preparato'         :
-  s >= 50 ? 'Fattibile con impegno'  :
+  s >= 75 ? 'Ben preparato' : s >= 50 ? 'Fattibile con impegno' :
   s >= 30 ? 'Al limite delle capacità' : 'Molto sfidante'
 const SUIT_COLOR = (s: number) =>
   s >= 75 ? 'bg-emerald-500' : s >= 50 ? 'bg-amber-500' : s >= 30 ? 'bg-orange-500' : 'bg-red-500'
-
-function StatTile({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
-  return (
-    <div className="bg-white rounded-xl border border-stone-200 p-4 flex items-start gap-3">
-      <div className="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center shrink-0">{icon}</div>
-      <div>
-        <p className="text-xs text-stone-400 font-medium">{label}</p>
-        <p className="text-lg font-bold text-stone-800 leading-tight">{value}</p>
-        {sub && <p className="text-xs text-stone-400">{sub}</p>}
-      </div>
-    </div>
-  )
-}
 
 function RiskItem({ type, text }: { type: 'danger' | 'warning' | 'info'; text: string }) {
   const colors = {
@@ -69,11 +60,10 @@ function RiskItem({ type, text }: { type: 'danger' | 'warning' | 'info'; text: s
   )
 }
 
-function AssessmentPanel({ a, distKm, elevGain }: { a: HikeAssessment; distKm: number; elevGain: number }) {
+function AssessmentPanel({ a }: { a: HikeAssessment }) {
   const suit = a.suitabilityScore
   return (
     <div className="space-y-5">
-      {/* Difficulty + suitability */}
       <div className="flex flex-wrap gap-3 items-start">
         <div className={`px-3 py-1.5 rounded-full border text-sm font-semibold ${DIFFICULTY_COLORS[a.difficulty]}`}>
           {DIFFICULTY_LABEL[a.difficulty]}
@@ -84,30 +74,25 @@ function AssessmentPanel({ a, distKm, elevGain }: { a: HikeAssessment; distKm: n
             <span>{suit}% · {SUIT_LABEL(suit)}</span>
           </div>
           <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full ${SUIT_COLOR(suit)}`} style={{ width: `${suit}%` }} />
+            <div className={`h-full rounded-full transition-all ${SUIT_COLOR(suit)}`} style={{ width: `${suit}%` }} />
           </div>
         </div>
       </div>
 
-      {/* Personal context */}
       {a.userContext.activityCount > 0 && (
         <div className="bg-stone-50 rounded-xl border border-stone-200 p-4 grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-xs text-stone-400 mb-0.5">vs. media distanza</p>
             <p className="font-semibold text-stone-800">
               {a.userContext.vsAvgDistPct}%
-              <span className="text-xs font-normal text-stone-400 ml-1">
-                (tua media {a.userContext.avgDistanceKm.toFixed(1)} km)
-              </span>
+              <span className="text-xs font-normal text-stone-400 ml-1">(media {a.userContext.avgDistanceKm.toFixed(1)} km)</span>
             </p>
           </div>
           <div>
             <p className="text-xs text-stone-400 mb-0.5">vs. media dislivello</p>
             <p className="font-semibold text-stone-800">
               {a.userContext.vsAvgElevPct}%
-              <span className="text-xs font-normal text-stone-400 ml-1">
-                (tua media {a.userContext.avgElevationM} m D+)
-              </span>
+              <span className="text-xs font-normal text-stone-400 ml-1">(media {a.userContext.avgElevationM} m D+)</span>
             </p>
           </div>
           {a.userContext.maxDistanceKm > 0 && (
@@ -125,20 +110,18 @@ function AssessmentPanel({ a, distKm, elevGain }: { a: HikeAssessment; distKm: n
         </div>
       )}
 
-      {/* Risks */}
       {a.risks.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">Fattori di rischio</p>
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Fattori di rischio</p>
           <div className="space-y-2">
             {a.risks.map((r, i) => <RiskItem key={i} type={r.type} text={r.text} />)}
           </div>
         </div>
       )}
 
-      {/* Suggestions */}
       {a.suggestions.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">Consigli pratici</p>
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Consigli pratici</p>
           <div className="space-y-2">
             {a.suggestions.map((s, i) => <RiskItem key={i} type={s.type} text={s.text} />)}
           </div>
@@ -151,21 +134,37 @@ function AssessmentPanel({ a, distKm, elevGain }: { a: HikeAssessment; distKm: n
 export default function PlannedHikePage() {
   const params = useParams()
   const router = useRouter()
-  const id     = decodeURIComponent(params.id as string)
+  const id = decodeURIComponent(params.id as string)
 
-  const [hike,         setHike]        = useState<PlannedHike | null>(null)
-  const [loading,      setLoading]     = useState(true)
-  const [saving,       setSaving]      = useState(false)
-  const [editTitle,    setEditTitle]   = useState(false)
-  const [editNotes,    setEditNotes]   = useState(false)
-  const [editDate,     setEditDate]    = useState(false)
-  const [titleVal,     setTitleVal]    = useState('')
-  const [notesVal,     setNotesVal]    = useState('')
-  const [dateVal,      setDateVal]     = useState('')
-  const [showGradient, setShowGradient] = useState(false)
-  const [pois,         setPois]        = useState<PoiItem[]>([])
-  const [wikiPages,    setWikiPages]   = useState<WikiPage[]>([])
-  const [terrain,      setTerrain]     = useState<TerrainContext | null>(null)
+  const [hike,           setHike]          = useState<PlannedHike | null>(null)
+  const [loading,        setLoading]       = useState(true)
+  const [saving,         setSaving]        = useState(false)
+  const [editTitle,      setEditTitle]     = useState(false)
+  const [editNotes,      setEditNotes]     = useState(false)
+  const [editDate,       setEditDate]      = useState(false)
+  const [titleVal,       setTitleVal]      = useState('')
+  const [notesVal,       setNotesVal]      = useState('')
+  const [dateVal,        setDateVal]       = useState('')
+  const [showGradient,   setShowGradient]  = useState(false)
+  const [pois,           setPois]          = useState<PoiItem[]>([])
+  const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
+  const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
+  const [loadingTerrain, setLoadingTerrain] = useState(false)
+
+  // Must be before early returns
+  const heroPolyline = useMemo((): [number, number][] => {
+    const pts = (hike?.trackPoints ?? []).filter(p => p.lat && p.lon)
+    if (!pts.length) return []
+    const step = Math.max(1, Math.ceil(pts.length / 100))
+    return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
+  }, [hike])
+
+  const beautyScore = useMemo(
+    () => hike && terrain && (pois.length > 0 || wikiPages.length > 0 || terrain.hasLake || terrain.hasForest)
+      ? computeBeautyScore(pois, wikiPages, terrain, hike.elevationGain, hike.altitudeMax)
+      : null,
+    [pois, wikiPages, terrain, hike],
+  )
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -174,25 +173,15 @@ export default function PlannedHikePage() {
       setTitleVal(h.title)
       setNotesVal(h.userNotes ?? '')
       setDateVal(h.plannedDate ?? '')
-      const gpsPoints = (h.trackPoints ?? [])
-        .filter(p => p.lat && p.lon)
-        .map(p => [p.lat!, p.lon!] as [number, number])
-      if (gpsPoints.length > 0) {
-        fetchPoisNearTrack(gpsPoints, 300).then(setPois).catch(() => {})
-        fetchTerrainContext(gpsPoints).then(setTerrain).catch(() => {})
+      const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+      if (gps.length > 0) {
+        fetchPoisNearTrack(gps, 300).then(setPois).catch(() => {})
+        setLoadingTerrain(true)
+        fetchTerrainContext(gps).then(setTerrain).catch(() => {}).finally(() => setLoadingTerrain(false))
       }
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  // Must be before early returns — hooks cannot be called conditionally
-  const beautyScore = useMemo(
-    () => hike && terrain && (pois.length > 0 || wikiPages.length > 0 || terrain.hasLake || terrain.hasForest)
-      ? computeBeautyScore(pois, wikiPages, terrain, hike.elevationGain, hike.altitudeMax)
-      : null,
-    [pois, wikiPages, terrain, hike],
-  )
-
-  // Persist score the first time it's computed (so list cards can show it)
   useEffect(() => {
     if (!beautyScore || !hike || hike.cachedBeautyScore) return
     const { overall, grade, color } = beautyScore
@@ -205,8 +194,7 @@ export default function PlannedHikePage() {
     <div className="min-h-screen bg-stone-50">
       <Navbar />
       <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin" />
-        <span>Caricamento…</span>
+        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
       </div>
     </div>
   )
@@ -232,122 +220,157 @@ export default function PlannedHikePage() {
   }
 
   const distKm    = hike.distanceMeters / 1000
-  const polyline  = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
   const gpsPoints = hike.trackPoints?.filter(p => p.lat && p.lon) ?? []
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
+  const polyline  = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+
+  const displayScore = beautyScore
+    ? { overall: beautyScore.overall, grade: beautyScore.grade, color: beautyScore.color }
+    : hike.cachedBeautyScore ?? null
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
       <Navbar />
 
-      <main className="max-w-[1200px] mx-auto px-3 sm:px-4 py-5 sm:py-8 space-y-5 sm:space-y-6">
-        {/* Back + delete */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => router.push('/programma')}
-            className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-700 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" /> Tutte le escursioni pianificate
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={saving}
-            className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-600 transition-colors"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Elimina
-          </button>
-        </div>
+      {/* ══ HERO ══ */}
+      <div className="relative bg-gradient-to-br from-sky-900 via-sky-800 to-sky-700 text-white overflow-hidden">
+        {heroPolyline.length > 1 && (
+          <div className="absolute inset-0 pointer-events-none">
+            <RouteThumb polyline={heroPolyline} color="rgba(255,255,255,0.10)" strokeWidth={7} />
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-sky-900/60 to-transparent pointer-events-none" />
 
-        {/* Title */}
-        <div className="flex items-start gap-2">
-          {editTitle ? (
-            <div className="flex items-center gap-2 flex-1">
-              <input
-                autoFocus
-                value={titleVal}
-                onChange={e => setTitleVal(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditTitle(false) }}
-                className="flex-1 text-2xl font-display font-semibold text-stone-800 border-b-2 border-sky-400 bg-transparent outline-none"
-              />
-              <button onClick={saveTitle} className="text-forest-600 hover:text-forest-700"><Check className="w-5 h-5" /></button>
-              <button onClick={() => { setTitleVal(hike.title); setEditTitle(false) }} className="text-stone-400"><X className="w-5 h-5" /></button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 group flex-1">
-              <h1 className="font-display text-3xl font-semibold text-stone-800">{hike.title}</h1>
-              <button onClick={() => setEditTitle(true)} className="opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-stone-600">
-                <Pencil className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Planned date row */}
-        <div className="flex items-center gap-2 text-sm">
-          <CalendarDays className="w-4 h-4 text-sky-500" />
-          {editDate ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={dateVal}
-                onChange={e => setDateVal(e.target.value)}
-                className="border border-stone-300 rounded-lg px-2 py-1 text-sm text-stone-700 bg-white outline-none focus:border-sky-400"
-              />
-              <button onClick={saveDate} className="text-forest-600 hover:text-forest-700"><Check className="w-4 h-4" /></button>
-              <button onClick={() => { setDateVal(hike.plannedDate ?? ''); setEditDate(false) }} className="text-stone-400"><X className="w-4 h-4" /></button>
-            </div>
-          ) : (
-            <button onClick={() => setEditDate(true)} className="text-stone-500 hover:text-sky-600 transition-colors">
-              {hike.plannedDate
-                ? <>Data pianificata: <strong>{format(new Date(hike.plannedDate), 'EEEE d MMMM yyyy', { locale: it })}</strong></>
-                : <span className="text-stone-400 italic">+ Aggiungi data pianificata</span>
-              }
+        <div className="relative max-w-[1200px] mx-auto px-4">
+          {/* Top nav */}
+          <div className="flex items-center justify-between pt-4 pb-3 border-b border-white/10">
+            <button onClick={() => router.push('/programma')}
+              className="flex items-center gap-1.5 text-sky-300 hover:text-white text-sm transition-colors">
+              <ArrowLeft className="w-4 h-4" /> Tutte le pianificate
             </button>
-          )}
-        </div>
+            <button onClick={handleDelete} disabled={saving}
+              className="flex items-center gap-1.5 text-sm text-red-300 hover:text-white transition-colors">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              <span className="hidden sm:inline">Elimina</span>
+            </button>
+          </div>
 
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          <StatTile
-            icon={<Route className="w-5 h-5 text-sky-600" />}
-            label="Distanza" value={`${distKm.toFixed(2)} km`}
-          />
-          <StatTile
-            icon={<TrendingUp className="w-5 h-5 text-sky-600" />}
-            label="Dislivello +" value={`${Math.round(hike.elevationGain)} m`}
-          />
-          <StatTile
-            icon={<TrendingDown className="w-5 h-5 text-sky-600" />}
-            label="Dislivello −" value={`${Math.round(hike.elevationLoss)} m`}
-          />
-          <StatTile
-            icon={<Mountain className="w-5 h-5 text-sky-600" />}
-            label="Quota max" value={`${Math.round(hike.altitudeMax)} m`}
-            sub={`Min: ${Math.round(hike.altitudeMin)} m`}
-          />
-          <StatTile
-            icon={<Clock className="w-5 h-5 text-sky-600" />}
-            label="Tempo stimato" value={formatDuration(hike.estimatedTimeSeconds)}
-            sub="Regola di Naismith"
-          />
-          {hike.fileName && (
-            <div className="col-span-1 flex items-center bg-white rounded-xl border border-stone-200 px-4 py-3 text-xs text-stone-400 font-mono truncate">
-              {hike.fileName}
+          {/* Hero body */}
+          <div className="py-7 flex items-end justify-between gap-6 flex-wrap">
+            {/* Left */}
+            <div className="flex-1 min-w-0">
+              {editTitle ? (
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    autoFocus
+                    value={titleVal}
+                    onChange={e => setTitleVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditTitle(false) }}
+                    className="flex-1 font-display text-2xl sm:text-3xl bg-white/10 rounded-lg px-3 py-1 text-white outline-none border border-white/30 max-w-md"
+                  />
+                  <button onClick={saveTitle}><Check className="w-5 h-5 text-sky-300 hover:text-white" /></button>
+                  <button onClick={() => { setTitleVal(hike.title); setEditTitle(false) }}><X className="w-5 h-5 text-white/50 hover:text-white" /></button>
+                </div>
+              ) : (
+                <button onClick={() => setEditTitle(true)} className="group flex items-center gap-2.5 text-left mb-2">
+                  <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">{hike.title}</h1>
+                  <Pencil className="w-4 h-4 text-white/40 group-hover:text-white/70 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              )}
+
+              {/* Planned date */}
+              <div className="flex items-center gap-2 mb-4 text-sm">
+                <CalendarDays className="w-4 h-4 text-sky-300 shrink-0" />
+                {editDate ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={dateVal}
+                      onChange={e => setDateVal(e.target.value)}
+                      className="bg-white/10 border border-white/30 rounded-lg px-2 py-1 text-sm text-white outline-none focus:border-white/50"
+                    />
+                    <button onClick={saveDate}><Check className="w-4 h-4 text-sky-300 hover:text-white" /></button>
+                    <button onClick={() => { setDateVal(hike.plannedDate ?? ''); setEditDate(false) }}><X className="w-4 h-4 text-white/50 hover:text-white" /></button>
+                  </div>
+                ) : (
+                  <button onClick={() => setEditDate(true)} className="text-sky-200 hover:text-white transition-colors">
+                    {hike.plannedDate
+                      ? <span className="capitalize">{format(new Date(hike.plannedDate), 'EEEE d MMMM yyyy', { locale: it })}</span>
+                      : <span className="italic text-sky-400">+ Aggiungi data pianificata</span>
+                    }
+                  </button>
+                )}
+              </div>
+
+              {/* Stat pills */}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { icon: <Route className="w-3.5 h-3.5" />, v: `${distKm.toFixed(1)} km` },
+                  { icon: <TrendingUp className="w-3.5 h-3.5" />, v: `${Math.round(hike.elevationGain)} m D+` },
+                  { icon: <Mountain className="w-3.5 h-3.5" />, v: `${Math.round(hike.altitudeMax)} m s.l.m.` },
+                  { icon: <Clock className="w-3.5 h-3.5" />, v: `${formatDuration(hike.estimatedTimeSeconds)} stim.` },
+                ].map(({ icon, v }) => (
+                  <span key={v} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 border border-white/15">
+                    {icon} {v}
+                  </span>
+                ))}
+              </div>
             </div>
-          )}
+
+            {/* Right: beauty score */}
+            <div className="shrink-0 pb-1">
+              {displayScore ? (
+                <div className="flex flex-col items-end gap-1.5">
+                  <div
+                    className="flex flex-col items-center justify-center rounded-2xl px-5 py-3 shadow-xl"
+                    style={{ backgroundColor: displayScore.color }}
+                  >
+                    <span className="text-3xl font-bold leading-none text-white">{displayScore.overall.toFixed(1)}</span>
+                    <span className="text-white/60 text-[10px] font-medium mt-0.5">/10</span>
+                  </div>
+                  <p className="text-sm font-semibold text-white/90">{GRADE_LABEL[displayScore.grade] ?? ''}</p>
+                  <p className="text-[11px] text-sky-400">Pagella bellezza</p>
+                </div>
+              ) : loadingTerrain ? (
+                <div className="flex flex-col items-center gap-2 px-4 py-3 bg-white/10 rounded-2xl border border-white/20">
+                  <Loader2 className="w-5 h-5 animate-spin text-sky-300" />
+                  <span className="text-xs text-sky-300">Calcolo pagella…</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <main className="max-w-[1200px] mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[
+            { icon: <Route className="w-5 h-5 text-sky-500" />, label: 'Distanza', value: `${distKm.toFixed(2)} km` },
+            { icon: <TrendingUp className="w-5 h-5 text-sky-500" />, label: 'Dislivello +', value: `${Math.round(hike.elevationGain)} m` },
+            { icon: <TrendingDown className="w-5 h-5 text-sky-500" />, label: 'Dislivello −', value: `${Math.round(hike.elevationLoss)} m` },
+            { icon: <Mountain className="w-5 h-5 text-sky-500" />, label: 'Quota max', value: `${Math.round(hike.altitudeMax)} m`, sub: `Min: ${Math.round(hike.altitudeMin)} m` },
+            { icon: <Clock className="w-5 h-5 text-sky-500" />, label: 'Tempo stimato', value: formatDuration(hike.estimatedTimeSeconds), sub: 'Naismith' },
+          ].map(({ icon, label, value, sub }) => (
+            <div key={label} className="bg-white rounded-2xl border border-stone-200 p-4 flex items-start gap-3 shadow-sm">
+              <div className="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center shrink-0">{icon}</div>
+              <div>
+                <p className="text-xs text-stone-400 font-medium">{label}</p>
+                <p className="text-base font-bold text-stone-800 leading-tight">{value}</p>
+                {sub && <p className="text-xs text-stone-400">{sub}</p>}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Weather forecast */}
-        {hasGps && (
-          <WeatherWidget mode="forecast" lat={centerPt.lat!} lon={centerPt.lon!} days={7} />
-        )}
+        {hasGps && <WeatherWidget mode="forecast" lat={centerPt.lat!} lon={centerPt.lon!} days={7} />}
 
-        {/* Map + Elevation side by side on large screens */}
+        {/* Map + Elevation */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Map */}
-          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
             <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
               <p className="text-sm font-semibold text-stone-700">Tracciato</p>
               {hasGps && hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
@@ -361,26 +384,17 @@ export default function PlannedHikePage() {
             </div>
             <div className="h-80">
               {polyline && polyline.length > 1 ? (
-                <MapView
-                  trackPoints={hike.trackPoints ?? []}
-                  showGradient={showGradient}
-                  pois={pois}
-                  wikiPages={wikiPages}
-                  planned
-                />
+                <MapView trackPoints={hike.trackPoints ?? []} showGradient={showGradient} pois={pois} wikiPages={wikiPages} planned />
               ) : (
-                <div className="h-full flex items-center justify-center text-stone-400 text-sm">
-                  <Mountain className="w-8 h-8 text-stone-200 mr-2" /> Tracciato non disponibile
+                <div className="h-full flex items-center justify-center text-stone-400 text-sm gap-2">
+                  <Mountain className="w-8 h-8 text-stone-200" /> Tracciato non disponibile
                 </div>
               )}
             </div>
-            {pois.length > 0 && (
-              <p className="px-4 pb-2 text-xs text-stone-400">{pois.length} punti di interesse lungo il tracciato</p>
-            )}
+            {pois.length > 0 && <p className="px-4 pb-3 text-xs text-stone-400">{pois.length} punti di interesse lungo il tracciato</p>}
           </div>
 
-          {/* Elevation profile */}
-          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
             <div className="px-4 py-3 border-b border-stone-100">
               <p className="text-sm font-semibold text-stone-700">Profilo altimetrico</p>
             </div>
@@ -388,8 +402,8 @@ export default function PlannedHikePage() {
               {hike.trackPoints && hike.trackPoints.length > 0 ? (
                 <ElevationProfileChart trackPoints={hike.trackPoints} />
               ) : (
-                <div className="h-48 flex items-center justify-center text-stone-400 text-sm">
-                  <BarChart2 className="w-8 h-8 text-stone-200 mr-2" /> Dati non disponibili
+                <div className="h-48 flex items-center justify-center text-stone-400 text-sm gap-2">
+                  <BarChart2 className="w-8 h-8 text-stone-200" /> Dati non disponibili
                 </div>
               )}
             </div>
@@ -398,32 +412,30 @@ export default function PlannedHikePage() {
 
         {/* Assessment */}
         {hike.assessment && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-5">
-            <p className="text-sm font-semibold text-stone-700 mb-4">Valutazione personalizzata</p>
-            <AssessmentPanel a={hike.assessment} distKm={distKm} elevGain={hike.elevationGain} />
+          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-5">Valutazione personalizzata</h2>
+            <AssessmentPanel a={hike.assessment} />
           </div>
         )}
 
         {/* Beauty report */}
-        {beautyScore && (
-          <BeautyReport score={beautyScore} />
-        )}
+        {beautyScore && <BeautyReport score={beautyScore} />}
 
-        {/* Wikipedia nearby */}
+        {/* Wikipedia */}
         {hasGps && (
-          <div>
-            <h2 className="font-display text-lg font-semibold text-stone-700 mb-3">Luoghi nelle vicinanze</h2>
+          <section>
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">Luoghi nelle vicinanze</h2>
             <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
-          </div>
+          </section>
         )}
 
         {/* Notes */}
-        <div className="bg-white rounded-2xl border border-stone-200 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-stone-700">Note personali</p>
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-xl font-semibold text-stone-700">Note personali</h2>
             {!editNotes && (
-              <button onClick={() => setEditNotes(true)} className="text-stone-400 hover:text-stone-600 transition-colors">
-                <Pencil className="w-4 h-4" />
+              <button onClick={() => setEditNotes(true)} className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 transition-colors">
+                <Pencil className="w-4 h-4" /> Modifica
               </button>
             )}
           </div>
@@ -435,20 +447,22 @@ export default function PlannedHikePage() {
                 onChange={e => setNotesVal(e.target.value)}
                 rows={4}
                 placeholder="Aggiungi note, equipaggiamento, punti di interesse…"
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-700 bg-stone-50 resize-none outline-none focus:border-sky-400 focus:bg-white"
+                className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm text-stone-700 bg-stone-50 resize-none outline-none focus:border-sky-400 focus:bg-white"
               />
               <div className="flex gap-2">
-                <button onClick={saveNotes} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 transition-colors">
+                <button onClick={saveNotes} disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 transition-colors">
                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salva
                 </button>
-                <button onClick={() => { setNotesVal(hike.userNotes ?? ''); setEditNotes(false) }} className="px-3 py-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
+                <button onClick={() => { setNotesVal(hike.userNotes ?? ''); setEditNotes(false) }}
+                  className="px-3 py-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
                   Annulla
                 </button>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-stone-500 whitespace-pre-wrap">
-              {hike.userNotes || <span className="italic text-stone-300">Nessuna nota — clicca la matita per aggiungerne una</span>}
+            <p className={`text-sm leading-relaxed ${hike.userNotes ? 'text-stone-600 whitespace-pre-wrap' : 'text-stone-400 italic'}`}>
+              {hike.userNotes || 'Nessuna nota — clicca Modifica per aggiungerne una.'}
             </p>
           )}
         </div>
