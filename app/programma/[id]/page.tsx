@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
+import SurfaceBar from '@/components/SurfaceBar'
 import WikiCards from '@/components/WikiCards'
 import BeautyReport from '@/components/BeautyReport'
 import RouteThumb from '@/components/RouteThumb'
@@ -12,7 +13,7 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { fetchPoisNearTrack, fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
+import { fetchPoisNearTrack, fetchTerrainContext, fetchSurfaceBreakdown, type PoiItem, type TerrainContext, type SurfaceSegment } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { computeBeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -150,6 +151,7 @@ export default function PlannedHikePage() {
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
   const [loadingTerrain, setLoadingTerrain] = useState(false)
+  const [surfaceSegments, setSurfaceSegments] = useState<SurfaceSegment[]>([])
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -178,6 +180,7 @@ export default function PlannedHikePage() {
         fetchPoisNearTrack(gps, 300).then(setPois).catch(() => {})
         setLoadingTerrain(true)
         fetchTerrainContext(gps).then(setTerrain).catch(() => {}).finally(() => setLoadingTerrain(false))
+        fetchSurfaceBreakdown(gps).then(setSurfaceSegments).catch(() => {})
       }
     }).finally(() => setLoading(false))
   }, [id, router])
@@ -364,6 +367,9 @@ export default function PlannedHikePage() {
             </div>
           ))}
         </div>
+
+        {/* Surface breakdown */}
+        <SurfaceBar segments={surfaceSegments} />
 
         {/* Weather forecast */}
         {hasGps && <WeatherWidget mode="forecast" lat={centerPt.lat!} lon={centerPt.lon!} days={7} />}
