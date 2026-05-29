@@ -25,11 +25,12 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 
-const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
+const MapView    = dynamic(() => import('@/components/MapView'),    { ssr: false })
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 const BEAUTY_GRADE: Record<string, string> = {
   '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto',
@@ -64,6 +65,7 @@ export default function EscursionePage() {
   const [ratingNote,      setRatingNote]     = useState('')
   const [savingRating,    setSavingRating]   = useState(false)
   const [showRatingPanel, setShowRatingPanel] = useState(false)
+  const [show3D,          setShow3D]          = useState(false)
 
   // Before early returns — hooks cannot be conditional
   const heroPolyline = useMemo((): [number, number][] => {
@@ -392,14 +394,24 @@ export default function EscursionePage() {
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-xl font-semibold text-stone-700">Tracciato GPS</h2>
-            {hasGps && activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
-              <button
-                onClick={() => setShowGradient(g => !g)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}
-              >
-                <Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Mappa pendenza</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {hasGps && activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
+                <button
+                  onClick={() => setShowGradient(g => !g)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}
+                >
+                  <Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Mappa pendenza</span>
+                </button>
+              )}
+              {hasGps && (
+                <button
+                  onClick={() => setShow3D(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors"
+                >
+                  <Box className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Vista 3D</span>
+                </button>
+              )}
+            </div>
           </div>
           <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
             <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} pois={pois} wikiPages={wikiPages} />
@@ -493,6 +505,14 @@ export default function EscursionePage() {
           )}
         </section>
       </main>
+
+      {show3D && (
+        <RouteMap3D
+          trackPoints={activity.trackPoints}
+          title={activity.title ?? activity.notes}
+          onClose={() => setShow3D(false)}
+        />
+      )}
     </div>
   )
 }
