@@ -1,27 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { put, del } from '@vercel/blob'
-import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
+import { supabase } from '@/lib/supabase'
+import type { StoredActivity } from '@/lib/blobStore'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { readIndex, writeIndex, readBlobText, getBlobUrl } from '@/lib/blobIndex'
 
 export const dynamic = 'force-dynamic'
 
-function getToken(): string {
-  const token = process.env.blob2dtrek_READ_WRITE_TOKEN
-  if (!token) throw new Error('blob2dtrek_READ_WRITE_TOKEN non configurato')
-  return token
-}
-
-function idToPath(id: string): string {
-  const safe = id.replace(/[^a-zA-Z0-9\-_.]/g, '_')
-  return `activities/${safe}.json`
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
   const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
-  if (valid.length === 0) return []
+  if (!valid.length) return []
   const count = Math.min(valid.length, maxPts)
-  const step = (valid.length - 1) / (count - 1 || 1)
+  const step  = (valid.length - 1) / (count - 1 || 1)
   return Array.from({ length: count }, (_, i) => {
     const idx = Math.min(Math.round(i * step), valid.length - 1)
     return [
@@ -31,69 +21,98 @@ function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] 
   })
 }
 
-async function readActivity(id: string): Promise<StoredActivity | null> {
-  try {
-    const text = await readBlobText(idToPath(id))
-    if (!text) return null
-    return JSON.parse(text) as StoredActivity
-  } catch {
-    return null
+function rowToActivity(row: Record<string, unknown>): StoredActivity {
+  return {
+    id:              row.id as string,
+    title:           (row.title as string) ?? undefined,
+    sport:           (row.sport as string) ?? 'Other',
+    notes:           (row.notes as string) ?? '',
+    device:          (row.device as string) ?? '',
+    startTime:       row.start_time as string,
+    endTime:         (row.end_time as string) ?? '',
+    totalTimeSeconds: row.total_time_seconds as number,
+    distanceMeters:  row.distance_meters as number,
+    calories:        row.calories as number,
+    avgHeartRate:    row.avg_heart_rate as number,
+    maxHeartRate:    row.max_heart_rate as number,
+    avgSpeedMs:      row.avg_speed_ms as number,
+    maxSpeedMs:      row.max_speed_ms as number,
+    altitudeMin:     row.altitude_min as number,
+    altitudeMax:     row.altitude_max as number,
+    elevationGain:   row.elevation_gain as number,
+    elevationLoss:   row.elevation_loss as number,
+    trackPoints:     (row.track_points as TrackPoint[]) ?? [],
+    fileName:        row.file_name as string | undefined,
+    userNotes:       row.user_notes as string | undefined,
+    tags:            row.tags as string[] | undefined,
+    userRating:      row.user_rating as number | undefined,
+    userRatingNote:  row.user_rating_note as string | undefined,
+    linkedPlannedId: row.linked_planned_id as string | undefined,
+    linkedBeautyScore: row.linked_beauty_score as StoredActivity['linkedBeautyScore'],
   }
 }
 
+function activityToRow(a: StoredActivity) {
+  return {
+    id:                   a.id,
+    title:                a.title ?? a.notes ?? 'Escursione',
+    start_time:           a.startTime,
+    end_time:             a.endTime || null,
+    sport:                a.sport,
+    notes:                a.notes,
+    device:               a.device,
+    distance_meters:      a.distanceMeters,
+    total_time_seconds:   a.totalTimeSeconds,
+    calories:             a.calories,
+    avg_heart_rate:       a.avgHeartRate,
+    max_heart_rate:       a.maxHeartRate,
+    avg_speed_ms:         a.avgSpeedMs,
+    max_speed_ms:         a.maxSpeedMs,
+    altitude_min:         a.altitudeMin,
+    altitude_max:         a.altitudeMax,
+    elevation_gain:       a.elevationGain,
+    elevation_loss:       a.elevationLoss,
+    file_name:            a.fileName ?? null,
+    user_notes:           a.userNotes ?? null,
+    tags:                 a.tags ?? null,
+    user_rating:          a.userRating ?? null,
+    user_rating_note:     a.userRatingNote ?? null,
+    linked_planned_id:    a.linkedPlannedId ?? null,
+    linked_beauty_score:  a.linkedBeautyScore ?? null,
+    route_polyline:       downsamplePolyline(a.trackPoints ?? []),
+    track_points:         a.trackPoints ?? [],
+  }
+}
+
+// ── GET /api/activity?id=X ───────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
-    const activity = await readActivity(id)
-    if (!activity) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json(activity)
+
+    const { data, error } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json(rowToActivity(data))
   } catch (e) {
     console.error('GET /api/activity:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
 
+// ── POST /api/activity → upsert ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const activity = (await req.json()) as StoredActivity
+    const { error } = await supabase
+      .from('activities')
+      .upsert(activityToRow(activity), { onConflict: 'id' })
 
-    await put(idToPath(activity.id), JSON.stringify(activity), {
-      access: 'public',
-      token: getToken(),
-      addRandomSuffix: false,
-      contentType: 'application/json',
-    })
-
-    const index = await readIndex()
-    const meta: ActivityMeta = {
-      id: activity.id,
-      title: activity.title ?? activity.notes ?? 'Escursione',
-      startTime: activity.startTime,
-      distanceMeters: activity.distanceMeters,
-      totalTimeSeconds: activity.totalTimeSeconds,
-      calories: activity.calories,
-      avgHeartRate: activity.avgHeartRate,
-      maxHeartRate: activity.maxHeartRate,
-      elevationGain: activity.elevationGain,
-      elevationLoss: activity.elevationLoss,
-      altitudeMax: activity.altitudeMax,
-      avgSpeedMs: activity.avgSpeedMs,
-      maxSpeedMs: activity.maxSpeedMs,
-      tags: activity.tags,
-      userNotes: activity.userNotes,
-      fileName: activity.fileName,
-      routePolyline: downsamplePolyline(activity.trackPoints ?? []),
-      userRating: activity.userRating,
-      userRatingNote: activity.userRatingNote,
-      linkedBeautyScore: activity.linkedBeautyScore,
-    }
-
-    const idx = index.findIndex(a => a.id === activity.id)
-    if (idx >= 0) index[idx] = meta
-    else index.unshift(meta)
-    await writeIndex(index)
-
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('POST /api/activity:', e)
@@ -101,31 +120,36 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// ── PATCH /api/activity → update metadata fields ─────────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
-      id: string; title?: string; userNotes?: string; tags?: string[]
-    }
-    const { id, ...patch } = body
-
-    const activity = await readActivity(id)
-    if (!activity) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-    const updated: StoredActivity = { ...activity, ...patch }
-    await put(idToPath(id), JSON.stringify(updated), {
-      access: 'public',
-      token: getToken(),
-      addRandomSuffix: false,
-      contentType: 'application/json',
-    })
-
-    const index = await readIndex()
-    const idx = index.findIndex(a => a.id === id)
-    if (idx >= 0) {
-      index[idx] = { ...index[idx], ...patch }
-      await writeIndex(index)
+    const body = (await req.json()) as Record<string, unknown>
+    const { id, ...patch } = body as {
+      id: string
+      title?: string
+      userNotes?: string
+      tags?: string[]
+      userRating?: number
+      userRatingNote?: string
+      linkedPlannedId?: string
+      linkedBeautyScore?: StoredActivity['linkedBeautyScore']
     }
 
+    const dbPatch: Record<string, unknown> = {}
+    if (patch.title           !== undefined) dbPatch.title             = patch.title
+    if (patch.userNotes       !== undefined) dbPatch.user_notes        = patch.userNotes
+    if (patch.tags            !== undefined) dbPatch.tags              = patch.tags
+    if (patch.userRating      !== undefined) dbPatch.user_rating       = patch.userRating
+    if (patch.userRatingNote  !== undefined) dbPatch.user_rating_note  = patch.userRatingNote
+    if (patch.linkedPlannedId !== undefined) dbPatch.linked_planned_id = patch.linkedPlannedId
+    if (patch.linkedBeautyScore !== undefined) dbPatch.linked_beauty_score = patch.linkedBeautyScore
+
+    const { error } = await supabase
+      .from('activities')
+      .update(dbPatch)
+      .eq('id', id)
+
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('PATCH /api/activity:', e)
@@ -133,17 +157,18 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
+// ── DELETE /api/activity?id=X ────────────────────────────────────────────────
 export async function DELETE(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    const url = await getBlobUrl(idToPath(id))
-    if (url) await del(url, { token: getToken() })
+    const { error } = await supabase
+      .from('activities')
+      .delete()
+      .eq('id', id)
 
-    const index = (await readIndex()).filter(a => a.id !== id)
-    await writeIndex(index)
-
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('DELETE /api/activity:', e)
