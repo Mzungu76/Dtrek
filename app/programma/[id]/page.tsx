@@ -21,10 +21,11 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2, Layers,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box,
 } from 'lucide-react'
 
-const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
+const MapView    = dynamic(() => import('@/components/MapView'),    { ssr: false })
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 const EMPTY_TERRAIN: TerrainContext = {
   hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
@@ -151,6 +152,7 @@ export default function PlannedHikePage() {
   const [notesVal,       setNotesVal]      = useState('')
   const [dateVal,        setDateVal]       = useState('')
   const [showGradient,   setShowGradient]  = useState(false)
+  const [show3D,         setShow3D]        = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
@@ -387,14 +389,24 @@ export default function PlannedHikePage() {
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
             <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
               <p className="text-sm font-semibold text-stone-700">Tracciato</p>
-              {hasGps && hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
-                <button
-                  onClick={() => setShowGradient(g => !g)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
-                >
-                  <Layers className="w-3 h-3" /> Pendenza
-                </button>
-              )}
+              <div className="flex items-center gap-1.5">
+                {hasGps && hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
+                  <button
+                    onClick={() => setShowGradient(g => !g)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
+                  >
+                    <Layers className="w-3 h-3" /> Pendenza
+                  </button>
+                )}
+                {hasGps && (
+                  <button
+                    onClick={() => setShow3D(true)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border bg-white text-stone-500 border-stone-200 hover:bg-stone-50 transition-colors"
+                  >
+                    <Box className="w-3 h-3" /> Vista 3D
+                  </button>
+                )}
+              </div>
             </div>
             <div className="h-80">
               {polyline && polyline.length > 1 ? (
@@ -521,6 +533,14 @@ export default function PlannedHikePage() {
           )}
         </div>
       </main>
+
+      {show3D && hike.trackPoints && (
+        <RouteMap3D
+          trackPoints={hike.trackPoints}
+          title={hike.title}
+          onClose={() => setShow3D(false)}
+        />
+      )}
     </div>
   )
 }
