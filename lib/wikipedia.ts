@@ -13,19 +13,25 @@ export interface WikiPage {
   dist:        number   // meters from query point
   lat?:        number   // article coordinates (from REST summary, when available)
   lon?:        number
+  source?:     'wikipedia-it' | 'wikipedia-en' | 'wikivoyage-it'
 }
 
-// POI types worth looking up on Wikipedia (named items likely to have articles)
+// POI types worth looking up (named items likely to have articles)
 const WIKI_WORTHY = new Set<PoiItem['type']>([
   'peak', 'pass', 'waterfall', 'cave', 'ruins', 'archaeological',
   'castle', 'monument', 'tower', 'hut', 'bivouac',
 ])
 
-async function fetchSummary(title: string, lang: string): Promise<WikiPage | null> {
+// Fetch the REST summary for a given title from any Wikimedia project
+async function fetchSummary(
+  title: string,
+  lang: string,
+  project: 'wikipedia' | 'wikivoyage' = 'wikipedia',
+): Promise<WikiPage | null> {
   try {
     const slug = encodeURIComponent(title.replace(/ /g, '_'))
     const res = await fetch(
-      `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${slug}`,
+      `https://${lang}.${project}.org/api/rest_v1/page/summary/${slug}`,
       { headers: { 'Api-User-Agent': 'DtrekApp/1.0' } },
     )
     if (!res.ok) return null
@@ -41,19 +47,46 @@ async function fetchSummary(title: string, lang: string): Promise<WikiPage | nul
       dist:        0,
       lat:         s.coordinates?.lat,
       lon:         s.coordinates?.lon,
+      source:      `${project}-${lang}` as WikiPage['source'],
     }
   } catch {
     return null
   }
 }
 
+// Search a Wikimedia project by name, return summary for best match (if relevant)
+async function searchAndFetch(
+  name: string,
+  lang: string,
+  project: 'wikipedia' | 'wikivoyage',
+): Promise<WikiPage | null> {
+  try {
+    const searchUrl = `https://${lang}.${project}.org/w/api.php?` + new URLSearchParams({
+      action: 'query', list: 'search', srsearch: name, srlimit: '1',
+      srnamespace: '0', format: 'json', origin: '*',
+    })
+    const res = await fetch(searchUrl)
+    if (!res.ok) return null
+    const top = (await res.json()).query?.search?.[0]
+    if (!top) return null
+
+    // Require the result title to share at least one significant word with the query name
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '')
+    const words = norm(name).split(' ').filter(w => w.length > 3)
+    if (words.length === 0 || !words.some(w => norm(top.title).includes(w))) return null
+
+    return fetchSummary(top.title, lang, project)
+  } catch {
+    return null
+  }
+}
+
 /**
- * Look up Wikipedia for each named POI that is physically on/near the route.
- * Priority: OSM `wikipedia=` tag (authoritative) → name-based search.
+ * Look up information for each named POI that is physically on/near the route.
+ * Cascade: OSM wikipedia= tag → Italian Wikipedia → English Wikipedia → Italian Wikivoyage
  */
 export async function fetchWikiForNamedPois(
   pois: PoiItem[],
-  lang = 'it',
 ): Promise<{ poi: PoiItem; wiki: WikiPage }[]> {
   const candidates = pois
     .filter(p => p.name && WIKI_WORTHY.has(p.type))
@@ -63,32 +96,29 @@ export async function fetchWikiForNamedPois(
 
   const results = await Promise.all(candidates.map(async poi => {
     try {
-      // 1. Direct lookup via OSM wikipedia= tag
+      // 1. OSM wikipedia= tag — authoritative, direct link
       const wikiTag = poi.tags?.['wikipedia'] ?? ''
       if (wikiTag) {
-        const tagLang  = wikiTag.includes(':') ? wikiTag.split(':')[0] : lang
-        const tagTitle = wikiTag.includes(':') ? wikiTag.split(':').slice(1).join(':') : wikiTag
-        const wiki = await fetchSummary(tagTitle, tagLang)
+        const tagLang    = wikiTag.includes(':') ? wikiTag.split(':')[0] : 'it'
+        const tagTitle   = wikiTag.includes(':') ? wikiTag.split(':').slice(1).join(':') : wikiTag
+        const tagProject = wikiTag.startsWith('voy:') || tagLang === 'voy' ? 'wikivoyage' : 'wikipedia'
+        const wiki = await fetchSummary(tagTitle, tagLang === 'voy' ? 'it' : tagLang, tagProject)
         if (wiki) return { poi, wiki }
       }
 
-      // 2. Search by POI name, accept result only if title clearly matches
-      const searchUrl = `https://${lang}.wikipedia.org/w/api.php?` + new URLSearchParams({
-        action: 'query', list: 'search', srsearch: poi.name!, srlimit: '1',
-        srnamespace: '0', format: 'json', origin: '*',
-      })
-      const searchRes = await fetch(searchUrl)
-      if (!searchRes.ok) return null
-      const top = (await searchRes.json()).query?.search?.[0]
-      if (!top) return null
+      // 2. Italian Wikipedia
+      const itWiki = await searchAndFetch(poi.name!, 'it', 'wikipedia')
+      if (itWiki) return { poi, wiki: itWiki }
 
-      // Require the result title to share at least one significant word with the POI name
-      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '')
-      const poiWords = norm(poi.name!).split(' ').filter(w => w.length > 3)
-      if (poiWords.length === 0 || !poiWords.some(w => norm(top.title).includes(w))) return null
+      // 3. English Wikipedia (catches peaks / castles with no Italian article)
+      const enWiki = await searchAndFetch(poi.name!, 'en', 'wikipedia')
+      if (enWiki) return { poi, wiki: enWiki }
 
-      const wiki = await fetchSummary(top.title, lang)
-      return wiki ? { poi, wiki } : null
+      // 4. Italian Wikivoyage (travel guide; covers historic towns, parks, attractions)
+      const voyWiki = await searchAndFetch(poi.name!, 'it', 'wikivoyage')
+      if (voyWiki) return { poi, wiki: voyWiki }
+
+      return null
     } catch {
       return null
     }
@@ -102,6 +132,7 @@ export async function fetchWikiForNamedPois(
     return true
   })
 }
+
 
 export async function fetchNearbyWiki(
   lat: number,

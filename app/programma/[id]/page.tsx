@@ -465,7 +465,7 @@ export default function PlannedHikePage() {
                         rel="noopener noreferrer"
                         className="text-xs text-sky-600 font-semibold mt-1.5 inline-block hover:text-sky-700"
                       >
-                        Leggi su Wikipedia →
+                        {wiki.source === 'wikivoyage-it' ? 'Leggi su Wikivoyage →' : wiki.source === 'wikipedia-en' ? 'Leggi su Wikipedia (EN) →' : 'Leggi su Wikipedia →'}
                       </a>
                     </div>
                   </div>
