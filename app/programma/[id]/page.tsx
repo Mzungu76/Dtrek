@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
-import SurfaceBar from '@/components/SurfaceBar'
 import WikiCards from '@/components/WikiCards'
 import BeautyReport from '@/components/BeautyReport'
 import RouteThumb from '@/components/RouteThumb'
@@ -13,7 +12,7 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { fetchPoisNearTrack, fetchTerrainContext, fetchSurfaceBreakdown, type PoiItem, type TerrainContext, type SurfaceSegment } from '@/lib/overpass'
+import { fetchPoisNearTrack, fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { computeBeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -26,6 +25,11 @@ import {
 } from 'lucide-react'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
+
+const EMPTY_TERRAIN: TerrainContext = {
+  hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
+  isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [],
+}
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
@@ -151,7 +155,6 @@ export default function PlannedHikePage() {
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
   const [loadingTerrain, setLoadingTerrain] = useState(false)
-  const [surfaceSegments, setSurfaceSegments] = useState<SurfaceSegment[]>([])
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -161,9 +164,10 @@ export default function PlannedHikePage() {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [hike])
 
+  // Compute as soon as we have ANY data (pois OR wikiPages); terrain enriches but isn't required
   const beautyScore = useMemo(
-    () => hike && terrain && (pois.length > 0 || wikiPages.length > 0 || terrain.hasLake || terrain.hasForest)
-      ? computeBeautyScore(pois, wikiPages, terrain, hike.elevationGain, hike.altitudeMax)
+    () => hike && (pois.length > 0 || wikiPages.length > 0)
+      ? computeBeautyScore(pois, wikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax)
       : null,
     [pois, wikiPages, terrain, hike],
   )
@@ -177,13 +181,9 @@ export default function PlannedHikePage() {
       setDateVal(h.plannedDate ?? '')
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
-        // Sequential to avoid Overpass 406 rate-limit (concurrent requests from same IP)
-        ;(async () => {
-          try { setPois(await fetchPoisNearTrack(gps, 300)) } catch {}
-          setLoadingTerrain(true)
-          try { setTerrain(await fetchTerrainContext(gps)) } catch {} finally { setLoadingTerrain(false) }
-          try { setSurfaceSegments(await fetchSurfaceBreakdown(gps)) } catch {}
-        })()
+        fetchPoisNearTrack(gps, 300).then(setPois).catch(() => {})
+        setLoadingTerrain(true)
+        fetchTerrainContext(gps).then(setTerrain).catch(() => {}).finally(() => setLoadingTerrain(false))
       }
     }).finally(() => setLoading(false))
   }, [id, router])
@@ -370,9 +370,6 @@ export default function PlannedHikePage() {
             </div>
           ))}
         </div>
-
-        {/* Surface breakdown */}
-        <SurfaceBar segments={surfaceSegments} />
 
         {/* Weather forecast */}
         {hasGps && <WeatherWidget mode="forecast" lat={centerPt.lat!} lon={centerPt.lon!} days={7} />}
