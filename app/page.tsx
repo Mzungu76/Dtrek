@@ -10,7 +10,7 @@ import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
-  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock,
+  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown,
 } from 'lucide-react'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -233,8 +233,10 @@ export default function HomePage() {
   const [planned,    setPlanned]    = useState<PlannedHikeMeta[]>([])
   const [loading,    setLoading]    = useState(true)
   const [monthIdx,   setMonthIdx]   = useState(-1)
-  const [view,       setView]       = useState<'calendar' | 'list'>('calendar')
+  const [view,       setView]       = useState<'calendar' | 'list'>('list')
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
+  const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating'>('date')
+  const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'beauty'>('date')
   const monthBarRef                 = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -312,10 +314,29 @@ export default function HomePage() {
     return map
   }, [planned])
 
-  const sortedActivities = useMemo(
-    () => [...activities].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()),
-    [activities]
-  )
+  const sortedActivities = useMemo(() => {
+    const arr = [...activities]
+    switch (sortBy) {
+      case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
+      case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
+      case 'rating': return arr.sort((a, b) => (b.userRating ?? 0) - (a.userRating ?? 0))
+      default:       return arr.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+    }
+  }, [activities, sortBy])
+
+  const sortedPlanned = useMemo(() => {
+    const arr = [...planned]
+    switch (planSortBy) {
+      case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
+      case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
+      case 'beauty': return arr.sort((a, b) => (b.cachedBeautyScore?.overall ?? -1) - (a.cachedBeautyScore?.overall ?? -1))
+      default:       return arr.sort((a, b) => {
+        const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
+        const db = b.plannedDate ? new Date(b.plannedDate).getTime() : 0
+        return db - da
+      })
+    }
+  }, [planned, planSortBy])
 
   const safeIdx = monthIdx < 0 ? months.length - 1 : monthIdx
   const { year, month } = months[safeIdx] ?? { year: new Date().getFullYear(), month: new Date().getMonth() }
@@ -567,7 +588,24 @@ export default function HomePage() {
           <div className="fade-up space-y-6">
             {sortedActivities.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">Registrate</p>
+                <div className="flex items-center gap-2 mb-3">
+                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider flex-1">Registrate</p>
+                  <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5">
+                    <ArrowUpDown className="w-3 h-3 text-stone-400 ml-1" />
+                    {([
+                      { id: 'date',   label: 'Data' },
+                      { id: 'km',     label: 'Km' },
+                      { id: 'dplus',  label: 'D+' },
+                      { id: 'rating', label: 'Voto' },
+                    ] as const).map(s => (
+                      <button key={s.id} onClick={() => setSortBy(s.id)}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
+                          ${sortBy === s.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-400 hover:text-stone-600'}`}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                   {sortedActivities.map(activity => (
                     <ActivityCard
@@ -583,14 +621,29 @@ export default function HomePage() {
 
             {planned.length > 0 && (
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Pianificate</p>
-                  <Link href="/programma" className="flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium">
-                    <CalendarClock className="w-3.5 h-3.5" /> Vedi tutte
+                <div className="flex items-center gap-2 mb-3">
+                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider flex-1">Pianificate</p>
+                  <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5">
+                    <ArrowUpDown className="w-3 h-3 text-stone-400 ml-1" />
+                    {([
+                      { id: 'date',   label: 'Data' },
+                      { id: 'km',     label: 'Km' },
+                      { id: 'dplus',  label: 'D+' },
+                      { id: 'beauty', label: 'Bellezza' },
+                    ] as const).map(s => (
+                      <button key={s.id} onClick={() => setPlanSortBy(s.id)}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
+                          ${planSortBy === s.id ? 'bg-white shadow-sm text-sky-700' : 'text-stone-400 hover:text-stone-600'}`}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <Link href="/programma" className="flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium ml-1">
+                    <CalendarClock className="w-3.5 h-3.5" /> Tutte
                   </Link>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                  {planned.map(hike => (
+                  {sortedPlanned.map(hike => (
                     <PlannedCard
                       key={hike.id}
                       hike={hike}

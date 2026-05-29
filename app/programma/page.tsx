@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
@@ -9,7 +9,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   Mountain, Route, TrendingUp, Clock, CalendarDays,
-  Loader2, Trash2, Upload, AlertTriangle, Info, ShieldAlert,
+  Loader2, Trash2, Upload, AlertTriangle, Info, ShieldAlert, ArrowUpDown,
 } from 'lucide-react'
 
 const GRADE_LABEL: Record<string, string> = {
@@ -57,6 +57,22 @@ export default function ProgrammaPage() {
   const [hikes,   setHikes]   = useState<PlannedHikeMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [sortBy,  setSortBy]  = useState<'date' | 'km' | 'dplus' | 'beauty' | 'suitability'>('date')
+
+  const sortedHikes = useMemo(() => {
+    const arr = [...hikes]
+    switch (sortBy) {
+      case 'km':          return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
+      case 'dplus':       return arr.sort((a, b) => b.elevationGain - a.elevationGain)
+      case 'beauty':      return arr.sort((a, b) => (b.cachedBeautyScore?.overall ?? -1) - (a.cachedBeautyScore?.overall ?? -1))
+      case 'suitability': return arr.sort((a, b) => (b.assessment?.suitabilityScore ?? 0) - (a.assessment?.suitabilityScore ?? 0))
+      default:            return arr.sort((a, b) => {
+        const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
+        const db = b.plannedDate ? new Date(b.plannedDate).getTime() : 0
+        return db - da
+      })
+    }
+  }, [hikes, sortBy])
 
   useEffect(() => {
     getAllPlanned().then(setHikes).finally(() => setLoading(false))
@@ -95,12 +111,32 @@ export default function ProgrammaPage() {
                 {loading ? 'Caricamento…' : `${hikes.length} escursion${hikes.length !== 1 ? 'i' : 'e'} in programma`}
               </p>
             </div>
+            <div className="flex items-center gap-3">
+              {!loading && hikes.length > 0 && (
+                <div className="flex items-center gap-0.5 bg-sky-700/50 rounded-xl p-1">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-sky-300 ml-1" />
+                  {([
+                    { id: 'date',        label: 'Data' },
+                    { id: 'km',          label: 'Km' },
+                    { id: 'dplus',       label: 'D+' },
+                    { id: 'beauty',      label: 'Bellezza' },
+                    { id: 'suitability', label: 'Adatta' },
+                  ] as const).map(s => (
+                    <button key={s.id} onClick={() => setSortBy(s.id)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all
+                        ${sortBy === s.id ? 'bg-white text-sky-800 shadow-sm' : 'text-sky-200 hover:text-white'}`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             <Link
               href="/upload"
               className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-medium transition-colors shadow-sm text-sm"
             >
               <Upload className="w-4 h-4" /> Pianifica da GPX
             </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -131,7 +167,7 @@ export default function ProgrammaPage() {
 
         ) : (
           <div className="fade-up grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {hikes.map(hike => {
+            {sortedHikes.map(hike => {
               const risk   = topRisk(hike)
               const diff   = hike.assessment?.difficulty
               const suit   = hike.assessment?.suitabilityScore ?? 50
