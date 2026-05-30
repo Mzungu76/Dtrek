@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film, Download, Share2 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
+import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
 
 const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
 
@@ -328,9 +329,10 @@ interface Props {
   trackPoints: TrackPoint[]
   title?: string
   onClose: () => void
+  plannedDate?: string  // YYYY-MM-DD — enables weather badge
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -383,6 +385,39 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
     const hasTime = pts.length > 1 && pts.some(p => !!p.time)
     return hasHr || hasTime
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pre-computed altitude series for elevation profile (300 samples)
+  const altitudeSeries = useMemo(() => {
+    const pts = gps.current
+    if (!pts.some(p => p.altitudeMeters !== undefined)) return []
+    const N = pts.length
+    const SAMPLES = Math.min(300, N)
+    const step = (N - 1) / (SAMPLES - 1)
+    return Array.from({ length: SAMPLES }, (_, i) => {
+      const idx = Math.min(Math.round(i * step), N - 1)
+      return pts[idx].altitudeMeters ?? 0
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Weather badge for planned hikes
+  const [weatherBadge, setWeatherBadge] = useState<{ emoji: string; temp: number; label: string } | null>(null)
+
+  useEffect(() => {
+    if (!plannedDate) return
+    const pts = gps.current
+    if (!pts.length) return
+    const cp = pts[Math.floor(pts.length / 2)]
+    if (!cp.lat || !cp.lon) return
+    fetchDayHourly(cp.lat, cp.lon, plannedDate)
+      .then(hours => {
+        const noon = hours.find(h => h.time.slice(11, 13) === '12') ?? hours[Math.floor(hours.length / 2)]
+        if (noon) {
+          const info = wmoInfo(noon.weathercode)
+          setWeatherBadge({ emoji: info.emoji, temp: Math.round(noon.temperature), label: info.label })
+        }
+      })
+      .catch(() => {})
+  }, [plannedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Layer setup ──────────────────────────────────────────────────────────────
   const setupLayers = useCallback(() => {
@@ -926,23 +961,63 @@ export default function RouteMap3D({ trackPoints, title, onClose }: Props) {
             <span className="text-[11px] text-white/55 flex-1">Totale</span>
             <span className="text-sm font-bold tabular-nums text-white/70">{totalKm} km</span>
           </div>
+          {weatherBadge && (
+            <div className="flex items-center gap-2 pt-1 border-t border-white/10">
+              <span className="text-base leading-none shrink-0">{weatherBadge.emoji}</span>
+              <span className="text-[11px] text-white/55 flex-1 truncate">{weatherBadge.label}</span>
+              <span className="text-sm font-bold tabular-nums">{weatherBadge.temp}°</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Progress bar (scrubable) ── */}
+      {/* ── Elevation profile / Progress bar ── */}
       <div className="absolute left-3 right-3" style={{ bottom: '92px' }}>
         <div className="relative">
-          <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
-            <div className="h-full rounded-full transition-none"
-              style={{ width: `${progress * 100}%`, background: 'linear-gradient(90deg,#3b82f6,#60a5fa)' }} />
-          </div>
+          {altitudeSeries.length > 1 ? (() => {
+            const minAlt  = Math.min(...altitudeSeries)
+            const maxAlt  = Math.max(...altitudeSeries)
+            const range   = maxAlt - minAlt || 1
+            const H = 56
+            const polyPts = altitudeSeries.map((a, i) => {
+              const x = ((i / (altitudeSeries.length - 1)) * 1000).toFixed(0)
+              const y = (H - ((a - minAlt) / range) * (H - 6)).toFixed(1)
+              return `${x},${y}`
+            }).join(' ')
+            const cursorX = (progress * 1000).toFixed(1)
+            return (
+              <div className="w-full rounded-xl overflow-hidden backdrop-blur-sm bg-black/30 border border-white/10" style={{ height: `${H}px` }}>
+                <svg viewBox={`0 0 1000 ${H}`} preserveAspectRatio="none" className="w-full h-full">
+                  <defs>
+                    <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.45" />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.08" />
+                    </linearGradient>
+                  </defs>
+                  <polygon points={`0,${H} ${polyPts} 1000,${H}`} fill="url(#elevGrad)" />
+                  <polyline points={polyPts} fill="none" stroke="#93c5fd" strokeWidth="2.5" strokeLinejoin="round" />
+                  <line x1={cursorX} y1="0" x2={cursorX} y2={H}
+                    stroke="white" strokeWidth="2" strokeDasharray="4,3" opacity="0.75" />
+                </svg>
+              </div>
+            )
+          })() : (
+            <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+              <div className="h-full rounded-full transition-none"
+                style={{ width: `${progress * 100}%`, background: 'linear-gradient(90deg,#3b82f6,#60a5fa)' }} />
+            </div>
+          )}
           <input type="range" min={0} max={1} step={0.0005} value={progress}
             onChange={e => handleScrub(+e.target.value)}
             className="absolute w-full opacity-0 cursor-pointer"
-            style={{ height: '32px', top: '50%', transform: 'translateY(-50%)' }} />
+            style={{ height: '64px', top: '50%', transform: 'translateY(-50%)' }} />
         </div>
-        <div className="flex justify-between mt-1 text-[10px] text-white/50 font-medium px-0.5">
-          <span>0 km</span><span>{totalKm} km</span>
+        <div className="flex justify-between mt-1 text-[10px] font-medium px-0.5">
+          <span className="text-white/50">0 km</span>
+          {altitudeSeries.length > 0 && (
+            <span className="text-blue-300">{currentAlt} m slm</span>
+          )}
+          <span className="text-white/50">{totalKm} km</span>
         </div>
       </div>
 

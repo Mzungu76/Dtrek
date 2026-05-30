@@ -407,8 +407,18 @@ export default function PlannedHikePage() {
           ))}
         </div>
 
-        {/* Weather forecast */}
-        {hasGps && <WeatherWidget mode="forecast" lat={centerPt.lat!} lon={centerPt.lon!} days={7} />}
+        {/* Weather forecast — planned mode when a date is set */}
+        {hasGps && (
+          <WeatherWidget
+            mode={hike.plannedDate ? 'planned' : 'forecast'}
+            lat={centerPt.lat!}
+            lon={centerPt.lon!}
+            date={hike.plannedDate}
+            altitudeMax={hike.altitudeMax}
+            elevationGain={hike.elevationGain}
+            days={7}
+          />
+        )}
 
         {/* Map + Elevation */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -572,6 +582,7 @@ export default function PlannedHikePage() {
         <RouteMap3D
           trackPoints={hike.trackPoints}
           title={hike.title}
+          plannedDate={hike.plannedDate}
           onClose={() => setShow3D(false)}
         />
       )}

@@ -190,6 +190,20 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
 
       {/* Full card */}
       <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
+
+        {/* Beauty score banner */}
+        {hike.cachedBeautyScore ? (
+          <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
+            style={{ backgroundColor: hike.cachedBeautyScore.color + '22', borderBottom: `1.5px solid ${hike.cachedBeautyScore.color}40` }}>
+            <span className="text-sm font-bold leading-none" style={{ color: hike.cachedBeautyScore.color }}>
+              ★ {hike.cachedBeautyScore.overall.toFixed(1)}
+            </span>
+            <span className="text-[10px] text-stone-400">/10</span>
+          </div>
+        ) : (
+          <div className="h-1 shrink-0 bg-sky-100" />
+        )}
+
         <div className="flex-1 relative bg-gradient-to-b from-sky-50 to-stone-50 min-h-0 overflow-hidden">
           <div className="absolute inset-2">
             {hike.routePolyline && hike.routePolyline.length > 1 ? (
