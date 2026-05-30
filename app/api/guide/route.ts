@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
 
   // Stream Claude response
   const stream = client.messages.stream({
-    model:      'claude-opus-4-8',
+    model:      'claude-haiku-4-5-20251001',
     max_tokens: 5000,
     system:     SYSTEM,
     messages:   [{ role: 'user', content: prompt }],

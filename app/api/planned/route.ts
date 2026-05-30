@@ -50,6 +50,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedBeautyScore:     row.cached_beauty_score as PlannedHike['cachedBeautyScore'],
     cachedPois:            row.cached_pois as unknown[] | undefined,
     cachedPoiWiki:         row.cached_poi_wiki as unknown[] | undefined,
+    cachedGuide:           row.cached_guide as string | undefined,
   }
 }
 
@@ -74,6 +75,7 @@ function hikeToRow(h: PlannedHike) {
     cached_beauty_score:    h.cachedBeautyScore ?? null,
     cached_pois:            h.cachedPois ?? null,
     cached_poi_wiki:        h.cachedPoiWiki ?? null,
+    cached_guide:           h.cachedGuide ?? null,
   }
 }
 
@@ -82,7 +84,7 @@ const META_COLS = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment', 'cached_beauty_score',
+  'route_polyline', 'assessment', 'cached_beauty_score', 'cached_guide',
 ].join(', ')
 
 // ── GET /api/planned          → PlannedHikeMeta[] ────────────────────────────
@@ -184,16 +186,18 @@ export async function PATCH(req: NextRequest) {
       cachedBeautyScore?: PlannedHike['cachedBeautyScore']
       cachedPois?: unknown[]
       cachedPoiWiki?: unknown[]
+      cachedGuide?: string
     }
 
     const dbPatch: Record<string, unknown> = {}
-    if (patch.title             !== undefined) dbPatch.title              = patch.title
-    if (patch.userNotes         !== undefined) dbPatch.user_notes         = patch.userNotes
-    if (patch.tags              !== undefined) dbPatch.tags               = patch.tags
-    if (patch.plannedDate       !== undefined) dbPatch.planned_date       = patch.plannedDate || null
+    if (patch.title             !== undefined) dbPatch.title               = patch.title
+    if (patch.userNotes         !== undefined) dbPatch.user_notes          = patch.userNotes
+    if (patch.tags              !== undefined) dbPatch.tags                = patch.tags
+    if (patch.plannedDate       !== undefined) dbPatch.planned_date        = patch.plannedDate || null
     if (patch.cachedBeautyScore !== undefined) dbPatch.cached_beauty_score = patch.cachedBeautyScore
-    if (patch.cachedPois       !== undefined) dbPatch.cached_pois         = patch.cachedPois
-    if (patch.cachedPoiWiki    !== undefined) dbPatch.cached_poi_wiki     = patch.cachedPoiWiki
+    if (patch.cachedPois        !== undefined) dbPatch.cached_pois         = patch.cachedPois
+    if (patch.cachedPoiWiki     !== undefined) dbPatch.cached_poi_wiki     = patch.cachedPoiWiki
+    if (patch.cachedGuide       !== undefined) dbPatch.cached_guide        = patch.cachedGuide
 
     const { error } = await supabase
       .from('planned_hikes')

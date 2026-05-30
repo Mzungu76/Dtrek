@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { getPlannedById, type PlannedHike } from '@/lib/plannedStore'
+import { getPlannedById, updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -64,7 +64,6 @@ function getItalianVoice(): SpeechSynthesisVoice | null {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = (id: string) => `dtrek-guide-${id}`
 const RATES = [0.8, 1, 1.2, 1.5]
 
 export default function GuidaPage() {
@@ -89,18 +88,16 @@ export default function GuidaPage() {
   const fullText   = useRef<string>('')        // full plain text for TTS
   const sectionOffsets = useRef<number[]>([]) // char start of each section in fullText
 
-  // Load hike metadata and cached guide
+  // Load hike metadata + cached guide from DB
   useEffect(() => {
     getPlannedById(hikeId).then(h => {
       setHike(h)
+      if (h?.cachedGuide) {
+        setGuideText(h.cachedGuide)
+        setSections(parseGuide(h.cachedGuide))
+      }
       setLoading(false)
     }).catch(() => setLoading(false))
-
-    const cached = localStorage.getItem(CACHE_KEY(hikeId))
-    if (cached) {
-      setGuideText(cached)
-      setSections(parseGuide(cached))
-    }
   }, [hikeId])
 
   // Keep fullText ref and sectionOffsets in sync
@@ -152,7 +149,8 @@ export default function GuidaPage() {
         setSections(parseGuide(acc))
       }
 
-      localStorage.setItem(CACHE_KEY(hikeId), acc)
+      // Save to DB (fire-and-forget, non-blocking)
+      updatePlannedMeta(hikeId, { cachedGuide: acc }).catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore durante la generazione')
     } finally {
