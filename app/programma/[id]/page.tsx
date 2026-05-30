@@ -24,6 +24,7 @@ import {
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
   ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images,
 } from 'lucide-react'
+import PdfExportButton from '@/components/PdfExportButton'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -291,11 +292,19 @@ export default function PlannedHikePage() {
               className="flex items-center gap-1.5 text-sky-300 hover:text-white text-sm transition-colors">
               <ArrowLeft className="w-4 h-4" /> Tutte le pianificate
             </button>
-            <button onClick={handleDelete} disabled={saving}
-              className="flex items-center gap-1.5 text-sm text-red-300 hover:text-white transition-colors">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              <span className="hidden sm:inline">Elimina</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <PdfExportButton
+                variant="planned"
+                data={hike}
+                iconOnly
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              />
+              <button onClick={handleDelete} disabled={saving}
+                className="flex items-center gap-1.5 text-sm text-red-300 hover:text-white transition-colors">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                <span className="hidden sm:inline">Elimina</span>
+              </button>
+            </div>
           </div>
 
           {/* Hero body */}

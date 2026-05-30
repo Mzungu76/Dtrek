@@ -398,7 +398,7 @@ export default function WeatherWidget(props: Props) {
                 name: 'Google Meteo',
                 emoji: '🔍',
                 note: '',
-                url: `https://www.google.com/search?q=meteo+${(props as PlannedProps).lat.toFixed(3)},${(props as PlannedProps).lon.toFixed(3)}`,
+                url: `https://www.google.com/search?q=weather+${(props as PlannedProps).lat.toFixed(4)},${(props as PlannedProps).lon.toFixed(4)}`,
               },
             ].map(link => (
               <a
