@@ -18,7 +18,8 @@ import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
-import { fetchPoisNearTrack, type PoiItem } from '@/lib/overpass'
+import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
+import type { PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -86,7 +87,7 @@ export default function EscursionePage() {
       setRatingVal(a.userRating ?? 0)
       setRatingNote(a.userRatingNote ?? '')
       const gps = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-      if (gps.length > 0) fetchPoisNearTrack(gps, 300).then(setPois).catch(() => {})
+      if (gps.length > 0) fetchHikingPoisFromWikidata(gps, 300).then(setPois).catch(() => {})
     }).finally(() => setLoading(false))
   }, [id, router])
 

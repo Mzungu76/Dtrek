@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, getActivityById, type ActivityMeta } from '@/lib/blobStore'
-import { fetchPoisNearTrack } from '@/lib/overpass'
+import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { ArrowLeft, Mountain, Loader2, Trophy, RefreshCw } from 'lucide-react'
@@ -86,7 +86,7 @@ export default function VettePage() {
           .map(p => [p.lat!, p.lon!] as [number, number])
         if (gps.length < 2) continue
 
-        const pois = await fetchPoisNearTrack(gps, 300)
+        const pois = await fetchHikingPoisFromWikidata(gps, 300)
         for (const p of pois) {
           if (p.type !== 'peak' || !p.name || seen.has(p.id)) continue
           seen.add(p.id)
