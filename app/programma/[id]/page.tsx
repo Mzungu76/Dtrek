@@ -196,6 +196,7 @@ export default function PlannedHikePage() {
           // Use cached POI data immediately — no API call needed
           setPois(h.cachedPois as PoiItem[])
           if (h.cachedPoiWiki?.length) setPoiWikiEntries(h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[])
+          setPoisFullyLoaded(true)  // triggers beauty score save with complete data
         } else {
           // Fresh fetch from Wikidata (cloud-IP friendly, no proxy needed)
           setLoadingTerrain(true)
@@ -213,13 +214,16 @@ export default function PlannedHikePage() {
     }).finally(() => setLoading(false))
   }, [id, router])
 
+  // Save beauty score whenever POIs are fully loaded — always overwrite stale cache
   useEffect(() => {
-    if (!beautyScore || !hike || hike.cachedBeautyScore) return
+    if (!beautyScore || !hike || !poisFullyLoaded) return
     const { overall, grade, color } = beautyScore
+    // Skip unnecessary DB write if value is identical
+    if (hike.cachedBeautyScore?.overall === overall) return
     const cached = { overall, grade, color }
     updatePlannedMeta(hike.id, { cachedBeautyScore: cached }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedBeautyScore: cached } : prev)
-  }, [beautyScore, hike])
+  }, [beautyScore, hike, poisFullyLoaded])
 
   // Save POI data to DB after first successful Overpass fetch
   useEffect(() => {
