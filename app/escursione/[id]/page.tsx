@@ -18,6 +18,7 @@ import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
+import PdfExportButton from '@/components/PdfExportButton'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import type { PoiItem, TerrainContext } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
@@ -208,6 +209,12 @@ export default function EscursionePage() {
                   {icon}
                 </button>
               ))}
+              <PdfExportButton
+                variant="activity"
+                data={activity}
+                iconOnly
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              />
               <button title="Elimina" onClick={handleDelete} disabled={saving}
                 className="w-8 h-8 rounded-lg bg-red-500/25 hover:bg-red-500/45 flex items-center justify-center transition-colors">
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}

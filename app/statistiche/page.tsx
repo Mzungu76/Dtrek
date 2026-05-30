@@ -6,6 +6,7 @@ import RouteThumb from '@/components/RouteThumb'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta, type StoredActivity } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { exportAllActivitiesToExcel } from '@/utils/exportExcel'
+import PdfExportButton from '@/components/PdfExportButton'
 import { formatDuration, msToKmh } from '@/lib/tcxParser'
 import {
   formatPaceMinkm, difficultyIndex, caloriesPerHour,
@@ -492,6 +493,18 @@ export default function StatistichePage() {
               >
                 <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Esporta Excel</span>
               </button>
+              <PdfExportButton
+                variant="stats"
+                data={activities as any}
+                label="PDF Statistiche"
+                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
+              />
+              <PdfExportButton
+                variant="map"
+                data={activities as any}
+                label="PDF Mappa"
+                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
+              />
             </div>
           )}
         </div>
