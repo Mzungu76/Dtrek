@@ -22,7 +22,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen,
 } from 'lucide-react'
 import PdfExportButton from '@/components/PdfExportButton'
 
@@ -293,6 +293,14 @@ export default function PlannedHikePage() {
               <ArrowLeft className="w-4 h-4" /> Tutte le pianificate
             </button>
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => router.push(`/guida/${encodeURIComponent(id)}`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-amber-900 rounded-lg text-xs font-semibold transition-colors"
+                title="Guida escursionistica"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Guida</span>
+              </button>
               <PdfExportButton
                 variant="planned"
                 data={hike}
