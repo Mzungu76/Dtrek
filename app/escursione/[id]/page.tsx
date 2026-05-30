@@ -19,8 +19,9 @@ import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
-import type { PoiItem } from '@/lib/overpass'
-import type { WikiPage } from '@/lib/wikipedia'
+import type { PoiItem, TerrainContext } from '@/lib/overpass'
+import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
+import { computeBeautyScore } from '@/lib/beautyScore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -69,6 +70,13 @@ export default function EscursionePage() {
   const [showRatingPanel, setShowRatingPanel] = useState(false)
   const [show3D,          setShow3D]          = useState(false)
   const [showStreetView,  setShowStreetView]  = useState(false)
+  const [poiWikiEntries, setPoiWikiEntries]   = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
+  const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
+
+  const EMPTY_TERRAIN: TerrainContext = {
+    hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
+    isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [],
+  }
 
   // Before early returns — hooks cannot be conditional
   const heroPolyline = useMemo((): [number, number][] => {
@@ -77,6 +85,18 @@ export default function EscursionePage() {
     const step = Math.max(1, Math.ceil(pts.length / 100))
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [activity])
+
+  const allWikiPages = useMemo(
+    () => [...wikiPages, ...poiWikiEntries.map(e => e.wiki)],
+    [wikiPages, poiWikiEntries],
+  )
+
+  const beautyScore = useMemo(
+    () => activity && (pois.length > 0 || allWikiPages.length > 0)
+      ? computeBeautyScore(pois, allWikiPages, EMPTY_TERRAIN, activity.elevationGain, activity.altitudeMax)
+      : null,
+    [pois, allWikiPages, activity], // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   useEffect(() => {
     getActivityById(id).then(a => {
@@ -87,9 +107,28 @@ export default function EscursionePage() {
       setRatingVal(a.userRating ?? 0)
       setRatingNote(a.userRatingNote ?? '')
       const gps = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-      if (gps.length > 0) fetchHikingPoisFromWikidata(gps, 300).then(setPois).catch(() => {})
+      if (gps.length > 0) {
+        fetchHikingPoisFromWikidata(gps, 300)
+          .then(newPois => {
+            setPois(newPois)
+            fetchWikiForNamedPois(newPois)
+              .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
+              .catch(() => { setPoisFullyLoaded(true) })
+          })
+          .catch(() => { setPoisFullyLoaded(true) })
+      }
     }).finally(() => setLoading(false))
   }, [id, router])
+
+  // Save beauty score to linkedBeautyScore when POIs are fully loaded
+  useEffect(() => {
+    if (!beautyScore || !activity || !poisFullyLoaded) return
+    const { overall, grade, color } = beautyScore
+    if (activity.linkedBeautyScore?.overall === overall) return
+    const cached = { overall, grade, color }
+    updateActivityMeta(id, { linkedBeautyScore: cached }).catch(() => {})
+    setActivity(prev => prev ? { ...prev, linkedBeautyScore: cached } : prev)
+  }, [beautyScore, activity, poisFullyLoaded, id])
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
@@ -371,22 +410,22 @@ export default function EscursionePage() {
         {/* Weather */}
         {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
 
-        {/* Beauty score from planned — prominent banner */}
-        {activity.linkedBeautyScore && (
+        {/* Beauty score — computed live or loaded from DB */}
+        {(beautyScore ?? activity.linkedBeautyScore) && (
           <div
             className="rounded-2xl p-6 text-white shadow-lg overflow-hidden relative"
-            style={{ background: `linear-gradient(135deg, ${activity.linkedBeautyScore.color}ee 0%, ${activity.linkedBeautyScore.color}88 100%)` }}
+            style={{ background: `linear-gradient(135deg, ${(beautyScore ?? activity.linkedBeautyScore)!.color}ee 0%, ${(beautyScore ?? activity.linkedBeautyScore)!.color}88 100%)` }}
           >
             <div className="absolute inset-0 bg-topography opacity-20 pointer-events-none" />
             <div className="relative flex items-center gap-5">
               <div className="text-center shrink-0">
-                <div className="text-5xl font-bold leading-none">{activity.linkedBeautyScore.overall.toFixed(1)}</div>
+                <div className="text-5xl font-bold leading-none">{(beautyScore ?? activity.linkedBeautyScore)!.overall.toFixed(1)}</div>
                 <div className="text-xs font-semibold opacity-60 mt-1">/ 10</div>
               </div>
               <div className="w-px h-12 bg-white/30 shrink-0" />
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-1">Pagella pre-escursione</p>
-                <p className="text-xl font-bold">{BEAUTY_GRADE[activity.linkedBeautyScore.grade] ?? ''}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-1">Pagella escursione</p>
+                <p className="text-xl font-bold">{BEAUTY_GRADE[(beautyScore ?? activity.linkedBeautyScore)!.grade] ?? ''}</p>
                 <p className="text-sm opacity-70 mt-0.5">Valutazione automatica · OSM + Wikipedia</p>
               </div>
             </div>

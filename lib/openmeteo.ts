@@ -10,6 +10,14 @@ export interface HourlyWeather {
   weathercode: number   // WMO code
 }
 
+export interface HourlyWeatherFull extends HourlyWeather {
+  feelsLike: number
+  humidity: number      // %
+  windDirection: number // degrees
+  snowfall: number      // mm water equivalent
+  uvIndex: number
+}
+
 export interface DailyWeather {
   date: string
   tempMax: number
@@ -17,6 +25,12 @@ export interface DailyWeather {
   precipitation: number
   windspeedMax: number
   weathercode: number
+}
+
+export interface ClothingItem {
+  icon: string
+  item: string
+  priority: 'essential' | 'recommended' | 'optional'
 }
 
 // WMO 4677 codes → Italian label + emoji
@@ -97,11 +111,155 @@ export async function fetchForecastWeather(
   const d = await res.json()
   const { time, temperature_2m_max, temperature_2m_min, precipitation_sum, windspeed_10m_max, weathercode } = d.daily
   return (time as string[]).map((t, i) => ({
-    date:         t,
-    tempMax:      temperature_2m_max[i],
-    tempMin:      temperature_2m_min[i],
+    date:          t,
+    tempMax:       temperature_2m_max[i],
+    tempMin:       temperature_2m_min[i],
     precipitation: precipitation_sum[i],
-    windspeedMax: windspeed_10m_max[i],
-    weathercode:  weathercode[i],
+    windspeedMax:  windspeed_10m_max[i],
+    weathercode:   weathercode[i],
   }))
+}
+
+// Fetch detailed hourly data for a specific date (past or future, max 16 days ahead)
+export async function fetchDayHourly(
+  lat: number,
+  lon: number,
+  date: string,  // YYYY-MM-DD
+): Promise<HourlyWeatherFull[]> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const targetDate = new Date(date + 'T00:00:00')
+  const isPast = targetDate < today
+
+  const HOURLY_VARS = [
+    'temperature_2m', 'apparent_temperature', 'relative_humidity_2m',
+    'windspeed_10m', 'winddirection_10m', 'precipitation', 'snowfall',
+    'cloudcover', 'weathercode', 'uv_index',
+  ].join(',')
+
+  let url: string
+  if (isPast) {
+    url = 'https://archive-api.open-meteo.com/v1/archive?' + new URLSearchParams({
+      latitude:   lat.toFixed(4),
+      longitude:  lon.toFixed(4),
+      start_date: date,
+      end_date:   date,
+      hourly:     HOURLY_VARS,
+      timezone:   'Europe/Rome',
+    })
+  } else {
+    url = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
+      latitude:      lat.toFixed(4),
+      longitude:     lon.toFixed(4),
+      start_date:    date,
+      end_date:      date,
+      hourly:        HOURLY_VARS,
+      timezone:      'Europe/Rome',
+      forecast_days: '16',
+    })
+  }
+
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Open-Meteo day-hourly error')
+  const d = await res.json()
+  const h = d.hourly
+  if (!h?.time?.length) throw new Error('No data')
+
+  return (h.time as string[]).map((t, i) => ({
+    time:          t,
+    temperature:   h.temperature_2m?.[i] ?? 0,
+    windspeed:     h.windspeed_10m?.[i] ?? 0,
+    precipitation: h.precipitation?.[i] ?? 0,
+    cloudcover:    h.cloudcover?.[i] ?? 0,
+    weathercode:   h.weathercode?.[i] ?? 0,
+    feelsLike:     h.apparent_temperature?.[i] ?? h.temperature_2m?.[i] ?? 0,
+    humidity:      h.relative_humidity_2m?.[i] ?? 0,
+    windDirection: h.winddirection_10m?.[i] ?? 0,
+    snowfall:      h.snowfall?.[i] ?? 0,
+    uvIndex:       h.uv_index?.[i] ?? 0,
+  }))
+}
+
+const WIND_DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
+export function windDirLabel(deg: number): string {
+  return WIND_DIRS[Math.round(deg / 45) % 8]
+}
+
+// Clothing and gear suggestions based on weather and hike parameters
+export function clothingSuggestions(
+  daytimeHours: HourlyWeatherFull[],
+  altitudeMax = 0,
+  elevationGain = 0,
+): ClothingItem[] {
+  if (!daytimeHours.length) return []
+
+  const temps     = daytimeHours.map(h => h.temperature)
+  const tempMin   = Math.min(...temps)
+  const tempMax   = Math.max(...temps)
+  const tempMid   = (tempMin + tempMax) / 2
+  // Lapse rate correction to summit temperature
+  const summitTemp = tempMid - elevationGain * 0.0065
+  const maxWind   = Math.max(...daytimeHours.map(h => h.windspeed))
+  const totalRain = daytimeHours.reduce((s, h) => s + h.precipitation, 0)
+  const totalSnow = daytimeHours.reduce((s, h) => s + (h.snowfall ?? 0), 0)
+  const maxUV     = Math.max(...daytimeHours.map(h => h.uvIndex ?? 0))
+  const isHigh    = altitudeMax > 2000
+  const isAlpine  = altitudeMax > 3000
+
+  const items: ClothingItem[] = []
+
+  items.push({ icon: '🥾', item: 'Scarpe da trekking', priority: 'essential' })
+  items.push({ icon: '💧', item: 'Acqua (min. 1.5 L)', priority: 'essential' })
+
+  if (summitTemp < 5) {
+    items.push({ icon: '🧥', item: 'Giacca invernale / softshell pesante', priority: 'essential' })
+    items.push({ icon: '🧤', item: 'Guanti e cappello invernale', priority: 'essential' })
+    items.push({ icon: '🧣', item: 'Strato termico intermedio', priority: 'recommended' })
+  } else if (summitTemp < 12) {
+    items.push({ icon: '🧥', item: 'Giacca a vento / softshell leggero', priority: 'essential' })
+    items.push({ icon: '🧤', item: 'Guanti leggeri', priority: 'recommended' })
+  } else if (summitTemp < 18) {
+    items.push({ icon: '🧣', item: 'Felpa o pile di ricambio', priority: 'recommended' })
+  }
+
+  if (totalRain > 5 || totalSnow > 1) {
+    items.push({ icon: '🌧️', item: 'Giacca impermeabile', priority: 'essential' })
+    items.push({ icon: '🎒', item: 'Cover antipioggia zaino', priority: 'essential' })
+  } else if (totalRain > 1) {
+    items.push({ icon: '🌦️', item: 'Giacca antipioggia leggera', priority: 'recommended' })
+  }
+
+  if (totalSnow > 2) {
+    items.push({ icon: '🏔️', item: 'Ghette / rampanti leggeri', priority: 'recommended' })
+  }
+
+  if (maxWind > 40) {
+    items.push({ icon: '💨', item: 'Protezione viso (buff / balaclava)', priority: 'essential' })
+  } else if (maxWind > 25) {
+    items.push({ icon: '💨', item: 'Guscio antivento', priority: 'recommended' })
+  }
+
+  if (maxUV >= 6) {
+    items.push({ icon: '🕶️', item: 'Occhiali da sole + SPF 50+', priority: 'essential' })
+    items.push({ icon: '🧢', item: 'Cappello a tesa larga', priority: 'essential' })
+  } else if (maxUV >= 3) {
+    items.push({ icon: '🕶️', item: 'Occhiali da sole', priority: 'recommended' })
+    items.push({ icon: '🧴', item: 'Crema solare', priority: 'recommended' })
+  }
+
+  if (isHigh) {
+    items.push({ icon: '⚡', item: 'Alimenti energetici (barrette, frutta secca)', priority: 'recommended' })
+    items.push({ icon: '🗺️', item: 'Mappa / GPS offline', priority: 'recommended' })
+  }
+  if (isAlpine) {
+    items.push({ icon: '🏔️', item: 'Equipaggiamento alpinistico (corda, imbracatura)', priority: 'essential' })
+  }
+
+  if (elevationGain > 600) {
+    items.push({ icon: '🪄', item: 'Bastoncini da trekking', priority: 'recommended' })
+  }
+
+  items.push({ icon: '🩹', item: 'Kit di pronto soccorso', priority: 'optional' })
+
+  return items
 }
