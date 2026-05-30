@@ -1,14 +1,15 @@
 /**
- * DTrek PDF export — uses jsPDF with inline Canvas-based chart rendering.
- * Text is fully selectable; charts are rasterised at 2× for clarity.
+ * DTrek PDF export — jsPDF + inline Canvas charts + MapTiler satellite tiles.
  */
 
 import { format } from 'date-fns'
 import { it }     from 'date-fns/locale'
 import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
 import type { PlannedHike }                  from '@/lib/plannedStore'
+import type { PoiItem }                      from '@/lib/overpass'
+import type { WikiPage }                     from '@/lib/wikipedia'
 import { formatDuration, msToKmh }           from '@/lib/tcxParser'
-import { getPersonalRecords, computeStreaks, difficultyIndex } from '@/lib/stats'
+import { getPersonalRecords, computeStreaks } from '@/lib/stats'
 import { computeGlobalStats }                from '@/lib/blobStore'
 
 // ── Brand palette ──────────────────────────────────────────────────────────────
@@ -20,7 +21,21 @@ const INK     = [28,   25,  23] as [number, number, number]
 const BORDER  = [228, 228, 231] as [number, number, number]
 const WHITE   = [255, 255, 255] as [number, number, number]
 
-// ── Canvas chart renderers ─────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** Strip emoji and non-latin characters that jsPDF Helvetica can't render */
+function safeText(s: string): string {
+  // Remove characters outside latin-1 range that jsPDF Helvetica can't render
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[^\x00-\xFF]/g, '').trim()
+}
+
+function hexColor(hex: string): [number, number, number] {
+  const h = hex.replace('#', '')
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]
+}
+
+// ── Canvas chart helpers ────────────────────────────────────────────────────────
 
 function mkCanvas(w: number, h: number, scale = 2) {
   const c = document.createElement('canvas')
@@ -30,7 +45,6 @@ function mkCanvas(w: number, h: number, scale = 2) {
   return { c, ctx }
 }
 
-/** Line/area chart — returns PNG data-URL */
 function chartLine(
   data: number[], w: number, h: number,
   line: string, fill: string,
@@ -42,7 +56,6 @@ function chartLine(
   const range = maxV - minV || 1
   const pad = 4
 
-  // Background
   ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, w, h)
 
   const pts = data.map((v, i): [number, number] => [
@@ -50,7 +63,6 @@ function chartLine(
     h - pad - ((v - minV) / range) * (h - 2 * pad),
   ])
 
-  // Area
   ctx.beginPath()
   ctx.moveTo(pts[0][0], h - pad)
   pts.forEach(([x, y]) => ctx.lineTo(x, y))
@@ -58,7 +70,6 @@ function chartLine(
   ctx.closePath()
   ctx.fillStyle = fill; ctx.fill()
 
-  // Line
   ctx.beginPath()
   pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y))
   ctx.strokeStyle = line; ctx.lineWidth = 1.5
@@ -67,7 +78,6 @@ function chartLine(
   return c.toDataURL('image/png')
 }
 
-/** Vertical bar chart — returns PNG data-URL */
 function chartBar(
   data: { label: string; value: number }[],
   w: number, h: number,
@@ -95,7 +105,6 @@ function chartBar(
     ctx.fill()
 
     if (d.value > 0) {
-      // Value label above bar
       ctx.fillStyle = barColor
       ctx.font = 'bold 9px sans-serif'
       ctx.textAlign = 'center'
@@ -113,8 +122,8 @@ function chartBar(
   return c.toDataURL('image/png')
 }
 
-/** Polyline normalised to canvas — returns PNG data-URL */
-function chartRoute(
+/** Fallback vector route (white background) */
+function chartRouteFallback(
   pts: [number, number][],
   w: number, h: number,
   lineColor = '#166534',
@@ -129,25 +138,21 @@ function chartRoute(
   const sc = Math.min((w - 2 * pad) / lonR, (h - 2 * pad) / latR)
   const xOff = pad + ((w - 2 * pad) - lonR * sc) / 2
   const yOff = pad + ((h - 2 * pad) - latR * sc) / 2
-
   const px = (lon: number) => xOff + (lon - minLon) * sc
   const py = (lat: number) => yOff + (maxLat - lat) * sc
 
-  // Background
   ctx.fillStyle = '#f0f9ff'
   if (typeof ctx.roundRect === 'function') { ctx.beginPath(); ctx.roundRect(0, 0, w, h, 6); ctx.fill() }
-  else { ctx.fillRect(0, 0, w, h) }
+  else ctx.fillRect(0, 0, w, h)
 
-  // Route line
-  ctx.strokeStyle = lineColor; ctx.lineWidth = 2
+  ctx.strokeStyle = lineColor; ctx.lineWidth = 2.5
   ctx.lineJoin = 'round'; ctx.lineCap = 'round'
   ctx.beginPath()
   pts.forEach(([lat, lon], i) => i === 0 ? ctx.moveTo(px(lon), py(lat)) : ctx.lineTo(px(lon), py(lat)))
   ctx.stroke()
 
-  // Start / end dots
   const dot = (lat: number, lon: number, col: string) => {
-    ctx.beginPath(); ctx.arc(px(lon), py(lat), 4, 0, Math.PI * 2)
+    ctx.beginPath(); ctx.arc(px(lon), py(lat), 5, 0, Math.PI * 2)
     ctx.fillStyle = col; ctx.fill()
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke()
   }
@@ -157,7 +162,148 @@ function chartRoute(
   return c.toDataURL('image/png')
 }
 
-/** All routes on a single canvas — returns PNG data-URL */
+// ── Satellite map with route overlay ───────────────────────────────────────────
+
+const TILE_SIZE = 256
+
+function latLonToXY(lat: number, lon: number, z: number) {
+  const n = Math.pow(2, z)
+  const latRad = (lat * Math.PI) / 180
+  return {
+    x: ((lon + 180) / 360) * n,
+    y: ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
+  }
+}
+
+function loadTileImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload  = () => resolve(img)
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+/**
+ * Fetch MapTiler satellite tiles, stitch them, draw the route polyline on top.
+ * Falls back to plain vector route on any error.
+ */
+async function fetchSatMap(
+  pts: [number, number][],  // [lat, lon]
+  outW: number,
+  outH: number,
+  lineColor: string,
+): Promise<string> {
+  const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
+  if (!KEY || pts.length < 2) return chartRouteFallback(pts, outW, outH, lineColor)
+
+  try {
+    const lats = pts.map(p => p[0])
+    const lons = pts.map(p => p[1])
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+    const minLon = Math.min(...lons), maxLon = Math.max(...lons)
+    const padFrac = 0.18
+    const padLat = (maxLat - minLat) * padFrac || 0.003
+    const padLon = (maxLon - minLon) * padFrac || 0.003
+    const bMinLat = minLat - padLat, bMaxLat = maxLat + padLat
+    const bMinLon = minLon - padLon, bMaxLon = maxLon + padLon
+
+    // Find best zoom where total tiles <= 30
+    let zoom = 16
+    for (let z = 16; z >= 9; z--) {
+      const tl = latLonToXY(bMaxLat, bMinLon, z)
+      const br = latLonToXY(bMinLat, bMaxLon, z)
+      const tw = Math.floor(br.x) - Math.floor(tl.x) + 1
+      const th = Math.floor(br.y) - Math.floor(tl.y) + 1
+      if (tw * th <= 30) { zoom = z; break }
+    }
+
+    const tl = latLonToXY(bMaxLat, bMinLon, zoom)
+    const br = latLonToXY(bMinLat, bMaxLon, zoom)
+    const minTX = Math.floor(tl.x), maxTX = Math.floor(br.x)
+    const minTY = Math.floor(tl.y), maxTY = Math.floor(br.y)
+    const tilesW = maxTX - minTX + 1
+    const tilesH = maxTY - minTY + 1
+
+    // Full stitched canvas (all tiles)
+    const full = document.createElement('canvas')
+    full.width = tilesW * TILE_SIZE
+    full.height = tilesH * TILE_SIZE
+    const fctx = full.getContext('2d')!
+
+    // Fetch and draw tiles
+    await Promise.all(
+      Array.from({ length: tilesW * tilesH }, (_, idx) => {
+        const tx = minTX + (idx % tilesW)
+        const ty = minTY + Math.floor(idx / tilesW)
+        const url = `https://api.maptiler.com/tiles/satellite/${zoom}/${tx}/${ty}.jpg?key=${KEY}`
+        return loadTileImage(url)
+          .then(img => fctx.drawImage(img, (tx - minTX) * TILE_SIZE, (ty - minTY) * TILE_SIZE))
+          .catch(() => {
+            fctx.fillStyle = '#1a2a3a'
+            fctx.fillRect((tx - minTX) * TILE_SIZE, (ty - minTY) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+          })
+      })
+    )
+
+    // Project lat/lon → full-canvas pixel
+    const project = (lat: number, lon: number) => {
+      const xy = latLonToXY(lat, lon, zoom)
+      return { x: (xy.x - minTX) * TILE_SIZE, y: (xy.y - minTY) * TILE_SIZE }
+    }
+
+    // Draw route shadow then line
+    const lineW = Math.max(4, Math.min(8, full.width / 120))
+    fctx.lineCap = 'round'; fctx.lineJoin = 'round'
+
+    fctx.strokeStyle = 'rgba(0,0,0,0.55)'; fctx.lineWidth = lineW + 3
+    fctx.shadowColor = 'transparent'
+    fctx.beginPath()
+    pts.forEach(([lat, lon], i) => {
+      const { x, y } = project(lat, lon)
+      i === 0 ? fctx.moveTo(x, y) : fctx.lineTo(x, y)
+    })
+    fctx.stroke()
+
+    fctx.strokeStyle = lineColor; fctx.lineWidth = lineW
+    fctx.beginPath()
+    pts.forEach(([lat, lon], i) => {
+      const { x, y } = project(lat, lon)
+      i === 0 ? fctx.moveTo(x, y) : fctx.lineTo(x, y)
+    })
+    fctx.stroke()
+
+    // Start / end dots
+    const drawDot = (lat: number, lon: number, fill: string) => {
+      const { x, y } = project(lat, lon)
+      const r = lineW * 1.8
+      fctx.beginPath(); fctx.arc(x, y, r, 0, Math.PI * 2)
+      fctx.fillStyle = fill; fctx.fill()
+      fctx.strokeStyle = '#fff'; fctx.lineWidth = r * 0.45; fctx.stroke()
+    }
+    drawDot(pts[0][0], pts[0][1], '#22c55e')
+    drawDot(pts[pts.length-1][0], pts[pts.length-1][1], '#ef4444')
+
+    // Crop to bbox + draw onto output canvas
+    const topLeft  = project(bMaxLat, bMinLon)
+    const botRight = project(bMinLat, bMaxLon)
+    const cropX = Math.max(0, topLeft.x), cropY = Math.max(0, topLeft.y)
+    const cropW = Math.min(full.width,  botRight.x) - cropX
+    const cropH = Math.min(full.height, botRight.y) - cropY
+
+    const out = document.createElement('canvas')
+    out.width = outW; out.height = outH
+    const octx = out.getContext('2d')!
+    octx.drawImage(full, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
+
+    return out.toDataURL('image/jpeg', 0.93)
+  } catch {
+    return chartRouteFallback(pts, outW, outH, lineColor)
+  }
+}
+
+/** All routes combined (stats map page) */
 function chartAllRoutes(activities: ActivityMeta[], w: number, h: number): string {
   const polylines = activities.filter(a => (a.routePolyline?.length ?? 0) > 1).map(a => a.routePolyline!)
   if (!polylines.length) return ''
@@ -194,19 +340,14 @@ function chartAllRoutes(activities: ActivityMeta[], w: number, h: number): strin
 
 type Doc = import('jspdf').jsPDF
 
-function hexColor(hex: string): [number, number, number] {
-  const h = hex.replace('#', '')
-  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]
-}
-
 function txt(
   doc: Doc, str: string, x: number, y: number,
-  { size = 9, bold = false, color = INK, align = 'left' as 'left' | 'center' | 'right' | 'justify' } = {},
+  { size = 9, bold = false, color = INK, align = 'left' as 'left' | 'center' | 'right' } = {},
 ) {
   doc.setFontSize(size)
   doc.setFont('helvetica', bold ? 'bold' : 'normal')
   doc.setTextColor(...color)
-  doc.text(str, x, y, { align })
+  doc.text(safeText(str), x, y, { align })
 }
 
 function sectionBar(doc: Doc, title: string, x: number, y: number, w: number, color: [number,number,number]): number {
@@ -222,7 +363,7 @@ function statBox(
   x: number, y: number, w: number, h: number,
 ) {
   doc.setFillColor(...STONE50); doc.roundedRect(x, y, w, h, 2, 2, 'F')
-  doc.setDrawColor(...BORDER);   doc.roundedRect(x, y, w, h, 2, 2, 'S')
+  doc.setDrawColor(...BORDER);  doc.roundedRect(x, y, w, h, 2, 2, 'S')
   txt(doc, label, x + 2.5, y + 4,   { size: 6.5, color: STONE })
   txt(doc, value, x + 2.5, y + 9.5, { size: 9.5, bold: true })
   if (sub) txt(doc, sub, x + 2.5, y + 13, { size: 6.5, color: STONE })
@@ -233,9 +374,102 @@ function footer(doc: Doc, label: string) {
   for (let i = 1; i <= n; i++) {
     doc.setPage(i)
     doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(180, 180, 180)
-    doc.text(label, 14, 291)
-    doc.text(`Pagina ${i} di ${n} · DTrek`, 196, 291, { align: 'right' })
+    doc.text(safeText(label), 14, 291)
+    doc.text(`Pagina ${i} di ${n}  DTrek`, 196, 291, { align: 'right' })
   }
+}
+
+/** Render POIs section, return new y */
+function renderPois(
+  doc: Doc,
+  wikiEntries: { poi: PoiItem; wiki: WikiPage }[],
+  rawPois: PoiItem[],
+  M: number, W: number, startY: number,
+  accentColor: [number,number,number],
+): number {
+  const totalWiki = wikiEntries.length
+  const rawOnly   = rawPois.filter(p => !wikiEntries.some(e => e.poi.id === p.id))
+  if (totalWiki === 0 && rawOnly.length === 0) return startY
+
+  const label = totalWiki + rawOnly.length === 1
+    ? '1 Luogo nel Percorso e Dintorni'
+    : `${totalWiki + rawOnly.length} Luoghi nel Percorso e Dintorni`
+  let y = sectionBar(doc, label, M, startY, W, accentColor)
+
+  const POI_LABELS: Record<string, string> = {
+    peak: 'Cima', hut: 'Rifugio', bivouac: 'Bivacco', spring: 'Sorgente',
+    viewpoint: 'Belvedere', cross: 'Croce', pass: 'Valico', waterfall: 'Cascata',
+    cave: 'Grotta', shelter: 'Riparo', ruins: 'Rovine', archaeological: 'Sito arch.',
+    castle: 'Castello', fountain: 'Fontana', bench: 'Panchina', chapel: 'Cappella',
+    picnic: 'Area picnic', tower: 'Torre', monument: 'Monumento',
+  }
+
+  // ── Wiki entries ─────────────────────────────────────────────────────────────
+  wikiEntries.forEach(({ poi, wiki }) => {
+    if (y + 22 > 280) { doc.addPage(); y = 14 }
+
+    // Name row
+    const name = safeText(wiki.title)
+    const typeLabel = POI_LABELS[poi.type] ?? poi.type
+    const distStr = poi.distFromTrack < 1000
+      ? `${poi.distFromTrack.toFixed(0)} m dal percorso`
+      : `${(poi.distFromTrack / 1000).toFixed(1)} km dal percorso`
+    const altStr = poi.ele ? `  ${poi.ele} m slm` : ''
+
+    txt(doc, name,      M,       y + 4, { size: 9, bold: true })
+    txt(doc, typeLabel, M + doc.getTextWidth(name) + 4, y + 4, { size: 7.5, color: accentColor })
+    txt(doc, distStr + altStr, M + W, y + 4, { size: 7, color: STONE, align: 'right' })
+    y += 6
+
+    // Description
+    if (wiki.extract) {
+      const excerpt = wiki.extract.slice(0, 340).replace(/\n+/g, ' ')
+      const lines = doc.splitTextToSize(safeText(excerpt), W - 22)
+      const shown = lines.slice(0, 2)
+      doc.setFontSize(7.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(...STONE)
+      doc.text(shown, M + 2, y + 4)
+      y += shown.length * 4 + 2
+    }
+
+    // Wikipedia link
+    if (wiki.url) {
+      doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(...accentColor)
+      doc.text('Apri su Wikipedia  >', M + 2, y + 4)
+      doc.link(M + 2, y, 44, 5, { url: wiki.url })
+    }
+    y += 7
+
+    // Divider
+    doc.setDrawColor(...BORDER); doc.setLineWidth(0.3)
+    doc.line(M, y, M + W, y)
+    y += 3
+  })
+
+  // ── Raw POIs (no wiki, compact 3-per-row) ────────────────────────────────────
+  if (rawOnly.length > 0) {
+    if (y + 8 > 280) { doc.addPage(); y = 14 }
+    txt(doc, 'Altri punti di interesse:', M, y + 4, { size: 7.5, bold: true, color: STONE })
+    y += 7
+    const colW = (W - 4) / 3
+    rawOnly.forEach((p, i) => {
+      if (y + 8 > 280) { doc.addPage(); y = 14 }
+      const col = i % 3
+      const row = Math.floor(i / 3)
+      const cx = M + col * (colW + 2)
+      const cy = y + row * 7
+      if (col === 0 && i > 0) { /* row started, already advanced */ }
+
+      const label2 = POI_LABELS[p.type] ?? p.type
+      const name2 = p.name ? safeText(p.name) : label2
+      doc.setFillColor(...STONE50); doc.roundedRect(cx, cy - 2, colW, 6, 1.5, 1.5, 'F')
+      txt(doc, name2.slice(0, 22), cx + 2, cy + 2.5, { size: 7.5 })
+      txt(doc, label2, cx + colW, cy + 2.5, { size: 6.5, color: STONE, align: 'right' })
+
+      if (col === 2 || i === rawOnly.length - 1) y += 8
+    })
+  }
+
+  return y + 4
 }
 
 // ── Activity PDF ───────────────────────────────────────────────────────────────
@@ -245,21 +479,24 @@ export async function exportActivityPdf(activity: StoredActivity): Promise<void>
   const M = 14, W = 182
   let y = 0
 
-  // ── Header ──────────────────────────────────────────────────────────────────
+  // Header
   doc.setFillColor(...FOREST); doc.rect(0, 0, 210, 32, 'F')
   txt(doc, 'DTrek', M, 9,  { size: 12, bold: true, color: WHITE })
-  txt(doc, 'Scheda Escursione', M, 14, { size: 7.5, color: [180, 240, 180] })
-  let ttl = activity.title ?? activity.notes ?? 'Escursione'
+  txt(doc, 'Scheda Escursione', M, 14, { size: 7.5, color: [180, 240, 180] as [number,number,number] })
+  let ttl = safeText(activity.title ?? activity.notes ?? 'Escursione')
   doc.setFontSize(17); doc.setFont('helvetica','bold'); doc.setTextColor(...WHITE)
   while (doc.getTextWidth(ttl) > W - 5 && ttl.length > 4) ttl = ttl.slice(0,-4) + '…'
   doc.text(ttl, M, 24)
   y = 35
 
-  // Date, time, device
+  // Date + time
   const dateStr = format(new Date(activity.startTime), "EEEE d MMMM yyyy", { locale: it })
-  const timeStr = `${format(new Date(activity.startTime),'HH:mm')} – ${format(new Date(activity.endTime),'HH:mm')}`
-  txt(doc, `${dateStr}  ·  ${timeStr}`, M, y, { size: 8.5, color: STONE })
-  if (activity.device) { y += 4.5; txt(doc, `📱 ${activity.device}`, M, y, { size: 7.5, color: STONE }) }
+  const timeStr = `${format(new Date(activity.startTime),'HH:mm')} - ${format(new Date(activity.endTime),'HH:mm')}`
+  txt(doc, `${dateStr}  |  ${timeStr}`, M, y, { size: 8.5, color: STONE })
+  if (activity.device) {
+    y += 4.5
+    txt(doc, safeText(activity.device), M, y, { size: 7.5, color: STONE })
+  }
   y += 4.5
 
   // Tags
@@ -269,75 +506,78 @@ export async function exportActivityPdf(activity: StoredActivity): Promise<void>
       doc.setFontSize(7.5); doc.setFont('helvetica','normal')
       const tw = doc.getTextWidth(tag) + 5
       doc.setFillColor(220, 252, 231); doc.roundedRect(tx, y-2, tw, 4, 1.5, 1.5, 'F')
-      doc.setTextColor(...FOREST); doc.text(tag, tx + 2.5, y + 0.7)
+      doc.setTextColor(...FOREST); doc.text(safeText(tag), tx + 2.5, y + 0.7)
       tx += tw + 2
     }
     y += 6
   }
 
-  // ── Stats grid (8 cells, 4 columns) ─────────────────────────────────────────
+  // Stats grid (4 × 2)
   y = sectionBar(doc, 'Statistiche', M, y + 2, W, FOREST)
   const stats = [
     { label: 'Distanza',       value: `${(activity.distanceMeters/1000).toFixed(2)} km` },
     { label: 'Durata',         value: formatDuration(activity.totalTimeSeconds) },
-    { label: 'FC Media',       value: `${activity.avgHeartRate} bpm`,        sub: `Max ${activity.maxHeartRate} bpm` },
-    { label: 'Vel. Media',     value: `${msToKmh(activity.avgSpeedMs)} km/h`, sub: `Max ${msToKmh(activity.maxSpeedMs)} km/h` },
-    { label: 'Dislivello +',   value: `${activity.elevationGain.toFixed(0)} m`, sub: `↓ ${activity.elevationLoss.toFixed(0)} m` },
+    { label: 'FC Media',       value: `${activity.avgHeartRate} bpm`,             sub: `Max ${activity.maxHeartRate} bpm` },
+    { label: 'Vel. Media',     value: `${msToKmh(activity.avgSpeedMs)} km/h`,      sub: `Max ${msToKmh(activity.maxSpeedMs)} km/h` },
+    { label: 'Dislivello +',   value: `${activity.elevationGain.toFixed(0)} m`,    sub: `discesa ${activity.elevationLoss.toFixed(0)} m` },
     { label: 'Calorie',        value: `${activity.calories} kcal` },
     { label: 'Quota massima',  value: `${activity.altitudeMax.toFixed(0)} m slm` },
     { label: 'Quota minima',   value: `${activity.altitudeMin.toFixed(0)} m slm` },
   ]
   const cols = 4, bw = (W - 3 * 2) / cols, bh = 15
   stats.forEach((s, i) => {
-    const row = Math.floor(i / cols), col = i % cols
-    statBox(doc, s.label, s.value, s.sub, M + col * (bw + 2), y + row * (bh + 2), bw, bh)
+    statBox(doc, s.label, s.value, s.sub, M + (i%cols)*(bw+2), y + Math.floor(i/cols)*(bh+2), bw, bh)
   })
-  y += 2 * (bh + 2) + 3
+  y += 2*(bh+2) + 4
 
-  // ── Route map + side info ────────────────────────────────────────────────────
+  // Satellite map — full width, tall
   const rawPoly = activity.trackPoints.filter(p => p.lat && p.lon)
-  const step0 = Math.max(1, Math.ceil(rawPoly.length / 250))
+  const step0 = Math.max(1, Math.ceil(rawPoly.length / 300))
   const poly = rawPoly.filter((_,i) => i % step0 === 0).map(p => [p.lat!, p.lon!] as [number,number])
   if (poly.length > 1) {
-    y = sectionBar(doc, 'Tracciato GPS', M, y + 1, W, FOREST)
-    const img = chartRoute(poly, 180, 80)
-    if (img) {
-      doc.addImage(img, 'PNG', M, y, 90, 40)
-      // Side info
-      const sx = M + 93
-      txt(doc, `${rawPoly.length.toLocaleString('it')} trackpoints`, sx, y + 6,  { size: 8 })
-      txt(doc, `Passo medio: ${activity.sport ?? 'Escursionismo'}`,    sx, y + 11, { size: 8 })
-      txt(doc, `Alt. partenza: ${rawPoly[0]?.altitudeMeters?.toFixed(0) ?? '—'} m`, sx, y + 16, { size: 8 })
+    y = sectionBar(doc, 'Mappa Satellitare', M, y, W, FOREST)
+    const mapH = 55  // mm
+    const mapImg = await fetchSatMap(poly, 1440, Math.round(1440 * mapH / W), '#22c55e')
+    if (mapImg) {
+      doc.addImage(mapImg, 'JPEG', M, y, W, mapH)
+      // Info overlay text (top-right of map box)
+      txt(doc, `${rawPoly.length.toLocaleString('it')} punti GPS`, M + W, y + 4.5, { size: 6.5, color: STONE, align: 'right' })
     }
-    y += 43
+    y += mapH + 2
+
+    // Trackpoints info below map
+    const startAlt = rawPoly[0]?.altitudeMeters?.toFixed(0) ?? '—'
+    txt(doc, `Partenza: ${startAlt} m slm`, M, y, { size: 7.5, color: STONE })
+    txt(doc, `Attivita: ${activity.sport ?? 'Escursionismo'}`, M + W, y, { size: 7.5, color: STONE, align: 'right' })
+    y += 5
   }
 
-  // ── Elevation profile ────────────────────────────────────────────────────────
+  // Elevation profile
   const altPts = activity.trackPoints.filter(p => p.altitudeMeters !== undefined)
   if (altPts.length > 2) {
+    if (y + 40 > 270) { doc.addPage(); y = 14 }
     y = sectionBar(doc, 'Profilo Altimetrico', M, y + 1, W, FOREST)
-    const SAMPLES = 200
-    const elevData = Array.from({length: SAMPLES}, (_,i) => {
-      const idx = Math.min(Math.round(i * (altPts.length-1) / (SAMPLES-1)), altPts.length-1)
+    const elevData = Array.from({length: 250}, (_,i) => {
+      const idx = Math.min(Math.round(i * (altPts.length-1) / 249), altPts.length-1)
       return altPts[idx].altitudeMeters!
     })
-    const eImg = chartLine(elevData, 540, 140, '#3b82f6', '#bfdbfe')
+    const eImg = chartLine(elevData, 540, 150, '#3b82f6', '#bfdbfe')
     if (eImg) {
-      doc.addImage(eImg, 'PNG', M, y, W, 35)
+      doc.addImage(eImg, 'PNG', M, y, W, 38)
       const minA = Math.min(...elevData).toFixed(0), maxA = Math.max(...elevData).toFixed(0)
-      txt(doc, `${minA} m`, M, y+37, { size: 7, color: STONE })
-      txt(doc, `${maxA} m`, M + W, y+37, { size: 7, color: STONE, align: 'right' })
-      y += 40
+      txt(doc, `${minA} m`, M, y+40, { size: 7, color: STONE })
+      txt(doc, `${maxA} m`, M + W, y+40, { size: 7, color: STONE, align: 'right' })
+      y += 43
     }
   }
 
-  // ── HR chart ─────────────────────────────────────────────────────────────────
+  // HR chart
   const hrPts = activity.trackPoints.filter(p => (p.heartRateBpm ?? 0) > 0)
   if (hrPts.length > 2) {
     if (y + 38 > 270) { doc.addPage(); y = 14 }
     y = sectionBar(doc, 'Frequenza Cardiaca', M, y + 1, W, FOREST)
-    const hrData = Array.from({length: 200}, (_,i) => {
-      const idx = Math.min(Math.round(i * (hrPts.length-1) / 199), hrPts.length-1)
+    const hrData = Array.from({length: 250}, (_,i) => {
+      const idx = Math.min(Math.round(i * (hrPts.length-1) / 249), hrPts.length-1)
       return hrPts[idx].heartRateBpm!
     })
     const hImg = chartLine(hrData, 540, 110, '#ef4444', '#fecaca', {
@@ -346,42 +586,44 @@ export async function exportActivityPdf(activity: StoredActivity): Promise<void>
     })
     if (hImg) {
       doc.addImage(hImg, 'PNG', M, y, W, 28)
-      txt(doc, `FC media ${activity.avgHeartRate} bpm  ·  Max ${activity.maxHeartRate} bpm`, M, y+30, { size: 7.5, color: STONE })
-      y += 33
+      txt(doc, `FC media ${activity.avgHeartRate} bpm  |  Max ${activity.maxHeartRate} bpm`, M, y+30, { size: 7.5, color: STONE })
+      y += 34
     }
   }
 
-  // ── User rating ───────────────────────────────────────────────────────────────
-  if (activity.userRating) {
+  // Rating + beauty score combined
+  const hasRating = !!activity.userRating
+  const hasBeauty = !!activity.linkedBeautyScore
+  if (hasRating || hasBeauty) {
     if (y + 18 > 270) { doc.addPage(); y = 14 }
-    y = sectionBar(doc, 'Il Tuo Voto', M, y + 2, W, FOREST)
-    const rc: [number,number,number] = activity.userRating >= 9 ? [22,163,74] : activity.userRating >= 7 ? [132,204,22] : activity.userRating >= 5 ? [249,115,22] : [239,68,68]
-    doc.setFillColor(...rc); doc.roundedRect(M, y, 18, 13, 2, 2, 'F')
-    txt(doc, String(activity.userRating), M+5, y+9, { size: 15, bold: true, color: WHITE })
-    txt(doc, '/10', M+20, y+9, { size: 9, bold: true })
-    if (activity.userRatingNote) txt(doc, `"${activity.userRatingNote}"`, M+30, y+9, { size: 8.5, color: STONE })
-    y += 16
+    y = sectionBar(doc, 'Valutazioni', M, y + 2, W, FOREST)
+
+    if (hasRating) {
+      const rc: [number,number,number] = activity.userRating! >= 9 ? [22,163,74] : activity.userRating! >= 7 ? [132,204,22] : activity.userRating! >= 5 ? [249,115,22] : [239,68,68]
+      doc.setFillColor(...rc); doc.roundedRect(M, y, 18, 13, 2, 2, 'F')
+      txt(doc, String(activity.userRating!), M+5, y+9, { size: 15, bold: true, color: WHITE })
+      txt(doc, '/10  Il tuo voto', M+20, y+5.5, { size: 8 })
+      if (activity.userRatingNote) txt(doc, safeText(`"${activity.userRatingNote}"`), M+20, y+10.5, { size: 8, color: STONE })
+    }
+
+    if (hasBeauty) {
+      const bs = activity.linkedBeautyScore!
+      const bc = hexColor(bs.color)
+      const bx = hasRating ? M + 100 : M
+      doc.setFillColor(...bc); doc.roundedRect(bx, y, 18, 13, 2, 2, 'F')
+      txt(doc, bs.overall.toFixed(1), bx+2, y+9, { size: 13, bold: true, color: WHITE })
+      txt(doc, '/10  Pagella automatica (OSM + Wikipedia)', bx+20, y+5.5, { size: 8 })
+      txt(doc, safeText(bs.grade), bx+20, y+10.5, { size: 8, color: STONE })
+    }
+    y += 18
   }
 
-  // ── Beauty score ──────────────────────────────────────────────────────────────
-  if (activity.linkedBeautyScore) {
-    if (y + 18 > 270) { doc.addPage(); y = 14 }
-    y = sectionBar(doc, 'Pagella Escursione', M, y + 2, W, FOREST)
-    const bs = activity.linkedBeautyScore
-    const bc = hexColor(bs.color)
-    doc.setFillColor(...bc); doc.roundedRect(M, y, 20, 13, 2, 2, 'F')
-    txt(doc, bs.overall.toFixed(1), M+2, y+9, { size: 13, bold: true, color: WHITE })
-    txt(doc, '/10', M+22, y+9, { size: 9, bold: true })
-    txt(doc, 'Valutazione automatica · OSM + Wikipedia', M+35, y+6.5, { size: 8, color: STONE })
-    y += 16
-  }
-
-  // ── Notes ────────────────────────────────────────────────────────────────────
+  // Notes
   if (activity.userNotes?.trim()) {
     if (y + 30 > 270) { doc.addPage(); y = 14 }
     y = sectionBar(doc, 'Note Personali', M, y + 2, W, FOREST)
     doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...INK)
-    const lines = doc.splitTextToSize(activity.userNotes.trim(), W - 3)
+    const lines = doc.splitTextToSize(safeText(activity.userNotes.trim()), W - 3)
     doc.text(lines, M, y)
     y += lines.length * 5 + 2
   }
@@ -400,8 +642,8 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
   // Header
   doc.setFillColor(...SKY); doc.rect(0, 0, 210, 32, 'F')
   txt(doc, 'DTrek', M, 9,  { size: 12, bold: true, color: WHITE })
-  txt(doc, 'Percorso Pianificato', M, 14, { size: 7.5, color: [180, 230, 255] })
-  let ttl = hike.title
+  txt(doc, 'Percorso Pianificato', M, 14, { size: 7.5, color: [180, 230, 255] as [number,number,number] })
+  let ttl = safeText(hike.title)
   doc.setFontSize(17); doc.setFont('helvetica','bold'); doc.setTextColor(...WHITE)
   while (doc.getTextWidth(ttl) > W - 5 && ttl.length > 4) ttl = ttl.slice(0,-4) + '…'
   doc.text(ttl, M, 24)
@@ -409,7 +651,7 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
 
   if (hike.plannedDate) {
     const dl = format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })
-    txt(doc, `📅 ${dl}`, M, y, { size: 8.5, color: STONE }); y += 5
+    txt(doc, dl, M, y, { size: 8.5, color: STONE }); y += 5
   }
   if ((hike.tags ?? []).length > 0) {
     let tx = M
@@ -417,64 +659,70 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
       doc.setFontSize(7.5); doc.setFont('helvetica','normal')
       const tw = doc.getTextWidth(tag) + 5
       doc.setFillColor(224, 242, 254); doc.roundedRect(tx, y-2, tw, 4, 1.5, 1.5, 'F')
-      doc.setTextColor(...SKY); doc.text(tag, tx+2.5, y+0.7)
+      doc.setTextColor(...SKY); doc.text(safeText(tag), tx+2.5, y+0.7)
       tx += tw + 2
     }
     y += 6
   }
 
-  // Stats
+  // Stats (5 boxes)
   y = sectionBar(doc, 'Statistiche', M, y + 2, W, SKY)
-  const stats = [
+  const planStats = [
     { label: 'Distanza',       value: `${(hike.distanceMeters/1000).toFixed(2)} km` },
     { label: 'Dislivello +',   value: `${Math.round(hike.elevationGain)} m` },
-    { label: 'Dislivello −',   value: `${Math.round(hike.elevationLoss)} m` },
+    { label: 'Dislivello -',   value: `${Math.round(hike.elevationLoss)} m` },
     { label: 'Quota massima',  value: `${Math.round(hike.altitudeMax)} m slm`, sub: `Min: ${Math.round(hike.altitudeMin)} m` },
     { label: 'Tempo stimato',  value: formatDuration(hike.estimatedTimeSeconds), sub: 'Formula Naismith' },
   ]
   const bw = (W - 4 * 2) / 5, bh = 15
-  stats.forEach((s, i) => statBox(doc, s.label, s.value, s.sub, M + i * (bw + 2), y, bw, bh))
+  planStats.forEach((s, i) => statBox(doc, s.label, s.value, s.sub, M + i*(bw+2), y, bw, bh))
   y += bh + 5
 
-  // Route + beauty score side by side
+  // Satellite map — full width
   const poly = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number,number])
-  const stepP = Math.max(1, Math.ceil(poly.length / 250))
+  const stepP = Math.max(1, Math.ceil(poly.length / 300))
   const sampledPoly = poly.filter((_,i) => i % stepP === 0)
 
   if (sampledPoly.length > 1) {
-    y = sectionBar(doc, 'Tracciato GPS', M, y, W, SKY)
-    const mapImg = chartRoute(sampledPoly, 180, 90, '#0369a1')
-    if (mapImg) {
-      const mapW = hike.cachedBeautyScore ? 105 : W
-      doc.addImage(mapImg, 'PNG', M, y, mapW, 43)
-      if (hike.cachedBeautyScore) {
-        const bs = hike.cachedBeautyScore
-        const bc = hexColor(bs.color)
-        const sx = M + mapW + 4
-        doc.setFillColor(...bc); doc.roundedRect(sx, y+1, 30, 20, 3, 3, 'F')
-        txt(doc, bs.overall.toFixed(1), sx+3, y+14, { size: 18, bold: true, color: WHITE })
-        txt(doc, '/10 Pagella', sx, y+24, { size: 7.5, color: STONE })
-        txt(doc, 'OSM + Wikipedia', sx, y+29, { size: 7, color: STONE })
-      }
-      y += 46
+    y = sectionBar(doc, 'Mappa Satellitare', M, y, W, SKY)
+    const mapH = 55
+    const mapImg = await fetchSatMap(sampledPoly, 1440, Math.round(1440 * mapH / W), '#38bdf8')
+
+    if (hike.cachedBeautyScore) {
+      // Map + beauty score side by side
+      const mapW = W - 38
+      doc.addImage(mapImg, 'JPEG', M, y, mapW, mapH)
+      const bs = hike.cachedBeautyScore
+      const bc = hexColor(bs.color)
+      const sx = M + mapW + 3
+      const scoreBoxW = W - mapW - 3
+      doc.setFillColor(...bc); doc.roundedRect(sx, y, scoreBoxW, 18, 3, 3, 'F')
+      txt(doc, bs.overall.toFixed(1), sx + 3, y + 13, { size: 18, bold: true, color: WHITE })
+      txt(doc, '/10', sx + 3, y + 21, { size: 7.5, color: STONE })
+      txt(doc, 'Pagella automatica', sx + 3, y + 25.5, { size: 7, color: STONE })
+      txt(doc, 'OSM + Wikipedia', sx + 3, y + 30, { size: 7, color: STONE })
+    } else {
+      doc.addImage(mapImg, 'JPEG', M, y, W, mapH)
     }
+    y += mapH + 3
   }
 
   // Elevation profile
   const altPts = (hike.trackPoints ?? []).filter(p => p.altitudeMeters !== undefined)
   if (altPts.length > 2) {
+    if (y + 44 > 270) { doc.addPage(); y = 14 }
     y = sectionBar(doc, 'Profilo Altimetrico', M, y + 1, W, SKY)
-    const elevData = Array.from({length: 200}, (_,i) => {
-      const idx = Math.min(Math.round(i * (altPts.length-1) / 199), altPts.length-1)
+    const elevData = Array.from({length: 250}, (_,i) => {
+      const idx = Math.min(Math.round(i * (altPts.length-1) / 249), altPts.length-1)
       return altPts[idx].altitudeMeters!
     })
-    const eImg = chartLine(elevData, 540, 140, '#0369a1', '#bae6fd')
+    const eImg = chartLine(elevData, 540, 150, '#0369a1', '#bae6fd')
     if (eImg) {
-      doc.addImage(eImg, 'PNG', M, y, W, 35)
+      doc.addImage(eImg, 'PNG', M, y, W, 38)
       const minA = Math.min(...elevData).toFixed(0), maxA = Math.max(...elevData).toFixed(0)
-      txt(doc, `${minA} m`, M, y+37, { size: 7, color: STONE })
-      txt(doc, `${maxA} m`, M+W, y+37, { size: 7, color: STONE, align: 'right' })
-      y += 40
+      txt(doc, `${minA} m`, M, y+40, { size: 7, color: STONE })
+      txt(doc, `${maxA} m`, M + W, y+40, { size: 7, color: STONE, align: 'right' })
+      y += 43
     }
   }
 
@@ -484,7 +732,6 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
     const a = hike.assessment
     y = sectionBar(doc, 'Valutazione Personalizzata', M, y + 2, W, SKY)
 
-    // Difficulty badge + suitability bar
     const diffColors: Record<string, string> = {
       facile: '#16a34a', moderata: '#d97706', impegnativa: '#ea580c', estrema: '#dc2626',
     }
@@ -495,7 +742,6 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
     doc.setFillColor(...dc); doc.roundedRect(M, y, 28, 7, 2, 2, 'F')
     txt(doc, diffLabels[a.difficulty] ?? a.difficulty, M+2, y+4.8, { size: 8, bold: true, color: WHITE })
 
-    // Suitability bar
     const barX = M + 32, barY = y + 1, barW2 = W - 34, barH2 = 5
     doc.setFillColor(...BORDER); doc.roundedRect(barX, barY, barW2, barH2, 2, 2, 'F')
     const suitColor: [number,number,number] = a.suitabilityScore >= 75 ? [22,163,74] : a.suitabilityScore >= 50 ? [245,158,11] : a.suitabilityScore >= 30 ? [234,88,12] : [220,38,38]
@@ -504,43 +750,55 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
     txt(doc, `Adatta a te: ${a.suitabilityScore}%`, barX, y+12, { size: 7.5, color: STONE })
     y += 16
 
-    // Risks
     if (a.risks.length > 0) {
       txt(doc, 'Fattori di rischio:', M, y, { size: 7.5, bold: true, color: STONE }); y += 4
-      a.risks.slice(0, 6).forEach(r => {
+      a.risks.slice(0, 5).forEach(r => {
+        if (y + 6 > 278) { doc.addPage(); y = 14 }
         const ic = r.type === 'danger' ? [239,68,68] as [number,number,number] : r.type === 'warning' ? [245,158,11] as [number,number,number] : [14,165,233] as [number,number,number]
         doc.setFillColor(...ic); doc.circle(M+2, y-0.8, 1.2, 'F')
-        const lines = doc.splitTextToSize(r.text, W - 8)
+        const lines = doc.splitTextToSize(safeText(r.text), W - 8)
         doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...INK)
         doc.text(lines, M+5, y)
         y += lines.length * 4.5
       })
     }
-    // Suggestions
     if (a.suggestions.length > 0) {
-      y += 2; txt(doc, 'Consigli pratici:', M, y, { size: 7.5, bold: true, color: STONE }); y += 4
-      a.suggestions.slice(0, 6).forEach(s => {
+      y += 2
+      if (y + 6 > 278) { doc.addPage(); y = 14 }
+      txt(doc, 'Consigli pratici:', M, y, { size: 7.5, bold: true, color: STONE }); y += 4
+      a.suggestions.slice(0, 5).forEach(s => {
+        if (y + 6 > 278) { doc.addPage(); y = 14 }
         doc.setFillColor(22, 163, 74); doc.circle(M+2, y-0.8, 1.2, 'F')
-        const lines = doc.splitTextToSize(s.text, W - 8)
+        const lines = doc.splitTextToSize(safeText(s.text), W - 8)
         doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...INK)
         doc.text(lines, M+5, y)
         y += lines.length * 4.5
       })
     }
-    y += 2
+    y += 4
   }
 
   // Notes
   if (hike.userNotes?.trim()) {
     if (y + 30 > 270) { doc.addPage(); y = 14 }
     y = sectionBar(doc, 'Note Personali', M, y + 2, W, SKY)
-    const lines = doc.splitTextToSize(hike.userNotes.trim(), W - 3)
+    const lines = doc.splitTextToSize(safeText(hike.userNotes.trim()), W - 3)
     doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...INK)
     doc.text(lines, M, y)
+    y += lines.length * 5 + 4
+  }
+
+  // POI section — new page if needed
+  const wikiEntries = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+  const rawPois     = (hike.cachedPois     ?? []) as PoiItem[]
+
+  if (wikiEntries.length > 0 || rawPois.length > 0) {
+    if (y + 40 > 270) { doc.addPage(); y = 14 }
+    y = renderPois(doc, wikiEntries, rawPois, M, W, y, SKY)
   }
 
   const dl = hike.plannedDate ? `pianificata il ${format(new Date(hike.plannedDate + 'T12:00'), 'dd/MM/yyyy')}` : 'senza data'
-  footer(doc, `Percorso "${hike.title}" · ${dl} · generato il ${format(new Date(),'dd/MM/yyyy HH:mm')}`)
+  footer(doc, `Percorso "${safeText(hike.title)}" · ${dl} · generato il ${format(new Date(),'dd/MM/yyyy HH:mm')}`)
   doc.save(`dtrek-pianificato-${hike.title.replace(/\s+/g,'-').replace(/[^a-z0-9-]/gi,'').slice(0,30)}.pdf`)
 }
 
@@ -558,30 +816,27 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
   // Header
   doc.setFillColor(22, 78, 50); doc.rect(0, 0, 210, 32, 'F')
   txt(doc, 'DTrek', M, 9, { size: 12, bold: true, color: WHITE })
-  txt(doc, 'Statistiche & Record Personali', M, 14, { size: 7.5, color: [180, 240, 180] })
-  txt(doc, `${activities.length} escursioni · aggiornato ${format(new Date(),'dd/MM/yyyy')}`, M, 27, { size: 8, color: [180, 240, 180] })
+  txt(doc, 'Statistiche & Record Personali', M, 14, { size: 7.5, color: [180, 240, 180] as [number,number,number] })
+  txt(doc, `${activities.length} escursioni · aggiornato ${format(new Date(),'dd/MM/yyyy')}`, M, 27, { size: 8, color: [180, 240, 180] as [number,number,number] })
   y = 35
 
-  // ── Totals ──────────────────────────────────────────────────────────────────
+  // Totals grid
   y = sectionBar(doc, 'Totali Generali', M, y, W, FOREST)
   const totals = [
-    { label: 'Escursioni', value: String(stats.totalActivities) },
-    { label: 'Km totali',  value: `${stats.totalDistanceKm.toFixed(1)} km` },
-    { label: 'Dislivello', value: `${(stats.totalElevationGain/1000).toFixed(1)} km↑` },
-    { label: 'Ore totali', value: `${(stats.totalTimeSeconds/3600).toFixed(0)} h` },
-    { label: 'Calorie',    value: `${Math.round(stats.totalCalories/1000)} kcal×10³` },
-    { label: 'FC media',   value: `${stats.avgHeartRate} bpm` },
+    { label: 'Escursioni',   value: String(stats.totalActivities) },
+    { label: 'Km totali',    value: `${stats.totalDistanceKm.toFixed(1)} km` },
+    { label: 'Dislivello',   value: `${(stats.totalElevationGain/1000).toFixed(1)} km su` },
+    { label: 'Ore totali',   value: `${(stats.totalTimeSeconds/3600).toFixed(0)} h` },
+    { label: 'Calorie',      value: `${Math.round(stats.totalCalories/1000)} kcal x1000` },
+    { label: 'FC media',     value: `${stats.avgHeartRate} bpm` },
     { label: 'Max distanza', value: `${stats.longestKm.toFixed(1)} km` },
-    { label: 'Max quota',  value: `${stats.highestAlt.toFixed(0)} m` },
+    { label: 'Max quota',    value: `${stats.highestAlt.toFixed(0)} m` },
   ]
   const bw2 = (W - 3*2) / 4, bh2 = 15
-  totals.forEach((s, i) => {
-    const row = Math.floor(i/4), col = i%4
-    statBox(doc, s.label, s.value, undefined, M + col*(bw2+2), y + row*(bh2+2), bw2, bh2)
-  })
+  totals.forEach((s, i) => statBox(doc, s.label, s.value, undefined, M+(i%4)*(bw2+2), y+Math.floor(i/4)*(bh2+2), bw2, bh2))
   y += 2*(bh2+2) + 4
 
-  // ── Streaks ──────────────────────────────────────────────────────────────────
+  // Streaks
   y = sectionBar(doc, 'Serie & Consistenza', M, y, W, FOREST)
   const stData = [
     { label: 'Serie corrente', value: `${streaks.currentDays} giorni` },
@@ -595,39 +850,37 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
   stData.forEach((s, i) => statBox(doc, s.label, s.value, undefined, M + i*(bw3+2), y, bw3, 14))
   y += 14 + 5
 
-  // ── Personal records table ───────────────────────────────────────────────────
+  // Personal records table
   y = sectionBar(doc, 'Record Personali', M, y, W, FOREST)
   const recRows = [
     ['Distanza maggiore',  records.longestKm,       (a: ActivityMeta) => `${(a.distanceMeters/1000).toFixed(2)} km`],
-    ['Dislivello maggiore', records.highestGain,    (a: ActivityMeta) => `${a.elevationGain.toFixed(0)} m D+`],
+    ['Dislivello maggiore',records.highestGain,      (a: ActivityMeta) => `${a.elevationGain.toFixed(0)} m D+`],
     ['Quota massima',      records.highestAlt,       (a: ActivityMeta) => `${a.altitudeMax.toFixed(0)} m slm`],
     ['Durata maggiore',    records.longestDuration,  (a: ActivityMeta) => formatDuration(a.totalTimeSeconds)],
-    ['Più calorie',        records.mostCalories,     (a: ActivityMeta) => `${a.calories} kcal`],
-    ['FC più alta',        records.highestHR,        (a: ActivityMeta) => `${a.maxHeartRate} bpm`],
+    ['Piu calorie',        records.mostCalories,     (a: ActivityMeta) => `${a.calories} kcal`],
+    ['FC piu alta',        records.highestHR,        (a: ActivityMeta) => `${a.maxHeartRate} bpm`],
   ] as [string, ActivityMeta|null, (a: ActivityMeta) => string][]
 
-  // Table header
   doc.setFillColor(220, 252, 231); doc.rect(M, y, W, 6, 'F')
-  txt(doc, 'Categoria',   M+2,    y+4.2, { size: 7.5, bold: true, color: FOREST })
-  txt(doc, 'Valore',      M+65,   y+4.2, { size: 7.5, bold: true, color: FOREST })
-  txt(doc, 'Escursione',  M+100,  y+4.2, { size: 7.5, bold: true, color: FOREST })
-  txt(doc, 'Data',        M+160,  y+4.2, { size: 7.5, bold: true, color: FOREST })
+  txt(doc, 'Categoria',  M+2,   y+4.2, { size: 7.5, bold: true, color: FOREST })
+  txt(doc, 'Valore',     M+65,  y+4.2, { size: 7.5, bold: true, color: FOREST })
+  txt(doc, 'Escursione', M+100, y+4.2, { size: 7.5, bold: true, color: FOREST })
+  txt(doc, 'Data',       M+160, y+4.2, { size: 7.5, bold: true, color: FOREST })
   y += 6
-  recRows.forEach(([label, activity, valFn], i) => {
-    if (!activity) return
+  recRows.forEach(([label, act, valFn], i) => {
+    if (!act) return
     if (i%2===0) { doc.setFillColor(...STONE50); doc.rect(M, y, W, 5.5, 'F') }
-    txt(doc, label,                                  M+2,   y+4, { size: 8 })
-    txt(doc, valFn(activity),                        M+65,  y+4, { size: 8, bold: true })
-    let aTitle = (activity.title ?? 'Escursione').slice(0, 30)
-    txt(doc, aTitle,                                 M+100, y+4, { size: 8 })
-    txt(doc, format(new Date(activity.startTime), 'dd/MM/yyyy'), M+160, y+4, { size: 8, color: STONE })
+    txt(doc, label, M+2, y+4, { size: 8 })
+    txt(doc, valFn(act), M+65, y+4, { size: 8, bold: true })
+    txt(doc, safeText((act.title ?? 'Escursione').slice(0, 30)), M+100, y+4, { size: 8 })
+    txt(doc, format(new Date(act.startTime), 'dd/MM/yyyy'), M+160, y+4, { size: 8, color: STONE })
     y += 5.5
   })
   y += 5
 
-  // ── Monthly activity chart ────────────────────────────────────────────────────
+  // Monthly bar chart
   if (y + 50 > 270) { doc.addPage(); y = 14 }
-  y = sectionBar(doc, 'Attività Mensili (ultimi 12 mesi)', M, y, W, FOREST)
+  y = sectionBar(doc, 'Attivita Mensili (ultimi 12 mesi)', M, y, W, FOREST)
   const now = new Date()
   const monthlyBars = Array.from({length: 12}, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
@@ -639,7 +892,7 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
   const bImg = chartBar(monthlyBars, 540, 160, '#16a34a')
   if (bImg) { doc.addImage(bImg, 'PNG', M, y, W, 38); y += 41 }
 
-  // ── Year-by-year chart ────────────────────────────────────────────────────────
+  // Year bar chart
   if (y + 45 > 270) { doc.addPage(); y = 14 }
   y = sectionBar(doc, 'Anno per Anno', M, y, W, FOREST)
   const yearMap = new Map<number, number>()
@@ -651,27 +904,33 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
   const yImg = chartBar(yearBars, 540, 160, '#0369a1')
   if (yImg) { doc.addImage(yImg, 'PNG', M, y, W, 38); y += 41 }
 
-  // ── Top activities table ──────────────────────────────────────────────────────
+  // Top 10 table
   if (y + 40 > 270) { doc.addPage(); y = 14 }
   y = sectionBar(doc, 'Top 10 per Distanza', M, y, W, FOREST)
   const top10 = [...activities].sort((a,b) => b.distanceMeters - a.distanceMeters).slice(0, 10)
-  doc.setFillColor(220, 252, 231); doc.rect(M, y, W, 6, 'F')
-  txt(doc, '#',       M+2,   y+4.2, { size: 7.5, bold: true, color: FOREST })
-  txt(doc, 'Titolo',  M+10,  y+4.2, { size: 7.5, bold: true, color: FOREST })
-  txt(doc, 'Data',    M+95,  y+4.2, { size: 7.5, bold: true, color: FOREST })
-  txt(doc, 'Km',      M+123, y+4.2, { size: 7.5, bold: true, color: FOREST })
-  txt(doc, 'D+',      M+141, y+4.2, { size: 7.5, bold: true, color: FOREST })
-  txt(doc, 'Durata',  M+157, y+4.2, { size: 7.5, bold: true, color: FOREST })
-  y += 6
+  doc.setFillColor(220, 252, 231); doc.rect(M, y, W, 5.5, 'F')
+  const cols2 = [
+    { h: 'N.',     x: M,     w: 9  },
+    { h: 'Data',   x: M+10,  w: 24 },
+    { h: 'Titolo', x: M+35,  w: 90 },
+    { h: 'Km',     x: M+127, w: 18 },
+    { h: 'D+',     x: M+147, w: 22 },
+    { h: 'Quota',  x: M+172, w: 24 },
+  ]
+  cols2.forEach(col => txt(doc, col.h, col.x+1, y+4, { size: 7.5, bold: true, color: FOREST }))
+  y += 5.5
   top10.forEach((a, i) => {
+    if (y > 280) { doc.addPage(); y = 14 }
     if (i%2===0) { doc.setFillColor(...STONE50); doc.rect(M, y, W, 5.5, 'F') }
-    txt(doc, String(i+1),                         M+2,   y+4, { size: 8, bold: true, color: FOREST })
-    let t = (a.title ?? 'Escursione').slice(0, 35)
-    txt(doc, t,                                    M+10,  y+4, { size: 8 })
-    txt(doc, format(new Date(a.startTime), 'dd/MM/yyyy'), M+95, y+4, { size: 8 })
-    txt(doc, `${(a.distanceMeters/1000).toFixed(1)}`,     M+123, y+4, { size: 8, bold: true, color: FOREST })
-    txt(doc, `${a.elevationGain.toFixed(0)} m`,           M+141, y+4, { size: 8 })
-    txt(doc, formatDuration(a.totalTimeSeconds),           M+157, y+4, { size: 8 })
+    const cells = [
+      String(i+1),
+      format(new Date(a.startTime), 'dd/MM/yy'),
+      safeText(a.title ?? 'Escursione').slice(0, 38),
+      `${(a.distanceMeters/1000).toFixed(1)} km`,
+      `${a.elevationGain.toFixed(0)} m`,
+      `${a.altitudeMax.toFixed(0)} m`,
+    ]
+    cols2.forEach((col, ci) => txt(doc, cells[ci], col.x+1, y+4, { size: 7.5 }))
     y += 5.5
   })
 
@@ -679,23 +938,22 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
   doc.save(`dtrek-statistiche-${format(new Date(),'yyyyMMdd')}.pdf`)
 }
 
-// ── All-routes map PDF ─────────────────────────────────────────────────────────
+// ── Map PDF (A4 landscape) ─────────────────────────────────────────────────────
 export async function exportMapPdf(activities: ActivityMeta[]): Promise<void> {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
-  // A4 landscape: 297 × 210 mm
-  const M = 14, W = 297 - 2*M
+  const M = 14, W = 269
 
-  // Header
-  doc.setFillColor(...FOREST); doc.rect(0, 0, 297, 25, 'F')
-  txt(doc, 'DTrek', M, 9, { size: 12, bold: true, color: WHITE })
-  txt(doc, 'Mappa di tutti i percorsi', M, 14, { size: 7.5, color: [180, 240, 180] })
-  txt(doc, `${activities.length} escursioni · generato ${format(new Date(),'dd/MM/yyyy')}`, M, 20, { size: 8, color: [180, 240, 180] })
+  // Header (landscape A4 = 297 × 210)
+  doc.setFillColor(...FOREST); doc.rect(0, 0, 297, 20, 'F')
+  txt(doc, 'DTrek · Mappa Percorsi', M, 8, { size: 12, bold: true, color: WHITE })
+  txt(doc, `${activities.length} escursioni`, M, 14, { size: 8, color: [180, 240, 180] as [number,number,number] })
+  txt(doc, format(new Date(),'dd/MM/yyyy'), 297-M, 14, { size: 8, color: [180, 240, 180] as [number,number,number], align: 'right' })
 
-  // Map image
-  const mapImg = chartAllRoutes(activities, 840, 500)
+  // All routes canvas
+  const mapImg = chartAllRoutes(activities, 1800, 700)
   if (mapImg) {
-    doc.addImage(mapImg, 'PNG', M, 28, W, 154)
+    doc.addImage(mapImg, 'PNG', M, 22, W, 160)
   } else {
     txt(doc, 'Nessun tracciato GPS disponibile', M, 80, { size: 12, color: STONE })
   }
@@ -705,9 +963,8 @@ export async function exportMapPdf(activities: ActivityMeta[]): Promise<void> {
   let y = M
   y = sectionBar(doc, `Elenco Escursioni (${activities.length})`, M, y, W, FOREST)
 
-  // Table header
   doc.setFillColor(220, 252, 231); doc.rect(M, y, W, 6, 'F')
-  const cols2 = [
+  const cols3 = [
     { h: 'N.',      x: M,     w: 9  },
     { h: 'Data',    x: M+10,  w: 24 },
     { h: 'Titolo',  x: M+35,  w: 90 },
@@ -716,9 +973,9 @@ export async function exportMapPdf(activities: ActivityMeta[]): Promise<void> {
     { h: 'Durata',  x: M+171, w: 28 },
     { h: 'FC',      x: M+201, w: 24 },
     { h: 'Voto',    x: M+227, w: 16 },
-    { h: 'Distanza',x: M+245, w: 24 },
+    { h: 'Quota',   x: M+245, w: 24 },
   ]
-  cols2.forEach(col => txt(doc, col.h, col.x+1, y+4.2, { size: 7.5, bold: true, color: FOREST }))
+  cols3.forEach(col => txt(doc, col.h, col.x+1, y+4.2, { size: 7.5, bold: true, color: FOREST }))
   y += 6
 
   const sorted = [...activities].sort((a,b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
@@ -728,15 +985,15 @@ export async function exportMapPdf(activities: ActivityMeta[]): Promise<void> {
     const cells = [
       String(i+1),
       format(new Date(a.startTime), 'dd/MM/yy'),
-      (a.title ?? 'Escursione').slice(0, 38),
+      safeText(a.title ?? 'Escursione').slice(0, 38),
       `${(a.distanceMeters/1000).toFixed(1)}`,
       `${a.elevationGain.toFixed(0)} m`,
       formatDuration(a.totalTimeSeconds),
       `${a.avgHeartRate} bpm`,
-      a.userRating ? `★${a.userRating}` : '—',
+      a.userRating ? `★${a.userRating}` : '-',
       `${a.altitudeMax.toFixed(0)} m`,
     ]
-    cols2.forEach((col, ci) => txt(doc, cells[ci], col.x+1, y+4, { size: 7.5 }))
+    cols3.forEach((col, ci) => txt(doc, cells[ci], col.x+1, y+4, { size: 7.5 }))
     y += 5.5
   })
 
