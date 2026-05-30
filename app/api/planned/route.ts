@@ -9,6 +9,12 @@ export const dynamic = 'force-dynamic'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (e && typeof e === 'object' && 'message' in e) return String((e as Record<string, unknown>).message)
+  try { return JSON.stringify(e) } catch { return String(e) }
+}
+
 function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
   const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
   if (!valid.length) return []
@@ -106,7 +112,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json((data ?? [] as any[]).map((r: any) => rowToHike(r, false) as PlannedHikeMeta))
   } catch (e) {
     console.error('GET /api/planned:', e)
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: errMsg(e) }, { status: 500 })
   }
 }
 
@@ -161,7 +167,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, assessment: hike.assessment })
   } catch (e) {
     console.error('POST /api/planned:', e)
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: errMsg(e) }, { status: 500 })
   }
 }
 
@@ -198,7 +204,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('PATCH /api/planned:', e)
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: errMsg(e) }, { status: 500 })
   }
 }
 
@@ -217,6 +223,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('DELETE /api/planned:', e)
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: errMsg(e) }, { status: 500 })
   }
 }
