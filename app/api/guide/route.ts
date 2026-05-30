@@ -3,6 +3,8 @@ import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
+
+export const maxDuration = 60  // allow up to 60s for streaming responses
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration }  from '@/lib/tcxParser'
 import { format }          from 'date-fns'
