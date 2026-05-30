@@ -27,6 +27,8 @@ export interface PlannedHike {
   // POI data cached after first successful Overpass fetch
   cachedPois?: unknown[]      // PoiItem[]
   cachedPoiWiki?: unknown[]   // { poi: PoiItem; wiki: WikiPage }[]
+  // AI-generated guide text (cached after first generation)
+  cachedGuide?: string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -61,7 +63,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedBeautyScore' | 'cachedPois' | 'cachedPoiWiki'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedBeautyScore' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide'>>,
 ): Promise<void> {
   await apiFetch('/api/planned', {
     method: 'PATCH',
