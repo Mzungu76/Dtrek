@@ -29,7 +29,24 @@ function poiDistance(m: number) {
   return m < 1000 ? `${m.toFixed(0)} m dal percorso` : `${(m / 1000).toFixed(1)} km dal percorso`
 }
 
-function buildPrompt(hike: PlannedHike): string {
+type GuideLength = 'breve' | 'media' | 'lunga'
+
+const LENGTH_CONFIG: Record<GuideLength, { maxTokens: number; instruction: string }> = {
+  breve: {
+    maxTokens: 1800,
+    instruction: 'Scrivi in modo conciso: 2-3 paragrafi brevi per sezione, massimo 150 parole per sezione.',
+  },
+  media: {
+    maxTokens: 4000,
+    instruction: 'Scrivi con buon equilibrio di dettagli: 3-4 paragrafi per sezione, circa 300 parole per sezione.',
+  },
+  lunga: {
+    maxTokens: 6500,
+    instruction: 'Scrivi con grande ricchezza di dettagli: 5-6 paragrafi per sezione, circa 500-600 parole per sezione, con aneddoti, curiosità e descrizioni vivide.',
+  },
+}
+
+function buildPrompt(hike: PlannedHike, length: GuideLength = 'media'): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
 
@@ -95,7 +112,9 @@ Tradizioni e feste locali, artigianato, cultura popolare della zona.
 Sicurezza, segnaletica, varianti del percorso, cosa fare in caso di maltempo,
 contatti utili (soccorso alpino, rifugi, app di navigazione).
 
-La guida deve essere ricca, coinvolgente, piena di vita. Scrivi come se raccontassi in persona, con calore ed entusiasmo genuino.`
+La guida deve essere ricca, coinvolgente, piena di vita. Scrivi come se raccontassi in persona, con calore ed entusiasmo genuino.
+
+LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}`
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
@@ -109,10 +128,14 @@ export async function POST(req: NextRequest) {
   }
 
   let hikeId: string
+  let length: GuideLength = 'media'
   try {
     const body = await req.json()
     hikeId = body.hikeId
     if (!hikeId) throw new Error('hikeId mancante')
+    if (body.length && ['breve', 'media', 'lunga'].includes(body.length)) {
+      length = body.length as GuideLength
+    }
   } catch {
     return new Response('{"error":"Body non valido"}', {
       status: 400, headers: { 'Content-Type': 'application/json' },
@@ -152,12 +175,13 @@ export async function POST(req: NextRequest) {
   }
 
   const client = new Anthropic({ apiKey })
-  const prompt = buildPrompt(hike)
+  const prompt = buildPrompt(hike, length)
+  const { maxTokens } = LENGTH_CONFIG[length]
 
   // Stream Claude response
   const stream = client.messages.stream({
     model:      'claude-haiku-4-5-20251001',
-    max_tokens: 5000,
+    max_tokens: maxTokens,
     system:     SYSTEM,
     messages:   [{ role: 'user', content: prompt }],
   })
