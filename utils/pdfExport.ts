@@ -802,6 +802,106 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
   doc.save(`dtrek-pianificato-${hike.title.replace(/\s+/g,'-').replace(/[^a-z0-9-]/gi,'').slice(0,30)}.pdf`)
 }
 
+// ── Guide PDF ──────────────────────────────────────────────────────────────────
+export async function exportGuidePdf(hike: PlannedHike, guideText: string): Promise<void> {
+  const { jsPDF } = await import('jspdf')
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const M = 14, W = 182
+  const AMBER:       [number,number,number] = [180,  83,  9]
+  const AMBER_SOFT:  [number,number,number] = [254, 215, 170]
+  let y = 0
+
+  // Section color mapping (mirrors frontend)
+  const GUIDE_COLORS: Record<string, [number,number,number]> = {
+    'prima di partire': [217, 119,   6],
+    'il percorso':      [ 22, 163,  74],
+    'i luoghi':         [124,  58, 237],
+    'la natura':        [ 15, 118, 110],
+    'sapori':           [180,  83,   9],
+    'consigli':         [  3, 105, 161],
+  }
+  function guideColor(title: string): [number,number,number] {
+    const key = title.toLowerCase()
+    for (const [k, v] of Object.entries(GUIDE_COLORS)) {
+      if (key.includes(k)) return v
+    }
+    return STONE
+  }
+
+  // ── Header ───────────────────────────────────────────────────────────────────
+  doc.setFillColor(...AMBER); doc.rect(0, 0, 210, 32, 'F')
+  txt(doc, 'DTrek', M, 9, { size: 12, bold: true, color: WHITE })
+  txt(doc, 'Guida Escursionistica — Giulia', M, 14, { size: 7.5, color: AMBER_SOFT })
+  let ttl = safeText(hike.title)
+  doc.setFontSize(17); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
+  while (doc.getTextWidth(ttl) > W - 5 && ttl.length > 4) ttl = ttl.slice(0, -4) + '…'
+  doc.text(ttl, M, 24)
+  y = 35
+
+  if (hike.plannedDate) {
+    const dl = format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })
+    txt(doc, dl, M, y, { size: 8.5, color: STONE }); y += 6
+  }
+
+  // ── Stats boxes ──────────────────────────────────────────────────────────────
+  y = sectionBar(doc, 'Il Percorso', M, y + 1, W, AMBER)
+  const gStats = [
+    { label: 'Distanza',      value: `${(hike.distanceMeters/1000).toFixed(1)} km` },
+    { label: 'Dislivello +',  value: `${Math.round(hike.elevationGain)} m` },
+    { label: 'Quota massima', value: `${Math.round(hike.altitudeMax)} m slm` },
+    { label: 'Durata stimata',value: formatDuration(hike.estimatedTimeSeconds) },
+  ]
+  const bw = (W - 3 * 2) / 4, bh = 14
+  gStats.forEach((s, i) => statBox(doc, s.label, s.value, undefined, M + i * (bw + 2), y, bw, bh))
+  y += bh + 4
+
+  // ── Satellite map ─────────────────────────────────────────────────────────────
+  const pts = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number,number])
+  const step = Math.max(1, Math.ceil(pts.length / 300))
+  const sampled = pts.length > 1 ? pts.filter((_, i) => i % step === 0) : (hike.routePolyline ?? []) as [number,number][]
+
+  if (sampled.length > 1) {
+    const mapH = 58
+    const mapImg = await fetchSatMap(sampled, 1440, Math.round(1440 * mapH / W), '#f59e0b')
+    if (mapImg) { doc.addImage(mapImg, 'JPEG', M, y, W, mapH); y += mapH + 4 }
+  }
+
+  // ── Guide sections ────────────────────────────────────────────────────────────
+  const parts = guideText.split(/^## /m).filter(Boolean)
+  for (const part of parts) {
+    const nl = part.indexOf('\n')
+    const title = (nl === -1 ? part : part.slice(0, nl)).trim()
+    const body  = nl === -1 ? '' : part.slice(nl + 1).trim()
+    if (!title) continue
+
+    const sc = guideColor(title)
+    if (y + 20 > 272) { doc.addPage(); y = 14 }
+    y = sectionBar(doc, safeText(title), M, y + 3, W, sc)
+
+    const paras = body.split(/\n+/).filter(Boolean)
+    for (const para of paras) {
+      const lines = doc.splitTextToSize(safeText(para), W - 2)
+      const needed = lines.length * 4.5 + 2
+      if (y + needed > 278) { doc.addPage(); y = 14 }
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(...INK)
+      doc.text(lines, M, y)
+      y += needed
+    }
+    y += 2
+  }
+
+  // ── POI reference list ────────────────────────────────────────────────────────
+  const wikiEntries = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+  const rawPois     = (hike.cachedPois   ?? []) as PoiItem[]
+  if (wikiEntries.length > 0 || rawPois.length > 0) {
+    if (y + 40 > 272) { doc.addPage(); y = 14 }
+    y = renderPois(doc, wikiEntries, rawPois, M, W, y + 3, AMBER)
+  }
+
+  footer(doc, `Guida "${safeText(hike.title)}" · generata il ${format(new Date(), 'dd/MM/yyyy HH:mm')} · DTrek`)
+  doc.save(`dtrek-guida-${hike.title.replace(/\s+/g, '-').replace(/[^a-z0-9-]/gi, '').slice(0, 30)}.pdf`)
+}
+
 // ── Statistics PDF ─────────────────────────────────────────────────────────────
 export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> {
   const { jsPDF } = await import('jspdf')
