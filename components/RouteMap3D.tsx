@@ -513,6 +513,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
   const [placingPhoto,    setPlacingPhoto]   = useState<{id:string;step:PlacingStep;lat?:number;lon?:number}|null>(null)
   const [tempBearing,     setTempBearing]    = useState(0)
   const tempBearingRef = useRef(0)
+  const placingPhotoRef = useRef<{id:string;step:PlacingStep;lat?:number;lon?:number}|null>(null)
+  useEffect(()=>{ placingPhotoRef.current=placingPhoto },[placingPhoto])
   const [photoBeingAdded, setPhotoBeingAdded]= useState(false)
 
   const gps = useRef(trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined))
@@ -574,8 +576,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
   useEffect(() => {
     const map=mapRef.current
     if(!map||!placingPhoto||placingPhoto.step!=='mapbear') return
+    const photoId=placingPhoto.id
     const fromLat=placingPhoto.lat??0, fromLon=placingPhoto.lon??0
     const DIST=380
+
+    // Always clean up stale layers first (handles style reloads / double-invocations)
+    const cleanup=()=>{
+      try{if(map.getLayer('_bear-line'))map.removeLayer('_bear-line')}catch{}
+      try{if(map.getLayer('_bear-cone'))map.removeLayer('_bear-cone')}catch{}
+      try{if(map.getSource('_bear-line'))map.removeSource('_bear-line')}catch{}
+      try{if(map.getSource('_bear-cone'))map.removeSource('_bear-cone')}catch{}
+    }
+    cleanup()
 
     function arrowData(bear: number) {
       const end=destinationPoint(fromLat,fromLon,bear,DIST)
@@ -587,40 +599,44 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       }
     }
 
-    const initData=arrowData(tempBearingRef.current)
-    if(!map.getSource('_bear-line')) {
-      map.addSource('_bear-line',{type:'geojson',data:initData.line})
-      map.addSource('_bear-cone',{type:'geojson',data:initData.cone})
-      map.addLayer({id:'_bear-cone',type:'fill',source:'_bear-cone',paint:{'fill-color':'#3b82f6','fill-opacity':0.18}})
-      map.addLayer({id:'_bear-line',type:'line',source:'_bear-line',paint:{'line-color':'#60a5fa','line-width':5,'line-opacity':0.95},layout:{'line-cap':'round'}})
-    }
+    map.addSource('_bear-line',{type:'geojson',data:arrowData(tempBearingRef.current).line})
+    map.addSource('_bear-cone',{type:'geojson',data:arrowData(tempBearingRef.current).cone})
+    map.addLayer({id:'_bear-cone',type:'fill',source:'_bear-cone',paint:{'fill-color':'#3b82f6','fill-opacity':0.18}})
+    map.addLayer({id:'_bear-line',type:'line',source:'_bear-line',paint:{'line-color':'#60a5fa','line-width':5,'line-opacity':0.95},layout:{'line-cap':'round'}})
 
+    const mapInst=map  // local alias — TypeScript can't narrow `map` inside nested functions
     function update(bear: number) {
       const d=arrowData(bear)
-      ;(map!.getSource('_bear-line') as any)?.setData(d.line)
-      ;(map!.getSource('_bear-cone') as any)?.setData(d.cone)
+      ;(mapInst.getSource('_bear-line') as any)?.setData(d.line)
+      ;(mapInst.getSource('_bear-cone') as any)?.setData(d.cone)
       tempBearingRef.current=bear
       setTempBearing(bear)
     }
 
     function onMove(e: any) {
+      if(!e.lngLat) return
       const {lat,lng}=e.lngLat
       update(Math.round(bearingDeg(fromLat,fromLon,lat,lng)))
     }
-    function onTouchMove(e: any) {
-      if(e.lngLat) onMove(e)
+
+    // Clicking on the map confirms the bearing (natural interaction — point and tap)
+    function onMapClick(e: any) {
+      if(!e.lngLat) return
+      const {lat,lng}=e.lngLat
+      const b=Math.round(bearingDeg(fromLat,fromLon,lat,lng))
+      setRoutePhotos(prev=>prev.map(p=>p.id===photoId?{...p,viewingBearing:b}:p))
+      setPlacingPhoto(null)
     }
 
     map.on('mousemove',onMove)
-    map.on('touchmove',onTouchMove)
+    map.on('touchmove',onMove)
+    map.on('click',onMapClick)
 
     return () => {
       map.off('mousemove',onMove)
-      map.off('touchmove',onTouchMove)
-      try{if(map.getLayer('_bear-line'))map.removeLayer('_bear-line')}catch{}
-      try{if(map.getLayer('_bear-cone'))map.removeLayer('_bear-cone')}catch{}
-      try{if(map.getSource('_bear-line'))map.removeSource('_bear-line')}catch{}
-      try{if(map.getSource('_bear-cone'))map.removeSource('_bear-cone')}catch{}
+      map.off('touchmove',onMove)
+      map.off('click',onMapClick)
+      cleanup()
     }
   },[placingPhoto]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -694,7 +710,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       map.fitBounds([[minLon,minLat],[maxLon,maxLat]],{padding:72,pitch:58,duration:2200})
 
       const onRouteClick=(e:any)=>{
-        if(placingPhoto?.step==='pos') return  // handled separately
+        // use ref — closure captures stale state
+        if(placingPhotoRef.current) return
         const g=gpsRef.current; if(g.length<2) return
         const {lat,lng}=e.lngLat; let minD=Infinity,bestIdx=0
         for(let i=0;i<g.length;i++){const d=distM(g[i].lat!,g[i].lon!,lat,lng);if(d<minD){minD=d;bestIdx=i}}
@@ -1331,11 +1348,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
               <div className="flex items-center gap-3 mb-3">
                 <Navigation className="w-5 h-5 text-white shrink-0 animate-pulse"/>
                 <div className="flex-1">
-                  <p className="text-white font-bold text-sm">Muovi sulla mappa per orientare la vista</p>
+                  <p className="text-white font-bold text-sm">Tocca la mappa nella direzione dello scatto</p>
                   <p className="text-indigo-200 text-xs mt-0.5">
-                    {tempBearing!==undefined
-                      ? `${Math.round(tempBearing)}° — ${bearingToCompass(Math.round(tempBearing))}`
-                      : 'Punta nella direzione dello scatto'}
+                    Muovi per vedere l'anteprima · tocca/clicca per confermare
+                    {tempBearing!==undefined ? ` · ${Math.round(tempBearing)}° ${bearingToCompass(Math.round(tempBearing))}` : ''}
                   </p>
                 </div>
                 <button onClick={()=>setPlacingPhoto(null)} className="text-indigo-300 hover:text-white transition-colors">
