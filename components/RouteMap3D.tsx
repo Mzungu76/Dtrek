@@ -355,18 +355,10 @@ function planShots(pts: TrackPoint[]): ShotSegment[] {
   for(let i=W;i<N-W;i++){const s=alts.slice(i-W,i+W).reduce((a,b)=>a+b,0);if(s>bestSum){bestSum=s;peakP=i/(N-1)}}
   const hasPeak=(maxA-minA)>200&&peakP>0.25&&peakP<0.85
   const shots:ShotSegment[]=[]
-  shots.push({id:'intro',label:'Discesa cinematografica',startP:0,endP:0.10,pitch:[25,65],zoom:[10.2,13.5],bearingMode:'orbit-cw',orbitDeg:72})
-  shots.push({id:'chase1',label:'Seguimento',startP:0.10,endP:0.30,pitch:[65,62],zoom:[14.3,14.6],bearingMode:'follow'})
-  if(hasPeak){
-    const ps=Math.max(0.30,peakP-0.14), pe=Math.min(0.90,peakP+0.14)
-    shots.push({id:'approach',label:'Vista laterale',startP:0.30,endP:ps,pitch:[52,60],zoom:[13.6,14.0],bearingMode:'side-right'})
-    shots.push({id:'peak',label:'Vetta — orbita lenta',startP:ps,endP:pe,pitch:[74,82],zoom:[13.2,12.6],bearingMode:'orbit-cw',orbitDeg:180})
-    shots.push({id:'descent',label:'Discesa',startP:pe,endP:0.90,pitch:[62,60],zoom:[14.2,14.4],bearingMode:'follow'})
-  } else {
-    shots.push({id:'mid1',label:'Vista laterale',startP:0.30,endP:0.55,pitch:[50,56],zoom:[13.7,14.0],bearingMode:'side-left'})
-    shots.push({id:'mid2',label:'Seguimento alto',startP:0.55,endP:0.90,pitch:[68,64],zoom:[14.4,14.6],bearingMode:'follow'})
-  }
-  shots.push({id:'outro',label:'Finale — pullback aereo',startP:0.90,endP:1.0,pitch:[65,22],zoom:[13.8,10.2],bearingMode:'orbit-ccw',orbitDeg:110})
+  // 3 shots only: no mid-section camera acrobatics that cause nausea
+  shots.push({id:'intro',label:'Intro aereo',startP:0,endP:0.08,pitch:[24,64],zoom:[10.0,14.0],bearingMode:'orbit-cw',orbitDeg:70})
+  shots.push({id:'follow',label:'Seguimento',startP:0.08,endP:0.83,pitch:[62,62],zoom:[14.2,14.2],bearingMode:'follow'})
+  shots.push({id:'outro',label:'Pullback finale',startP:0.83,endP:1.0,pitch:[65,10],zoom:[14.2,9.2],bearingMode:'orbit-ccw',orbitDeg:140})
   return shots
 }
 
@@ -933,7 +925,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     // Pre-compute smooth route bearings to avoid per-frame jitter
     const N=pts.length
     const rawRouteBears=Array.from({length:Math.max(1,N-1)},(_,i)=>bearingDeg(pts[i].lat!,pts[i].lon!,pts[Math.min(i+1,N-1)].lat!,pts[Math.min(i+1,N-1)].lon!))
-    const smoothRouteBears=smoothArray(rawRouteBears,8)
+    const smoothRouteBears=smoothArray(rawRouteBears,30)  // wide window → macro direction only
 
     // Body data pre-computation
     const SAMPLES=Math.min(300,N), step=(N-1)/(SAMPLES-1)
@@ -984,14 +976,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       const bearIdx=Math.min(i0,smoothRouteBears.length-1)
       const routeBear=smoothRouteBears[bearIdx]
 
-      // Photo bearing influence: camera aligns with photo viewingBearing when nearby
-      let blendBear=routeBear, zoomBoost=0
+      // Photo bearing influence: gently rotate toward viewingBearing when near a photo
+      let blendBear=routeBear
       for(const sched of photoSchedule){
         const dist=Math.abs(p-sched.photo.progress)
         if(dist<PHOTO_WINDOW&&sched.photo.viewingBearing!==undefined){
-          const influence=Math.pow(1-dist/PHOTO_WINDOW,1.5)
-          blendBear=lerpAngle(blendBear,sched.photo.viewingBearing,influence*0.85)
-          zoomBoost=Math.max(zoomBoost,influence*0.9)
+          const influence=Math.pow(1-dist/PHOTO_WINDOW,2)
+          blendBear=lerpAngle(blendBear,sched.photo.viewingBearing,influence*0.7)
         }
       }
 
@@ -1004,15 +995,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       // Compute target camera
       const cam=shotCamera(activShot,blendBear,p,orbitBaseRef)
 
-      // Exponential smoothing (bird-in-flight feel)
-      smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.09)
-      smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.11)
-      smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom + zoomBoost, 0.10)
+      // Only smooth bearing — pitch and zoom come from the planned curve (already smooth)
+      // Lower α = camera rotates slowly = no nausea
+      smoothBearRef.current = lerpAngle(smoothBearRef.current, cam.bearing, 0.04)
 
-      // Jump camera instantly (no animation lag)
       mapRef.current?.jumpTo({
         center:[lon,lat], bearing:smoothBearRef.current,
-        pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
+        pitch:cam.pitch, zoom:cam.zoom,
       })
 
       // Progressive route reveal (every 20 frames)
@@ -1067,6 +1056,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
           const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:rawHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:rawHr[si]}:undefined
           const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
           drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:title??'',showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:activShot?.label})
+        }
+
+        // Fade to black at the end of outro (last 6% of video)
+        const FADE_START=0.94
+        if(p>FADE_START){
+          const fa=Math.pow((p-FADE_START)/(1-FADE_START),1.4)
+          ctx.globalAlpha=fa; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
         }
 
         frameCountRef.current++
