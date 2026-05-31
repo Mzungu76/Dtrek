@@ -1,7 +1,9 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Mountain, Upload, BarChart2, BookOpen, Map, CalendarClock } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Mountain, Upload, BarChart2, BookOpen, Map, CalendarClock, User } from 'lucide-react'
+import { getProfile } from '@/lib/userProfile'
 
 const NAV_LINKS = [
   { href: '/',            label: 'Diario',      icon: BookOpen      },
@@ -16,6 +18,8 @@ function isActive(href: string, path: string) {
 
 export default function Navbar() {
   const path = usePathname()
+  const [faceUrl, setFaceUrl] = useState<string | null>(null)
+  useEffect(() => { setFaceUrl(getProfile().hikerFaceDataUrl ?? null) }, [])
   return (
     <>
       {/* ── Top bar ───────────────────────────────────────────────────────── */}
@@ -47,6 +51,16 @@ export default function Navbar() {
                 </Link>
               )
             })}
+            <Link href="/profilo"
+              className={`flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border-2 transition-all ${
+                path === '/profilo' ? 'border-amber-500' : 'border-stone-200 hover:border-amber-300'
+              }`}
+            >
+              {faceUrl
+                ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
+                : <User className="w-4 h-4 text-stone-400" />
+              }
+            </Link>
             <div className="w-px h-5 bg-stone-200 mx-1" />
             <Link
               href="/upload"
