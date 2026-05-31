@@ -36,7 +36,7 @@ const VIDEO_DIMS: Record<string, [number, number]> = {
 
 type VideoState = 'idle' | 'config' | 'postprod' | 'rendering' | 'done'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
-type PlacingStep = 'pos' | 'bear'
+type PlacingStep = 'pos' | 'mapbear'
 
 interface ShotSegment {
   id: string; label: string; startP: number; endP: number
@@ -82,6 +82,14 @@ function lerpAngle(a: number, b: number, t: number): number {
 function bearingToCompass(b: number): string {
   const d = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO']
   return d[Math.round(b / 22.5) % 16]
+}
+
+function destinationPoint(lat: number, lon: number, bearingDeg2: number, distM: number): {lat:number;lon:number} {
+  const R=6371000, d=distM/R, b=rad(bearingDeg2)
+  const la1=rad(lat), lo1=rad(lon)
+  const la2=Math.asin(Math.sin(la1)*Math.cos(d)+Math.cos(la1)*Math.sin(d)*Math.cos(b))
+  const lo2=lo1+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(la1),Math.cos(d)-Math.sin(la1)*Math.sin(la2))
+  return {lat:la2*180/Math.PI,lon:((lo2*180/Math.PI)+540)%360-180}
 }
 
 // ── Canvas helpers ─────────────────────────────────────────────────────────────
@@ -347,18 +355,18 @@ function planShots(pts: TrackPoint[]): ShotSegment[] {
   for(let i=W;i<N-W;i++){const s=alts.slice(i-W,i+W).reduce((a,b)=>a+b,0);if(s>bestSum){bestSum=s;peakP=i/(N-1)}}
   const hasPeak=(maxA-minA)>200&&peakP>0.25&&peakP<0.85
   const shots:ShotSegment[]=[]
-  shots.push({id:'intro',label:'Intro aereo',startP:0,endP:0.10,pitch:[45,68],zoom:[11.5,13.5],bearingMode:'orbit-cw',orbitDeg:60})
-  shots.push({id:'chase1',label:'Seguimento',startP:0.10,endP:0.30,pitch:[65,62],zoom:[14.2,14.5],bearingMode:'follow'})
+  shots.push({id:'intro',label:'Discesa cinematografica',startP:0,endP:0.10,pitch:[25,65],zoom:[10.2,13.5],bearingMode:'orbit-cw',orbitDeg:72})
+  shots.push({id:'chase1',label:'Seguimento',startP:0.10,endP:0.30,pitch:[65,62],zoom:[14.3,14.6],bearingMode:'follow'})
   if(hasPeak){
-    const ps=Math.max(0.30,peakP-0.12), pe=Math.min(0.90,peakP+0.12)
-    shots.push({id:'approach',label:'Vista laterale',startP:0.30,endP:ps,pitch:[55,60],zoom:[13.8,14.0],bearingMode:'side-right'})
-    shots.push({id:'peak',label:'Vetta — orbita',startP:ps,endP:pe,pitch:[72,78],zoom:[13.0,12.5],bearingMode:'orbit-cw',orbitDeg:120})
-    shots.push({id:'descent',label:'Discesa',startP:pe,endP:0.90,pitch:[62,58],zoom:[14.2,14.0],bearingMode:'follow'})
+    const ps=Math.max(0.30,peakP-0.14), pe=Math.min(0.90,peakP+0.14)
+    shots.push({id:'approach',label:'Vista laterale',startP:0.30,endP:ps,pitch:[52,60],zoom:[13.6,14.0],bearingMode:'side-right'})
+    shots.push({id:'peak',label:'Vetta — orbita lenta',startP:ps,endP:pe,pitch:[74,82],zoom:[13.2,12.6],bearingMode:'orbit-cw',orbitDeg:180})
+    shots.push({id:'descent',label:'Discesa',startP:pe,endP:0.90,pitch:[62,60],zoom:[14.2,14.4],bearingMode:'follow'})
   } else {
-    shots.push({id:'mid1',label:'Vista laterale',startP:0.30,endP:0.55,pitch:[52,55],zoom:[13.8,14.0],bearingMode:'side-left'})
-    shots.push({id:'mid2',label:'Seguimento',startP:0.55,endP:0.90,pitch:[64,62],zoom:[14.3,14.5],bearingMode:'follow'})
+    shots.push({id:'mid1',label:'Vista laterale',startP:0.30,endP:0.55,pitch:[50,56],zoom:[13.7,14.0],bearingMode:'side-left'})
+    shots.push({id:'mid2',label:'Seguimento alto',startP:0.55,endP:0.90,pitch:[68,64],zoom:[14.4,14.6],bearingMode:'follow'})
   }
-  shots.push({id:'outro',label:'Finale — panoramica',startP:0.90,endP:1.0,pitch:[68,48],zoom:[13.5,11.0],bearingMode:'orbit-ccw',orbitDeg:80})
+  shots.push({id:'outro',label:'Finale — pullback aereo',startP:0.90,endP:1.0,pitch:[65,22],zoom:[13.8,10.2],bearingMode:'orbit-ccw',orbitDeg:110})
   return shots
 }
 
@@ -431,64 +439,7 @@ function cleanupRouteReveal(map: MLMap) {
   try{map.setPaintProperty('route-casing','line-opacity',0.55)}catch{}
 }
 
-// ── Bearing picker sub-component ───────────────────────────────────────────────
-
-function BearingPicker({ value, onChange }: { value: number; onChange: (b: number) => void }) {
-  const svgRef = useRef<SVGSVGElement>(null)
-  const toRad  = (d: number) => d * Math.PI / 180
-
-  function applyEvent(e: React.MouseEvent | React.TouchEvent) {
-    const el=svgRef.current; if(!el) return
-    const rect=el.getBoundingClientRect()
-    const cx=rect.width/2, cy=rect.height/2
-    const clientX='touches' in e?e.touches[0].clientX:(e as React.MouseEvent).clientX
-    const clientY='touches' in e?e.touches[0].clientY:(e as React.MouseEvent).clientY
-    const dx=clientX-rect.left-cx, dy=clientY-rect.top-cy
-    onChange(Math.round((Math.atan2(dx,-dy)*180/Math.PI+360)%360))
-  }
-
-  const FOV=45
-  const AX=50+38*Math.sin(toRad(value)), AY=50-38*Math.cos(toRad(value))
-  const L1X=50+38*Math.sin(toRad(value-FOV)), L1Y=50-38*Math.cos(toRad(value-FOV))
-  const L2X=50+38*Math.sin(toRad(value+FOV)), L2Y=50-38*Math.cos(toRad(value+FOV))
-  const dirs = ['N','NE','E','SE','S','SO','O','NO']
-
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <svg ref={svgRef} viewBox="0 0 100 100" width="200" height="200"
-        className="cursor-crosshair touch-none select-none rounded-full"
-        onMouseDown={applyEvent} onMouseMove={e=>e.buttons&&applyEvent(e)}
-        onTouchStart={applyEvent} onTouchMove={applyEvent}>
-        <circle cx="50" cy="50" r="49" fill="rgba(15,23,42,0.85)" stroke="rgba(148,163,184,0.25)" strokeWidth="1"/>
-        {/* Degree marks */}
-        {Array.from({length:36},(_,i)=>{
-          const a=i*10*Math.PI/180, major=i%9===0
-          const x1=50+43*Math.sin(a),y1=50-43*Math.cos(a),x2=50+(major?38:41)*Math.sin(a),y2=50-(major?38:41)*Math.cos(a)
-          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={major?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.2)'} strokeWidth={major?1.2:0.7}/>
-        })}
-        {/* Cardinal labels */}
-        {dirs.map((d,i)=>{const a=i*45*Math.PI/180,tx=50+32*Math.sin(a),ty=50-32*Math.cos(a);return(
-          <text key={d} x={tx} y={ty} textAnchor="middle" dominantBaseline="middle"
-            fill={i%2===0?'rgba(255,255,255,0.75)':'rgba(255,255,255,0.38)'}
-            fontSize={i%2===0?7:5} fontWeight={i%2===0?'bold':'normal'}>{d}</text>
-        )})}
-        {/* FOV cone */}
-        <path d={`M 50 50 L ${L1X} ${L1Y} A 38 38 0 0 1 ${L2X} ${L2Y} Z`}
-          fill="rgba(96,165,250,0.18)" stroke="rgba(96,165,250,0.5)" strokeWidth="0.8"/>
-        {/* Arrow */}
-        <line x1="50" y1="50" x2={AX} y2={AY} stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round"/>
-        <polygon
-          points={`${AX},${AY} ${50+4.5*Math.sin(toRad(value+148))},${50-4.5*Math.cos(toRad(value+148))} ${50+4.5*Math.sin(toRad(value-148))},${50-4.5*Math.cos(toRad(value-148))}`}
-          fill="#60a5fa"/>
-        <circle cx="50" cy="50" r="3" fill="white"/>
-      </svg>
-      <p className="text-white font-bold text-sm">
-        <span className="text-stone-400 font-normal text-xs">Direzione </span>
-        {Math.round(value)}° — <span className="text-blue-300">{bearingToCompass(value)}</span>
-      </p>
-    </div>
-  )
-}
+// BearingPicker removed — orientation is now set directly on the map
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -559,8 +510,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
   // Post-production
   const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
   const [routePhotos,     setRoutePhotos]    = useState<RoutePhoto[]>([])
-  const [placingPhoto,    setPlacingPhoto]   = useState<{id:string;step:PlacingStep}|null>(null)
+  const [placingPhoto,    setPlacingPhoto]   = useState<{id:string;step:PlacingStep;lat?:number;lon?:number}|null>(null)
   const [tempBearing,     setTempBearing]    = useState(0)
+  const tempBearingRef = useRef(0)
   const [photoBeingAdded, setPhotoBeingAdded]= useState(false)
 
   const gps = useRef(trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined))
@@ -609,12 +561,68 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id?{...p,progress:prog}:p))
       // default bearing = route direction at that point
       const li=Math.min(bestIdx+Math.max(2,Math.round(pts.length*0.01)),pts.length-1)
-      setTempBearing(Math.round(bearingDeg(pts[bestIdx].lat!,pts[bestIdx].lon!,pts[li].lat!,pts[li].lon!)))
-      setPlacingPhoto({id:placingPhoto.id,step:'bear'})
+      const defaultBear=Math.round(bearingDeg(pts[bestIdx].lat!,pts[bestIdx].lon!,pts[li].lat!,pts[li].lon!))
+      setTempBearing(defaultBear); tempBearingRef.current=defaultBear
+      setPlacingPhoto({id:placingPhoto.id,step:'mapbear',lat:pts[bestIdx].lat!,lon:pts[bestIdx].lon!})
     }
     map.on('click',handler)
     return ()=>{map.off('click',handler)}
   },[placingPhoto])
+
+  // ── Map bearing orientation (drag arrow on map) ───────────────────────────────
+
+  useEffect(() => {
+    const map=mapRef.current
+    if(!map||!placingPhoto||placingPhoto.step!=='mapbear') return
+    const fromLat=placingPhoto.lat??0, fromLon=placingPhoto.lon??0
+    const DIST=380
+
+    function arrowData(bear: number) {
+      const end=destinationPoint(fromLat,fromLon,bear,DIST)
+      const fL=destinationPoint(fromLat,fromLon,(bear-40+360)%360,DIST*0.65)
+      const fR=destinationPoint(fromLat,fromLon,(bear+40)%360,DIST*0.65)
+      return {
+        line:{type:'Feature' as const,geometry:{type:'LineString' as const,coordinates:[[fromLon,fromLat],[end.lon,end.lat]]},properties:{}},
+        cone:{type:'Feature' as const,geometry:{type:'Polygon' as const,coordinates:[[[fromLon,fromLat],[fL.lon,fL.lat],[end.lon,end.lat],[fR.lon,fR.lat],[fromLon,fromLat]]]},properties:{}},
+      }
+    }
+
+    const initData=arrowData(tempBearingRef.current)
+    if(!map.getSource('_bear-line')) {
+      map.addSource('_bear-line',{type:'geojson',data:initData.line})
+      map.addSource('_bear-cone',{type:'geojson',data:initData.cone})
+      map.addLayer({id:'_bear-cone',type:'fill',source:'_bear-cone',paint:{'fill-color':'#3b82f6','fill-opacity':0.18}})
+      map.addLayer({id:'_bear-line',type:'line',source:'_bear-line',paint:{'line-color':'#60a5fa','line-width':5,'line-opacity':0.95},layout:{'line-cap':'round'}})
+    }
+
+    function update(bear: number) {
+      const d=arrowData(bear)
+      ;(map!.getSource('_bear-line') as any)?.setData(d.line)
+      ;(map!.getSource('_bear-cone') as any)?.setData(d.cone)
+      tempBearingRef.current=bear
+      setTempBearing(bear)
+    }
+
+    function onMove(e: any) {
+      const {lat,lng}=e.lngLat
+      update(Math.round(bearingDeg(fromLat,fromLon,lat,lng)))
+    }
+    function onTouchMove(e: any) {
+      if(e.lngLat) onMove(e)
+    }
+
+    map.on('mousemove',onMove)
+    map.on('touchmove',onTouchMove)
+
+    return () => {
+      map.off('mousemove',onMove)
+      map.off('touchmove',onTouchMove)
+      try{if(map.getLayer('_bear-line'))map.removeLayer('_bear-line')}catch{}
+      try{if(map.getLayer('_bear-cone'))map.removeLayer('_bear-cone')}catch{}
+      try{if(map.getSource('_bear-line'))map.removeSource('_bear-line')}catch{}
+      try{if(map.getSource('_bear-cone'))map.removeSource('_bear-cone')}catch{}
+    }
+  },[placingPhoto]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Layer setup ───────────────────────────────────────────────────────────────
 
@@ -834,13 +842,24 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
 
   function confirmBearing() {
     if(!placingPhoto) return
-    setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id?{...p,viewingBearing:tempBearing}:p))
+    setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id?{...p,viewingBearing:tempBearingRef.current}:p))
     setPlacingPhoto(null)
+  }
+
+  function handleSetBearing(photo: RoutePhoto) {
+    const pts=gpsRef.current; if(!pts.length) return
+    const rawIdx=photo.progress*(pts.length-1)
+    const i0=Math.min(Math.floor(rawIdx),pts.length-1), i1=Math.min(i0+1,pts.length-1), frac=rawIdx-i0
+    const lat=pts[i0].lat!+(pts[i1].lat!-pts[i0].lat!)*frac
+    const lon=pts[i0].lon!+(pts[i1].lon!-pts[i0].lon!)*frac
+    const bear=photo.viewingBearing??0
+    setTempBearing(bear); tempBearingRef.current=bear
+    setPlacingPhoto({id:photo.id,step:'mapbear',lat,lon})
   }
 
   // ── Cinematic rendering ───────────────────────────────────────────────────────
 
-  const startRendering=useCallback(()=>{
+  const startRendering=useCallback(async ()=>{
     const map=mapRef.current; if(!map) return
     if(typeof MediaRecorder==='undefined'){
       setShareToast('Registrazione video non supportata su questo browser')
@@ -850,6 +869,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     cancelAnimationFrame(animRef.current); isPlayingRef.current=false; setIsPlaying(false)
     progressRef.current=0; setProgress(0)
     const pts=gpsRef.current; if(pts.length<2) return
+
+    const [outW,outH]=VIDEO_DIMS[videoOrientation]
+
+    // Resize map container to output resolution so tiles load at correct density
+    const cont=containerRef.current!
+    const dpr=window.devicePixelRatio||1
+    cont.style.width=`${outW/dpr}px`
+    cont.style.height=`${outH/dpr}px`
+    map.resize()
+    await new Promise<void>(r=>map.once('idle',r as any))
 
     // Hide HTML marker during rendering
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='0'
@@ -864,7 +893,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     try { setupRouteReveal(map, pts) } catch {}
 
     const mapCanvas=map.getCanvas(), srcW=mapCanvas.width, srcH=mapCanvas.height
-    const [outW,outH]=VIDEO_DIMS[videoOrientation]
     const composite=document.createElement('canvas'); composite.width=outW; composite.height=outH
     compositeCanvasRef.current=composite
     const ctx=composite.getContext('2d')!
@@ -880,11 +908,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       setVideoRecordedBlob(blob); setVideoState('done')
       if(mEl) mEl.style.opacity='1'
       try { cleanupRouteReveal(map) } catch {}
+      // Restore container to CSS-driven dimensions
+      cont.style.width=''; cont.style.height=''; map.resize()
     }
     mediaRecorderRef.current=recorder; recorder.start(100)
 
+    // Pre-compute smooth route bearings to avoid per-frame jitter
+    const N=pts.length
+    const rawRouteBears=Array.from({length:Math.max(1,N-1)},(_,i)=>bearingDeg(pts[i].lat!,pts[i].lon!,pts[Math.min(i+1,N-1)].lat!,pts[Math.min(i+1,N-1)].lon!))
+    const smoothRouteBears=smoothArray(rawRouteBears,8)
+
     // Body data pre-computation
-    const N=pts.length, SAMPLES=Math.min(300,N), step=(N-1)/(SAMPLES-1)
+    const SAMPLES=Math.min(300,N), step=(N-1)/(SAMPLES-1)
     const rawHr=Array.from({length:SAMPLES},(_,i)=>pts[Math.min(Math.round(i*step),N-1)].heartRateBpm??0)
     const rawSpeed=Array.from({length:SAMPLES},(_,i)=>{
       const idx=Math.min(Math.round(i*step),N-1); if(idx===0) return 0
@@ -897,7 +932,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     const hrMax=Math.max(...rawHr), hrMin=Math.min(...rawHr.filter(v=>v>0),hrMax)
     const spMax=Math.max(...smoothSpeed), hasHr=hrMax>0, hasSpeed=spMax>0
     const totalKm=totalDistRef.current/1000, {gain:elevGain}=elevStatsRef.current
-    const dpr=window.devicePixelRatio||1, cr=coverRect(srcW,srcH,outW,outH)
+    const cr=coverRect(srcW,srcH,outW,outH)
 
     const TARGET_FPS=30, TOTAL_FRAMES=Math.round(TARGET_FPS*videoDuration)
     setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
@@ -928,9 +963,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       const lat=pts[i0].lat!+(pts[i1].lat!-pts[i0].lat!)*frac
       const alt=(pts[i0].altitudeMeters??0)+((pts[i1].altitudeMeters??0)-(pts[i0].altitudeMeters??0))*frac
 
-      // Route bearing (lookahead for smooth direction)
-      const li=Math.min(i0+Math.max(5,Math.round(N*0.025)),N-1)
-      const routeBear=bearingDeg(lat,lon,pts[li].lat!,pts[li].lon!)
+      // Route bearing from precomputed smooth array
+      const bearIdx=Math.min(i0,smoothRouteBears.length-1)
+      const routeBear=smoothRouteBears[bearIdx]
 
       // Photo bearing influence: camera aligns with photo viewingBearing when nearby
       let blendBear=routeBear, zoomBoost=0
@@ -953,9 +988,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       const cam=shotCamera(activShot,blendBear,p,orbitBaseRef)
 
       // Exponential smoothing (bird-in-flight feel)
-      smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.07)
-      smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.09)
-      smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom + zoomBoost, 0.08)
+      smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.09)
+      smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.11)
+      smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom + zoomBoost, 0.10)
 
       // Jump camera instantly (no animation lag)
       mapRef.current?.jumpTo({
@@ -1288,42 +1323,45 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
         </div>
       )}
 
-      {/* ══ BEARING PICKER ══════════════════════════════════════════════════════ */}
-      {videoState==='postprod'&&placingPhoto?.step==='bear'&&(
-        <div className="absolute inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-20 pointer-events-auto">
-          <div className="bg-stone-900/97 rounded-3xl px-6 py-7 mx-4 w-full max-w-sm shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h3 className="text-white font-bold text-base">Direzione della foto</h3>
-                <p className="text-white/45 text-xs mt-0.5">Dove stavi guardando quando hai scattato?</p>
+      {/* ══ ON-MAP BEARING ORIENTATION ══════════════════════════════════════════ */}
+      {videoState==='postprod'&&placingPhoto?.step==='mapbear'&&(
+        <div className="absolute inset-0 z-20 pointer-events-none">
+          <div className="absolute top-0 inset-x-0 pointer-events-auto">
+            <div className="m-3 bg-indigo-700/96 backdrop-blur-md rounded-2xl px-4 py-3 shadow-2xl">
+              <div className="flex items-center gap-3 mb-3">
+                <Navigation className="w-5 h-5 text-white shrink-0 animate-pulse"/>
+                <div className="flex-1">
+                  <p className="text-white font-bold text-sm">Muovi sulla mappa per orientare la vista</p>
+                  <p className="text-indigo-200 text-xs mt-0.5">
+                    {tempBearing!==undefined
+                      ? `${Math.round(tempBearing)}° — ${bearingToCompass(Math.round(tempBearing))}`
+                      : 'Punta nella direzione dello scatto'}
+                  </p>
+                </div>
+                <button onClick={()=>setPlacingPhoto(null)} className="text-indigo-300 hover:text-white transition-colors">
+                  <X className="w-5 h-5"/>
+                </button>
               </div>
-              <button onClick={()=>setPlacingPhoto(null)} className="text-white/40 hover:text-white"><X className="w-5 h-5"/></button>
-            </div>
-            {/* Photo preview */}
-            {routePhotos.find(p=>p.id===placingPhoto.id)&&(
-              <div className="flex justify-center mb-4">
-                <img src={routePhotos.find(p=>p.id===placingPhoto.id)!.dataUrl} alt=""
-                  className="w-24 h-24 rounded-xl object-cover border-2 border-white/20"/>
+              <div className="flex gap-2">
+                <button onClick={()=>{setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto!.id?{...p,viewingBearing:undefined}:p));setPlacingPhoto(null)}}
+                  className="flex-1 py-2 rounded-xl bg-indigo-900/70 text-white/70 text-sm font-semibold hover:bg-indigo-900">
+                  Salta
+                </button>
+                <button onClick={confirmBearing}
+                  className="flex-[2] py-2 rounded-xl bg-white text-indigo-700 font-bold text-sm flex items-center justify-center gap-1.5">
+                  <Check className="w-3.5 h-3.5"/> Conferma direzione
+                </button>
               </div>
-            )}
-            <div className="flex justify-center mb-4">
-              <BearingPicker value={tempBearing} onChange={setTempBearing}/>
-            </div>
-            <p className="text-white/40 text-xs text-center mb-5">
-              Trascina o tocca la bussola per impostare la direzione.
-              La camera si allineerà automaticamente durante il video.
-            </p>
-            <div className="flex gap-3">
-              <button onClick={()=>{setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto!.id?{...p,viewingBearing:undefined}:p));setPlacingPhoto(null)}}
-                className="flex-1 py-3 rounded-2xl bg-white/10 text-white/70 text-sm font-semibold hover:bg-white/20">
-                Salta
-              </button>
-              <button onClick={confirmBearing}
-                className="flex-[2] py-3 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-bold flex items-center justify-center gap-2">
-                <Check className="w-4 h-4"/> Conferma
-              </button>
             </div>
           </div>
+          {/* Photo thumbnail */}
+          {routePhotos.find(p=>p.id===placingPhoto.id)&&(
+            <div className="absolute top-36 right-3 pointer-events-none">
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-1.5 shadow-xl border border-white/20">
+                <img src={routePhotos.find(p=>p.id===placingPhoto.id)!.dataUrl} alt="" className="w-16 h-16 rounded-lg object-cover"/>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1383,7 +1421,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
               {routePhotos.length===0?(
                 <div className="border border-dashed border-white/15 rounded-xl p-5 text-center">
                   <p className="text-white/35 text-sm">Nessuna foto</p>
-                  <p className="text-white/22 text-xs mt-1">GPS automatico da EXIF · clic sul percorso per posizionare · bussola per la direzione</p>
+                  <p className="text-white/22 text-xs mt-1">GPS automatico da EXIF · clic sul percorso per posizionare · muovi sulla mappa per la direzione</p>
                 </div>
               ):(
                 <div className="space-y-2.5">
@@ -1419,8 +1457,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
                             {photo.hasExifGps&&(
                               <span className="text-[10px] text-green-400 font-medium">📍 {Math.round(photo.progress*100)}%</span>
                             )}
-                            {/* Bearing picker button */}
-                            <button onClick={()=>{setTempBearing(photo.viewingBearing??0);setPlacingPhoto({id:photo.id,step:'bear'})}}
+                            {/* Bearing button → on-map orientation */}
+                            <button onClick={()=>handleSetBearing(photo)}
                               className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/15 rounded-lg px-2 py-1 transition-colors">
                               <Navigation className="w-3 h-3"/>
                               {photo.viewingBearing!==undefined
