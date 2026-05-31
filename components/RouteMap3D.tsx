@@ -72,6 +72,16 @@ function smoothArray(arr: number[], half = 4): number[] {
   return arr.map((_,i) => { const s=arr.slice(Math.max(0,i-half),Math.min(arr.length,i+half+1)); return s.reduce((a,b)=>a+b,0)/s.length })
 }
 
+// Circular mean for bearings — avoids the 350°/10° → 180° bug at north crossings
+function circularMeanBearings(bearings: number[], half: number): number[] {
+  return bearings.map((_,i)=>{
+    const s=bearings.slice(Math.max(0,i-half),Math.min(bearings.length,i+half+1))
+    const x=s.reduce((sum,b)=>sum+Math.cos(b*Math.PI/180),0)/s.length
+    const y=s.reduce((sum,b)=>sum+Math.sin(b*Math.PI/180),0)/s.length
+    return (Math.atan2(y,x)*180/Math.PI+360)%360
+  })
+}
+
 function lerp(a: number, b: number, t: number) { return a + (b-a)*t }
 
 function lerpAngle(a: number, b: number, t: number): number {
@@ -905,11 +915,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     const composite=document.createElement('canvas'); composite.width=outW; composite.height=outH
     compositeCanvasRef.current=composite
     const ctx=composite.getContext('2d')!
+    ctx.imageSmoothingEnabled=true
+    ctx.imageSmoothingQuality='high'
 
-    const mimeType=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4']
-      .find(t=>MediaRecorder.isTypeSupported(t))??''
+    // Prefer H.264/MP4: iOS Safari records natively → no re-encoding on Instagram/TikTok
+    const mimeType=[
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+    ].find(t=>MediaRecorder.isTypeSupported(t))??''
     const stream=(composite as any).captureStream(30) as MediaStream
-    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:10_000_000})
+    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:25_000_000})
     videoChunksRef.current=[]
     recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
     recorder.onstop=()=>{
@@ -925,7 +943,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     // Pre-compute smooth route bearings to avoid per-frame jitter
     const N=pts.length
     const rawRouteBears=Array.from({length:Math.max(1,N-1)},(_,i)=>bearingDeg(pts[i].lat!,pts[i].lon!,pts[Math.min(i+1,N-1)].lat!,pts[Math.min(i+1,N-1)].lon!))
-    const smoothRouteBears=smoothArray(rawRouteBears,30)  // wide window → macro direction only
+    // Circular mean (handles 350°/10° north crossings) + wide window
+    const smoothRouteBears=circularMeanBearings(rawRouteBears,35)
 
     // Body data pre-computation
     const SAMPLES=Math.min(300,N), step=(N-1)/(SAMPLES-1)
@@ -972,9 +991,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       const lat=pts[i0].lat!+(pts[i1].lat!-pts[i0].lat!)*frac
       const alt=(pts[i0].altitudeMeters??0)+((pts[i1].altitudeMeters??0)-(pts[i0].altitudeMeters??0))*frac
 
-      // Route bearing from precomputed smooth array
-      const bearIdx=Math.min(i0,smoothRouteBears.length-1)
-      const routeBear=smoothRouteBears[bearIdx]
+      // Route bearing: look 12% ahead so camera anticipates direction (more natural)
+      const lookIdx=Math.min(Math.round((p+0.12)*(N-1)),smoothRouteBears.length-1)
+      const routeBear=smoothRouteBears[lookIdx]
 
       // Photo bearing influence: gently rotate toward viewingBearing when near a photo
       let blendBear=routeBear
@@ -995,9 +1014,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       // Compute target camera
       const cam=shotCamera(activShot,blendBear,p,orbitBaseRef)
 
-      // Only smooth bearing — pitch and zoom come from the planned curve (already smooth)
-      // Lower α = camera rotates slowly = no nausea
-      smoothBearRef.current = lerpAngle(smoothBearRef.current, cam.bearing, 0.04)
+      // Only smooth bearing — pitch and zoom from planned curve (already smooth by design)
+      // α=0.022 → ~1.4s lag → camera rotates like a hawk, never snaps
+      smoothBearRef.current = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
 
       mapRef.current?.jumpTo({
         center:[lon,lat], bearing:smoothBearRef.current,
