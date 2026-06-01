@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS activities (
 CREATE INDEX IF NOT EXISTS idx_activities_start_time ON activities (start_time DESC);
 CREATE INDEX IF NOT EXISTS idx_activities_user_rating ON activities (user_rating DESC NULLS LAST);
 
+-- ── Aggiornamenti schema ─────────────────────────────────────────────────────
+-- Esegui solo se la tabella è già esistente (da una versione precedente):
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS linked_planned_track_points JSONB;
+
 -- ── Escursioni pianificate ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS planned_hikes (
   id                      TEXT PRIMARY KEY,

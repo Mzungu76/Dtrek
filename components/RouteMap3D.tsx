@@ -6,7 +6,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
   Download, Share2, ChevronLeft, ChevronRight, ImagePlus,
-  Loader2, GripVertical, Check, Navigation,
+  Loader2, GripVertical, Check, Navigation, Layers,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
@@ -460,9 +460,10 @@ interface Props {
   title?: string
   onClose: () => void
   plannedDate?: string
+  plannedTrackPoints?: TrackPoint[]
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -504,7 +505,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
   const [currentAlt,     setCurrentAlt]    = useState(0)
   const [coveredKm,      setCoveredKm]     = useState(0)
   const [shareToast,     setShareToast]    = useState('')
-  const [showStreetView, setShowStreetView]= useState(false)
+  const [showStreetView,     setShowStreetView]    = useState(false)
+  const [showPlannedRoute,   setShowPlannedRoute]  = useState(false)
   const [streetViewPos,  setStreetViewPos] = useState<[number,number]|null>(null)
 
   // Video config
@@ -703,6 +705,35 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
   },[setupLayers]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(()=>{exaggRef.current=exaggeration;const map=mapRef.current;if(!map||!mapReady) return;try{map.setTerrain({source:'terrain',exaggeration})}catch{}},[exaggeration,mapReady])
+
+  // ── Planned route overlay layer ────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady || !plannedTrackPoints?.length) return
+    const coords = plannedTrackPoints
+      .filter(p => p.lat && p.lon)
+      .map(p => [p.lon!, p.lat!] as [number, number])
+    if (coords.length < 2) return
+    if (!map.getSource('planned-route')) {
+      map.addSource('planned-route', {
+        type: 'geojson',
+        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} },
+      })
+      map.addLayer({
+        id: 'planned-route-line',
+        type: 'line',
+        source: 'planned-route',
+        layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
+        paint: { 'line-color': '#a855f7', 'line-width': 3, 'line-dasharray': [2, 3], 'line-opacity': 0.9 },
+      }, 'route-casing')
+    }
+  }, [mapReady, plannedTrackPoints])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    try { map.setLayoutProperty('planned-route-line', 'visibility', showPlannedRoute ? 'visible' : 'none') } catch {}
+  }, [showPlannedRoute, mapReady])
 
   const switchStyle=useCallback((i:number)=>{setStyleIdx(i);setMapReady(false);mapRef.current?.setStyle(STYLES[i].url())},[])
 
@@ -1176,6 +1207,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
               className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg">
               <Camera style={{width:'1.1rem',height:'1.1rem'}}/>
             </button>
+            {plannedTrackPoints && plannedTrackPoints.filter(p=>p.lat&&p.lon).length >= 2 && (
+              <button onClick={()=>setShowPlannedRoute(v=>!v)} title="Percorso pianificato"
+                className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
+                  showPlannedRoute ? 'bg-violet-500/80 hover:bg-violet-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
+                }`}>
+                <Layers style={{width:'1.1rem',height:'1.1rem'}}/>
+              </button>
+            )}
             <button onClick={onClose}
               className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg">
               <X className="w-5 h-5"/>

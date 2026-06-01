@@ -5,7 +5,7 @@ import Navbar from '@/components/Navbar'
 import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
 import { saveActivity } from '@/lib/blobStore'
 import { parseGpx } from '@/lib/gpxParser'
-import { savePlanned, deletePlanned, getAllPlanned, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
@@ -52,12 +52,22 @@ function TcxUploader() {
     if (!parsedActivity) return
     setStatus('saving')
     try {
+      // Fetch full planned hike to capture trackPoints before deletion
+      let linkedPlannedTrackPoints: import('@/lib/tcxParser').TrackPoint[] | undefined
+      if (selectedPlanned) {
+        try {
+          const full = await getPlannedById(selectedPlanned.id)
+          const validPts = (full?.trackPoints ?? []).filter(p => p.lat && p.lon)
+          if (validPts.length >= 2) linkedPlannedTrackPoints = validPts
+        } catch {}
+      }
       await saveActivity({
         ...parsedActivity,
-        title:             titleVal.trim() || undefined,
+        title:                    titleVal.trim() || undefined,
         fileName,
-        linkedPlannedId:   selectedPlanned?.id,
-        linkedBeautyScore: selectedPlanned?.cachedBeautyScore,
+        linkedPlannedId:          selectedPlanned?.id,
+        linkedPlannedTrackPoints,
+        linkedBeautyScore:        selectedPlanned?.cachedBeautyScore,
       })
       // Elimina il percorso pianificato se associato
       if (selectedPlanned) {

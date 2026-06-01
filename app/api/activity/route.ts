@@ -56,6 +56,7 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     userRating:      row.user_rating as number | undefined,
     userRatingNote:  row.user_rating_note as string | undefined,
     linkedPlannedId: row.linked_planned_id as string | undefined,
+    linkedPlannedTrackPoints: row.linked_planned_track_points as TrackPoint[] | undefined,
     linkedBeautyScore: row.linked_beauty_score as StoredActivity['linkedBeautyScore'],
   }
 }
@@ -85,8 +86,9 @@ function activityToRow(a: StoredActivity) {
     tags:                 a.tags ?? null,
     user_rating:          a.userRating ?? null,
     user_rating_note:     a.userRatingNote ?? null,
-    linked_planned_id:    a.linkedPlannedId ?? null,
-    linked_beauty_score:  a.linkedBeautyScore ?? null,
+    linked_planned_id:            a.linkedPlannedId ?? null,
+    linked_planned_track_points:  a.linkedPlannedTrackPoints ?? null,
+    linked_beauty_score:          a.linkedBeautyScore ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }
