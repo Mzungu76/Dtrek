@@ -73,16 +73,28 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* Mobile: upload icon only in top-right */}
-          <Link
-            href="/upload"
-            className={`md:hidden flex items-center justify-center w-9 h-9 rounded-xl text-sm font-semibold transition-all ${
-              path === '/upload' ? 'bg-terra-600 text-white' : 'bg-terra-500 text-white shadow-sm'
-            }`}
-            aria-label="Carica file"
-          >
-            <Upload className="w-4 h-4" />
-          </Link>
+          {/* Mobile: profile + upload in top-right */}
+          <div className="md:hidden flex items-center gap-2">
+            <Link href="/profilo"
+              className={`flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border-2 transition-all ${
+                path === '/profilo' ? 'border-amber-500' : 'border-stone-200 hover:border-amber-300'
+              }`}
+            >
+              {faceUrl
+                ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
+                : <User className="w-4 h-4 text-stone-400" />
+              }
+            </Link>
+            <Link
+              href="/upload"
+              className={`flex items-center justify-center w-9 h-9 rounded-xl text-sm font-semibold transition-all ${
+                path === '/upload' ? 'bg-terra-600 text-white' : 'bg-terra-500 text-white shadow-sm'
+              }`}
+              aria-label="Carica file"
+            >
+              <Upload className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       </nav>
 

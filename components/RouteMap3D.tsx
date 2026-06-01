@@ -128,8 +128,8 @@ function drawMapPin(
   sc: number,                // scale (outW/1080)
   faceImg: HTMLImageElement | null,
 ) {
-  const R    = 22 * sc
-  const tipH = 12 * sc
+  const R    = 28 * sc
+  const tipH = 14 * sc
   const ccY  = cy - R - tipH   // circle center (pin tip is at cy)
 
   ctx.save()
@@ -157,7 +157,7 @@ function drawMapPin(
 
   // Photo or person silhouette clipped to inner circle
   ctx.save()
-  const ir = R - 3*sc
+  const ir = R - 2*sc
   ctx.beginPath(); ctx.arc(cx, ccY, ir, 0, Math.PI*2); ctx.clip()
   if (faceImg) {
     ctx.drawImage(faceImg, cx-ir, ccY-ir, ir*2, ir*2)
@@ -367,7 +367,7 @@ function planShots(pts: TrackPoint[]): ShotSegment[] {
   const shots:ShotSegment[]=[]
   // 3 shots only: no mid-section camera acrobatics that cause nausea
   shots.push({id:'intro',label:'Intro aereo',startP:0,endP:0.08,pitch:[24,64],zoom:[10.0,14.0],bearingMode:'orbit-cw',orbitDeg:70})
-  shots.push({id:'follow',label:'Seguimento',startP:0.08,endP:0.83,pitch:[62,62],zoom:[14.2,14.2],bearingMode:'follow'})
+  shots.push({id:'follow',label:'Seguimento',startP:0.08,endP:0.83,pitch:[48,48],zoom:[13.8,13.8],bearingMode:'follow'})
   shots.push({id:'outro',label:'Pullback finale',startP:0.83,endP:1.0,pitch:[65,10],zoom:[14.2,9.2],bearingMode:'orbit-ccw',orbitDeg:140})
   return shots
 }
@@ -689,19 +689,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       const { hikerFaceDataUrl } = getProfile()
       const el=document.createElement('div')
       el.style.cssText='width:32px;height:44px;cursor:default'
+      const ts=Date.now()
       el.innerHTML=`<svg viewBox="0 0 32 44" width="32" height="44" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <radialGradient id="pg${Date.now()}" cx="38%" cy="28%">
+          <radialGradient id="pg${ts}" cx="38%" cy="28%">
             <stop offset="0%" stop-color="#93c5fd"/>
             <stop offset="100%" stop-color="#1d4ed8"/>
           </radialGradient>
-          <clipPath id="fc${Date.now()}"><circle cx="16" cy="13.5" r="9.5"/></clipPath>
+          <clipPath id="fc${ts}"><circle cx="16" cy="13.5" r="12"/></clipPath>
         </defs>
         <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.45"/></filter>
-        <path d="M16 0C7.2 0 0 7.2 0 16c0 11 13.5 26.5 16 28 2.5-1.5 16-17 16-28C32 7.2 24.8 0 16 0z" fill="url(#pg${Date.now()})" filter="url(#ds)"/>
-        <circle cx="16" cy="13.5" r="11" fill="none" stroke="white" stroke-width="2.5"/>
+        <path d="M16 0C7.2 0 0 7.2 0 16c0 11 13.5 26.5 16 28 2.5-1.5 16-17 16-28C32 7.2 24.8 0 16 0z" fill="url(#pg${ts})" filter="url(#ds)"/>
+        <circle cx="16" cy="13.5" r="13.5" fill="none" stroke="white" stroke-width="2.5"/>
         ${hikerFaceDataUrl
-          ? `<image href="${hikerFaceDataUrl}" x="6.5" y="4" width="19" height="19" clip-path="url(#fc${Date.now()})"/>`
+          ? `<image href="${hikerFaceDataUrl}" x="4" y="1" width="24" height="24" clip-path="url(#fc${ts})"/>`
           : `<circle cx="16" cy="11.5" r="3.8" fill="rgba(255,255,255,0.88)"/>
              <path d="M9.5 21.5 Q16 17 22.5 21.5" fill="none" stroke="rgba(255,255,255,0.88)" stroke-width="1.8" stroke-linecap="round"/>`
         }
@@ -1018,8 +1019,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       // α=0.022 → ~1.4s lag → camera rotates like a hawk, never snaps
       smoothBearRef.current = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
 
+      // Pin center to route start/end during orbit shots — avoids abrupt movements from moving GPS center
+      const camCenterLon=activShot.id==='intro'?pts[0].lon!:activShot.id==='outro'?pts[N-1].lon!:lon
+      const camCenterLat=activShot.id==='intro'?pts[0].lat!:activShot.id==='outro'?pts[N-1].lat!:lat
       mapRef.current?.jumpTo({
-        center:[lon,lat], bearing:smoothBearRef.current,
+        center:[camCenterLon,camCenterLat], bearing:smoothBearRef.current,
         pitch:cam.pitch, zoom:cam.zoom,
       })
 
@@ -1040,7 +1044,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
 
         // Map pin at GPS position
         const mp=mapRef.current!.project([lon,lat] as [number,number])
-        const px=(mp.x*dpr-cr.sx)/cr.sw*outW, py=(mp.y*dpr-cr.sy)/cr.sh*outH
+        const px=(mp.x-cr.sx)/cr.sw*outW, py=(mp.y-cr.sy)/cr.sh*outH
         if(px>=-60&&px<=outW+60&&py>=-80&&py<=outH+60){
           drawMapPin(ctx,px,py,outW/1080,faceImgRef.current)
         }
