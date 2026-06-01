@@ -36,7 +36,7 @@ const VIDEO_DIMS: Record<string, [number, number]> = {
 
 type VideoState = 'idle' | 'config' | 'postprod' | 'rendering' | 'done'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
-type PlacingStep = 'pos' | 'mapbear'
+type PlacingStep = 'pos'
 
 interface ShotSegment {
   id: string; label: string; startP: number; endP: number
@@ -49,7 +49,6 @@ interface RoutePhoto {
   dataUrl:         string
   progress:        number       // 0-1 on route
   caption:         string       // mandatory — shown in polaroid
-  viewingBearing?: number       // camera direction (0-360) when photo was taken
   hasExifGps:      boolean      // true = auto-placed, false = needs manual placement
 }
 
@@ -89,18 +88,6 @@ function lerpAngle(a: number, b: number, t: number): number {
   return (a + d * t + 360) % 360
 }
 
-function bearingToCompass(b: number): string {
-  const d = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO']
-  return d[Math.round(b / 22.5) % 16]
-}
-
-function destinationPoint(lat: number, lon: number, bearingDeg2: number, distM: number): {lat:number;lon:number} {
-  const R=6371000, d=distM/R, b=rad(bearingDeg2)
-  const la1=rad(lat), lo1=rad(lon)
-  const la2=Math.asin(Math.sin(la1)*Math.cos(d)+Math.cos(la1)*Math.sin(d)*Math.cos(b))
-  const lo2=lo1+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(la1),Math.cos(d)-Math.sin(la1)*Math.sin(la2))
-  return {lat:la2*180/Math.PI,lon:((lo2*180/Math.PI)+540)%360-180}
-}
 
 // ── Canvas helpers ─────────────────────────────────────────────────────────────
 
@@ -169,6 +156,29 @@ function drawMapPin(
     ctx.beginPath(); ctx.arc(cx, ccY-ir*0.2, ir*0.32, 0, Math.PI*2); ctx.fill()
     ctx.beginPath(); ctx.ellipse(cx, ccY+ir*0.32, ir*0.44, ir*0.26, 0, Math.PI, 0); ctx.fill()
   }
+  ctx.restore()
+  ctx.restore()
+}
+
+// ── Photo pin ─────────────────────────────────────────────────────────────────
+
+function drawPhotoPin(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  sc: number,
+  img: HTMLImageElement,
+) {
+  const W = 34*sc, H = 34*sc, R = 5*sc, tipH = 7*sc
+  const bx = cx - W/2, by = cy - H - tipH
+  ctx.save()
+  ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=8*sc; ctx.shadowOffsetY=3*sc
+  ctx.fillStyle='white'
+  rrect(ctx,bx,by,W,H,R); ctx.fill()
+  ctx.beginPath(); ctx.moveTo(cx-5*sc,by+H); ctx.lineTo(cx+5*sc,by+H); ctx.lineTo(cx,cy); ctx.closePath(); ctx.fill()
+  ctx.shadowColor='transparent'
+  ctx.save()
+  rrect(ctx,bx+2*sc,by+2*sc,W-4*sc,H-4*sc,R-1*sc); ctx.clip()
+  ctx.drawImage(img,bx+2*sc,by+2*sc,W-4*sc,H-4*sc)
   ctx.restore()
   ctx.restore()
 }
@@ -483,6 +493,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
   // Face image
   const faceImgRef   = useRef<HTMLImageElement | null>(null)
   const photoImgsRef = useRef<Map<string, HTMLImageElement>>(new Map())
+  const photoMarkersRef = useRef<Map<string, import('maplibre-gl').Marker>>(new Map())
 
   const [mapReady,       setMapReady]      = useState(false)
   const [isPlaying,      setIsPlaying]     = useState(false)
@@ -512,10 +523,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
   // Post-production
   const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
   const [routePhotos,     setRoutePhotos]    = useState<RoutePhoto[]>([])
-  const [placingPhoto,    setPlacingPhoto]   = useState<{id:string;step:PlacingStep;lat?:number;lon?:number}|null>(null)
-  const [tempBearing,     setTempBearing]    = useState(0)
-  const tempBearingRef = useRef(0)
-  const placingPhotoRef = useRef<{id:string;step:PlacingStep;lat?:number;lon?:number}|null>(null)
+  const [placingPhoto,    setPlacingPhoto]   = useState<{id:string;step:PlacingStep}|null>(null)
+  const placingPhotoRef = useRef<{id:string;step:PlacingStep}|null>(null)
   useEffect(()=>{ placingPhotoRef.current=placingPhoto },[placingPhoto])
   const [photoBeingAdded, setPhotoBeingAdded]= useState(false)
 
@@ -563,84 +572,41 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,lat,lng);if(d<minD){minD=d;bestIdx=i}}
       const prog=bestIdx/(pts.length-1)
       setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id?{...p,progress:prog}:p))
-      // default bearing = route direction at that point
-      const li=Math.min(bestIdx+Math.max(2,Math.round(pts.length*0.01)),pts.length-1)
-      const defaultBear=Math.round(bearingDeg(pts[bestIdx].lat!,pts[bestIdx].lon!,pts[li].lat!,pts[li].lon!))
-      setTempBearing(defaultBear); tempBearingRef.current=defaultBear
-      setPlacingPhoto({id:placingPhoto.id,step:'mapbear',lat:pts[bestIdx].lat!,lon:pts[bestIdx].lon!})
+      setPlacingPhoto(null)
     }
     map.on('click',handler)
     return ()=>{map.off('click',handler)}
   },[placingPhoto])
 
-  // ── Map bearing orientation (drag arrow on map) ───────────────────────────────
+  // ── Photo markers on map ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    const map=mapRef.current
-    if(!map||!placingPhoto||placingPhoto.step!=='mapbear') return
-    const photoId=placingPhoto.id
-    const fromLat=placingPhoto.lat??0, fromLon=placingPhoto.lon??0
-    const DIST=380
-
-    // Always clean up stale layers first (handles style reloads / double-invocations)
-    const cleanup=()=>{
-      try{if(map.getLayer('_bear-line'))map.removeLayer('_bear-line')}catch{}
-      try{if(map.getLayer('_bear-cone'))map.removeLayer('_bear-cone')}catch{}
-      try{if(map.getSource('_bear-line'))map.removeSource('_bear-line')}catch{}
-      try{if(map.getSource('_bear-cone'))map.removeSource('_bear-cone')}catch{}
-    }
-    cleanup()
-
-    function arrowData(bear: number) {
-      const end=destinationPoint(fromLat,fromLon,bear,DIST)
-      const fL=destinationPoint(fromLat,fromLon,(bear-40+360)%360,DIST*0.65)
-      const fR=destinationPoint(fromLat,fromLon,(bear+40)%360,DIST*0.65)
-      return {
-        line:{type:'Feature' as const,geometry:{type:'LineString' as const,coordinates:[[fromLon,fromLat],[end.lon,end.lat]]},properties:{}},
-        cone:{type:'Feature' as const,geometry:{type:'Polygon' as const,coordinates:[[[fromLon,fromLat],[fL.lon,fL.lat],[end.lon,end.lat],[fR.lon,fR.lat],[fromLon,fromLat]]]},properties:{}},
-      }
-    }
-
-    map.addSource('_bear-line',{type:'geojson',data:arrowData(tempBearingRef.current).line})
-    map.addSource('_bear-cone',{type:'geojson',data:arrowData(tempBearingRef.current).cone})
-    map.addLayer({id:'_bear-cone',type:'fill',source:'_bear-cone',paint:{'fill-color':'#3b82f6','fill-opacity':0.18}})
-    map.addLayer({id:'_bear-line',type:'line',source:'_bear-line',paint:{'line-color':'#60a5fa','line-width':5,'line-opacity':0.95},layout:{'line-cap':'round'}})
-
-    const mapInst=map  // local alias — TypeScript can't narrow `map` inside nested functions
-    function update(bear: number) {
-      const d=arrowData(bear)
-      ;(mapInst.getSource('_bear-line') as any)?.setData(d.line)
-      ;(mapInst.getSource('_bear-cone') as any)?.setData(d.cone)
-      tempBearingRef.current=bear
-      setTempBearing(bear)
-    }
-
-    function onMove(e: any) {
-      if(!e.lngLat) return
-      const {lat,lng}=e.lngLat
-      update(Math.round(bearingDeg(fromLat,fromLon,lat,lng)))
-    }
-
-    // Clicking on the map confirms the bearing (natural interaction — point and tap)
-    function onMapClick(e: any) {
-      if(!e.lngLat) return
-      const {lat,lng}=e.lngLat
-      const b=Math.round(bearingDeg(fromLat,fromLon,lat,lng))
-      setRoutePhotos(prev=>prev.map(p=>p.id===photoId?{...p,viewingBearing:b}:p))
-      setPlacingPhoto(null)
-    }
-
-    map.on('mousemove',onMove)
-    map.on('touchmove',onMove)
-    map.on('click',onMapClick)
-
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const pts = gpsRef.current
+    // Remove old photo markers
+    photoMarkersRef.current.forEach(m => m.remove())
+    photoMarkersRef.current.clear()
+    // Add new photo markers
+    routePhotos.forEach(photo => {
+      const idx = Math.min(Math.round(photo.progress*(pts.length-1)), pts.length-1)
+      const lon = pts[idx].lon!, lat = pts[idx].lat!
+      const el = document.createElement('div')
+      el.style.cssText = 'cursor:pointer'
+      el.innerHTML = `<div style="position:relative;display:inline-block">
+        <div style="width:36px;height:36px;background:white;border-radius:6px;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.45);overflow:hidden">
+          <img src="${photo.dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block"/>
+        </div>
+        <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid white;margin:0 auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35))"></div>
+      </div>`
+      const marker = new maplibregl.Marker({element:el, anchor:'bottom'}).setLngLat([lon,lat]).addTo(map)
+      photoMarkersRef.current.set(photo.id, marker)
+    })
     return () => {
-      map.off('mousemove',onMove)
-      map.off('touchmove',onMove)
-      map.off('click',onMapClick)
-      cleanup()
+      photoMarkersRef.current.forEach(m => m.remove())
+      photoMarkersRef.current.clear()
     }
-  },[placingPhoto]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [routePhotos, mapReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Layer setup ───────────────────────────────────────────────────────────────
 
@@ -860,23 +826,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     })
   }
 
-  function confirmBearing() {
-    if(!placingPhoto) return
-    setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id?{...p,viewingBearing:tempBearingRef.current}:p))
-    setPlacingPhoto(null)
-  }
-
-  function handleSetBearing(photo: RoutePhoto) {
-    const pts=gpsRef.current; if(!pts.length) return
-    const rawIdx=photo.progress*(pts.length-1)
-    const i0=Math.min(Math.floor(rawIdx),pts.length-1), i1=Math.min(i0+1,pts.length-1), frac=rawIdx-i0
-    const lat=pts[i0].lat!+(pts[i1].lat!-pts[i0].lat!)*frac
-    const lon=pts[i0].lon!+(pts[i1].lon!-pts[i0].lon!)*frac
-    const bear=photo.viewingBearing??0
-    setTempBearing(bear); tempBearingRef.current=bear
-    setPlacingPhoto({id:photo.id,step:'mapbear',lat,lon})
-  }
-
   // ── Cinematic rendering ───────────────────────────────────────────────────────
 
   const startRendering=useCallback(async ()=>{
@@ -903,10 +852,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     // Stable intro bearing: direction from route start toward first 5% of route
     const introLookIdx=Math.min(Math.round(0.05*(pts.length-1)),pts.length-2)
     const introBearing=bearingDeg(pts[0].lat!,pts[0].lon!,pts[introLookIdx].lat!,pts[introLookIdx].lon!)
-    // Pre-warm tiles: jump to start area at max recording zoom so all tiles load before recording
-    map.jumpTo({center:[pts[0].lon!,pts[0].lat!],zoom:14,pitch:0,bearing:introBearing})
-    await new Promise<void>(r=>map.once('idle',r as any))
-    // Position at intro starting pose (wide overview)
+    // Pre-warm tiles along entire route at recording zoom
+    const keyIdxs = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(t =>
+      Math.min(Math.round(t*(pts.length-1)), pts.length-1))
+    for (const ki of keyIdxs) {
+      map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:14,pitch:0,bearing:0})
+      await new Promise<void>(r=>map.once('idle',r as any))
+    }
+    // Position at intro start
     map.jumpTo({center:[pts[0].lon!,pts[0].lat!],zoom:10.5,pitch:20,bearing:introBearing})
     await new Promise<void>(r=>map.once('idle',r as any))
 
@@ -973,21 +926,39 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     const totalKm=totalDistRef.current/1000, {gain:elevGain}=elevStatsRef.current
     const cr=coverRect(srcW,srcH,outW,outH)
 
-    const TARGET_FPS=30, TOTAL_FRAMES=Math.round(TARGET_FPS*videoDuration)
-    setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
+    const TARGET_FPS=30
+    const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * 2.5)  // 2.5s per photo
+    const sortedPhotos = [...routePhotos]
+      .sort((a,b)=>a.progress-b.progress)
+      .filter(ph => photoImgsRef.current.has(ph.id))
+      .map(ph => ({photo:ph, img:photoImgsRef.current.get(ph.id)!}))
 
-    // Photo schedule
-    const sortedPhotos=[...routePhotos].sort((a,b)=>a.progress-b.progress)
-    const photoSchedule=sortedPhotos.map(ph=>({
-      photo:ph, img:photoImgsRef.current.get(ph.id),
-      startFrame:Math.round(ph.progress*TOTAL_FRAMES),
-      holdFrames:Math.round(TARGET_FPS*4.5),
-    })).filter(s=>!!s.img)
+    // Route frames = base video duration; photo reveals are added on top
+    const ROUTE_FRAMES = Math.round(TARGET_FPS * videoDuration)
+    // Build a timeline mapping frame → {routeP, revealPhoto?}
+    // Each photo inserts PHOTO_REVEAL_FRAMES of pause after reaching its position
+    const photoTriggerRouteFrames = sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
+    const TOTAL_FRAMES = ROUTE_FRAMES + sortedPhotos.length * PHOTO_REVEAL_FRAMES
+
+    function frameToState(frameIdx: number): {p:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}} {
+      let pauseOffset = 0
+      for (let i = 0; i < sortedPhotos.length; i++) {
+        const triggerF = photoTriggerRouteFrames[i] + pauseOffset
+        if (frameIdx < triggerF) break
+        if (frameIdx < triggerF + PHOTO_REVEAL_FRAMES) {
+          return {p: sortedPhotos[i].photo.progress, reveal: {...sortedPhotos[i], revealFrame: frameIdx - triggerF}}
+        }
+        pauseOffset += PHOTO_REVEAL_FRAMES
+      }
+      const routeFrame = Math.min(frameIdx - pauseOffset, ROUTE_FRAMES)
+      return {p: routeFrame / ROUTE_FRAMES}
+    }
+
+    setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
 
     const currentShots=shotPlan.length>0?shotPlan:planShots(pts)
 
     const TITLE_DUR = Math.round(TARGET_FPS * 2.2)  // 2.2s title card
-    const PHOTO_WINDOW = 0.028   // 2.8% route = ~camera-align window
     // Strip database code prefix (e.g. "dtrek1234567890" or "dtrek1234567890 - Titolo")
     const displayTitle=(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'')
 
@@ -996,8 +967,43 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       const frameIdx=frameCountRef.current
       if(frameIdx>=TOTAL_FRAMES){recorder.stop();return}
 
-      const p=frameIdx/TOTAL_FRAMES
-      setRenderProgress(p); setRenderFrame(frameIdx)
+      const {p, reveal} = frameToState(frameIdx)
+      setRenderProgress(frameIdx/TOTAL_FRAMES); setRenderFrame(frameIdx)
+
+      // During photo reveal: hold camera, show photo fullscreen
+      if (reveal) {
+        requestAnimationFrame(()=>{
+          const t = reveal.revealFrame / PHOTO_REVEAL_FRAMES
+          const alpha = t<0.12 ? t/0.12 : t>0.88 ? (1-t)/0.12 : 1
+          // Draw photo fullscreen (cover-fit)
+          const img = reveal.img
+          const srcA = img.width / img.height
+          const dstA = outW / outH
+          let sx=0,sy=0,sw=img.width,sh=img.height
+          if(srcA>dstA){sw=Math.round(sh*dstA);sx=(img.width-sw)/2}
+          else{sh=Math.round(sw/dstA);sy=(img.height-sh)/2}
+          ctx.drawImage(img,sx,sy,sw,sh,0,0,outW,outH)
+          // Vignette
+          const vig=ctx.createRadialGradient(outW/2,outH/2,outW*0.3,outW/2,outH/2,outW*0.75)
+          vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,0,0,0.35)')
+          ctx.fillStyle=vig; ctx.fillRect(0,0,outW,outH)
+          // Caption
+          if(reveal.photo.caption){
+            const sc2=Math.min(outW,outH)/1080
+            ctx.globalAlpha=alpha
+            ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,outH-Math.round(100*sc2),outW,Math.round(100*sc2))
+            ctx.fillStyle='white'; ctx.textAlign='center'; ctx.textBaseline='middle'
+            ctx.font=`italic ${Math.round(38*sc2)}px Georgia,serif`
+            ctx.fillText(reveal.photo.caption,outW/2,outH-Math.round(50*sc2))
+            ctx.globalAlpha=1
+          }
+          // Fade overlay
+          ctx.globalAlpha=1-alpha; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
+          frameCountRef.current++
+          renderNextFrame()
+        })
+        return
+      }
 
       const rawIdx=p*(N-1), i0=Math.floor(rawIdx), i1=Math.min(i0+1,N-1), frac=rawIdx-i0
       const lon=pts[i0].lon!+(pts[i1].lon!-pts[i0].lon!)*frac
@@ -1008,24 +1014,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       const lookIdx=Math.min(Math.round((p+0.12)*(N-1)),smoothRouteBears.length-1)
       const routeBear=smoothRouteBears[lookIdx]
 
-      // Photo bearing influence: gently rotate toward viewingBearing when near a photo
-      let blendBear=routeBear
-      for(const sched of photoSchedule){
-        const dist=Math.abs(p-sched.photo.progress)
-        if(dist<PHOTO_WINDOW&&sched.photo.viewingBearing!==undefined){
-          const influence=Math.pow(1-dist/PHOTO_WINDOW,2)
-          blendBear=lerpAngle(blendBear,sched.photo.viewingBearing,influence*0.7)
-        }
-      }
-
       // Find active shot
       const activShot=currentShots.find(s=>p>=s.startP&&p<=s.endP)??currentShots[currentShots.length-1]
-      const prevP=(frameIdx-1)/TOTAL_FRAMES
+      const prevP=frameToState(frameIdx-1).p
       const prevShot=currentShots.find(s=>prevP>=s.startP&&prevP<=s.endP)
       if(activShot&&prevShot&&activShot.id!==prevShot.id) orbitBaseRef.current=mapRef.current?.getBearing()??0
 
       // Compute target camera
-      const cam=shotCamera(activShot,blendBear,p,orbitBaseRef)
+      const cam=shotCamera(activShot,routeBear,p,orbitBaseRef)
       // Intro: stable bearing (no look-ahead jitter when center is fixed)
       const targetBear=activShot.id==='intro'?introBearing:cam.bearing
       // Exponential smoothing on all axes → seamless transitions between shots
@@ -1063,10 +1059,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
           drawMapPin(ctx,px,py,outW/1080,faceImgRef.current)
         }
 
-        // Photo polaroid overlays
-        for(const sched of photoSchedule){
-          if(frameIdx>=sched.startFrame&&frameIdx<sched.startFrame+sched.holdFrames){
-            drawPolaroid(ctx,outW,outH,{photo:sched.photo,img:sched.img!,startFrame:sched.startFrame,holdFrames:sched.holdFrames},frameIdx)
+        // Photo pins on canvas
+        for(const s of sortedPhotos){
+          const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
+          const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
+          const ppx=(pmp.x-cr.sx)/cr.sw*outW, ppy=(pmp.y-cr.sy)/cr.sh*outH
+          if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
+            drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
           }
         }
 
@@ -1373,46 +1372,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
         </div>
       )}
 
-      {/* ══ ON-MAP BEARING ORIENTATION ══════════════════════════════════════════ */}
-      {videoState==='postprod'&&placingPhoto?.step==='mapbear'&&(
-        <div className="absolute inset-0 z-20 pointer-events-none">
-          <div className="absolute top-0 inset-x-0 pointer-events-auto">
-            <div className="m-3 bg-indigo-700/96 backdrop-blur-md rounded-2xl px-4 py-3 shadow-2xl">
-              <div className="flex items-center gap-3 mb-3">
-                <Navigation className="w-5 h-5 text-white shrink-0 animate-pulse"/>
-                <div className="flex-1">
-                  <p className="text-white font-bold text-sm">Tocca la mappa nella direzione dello scatto</p>
-                  <p className="text-indigo-200 text-xs mt-0.5">
-                    Muovi per vedere l'anteprima · tocca/clicca per confermare
-                    {tempBearing!==undefined ? ` · ${Math.round(tempBearing)}° ${bearingToCompass(Math.round(tempBearing))}` : ''}
-                  </p>
-                </div>
-                <button onClick={()=>setPlacingPhoto(null)} className="text-indigo-300 hover:text-white transition-colors">
-                  <X className="w-5 h-5"/>
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={()=>{setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto!.id?{...p,viewingBearing:undefined}:p));setPlacingPhoto(null)}}
-                  className="flex-1 py-2 rounded-xl bg-indigo-900/70 text-white/70 text-sm font-semibold hover:bg-indigo-900">
-                  Salta
-                </button>
-                <button onClick={confirmBearing}
-                  className="flex-[2] py-2 rounded-xl bg-white text-indigo-700 font-bold text-sm flex items-center justify-center gap-1.5">
-                  <Check className="w-3.5 h-3.5"/> Conferma direzione
-                </button>
-              </div>
-            </div>
-          </div>
-          {/* Photo thumbnail */}
-          {routePhotos.find(p=>p.id===placingPhoto.id)&&(
-            <div className="absolute top-36 right-3 pointer-events-none">
-              <div className="bg-white/10 backdrop-blur-md rounded-xl p-1.5 shadow-xl border border-white/20">
-                <img src={routePhotos.find(p=>p.id===placingPhoto.id)!.dataUrl} alt="" className="w-16 h-16 rounded-lg object-cover"/>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ══ POST-PRODUCTION ══════════════════════════════════════════════════════ */}
       {videoState==='postprod'&&!placingPhoto&&(
@@ -1470,7 +1429,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
               {routePhotos.length===0?(
                 <div className="border border-dashed border-white/15 rounded-xl p-5 text-center">
                   <p className="text-white/35 text-sm">Nessuna foto</p>
-                  <p className="text-white/22 text-xs mt-1">GPS automatico da EXIF · clic sul percorso per posizionare · muovi sulla mappa per la direzione</p>
+                  <p className="text-white/22 text-xs mt-1">GPS automatico da EXIF · tocca il percorso per posizionare</p>
                 </div>
               ):(
                 <div className="space-y-2.5">
@@ -1506,14 +1465,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
                             {photo.hasExifGps&&(
                               <span className="text-[10px] text-green-400 font-medium">📍 {Math.round(photo.progress*100)}%</span>
                             )}
-                            {/* Bearing button → on-map orientation */}
-                            <button onClick={()=>handleSetBearing(photo)}
-                              className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/15 rounded-lg px-2 py-1 transition-colors">
-                              <Navigation className="w-3 h-3"/>
-                              {photo.viewingBearing!==undefined
-                                ? `${bearingToCompass(photo.viewingBearing)} ${Math.round(photo.viewingBearing)}°`
-                                : 'Direzione'}
-                            </button>
                             {/* Remove */}
                             <button onClick={()=>{setRoutePhotos(prev=>prev.filter(p=>p.id!==photo.id));photoImgsRef.current.delete(photo.id)}}
                               className="ml-auto text-white/25 hover:text-red-400 transition-colors">
