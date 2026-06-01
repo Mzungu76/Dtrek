@@ -378,7 +378,7 @@ function planShots(pts: TrackPoint[]): ShotSegment[] {
   // 3 shots only: no mid-section camera acrobatics that cause nausea
   shots.push({id:'intro',label:'Intro aereo',startP:0,endP:0.08,pitch:[20,48],zoom:[10.5,13.8],bearingMode:'follow'})
   shots.push({id:'follow',label:'Seguimento',startP:0.08,endP:0.83,pitch:[48,48],zoom:[13.8,13.8],bearingMode:'follow'})
-  shots.push({id:'outro',label:'Pullback finale',startP:0.83,endP:1.0,pitch:[48,10],zoom:[13.8,9.2],bearingMode:'orbit-ccw',orbitDeg:140})
+  shots.push({id:'outro',label:'Pullback finale',startP:0.83,endP:1.0,pitch:[48,8],zoom:[13.8,7.5],bearingMode:'orbit-ccw',orbitDeg:100})
   return shots
 }
 
@@ -927,7 +927,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     const cr=coverRect(srcW,srcH,outW,outH)
 
     const TARGET_FPS=30
-    const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * 2.5)  // 2.5s per photo
+    const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * 3.5)  // 3.5s per photo
     const sortedPhotos = [...routePhotos]
       .sort((a,b)=>a.progress-b.progress)
       .filter(ph => photoImgsRef.current.has(ph.id))
@@ -1030,8 +1030,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
       smoothZoomRef.current = lerp(smoothZoomRef.current, cam.zoom, 0.06)
 
       // Pin center to route start/end during orbit shots — avoids abrupt movements from moving GPS center
-      const camCenterLon=activShot.id==='intro'?pts[0].lon!:activShot.id==='outro'?pts[N-1].lon!:lon
-      const camCenterLat=activShot.id==='intro'?pts[0].lat!:activShot.id==='outro'?pts[N-1].lat!:lat
+      const camCenterLon=activShot.id==='intro'?pts[0].lon!:lon
+      const camCenterLat=activShot.id==='intro'?pts[0].lat!:lat
       mapRef.current?.jumpTo({
         center:[camCenterLon,camCenterLat], bearing:smoothBearRef.current,
         pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
@@ -1059,13 +1059,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
           drawMapPin(ctx,px,py,outW/1080,faceImgRef.current)
         }
 
-        // Photo pins on canvas
-        for(const s of sortedPhotos){
-          const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
-          const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
-          const ppx=(pmp.x-cr.sx)/cr.sw*outW, ppy=(pmp.y-cr.sy)/cr.sh*outH
-          if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
-            drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
+        // Photo pins on canvas (hidden during outro pullback)
+        if(activShot.id!=='outro'){
+          for(const s of sortedPhotos){
+            const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
+            const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
+            const ppx=(pmp.x-cr.sx)/cr.sw*outW, ppy=(pmp.y-cr.sy)/cr.sh*outH
+            if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
+              drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
+            }
           }
         }
 
