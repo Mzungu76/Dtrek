@@ -568,6 +568,7 @@ export default function EscursionePage() {
           trackPoints={activity.trackPoints}
           title={activity.title ?? activity.notes}
           onClose={() => setShow3D(false)}
+          plannedTrackPoints={activity.linkedPlannedTrackPoints}
         />
       )}
 

@@ -9,7 +9,7 @@
  *   activities/{encodedId}.json  → StoredActivity completo
  */
 
-import { TcxActivity } from './tcxParser'
+import { TcxActivity, type TrackPoint } from './tcxParser'
 
 export interface StoredActivity extends TcxActivity {
   userNotes?: string
@@ -19,6 +19,7 @@ export interface StoredActivity extends TcxActivity {
   userRating?: number          // 1-10, assegnato dall'utente post-escursione
   userRatingNote?: string      // commento libero
   linkedPlannedId?: string     // ID percorso pianificato di origine
+  linkedPlannedTrackPoints?: TrackPoint[]  // tracciato GPS del percorso pianificato
   linkedBeautyScore?: { overall: number; grade: string; color: string }
 }
 
