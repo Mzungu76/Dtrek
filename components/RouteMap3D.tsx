@@ -366,9 +366,9 @@ function planShots(pts: TrackPoint[]): ShotSegment[] {
   const hasPeak=(maxA-minA)>200&&peakP>0.25&&peakP<0.85
   const shots:ShotSegment[]=[]
   // 3 shots only: no mid-section camera acrobatics that cause nausea
-  shots.push({id:'intro',label:'Intro aereo',startP:0,endP:0.08,pitch:[24,64],zoom:[10.0,14.0],bearingMode:'orbit-cw',orbitDeg:70})
+  shots.push({id:'intro',label:'Intro aereo',startP:0,endP:0.08,pitch:[20,48],zoom:[10.5,13.8],bearingMode:'follow'})
   shots.push({id:'follow',label:'Seguimento',startP:0.08,endP:0.83,pitch:[48,48],zoom:[13.8,13.8],bearingMode:'follow'})
-  shots.push({id:'outro',label:'Pullback finale',startP:0.83,endP:1.0,pitch:[65,10],zoom:[14.2,9.2],bearingMode:'orbit-ccw',orbitDeg:140})
+  shots.push({id:'outro',label:'Pullback finale',startP:0.83,endP:1.0,pitch:[48,10],zoom:[13.8,9.2],bearingMode:'orbit-ccw',orbitDeg:140})
   return shots
 }
 
@@ -900,14 +900,24 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
     map.resize()
     await new Promise<void>(r=>map.once('idle',r as any))
 
+    // Stable intro bearing: direction from route start toward first 5% of route
+    const introLookIdx=Math.min(Math.round(0.05*(pts.length-1)),pts.length-2)
+    const introBearing=bearingDeg(pts[0].lat!,pts[0].lon!,pts[introLookIdx].lat!,pts[introLookIdx].lon!)
+    // Pre-warm tiles: jump to start area at max recording zoom so all tiles load before recording
+    map.jumpTo({center:[pts[0].lon!,pts[0].lat!],zoom:14,pitch:0,bearing:introBearing})
+    await new Promise<void>(r=>map.once('idle',r as any))
+    // Position at intro starting pose (wide overview)
+    map.jumpTo({center:[pts[0].lon!,pts[0].lat!],zoom:10.5,pitch:20,bearing:introBearing})
+    await new Promise<void>(r=>map.once('idle',r as any))
+
     // Hide HTML marker during rendering
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='0'
 
-    // Initialize smooth camera
-    smoothBearRef.current=map.getBearing()
-    smoothPitchRef.current=map.getPitch()
-    smoothZoomRef.current=map.getZoom()
-    orbitBaseRef.current=map.getBearing()
+    // Initialize smooth camera from intro starting pose
+    smoothBearRef.current=introBearing
+    smoothPitchRef.current=20
+    smoothZoomRef.current=10.5
+    orbitBaseRef.current=introBearing
 
     // Setup progressive route reveal
     try { setupRouteReveal(map, pts) } catch {}
@@ -978,6 +988,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
 
     const TITLE_DUR = Math.round(TARGET_FPS * 2.2)  // 2.2s title card
     const PHOTO_WINDOW = 0.028   // 2.8% route = ~camera-align window
+    // Strip database code prefix (e.g. "dtrek1234567890" or "dtrek1234567890 - Titolo")
+    const displayTitle=(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'')
 
     function renderNextFrame() {
       if(renderAbortRef.current) return
@@ -1014,17 +1026,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
 
       // Compute target camera
       const cam=shotCamera(activShot,blendBear,p,orbitBaseRef)
-
-      // Only smooth bearing — pitch and zoom from planned curve (already smooth by design)
-      // α=0.022 → ~1.4s lag → camera rotates like a hawk, never snaps
-      smoothBearRef.current = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
+      // Intro: stable bearing (no look-ahead jitter when center is fixed)
+      const targetBear=activShot.id==='intro'?introBearing:cam.bearing
+      // Exponential smoothing on all axes → seamless transitions between shots
+      smoothBearRef.current = lerpAngle(smoothBearRef.current, targetBear, 0.022)
+      smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
+      smoothZoomRef.current = lerp(smoothZoomRef.current, cam.zoom, 0.06)
 
       // Pin center to route start/end during orbit shots — avoids abrupt movements from moving GPS center
       const camCenterLon=activShot.id==='intro'?pts[0].lon!:activShot.id==='outro'?pts[N-1].lon!:lon
       const camCenterLat=activShot.id==='intro'?pts[0].lat!:activShot.id==='outro'?pts[N-1].lat!:lat
       mapRef.current?.jumpTo({
         center:[camCenterLon,camCenterLat], bearing:smoothBearRef.current,
-        pitch:cam.pitch, zoom:cam.zoom,
+        pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
       })
 
       // Progressive route reveal (every 20 frames)
@@ -1057,7 +1071,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
         }
 
         // Title card (first 2.2s)
-        if(videoShowTitle&&title&&frameIdx<TITLE_DUR){
+        if(videoShowTitle&&displayTitle&&frameIdx<TITLE_DUR){
           const fi=frameIdx/(TARGET_FPS*0.55), fo=frameIdx>(TITLE_DUR-TARGET_FPS*0.55)?(TITLE_DUR-frameIdx)/(TARGET_FPS*0.55):1
           const alpha=Math.min(1,Math.min(fi,fo))
           ctx.fillStyle=`rgba(0,0,0,${alpha*0.58})`; ctx.fillRect(0,0,outW,outH)
@@ -1067,18 +1081,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate }:
           ctx.textAlign='center'; ctx.textBaseline='bottom'
           ctx.fillText('DTrek',outW/2,outH/2-Math.round(36*sc2))
           ctx.fillStyle='white'; ctx.font=`700 ${Math.round(62*sc2)}px -apple-system,sans-serif`; ctx.textBaseline='middle'
-          let tt=title; while(ctx.measureText(tt).width>outW-Math.round(120*sc2)&&tt.length>4) tt=tt.slice(0,-4)+'…'
+          let tt=displayTitle; while(ctx.measureText(tt).width>outW-Math.round(120*sc2)&&tt.length>4) tt=tt.slice(0,-4)+'…'
           ctx.fillText(tt,outW/2,outH/2)
           ctx.globalAlpha=1
         }
 
         // HUD (skip if title card is prominent)
-        const showHUD = !(videoShowTitle&&title&&frameIdx<TITLE_DUR&&frameIdx<Math.round(TARGET_FPS*1.5))
+        const showHUD = !(videoShowTitle&&displayTitle&&frameIdx<TITLE_DUR&&frameIdx<Math.round(TARGET_FPS*1.5))
         if(showHUD){
           const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
           const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:rawHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:rawHr[si]}:undefined
           const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
-          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:title??'',showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:activShot?.label})
+          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:activShot?.label})
         }
 
         // Fade to black at the end of outro (last 6% of video)
