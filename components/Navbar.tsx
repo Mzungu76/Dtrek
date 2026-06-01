@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Mountain, Upload, BarChart2, BookOpen, Map, CalendarClock, User } from 'lucide-react'
+import { Mountain, Upload, BarChart2, BookOpen, Map, CalendarClock, User, ArrowDownToLine } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 
 const NAV_LINKS = [
@@ -15,6 +15,80 @@ const NAV_LINKS = [
 function isActive(href: string, path: string) {
   return href === '/' ? path === '/' : path.startsWith(href)
 }
+
+// ── Small install trigger button ───────────────────────────────────────────────
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
+function InstallButton({ compact = false }: { compact?: boolean }) {
+  const [prompt, setPrompt]     = useState<BeforeInstallPromptEvent | null>(null)
+  const [isIOS, setIsIOS]       = useState(false)
+  const [installed, setInstalled] = useState(false)
+  const [showIOSHint, setShowIOSHint] = useState(false)
+
+  useEffect(() => {
+    if (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    ) { setInstalled(true); return }
+
+    const ua = navigator.userAgent.toLowerCase()
+    if (/iphone|ipad|ipod/.test(ua) && !(window as any).MSStream) setIsIOS(true)
+
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setPrompt(e as BeforeInstallPromptEvent)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    window.addEventListener('appinstalled', () => { setInstalled(true); setPrompt(null) })
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleClick = async () => {
+    if (isIOS) { setShowIOSHint(v => !v); return }
+    if (!prompt) return
+    await prompt.prompt()
+    const { outcome } = await prompt.userChoice
+    if (outcome === 'accepted') setInstalled(true)
+    setPrompt(null)
+  }
+
+  if (installed || (!prompt && !isIOS)) return null
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleClick}
+        title="Installa l'app"
+        className={
+          compact
+            ? 'flex items-center justify-center w-9 h-9 rounded-xl bg-forest-50 border border-forest-200 text-forest-600 hover:bg-forest-100 transition-colors'
+            : 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-forest-600 bg-forest-50 border border-forest-200 hover:bg-forest-100 transition-colors'
+        }
+      >
+        <ArrowDownToLine className="w-4 h-4 shrink-0" />
+        {!compact && <span>Installa</span>}
+      </button>
+
+      {/* iOS tooltip */}
+      {showIOSHint && (
+        <div className="absolute right-0 top-12 w-64 bg-stone-900 text-white text-xs rounded-xl p-3 shadow-2xl z-50">
+          <p className="font-semibold mb-1">Aggiungi alla Home Screen</p>
+          <p className="text-stone-300 leading-snug">
+            Tocca <strong>Condividi ⬆️</strong> in Safari, poi seleziona
+            <strong> "Aggiungi a Home"</strong>.
+          </p>
+          <div className="absolute -top-1.5 right-4 w-3 h-3 bg-stone-900 rotate-45" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Navbar ─────────────────────────────────────────────────────────────────────
 
 export default function Navbar() {
   const path = usePathname()
@@ -62,6 +136,7 @@ export default function Navbar() {
               }
             </Link>
             <div className="w-px h-5 bg-stone-200 mx-1" />
+            <InstallButton />
             <Link
               href="/upload"
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
@@ -73,8 +148,9 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* Mobile: profile + upload in top-right */}
-          <div className="md:hidden flex items-center gap-2">
+          {/* Mobile: install + profile + upload in top-right */}
+          <div className="md:hidden flex items-center gap-1.5">
+            <InstallButton compact />
             <Link href="/profilo"
               className={`flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border-2 transition-all ${
                 path === '/profilo' ? 'border-amber-500' : 'border-stone-200 hover:border-amber-300'
