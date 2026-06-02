@@ -281,7 +281,10 @@ export default function HomePage() {
   const monthBarRef                 = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    Promise.all([getAllActivities(), getAllPlanned()])
+    Promise.all([
+      getAllActivities(setActivities),
+      getAllPlanned(setPlanned),
+    ])
       .then(([acts, plan]) => { setActivities(acts); setPlanned(plan) })
       .finally(() => setLoading(false))
   }, [])

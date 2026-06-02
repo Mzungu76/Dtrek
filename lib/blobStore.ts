@@ -96,12 +96,12 @@ function bgRefreshActivity(fresh: StoredActivity) {
  * Stale-while-revalidate: returns local cache immediately (fast offline-first),
  * then fetches fresh data from Supabase in the background.
  */
-export async function getAllActivities(): Promise<ActivityMeta[]> {
+export async function getAllActivities(onRefresh?: (data: ActivityMeta[]) => void): Promise<ActivityMeta[]> {
   const local = await lsGet<ActivityMeta[]>(LS_KEYS.activitiesList)
 
   // Start network fetch regardless; update cache in background
   const netFetch = apiFetch<ActivityMeta[]>('/api/activities')
-    .then((data) => { bgRefreshList(data); return data })
+    .then((data) => { bgRefreshList(data); onRefresh?.(data); return data })
     .catch((): ActivityMeta[] => [])
 
   if (local && local.length > 0) {
