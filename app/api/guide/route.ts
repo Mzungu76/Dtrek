@@ -128,11 +128,25 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  // Resolve API key: user's personal key → else subscription (future) → else 402
+  const { data: settings } = await supabase
+    .from('user_settings')
+    .select('claude_api_key, subscription_tier')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  const userKey = settings?.claude_api_key as string | null | undefined
+  const hasSub  = (settings?.subscription_tier as string) === 'premium'
+  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
+
   if (!apiKey) {
-    return new Response('{"error":"ANTHROPIC_API_KEY non configurata"}', {
-      status: 500, headers: { 'Content-Type': 'application/json' },
-    })
+    return new Response(
+      JSON.stringify({
+        error:   'no_ai_access',
+        message: 'Aggiungi la tua chiave API Claude nelle impostazioni del profilo per generare guide turistiche.',
+      }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 
   let hikeId: string
