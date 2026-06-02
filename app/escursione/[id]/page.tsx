@@ -28,9 +28,10 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, Activity,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, Smile,
 } from 'lucide-react'
-import { computeMeritaScore, msLabel, type MeritaResult } from '@/lib/meritaScore'
+import { computeLootScore, lsLabel, type LootResult } from '@/lib/lootScore'
+import { computeTrailScore, tsLabel, type TrailScoreResult } from '@/lib/trailScore'
 import ShareModal from '@/components/ShareModal'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
@@ -54,40 +55,40 @@ export default function EscursionePage() {
   const router = useRouter()
   const id = decodeURIComponent(params.id as string)
 
-  const [activity,        setActivity]       = useState<StoredActivity | null>(null)
-  const [loading,         setLoading]        = useState(true)
-  const [saving,          setSaving]         = useState(false)
-  const [editTitle,       setEditTitle]      = useState(false)
-  const [editNotes,       setEditNotes]      = useState(false)
-  const [titleVal,        setTitleVal]       = useState('')
-  const [notesVal,        setNotesVal]       = useState('')
-  const [tagInput,        setTagInput]       = useState('')
-  const [showShare,       setShowShare]      = useState(false)
-  const [showGradient,    setShowGradient]   = useState(false)
-  const [pois,            setPois]           = useState<PoiItem[]>([])
-  const [wikiPages,       setWikiPages]      = useState<WikiPage[]>([])
-  const [ratingVal,       setRatingVal]      = useState(0)
-  const [ratingNote,      setRatingNote]     = useState('')
-  const [savingRating,    setSavingRating]   = useState(false)
-  const [showRatingPanel, setShowRatingPanel] = useState(false)
-  const [show3D,          setShow3D]          = useState(false)
-  const [showStreetView,  setShowStreetView]  = useState(false)
-  const [poiWikiEntries, setPoiWikiEntries]   = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
-  const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
-  // MeritaScore
-  const [showRpePanel,    setShowRpePanel]    = useState(false)
-  const [rpeVal,          setRpeVal]          = useState(0)
-  const [savingRpe,       setSavingRpe]       = useState(false)
-  const [meritaResult,    setMeritaResult]    = useState<MeritaResult | null>(null)
-  const [userMaxHR,       setUserMaxHR]       = useState(0)
-  const [pesoNatura,      setPesoNatura]      = useState(50)
+  const [activity,           setActivity]           = useState<StoredActivity | null>(null)
+  const [loading,            setLoading]            = useState(true)
+  const [saving,             setSaving]             = useState(false)
+  const [editTitle,          setEditTitle]          = useState(false)
+  const [editNotes,          setEditNotes]          = useState(false)
+  const [titleVal,           setTitleVal]           = useState('')
+  const [notesVal,           setNotesVal]           = useState('')
+  const [tagInput,           setTagInput]           = useState('')
+  const [showShare,          setShowShare]          = useState(false)
+  const [showGradient,       setShowGradient]       = useState(false)
+  const [pois,               setPois]               = useState<PoiItem[]>([])
+  const [wikiPages,          setWikiPages]          = useState<WikiPage[]>([])
+  const [ratingVal,          setRatingVal]          = useState(0)
+  const [ratingNote,         setRatingNote]         = useState('')
+  const [savingRating,       setSavingRating]       = useState(false)
+  const [showRatingPanel,    setShowRatingPanel]    = useState(false)
+  const [show3D,             setShow3D]             = useState(false)
+  const [showStreetView,     setShowStreetView]     = useState(false)
+  const [poiWikiEntries,     setPoiWikiEntries]     = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
+  const [poisFullyLoaded,    setPoisFullyLoaded]    = useState(false)
+  // LootScore / TrailScore
+  const [showSodPanel,       setShowSodPanel]       = useState(false)
+  const [sodVal,             setSodVal]             = useState(0)
+  const [savingSod,          setSavingSod]          = useState(false)
+  const [lootResult,         setLootResult]         = useState<LootResult | null>(null)
+  const [trailResult,        setTrailResult]        = useState<TrailScoreResult | null>(null)
+  const [userAge,            setUserAge]            = useState(0)
+  const [pesoNatura,         setPesoNatura]         = useState(50)
 
   const EMPTY_TERRAIN: TerrainContext = {
     hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
     isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [],
   }
 
-  // Before early returns — hooks cannot be conditional
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat && p.lon)
     if (!pts.length) return []
@@ -129,7 +130,18 @@ export default function EscursionePage() {
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  // Save beauty score to linkedBeautyScore when POIs are fully loaded
+  // Fetch user settings on mount
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.userAge)                    setUserAge(d.userAge)
+        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Save beauty score to DB when POIs fully loaded
   useEffect(() => {
     if (!beautyScore || !activity || !poisFullyLoaded) return
     const { overall, grade, color } = beautyScore
@@ -139,44 +151,48 @@ export default function EscursionePage() {
     setActivity(prev => prev ? { ...prev, linkedBeautyScore: cached } : prev)
   }, [beautyScore, activity, poisFullyLoaded, id])
 
-  // Fetch user settings (FCmax, beauty weights) once
-  useEffect(() => {
-    fetch('/api/user-settings')
-      .then(r => r.json())
-      .then(d => {
-        if (d.maxHeartRate)             setUserMaxHR(d.maxHeartRate)
-        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
-      })
-      .catch(() => {})
-  }, [])
-
-  // Compute MeritaScore when beautyScore and activity are ready
+  // Compute LootScore + TrailScore when beautyScore is ready
   useEffect(() => {
     if (!beautyScore || !activity || !poisFullyLoaded) return
-    const result = computeMeritaScore(
+
+    const ls = computeLootScore(
       beautyScore,
       {
         distanceMeters:   activity.distanceMeters,
         elevationGain:    activity.elevationGain,
         totalTimeSeconds: activity.totalTimeSeconds,
         avgHeartRate:     activity.avgHeartRate,
-        userMaxHeartRate: userMaxHR,
-        rpe:              activity.rpe,
+        userAge,
+        soddisfazione:    activity.soddisfazione,
       },
       pesoNatura,
     )
-    setMeritaResult(result)
-    // Cache MS in DB only if it changed
-    if (activity.meritaScore !== result.ms) {
-      updateActivityMeta(id, { meritaScore: result.ms }).catch(() => {})
-      setActivity(prev => prev ? { ...prev, meritaScore: result.ms } : prev)
-    }
-  }, [beautyScore, activity, poisFullyLoaded, userMaxHR, pesoNatura, id]) // eslint-disable-line react-hooks/exhaustive-deps
+    setLootResult(ls)
 
-  // Init RPE state from loaded activity
+    const ts = computeTrailScore(
+      beautyScore,
+      {
+        distanceMeters: activity.distanceMeters,
+        elevationGain:  activity.elevationGain,
+      },
+      pesoNatura,
+    )
+    setTrailResult(ts)
+
+    // Cache to DB only if changed
+    const patchNeeded: Partial<Parameters<typeof updateActivityMeta>[1]> = {}
+    if (activity.lootScore  !== ls.ls) patchNeeded.lootScore  = ls.ls
+    if (activity.trailScore !== ts.ts) patchNeeded.trailScore = ts.ts
+    if (Object.keys(patchNeeded).length > 0) {
+      updateActivityMeta(id, patchNeeded).catch(() => {})
+      setActivity(prev => prev ? { ...prev, ...patchNeeded } : prev)
+    }
+  }, [beautyScore, activity, poisFullyLoaded, userAge, pesoNatura, id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Init soddisfazione from loaded activity
   useEffect(() => {
-    if (activity?.rpe) setRpeVal(activity.rpe)
-  }, [activity?.rpe])
+    if (activity?.soddisfazione) setSodVal(activity.soddisfazione)
+  }, [activity?.soddisfazione])
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
@@ -207,14 +223,14 @@ export default function EscursionePage() {
       setShowRatingPanel(false)
     } finally { setSavingRating(false) }
   }
-  const saveRpe = async () => {
-    if (!rpeVal) return
-    setSavingRpe(true)
+  const saveSod = async () => {
+    if (!sodVal) return
+    setSavingSod(true)
     try {
-      await updateActivityMeta(id, { rpe: rpeVal })
-      setActivity(prev => prev ? { ...prev, rpe: rpeVal } : prev)
-      setShowRpePanel(false)
-    } finally { setSavingRpe(false) }
+      await updateActivityMeta(id, { soddisfazione: sodVal })
+      setActivity(prev => prev ? { ...prev, soddisfazione: sodVal } : prev)
+      setShowSodPanel(false)
+    } finally { setSavingSod(false) }
   }
 
   const addTag    = async () => { if (!tagInput.trim()) return; await patch({ tags: [...(activity.tags ?? []), tagInput.trim()] }); setTagInput('') }
@@ -486,7 +502,7 @@ export default function EscursionePage() {
         {/* Weather */}
         {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
 
-        {/* Beauty score — computed live or loaded from DB */}
+        {/* Beauty score */}
         {(beautyScore ?? activity.linkedBeautyScore) && (
           <div
             className="rounded-2xl p-6 text-white shadow-lg overflow-hidden relative"
@@ -505,7 +521,6 @@ export default function EscursionePage() {
                 <p className="text-sm opacity-70 mt-0.5">Valutazione automatica · OSM + Wikipedia</p>
               </div>
             </div>
-            {/* Category breakdown */}
             {beautyScore?.categories && (
               <div className="relative mt-4 grid grid-cols-5 gap-2">
                 {beautyScore.categories.map(c => (
@@ -520,129 +535,149 @@ export default function EscursionePage() {
           </div>
         )}
 
-        {/* ── MERITASCORE ── */}
-        {meritaResult ? (
-          <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
-            {/* Header band */}
-            <div
-              className="px-6 py-4 flex items-center justify-between"
-              style={{ background: `linear-gradient(135deg, ${meritaResult.color}22, ${meritaResult.color}11)`, borderBottom: `2px solid ${meritaResult.color}40` }}
-            >
-              <div className="flex items-center gap-4">
-                <div className="text-center">
-                  <div className="text-5xl font-bold leading-none" style={{ color: meritaResult.color }}>
-                    {meritaResult.ms}
+        {/* ── TRAILSCORE + LOOTSCORE ── */}
+        {(trailResult || lootResult || activity.lootScore !== undefined || activity.trailScore !== undefined) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            {/* TrailScore */}
+            {(() => {
+              const result = trailResult
+              const cached = activity.trailScore
+              const ts = result?.ts ?? cached
+              if (ts === undefined) return null
+              const { label, color } = result ? result : tsLabel(ts)
+              return (
+                <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm bg-white">
+                  <div className="px-5 py-3 flex items-center gap-3"
+                    style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, borderBottom: `2px solid ${color}30` }}>
+                    <div className="text-center shrink-0">
+                      <div className="text-4xl font-bold leading-none" style={{ color }}>{ts}</div>
+                      <div className="text-[10px] text-stone-400 mt-0.5">/ 100</div>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">TrailScore</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: color }}>{label}</span>
+                      </div>
+                      <p className="text-xs text-stone-500">Obiettivo · escursionista standard</p>
+                      {result && (
+                        <p className="text-[10px] text-stone-400 mt-0.5">
+                          Tempo stimato: {result.estimatedHours}h · Fatica standard: {result.f}/10
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs text-stone-400 mt-0.5">/ 100</div>
+                  {result && (
+                    <div className="px-5 py-3 flex gap-4">
+                      <div className="flex-1">
+                        <div className="flex justify-between text-[10px] text-stone-500 mb-1">
+                          <span>🌄 Bellezza</span><span className="font-bold text-stone-700">{result.b}/10</span>
+                        </div>
+                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-forest-400" style={{ width: `${result.b * 10}%` }} />
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between text-[10px] text-stone-500 mb-1">
+                          <span>⛰️ Fatica std</span><span className="font-bold text-stone-700">{result.f}/10</span>
+                        </div>
+                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-terra-400" style={{ width: `${result.f * 10}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-bold uppercase tracking-widest text-stone-400">MeritaScore</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
-                      style={{ backgroundColor: meritaResult.color }}>
-                      {meritaResult.label}
-                    </span>
+              )
+            })()}
+
+            {/* LootScore */}
+            {(() => {
+              const result = lootResult
+              const cached = activity.lootScore
+              const ls = result?.ls ?? cached
+              if (ls === undefined) return null
+              const { label, color } = result ? result : lsLabel(ls)
+              return (
+                <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm bg-white">
+                  <div className="px-5 py-3 flex items-center justify-between gap-3"
+                    style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, borderBottom: `2px solid ${color}30` }}>
+                    <div className="flex items-center gap-3">
+                      <div className="text-center shrink-0">
+                        <div className="text-4xl font-bold leading-none" style={{ color }}>{ls}</div>
+                        <div className="text-[10px] text-stone-400 mt-0.5">/ 100</div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">LootScore</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: color }}>{label}</span>
+                        </div>
+                        <p className="text-xs text-stone-500">Personale · ne è valsa la pena?</p>
+                        {activity.soddisfazione && (
+                          <p className="text-[10px] text-stone-400 mt-0.5">
+                            Soddisfazione: {activity.soddisfazione}/10
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowSodPanel(v => !v)}
+                      className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:border-stone-400 text-xs font-medium transition-colors"
+                    >
+                      <Smile className="w-3.5 h-3.5" />
+                      {activity.soddisfazione ? `${activity.soddisfazione}/10` : 'Soddisfazione'}
+                    </button>
                   </div>
-                  <p className="text-sm text-stone-500">Ne è valsa la pena?</p>
+                  {result && (
+                    <div className="px-5 py-3 flex gap-4">
+                      <div className="flex-1">
+                        <div className="flex justify-between text-[10px] text-stone-500 mb-1">
+                          <span>🌄 Bellezza</span><span className="font-bold text-stone-700">{result.b}/10</span>
+                        </div>
+                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-forest-400" style={{ width: `${result.b * 10}%` }} />
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between text-[10px] text-stone-500 mb-1">
+                          <span>💪 Fatica tua</span><span className="font-bold text-stone-700">{result.f}/10</span>
+                        </div>
+                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-terra-400" style={{ width: `${result.f * 10}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {result && !result.breakdown.hasFc && (
+                    <div className="bg-amber-50 border-t border-amber-100 px-5 py-2 text-[11px] text-amber-700">
+                      ℹ️ Inserisci età nel profilo per una fatica FC più precisa.
+                    </div>
+                  )}
                 </div>
-              </div>
-              <button
-                onClick={() => setShowRpePanel(v => !v)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:border-stone-400 text-xs font-medium transition-colors"
-              >
-                <Activity className="w-3.5 h-3.5" />
-                {activity.rpe ? `RPE ${activity.rpe}/10` : 'Aggiungi RPE'}
-              </button>
-            </div>
-
-            {/* Breakdown bars */}
-            <div className="bg-white px-6 py-4 grid grid-cols-2 gap-4">
-              {/* Bellezza */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-stone-500 flex items-center gap-1">
-                    🌄 Bellezza
-                  </span>
-                  <span className="text-xs font-bold text-stone-800">{meritaResult.b.toFixed(1)}/10</span>
-                </div>
-                <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full bg-forest-500 transition-all"
-                    style={{ width: `${meritaResult.b * 10}%` }} />
-                </div>
-                <div className="flex justify-between mt-1 text-[10px] text-stone-400">
-                  <span>🌿 Natura {meritaResult.b1.toFixed(1)}</span>
-                  <span>🏛 Cultura {meritaResult.b2.toFixed(1)}</span>
-                </div>
-              </div>
-
-              {/* Fatica */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-stone-500 flex items-center gap-1">
-                    💪 Fatica
-                  </span>
-                  <span className="text-xs font-bold text-stone-800">{meritaResult.f.toFixed(1)}/10</span>
-                </div>
-                <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full bg-terra-500 transition-all"
-                    style={{ width: `${meritaResult.f * 10}%` }} />
-                </div>
-                <div className="flex justify-between mt-1 text-[10px] text-stone-400">
-                  <span>D+ {meritaResult.breakdown.dislKm.toFixed(1)}</span>
-                  {meritaResult.breakdown.hasFc && <span>FC {meritaResult.breakdown.fcPct.toFixed(1)}</span>}
-                  {meritaResult.breakdown.hasRpe && <span>RPE {meritaResult.breakdown.rpe}</span>}
-                  <span>⏱ {meritaResult.breakdown.durata.toFixed(1)}</span>
-                </div>
-              </div>
-            </div>
-
-            {(!meritaResult.breakdown.hasRpe || !meritaResult.breakdown.hasFc) && (
-              <div className="bg-amber-50 border-t border-amber-100 px-6 py-2 flex items-center gap-2 text-xs text-amber-700">
-                <span>ℹ️</span>
-                <span>
-                  {!meritaResult.breakdown.hasRpe && !meritaResult.breakdown.hasFc
-                    ? 'Aggiungi RPE e imposta la FCmax nel profilo per un calcolo più preciso.'
-                    : !meritaResult.breakdown.hasRpe
-                    ? 'Aggiungi l\'RPE per affinare il calcolo della fatica.'
-                    : 'Imposta la FCmax nel profilo per un calcolo FC più preciso.'}
-                </span>
-              </div>
-            )}
+              )
+            })()}
           </div>
-        ) : (activity.meritaScore !== undefined && activity.meritaScore !== null) ? (
-          /* Cached MS while beautyScore loads */
-          <div className="rounded-2xl border border-stone-200 shadow-sm p-5 flex items-center gap-4 bg-white">
-            <div style={{ color: msLabel(activity.meritaScore).color }}
-              className="text-4xl font-bold leading-none shrink-0">{activity.meritaScore}</div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-stone-400">MeritaScore</p>
-              <p className="text-sm font-semibold" style={{ color: msLabel(activity.meritaScore).color }}>
-                {msLabel(activity.meritaScore).label}
-              </p>
-              <p className="text-xs text-stone-400">Caricamento dettagli…</p>
-            </div>
-          </div>
-        ) : null}
+        )}
 
-        {/* RPE panel */}
-        {showRpePanel && (
+        {/* Soddisfazione panel */}
+        {showSodPanel && (
           <div className="rounded-2xl border border-stone-200 bg-white shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-semibold text-stone-800">Sforzo percepito (RPE)</h3>
-                <p className="text-xs text-stone-400 mt-0.5">Come ti sei sentito durante questa escursione?</p>
+                <h3 className="text-sm font-semibold text-stone-800">Soddisfazione (1–10)</h3>
+                <p className="text-xs text-stone-400 mt-0.5">Quanto sei soddisfatto di questa escursione?</p>
               </div>
-              <button onClick={() => setShowRpePanel(false)} className="text-stone-400 hover:text-stone-700 transition-colors">
+              <button onClick={() => setShowSodPanel(false)} className="text-stone-400 hover:text-stone-700 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="grid grid-cols-10 gap-1.5 mb-4">
               {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
-                const sel = n === rpeVal
-                const rpeColor = n <= 3 ? '#16a34a' : n <= 6 ? '#ca8a04' : n <= 8 ? '#ea580c' : '#dc2626'
+                const sel = n === sodVal
+                const sodColor = n <= 3 ? '#dc2626' : n <= 6 ? '#ca8a04' : n <= 8 ? '#65a30d' : '#15803d'
                 return (
-                  <button key={n} onClick={() => setRpeVal(n)}
-                    style={sel ? { backgroundColor: rpeColor, borderColor: rpeColor } : {}}
+                  <button key={n} onClick={() => setSodVal(n)}
+                    style={sel ? { backgroundColor: sodColor, borderColor: sodColor } : {}}
                     className={`aspect-square rounded-xl text-sm font-bold border-2 transition-all
                       ${sel ? 'text-white scale-110 shadow-md' : 'bg-stone-50 text-stone-600 border-stone-200 hover:border-stone-400'}`}
                   >
@@ -652,17 +687,17 @@ export default function EscursionePage() {
               })}
             </div>
             <div className="flex justify-between text-[10px] text-stone-400 mb-4 px-0.5">
-              <span>Molto facile</span>
-              <span>Moderato</span>
-              <span>Massimale</span>
+              <span>Per niente</span>
+              <span>Abbastanza</span>
+              <span>Moltissimo</span>
             </div>
             <div className="flex gap-2">
-              <button onClick={saveRpe} disabled={savingRpe || rpeVal === 0}
+              <button onClick={saveSod} disabled={savingSod || sodVal === 0}
                 className="flex items-center gap-2 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-40">
-                {savingRpe && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {activity.rpe ? 'Aggiorna RPE' : 'Salva RPE'}
+                {savingSod && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {activity.soddisfazione ? 'Aggiorna' : 'Salva'}
               </button>
-              <button onClick={() => setShowRpePanel(false)} className="px-4 py-2 text-sm text-stone-400 hover:text-stone-700 transition-colors">
+              <button onClick={() => setShowSodPanel(false)} className="px-4 py-2 text-sm text-stone-400 hover:text-stone-700 transition-colors">
                 Annulla
               </button>
             </div>

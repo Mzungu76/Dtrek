@@ -59,8 +59,9 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     linkedPlannedId: row.linked_planned_id as string | undefined,
     linkedPlannedTrackPoints: row.linked_planned_track_points as TrackPoint[] | undefined,
     linkedBeautyScore: row.linked_beauty_score as StoredActivity['linkedBeautyScore'],
-    rpe:          row.rpe as number | undefined,
-    meritaScore:  row.merita_score as number | undefined,
+    soddisfazione: row.soddisfazione as number | undefined,
+    lootScore:     row.loot_score as number | undefined,
+    trailScore:    row.trail_score as number | undefined,
   }
 }
 
@@ -92,8 +93,9 @@ function activityToRow(a: StoredActivity) {
     linked_planned_id:            a.linkedPlannedId ?? null,
     linked_planned_track_points:  a.linkedPlannedTrackPoints ?? null,
     linked_beauty_score:          a.linkedBeautyScore ?? null,
-    rpe:                          a.rpe ?? null,
-    merita_score:                 a.meritaScore ?? null,
+    soddisfazione:                a.soddisfazione ?? null,
+    loot_score:                   a.lootScore ?? null,
+    trail_score:                  a.trailScore ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }
@@ -158,20 +160,22 @@ export async function PATCH(req: NextRequest) {
       userRatingNote?: string
       linkedPlannedId?: string
       linkedBeautyScore?: StoredActivity['linkedBeautyScore']
-      rpe?: number
-      meritaScore?: number
+      soddisfazione?: number
+      lootScore?: number
+      trailScore?: number
     }
 
     const dbPatch: Record<string, unknown> = {}
-    if (patch.title           !== undefined) dbPatch.title             = patch.title
-    if (patch.userNotes       !== undefined) dbPatch.user_notes        = patch.userNotes
-    if (patch.tags            !== undefined) dbPatch.tags              = patch.tags
-    if (patch.userRating      !== undefined) dbPatch.user_rating       = patch.userRating
-    if (patch.userRatingNote  !== undefined) dbPatch.user_rating_note  = patch.userRatingNote
-    if (patch.linkedPlannedId !== undefined) dbPatch.linked_planned_id = patch.linkedPlannedId
+    if (patch.title             !== undefined) dbPatch.title               = patch.title
+    if (patch.userNotes         !== undefined) dbPatch.user_notes          = patch.userNotes
+    if (patch.tags              !== undefined) dbPatch.tags                = patch.tags
+    if (patch.userRating        !== undefined) dbPatch.user_rating         = patch.userRating
+    if (patch.userRatingNote    !== undefined) dbPatch.user_rating_note    = patch.userRatingNote
+    if (patch.linkedPlannedId   !== undefined) dbPatch.linked_planned_id   = patch.linkedPlannedId
     if (patch.linkedBeautyScore !== undefined) dbPatch.linked_beauty_score = patch.linkedBeautyScore
-    if (patch.rpe             !== undefined) dbPatch.rpe               = patch.rpe
-    if (patch.meritaScore     !== undefined) dbPatch.merita_score      = patch.meritaScore
+    if (patch.soddisfazione     !== undefined) dbPatch.soddisfazione       = patch.soddisfazione
+    if (patch.lootScore         !== undefined) dbPatch.loot_score          = patch.lootScore
+    if (patch.trailScore        !== undefined) dbPatch.trail_score         = patch.trailScore
 
     const { error } = await supabase
       .from('activities')

@@ -12,7 +12,7 @@ import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
   ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown,
 } from 'lucide-react'
-import { msLabel } from '@/lib/meritaScore'
+import { lsLabel } from '@/lib/lootScore'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -93,29 +93,29 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
 
         {/* ── Score banner — top of card, visible at first glance ── */}
         {(() => {
-          const ms = activity.meritaScore
-          const msInfo = ms !== undefined ? msLabel(ms) : null
+          const ls = activity.lootScore
+          const lsInfo = ls !== undefined ? lsLabel(ls) : null
           if (rating && rColor) {
             return (
               <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
                 style={{ backgroundColor: rColor + '22', borderBottom: `1.5px solid ${rColor}40` }}>
                 <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}</span>
                 <span className="text-[10px] text-stone-400">/10</span>
-                {msInfo && ms !== undefined && (
+                {lsInfo && ls !== undefined && (
                   <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
-                    style={{ backgroundColor: msInfo.color }}>
-                    MS {ms}
+                    style={{ backgroundColor: lsInfo.color }}>
+                    LS {ls}
                   </span>
                 )}
               </div>
             )
           }
-          if (msInfo && ms !== undefined) {
+          if (lsInfo && ls !== undefined) {
             return (
               <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
-                style={{ backgroundColor: msInfo.color + '18', borderBottom: `1.5px solid ${msInfo.color}30` }}>
-                <span className="text-xs font-bold" style={{ color: msInfo.color }}>MS {ms}</span>
-                <span className="text-[10px] font-semibold ml-auto" style={{ color: msInfo.color }}>{msInfo.label}</span>
+                style={{ backgroundColor: lsInfo.color + '18', borderBottom: `1.5px solid ${lsInfo.color}30` }}>
+                <span className="text-xs font-bold" style={{ color: lsInfo.color }}>LS {ls}</span>
+                <span className="text-[10px] font-semibold ml-auto" style={{ color: lsInfo.color }}>{lsInfo.label}</span>
               </div>
             )
           }
