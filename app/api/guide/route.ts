@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
+import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
 
@@ -120,6 +121,13 @@ LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}`
 // ── Route ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const user = await getUserFromRequest(req)
+  if (!user) {
+    return new Response('{"error":"Non autenticato"}', {
+      status: 401, headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return new Response('{"error":"ANTHROPIC_API_KEY non configurata"}', {
@@ -142,11 +150,12 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Fetch hike from Supabase
+  // Fetch hike — scoped to the authenticated user
   const { data, error } = await supabase
     .from('planned_hikes')
     .select('*')
     .eq('id', hikeId)
+    .eq('user_id', user.id)
     .single()
 
   if (error || !data) {
