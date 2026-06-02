@@ -16,6 +16,8 @@ import { type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeBeautyScore } from '@/lib/beautyScore'
+import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
+import { TrailScoreWidget } from '@/components/TrailScoreWidget'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -163,6 +165,9 @@ export default function PlannedHikePage() {
   const [loadingTerrain, setLoadingTerrain] = useState(false)  // kept for beauty-score spinner
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
+  const [userAge,         setUserAge]         = useState(0)
+  const [pesoNatura,      setPesoNatura]      = useState(50)
+  const [trailResult,     setTrailResult]     = useState<TrailScoreResult | null>(null)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -232,6 +237,34 @@ export default function PlannedHikePage() {
     updatePlannedMeta(hike.id, { cachedPois: pois, cachedPoiWiki: poiWikiEntries }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedPois: pois, cachedPoiWiki: poiWikiEntries } : prev)
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch user profile for TrailScore personal correction
+  useEffect(() => {
+    fetch('/api/user-settings').then(r => r.json()).then(d => {
+      if (d.userAge)            setUserAge(d.userAge)
+      if (d.beautyNaturaWeight !== undefined) setPesoNatura(d.beautyNaturaWeight)
+    }).catch(() => {})
+  }, [])
+
+  // Compute TrailScore when beauty score is ready
+  useEffect(() => {
+    if (!beautyScore || !hike) return
+    const result = computeTrailScore(
+      beautyScore,
+      {
+        distanceMeters: hike.distanceMeters,
+        elevationGain:  hike.elevationGain,
+        userAge:        userAge > 0 ? userAge : undefined,
+      },
+      pesoNatura,
+    )
+    setTrailResult(result)
+    // Cache TS if it changed
+    if (hike.cachedTrailScore !== result.ts) {
+      updatePlannedMeta(hike.id, { cachedTrailScore: result.ts }).catch(() => {})
+      setHike(prev => prev ? { ...prev, cachedTrailScore: result.ts } : prev)
+    }
+  }, [beautyScore, hike?.id, userAge, pesoNatura]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
@@ -507,6 +540,14 @@ export default function PlannedHikePage() {
 
         {/* Beauty report */}
         {beautyScore && <BeautyReport score={beautyScore} />}
+
+        {/* TrailScore */}
+        {(trailResult || hike.cachedTrailScore !== undefined) && (
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">TrailScore</h2>
+            <TrailScoreWidget result={trailResult} cached={hike.cachedTrailScore} />
+          </div>
+        )}
 
         {/* POI-focused Wikipedia: articles for named elements physically on the route */}
         {poiWikiEntries.length > 0 && (

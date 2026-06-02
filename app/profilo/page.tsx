@@ -185,7 +185,7 @@ function SubscriptionTeaser() {
   )
 }
 
-// ── LootScore / biometric settings ────────────────────────────────────────────
+// ── TrailScore / biometric settings ───────────────────────────────────────────
 
 function LootSettingsSection() {
   const [age,       setAge]       = useState(0)
@@ -234,9 +234,9 @@ function LootSettingsSection() {
   return (
     <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
       <div className="flex items-center gap-2.5">
-        <span className="text-lg font-bold text-forest-700">LS</span>
+        <span className="text-lg font-bold text-forest-700">TS</span>
         <div>
-          <h2 className="text-sm font-semibold text-stone-800">LootScore — profilo personale</h2>
+          <h2 className="text-sm font-semibold text-stone-800">TrailScore — profilo personale</h2>
           <p className="text-xs text-stone-400">Parametri fisiologici per il calcolo della fatica reale</p>
         </div>
       </div>
@@ -455,9 +455,9 @@ export default function ProfiloPage() {
           {saved ? <><Check className="w-4 h-4" /> Salvato!</> : 'Salva profilo'}
         </button>
 
-        {/* LootScore settings */}
+        {/* TrailScore settings */}
         <div className="pt-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">LootScore</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">TrailScore</p>
           <LootSettingsSection />
         </div>
 
