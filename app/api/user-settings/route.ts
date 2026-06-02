@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase }            from '@/lib/supabase'
 import { getUserFromRequest }  from '@/lib/supabaseAuth'
-import { deriveFCmax }         from '@/lib/lootScore'
+import { deriveFCmax }         from '@/lib/trailScore'
 
 export const dynamic = 'force-dynamic'
 
