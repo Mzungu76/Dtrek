@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { PlannedHike, PlannedHikeMeta } from '@/lib/plannedStore'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { readIndex } from '@/lib/blobIndex'
@@ -91,6 +92,9 @@ const META_COLS = [
 // ── GET /api/planned?id=X     → PlannedHike (full, with trackPoints) ─────────
 export async function GET(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const id = req.nextUrl.searchParams.get('id')
 
     if (id) {
@@ -98,6 +102,7 @@ export async function GET(req: NextRequest) {
         .from('planned_hikes')
         .select('*')
         .eq('id', id)
+        .eq('user_id', user.id)
         .single()
 
       if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -107,6 +112,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from('planned_hikes')
       .select(META_COLS)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -121,6 +127,9 @@ export async function GET(req: NextRequest) {
 // ── POST /api/planned → upsert ───────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const hike = (await req.json()) as PlannedHike
 
     if (!hike.routePolyline && hike.trackPoints) {
@@ -135,6 +144,7 @@ export async function POST(req: NextRequest) {
       const { data } = await supabase
         .from('activities')
         .select('distance_meters, elevation_gain, altitude_max')
+        .eq('user_id', user.id)
       if (data) {
         activities = data.map((r: Record<string, unknown>) => ({
           id: '',
@@ -163,7 +173,7 @@ export async function POST(req: NextRequest) {
 
     const { error } = await supabase
       .from('planned_hikes')
-      .upsert(hikeToRow(hike), { onConflict: 'id' })
+      .upsert({ ...hikeToRow(hike), user_id: user.id }, { onConflict: 'id' })
 
     if (error) throw error
     return NextResponse.json({ ok: true, assessment: hike.assessment })
@@ -176,6 +186,9 @@ export async function POST(req: NextRequest) {
 // ── PATCH /api/planned → update metadata fields ──────────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = (await req.json()) as Record<string, unknown>
     const { id, ...patch } = body as {
       id: string
@@ -203,6 +216,7 @@ export async function PATCH(req: NextRequest) {
       .from('planned_hikes')
       .update(dbPatch)
       .eq('id', id)
+      .eq('user_id', user.id)
 
     if (error) throw error
     return NextResponse.json({ ok: true })
@@ -215,6 +229,9 @@ export async function PATCH(req: NextRequest) {
 // ── DELETE /api/planned?id=X ─────────────────────────────────────────────────
 export async function DELETE(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
@@ -222,6 +239,7 @@ export async function DELETE(req: NextRequest) {
       .from('planned_hikes')
       .delete()
       .eq('id', id)
+      .eq('user_id', user.id)
 
     if (error) throw error
     return NextResponse.json({ ok: true })
