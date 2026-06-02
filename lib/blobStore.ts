@@ -11,6 +11,8 @@ export interface StoredActivity extends TcxActivity {
   linkedPlannedId?: string
   linkedPlannedTrackPoints?: TrackPoint[]
   linkedBeautyScore?: { overall: number; grade: string; color: string }
+  rpe?: number        // perceived exertion 1–10
+  meritaScore?: number  // cached MeritaScore 0–100
 }
 
 export interface ActivityMeta {
@@ -34,6 +36,8 @@ export interface ActivityMeta {
   userRating?: number
   userRatingNote?: string
   linkedBeautyScore?: { overall: number; grade: string; color: string }
+  rpe?: number
+  meritaScore?: number
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -68,6 +72,8 @@ function toMeta(a: StoredActivity): ActivityMeta {
     userRating:      a.userRating,
     userRatingNote:  a.userRatingNote,
     linkedBeautyScore: a.linkedBeautyScore,
+    rpe:             a.rpe,
+    meritaScore:     a.meritaScore,
   }
 }
 
@@ -137,7 +143,7 @@ export async function saveActivity(activity: StoredActivity): Promise<void> {
 /** Patches Supabase, then applies the same patch to local cached copies. */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'linkedBeautyScore'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'linkedBeautyScore' | 'rpe' | 'meritaScore'>>
 ): Promise<void> {
   await apiFetch('/api/activity', {
     method: 'PATCH',

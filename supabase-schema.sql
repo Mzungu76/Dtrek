@@ -101,6 +101,15 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide    TEXT;
 CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities    (user_id);
 CREATE INDEX IF NOT EXISTS idx_planned_user_id    ON planned_hikes (user_id);
 
+-- ── MeritaScore ──────────────────────────────────────────────────────────────
+ALTER TABLE activities    ADD COLUMN IF NOT EXISTS rpe          INTEGER;
+ALTER TABLE activities    ADD COLUMN IF NOT EXISTS merita_score DOUBLE PRECISION;
+
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS max_heart_rate       INTEGER;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS beauty_natura_weight INTEGER DEFAULT 50;
+
+CREATE INDEX IF NOT EXISTS idx_activities_merita_score ON activities (merita_score DESC NULLS LAST);
+
 
 -- ═══════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY  (doppio strato di sicurezza)

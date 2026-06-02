@@ -28,8 +28,9 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, Activity,
 } from 'lucide-react'
+import { computeMeritaScore, msLabel, type MeritaResult } from '@/lib/meritaScore'
 import ShareModal from '@/components/ShareModal'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
@@ -73,6 +74,13 @@ export default function EscursionePage() {
   const [showStreetView,  setShowStreetView]  = useState(false)
   const [poiWikiEntries, setPoiWikiEntries]   = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
+  // MeritaScore
+  const [showRpePanel,    setShowRpePanel]    = useState(false)
+  const [rpeVal,          setRpeVal]          = useState(0)
+  const [savingRpe,       setSavingRpe]       = useState(false)
+  const [meritaResult,    setMeritaResult]    = useState<MeritaResult | null>(null)
+  const [userMaxHR,       setUserMaxHR]       = useState(0)
+  const [pesoNatura,      setPesoNatura]      = useState(50)
 
   const EMPTY_TERRAIN: TerrainContext = {
     hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
@@ -131,6 +139,45 @@ export default function EscursionePage() {
     setActivity(prev => prev ? { ...prev, linkedBeautyScore: cached } : prev)
   }, [beautyScore, activity, poisFullyLoaded, id])
 
+  // Fetch user settings (FCmax, beauty weights) once
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.maxHeartRate)             setUserMaxHR(d.maxHeartRate)
+        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Compute MeritaScore when beautyScore and activity are ready
+  useEffect(() => {
+    if (!beautyScore || !activity || !poisFullyLoaded) return
+    const result = computeMeritaScore(
+      beautyScore,
+      {
+        distanceMeters:   activity.distanceMeters,
+        elevationGain:    activity.elevationGain,
+        totalTimeSeconds: activity.totalTimeSeconds,
+        avgHeartRate:     activity.avgHeartRate,
+        userMaxHeartRate: userMaxHR,
+        rpe:              activity.rpe,
+      },
+      pesoNatura,
+    )
+    setMeritaResult(result)
+    // Cache MS in DB only if it changed
+    if (activity.meritaScore !== result.ms) {
+      updateActivityMeta(id, { meritaScore: result.ms }).catch(() => {})
+      setActivity(prev => prev ? { ...prev, meritaScore: result.ms } : prev)
+    }
+  }, [beautyScore, activity, poisFullyLoaded, userMaxHR, pesoNatura, id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Init RPE state from loaded activity
+  useEffect(() => {
+    if (activity?.rpe) setRpeVal(activity.rpe)
+  }, [activity?.rpe])
+
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
       <Navbar />
@@ -160,6 +207,16 @@ export default function EscursionePage() {
       setShowRatingPanel(false)
     } finally { setSavingRating(false) }
   }
+  const saveRpe = async () => {
+    if (!rpeVal) return
+    setSavingRpe(true)
+    try {
+      await updateActivityMeta(id, { rpe: rpeVal })
+      setActivity(prev => prev ? { ...prev, rpe: rpeVal } : prev)
+      setShowRpePanel(false)
+    } finally { setSavingRpe(false) }
+  }
+
   const addTag    = async () => { if (!tagInput.trim()) return; await patch({ tags: [...(activity.tags ?? []), tagInput.trim()] }); setTagInput('') }
   const removeTag = async (tag: string) => patch({ tags: (activity.tags ?? []).filter(t => t !== tag) })
   const handleDelete = async () => {
@@ -443,10 +500,171 @@ export default function EscursionePage() {
               </div>
               <div className="w-px h-12 bg-white/30 shrink-0" />
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-1">Pagella escursione</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-1">Pagella bellezza</p>
                 <p className="text-xl font-bold">{BEAUTY_GRADE[(beautyScore ?? activity.linkedBeautyScore)!.grade] ?? ''}</p>
                 <p className="text-sm opacity-70 mt-0.5">Valutazione automatica · OSM + Wikipedia</p>
               </div>
+            </div>
+            {/* Category breakdown */}
+            {beautyScore?.categories && (
+              <div className="relative mt-4 grid grid-cols-5 gap-2">
+                {beautyScore.categories.map(c => (
+                  <div key={c.key} className="text-center">
+                    <div className="text-base leading-none">{c.emoji}</div>
+                    <div className="text-xs font-bold mt-0.5 text-white/90">{c.score.toFixed(1)}</div>
+                    <div className="text-[9px] text-white/60 leading-tight">{c.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MERITASCORE ── */}
+        {meritaResult ? (
+          <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
+            {/* Header band */}
+            <div
+              className="px-6 py-4 flex items-center justify-between"
+              style={{ background: `linear-gradient(135deg, ${meritaResult.color}22, ${meritaResult.color}11)`, borderBottom: `2px solid ${meritaResult.color}40` }}
+            >
+              <div className="flex items-center gap-4">
+                <div className="text-center">
+                  <div className="text-5xl font-bold leading-none" style={{ color: meritaResult.color }}>
+                    {meritaResult.ms}
+                  </div>
+                  <div className="text-xs text-stone-400 mt-0.5">/ 100</div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-bold uppercase tracking-widest text-stone-400">MeritaScore</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
+                      style={{ backgroundColor: meritaResult.color }}>
+                      {meritaResult.label}
+                    </span>
+                  </div>
+                  <p className="text-sm text-stone-500">Ne è valsa la pena?</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRpePanel(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:border-stone-400 text-xs font-medium transition-colors"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                {activity.rpe ? `RPE ${activity.rpe}/10` : 'Aggiungi RPE'}
+              </button>
+            </div>
+
+            {/* Breakdown bars */}
+            <div className="bg-white px-6 py-4 grid grid-cols-2 gap-4">
+              {/* Bellezza */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-stone-500 flex items-center gap-1">
+                    🌄 Bellezza
+                  </span>
+                  <span className="text-xs font-bold text-stone-800">{meritaResult.b.toFixed(1)}/10</span>
+                </div>
+                <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-forest-500 transition-all"
+                    style={{ width: `${meritaResult.b * 10}%` }} />
+                </div>
+                <div className="flex justify-between mt-1 text-[10px] text-stone-400">
+                  <span>🌿 Natura {meritaResult.b1.toFixed(1)}</span>
+                  <span>🏛 Cultura {meritaResult.b2.toFixed(1)}</span>
+                </div>
+              </div>
+
+              {/* Fatica */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-stone-500 flex items-center gap-1">
+                    💪 Fatica
+                  </span>
+                  <span className="text-xs font-bold text-stone-800">{meritaResult.f.toFixed(1)}/10</span>
+                </div>
+                <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-terra-500 transition-all"
+                    style={{ width: `${meritaResult.f * 10}%` }} />
+                </div>
+                <div className="flex justify-between mt-1 text-[10px] text-stone-400">
+                  <span>D+ {meritaResult.breakdown.dislKm.toFixed(1)}</span>
+                  {meritaResult.breakdown.hasFc && <span>FC {meritaResult.breakdown.fcPct.toFixed(1)}</span>}
+                  {meritaResult.breakdown.hasRpe && <span>RPE {meritaResult.breakdown.rpe}</span>}
+                  <span>⏱ {meritaResult.breakdown.durata.toFixed(1)}</span>
+                </div>
+              </div>
+            </div>
+
+            {(!meritaResult.breakdown.hasRpe || !meritaResult.breakdown.hasFc) && (
+              <div className="bg-amber-50 border-t border-amber-100 px-6 py-2 flex items-center gap-2 text-xs text-amber-700">
+                <span>ℹ️</span>
+                <span>
+                  {!meritaResult.breakdown.hasRpe && !meritaResult.breakdown.hasFc
+                    ? 'Aggiungi RPE e imposta la FCmax nel profilo per un calcolo più preciso.'
+                    : !meritaResult.breakdown.hasRpe
+                    ? 'Aggiungi l\'RPE per affinare il calcolo della fatica.'
+                    : 'Imposta la FCmax nel profilo per un calcolo FC più preciso.'}
+                </span>
+              </div>
+            )}
+          </div>
+        ) : (activity.meritaScore !== undefined && activity.meritaScore !== null) ? (
+          /* Cached MS while beautyScore loads */
+          <div className="rounded-2xl border border-stone-200 shadow-sm p-5 flex items-center gap-4 bg-white">
+            <div style={{ color: msLabel(activity.meritaScore).color }}
+              className="text-4xl font-bold leading-none shrink-0">{activity.meritaScore}</div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-stone-400">MeritaScore</p>
+              <p className="text-sm font-semibold" style={{ color: msLabel(activity.meritaScore).color }}>
+                {msLabel(activity.meritaScore).label}
+              </p>
+              <p className="text-xs text-stone-400">Caricamento dettagli…</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* RPE panel */}
+        {showRpePanel && (
+          <div className="rounded-2xl border border-stone-200 bg-white shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-stone-800">Sforzo percepito (RPE)</h3>
+                <p className="text-xs text-stone-400 mt-0.5">Come ti sei sentito durante questa escursione?</p>
+              </div>
+              <button onClick={() => setShowRpePanel(false)} className="text-stone-400 hover:text-stone-700 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-10 gap-1.5 mb-4">
+              {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
+                const sel = n === rpeVal
+                const rpeColor = n <= 3 ? '#16a34a' : n <= 6 ? '#ca8a04' : n <= 8 ? '#ea580c' : '#dc2626'
+                return (
+                  <button key={n} onClick={() => setRpeVal(n)}
+                    style={sel ? { backgroundColor: rpeColor, borderColor: rpeColor } : {}}
+                    className={`aspect-square rounded-xl text-sm font-bold border-2 transition-all
+                      ${sel ? 'text-white scale-110 shadow-md' : 'bg-stone-50 text-stone-600 border-stone-200 hover:border-stone-400'}`}
+                  >
+                    {n}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex justify-between text-[10px] text-stone-400 mb-4 px-0.5">
+              <span>Molto facile</span>
+              <span>Moderato</span>
+              <span>Massimale</span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={saveRpe} disabled={savingRpe || rpeVal === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-40">
+                {savingRpe && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {activity.rpe ? 'Aggiorna RPE' : 'Salva RPE'}
+              </button>
+              <button onClick={() => setShowRpePanel(false)} className="px-4 py-2 text-sm text-stone-400 hover:text-stone-700 transition-colors">
+                Annulla
+              </button>
             </div>
           </div>
         )}

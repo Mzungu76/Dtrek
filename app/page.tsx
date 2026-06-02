@@ -12,6 +12,7 @@ import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
   ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown,
 } from 'lucide-react'
+import { msLabel } from '@/lib/meritaScore'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -91,16 +92,35 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
       <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
 
         {/* ── Score banner — top of card, visible at first glance ── */}
-        {rating && rColor ? (
-          <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
-            style={{ backgroundColor: rColor + '22', borderBottom: `1.5px solid ${rColor}40` }}>
-            <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}</span>
-            <span className="text-[10px] text-stone-400">/10</span>
-            <span className="text-[10px] font-semibold ml-auto" style={{ color: rColor }}>{ratingLabel(rating)}</span>
-          </div>
-        ) : (
-          <div className="h-1 shrink-0 bg-forest-100" />
-        )}
+        {(() => {
+          const ms = activity.meritaScore
+          const msInfo = ms !== undefined ? msLabel(ms) : null
+          if (rating && rColor) {
+            return (
+              <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
+                style={{ backgroundColor: rColor + '22', borderBottom: `1.5px solid ${rColor}40` }}>
+                <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}</span>
+                <span className="text-[10px] text-stone-400">/10</span>
+                {msInfo && ms !== undefined && (
+                  <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                    style={{ backgroundColor: msInfo.color }}>
+                    MS {ms}
+                  </span>
+                )}
+              </div>
+            )
+          }
+          if (msInfo && ms !== undefined) {
+            return (
+              <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
+                style={{ backgroundColor: msInfo.color + '18', borderBottom: `1.5px solid ${msInfo.color}30` }}>
+                <span className="text-xs font-bold" style={{ color: msInfo.color }}>MS {ms}</span>
+                <span className="text-[10px] font-semibold ml-auto" style={{ color: msInfo.color }}>{msInfo.label}</span>
+              </div>
+            )
+          }
+          return <div className="h-1 shrink-0 bg-forest-100" />
+        })()}
 
         {/* Thumbnail */}
         <div className="flex-1 relative bg-gradient-to-b from-forest-50 to-stone-50 min-h-0 overflow-hidden">
@@ -148,13 +168,17 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             <span className="flex items-center gap-0.5 text-stone-400">
               <Clock className="w-2.5 h-2.5" />{formatDuration(activity.totalTimeSeconds)}
             </span>
-            <span className="flex items-center gap-0.5 text-red-400">
-              <Heart className="w-2.5 h-2.5" />{activity.avgHeartRate} bpm
-            </span>
+            {activity.avgHeartRate > 0 && (
+              <span className="flex items-center gap-0.5 text-red-400">
+                <Heart className="w-2.5 h-2.5" />{activity.avgHeartRate} bpm
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-terra-500">
-            <Flame className="w-2.5 h-2.5" />{activity.calories} kcal
-          </div>
+          {activity.calories > 0 && (
+            <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-terra-500">
+              <Flame className="w-2.5 h-2.5" />{activity.calories} kcal
+            </div>
+          )}
         </div>
       </div>
     </Link>
