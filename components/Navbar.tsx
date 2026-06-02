@@ -1,8 +1,9 @@
 'use client'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Mountain, Upload, BarChart2, BookOpen, Map, CalendarClock, User, ArrowDownToLine } from 'lucide-react'
+import { Upload, BarChart2, BookOpen, Map, CalendarClock, User, ArrowDownToLine } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 
 const NAV_LINKS = [
@@ -102,7 +103,7 @@ export default function Navbar() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group shrink-0">
-            <Mountain className="w-6 h-6 text-forest-600 group-hover:text-forest-500 transition-colors" />
+            <Image src="/icon-192.png" alt="DTrek" width={28} height={28} className="rounded-md" />
             <span className="font-display font-semibold text-lg text-stone-800 tracking-tight">
               Diario Trekking
             </span>
