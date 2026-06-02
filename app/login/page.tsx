@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -18,7 +18,7 @@ function mapError(msg: string) {
   return ERRORS[msg] ?? `Accesso non riuscito: ${msg}`
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const next         = searchParams.get('next') ?? '/'
@@ -133,5 +133,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }
