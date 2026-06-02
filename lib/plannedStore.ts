@@ -50,11 +50,11 @@ function toPlannedMeta(h: PlannedHike): PlannedHikeMeta {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /** Stale-while-revalidate: local cache → Supabase refresh in background. */
-export async function getAllPlanned(): Promise<PlannedHikeMeta[]> {
+export async function getAllPlanned(onRefresh?: (data: PlannedHikeMeta[]) => void): Promise<PlannedHikeMeta[]> {
   const local = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
 
   const netFetch = apiFetch<PlannedHikeMeta[]>('/api/planned')
-    .then((data) => { lsSet(LS_KEYS.plannedList, data).catch(() => {}); return data })
+    .then((data) => { lsSet(LS_KEYS.plannedList, data).catch(() => {}); onRefresh?.(data); return data })
     .catch((): PlannedHikeMeta[] => [])
 
   if (local && local.length > 0) {
