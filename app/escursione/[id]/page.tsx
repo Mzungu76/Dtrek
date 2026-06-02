@@ -28,10 +28,10 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, Smile,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images,
 } from 'lucide-react'
-import { computeLootScore, lsLabel, type LootResult } from '@/lib/lootScore'
-import { computeTrailScore, tsLabel, type TrailScoreResult } from '@/lib/trailScore'
+import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
+import { TrailScoreWidget } from '@/components/TrailScoreWidget'
 import ShareModal from '@/components/ShareModal'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
@@ -42,7 +42,6 @@ const BEAUTY_GRADE: Record<string, string> = {
   '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto',
   '6': 'Sufficiente', '5': 'Mediocre', '4': 'Insufficiente',
 }
-
 function ratingColor(n: number) {
   return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
 }
@@ -50,39 +49,36 @@ function ratingLabel(n: number) {
   return n >= 9 ? 'Eccellente' : n >= 7 ? 'Buono' : n >= 5 ? 'Sufficiente' : 'Insufficiente'
 }
 
+// ── Pagina principale ─────────────────────────────────────────────────────────
+
 export default function EscursionePage() {
   const params = useParams()
   const router = useRouter()
   const id = decodeURIComponent(params.id as string)
 
-  const [activity,           setActivity]           = useState<StoredActivity | null>(null)
-  const [loading,            setLoading]            = useState(true)
-  const [saving,             setSaving]             = useState(false)
-  const [editTitle,          setEditTitle]          = useState(false)
-  const [editNotes,          setEditNotes]          = useState(false)
-  const [titleVal,           setTitleVal]           = useState('')
-  const [notesVal,           setNotesVal]           = useState('')
-  const [tagInput,           setTagInput]           = useState('')
-  const [showShare,          setShowShare]          = useState(false)
-  const [showGradient,       setShowGradient]       = useState(false)
-  const [pois,               setPois]               = useState<PoiItem[]>([])
-  const [wikiPages,          setWikiPages]          = useState<WikiPage[]>([])
-  const [ratingVal,          setRatingVal]          = useState(0)
-  const [ratingNote,         setRatingNote]         = useState('')
-  const [savingRating,       setSavingRating]       = useState(false)
-  const [showRatingPanel,    setShowRatingPanel]    = useState(false)
-  const [show3D,             setShow3D]             = useState(false)
-  const [showStreetView,     setShowStreetView]     = useState(false)
-  const [poiWikiEntries,     setPoiWikiEntries]     = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
-  const [poisFullyLoaded,    setPoisFullyLoaded]    = useState(false)
-  // LootScore / TrailScore
-  const [showSodPanel,       setShowSodPanel]       = useState(false)
-  const [sodVal,             setSodVal]             = useState(0)
-  const [savingSod,          setSavingSod]          = useState(false)
-  const [lootResult,         setLootResult]         = useState<LootResult | null>(null)
-  const [trailResult,        setTrailResult]        = useState<TrailScoreResult | null>(null)
-  const [userAge,            setUserAge]            = useState(0)
-  const [pesoNatura,         setPesoNatura]         = useState(50)
+  const [activity,        setActivity]       = useState<StoredActivity | null>(null)
+  const [loading,         setLoading]        = useState(true)
+  const [saving,          setSaving]         = useState(false)
+  const [editTitle,       setEditTitle]      = useState(false)
+  const [editNotes,       setEditNotes]      = useState(false)
+  const [titleVal,        setTitleVal]       = useState('')
+  const [notesVal,        setNotesVal]       = useState('')
+  const [tagInput,        setTagInput]       = useState('')
+  const [showShare,       setShowShare]      = useState(false)
+  const [showGradient,    setShowGradient]   = useState(false)
+  const [pois,            setPois]           = useState<PoiItem[]>([])
+  const [wikiPages,       setWikiPages]      = useState<WikiPage[]>([])
+  const [ratingVal,       setRatingVal]      = useState(0)
+  const [ratingNote,      setRatingNote]     = useState('')
+  const [savingRating,    setSavingRating]   = useState(false)
+  const [showRatingPanel, setShowRatingPanel] = useState(false)
+  const [show3D,          setShow3D]          = useState(false)
+  const [showStreetView,  setShowStreetView]  = useState(false)
+  const [poiWikiEntries,  setPoiWikiEntries]  = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
+  const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
+  const [trailResult,     setTrailResult]     = useState<TrailScoreResult | null>(null)
+  const [userAge,         setUserAge]         = useState(0)
+  const [pesoNatura,      setPesoNatura]      = useState(50)
 
   const EMPTY_TERRAIN: TerrainContext = {
     hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
@@ -130,7 +126,6 @@ export default function EscursionePage() {
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  // Fetch user settings on mount
   useEffect(() => {
     fetch('/api/user-settings')
       .then(r => r.json())
@@ -141,7 +136,7 @@ export default function EscursionePage() {
       .catch(() => {})
   }, [])
 
-  // Save beauty score to DB when POIs fully loaded
+  // Salva beauty score quando i POI sono pronti
   useEffect(() => {
     if (!beautyScore || !activity || !poisFullyLoaded) return
     const { overall, grade, color } = beautyScore
@@ -151,48 +146,25 @@ export default function EscursionePage() {
     setActivity(prev => prev ? { ...prev, linkedBeautyScore: cached } : prev)
   }, [beautyScore, activity, poisFullyLoaded, id])
 
-  // Compute LootScore + TrailScore when beautyScore is ready
+  // Calcola TrailScore (unificato: obiettivo + correzione personale)
   useEffect(() => {
     if (!beautyScore || !activity || !poisFullyLoaded) return
-
-    const ls = computeLootScore(
+    const result = computeTrailScore(
       beautyScore,
       {
         distanceMeters:   activity.distanceMeters,
         elevationGain:    activity.elevationGain,
-        totalTimeSeconds: activity.totalTimeSeconds,
-        avgHeartRate:     activity.avgHeartRate,
-        userAge,
-        soddisfazione:    activity.soddisfazione,
+        avgHeartRate:     activity.avgHeartRate > 0 ? activity.avgHeartRate : undefined,
+        userAge:          userAge > 0 ? userAge : undefined,
       },
       pesoNatura,
     )
-    setLootResult(ls)
-
-    const ts = computeTrailScore(
-      beautyScore,
-      {
-        distanceMeters: activity.distanceMeters,
-        elevationGain:  activity.elevationGain,
-      },
-      pesoNatura,
-    )
-    setTrailResult(ts)
-
-    // Cache to DB only if changed
-    const patchNeeded: Partial<Parameters<typeof updateActivityMeta>[1]> = {}
-    if (activity.lootScore  !== ls.ls) patchNeeded.lootScore  = ls.ls
-    if (activity.trailScore !== ts.ts) patchNeeded.trailScore = ts.ts
-    if (Object.keys(patchNeeded).length > 0) {
-      updateActivityMeta(id, patchNeeded).catch(() => {})
-      setActivity(prev => prev ? { ...prev, ...patchNeeded } : prev)
+    setTrailResult(result)
+    if (activity.trailScore !== result.ts) {
+      updateActivityMeta(id, { trailScore: result.ts }).catch(() => {})
+      setActivity(prev => prev ? { ...prev, trailScore: result.ts } : prev)
     }
   }, [beautyScore, activity, poisFullyLoaded, userAge, pesoNatura, id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Init soddisfazione from loaded activity
-  useEffect(() => {
-    if (activity?.soddisfazione) setSodVal(activity.soddisfazione)
-  }, [activity?.soddisfazione])
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
@@ -222,15 +194,6 @@ export default function EscursionePage() {
       setActivity(prev => prev ? { ...prev, userRating: ratingVal, userRatingNote: ratingNote.trim() || undefined } : prev)
       setShowRatingPanel(false)
     } finally { setSavingRating(false) }
-  }
-  const saveSod = async () => {
-    if (!sodVal) return
-    setSavingSod(true)
-    try {
-      await updateActivityMeta(id, { soddisfazione: sodVal })
-      setActivity(prev => prev ? { ...prev, soddisfazione: sodVal } : prev)
-      setShowSodPanel(false)
-    } finally { setSavingSod(false) }
   }
 
   const addTag    = async () => { if (!tagInput.trim()) return; await patch({ tags: [...(activity.tags ?? []), tagInput.trim()] }); setTagInput('') }
@@ -264,7 +227,6 @@ export default function EscursionePage() {
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-forest-900/60 to-transparent pointer-events-none" />
 
         <div className="relative max-w-6xl mx-auto px-4">
-          {/* Top nav */}
           <div className="flex items-center justify-between pt-4 pb-3 border-b border-white/10">
             <button onClick={() => router.push('/')}
               className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors">
@@ -282,12 +244,8 @@ export default function EscursionePage() {
                   {icon}
                 </button>
               ))}
-              <PdfExportButton
-                variant="activity"
-                data={activity}
-                iconOnly
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-              />
+              <PdfExportButton variant="activity" data={activity} iconOnly
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors" />
               <button title="Elimina" onClick={handleDelete} disabled={saving}
                 className="w-8 h-8 rounded-lg bg-red-500/25 hover:bg-red-500/45 flex items-center justify-center transition-colors">
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
@@ -295,19 +253,14 @@ export default function EscursionePage() {
             </div>
           </div>
 
-          {/* Hero body */}
           <div className="py-7 flex items-end justify-between gap-6 flex-wrap">
-            {/* Left */}
             <div className="flex-1 min-w-0">
               {editTitle ? (
                 <div className="flex items-center gap-2 mb-2">
-                  <input
-                    value={titleVal}
-                    onChange={e => setTitleVal(e.target.value)}
+                  <input value={titleVal} onChange={e => setTitleVal(e.target.value)}
                     className="font-display text-2xl sm:text-3xl bg-white/10 rounded-lg px-3 py-1 text-white outline-none border border-white/30 w-full max-w-md"
                     autoFocus
-                    onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditTitle(false) }}
-                  />
+                    onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditTitle(false) }} />
                   <button onClick={saveTitle} disabled={saving}>
                     {saving ? <Loader2 className="w-5 h-5 animate-spin text-forest-300" /> : <Check className="w-5 h-5 text-forest-300 hover:text-white" />}
                   </button>
@@ -325,7 +278,6 @@ export default function EscursionePage() {
               <p className="text-forest-300 text-sm capitalize mb-1">{dateStr} · {timeStr}</p>
               {activity.device && <p className="text-forest-400 text-xs mb-3">📱 {activity.device}</p>}
 
-              {/* Stat pills */}
               <div className="flex flex-wrap gap-2 mt-3">
                 {[
                   { icon: <Route className="w-3.5 h-3.5" />, v: `${(activity.distanceMeters/1000).toFixed(1)} km` },
@@ -339,7 +291,6 @@ export default function EscursionePage() {
                 ))}
               </div>
 
-              {/* Tags */}
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 {(activity.tags ?? []).map(tag => (
                   <span key={tag} className="flex items-center gap-1 bg-white/10 text-forest-200 rounded-full px-3 py-0.5 text-xs">
@@ -347,38 +298,29 @@ export default function EscursionePage() {
                     <button onClick={() => removeTag(tag)} className="hover:text-white"><X className="w-3 h-3" /></button>
                   </span>
                 ))}
-                <input
-                  value={tagInput}
-                  onChange={e => setTagInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addTag()}
-                  placeholder="+ tag"
-                  className="bg-white/10 text-forest-200 placeholder-forest-500 rounded-full px-3 py-0.5 text-xs w-20 outline-none border border-transparent focus:border-white/30"
-                />
+                <input value={tagInput} onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="+ tag"
+                  className="bg-white/10 text-forest-200 placeholder-forest-500 rounded-full px-3 py-0.5 text-xs w-20 outline-none border border-transparent focus:border-white/30" />
               </div>
             </div>
 
-            {/* Right: rating */}
+            {/* Voto bellezza utente */}
             <div className="shrink-0 pb-1">
               {rated ? (
                 <div className="flex flex-col items-end gap-1.5">
                   <div className="flex items-center gap-2">
-                    <div
-                      className="flex flex-col items-center justify-center rounded-2xl px-5 py-3 shadow-xl"
-                      style={{ backgroundColor: ratingColor(activity.userRating!) }}
-                    >
+                    <div className="flex flex-col items-center justify-center rounded-2xl px-5 py-3 shadow-xl"
+                      style={{ backgroundColor: ratingColor(activity.userRating!) }}>
                       <span className="text-3xl font-bold leading-none text-white">{activity.userRating}</span>
                       <span className="text-white/60 text-[10px] font-medium mt-0.5">/10</span>
                     </div>
-                    <button
-                      onClick={() => setShowRatingPanel(v => !v)}
-                      className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center transition-colors"
-                      title="Modifica voto"
-                    >
+                    <button onClick={() => setShowRatingPanel(v => !v)}
+                      className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center transition-colors" title="Modifica voto">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                   </div>
                   <p className="text-sm font-semibold text-white/90">{ratingLabel(activity.userRating!)}</p>
-                  <p className="text-[11px] text-forest-400">Il tuo voto</p>
+                  <p className="text-[11px] text-forest-400">Voto bellezza</p>
                   {activity.userRatingNote && (
                     <p className="text-xs text-forest-300 italic max-w-[160px] text-right leading-snug mt-0.5">
                       "{activity.userRatingNote}"
@@ -386,11 +328,9 @@ export default function EscursionePage() {
                   )}
                 </div>
               ) : (
-                <button
-                  onClick={() => setShowRatingPanel(v => !v)}
-                  className="flex items-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-2xl border border-white/20 text-sm font-medium transition-all hover:scale-[1.02]"
-                >
-                  <Star className="w-4 h-4 text-amber-300" /> Dai il tuo voto
+                <button onClick={() => setShowRatingPanel(v => !v)}
+                  className="flex items-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-2xl border border-white/20 text-sm font-medium transition-all hover:scale-[1.02]">
+                  <Star className="w-4 h-4 text-amber-300" /> Voto bellezza
                 </button>
               )}
             </div>
@@ -402,11 +342,11 @@ export default function EscursionePage() {
       {showRatingPanel && (
         <div className="bg-forest-900 border-b border-forest-800 text-white">
           <div className="max-w-6xl mx-auto px-4 py-5">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-forest-200">
-                {rated ? `Voto attuale: ${activity.userRating}/10 · ${ratingLabel(activity.userRating!)}` : 'Dai il tuo voto'}
+                {rated ? `Voto attuale: ${activity.userRating}/10` : 'Dai il tuo voto di bellezza'}
               </p>
-              <button onClick={() => setShowRatingPanel(false)} className="text-forest-400 hover:text-white transition-colors">
+              <button onClick={() => setShowRatingPanel(false)} className="text-forest-400 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -414,37 +354,25 @@ export default function EscursionePage() {
               {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
                 const sel = n === ratingVal
                 return (
-                  <button
-                    key={n}
-                    onClick={() => setRatingVal(n)}
+                  <button key={n} onClick={() => setRatingVal(n)}
                     style={sel ? { backgroundColor: ratingColor(n) } : {}}
                     className={`flex-1 aspect-square rounded-xl text-sm font-bold transition-all
-                      ${sel ? 'text-white scale-110 shadow-lg' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'}`}
-                  >
+                      ${sel ? 'text-white scale-110 shadow-lg' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'}`}>
                     {n}
                   </button>
                 )
               })}
             </div>
-            <textarea
-              value={ratingNote}
-              onChange={e => setRatingNote(e.target.value)}
-              placeholder="Commento sull'escursione (opzionale)…"
-              rows={2}
-              className="w-full max-w-lg bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 resize-none outline-none focus:border-white/40 mb-3"
-            />
+            <textarea value={ratingNote} onChange={e => setRatingNote(e.target.value)}
+              placeholder="Nota (opzionale)…" rows={2}
+              className="w-full max-w-lg bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 resize-none outline-none focus:border-white/40 mb-3" />
             <div className="flex gap-2">
-              <button
-                onClick={saveRating}
-                disabled={savingRating || ratingVal === 0}
-                className="flex items-center gap-2 px-5 py-2 bg-forest-500 hover:bg-forest-400 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-40"
-              >
+              <button onClick={saveRating} disabled={savingRating || ratingVal === 0}
+                className="flex items-center gap-2 px-5 py-2 bg-forest-500 hover:bg-forest-400 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-40">
                 {savingRating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {rated ? 'Aggiorna voto' : 'Salva voto'}
+                {rated ? 'Aggiorna' : 'Salva voto'}
               </button>
-              <button onClick={() => setShowRatingPanel(false)} className="px-4 py-2 text-sm text-forest-400 hover:text-white transition-colors">
-                Annulla
-              </button>
+              <button onClick={() => setShowRatingPanel(false)} className="px-4 py-2 text-sm text-forest-400 hover:text-white">Annulla</button>
             </div>
           </div>
         </div>
@@ -454,22 +382,14 @@ export default function EscursionePage() {
         const polyline = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
         const step = Math.max(1, Math.ceil(polyline.length / 250))
         const actMeta: ActivityMeta = {
-          id: activity.id,
-          title: activity.title ?? activity.notes ?? 'Escursione',
-          startTime: activity.startTime,
-          distanceMeters: activity.distanceMeters,
-          totalTimeSeconds: activity.totalTimeSeconds,
-          calories: activity.calories,
-          avgHeartRate: activity.avgHeartRate,
-          maxHeartRate: activity.maxHeartRate,
-          elevationGain: activity.elevationGain,
-          elevationLoss: activity.elevationLoss,
-          altitudeMax: activity.altitudeMax,
-          avgSpeedMs: activity.avgSpeedMs,
-          maxSpeedMs: activity.maxSpeedMs,
-          tags: activity.tags,
-          userNotes: activity.userNotes,
-          fileName: activity.fileName,
+          id: activity.id, title: activity.title ?? activity.notes ?? 'Escursione',
+          startTime: activity.startTime, distanceMeters: activity.distanceMeters,
+          totalTimeSeconds: activity.totalTimeSeconds, calories: activity.calories,
+          avgHeartRate: activity.avgHeartRate, maxHeartRate: activity.maxHeartRate,
+          elevationGain: activity.elevationGain, elevationLoss: activity.elevationLoss,
+          altitudeMax: activity.altitudeMax, avgSpeedMs: activity.avgSpeedMs,
+          maxSpeedMs: activity.maxSpeedMs, tags: activity.tags,
+          userNotes: activity.userNotes, fileName: activity.fileName,
           routePolyline: polyline.filter((_, i) => i % step === 0),
         }
         return <ShareModal kind="activity" activity={actMeta} onClose={() => setShowShare(false)} />
@@ -504,10 +424,8 @@ export default function EscursionePage() {
 
         {/* Beauty score */}
         {(beautyScore ?? activity.linkedBeautyScore) && (
-          <div
-            className="rounded-2xl p-6 text-white shadow-lg overflow-hidden relative"
-            style={{ background: `linear-gradient(135deg, ${(beautyScore ?? activity.linkedBeautyScore)!.color}ee 0%, ${(beautyScore ?? activity.linkedBeautyScore)!.color}88 100%)` }}
-          >
+          <div className="rounded-2xl p-6 text-white shadow-lg overflow-hidden relative"
+            style={{ background: `linear-gradient(135deg, ${(beautyScore ?? activity.linkedBeautyScore)!.color}ee 0%, ${(beautyScore ?? activity.linkedBeautyScore)!.color}88 100%)` }}>
             <div className="absolute inset-0 bg-topography opacity-20 pointer-events-none" />
             <div className="relative flex items-center gap-5">
               <div className="text-center shrink-0">
@@ -535,174 +453,8 @@ export default function EscursionePage() {
           </div>
         )}
 
-        {/* ── TRAILSCORE + LOOTSCORE ── */}
-        {(trailResult || lootResult || activity.lootScore !== undefined || activity.trailScore !== undefined) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-            {/* TrailScore */}
-            {(() => {
-              const result = trailResult
-              const cached = activity.trailScore
-              const ts = result?.ts ?? cached
-              if (ts === undefined) return null
-              const { label, color } = result ? result : tsLabel(ts)
-              return (
-                <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm bg-white">
-                  <div className="px-5 py-3 flex items-center gap-3"
-                    style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, borderBottom: `2px solid ${color}30` }}>
-                    <div className="text-center shrink-0">
-                      <div className="text-4xl font-bold leading-none" style={{ color }}>{ts}</div>
-                      <div className="text-[10px] text-stone-400 mt-0.5">/ 100</div>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">TrailScore</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: color }}>{label}</span>
-                      </div>
-                      <p className="text-xs text-stone-500">Obiettivo · escursionista standard</p>
-                      {result && (
-                        <p className="text-[10px] text-stone-400 mt-0.5">
-                          Tempo stimato: {result.estimatedHours}h · Fatica standard: {result.f}/10
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {result && (
-                    <div className="px-5 py-3 flex gap-4">
-                      <div className="flex-1">
-                        <div className="flex justify-between text-[10px] text-stone-500 mb-1">
-                          <span>🌄 Bellezza</span><span className="font-bold text-stone-700">{result.b}/10</span>
-                        </div>
-                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-forest-400" style={{ width: `${result.b * 10}%` }} />
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between text-[10px] text-stone-500 mb-1">
-                          <span>⛰️ Fatica std</span><span className="font-bold text-stone-700">{result.f}/10</span>
-                        </div>
-                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-terra-400" style={{ width: `${result.f * 10}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-
-            {/* LootScore */}
-            {(() => {
-              const result = lootResult
-              const cached = activity.lootScore
-              const ls = result?.ls ?? cached
-              if (ls === undefined) return null
-              const { label, color } = result ? result : lsLabel(ls)
-              return (
-                <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm bg-white">
-                  <div className="px-5 py-3 flex items-center justify-between gap-3"
-                    style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, borderBottom: `2px solid ${color}30` }}>
-                    <div className="flex items-center gap-3">
-                      <div className="text-center shrink-0">
-                        <div className="text-4xl font-bold leading-none" style={{ color }}>{ls}</div>
-                        <div className="text-[10px] text-stone-400 mt-0.5">/ 100</div>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">LootScore</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: color }}>{label}</span>
-                        </div>
-                        <p className="text-xs text-stone-500">Personale · ne è valsa la pena?</p>
-                        {activity.soddisfazione && (
-                          <p className="text-[10px] text-stone-400 mt-0.5">
-                            Soddisfazione: {activity.soddisfazione}/10
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setShowSodPanel(v => !v)}
-                      className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:border-stone-400 text-xs font-medium transition-colors"
-                    >
-                      <Smile className="w-3.5 h-3.5" />
-                      {activity.soddisfazione ? `${activity.soddisfazione}/10` : 'Soddisfazione'}
-                    </button>
-                  </div>
-                  {result && (
-                    <div className="px-5 py-3 flex gap-4">
-                      <div className="flex-1">
-                        <div className="flex justify-between text-[10px] text-stone-500 mb-1">
-                          <span>🌄 Bellezza</span><span className="font-bold text-stone-700">{result.b}/10</span>
-                        </div>
-                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-forest-400" style={{ width: `${result.b * 10}%` }} />
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between text-[10px] text-stone-500 mb-1">
-                          <span>💪 Fatica tua</span><span className="font-bold text-stone-700">{result.f}/10</span>
-                        </div>
-                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-terra-400" style={{ width: `${result.f * 10}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {result && !result.breakdown.hasFc && (
-                    <div className="bg-amber-50 border-t border-amber-100 px-5 py-2 text-[11px] text-amber-700">
-                      ℹ️ Inserisci età nel profilo per una fatica FC più precisa.
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-          </div>
-        )}
-
-        {/* Soddisfazione panel */}
-        {showSodPanel && (
-          <div className="rounded-2xl border border-stone-200 bg-white shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold text-stone-800">Soddisfazione (1–10)</h3>
-                <p className="text-xs text-stone-400 mt-0.5">Quanto sei soddisfatto di questa escursione?</p>
-              </div>
-              <button onClick={() => setShowSodPanel(false)} className="text-stone-400 hover:text-stone-700 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-10 gap-1.5 mb-4">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
-                const sel = n === sodVal
-                const sodColor = n <= 3 ? '#dc2626' : n <= 6 ? '#ca8a04' : n <= 8 ? '#65a30d' : '#15803d'
-                return (
-                  <button key={n} onClick={() => setSodVal(n)}
-                    style={sel ? { backgroundColor: sodColor, borderColor: sodColor } : {}}
-                    className={`aspect-square rounded-xl text-sm font-bold border-2 transition-all
-                      ${sel ? 'text-white scale-110 shadow-md' : 'bg-stone-50 text-stone-600 border-stone-200 hover:border-stone-400'}`}
-                  >
-                    {n}
-                  </button>
-                )
-              })}
-            </div>
-            <div className="flex justify-between text-[10px] text-stone-400 mb-4 px-0.5">
-              <span>Per niente</span>
-              <span>Abbastanza</span>
-              <span>Moltissimo</span>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={saveSod} disabled={savingSod || sodVal === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-40">
-                {savingSod && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {activity.soddisfazione ? 'Aggiorna' : 'Salva'}
-              </button>
-              <button onClick={() => setShowSodPanel(false)} className="px-4 py-2 text-sm text-stone-400 hover:text-stone-700 transition-colors">
-                Annulla
-              </button>
-            </div>
-          </div>
-        )}
+        {/* TrailScore — unificato con correzione personale */}
+        <TrailScoreWidget result={trailResult} cached={activity.trailScore} />
 
         {/* Map */}
         <section>
@@ -710,26 +462,20 @@ export default function EscursionePage() {
             <h2 className="font-display text-xl font-semibold text-stone-700">Tracciato GPS</h2>
             <div className="flex items-center gap-2">
               {hasGps && activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
-                <button
-                  onClick={() => setShowGradient(g => !g)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}
-                >
-                  <Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Mappa pendenza</span>
+                <button onClick={() => setShowGradient(g => !g)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                  <Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Pendenza</span>
                 </button>
               )}
               {hasGps && (
-                <button
-                  onClick={() => setShowStreetView(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors"
-                >
+                <button onClick={() => setShowStreetView(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors">
                   <Images className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Foto zona</span>
                 </button>
               )}
               {hasGps && (
-                <button
-                  onClick={() => setShow3D(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors"
-                >
+                <button onClick={() => setShow3D(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors">
                   <Box className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Vista 3D</span>
                 </button>
               )}
@@ -738,7 +484,7 @@ export default function EscursionePage() {
           <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
             <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} pois={pois} wikiPages={wikiPages} />
           </div>
-          {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati lungo il tracciato</p>}
+          {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
         </section>
 
         {/* Charts */}
@@ -808,14 +554,9 @@ export default function EscursionePage() {
           </div>
           {editNotes ? (
             <div>
-              <textarea
-                value={notesVal}
-                onChange={e => setNotesVal(e.target.value)}
-                rows={5}
+              <textarea value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={5}
                 placeholder="Descrivi l'escursione, i luoghi visitati, le sensazioni…"
-                className="w-full border border-stone-200 rounded-xl p-3 text-stone-700 text-sm outline-none focus:border-forest-400 resize-none"
-                autoFocus
-              />
+                className="w-full border border-stone-200 rounded-xl p-3 text-stone-700 text-sm outline-none focus:border-forest-400 resize-none" autoFocus />
               <div className="flex gap-2 mt-2">
                 <button onClick={saveNotes} disabled={saving}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-forest-600 text-white rounded-lg text-sm hover:bg-forest-700 transition-colors disabled:opacity-60">
@@ -836,21 +577,12 @@ export default function EscursionePage() {
       </main>
 
       {show3D && (
-        <RouteMap3D
-          trackPoints={activity.trackPoints}
-          title={activity.title ?? activity.notes}
-          onClose={() => setShow3D(false)}
-          plannedTrackPoints={activity.linkedPlannedTrackPoints}
-        />
+        <RouteMap3D trackPoints={activity.trackPoints} title={activity.title ?? activity.notes}
+          onClose={() => setShow3D(false)} plannedTrackPoints={activity.linkedPlannedTrackPoints} />
       )}
-
       {showStreetView && centerPt?.lat && centerPt?.lon && (
-        <StreetViewPanel
-          lat={centerPt.lat}
-          lon={centerPt.lon}
-          title={activity.title ?? undefined}
-          onClose={() => setShowStreetView(false)}
-        />
+        <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity.title ?? undefined}
+          onClose={() => setShowStreetView(false)} />
       )}
     </div>
   )

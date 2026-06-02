@@ -123,6 +123,11 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_height_cm  INTEGER;
 CREATE INDEX IF NOT EXISTS idx_activities_loot_score  ON activities (loot_score  DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_activities_trail_score ON activities (trail_score DESC NULLS LAST);
 
+-- TrailScore cache for planned hikes
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score DOUBLE PRECISION;
+
+CREATE INDEX IF NOT EXISTS idx_planned_trail_score ON planned_hikes (cached_trail_score DESC NULLS LAST);
+
 
 -- ═══════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY  (doppio strato di sicurezza)
