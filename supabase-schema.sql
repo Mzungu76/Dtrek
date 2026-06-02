@@ -71,6 +71,23 @@ CREATE INDEX IF NOT EXISTS idx_planned_planned_date ON planned_hikes (planned_da
 CREATE INDEX IF NOT EXISTS idx_planned_user_id      ON planned_hikes (user_id);
 
 
+-- ── Impostazioni utente (chiave API Claude, abbonamento) ────
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id           UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  claude_api_key    TEXT,
+  subscription_tier TEXT NOT NULL DEFAULT 'free',  -- 'free' | 'premium'
+  updated_at        TIMESTAMPTZ DEFAULT NOW(),
+  created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS "user_settings_owner"
+  ON user_settings FOR ALL
+  USING     (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+
 -- ═══════════════════════════════════════════════════════════
 -- AGGIORNAMENTI SCHEMA (se le tabelle esistono già)
 -- ═══════════════════════════════════════════════════════════
