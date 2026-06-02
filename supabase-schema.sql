@@ -101,7 +101,7 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide    TEXT;
 CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities    (user_id);
 CREATE INDEX IF NOT EXISTS idx_planned_user_id    ON planned_hikes (user_id);
 
--- ── MeritaScore ──────────────────────────────────────────────────────────────
+-- ── MeritaScore (deprecated columns kept for data compatibility) ─────────────
 ALTER TABLE activities    ADD COLUMN IF NOT EXISTS rpe          INTEGER;
 ALTER TABLE activities    ADD COLUMN IF NOT EXISTS merita_score DOUBLE PRECISION;
 
@@ -109,6 +109,19 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS max_heart_rate       INTEGER;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS beauty_natura_weight INTEGER DEFAULT 50;
 
 CREATE INDEX IF NOT EXISTS idx_activities_merita_score ON activities (merita_score DESC NULLS LAST);
+
+-- ── LootScore + TrailScore ────────────────────────────────────────────────────
+ALTER TABLE activities    ADD COLUMN IF NOT EXISTS soddisfazione INTEGER;
+ALTER TABLE activities    ADD COLUMN IF NOT EXISTS loot_score    DOUBLE PRECISION;
+ALTER TABLE activities    ADD COLUMN IF NOT EXISTS trail_score   DOUBLE PRECISION;
+
+-- Biometric profile (replaces manual FCmax setting)
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_age        INTEGER;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_weight_kg  DOUBLE PRECISION;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_height_cm  INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_activities_loot_score  ON activities (loot_score  DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_activities_trail_score ON activities (trail_score DESC NULLS LAST);
 
 
 -- ═══════════════════════════════════════════════════════════

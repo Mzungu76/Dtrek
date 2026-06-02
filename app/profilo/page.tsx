@@ -4,7 +4,7 @@ import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock, Heart, Leaf,
+  Loader2, ShieldCheck, Sparkles, Lock, Leaf, PersonStanding,
 } from 'lucide-react'
 
 // ── Claude API key section ─────────────────────────────────────────────────
@@ -185,20 +185,27 @@ function SubscriptionTeaser() {
   )
 }
 
-// ── MeritaScore settings ──────────────────────────────────────────────────────
+// ── LootScore / biometric settings ────────────────────────────────────────────
 
-function MeritaSettingsSection() {
-  const [maxHR,      setMaxHR]      = useState(0)
-  const [naturaW,    setNaturaW]    = useState(50)
-  const [loading,    setLoading]    = useState(true)
-  const [saving,     setSaving]     = useState(false)
-  const [status,     setStatus]     = useState<{ ok: boolean; msg: string } | null>(null)
+function LootSettingsSection() {
+  const [age,       setAge]       = useState(0)
+  const [weight,    setWeight]    = useState(0)
+  const [height,    setHeight]    = useState(0)
+  const [naturaW,   setNaturaW]   = useState(50)
+  const [loading,   setLoading]   = useState(true)
+  const [saving,    setSaving]    = useState(false)
+  const [status,    setStatus]    = useState<{ ok: boolean; msg: string } | null>(null)
+
+  // Derived FCmax via Tanaka: 211 − 0.64 × age
+  const derivedFCmax = age >= 10 && age <= 90 ? Math.round(211 - 0.64 * age) : 0
 
   useEffect(() => {
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
-        if (d.maxHeartRate)       setMaxHR(d.maxHeartRate)
+        if (d.userAge)        setAge(d.userAge)
+        if (d.userWeightKg)   setWeight(d.userWeightKg)
+        if (d.userHeightCm)   setHeight(d.userHeightCm)
         if (d.beautyNaturaWeight !== undefined) setNaturaW(d.beautyNaturaWeight)
       })
       .catch(() => {})
@@ -207,17 +214,18 @@ function MeritaSettingsSection() {
 
   async function handleSave() {
     setSaving(true); setStatus(null)
+    const body: Record<string, number> = { beautyNaturaWeight: naturaW }
+    if (age > 0)    body.userAge       = age
+    if (weight > 0) body.userWeightKg  = weight
+    if (height > 0) body.userHeightCm  = height
     const res = await fetch('/api/user-settings', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        ...(maxHR > 0 ? { maxHeartRate: maxHR } : {}),
-        beautyNaturaWeight: naturaW,
-      }),
+      body:    JSON.stringify(body),
     })
     setSaving(false)
     setStatus(res.ok
-      ? { ok: true,  msg: 'Impostazioni MeritaScore salvate.' }
+      ? { ok: true,  msg: 'Profilo salvato.' }
       : { ok: false, msg: 'Errore durante il salvataggio.' })
   }
 
@@ -226,10 +234,10 @@ function MeritaSettingsSection() {
   return (
     <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
       <div className="flex items-center gap-2.5">
-        <span className="text-lg font-bold text-forest-700">MS</span>
+        <span className="text-lg font-bold text-forest-700">LS</span>
         <div>
-          <h2 className="text-sm font-semibold text-stone-800">MeritaScore — impostazioni</h2>
-          <p className="text-xs text-stone-400">Personalizza il calcolo "ne è valsa la pena?"</p>
+          <h2 className="text-sm font-semibold text-stone-800">LootScore — profilo personale</h2>
+          <p className="text-xs text-stone-400">Parametri fisiologici per il calcolo della fatica reale</p>
         </div>
       </div>
 
@@ -239,23 +247,58 @@ function MeritaSettingsSection() {
         </div>
       ) : (
         <>
-          {/* FCmax personale */}
+          {/* Biometric profile */}
           <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-2">
-              <Heart className="w-4 h-4 text-red-400" />
-              Frequenza cardiaca massima (FC max)
+            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-3">
+              <PersonStanding className="w-4 h-4 text-forest-600" />
+              Dati antropometrici
             </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min={100} max={230}
-                value={maxHR || ''}
-                onChange={e => { setMaxHR(parseInt(e.target.value) || 0); setStatus(null) }}
-                placeholder="es. 185"
-                className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
-              />
-              <span className="text-xs text-stone-400">bpm &nbsp;·&nbsp; se 0, si usa la stima 220 − età</span>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Età</p>
+                <div className="relative">
+                  <input
+                    type="number" min={10} max={90}
+                    value={age || ''}
+                    onChange={e => { setAge(parseInt(e.target.value) || 0); setStatus(null) }}
+                    placeholder="40"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">anni</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Peso</p>
+                <div className="relative">
+                  <input
+                    type="number" min={30} max={250}
+                    value={weight || ''}
+                    onChange={e => { setWeight(parseInt(e.target.value) || 0); setStatus(null) }}
+                    placeholder="70"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">kg</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Altezza</p>
+                <div className="relative">
+                  <input
+                    type="number" min={100} max={250}
+                    value={height || ''}
+                    onChange={e => { setHeight(parseInt(e.target.value) || 0); setStatus(null) }}
+                    placeholder="170"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">cm</span>
+                </div>
+              </div>
             </div>
+            {derivedFCmax > 0 && (
+              <p className="mt-2 text-xs text-forest-700 bg-forest-50 rounded-lg px-3 py-1.5">
+                FC max derivata (formula Tanaka): <span className="font-bold">{derivedFCmax} bpm</span>
+              </p>
+            )}
           </div>
 
           {/* Natura / Cultura slider */}
@@ -412,10 +455,10 @@ export default function ProfiloPage() {
           {saved ? <><Check className="w-4 h-4" /> Salvato!</> : 'Salva profilo'}
         </button>
 
-        {/* MeritaScore settings */}
+        {/* LootScore settings */}
         <div className="pt-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">MeritaScore</p>
-          <MeritaSettingsSection />
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">LootScore</p>
+          <LootSettingsSection />
         </div>
 
         {/* AI settings */}

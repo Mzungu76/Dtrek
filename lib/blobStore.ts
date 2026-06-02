@@ -11,8 +11,9 @@ export interface StoredActivity extends TcxActivity {
   linkedPlannedId?: string
   linkedPlannedTrackPoints?: TrackPoint[]
   linkedBeautyScore?: { overall: number; grade: string; color: string }
-  rpe?: number        // perceived exertion 1–10
-  meritaScore?: number  // cached MeritaScore 0–100
+  soddisfazione?: number  // satisfaction 1–10
+  lootScore?: number      // cached LootScore 0–100
+  trailScore?: number     // cached TrailScore 0–100
 }
 
 export interface ActivityMeta {
@@ -36,8 +37,9 @@ export interface ActivityMeta {
   userRating?: number
   userRatingNote?: string
   linkedBeautyScore?: { overall: number; grade: string; color: string }
-  rpe?: number
-  meritaScore?: number
+  soddisfazione?: number
+  lootScore?: number
+  trailScore?: number
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -72,8 +74,9 @@ function toMeta(a: StoredActivity): ActivityMeta {
     userRating:      a.userRating,
     userRatingNote:  a.userRatingNote,
     linkedBeautyScore: a.linkedBeautyScore,
-    rpe:             a.rpe,
-    meritaScore:     a.meritaScore,
+    soddisfazione:   a.soddisfazione,
+    lootScore:       a.lootScore,
+    trailScore:      a.trailScore,
   }
 }
 
@@ -143,24 +146,24 @@ export async function saveActivity(activity: StoredActivity): Promise<void> {
 /** Patches Supabase, then applies the same patch to local cached copies. */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'linkedBeautyScore' | 'rpe' | 'meritaScore'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'linkedBeautyScore' | 'soddisfazione' | 'lootScore' | 'trailScore'>>
 ): Promise<void> {
-  await apiFetch('/api/activity', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, ...meta }),
-  })
-  // Patch local full-activity cache
+  // Update local caches optimistically (before API) so scores always persist locally
   lsGet<StoredActivity>(LS_KEYS.activity(id)).then((local) => {
     if (local) lsSet(LS_KEYS.activity(id), { ...local, ...meta }).catch(() => {})
   }).catch(() => {})
-  // Patch activity in list cache
   lsGet<ActivityMeta[]>(LS_KEYS.activitiesList).then((list) => {
     if (!list) return
     lsSet(LS_KEYS.activitiesList,
       list.map((a) => a.id === id ? { ...a, ...meta } : a)
     ).catch(() => {})
   }).catch(() => {})
+  // Sync to Supabase (may fail if columns not yet migrated — local cache already updated)
+  await apiFetch('/api/activity', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...meta }),
+  })
 }
 
 /** Deletes from Supabase, then removes from local cache. */
