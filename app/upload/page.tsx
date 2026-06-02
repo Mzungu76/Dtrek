@@ -3,24 +3,25 @@ import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
+import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivity } from '@/lib/blobStore'
 import { parseGpx } from '@/lib/gpxParser'
 import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
-import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off } from 'lucide-react'
+import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
-type TcxStatus = 'idle' | 'parsing' | 'parsed' | 'saving' | 'success' | 'error'
+type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'saving' | 'success' | 'error'
 type GpxStatus = 'idle' | 'parsed' | 'saving' | 'success' | 'error'
 
-// ── TCX tab ───────────────────────────────────────────────────────────────────
+// ── Activity uploader (TCX / GPX / FIT) ───────────────────────────────────────
 
-function TcxUploader() {
+function ActivityUploader() {
   const router   = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging,         setDragging]         = useState(false)
-  const [status,           setStatus]           = useState<TcxStatus>('idle')
+  const [status,           setStatus]           = useState<ActivityStatus>('idle')
   const [fileName,         setFileName]         = useState('')
   const [errorMsg,         setErrorMsg]         = useState('')
   const [parsedActivity,   setParsedActivity]   = useState<TcxActivity | null>(null)
@@ -30,21 +31,37 @@ function TcxUploader() {
   const [linkMode,         setLinkMode]         = useState<'none' | 'link'>('none')
 
   const processFile = useCallback(async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.tcx')) {
-      setStatus('error'); setErrorMsg('Seleziona un file con estensione .tcx'); return
+    const ext = file.name.toLowerCase().split('.').pop() ?? ''
+    if (!['tcx', 'gpx', 'fit'].includes(ext)) {
+      setStatus('error'); setErrorMsg('Formato non supportato. Usa file .tcx, .gpx o .fit'); return
     }
     setFileName(file.name); setStatus('parsing')
     try {
-      const text     = await file.text()
-      const activity = parseTcx(text)
+      let activity: TcxActivity
+      if (ext === 'tcx') {
+        activity = parseTcx(await file.text())
+      } else if (ext === 'gpx') {
+        activity = parseGpxActivity(await file.text())
+      } else {
+        // FIT: send binary to server
+        const res = await fetch('/api/parse-fit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: await file.arrayBuffer(),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Errore nel parsing FIT' }))
+          throw new Error(err.error ?? 'Errore nel parsing FIT')
+        }
+        activity = await res.json()
+      }
       setParsedActivity(activity)
       setTitleVal(activity.notes ?? '')
       setStatus('parsed')
-      // Carica i percorsi pianificati per eventuale associazione
       getAllPlanned().then(setPlannedHikes).catch(() => {})
     } catch (e) {
       console.error(e); setStatus('error')
-      setErrorMsg('Errore nel caricamento. Verificate che il file TCX sia valido.')
+      setErrorMsg(e instanceof Error ? e.message : 'Errore nel caricamento del file.')
     }
   }, [])
 
@@ -52,7 +69,6 @@ function TcxUploader() {
     if (!parsedActivity) return
     setStatus('saving')
     try {
-      // Fetch full planned hike to capture trackPoints before deletion
       let linkedPlannedTrackPoints: import('@/lib/tcxParser').TrackPoint[] | undefined
       if (selectedPlanned) {
         try {
@@ -69,7 +85,6 @@ function TcxUploader() {
         linkedPlannedTrackPoints,
         linkedBeautyScore:        selectedPlanned?.cachedBeautyScore,
       })
-      // Elimina il percorso pianificato se associato
       if (selectedPlanned) {
         await deletePlanned(selectedPlanned.id).catch(() => {})
       }
@@ -99,11 +114,18 @@ function TcxUploader() {
         onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) processFile(f) }}
         onClick={() => inputRef.current?.click()}
       >
-        <input ref={inputRef} type="file" accept=".tcx" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
+        <input ref={inputRef} type="file" accept=".tcx,.gpx,.fit" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
         {status === 'idle' && (<>
           <Upload className="w-12 h-12 text-stone-300 mx-auto mb-4" />
-          <p className="text-stone-500 font-medium">Drag & Drop del file TCX qui</p>
-          <p className="text-stone-400 text-sm mt-1">oppure clicca per sfogliare</p>
+          <p className="text-stone-500 font-medium">Drag & Drop del file qui</p>
+          <p className="text-stone-400 text-sm mt-1">
+            <span className="font-mono text-stone-600">.tcx</span>
+            {' · '}
+            <span className="font-mono text-stone-600">.gpx</span>
+            {' · '}
+            <span className="font-mono text-stone-600">.fit</span>
+            {' · oppure clicca per sfogliare'}
+          </p>
         </>)}
         {status === 'error' && (
           <div className="flex flex-col items-center gap-3">
@@ -115,17 +137,24 @@ function TcxUploader() {
           </div>
         )}
       </div>
-      <div className="mt-6 bg-white rounded-xl border border-stone-200 p-5">
-        <div className="flex items-start gap-3">
-          <FileText className="w-5 h-5 text-terra-500 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-medium text-stone-700 text-sm mb-1">Archiviazione su Supabase</p>
-            <ul className="text-stone-500 text-sm space-y-0.5 list-disc list-inside">
-              <li>Il file viene analizzato nel browser</li>
-              <li>I dati vengono salvati permanentemente su Supabase</li>
-              <li>Tracciato GPS, FC, velocità, altimetria completi</li>
-            </ul>
-          </div>
+
+      {/* Format guide */}
+      <div className="mt-4 bg-white rounded-xl border border-stone-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Info className="w-4 h-4 text-stone-400 shrink-0" />
+          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Formati supportati</p>
+        </div>
+        <div className="space-y-2">
+          {[
+            { ext: 'TCX', color: 'text-forest-700 bg-forest-50 border-forest-200', note: 'Garmin, Wahoo, Coros · Dati completi: tracciato GPS, frequenza cardiaca, calorie, velocità' },
+            { ext: 'FIT', color: 'text-terra-700 bg-terra-50 border-terra-200', note: 'Garmin (formato nativo) · Dati completi come TCX, spesso più preciso' },
+            { ext: 'GPX', color: 'text-sky-700 bg-sky-50 border-sky-200', note: 'Standard universale · Solo tracciato GPS e altimetria — senza FC né calorie' },
+          ].map(({ ext, color, note }) => (
+            <div key={ext} className="flex items-start gap-2.5">
+              <span className={`shrink-0 font-mono text-[11px] font-bold px-1.5 py-0.5 rounded border ${color}`}>{ext}</span>
+              <p className="text-xs text-stone-500 leading-relaxed">{note}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -135,7 +164,7 @@ function TcxUploader() {
     <div className="drop-zone rounded-2xl p-12 text-center">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 border-4 border-forest-200 border-t-forest-600 rounded-full animate-spin" />
-        <p className="text-stone-600 font-medium">Analisi file TCX…</p>
+        <p className="text-stone-600 font-medium">Analisi in corso…</p>
         <p className="text-stone-400 text-sm font-mono">{fileName}</p>
       </div>
     </div>
@@ -502,7 +531,7 @@ function GpxUploader() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function UploadPage() {
-  const [tab, setTab] = useState<'tcx' | 'gpx'>('tcx')
+  const [tab, setTab] = useState<'activity' | 'gpx'>('activity')
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
@@ -513,11 +542,11 @@ export default function UploadPage() {
             <Mountain className="w-8 h-8 text-forest-600" />
           </div>
           <h1 className="font-display text-3xl font-semibold text-stone-800 mb-2">
-            {tab === 'tcx' ? 'Carica una nuova escursione' : 'Pianifica un\'escursione'}
+            {tab === 'activity' ? 'Carica una nuova escursione' : 'Pianifica un\'escursione'}
           </h1>
           <p className="text-stone-500 text-sm">
-            {tab === 'tcx'
-              ? <>Trascina il tuo file <span className="font-mono font-medium text-stone-700">.tcx</span> oppure clicca per selezionarlo</>
+            {tab === 'activity'
+              ? 'Importa il file dal tuo GPS o orologio sportivo'
               : <>Trascina il tuo file <span className="font-mono font-medium text-stone-700">.gpx</span> del percorso futuro</>
             }
           </p>
@@ -526,11 +555,11 @@ export default function UploadPage() {
         {/* Tab switcher */}
         <div className="flex bg-stone-100 rounded-xl p-1 mb-6">
           <button
-            onClick={() => setTab('tcx')}
+            onClick={() => setTab('activity')}
             className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all
-              ${tab === 'tcx' ? 'bg-white text-forest-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+              ${tab === 'activity' ? 'bg-white text-forest-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
           >
-            <Upload className="w-4 h-4" /> Registrata (TCX)
+            <Upload className="w-4 h-4" /> Escursione completata
           </button>
           <button
             onClick={() => setTab('gpx')}
@@ -541,7 +570,7 @@ export default function UploadPage() {
           </button>
         </div>
 
-        {tab === 'tcx' ? <TcxUploader /> : <GpxUploader />}
+        {tab === 'activity' ? <ActivityUploader /> : <GpxUploader />}
       </main>
     </div>
   )

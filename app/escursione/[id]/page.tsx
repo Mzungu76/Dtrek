@@ -258,7 +258,7 @@ export default function EscursionePage() {
                   { icon: <Route className="w-3.5 h-3.5" />, v: `${(activity.distanceMeters/1000).toFixed(1)} km` },
                   { icon: <Mountain className="w-3.5 h-3.5" />, v: `${activity.elevationGain.toFixed(0)} m D+` },
                   { icon: <Clock className="w-3.5 h-3.5" />, v: formatDuration(activity.totalTimeSeconds) },
-                  { icon: <Flame className="w-3.5 h-3.5" />, v: `${activity.calories} kcal` },
+                  ...(activity.calories > 0 ? [{ icon: <Flame className="w-3.5 h-3.5" />, v: `${activity.calories} kcal` }] : []),
                 ].map(({ icon, v }) => (
                   <span key={v} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 border border-white/15">
                     {icon} {v}
@@ -405,14 +405,26 @@ export default function EscursionePage() {
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
-          <StatCard label="Distanza"     value={`${(activity.distanceMeters/1000).toFixed(2)} km`} color="forest" icon={<Route className="w-3.5 h-3.5" />} />
-          <StatCard label="Durata"       value={formatDuration(activity.totalTimeSeconds)} color="terra" icon={<Clock className="w-3.5 h-3.5" />} />
-          <StatCard label="FC Media"     value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />
-          <StatCard label="Vel. Media"   value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
-          <StatCard label="Dislivello ↑" value={`${activity.elevationGain.toFixed(0)} m`} sub={`↓ ${activity.elevationLoss.toFixed(0)} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5" />} />
-          <StatCard label="Calorie"      value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />
-        </div>
+        {(() => {
+          const hasHR  = (activity.avgHeartRate ?? 0) > 0
+          const hasCal = (activity.calories ?? 0) > 0
+          const cols   = 4 + (hasHR ? 1 : 0) + (hasCal ? 1 : 0)
+          const gridCls = cols === 6
+            ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3'
+            : cols === 5
+            ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3'
+            : 'grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3'
+          return (
+            <div className={gridCls}>
+              <StatCard label="Distanza"     value={`${(activity.distanceMeters/1000).toFixed(2)} km`} color="forest" icon={<Route className="w-3.5 h-3.5" />} />
+              <StatCard label="Durata"       value={formatDuration(activity.totalTimeSeconds)} color="terra" icon={<Clock className="w-3.5 h-3.5" />} />
+              {hasHR && <StatCard label="FC Media"   value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
+              <StatCard label="Vel. Media"   value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
+              <StatCard label="Dislivello ↑" value={`${activity.elevationGain.toFixed(0)} m`} sub={`↓ ${activity.elevationLoss.toFixed(0)} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5" />} />
+              {hasCal && <StatCard label="Calorie"    value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
+            </div>
+          )
+        })()}
 
         {/* Weather */}
         {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
@@ -477,44 +489,51 @@ export default function EscursionePage() {
         </section>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
-              <Heart className="w-4 h-4 text-red-400" /> Frequenza Cardiaca
-            </h3>
-            <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
-          </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
-              <Mountain className="w-4 h-4 text-forest-500" /> Profilo Altimetrico
-            </h3>
-            <AltimetryChart trackPoints={activity.trackPoints} />
-          </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-terra-400" /> Velocità
-            </h3>
-            <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
-          </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-stone-600 mb-4">Dati tecnici</h3>
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-              {[
-                ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
-                ['Quota partenza', `${activity.trackPoints[0]?.altitudeMeters?.toFixed(1) ?? '--'} m`],
-                ['Quota minima', `${activity.altitudeMin.toFixed(1)} m`],
-                ['Quota massima', `${activity.altitudeMax.toFixed(1)} m`],
-                ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
-                ['Sport', activity.sport],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between border-b border-stone-100 py-1">
-                  <dt className="text-stone-400 text-xs">{k}</dt>
-                  <dd className="font-mono text-stone-700 text-xs font-medium">{v}</dd>
+        {(() => {
+          const hasHRData = activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0)
+          return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+              {hasHRData && (
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                  <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                    <Heart className="w-4 h-4 text-red-400" /> Frequenza Cardiaca
+                  </h3>
+                  <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
                 </div>
-              ))}
-            </dl>
-          </div>
-        </div>
+              )}
+              <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                  <Mountain className="w-4 h-4 text-forest-500" /> Profilo Altimetrico
+                </h3>
+                <AltimetryChart trackPoints={activity.trackPoints} />
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-terra-400" /> Velocità
+                </h3>
+                <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-stone-600 mb-4">Dati tecnici</h3>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  {[
+                    ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
+                    ['Quota partenza', `${activity.trackPoints[0]?.altitudeMeters?.toFixed(1) ?? '--'} m`],
+                    ['Quota minima', `${activity.altitudeMin.toFixed(1)} m`],
+                    ['Quota massima', `${activity.altitudeMax.toFixed(1)} m`],
+                    ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
+                    ['Sport', activity.sport],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between border-b border-stone-100 py-1">
+                      <dt className="text-stone-400 text-xs">{k}</dt>
+                      <dd className="font-mono text-stone-700 text-xs font-medium">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Wikipedia */}
         {hasGps && (
