@@ -1,25 +1,15 @@
-/**
- * blobStore.ts
- * Sostituisce lib/store.ts.
- * Tutte le operazioni passano per le API Routes Next.js,
- * che a loro volta usano @vercel/blob server-side.
- *
- * Struttura blob:
- *   activities/index.json        → array di ActivityMeta (lista leggera)
- *   activities/{encodedId}.json  → StoredActivity completo
- */
-
 import { TcxActivity, type TrackPoint } from './tcxParser'
+import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
 
 export interface StoredActivity extends TcxActivity {
   userNotes?: string
   title?: string
   tags?: string[]
   fileName?: string
-  userRating?: number          // 1-10, assegnato dall'utente post-escursione
-  userRatingNote?: string      // commento libero
-  linkedPlannedId?: string     // ID percorso pianificato di origine
-  linkedPlannedTrackPoints?: TrackPoint[]  // tracciato GPS del percorso pianificato
+  userRating?: number
+  userRatingNote?: string
+  linkedPlannedId?: string
+  linkedPlannedTrackPoints?: TrackPoint[]
   linkedBeautyScore?: { overall: number; grade: string; color: string }
 }
 
@@ -46,7 +36,7 @@ export interface ActivityMeta {
   linkedBeautyScore?: { overall: number; grade: string; color: string }
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options)
@@ -59,60 +49,92 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
 
 function toMeta(a: StoredActivity): ActivityMeta {
   return {
-    id: a.id,
-    title: a.title ?? a.notes ?? 'Escursione',
-    startTime: a.startTime,
-    distanceMeters: a.distanceMeters,
+    id:              a.id,
+    title:           a.title ?? a.notes ?? 'Escursione',
+    startTime:       a.startTime,
+    distanceMeters:  a.distanceMeters,
     totalTimeSeconds: a.totalTimeSeconds,
-    calories: a.calories,
-    avgHeartRate: a.avgHeartRate,
-    maxHeartRate: a.maxHeartRate,
-    elevationGain: a.elevationGain,
-    elevationLoss: a.elevationLoss,
-    altitudeMax: a.altitudeMax,
-    avgSpeedMs: a.avgSpeedMs,
-    maxSpeedMs: a.maxSpeedMs,
-    tags: a.tags,
-    userNotes: a.userNotes,
-    fileName: a.fileName,
-    userRating: a.userRating,
-    userRatingNote: a.userRatingNote,
+    calories:        a.calories,
+    avgHeartRate:    a.avgHeartRate,
+    maxHeartRate:    a.maxHeartRate,
+    elevationGain:   a.elevationGain,
+    elevationLoss:   a.elevationLoss,
+    altitudeMax:     a.altitudeMax,
+    avgSpeedMs:      a.avgSpeedMs,
+    maxSpeedMs:      a.maxSpeedMs,
+    tags:            a.tags,
+    userNotes:       a.userNotes,
+    fileName:        a.fileName,
+    userRating:      a.userRating,
+    userRatingNote:  a.userRatingNote,
     linkedBeautyScore: a.linkedBeautyScore,
   }
 }
 
-// ── API pubbliche ─────────────────────────────────────────────────────────────
+// ── Cache helpers ─────────────────────────────────────────────────────────────
 
-/** Recupera la lista leggera di tutte le escursioni */
+function bgRefreshList(fresh: ActivityMeta[]) {
+  lsSet(LS_KEYS.activitiesList, fresh).catch(() => {})
+}
+
+function bgRefreshActivity(fresh: StoredActivity) {
+  lsSet(LS_KEYS.activity(fresh.id), fresh).catch(() => {})
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Stale-while-revalidate: returns local cache immediately (fast offline-first),
+ * then fetches fresh data from Supabase in the background.
+ */
 export async function getAllActivities(): Promise<ActivityMeta[]> {
-  try {
-    return await apiFetch<ActivityMeta[]>('/api/activities')
-  } catch {
-    return []
+  const local = await lsGet<ActivityMeta[]>(LS_KEYS.activitiesList)
+
+  // Start network fetch regardless; update cache in background
+  const netFetch = apiFetch<ActivityMeta[]>('/api/activities')
+    .then((data) => { bgRefreshList(data); return data })
+    .catch((): ActivityMeta[] => [])
+
+  if (local && local.length > 0) {
+    netFetch.catch(() => {})  // keep running silently
+    return local
   }
+  return netFetch
 }
 
-/** Recupera un'escursione completa per ID */
+/** Returns cached full activity immediately; refreshes from API in background. */
 export async function getActivityById(id: string): Promise<StoredActivity | null> {
-  try {
-    return await apiFetch<StoredActivity>(
-      `/api/activity?id=${encodeURIComponent(id)}`
-    )
-  } catch {
-    return null
+  const local = await lsGet<StoredActivity>(LS_KEYS.activity(id))
+
+  const netFetch = apiFetch<StoredActivity>(`/api/activity?id=${encodeURIComponent(id)}`)
+    .then((data) => { bgRefreshActivity(data); return data })
+    .catch((): null => null)
+
+  if (local) {
+    netFetch.catch(() => {})
+    return local
   }
+  return netFetch
 }
 
-/** Salva una nuova escursione (o sovrascrive se stessa ID) */
+/** Saves to Supabase, then writes to local cache and updates list cache. */
 export async function saveActivity(activity: StoredActivity): Promise<void> {
   await apiFetch('/api/activity', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(activity),
   })
+  // Update local cache (don't await — fire-and-forget)
+  lsSet(LS_KEYS.activity(activity.id), activity).catch(() => {})
+  lsGet<ActivityMeta[]>(LS_KEYS.activitiesList).then((list) => {
+    if (!list) return
+    const meta    = toMeta(activity)
+    const updated = [meta, ...list.filter((a) => a.id !== activity.id)]
+    lsSet(LS_KEYS.activitiesList, updated).catch(() => {})
+  }).catch(() => {})
 }
 
-/** Aggiorna metadati editabili */
+/** Patches Supabase, then applies the same patch to local cached copies. */
 export async function updateActivityMeta(
   id: string,
   meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'linkedBeautyScore'>>
@@ -122,28 +144,42 @@ export async function updateActivityMeta(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, ...meta }),
   })
+  // Patch local full-activity cache
+  lsGet<StoredActivity>(LS_KEYS.activity(id)).then((local) => {
+    if (local) lsSet(LS_KEYS.activity(id), { ...local, ...meta }).catch(() => {})
+  }).catch(() => {})
+  // Patch activity in list cache
+  lsGet<ActivityMeta[]>(LS_KEYS.activitiesList).then((list) => {
+    if (!list) return
+    lsSet(LS_KEYS.activitiesList,
+      list.map((a) => a.id === id ? { ...a, ...meta } : a)
+    ).catch(() => {})
+  }).catch(() => {})
 }
 
-/** Elimina un'escursione */
+/** Deletes from Supabase, then removes from local cache. */
 export async function deleteActivity(id: string): Promise<void> {
-  await apiFetch(`/api/activity?id=${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
+  await apiFetch(`/api/activity?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  lsDel(LS_KEYS.activity(id)).catch(() => {})
+  lsGet<ActivityMeta[]>(LS_KEYS.activitiesList).then((list) => {
+    if (!list) return
+    lsSet(LS_KEYS.activitiesList, list.filter((a) => a.id !== id)).catch(() => {})
+  }).catch(() => {})
 }
 
-/** Statistiche globali calcolate dalla lista */
+/** Global stats calculated from the list (no extra fetch). */
 export function computeGlobalStats(activities: ActivityMeta[]) {
   return {
-    totalActivities: activities.length,
-    totalDistanceKm: activities.reduce((s, a) => s + a.distanceMeters / 1000, 0),
-    totalTimeSeconds: activities.reduce((s, a) => s + a.totalTimeSeconds, 0),
-    totalCalories: activities.reduce((s, a) => s + a.calories, 0),
+    totalActivities:   activities.length,
+    totalDistanceKm:   activities.reduce((s, a) => s + a.distanceMeters / 1000, 0),
+    totalTimeSeconds:  activities.reduce((s, a) => s + a.totalTimeSeconds, 0),
+    totalCalories:     activities.reduce((s, a) => s + a.calories, 0),
     totalElevationGain: activities.reduce((s, a) => s + a.elevationGain, 0),
-    avgHeartRate: activities.length
+    avgHeartRate:      activities.length
       ? Math.round(activities.reduce((s, a) => s + a.avgHeartRate, 0) / activities.length)
       : 0,
-    longestKm: activities.length ? Math.max(...activities.map(a => a.distanceMeters / 1000)) : 0,
-    highestAlt: activities.length ? Math.max(...activities.map(a => a.altitudeMax)) : 0,
+    longestKm:  activities.length ? Math.max(...activities.map((a) => a.distanceMeters / 1000)) : 0,
+    highestAlt: activities.length ? Math.max(...activities.map((a) => a.altitudeMax)) : 0,
   }
 }
 

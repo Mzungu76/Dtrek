@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
 import InstallPWA from '@/components/InstallPWA'
+import OfflineBanner from '@/components/OfflineBanner'
 
 export const metadata: Metadata = {
   title: 'Diario Trekking',
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="it">
       <body className="antialiased">
         {children}
+        <OfflineBanner />
         <ServiceWorkerRegister />
         <InstallPWA />
       </body>
