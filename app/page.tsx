@@ -215,28 +215,16 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
       {/* Full card */}
       <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
 
-        {/* Score banner: TS if available, else beauty score */}
+        {/* TS banner */}
         {(() => {
           const cts = hike.cachedTrailScore
           const tsInfo = cts !== undefined ? tsLabel(cts) : null
-          const bs = hike.cachedBeautyScore
           if (tsInfo && cts !== undefined) {
             return (
               <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
                 style={{ backgroundColor: tsInfo.color + '18', borderBottom: `1.5px solid ${tsInfo.color}30` }}>
                 <span className="text-xs font-bold" style={{ color: tsInfo.color }}>TS {cts}</span>
-                {bs && (
-                  <span className="ml-auto text-[10px] font-bold" style={{ color: bs.color }}>★ {bs.overall.toFixed(1)}</span>
-                )}
-              </div>
-            )
-          }
-          if (bs) {
-            return (
-              <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
-                style={{ backgroundColor: bs.color + '22', borderBottom: `1.5px solid ${bs.color}40` }}>
-                <span className="text-sm font-bold leading-none" style={{ color: bs.color }}>★ {bs.overall.toFixed(1)}</span>
-                <span className="text-[10px] text-stone-400">/10</span>
+                <span className="text-[10px] font-semibold ml-auto" style={{ color: tsInfo.color }}>{tsInfo.label}</span>
               </div>
             )
           }

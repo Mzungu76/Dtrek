@@ -38,10 +38,6 @@ const MapView         = dynamic(() => import('@/components/MapView'),         { 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 
-const BEAUTY_GRADE: Record<string, string> = {
-  '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto',
-  '6': 'Sufficiente', '5': 'Mediocre', '4': 'Insufficiente',
-}
 function ratingColor(n: number) {
   return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
 }
@@ -97,12 +93,15 @@ export default function EscursionePage() {
     [wikiPages, poiWikiEntries],
   )
 
-  const beautyScore = useMemo(
-    () => activity && (pois.length > 0 || allWikiPages.length > 0)
-      ? computeBeautyScore(pois, allWikiPages, EMPTY_TERRAIN, activity.elevationGain, activity.altitudeMax)
-      : null,
-    [pois, allWikiPages, activity], // eslint-disable-line react-hooks/exhaustive-deps
-  )
+  const beautyScore = useMemo(() => {
+    // If full cached data available (with categories), reconstruct from it — no live recompute
+    const cached = activity?.linkedBeautyScore
+    if (cached?.categories?.length) return cached as import('@/lib/beautyScore').BeautyScore
+    // Otherwise compute from live POI/wiki data
+    if (!activity || (pois.length === 0 && allWikiPages.length === 0)) return null
+    return computeBeautyScore(pois, allWikiPages, EMPTY_TERRAIN, activity.elevationGain, activity.altitudeMax)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pois, allWikiPages, activity])
 
   useEffect(() => {
     getActivityById(id).then(a => {
@@ -112,8 +111,12 @@ export default function EscursionePage() {
       setNotesVal(a.userNotes ?? '')
       setRatingVal(a.userRating ?? 0)
       setRatingNote(a.userRatingNote ?? '')
+      const hasFullCache = a.trailScore !== undefined && (a.linkedBeautyScore?.categories?.length ?? 0) > 0
       const gps = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-      if (gps.length > 0) {
+      if (hasFullCache) {
+        // All data cached — no network fetch needed, mark ready immediately
+        setPoisFullyLoaded(true)
+      } else if (gps.length > 0) {
         fetchHikingPoisFromWikidata(gps, 300)
           .then(newPois => {
             setPois(newPois)
@@ -136,14 +139,12 @@ export default function EscursionePage() {
       .catch(() => {})
   }, [])
 
-  // Salva beauty score quando i POI sono pronti
+  // Salva beauty score quando i POI sono pronti (solo se mancano le categories in cache)
   useEffect(() => {
     if (!beautyScore || !activity || !poisFullyLoaded) return
-    const { overall, grade, color } = beautyScore
-    if (activity.linkedBeautyScore?.overall === overall) return
-    const cached = { overall, grade, color }
-    updateActivityMeta(id, { linkedBeautyScore: cached }).catch(() => {})
-    setActivity(prev => prev ? { ...prev, linkedBeautyScore: cached } : prev)
+    if (activity.linkedBeautyScore?.categories?.length) return  // already fully cached
+    updateActivityMeta(id, { linkedBeautyScore: beautyScore }).catch(() => {})
+    setActivity(prev => prev ? { ...prev, linkedBeautyScore: beautyScore } : prev)
   }, [beautyScore, activity, poisFullyLoaded, id])
 
   // Calcola TrailScore (unificato: obiettivo + correzione personale)
@@ -421,37 +422,6 @@ export default function EscursionePage() {
 
         {/* Weather */}
         {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
-
-        {/* Beauty score */}
-        {(beautyScore ?? activity.linkedBeautyScore) && (
-          <div className="rounded-2xl p-6 text-white shadow-lg overflow-hidden relative"
-            style={{ background: `linear-gradient(135deg, ${(beautyScore ?? activity.linkedBeautyScore)!.color}ee 0%, ${(beautyScore ?? activity.linkedBeautyScore)!.color}88 100%)` }}>
-            <div className="absolute inset-0 bg-topography opacity-20 pointer-events-none" />
-            <div className="relative flex items-center gap-5">
-              <div className="text-center shrink-0">
-                <div className="text-5xl font-bold leading-none">{(beautyScore ?? activity.linkedBeautyScore)!.overall.toFixed(1)}</div>
-                <div className="text-xs font-semibold opacity-60 mt-1">/ 10</div>
-              </div>
-              <div className="w-px h-12 bg-white/30 shrink-0" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-1">Pagella bellezza</p>
-                <p className="text-xl font-bold">{BEAUTY_GRADE[(beautyScore ?? activity.linkedBeautyScore)!.grade] ?? ''}</p>
-                <p className="text-sm opacity-70 mt-0.5">Valutazione automatica · OSM + Wikipedia</p>
-              </div>
-            </div>
-            {beautyScore?.categories && (
-              <div className="relative mt-4 grid grid-cols-5 gap-2">
-                {beautyScore.categories.map(c => (
-                  <div key={c.key} className="text-center">
-                    <div className="text-base leading-none">{c.emoji}</div>
-                    <div className="text-xs font-bold mt-0.5 text-white/90">{c.score.toFixed(1)}</div>
-                    <div className="text-[9px] text-white/60 leading-tight">{c.label}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* TrailScore — unificato con correzione personale */}
         <TrailScoreWidget result={trailResult} cached={activity.trailScore} />

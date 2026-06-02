@@ -6,7 +6,6 @@ import Navbar from '@/components/Navbar'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
-import BeautyReport from '@/components/BeautyReport'
 import RouteThumb from '@/components/RouteThumb'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
@@ -45,10 +44,6 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   moderata:    'bg-amber-100 text-amber-700 border-amber-200',
   impegnativa: 'bg-orange-100 text-orange-700 border-orange-200',
   estrema:     'bg-red-100 text-red-700 border-red-200',
-}
-const GRADE_LABEL: Record<string, string> = {
-  '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto',
-  '6': 'Sufficiente', '5': 'Mediocre', '4': 'Insufficiente',
 }
 const SUIT_LABEL = (s: number) =>
   s >= 75 ? 'Ben preparato' : s >= 50 ? 'Fattibile con impegno' :
@@ -182,12 +177,15 @@ export default function PlannedHikePage() {
     () => [...wikiPages, ...poiWikiEntries.map(e => e.wiki)],
     [wikiPages, poiWikiEntries],
   )
-  const beautyScore = useMemo(
-    () => hike && (pois.length > 0 || allWikiPages.length > 0)
-      ? computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax)
-      : null,
-    [pois, allWikiPages, terrain, hike],
-  )
+  const beautyScore = useMemo(() => {
+    // If full cached data available (with categories), reconstruct from it
+    const cached = hike?.cachedBeautyScore
+    if (cached?.categories?.length) return cached as import('@/lib/beautyScore').BeautyScore
+    // Otherwise compute from live POI/wiki data
+    if (!hike || (pois.length === 0 && allWikiPages.length === 0)) return null
+    return computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pois, allWikiPages, terrain, hike])
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -198,11 +196,15 @@ export default function PlannedHikePage() {
       setDateVal(h.plannedDate ?? '')
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
-        if (h.cachedPois?.length) {
+        const hasFullCache = (h.cachedTrailScore !== undefined) && ((h.cachedBeautyScore?.categories?.length ?? 0) > 0)
+        if (hasFullCache) {
+          // Full TS + beauty cached — no network fetch needed
+          setPoisFullyLoaded(true)
+        } else if (h.cachedPois?.length) {
           // Use cached POI data immediately — no API call needed
           setPois(h.cachedPois as PoiItem[])
           if (h.cachedPoiWiki?.length) setPoiWikiEntries(h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[])
-          setPoisFullyLoaded(true)  // triggers beauty score save with complete data
+          setPoisFullyLoaded(true)
         } else {
           // Fresh fetch from Wikidata (cloud-IP friendly, no proxy needed)
           setLoadingTerrain(true)
@@ -220,15 +222,12 @@ export default function PlannedHikePage() {
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  // Save beauty score whenever POIs are fully loaded — always overwrite stale cache
+  // Save beauty score the first time POIs are fully loaded (skip if categories already cached)
   useEffect(() => {
     if (!beautyScore || !hike || !poisFullyLoaded) return
-    const { overall, grade, color } = beautyScore
-    // Skip unnecessary DB write if value is identical
-    if (hike.cachedBeautyScore?.overall === overall) return
-    const cached = { overall, grade, color }
-    updatePlannedMeta(hike.id, { cachedBeautyScore: cached }).catch(() => {})
-    setHike(prev => prev ? { ...prev, cachedBeautyScore: cached } : prev)
+    if (hike.cachedBeautyScore?.categories?.length) return  // already fully cached
+    updatePlannedMeta(hike.id, { cachedBeautyScore: beautyScore }).catch(() => {})
+    setHike(prev => prev ? { ...prev, cachedBeautyScore: beautyScore } : prev)
   }, [beautyScore, hike, poisFullyLoaded])
 
   // Save POI data to DB after first successful Overpass fetch
@@ -300,10 +299,6 @@ export default function PlannedHikePage() {
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
   const polyline  = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-
-  const displayScore = beautyScore
-    ? { overall: beautyScore.overall, grade: beautyScore.grade, color: beautyScore.color }
-    : hike.cachedBeautyScore ?? null
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
@@ -410,27 +405,6 @@ export default function PlannedHikePage() {
               </div>
             </div>
 
-            {/* Right: beauty score */}
-            <div className="shrink-0 pb-1">
-              {displayScore ? (
-                <div className="flex flex-col items-end gap-1.5">
-                  <div
-                    className="flex flex-col items-center justify-center rounded-2xl px-5 py-3 shadow-xl"
-                    style={{ backgroundColor: displayScore.color }}
-                  >
-                    <span className="text-3xl font-bold leading-none text-white">{displayScore.overall.toFixed(1)}</span>
-                    <span className="text-white/60 text-[10px] font-medium mt-0.5">/10</span>
-                  </div>
-                  <p className="text-sm font-semibold text-white/90">{GRADE_LABEL[displayScore.grade] ?? ''}</p>
-                  <p className="text-[11px] text-sky-400">Pagella bellezza</p>
-                </div>
-              ) : loadingTerrain ? (
-                <div className="flex flex-col items-center gap-2 px-4 py-3 bg-white/10 rounded-2xl border border-white/20">
-                  <Loader2 className="w-5 h-5 animate-spin text-sky-300" />
-                  <span className="text-xs text-sky-300">Calcolo pagella…</span>
-                </div>
-              ) : null}
-            </div>
           </div>
         </div>
       </div>
@@ -537,9 +511,6 @@ export default function PlannedHikePage() {
             <AssessmentPanel a={hike.assessment} />
           </div>
         )}
-
-        {/* Beauty report */}
-        {beautyScore && <BeautyReport score={beautyScore} />}
 
         {/* TrailScore */}
         {(trailResult || hike.cachedTrailScore !== undefined) && (
