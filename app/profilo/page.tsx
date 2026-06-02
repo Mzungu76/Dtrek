@@ -4,7 +4,7 @@ import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock,
+  Loader2, ShieldCheck, Sparkles, Lock, Heart, Leaf,
 } from 'lucide-react'
 
 // ── Claude API key section ─────────────────────────────────────────────────
@@ -185,6 +185,121 @@ function SubscriptionTeaser() {
   )
 }
 
+// ── MeritaScore settings ──────────────────────────────────────────────────────
+
+function MeritaSettingsSection() {
+  const [maxHR,      setMaxHR]      = useState(0)
+  const [naturaW,    setNaturaW]    = useState(50)
+  const [loading,    setLoading]    = useState(true)
+  const [saving,     setSaving]     = useState(false)
+  const [status,     setStatus]     = useState<{ ok: boolean; msg: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.maxHeartRate)       setMaxHR(d.maxHeartRate)
+        if (d.beautyNaturaWeight !== undefined) setNaturaW(d.beautyNaturaWeight)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleSave() {
+    setSaving(true); setStatus(null)
+    const res = await fetch('/api/user-settings', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        ...(maxHR > 0 ? { maxHeartRate: maxHR } : {}),
+        beautyNaturaWeight: naturaW,
+      }),
+    })
+    setSaving(false)
+    setStatus(res.ok
+      ? { ok: true,  msg: 'Impostazioni MeritaScore salvate.' }
+      : { ok: false, msg: 'Errore durante il salvataggio.' })
+  }
+
+  const culturaW = 100 - naturaW
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
+      <div className="flex items-center gap-2.5">
+        <span className="text-lg font-bold text-forest-700">MS</span>
+        <div>
+          <h2 className="text-sm font-semibold text-stone-800">MeritaScore — impostazioni</h2>
+          <p className="text-xs text-stone-400">Personalizza il calcolo "ne è valsa la pena?"</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-stone-400 text-xs">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…
+        </div>
+      ) : (
+        <>
+          {/* FCmax personale */}
+          <div>
+            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-2">
+              <Heart className="w-4 h-4 text-red-400" />
+              Frequenza cardiaca massima (FC max)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={100} max={230}
+                value={maxHR || ''}
+                onChange={e => { setMaxHR(parseInt(e.target.value) || 0); setStatus(null) }}
+                placeholder="es. 185"
+                className="w-28 rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+              />
+              <span className="text-xs text-stone-400">bpm &nbsp;·&nbsp; se 0, si usa la stima 220 − età</span>
+            </div>
+          </div>
+
+          {/* Natura / Cultura slider */}
+          <div>
+            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-3">
+              <Leaf className="w-4 h-4 text-forest-500" />
+              Peso bellezza: Natura vs Cultura
+            </label>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-forest-700 font-semibold w-16">Natura {naturaW}%</span>
+              <input
+                type="range" min={0} max={100} step={5}
+                value={naturaW}
+                onChange={e => { setNaturaW(parseInt(e.target.value)); setStatus(null) }}
+                className="flex-1 accent-forest-600"
+              />
+              <span className="text-xs text-amber-700 font-semibold w-20 text-right">Cultura {culturaW}%</span>
+            </div>
+            <div className="flex justify-between mt-1.5 px-16">
+              <span className="text-[10px] text-stone-400">solo paesaggio</span>
+              <span className="text-[10px] text-stone-400">solo storia/cultura</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition"
+          >
+            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Salva impostazioni
+          </button>
+        </>
+      )}
+
+      {status && (
+        <p className={`text-xs font-medium ${status.ok ? 'text-forest-600' : 'text-red-600'}`}>
+          {status.ok ? '✓ ' : '✗ '}{status.msg}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Profile page ───────────────────────────────────────────────────────────
 
 export default function ProfiloPage() {
@@ -297,7 +412,13 @@ export default function ProfiloPage() {
           {saved ? <><Check className="w-4 h-4" /> Salvato!</> : 'Salva profilo'}
         </button>
 
-        {/* Divider */}
+        {/* MeritaScore settings */}
+        <div className="pt-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">MeritaScore</p>
+          <MeritaSettingsSection />
+        </div>
+
+        {/* AI settings */}
         <div className="pt-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">Intelligenza artificiale</p>
           <div className="space-y-3">

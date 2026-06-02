@@ -59,6 +59,8 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     linkedPlannedId: row.linked_planned_id as string | undefined,
     linkedPlannedTrackPoints: row.linked_planned_track_points as TrackPoint[] | undefined,
     linkedBeautyScore: row.linked_beauty_score as StoredActivity['linkedBeautyScore'],
+    rpe:          row.rpe as number | undefined,
+    meritaScore:  row.merita_score as number | undefined,
   }
 }
 
@@ -90,6 +92,8 @@ function activityToRow(a: StoredActivity) {
     linked_planned_id:            a.linkedPlannedId ?? null,
     linked_planned_track_points:  a.linkedPlannedTrackPoints ?? null,
     linked_beauty_score:          a.linkedBeautyScore ?? null,
+    rpe:                          a.rpe ?? null,
+    merita_score:                 a.meritaScore ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }
@@ -154,6 +158,8 @@ export async function PATCH(req: NextRequest) {
       userRatingNote?: string
       linkedPlannedId?: string
       linkedBeautyScore?: StoredActivity['linkedBeautyScore']
+      rpe?: number
+      meritaScore?: number
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -164,6 +170,8 @@ export async function PATCH(req: NextRequest) {
     if (patch.userRatingNote  !== undefined) dbPatch.user_rating_note  = patch.userRatingNote
     if (patch.linkedPlannedId !== undefined) dbPatch.linked_planned_id = patch.linkedPlannedId
     if (patch.linkedBeautyScore !== undefined) dbPatch.linked_beauty_score = patch.linkedBeautyScore
+    if (patch.rpe             !== undefined) dbPatch.rpe               = patch.rpe
+    if (patch.meritaScore     !== undefined) dbPatch.merita_score      = patch.meritaScore
 
     const { error } = await supabase
       .from('activities')
