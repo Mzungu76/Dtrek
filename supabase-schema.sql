@@ -128,6 +128,12 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score DOUBLE PRE
 
 CREATE INDEX IF NOT EXISTS idx_planned_trail_score ON planned_hikes (cached_trail_score DESC NULLS LAST);
 
+-- Invalidate stale TrailScore values (computed with old formula, before beauty categories caching)
+UPDATE activities
+SET trail_score = NULL
+WHERE trail_score IS NOT NULL
+  AND (linked_beauty_score IS NULL OR linked_beauty_score->'categories' IS NULL);
+
 
 -- ═══════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY  (doppio strato di sicurezza)

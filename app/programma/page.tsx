@@ -3,7 +3,9 @@ import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
-import { getAllPlanned, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, updatePlannedMeta, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { computeTrailScore, tsLabel } from '@/lib/trailScore'
+import type { BeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -11,11 +13,6 @@ import {
   Mountain, Route, TrendingUp, Clock, CalendarDays,
   Loader2, Trash2, Upload, AlertTriangle, Info, ShieldAlert, ArrowUpDown,
 } from 'lucide-react'
-
-const GRADE_LABEL: Record<string, string> = {
-  '10': 'Eccellente', '9': 'Ottimo', '8': 'Buono', '7': 'Discreto',
-  '6': 'Sufficiente', '5': 'Mediocre', '4': 'Insufficiente',
-}
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   facile:       'Facile',
@@ -57,14 +54,16 @@ export default function ProgrammaPage() {
   const [hikes,   setHikes]   = useState<PlannedHikeMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [sortBy,  setSortBy]  = useState<'date' | 'km' | 'dplus' | 'beauty' | 'suitability'>('date')
+  const [sortBy,    setSortBy]    = useState<'date' | 'km' | 'dplus' | 'ts' | 'suitability'>('date')
+  const [userAge,   setUserAge]   = useState(0)
+  const [pesoNatura, setPesoNatura] = useState(50)
 
   const sortedHikes = useMemo(() => {
     const arr = [...hikes]
     switch (sortBy) {
       case 'km':          return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
       case 'dplus':       return arr.sort((a, b) => b.elevationGain - a.elevationGain)
-      case 'beauty':      return arr.sort((a, b) => (b.cachedBeautyScore?.overall ?? -1) - (a.cachedBeautyScore?.overall ?? -1))
+      case 'ts':          return arr.sort((a, b) => (b.cachedTrailScore ?? -1) - (a.cachedTrailScore ?? -1))
       case 'suitability': return arr.sort((a, b) => (b.assessment?.suitabilityScore ?? 0) - (a.assessment?.suitabilityScore ?? 0))
       default:            return arr.sort((a, b) => {
         const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
@@ -75,8 +74,40 @@ export default function ProgrammaPage() {
   }, [hikes, sortBy])
 
   useEffect(() => {
-    getAllPlanned().then(setHikes).finally(() => setLoading(false))
+    getAllPlanned(setHikes).then(setHikes).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    fetch('/api/user-settings').then(r => r.json()).then(d => {
+      if (d.userAge)                    setUserAge(d.userAge)
+      if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+    }).catch(() => {})
+  }, [])
+
+  // Compute + cache TS for hikes that have beauty categories but no cachedTrailScore
+  useEffect(() => {
+    const toCompute = hikes.filter(
+      h => !h.cachedTrailScore && (h.cachedBeautyScore?.categories?.length ?? 0) > 0
+    )
+    if (!toCompute.length) return
+    for (const hike of toCompute) {
+      const cats = hike.cachedBeautyScore!.categories!
+      const bs: BeautyScore = {
+        categories:  cats as BeautyScore['categories'],
+        overall:     hike.cachedBeautyScore!.overall,
+        grade:       hike.cachedBeautyScore!.grade,
+        gradeLabel:  hike.cachedBeautyScore!.gradeLabel ?? '',
+        color:       hike.cachedBeautyScore!.color,
+      }
+      const { ts } = computeTrailScore(bs, {
+        distanceMeters: hike.distanceMeters,
+        elevationGain:  hike.elevationGain,
+        userAge:        userAge > 0 ? userAge : undefined,
+      }, pesoNatura)
+      updatePlannedMeta(hike.id, { cachedTrailScore: ts }).catch(() => {})
+      setHikes(prev => prev.map(h => h.id === hike.id ? { ...h, cachedTrailScore: ts } : h))
+    }
+  }, [hikes, userAge, pesoNatura])
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -119,7 +150,7 @@ export default function ProgrammaPage() {
                     { id: 'date',        label: 'Data' },
                     { id: 'km',          label: 'Km' },
                     { id: 'dplus',       label: 'D+' },
-                    { id: 'beauty',      label: 'Bellezza' },
+                    { id: 'ts',          label: 'TS' },
                     { id: 'suitability', label: 'Adatta' },
                   ] as const).map(s => (
                     <button key={s.id} onClick={() => setSortBy(s.id)}
@@ -179,42 +210,37 @@ export default function ProgrammaPage() {
                   href={`/programma/${encodeURIComponent(hike.id)}`}
                   className="bg-white rounded-2xl border border-sky-100 shadow-sm hover:border-sky-400 hover:shadow-md transition-all overflow-hidden flex flex-col group"
                 >
-                  {/* ── Beauty score header — top of card ── */}
-                  {hike.cachedBeautyScore ? (
-                    <div
-                      className="flex items-center gap-2.5 px-3 py-2 shrink-0"
-                      style={{
-                        backgroundColor: hike.cachedBeautyScore.color + '1a',
-                        borderBottom: `1.5px solid ${hike.cachedBeautyScore.color}35`,
-                      }}
-                    >
-                      <span className="text-xl font-bold leading-none" style={{ color: hike.cachedBeautyScore.color }}>
-                        {hike.cachedBeautyScore.overall.toFixed(1)}
-                      </span>
-                      <div className="flex flex-col leading-none">
-                        <span className="text-[9px] uppercase tracking-wide font-semibold text-stone-400">Bellezza</span>
-                        <span className="text-xs font-semibold" style={{ color: hike.cachedBeautyScore.color }}>
-                          {GRADE_LABEL[hike.cachedBeautyScore.grade] ?? hike.cachedBeautyScore.grade}
-                        </span>
+                  {/* ── TS header — top of card ── */}
+                  {(() => {
+                    const cts = hike.cachedTrailScore
+                    const tsInfo = cts !== undefined ? tsLabel(cts) : null
+                    if (tsInfo && cts !== undefined) {
+                      return (
+                        <div className="flex items-center gap-2 px-3 py-2 shrink-0"
+                          style={{ backgroundColor: tsInfo.color + '18', borderBottom: `1.5px solid ${tsInfo.color}30` }}>
+                          <span className="text-base font-bold" style={{ color: tsInfo.color }}>TS {cts}</span>
+                          <span className="text-xs font-semibold" style={{ color: tsInfo.color }}>{tsInfo.label}</span>
+                          {hike.plannedDate && (
+                            <span className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
+                              <CalendarDays className="w-3 h-3" />
+                              {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="flex items-center justify-between px-3 py-1.5 shrink-0 bg-stone-50 border-b border-stone-100">
+                        <span className="text-[10px] text-stone-400 italic">Apri per il punteggio</span>
+                        {hike.plannedDate && (
+                          <span className="flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
+                            <CalendarDays className="w-3 h-3" />
+                            {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
+                          </span>
+                        )}
                       </div>
-                      {hike.plannedDate && (
-                        <span className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
-                          <CalendarDays className="w-3 h-3" />
-                          {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between px-3 py-1.5 shrink-0 bg-stone-50 border-b border-stone-100">
-                      <span className="text-[10px] text-stone-400 italic">Apri per la pagella</span>
-                      {hike.plannedDate && (
-                        <span className="flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
-                          <CalendarDays className="w-3 h-3" />
-                          {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {/* Route thumbnail */}
                   <div className="relative h-32 bg-gradient-to-b from-sky-50 to-stone-50 overflow-hidden">

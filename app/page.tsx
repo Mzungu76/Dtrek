@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
-import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, updatePlannedMeta, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -12,7 +12,8 @@ import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
   ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown,
 } from 'lucide-react'
-import { tsLabel } from '@/lib/trailScore'
+import { tsLabel, computeTrailScore } from '@/lib/trailScore'
+import type { BeautyScore } from '@/lib/beautyScore'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -277,7 +278,9 @@ export default function HomePage() {
   const [view,       setView]       = useState<'calendar' | 'list'>('list')
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
   const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating' | 'ts'>('date')
-  const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'beauty' | 'ts'>('date')
+  const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'ts'>('date')
+  const [userAge,    setUserAge]    = useState(0)
+  const [pesoNatura, setPesoNatura] = useState(50)
   const monthBarRef                 = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -288,6 +291,39 @@ export default function HomePage() {
       .then(([acts, plan]) => { setActivities(acts); setPlanned(plan) })
       .finally(() => setLoading(false))
   }, [])
+
+  // Fetch user profile for TS personal correction
+  useEffect(() => {
+    fetch('/api/user-settings').then(r => r.json()).then(d => {
+      if (d.userAge)                    setUserAge(d.userAge)
+      if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+    }).catch(() => {})
+  }, [])
+
+  // Compute + cache TS for planned hikes that have beauty categories but no cachedTrailScore
+  useEffect(() => {
+    const toCompute = planned.filter(
+      h => !h.cachedTrailScore && (h.cachedBeautyScore?.categories?.length ?? 0) > 0
+    )
+    if (!toCompute.length) return
+    for (const hike of toCompute) {
+      const cats = hike.cachedBeautyScore!.categories!
+      const bs: BeautyScore = {
+        categories:  cats as BeautyScore['categories'],
+        overall:     hike.cachedBeautyScore!.overall,
+        grade:       hike.cachedBeautyScore!.grade,
+        gradeLabel:  hike.cachedBeautyScore!.gradeLabel ?? '',
+        color:       hike.cachedBeautyScore!.color,
+      }
+      const { ts } = computeTrailScore(bs, {
+        distanceMeters: hike.distanceMeters,
+        elevationGain:  hike.elevationGain,
+        userAge:        userAge > 0 ? userAge : undefined,
+      }, pesoNatura)
+      updatePlannedMeta(hike.id, { cachedTrailScore: ts }).catch(() => {})
+      setPlanned(prev => prev.map(h => h.id === hike.id ? { ...h, cachedTrailScore: ts } : h))
+    }
+  }, [planned, userAge, pesoNatura])
 
   const months = useMemo(() => {
     const now = new Date()
@@ -374,7 +410,6 @@ export default function HomePage() {
     switch (planSortBy) {
       case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
       case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
-      case 'beauty': return arr.sort((a, b) => (b.cachedBeautyScore?.overall ?? -1) - (a.cachedBeautyScore?.overall ?? -1))
       case 'ts':     return arr.sort((a, b) => (b.cachedTrailScore ?? -1) - (a.cachedTrailScore ?? -1))
       default:       return arr.sort((a, b) => {
         const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
@@ -673,11 +708,10 @@ export default function HomePage() {
                   <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5">
                     <ArrowUpDown className="w-3 h-3 text-stone-400 ml-1" />
                     {([
-                      { id: 'date',   label: 'Data' },
-                      { id: 'km',     label: 'Km' },
-                      { id: 'dplus',  label: 'D+' },
-                      { id: 'beauty', label: 'Bellezza' },
-                      { id: 'ts',     label: 'TS' },
+                      { id: 'date',  label: 'Data' },
+                      { id: 'km',   label: 'Km' },
+                      { id: 'dplus', label: 'D+' },
+                      { id: 'ts',   label: 'TS' },
                     ] as const).map(s => (
                       <button key={s.id} onClick={() => setPlanSortBy(s.id)}
                         className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
