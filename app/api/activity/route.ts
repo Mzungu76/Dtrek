@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { TrackPoint } from '@/lib/tcxParser'
 
@@ -97,6 +98,9 @@ function activityToRow(a: StoredActivity) {
 // ── GET /api/activity?id=X ───────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
@@ -104,6 +108,7 @@ export async function GET(req: NextRequest) {
       .from('activities')
       .select('*')
       .eq('id', id)
+      .eq('user_id', user.id)
       .single()
 
     if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -117,10 +122,13 @@ export async function GET(req: NextRequest) {
 // ── POST /api/activity → upsert ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const activity = (await req.json()) as StoredActivity
     const { error } = await supabase
       .from('activities')
-      .upsert(activityToRow(activity), { onConflict: 'id' })
+      .upsert({ ...activityToRow(activity), user_id: user.id }, { onConflict: 'id' })
 
     if (error) throw error
     return NextResponse.json({ ok: true })
@@ -133,6 +141,9 @@ export async function POST(req: NextRequest) {
 // ── PATCH /api/activity → update metadata fields ─────────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = (await req.json()) as Record<string, unknown>
     const { id, ...patch } = body as {
       id: string
@@ -158,6 +169,7 @@ export async function PATCH(req: NextRequest) {
       .from('activities')
       .update(dbPatch)
       .eq('id', id)
+      .eq('user_id', user.id)
 
     if (error) throw error
     return NextResponse.json({ ok: true })
@@ -170,6 +182,9 @@ export async function PATCH(req: NextRequest) {
 // ── DELETE /api/activity?id=X ────────────────────────────────────────────────
 export async function DELETE(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
@@ -177,6 +192,7 @@ export async function DELETE(req: NextRequest) {
       .from('activities')
       .delete()
       .eq('id', id)
+      .eq('user_id', user.id)
 
     if (error) throw error
     return NextResponse.json({ ok: true })

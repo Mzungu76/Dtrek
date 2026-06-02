@@ -13,6 +13,7 @@ function sleep(ms: number) {
 
 async function apiFetch<T>(url: string): Promise<T> {
   const res = await fetch(url)
+  if (res.status === 401) throw new Error('unauthenticated')
   if (!res.ok) throw new Error(`${res.status}`)
   return res.json() as Promise<T>
 }

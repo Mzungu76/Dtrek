@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { ActivityMeta } from '@/lib/blobStore'
 
 export const dynamic = 'force-dynamic'
@@ -39,11 +40,15 @@ function rowToMeta(row: Record<string, unknown>): ActivityMeta {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { data, error } = await supabase
       .from('activities')
       .select(META_COLS)
+      .eq('user_id', user.id)
       .order('start_time', { ascending: false })
 
     if (error) throw error
