@@ -1,17 +1,17 @@
 import type { TrackPoint } from './tcxParser'
 import type { HikeAssessment } from './hikeAssessment'
+import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 
 export interface PlannedHike {
   id: string
   title: string
-  plannedDate?: string        // ISO date string (user-settable)
+  plannedDate?: string
   fileName?: string
   userNotes?: string
   tags?: string[]
   createdAt: string
-  // from GPX parsing
   distanceMeters:       number
   elevationGain:        number
   elevationLoss:        number
@@ -20,19 +20,17 @@ export interface PlannedHike {
   estimatedTimeSeconds: number
   routePolyline?:       [number, number][]
   trackPoints?:         TrackPoint[]
-  // assessment
-  assessment?: HikeAssessment
-  // beauty score (cached after first detail-page visit)
-  cachedBeautyScore?: { overall: number; grade: string; color: string }
-  // POI data cached after first successful Overpass fetch
-  cachedPois?: unknown[]      // PoiItem[]
-  cachedPoiWiki?: unknown[]   // { poi: PoiItem; wiki: WikiPage }[]
-  // AI-generated guide text (cached after first generation)
-  cachedGuide?: string
+  assessment?:          HikeAssessment
+  cachedBeautyScore?:   { overall: number; grade: string; color: string }
+  cachedPois?:          unknown[]
+  cachedPoiWiki?:       unknown[]
+  cachedGuide?:         string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
 export type PlannedHikeMeta = Omit<PlannedHike, 'trackPoints'>
+
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options)
@@ -43,24 +41,61 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+function toPlannedMeta(h: PlannedHike): PlannedHikeMeta {
+  const { trackPoints: _, ...meta } = h
+  return meta
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/** Stale-while-revalidate: local cache → Supabase refresh in background. */
 export async function getAllPlanned(): Promise<PlannedHikeMeta[]> {
-  try { return await apiFetch<PlannedHikeMeta[]>('/api/planned') }
-  catch { return [] }
+  const local = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+
+  const netFetch = apiFetch<PlannedHikeMeta[]>('/api/planned')
+    .then((data) => { lsSet(LS_KEYS.plannedList, data).catch(() => {}); return data })
+    .catch((): PlannedHikeMeta[] => [])
+
+  if (local && local.length > 0) {
+    netFetch.catch(() => {})
+    return local
+  }
+  return netFetch
 }
 
+/** Returns cached full planned hike immediately; refreshes from API in background. */
 export async function getPlannedById(id: string): Promise<PlannedHike | null> {
-  try { return await apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`) }
-  catch { return null }
+  const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
+
+  const netFetch = apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`)
+    .then((data) => { lsSet(LS_KEYS.planned(id), data).catch(() => {}); return data })
+    .catch((): null => null)
+
+  if (local) {
+    netFetch.catch(() => {})
+    return local
+  }
+  return netFetch
 }
 
+/** Saves to Supabase, then updates local cache. */
 export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: HikeAssessment }> {
-  return apiFetch<{ ok: boolean; assessment?: HikeAssessment }>('/api/planned', {
+  const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment }>('/api/planned', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(hike),
   })
+  // Update local cache
+  lsSet(LS_KEYS.planned(hike.id), hike).catch(() => {})
+  lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList).then((list) => {
+    const meta    = toPlannedMeta(hike)
+    const updated = [meta, ...(list ?? []).filter((h) => h.id !== hike.id)]
+    lsSet(LS_KEYS.plannedList, updated).catch(() => {})
+  }).catch(() => {})
+  return result
 }
 
+/** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
   meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedBeautyScore' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide'>>,
@@ -70,8 +105,25 @@ export async function updatePlannedMeta(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, ...meta }),
   })
+  // Patch full cached hike
+  lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {
+    if (local) lsSet(LS_KEYS.planned(id), { ...local, ...meta }).catch(() => {})
+  }).catch(() => {})
+  // Patch list cache
+  lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList).then((list) => {
+    if (!list) return
+    lsSet(LS_KEYS.plannedList,
+      list.map((h) => h.id === id ? { ...h, ...meta } : h)
+    ).catch(() => {})
+  }).catch(() => {})
 }
 
+/** Deletes from Supabase, then removes from local cache. */
 export async function deletePlanned(id: string): Promise<void> {
   await apiFetch(`/api/planned?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  lsDel(LS_KEYS.planned(id)).catch(() => {})
+  lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList).then((list) => {
+    if (!list) return
+    lsSet(LS_KEYS.plannedList, list.filter((h) => h.id !== id)).catch(() => {})
+  }).catch(() => {})
 }
