@@ -10,7 +10,7 @@ export interface StoredActivity extends TcxActivity {
   userRatingNote?: string
   linkedPlannedId?: string
   linkedPlannedTrackPoints?: TrackPoint[]
-  linkedBeautyScore?: { overall: number; grade: string; color: string }
+  linkedBeautyScore?: { overall: number; grade: string; color: string; gradeLabel?: string; categories?: { key: string; label: string; emoji: string; score: number; grade: string; gradeLabel: string; color: string; reasons: string[] }[] }
   soddisfazione?: number  // satisfaction 1–10
   lootScore?: number      // cached LootScore 0–100
   trailScore?: number     // cached TrailScore 0–100
@@ -36,7 +36,7 @@ export interface ActivityMeta {
   routePolyline?: [number, number][]
   userRating?: number
   userRatingNote?: string
-  linkedBeautyScore?: { overall: number; grade: string; color: string }
+  linkedBeautyScore?: { overall: number; grade: string; color: string; gradeLabel?: string; categories?: { key: string; label: string; emoji: string; score: number; grade: string; gradeLabel: string; color: string; reasons: string[] }[] }
   soddisfazione?: number
   lootScore?: number
   trailScore?: number

@@ -21,7 +21,7 @@ export interface PlannedHike {
   routePolyline?:       [number, number][]
   trackPoints?:         TrackPoint[]
   assessment?:          HikeAssessment
-  cachedBeautyScore?:   { overall: number; grade: string; color: string }
+  cachedBeautyScore?:   { overall: number; grade: string; color: string; gradeLabel?: string; categories?: { key: string; label: string; emoji: string; score: number; grade: string; gradeLabel: string; color: string; reasons: string[] }[] }
   cachedTrailScore?:    number
   cachedPois?:          unknown[]
   cachedPoiWiki?:       unknown[]
