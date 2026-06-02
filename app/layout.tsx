@@ -3,6 +3,7 @@ import './globals.css'
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
 import InstallPWA from '@/components/InstallPWA'
 import OfflineBanner from '@/components/OfflineBanner'
+import OfflineSync from '@/components/OfflineSync'
 
 export const metadata: Metadata = {
   title: 'Diario Trekking',
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <OfflineBanner />
         <ServiceWorkerRegister />
         <InstallPWA />
+        <OfflineSync />
       </body>
     </html>
   )
