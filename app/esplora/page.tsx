@@ -24,6 +24,8 @@ interface TrailResult {
   distanceKm: number | null
   elevationGain: number | null
   elevationLoss: number | null
+  altitudeMax: number | null   // da tag OSM ele:max / highest_point
+  altitudeMin: number | null
   sacScale?: string
   caiScale?: string
   ref?: string
@@ -50,8 +52,10 @@ function parseOsmRelation(rel: { id: number; tags: Record<string, string> }): Tr
     from: t.from,
     to: t.to,
     distanceKm: parseOsmDistance(t.distance ?? t.length),
-    elevationGain: parseInt(t.ascent ?? t['ele:gain'] ?? '') || null,
+    elevationGain: parseInt(t.ascent  ?? t['ele:gain'] ?? '') || null,
     elevationLoss: parseInt(t.descent ?? t['ele:loss'] ?? '') || null,
+    altitudeMax:   parseInt(t['ele:max'] ?? t.highest_point ?? t.ele ?? '') || null,
+    altitudeMin:   parseInt(t['ele:min'] ?? t.lowest_point  ?? '') || null,
     sacScale: t.sac_scale,
     caiScale: t.cai_scale,
     ref: t.ref,
@@ -94,7 +98,7 @@ export default function EsploraPage() {
   const [searched, setSearched]       = useState(false)
   const [loading, setLoading]         = useState(false)
   const [geoLoading, setGeoLoading]   = useState(false)
-  const [adding, setAdding]           = useState<string | null>(null)
+  const [adding, setAdding]           = useState<{ id: string; phase: 'geo' | 'save' } | null>(null)
   const [added, setAdded]             = useState<Set<string>>(new Set())
   const [error, setError]             = useState<string | null>(null)
   const [preview, setPreview]         = useState<TrailResult | null>(null)
@@ -151,8 +155,21 @@ export default function EsploraPage() {
 
   // ── Add to programma ──
   async function addToPlanned(t: TrailResult) {
-    setAdding(t.id)
+    setAdding({ id: t.id, phase: 'geo' })
     try {
+      // Step 1: fetch geometry for map + terrain context
+      let routePolyline: [number, number][] = []
+      try {
+        const geoRes = await fetch(`/api/trail-geometry?id=${t.osmId}`)
+        const geoJson = await geoRes.json()
+        routePolyline = geoJson.polyline ?? []
+      } catch {
+        // geometry fetch failed — save without polyline (graceful degradation)
+      }
+
+      setAdding({ id: t.id, phase: 'save' })
+
+      // Step 2: save to planned_hikes
       const notes = [
         t.description,
         t.from && t.to ? `Da ${t.from} a ${t.to}` : null,
@@ -173,10 +190,11 @@ export default function EsploraPage() {
         distanceMeters: (t.distanceKm ?? 0) * 1000,
         elevationGain:  t.elevationGain ?? 0,
         elevationLoss:  t.elevationLoss ?? 0,
-        altitudeMax: 0, altitudeMin: 0,
+        altitudeMax:    t.altitudeMax   ?? 0,
+        altitudeMin:    t.altitudeMin   ?? 0,
         estimatedTimeSeconds: naisimithSecs(t.distanceKm, t.elevationGain),
-        trackPoints: [],
-        routePolyline: [],
+        trackPoints:   [],
+        routePolyline,
         userNotes: notes,
         tags,
       }
@@ -395,7 +413,8 @@ export default function EsploraPage() {
         const t   = preview
         const dur = naisimithSecs(t.distanceKm, t.elevationGain)
         const isAdded  = added.has(t.id)
-        const isAdding = adding === t.id
+        const isAdding = adding?.id === t.id
+        const addPhase = adding?.phase
         return (
           <div
             className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -491,7 +510,7 @@ export default function EsploraPage() {
                   }`}
                 >
                   {isAdding
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    ? <><Loader2 className="w-4 h-4 animate-spin" />{addPhase === 'geo' ? 'Caricamento tracciato…' : 'Salvataggio…'}</>
                     : isAdded
                       ? '✓ Aggiunto al programma'
                       : <><Plus className="w-4 h-4" /> Aggiungi al programma</>
