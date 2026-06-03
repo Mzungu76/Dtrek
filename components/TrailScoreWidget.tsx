@@ -75,6 +75,12 @@ export function TrailScoreWidget({ result, cached }: {
               <div className="flex flex-wrap gap-x-2 mt-1 text-[10px] text-stone-400">
                 <span>⛰️ Std {bd.fStd.toFixed(1)}</span>
                 <span>⏱ {bd.tNaismith.toFixed(1)}h</span>
+                {bd.tDesc > 0.05 && (
+                  <span>⬇ +{Math.round(bd.tDesc * 60)}min discesa</span>
+                )}
+                {bd.altPhysioMult > 1.0 && (
+                  <span>🫁 ×{bd.altPhysioMult.toFixed(2)} quota</span>
+                )}
                 {bd.deltaEff !== 0 && (
                   <span style={{ color: bd.deltaEff > 0 ? '#dc2626' : bd.deltaEff < 0 ? '#16a34a' : '#a8a29e' }}>
                     👤 {bd.deltaEff > 0 ? '+' : ''}{bd.deltaEff.toFixed(1)}
