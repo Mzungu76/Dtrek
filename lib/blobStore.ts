@@ -40,6 +40,7 @@ export interface ActivityMeta {
   soddisfazione?: number
   lootScore?: number
   trailScore?: number
+  elevationProfile?: number[]  // downsampled altitude (m) for share-card profile chart
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

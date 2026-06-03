@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { computeGlobalStats } from '@/lib/blobStore'
 import { getPersonalRecords, computeStreaks, formatPaceMinkm, COMPARISON_COLORS } from '@/lib/stats'
+import { tsLabel } from '@/lib/trailScore'
 
 export type ShareFormat = '1:1' | '16:9' | '9:16'
 
@@ -18,6 +19,8 @@ export interface ActivityShareOpts {
   showHR:        boolean
   showCalories:  boolean
   showDate:      boolean
+  showProfile:   boolean   // elevation profile band
+  showScore:     boolean   // TrailScore badge
 }
 
 export interface StatsShareOpts {
@@ -95,12 +98,121 @@ function drawCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.strokeStyle = DARK.cardBorder; ctx.lineWidth = 1; ctx.stroke()
 }
 
-function drawWatermark(ctx: CanvasRenderingContext2D, w: number, h: number, light = true) {
+// Branded logo lockup: small mountain glyph + "DTrek" wordmark, bottom-right.
+function drawLogo(ctx: CanvasRenderingContext2D, w: number, h: number, scale = 1) {
   ctx.save()
-  ctx.font = `bold 20px ${FONT}`
-  ctx.fillStyle = light ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.25)'
+  const baseY = h - 30 * scale
+  const txt   = 'DTrek'
+  const fontPx = Math.round(22 * scale)
+  ctx.font = `bold ${fontPx}px ${FONT}`
   ctx.textAlign = 'right'
-  ctx.fillText('DTrek', w - 32, h - 28)
+  ctx.textBaseline = 'alphabetic'
+  const txtW   = ctx.measureText(txt).width
+  const rightX = w - 30 * scale
+  const glyphR = 11 * scale                     // mountain glyph half-width
+  const gap    = 9 * scale
+  const glyphCx = rightX - txtW - gap - glyphR
+  const glyphTop = baseY - fontPx * 0.78
+
+  // Mountain glyph (two triangles) with subtle shadow for legibility on maps
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 4 * scale
+  ctx.fillStyle = DARK.accent
+  ctx.beginPath()
+  ctx.moveTo(glyphCx - glyphR,       baseY)
+  ctx.lineTo(glyphCx - glyphR * 0.1, glyphTop)
+  ctx.lineTo(glyphCx + glyphR * 0.5, baseY)
+  ctx.closePath(); ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(glyphCx - glyphR * 0.2, baseY)
+  ctx.lineTo(glyphCx + glyphR * 0.55, glyphTop + glyphR * 0.55)
+  ctx.lineTo(glyphCx + glyphR,        baseY)
+  ctx.closePath(); ctx.fill()
+
+  // Wordmark
+  ctx.fillStyle = 'rgba(255,255,255,0.92)'
+  ctx.fillText(txt, rightX, baseY)
+  ctx.restore()
+}
+
+// TrailScore badge — circular score chip with grade label, color-coded.
+function drawScoreBadge(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, score: number, scale = 1,
+) {
+  const { label, color } = tsLabel(score)
+  const r = 46 * scale
+  ctx.save()
+  // Disc
+  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 12 * scale
+  ctx.fillStyle = color
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill()
+  ctx.shadowBlur = 0
+  // Inner ring
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2 * scale
+  ctx.beginPath(); ctx.arc(cx, cy, r - 6 * scale, 0, Math.PI * 2); ctx.stroke()
+  // Score number
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.font = `bold ${Math.round(40 * scale)}px ${FONT}`
+  ctx.fillText(String(Math.round(score)), cx, cy - 4 * scale)
+  ctx.font = `bold ${Math.round(11 * scale)}px ${FONT}`
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'
+  ctx.fillText('TRAILSCORE', cx, cy + 22 * scale)
+  ctx.restore()
+  // Grade label pill under the disc
+  ctx.save()
+  ctx.font = `bold ${Math.round(15 * scale)}px ${FONT}`
+  const lw = ctx.measureText(label).width + 22 * scale
+  const ph = 26 * scale, py = cy + r + 8 * scale
+  rr(ctx, cx - lw / 2, py, lw, ph, ph / 2)
+  ctx.fillStyle = color; ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 6 * scale
+  ctx.fill(); ctx.shadowBlur = 0
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(label, cx, py + ph / 2 + scale)
+  ctx.restore()
+}
+
+// Elevation profile — filled area chart with peak marker. Drawn over a dark band.
+function drawElevationProfile(
+  ctx: CanvasRenderingContext2D,
+  profile: number[],
+  x: number, y: number, w: number, h: number,
+  scale = 1,
+) {
+  if (profile.length < 3) return
+  const min = Math.min(...profile), max = Math.max(...profile)
+  const range = max - min || 1
+  const px = (i: number) => x + (i / (profile.length - 1)) * w
+  const py = (v: number) => y + h - ((v - min) / range) * h
+
+  // Area fill
+  ctx.save()
+  const grad = ctx.createLinearGradient(0, y, 0, y + h)
+  grad.addColorStop(0, 'rgba(91,196,122,0.55)')
+  grad.addColorStop(1, 'rgba(91,196,122,0.05)')
+  ctx.beginPath()
+  ctx.moveTo(px(0), y + h)
+  profile.forEach((v, i) => ctx.lineTo(px(i), py(v)))
+  ctx.lineTo(px(profile.length - 1), y + h)
+  ctx.closePath()
+  ctx.fillStyle = grad; ctx.fill()
+
+  // Top line
+  ctx.beginPath()
+  profile.forEach((v, i) => (i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v))))
+  ctx.strokeStyle = DARK.accent; ctx.lineWidth = 2.5 * scale
+  ctx.lineJoin = 'round'; ctx.stroke()
+
+  // Peak marker
+  const peakI = profile.indexOf(max)
+  const pkx = px(peakI), pky = py(max)
+  ctx.fillStyle = '#fff'
+  ctx.beginPath(); ctx.arc(pkx, pky, 4 * scale, 0, Math.PI * 2); ctx.fill()
+  ctx.font = `bold ${Math.round(15 * scale)}px ${FONT}`
+  ctx.textAlign = pkx > x + w * 0.7 ? 'right' : 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 4 * scale
+  ctx.fillText(`${Math.round(max)} m`, pkx + (ctx.textAlign === 'right' ? -8 : 8) * scale, pky - 6 * scale)
   ctx.restore()
 }
 
@@ -308,10 +420,16 @@ export async function generateActivityImage(
   const useMap      = opts.showMap && hasPolyline
   const useAbstract = !useMap && opts.showRoute && hasPolyline
 
+  const profile        = activity.elevationProfile
+  const showProfileBand = opts.showProfile && !!(profile && profile.length > 3)
+  const showScoreBadge  = opts.showScore   && typeof activity.trailScore === 'number' && activity.trailScore > 0
+
   // ── Full-bleed map ────────────────────────────────────────────────────────
   if (useMap) {
-    const topH = fmt === '9:16' ? 280 : fmt === '1:1' ? 200 : 170    // gradient header height
-    const botH = fmt === '9:16' ? 300 : fmt === '1:1' ? 190 : 160    // gradient footer height
+    const topH = fmt === '9:16' ? 300 : fmt === '1:1' ? 210 : 175    // gradient header height
+    const botH = showProfileBand
+      ? (fmt === '9:16' ? 460 : fmt === '1:1' ? 330 : 250)
+      : (fmt === '9:16' ? 300 : fmt === '1:1' ? 190 : 160)
 
     // 1. Map tiles fill the whole canvas
     const tileCtx = await drawTiledMap(
@@ -340,11 +458,13 @@ export async function generateActivityImage(
     // 5. Title
     const PAD  = isTall(fmt) ? 56 : 44
     const titleSz = fmt === '9:16' ? 74 : fmt === '1:1' ? 62 : 48
+    const badgeScale = fmt === '9:16' ? 1.2 : fmt === '1:1' ? 1.0 : 0.8
+    const titleMaxW  = w - 2 * PAD - (showScoreBadge ? 150 * badgeScale : 0)
     ctx.font = `bold ${titleSz}px ${FONT}`
     ctx.fillStyle = '#ffffff'
     ctx.textAlign = 'left'
     ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8
-    ctx.fillText(fitText(ctx, activity.title ?? 'Escursione', w - 2 * PAD), PAD, PAD + titleSz * 0.82)
+    ctx.fillText(fitText(ctx, activity.title ?? 'Escursione', titleMaxW), PAD, PAD + titleSz * 0.82)
     ctx.shadowBlur = 0
 
     if (opts.showDate) {
@@ -357,6 +477,12 @@ export async function generateActivityImage(
       )
     }
 
+    // 5b. TrailScore badge — top-right corner
+    if (showScoreBadge) {
+      const bR = 46 * badgeScale
+      drawScoreBadge(ctx, w - PAD - bR, PAD + bR + 6 * badgeScale, activity.trailScore!, badgeScale)
+    }
+
     // 6. Stats row at bottom
     const pillData: { label: string; value: string }[] = []
     if (opts.showDistance)  pillData.push({ label: 'Distanza',   value: `${(activity.distanceMeters / 1000).toFixed(1)} km` })
@@ -365,11 +491,25 @@ export async function generateActivityImage(
     if (opts.showHR)        pillData.push({ label: 'FC Media',   value: `${activity.avgHeartRate} bpm` })
     if (opts.showCalories)  pillData.push({ label: 'Calorie',    value: `${activity.calories} kcal` })
 
+    const valY    = h - (fmt === '9:16' ? 110 : fmt === '1:1' ? 52 : 44)
+    const valSz   = fmt === '9:16' ? 42 : fmt === '1:1' ? 34 : 28
+
+    // 6a. Elevation profile band — sits just above the stats row
+    if (showProfileBand) {
+      const profH = fmt === '9:16' ? 165 : fmt === '1:1' ? 115 : 82
+      const profBottom = valY - valSz - (fmt === '16:9' ? 14 : 22)
+      const profTop    = profBottom - profH
+      ctx.save()
+      ctx.font = `bold ${fmt === '16:9' ? 11 : 13}px ${FONT}`
+      ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.textAlign = 'left'
+      ctx.fillText('ALTIMETRIA', PAD, profTop - 8)
+      ctx.restore()
+      drawElevationProfile(ctx, profile!, PAD, profTop, w - 2 * PAD, profH, fmt === '16:9' ? 0.85 : 1)
+    }
+
     if (pillData.length > 0) {
       const colW    = Math.floor((w - 2 * PAD) / pillData.length)
-      const valY    = h - (fmt === '9:16' ? 110 : fmt === '1:1' ? 52 : 44)
       const lblY    = valY + (fmt === '9:16' ? 32 : fmt === '1:1' ? 28 : 24)
-      const valSz   = fmt === '9:16' ? 42 : fmt === '1:1' ? 34 : 28
       const lblSz   = fmt === '9:16' ? 15 : fmt === '1:1' ? 13 : 11
 
       pillData.forEach((p, i) => {
@@ -386,7 +526,7 @@ export async function generateActivityImage(
       })
     }
 
-    drawWatermark(ctx, w, h, true)
+    drawLogo(ctx, w, h)
     return canvas.toDataURL('image/png')
   }
 
@@ -401,9 +541,10 @@ export async function generateActivityImage(
   if (opts.showHR)        pillData.push({ label: 'FC Media',   value: `${activity.avgHeartRate} bpm` })
   if (opts.showCalories)  pillData.push({ label: 'Calorie',    value: `${activity.calories} kcal` })
 
+  const dBadgeScale = 0.95
   let y = PAD + 44
   ctx.font = `bold 50px ${FONT}`; ctx.fillStyle = DARK.white; ctx.textAlign = 'left'
-  ctx.fillText(fitText(ctx, activity.title ?? 'Escursione', w - 2 * PAD), PAD, y)
+  ctx.fillText(fitText(ctx, activity.title ?? 'Escursione', w - 2 * PAD - (showScoreBadge ? 150 * dBadgeScale : 0)), PAD, y)
   y += 14
   if (opts.showDate) {
     ctx.font = `22px ${FONT}`; ctx.fillStyle = DARK.muted
@@ -411,9 +552,15 @@ export async function generateActivityImage(
     y += 60
   } else { y += 20 }
 
+  if (showScoreBadge) {
+    const bR = 46 * dBadgeScale
+    drawScoreBadge(ctx, w - PAD - bR, PAD + bR + 4, activity.trailScore!, dBadgeScale)
+  }
+
   if (useAbstract) {
     const pillsH = pillData.length > 0 ? 78 : 0
-    const routeH = Math.min(440, h - y - PAD - pillsH - 48)
+    const profH  = showProfileBand ? 150 : 0
+    const routeH = Math.min(440, h - y - PAD - pillsH - profH - 48)
     if (routeH > 80) {
       const ry = y + 12
       rr(ctx, PAD, ry, w - 2 * PAD, routeH, 20)
@@ -421,6 +568,17 @@ export async function generateActivityImage(
       drawRouteAbstract(ctx, activity.routePolyline!, PAD + 12, ry + 12, w - 2 * PAD - 24, routeH - 24)
       y = ry + routeH + 24
     }
+  }
+
+  if (showProfileBand) {
+    const profH = 150
+    const ry = y + 8
+    rr(ctx, PAD, ry, w - 2 * PAD, profH, 16)
+    ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fill()
+    ctx.font = `bold 12px ${FONT}`; ctx.fillStyle = DARK.muted; ctx.textAlign = 'left'
+    ctx.fillText('ALTIMETRIA', PAD + 14, ry + 24)
+    drawElevationProfile(ctx, profile!, PAD + 14, ry + 34, w - 2 * PAD - 28, profH - 48)
+    y = ry + profH + 20
   }
 
   if (pillData.length > 0) {
@@ -436,7 +594,7 @@ export async function generateActivityImage(
     })
   }
 
-  drawWatermark(ctx, w, h)
+  drawLogo(ctx, w, h)
   return canvas.toDataURL('image/png')
 }
 
@@ -527,7 +685,7 @@ export async function generateStatsImage(
     }
   }
 
-  drawWatermark(ctx, w, h)
+  drawLogo(ctx, w, h)
   return canvas.toDataURL('image/png')
 }
 
@@ -584,7 +742,7 @@ export async function generateComparisonImage(
     })
   })
 
-  drawWatermark(ctx, w, h)
+  drawLogo(ctx, w, h)
   return canvas.toDataURL('image/png')
 }
 
@@ -607,7 +765,7 @@ export async function generateMapImage(
     drawDarkBg(ctx, w, h)
     ctx.font = `bold 38px ${FONT}`; ctx.fillStyle = DARK.white; ctx.textAlign = 'left'
     ctx.fillText('Le mie escursioni', 56, 56 + 38)
-    drawWatermark(ctx, w, h)
+    drawLogo(ctx, w, h)
     return canvas.toDataURL('image/png')
   }
 
@@ -640,6 +798,6 @@ export async function generateMapImage(
   }
   ctx.shadowBlur = 0
 
-  drawWatermark(ctx, w, h, true)
+  drawLogo(ctx, w, h)
   return canvas.toDataURL('image/png')
 }
