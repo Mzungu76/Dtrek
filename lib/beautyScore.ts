@@ -20,6 +20,7 @@ export interface BeautyScore {
   grade:      string
   gradeLabel: string
   color:      string
+  version?:   number   // 1 = computed with terrain context; absent = legacy cache
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -275,5 +276,5 @@ export function computeBeautyScore(
   const overall = clamp10(categories.reduce((s, c) => s + c.score, 0) / categories.length)
   const { grade, gradeLabel, color } = gradeFrom(overall)
 
-  return { categories, overall, grade, gradeLabel, color }
+  return { categories, overall, grade, gradeLabel, color, version: 1 }
 }
