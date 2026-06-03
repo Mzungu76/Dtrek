@@ -1,8 +1,10 @@
 'use client'
 import { useState, useRef } from 'react'
+import Link from 'next/link'
+import Navbar from '@/components/Navbar'
 import {
   Compass, Search, MapPin, Route, TrendingUp, Clock,
-  Plus, Loader2, X, ArrowUpRight,
+  Plus, Loader2, X, ArrowUpRight, ChevronLeft, Mountain, Info,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -196,17 +198,29 @@ export default function EsploraPage() {
   // ── Render ──
   return (
     <div className="min-h-screen bg-stone-50 pb-24 md:pb-8">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <Navbar />
+      <div className="max-w-4xl mx-auto px-4 py-6">
 
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="p-2.5 rounded-xl bg-sky-100">
-            <Compass className="w-6 h-6 text-sky-600" />
+        {/* Back + header */}
+        <div className="mb-6">
+          <Link href="/programma" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition mb-4">
+            <ChevronLeft className="w-4 h-4" /> Programma
+          </Link>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-sky-100">
+              <Compass className="w-6 h-6 text-sky-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-stone-800">Esplora Trail</h1>
+              <p className="text-sm text-stone-500">Cerca percorsi OSM nelle vicinanze e aggiungili al programma</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-stone-800">Esplora Trail</h1>
-            <p className="text-sm text-stone-500">Cerca percorsi nelle vicinanze e aggiungili al programma</p>
-          </div>
+        </div>
+
+        {/* Info banner */}
+        <div className="flex items-start gap-2.5 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 mb-6 text-xs text-sky-700">
+          <Info className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>I dati provengono da <strong>OpenStreetMap</strong>. Distanza e dislivello potrebbero essere assenti su percorsi poco documentati — verifica sempre su OSM prima di aggiungere al programma.</span>
         </div>
 
         {/* Search panel */}
@@ -348,9 +362,30 @@ export default function EsploraPage() {
           </div>
         )}
         {!loading && !searched && (
-          <div className="text-center py-16 text-stone-400">
-            <Compass className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Cerca una città o un&apos;area per scoprire i trail nelle vicinanze</p>
+          <div className="space-y-3">
+            <p className="text-xs text-stone-400 font-medium uppercase tracking-wider px-1">Idee di ricerca</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                { label: 'Dolomiti', area: 'Belluno, Veneto' },
+                { label: 'Appennino Toscano', area: 'Firenze, Toscana' },
+                { label: 'Gran Sasso', area: "L'Aquila, Abruzzo" },
+                { label: 'Cinque Terre', area: 'La Spezia, Liguria' },
+                { label: 'Etna', area: 'Catania, Sicilia' },
+                { label: 'Valle d\'Aosta', area: 'Aosta, Valle d\'Aosta' },
+              ].map(({ label, area }) => (
+                <button
+                  key={label}
+                  onClick={() => { setQuery(label); handleQueryChange(label) }}
+                  className="flex items-center gap-2.5 bg-white rounded-xl border border-stone-200 px-3 py-3 hover:border-sky-300 hover:shadow-sm transition text-left"
+                >
+                  <Mountain className="w-4 h-4 text-stone-400 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-stone-700">{label}</div>
+                    <div className="text-[10px] text-stone-400">{area}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
