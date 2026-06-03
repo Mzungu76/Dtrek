@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
 
   if (body.prefDurata !== undefined) {
     const r = Math.round(body.prefDurata)
-    if (r < 0 || r > 100) return NextResponse.json({ error: 'prefDurata fuori range (0–100)' }, { status: 400 })
+    if (r < 60 || r > 480 || r % 30 !== 0) return NextResponse.json({ error: 'prefDurata: valore non valido (60–480 min, step 30)' }, { status: 400 })
     upsertData.pref_durata = r
   }
 

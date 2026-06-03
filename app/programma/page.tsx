@@ -58,7 +58,7 @@ export default function ProgrammaPage() {
   const [userAge,       setUserAge]       = useState(0)
   const [pesoNatura,    setPesoNatura]    = useState(50)
   const [prefSforzo,    setPrefSforzo]    = useState(50)
-  const [prefDurata,     setPrefDurata]     = useState(50)
+  const [prefDurata,     setPrefDurata]     = useState(270)
   const [personalDelta, setPersonalDelta] = useState<number | null>(null)
   const [hrHikeCount,   setHrHikeCount]   = useState(0)
 

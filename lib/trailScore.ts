@@ -66,7 +66,7 @@ export interface TrailScoreInputs {
   hrHikeCount?:      number   // quante uscite con FC hanno contribuito al delta
   // Preferenze escursionistiche (0–100, default 50 = neutro)
   prefSforzo?:       number
-  prefDurata?:       number
+  prefDurata?:       number   // minuti: 60=1h … 480=8h+ (step 30)
 }
 
 export interface TrailScoreBreakdown {
@@ -196,7 +196,8 @@ export function computeTrailScore(
   const effortNorm = (fFinal - 1.5) / 8.5                    // 0 to 1
   const sfidaBonus = Math.round(sfidaNorm * effortNorm * 20)
 
-  const duraNorm     = ((inputs.prefDurata ?? 50) - 50) / 50   // -1=breve, +1=lunga
+  // prefDurata in minuti (60–480): midpoint 270 (4.5h) = neutro
+  const duraNorm     = Math.min(Math.max(((inputs.prefDurata ?? 270) - 270) / 210, -1), 1)
   const trailDur     = tNaismith + tDesc
   const trailDurNorm = Math.min(Math.max((trailDur - 2.5) / 4.5, 0), 1)  // 0 at ≤2.5h, 1 at ≥7h
   const duraBonus    = Math.round(duraNorm * (trailDurNorm - 0.5) * 40)   // max ±20 pts
