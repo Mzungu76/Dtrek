@@ -96,7 +96,10 @@ function scoreNatura(
   if (terrain.isNationalPark)              { score += 2.5; reasons.push('parco nazionale') }
   else if (terrain.isProtected)            { score += 2;   reasons.push('area naturale protetta') }
   if (terrain.hasGlacier)                  { score += 3;   reasons.push('ghiacciaio') }
+  if (terrain.hasRiver)                    { score += 1.5; reasons.push('fiume') }
+  if (terrain.hasStream)                   { score += 1;   reasons.push('torrente/ruscello') }
   if (terrain.hasLake)                     { score += 2;   reasons.push('lago') }
+  if (terrain.hasPond)                     { score += 0.8; reasons.push('stagno/pozza') }
   if (terrain.hasForest)                   { score += 1.5; reasons.push('bosco/foresta') }
   if (terrain.openTerrain)                 { score += 1;   reasons.push('terreno aperto') }
   if (terrain.sacScale && terrain.sacScale >= 'T3') { score += 0.5; reasons.push(`sentiero ${terrain.sacScale}`) }
@@ -154,7 +157,10 @@ function scorePaesaggio(
 
   // Dati terreno OSM
   if (terrain.hasGlacier)    { score += 2.5; reasons.push('ghiacciaio') }
+  if (terrain.hasRiver)      { score += 1;   reasons.push('fiume') }
+  if (terrain.hasStream)     { score += 0.5; reasons.push('torrente/ruscello') }
   if (terrain.hasLake)       { score += 2;   reasons.push('lago') }
+  if (terrain.hasPond)       { score += 0.5; reasons.push('stagno') }
   if (terrain.hasCoast)      { score += 2;   reasons.push('vista mare/costa') }
   if (terrain.openTerrain)   { score += 1.5; reasons.push('terreno aperto (panorami)') }
   if (terrain.hasForest)     { score += 0.5; reasons.push('bosco/foresta') }
@@ -168,8 +174,9 @@ function scorePaesaggio(
 
   // Wikipedia — paesaggi e scenari (peso 1.8, cap 7)
   const scenicWiki = wikiMatches(wiki, [
-    'lago', 'panorama', 'belvedere', 'caldera', 'pianura', 'costa', 'mare', 'golfo',
-    'valle', 'gola', 'forra', 'rupe', 'dirupo', 'promontorio', 'collina', 'crinale',
+    'lago', 'fiume', 'torrente', 'cascata', 'gola', 'forra', 'gorge',
+    'panorama', 'belvedere', 'caldera', 'pianura', 'costa', 'mare', 'golfo',
+    'valle', 'rupe', 'dirupo', 'promontorio', 'collina', 'crinale',
     'tufo', 'altopiano', 'canyon', 'paesaggio', 'scenario',
   ])
   if (scenicWiki.length > 0) {
@@ -206,10 +213,12 @@ function scoreArchitettura(pois: PoiItem[], wiki: WikiPage[]): CategoryScore {
   const huts    = pois.filter(p => p.type === 'hut' || p.type === 'bivouac')
   const crosses = pois.filter(p => p.type === 'cross')
   const ruins   = pois.filter(p => p.type === 'ruins')
+  const bridges = pois.filter(p => p.type === 'bridge')
 
-  if (crosses.length) { score += Math.min(crosses.length * 0.7, 2); reasons.push(`${crosses.length} croce${crosses.length > 1 ? 'i' : ''}`) }
-  if (huts.length)    { score += Math.min(huts.length * 0.7, 2);    reasons.push(`${huts.length} rifugio/i`) }
-  if (ruins.length)   { score += Math.min(ruins.length * 1, 2) }
+  if (crosses.length)  { score += Math.min(crosses.length * 0.7, 2);  reasons.push(`${crosses.length} croce${crosses.length > 1 ? 'i' : ''}`) }
+  if (huts.length)     { score += Math.min(huts.length * 0.7, 2);     reasons.push(`${huts.length} rifugio/i`) }
+  if (bridges.length)  { score += Math.min(bridges.length * 1.5, 3);  reasons.push(`${bridges.length} ponte${bridges.length > 1 ? 'i' : ''} storico${bridges.length > 1 ? 'i' : ''}`) }
+  if (ruins.length)    { score += Math.min(ruins.length * 1, 2) }
 
   const archWiki = wikiMatches(wiki, [
     // religiosi
@@ -220,6 +229,8 @@ function scoreArchitettura(pois: PoiItem[], wiki: WikiPage[]): CategoryScore {
     // borghi e insediamenti
     'borgo', 'comune', 'paese', 'centro storico', 'insediamento rupestre',
     'rupestre', 'villaggio', 'necropoli',
+    // idrografia
+    'ponte', 'acquedotto', 'mulino',
   ])
   if (archWiki.length) { score += Math.min(archWiki.length * 2.5, 8); reasons.push(archWiki.map(p => p.title).join(', ')) }
 

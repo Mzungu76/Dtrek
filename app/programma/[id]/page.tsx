@@ -32,7 +32,8 @@ const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 
 const EMPTY_TERRAIN: TerrainContext = {
-  hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
+  hasForest: false, hasRiver: false, hasStream: false,
+  hasLake: false, hasPond: false, hasGlacier: false, hasCoast: false,
   isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [],
 }
 
