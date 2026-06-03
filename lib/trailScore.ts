@@ -1,17 +1,15 @@
 // TrailScore (TS) — punteggio unico che risponde "ne è valsa la pena?"
 //
 // Componenti:
-//   B  = media pesata tra b1 (natura+paesaggio) e b2 (archeologia+architettura+interesse),
-//        corretta dalle preferenze utente (pesoNatura 0–100).
-//        b2 è limitato inferiormente a b1: B = (b1×pesoNatura + max(b2,b1)×pesoCultura) / 100
-//        → quando b2 < b1, B = b1 indipendentemente dal peso; quando b2 > b1 la cultura
-//        aumenta B proporzionalmente alle preferenze.
-//        Auto-boost montagna: su sentieri alpini pesoNatura viene aumentato automaticamente
-//        (fino a +50%) perché la cultura è irrilevante in quota.
+//   B  = media pesata pura tra b1 (natura+paesaggio) e b2 (archeologia+architettura+interesse),
+//        secondo le preferenze utente (pesoNatura 0–100).
+//        B = (b1×pesoNatura + b2×pesoCultura) / 100
+//        → Un utente culturale (pesoNatura basso) ottiene B bassa su trail alpini privi di
+//        patrimonio: corretto — il TS è personalizzato sull'utente, non generico.
 //   F  = Fatica = F_std (Naismith + Langmuir + SAC + fattore fisiologico quota)
 //                 corretta con profilo personale
 //
-//   TS = clamp(B / √F × 20, 0, 100)
+//   TS = clamp(B / √F × 25, 0, 100)
 //
 //   La radice quadrata di F attenua la penalizzazione dei trail difficili:
 //   B=10, F=1.5 → TS≈100 (Imperdibile); B=10, F=8 → TS≈70 (Eccellente)
@@ -180,25 +178,14 @@ export function computeTrailScore(
   const deltaEff    = r1(delta * difficultyW)
   const fFinal      = Math.min(Math.max(fStd + deltaEff, 1.5), 10)
 
-  // ── Bellezza ── con auto-boost natura per sentieri montani
-  const sacVal = ({ T1:1, T2:2, T3:3, T4:4, T5:5, T6:6 } as Record<string,number>)[inputs.sacScale ?? ''] ?? 0
-  // Se quota o scala SAC indicano terreno montano, riduce il peso della cultura
-  // (su un sentiero alpino non ci sono cattedrali né siti archeol. — non è un difetto)
-  const altBoost = altMax >= 2500 ? 45 : altMax >= 2000 ? 35 : altMax >= 1600 ? 25 : altMax >= 1200 ? 12 : 0
-  const sacBoost = sacVal >= 4 ? 45 : sacVal >= 3 ? 25 : sacVal >= 2 ? 12 : 0
-  const mountainNaturaBoost = Math.min(50, Math.max(altBoost, sacBoost))
-  const effectivePesoNatura = Math.min(100, pesoNatura + mountainNaturaBoost)
+  // ── Bellezza ── media pesata pura secondo le preferenze utente
+  const effectivePesoNatura = Math.min(100, Math.max(0, pesoNatura))
   const effectivePesoCultura = 100 - effectivePesoNatura
 
   const catMap = Object.fromEntries(beautyScore.categories.map(c => [c.key, c.score]))
   const b1 = ((catMap.natura ?? 0) + (catMap.paesaggio ?? 0)) / 2
   const b2 = ((catMap.archeologia ?? 0) + (catMap.architettura ?? 0) + (catMap.interesse ?? 0)) / 3
-  // B = media pesata b1 (natura+paesaggio) e b2 (cultura), corretta dalle preferenze utente.
-  // b2 è limitato inferiormente a b1: la cultura può solo aggiungere, mai sottrarre dalla
-  // bellezza naturale base. Quando b2 = 0 (nessun dato OSM culturale) → b2eff = b1 → B = b1,
-  // garantendo che trail senza patrimonio culturale censito non vengano penalizzati.
-  const b2eff = Math.max(b2, b1)
-  const B = Math.min(10, (b1 * effectivePesoNatura + b2eff * effectivePesoCultura) / 100)
+  const B = Math.min(10, (b1 * effectivePesoNatura + b2 * effectivePesoCultura) / 100)
 
   const tsBase = Math.round((B / Math.sqrt(fFinal)) * 25)
 
@@ -236,7 +223,7 @@ export function computeTrailScore(
       terrainLabel,
       sfidaBonus,
       ritmoBonus,
-      mountainNaturaBoost,
+      mountainNaturaBoost: 0,
     },
   }
 }
