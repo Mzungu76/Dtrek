@@ -61,6 +61,7 @@ export default function ProgrammaPage() {
   const [prefDurata,     setPrefDurata]     = useState(270)
   const [personalDelta, setPersonalDelta] = useState<number | null>(null)
   const [hrHikeCount,   setHrHikeCount]   = useState(0)
+  const [prefsLoaded,   setPrefsLoaded]   = useState(false)
 
   const sortedHikes = useMemo(() => {
     const arr = [...hikes]
@@ -89,11 +90,12 @@ export default function ProgrammaPage() {
       if (d.prefDurata          != null) setPrefDurata(d.prefDurata)
       if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
       if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setPrefsLoaded(true))
   }, [])
 
   // Compute TS client-side from cached categories + current prefs (all hikes, every time prefs change)
   useEffect(() => {
+    if (!prefsLoaded) return
     const toCompute = hikes.filter(
       h => (h.cachedBeautyScore?.categories?.length ?? 0) > 0
     )
@@ -130,7 +132,7 @@ export default function ProgrammaPage() {
       if (!hasChanges) return prev
       return prev.map(h => updMap[h.id] !== undefined ? { ...h, cachedTrailScore: updMap[h.id] } : h)
     })
-  }, [hikes.length, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount])
+  }, [hikes.length, prefsLoaded, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount])
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -235,7 +237,7 @@ export default function ProgrammaPage() {
                 >
                   {/* ── TS header — top of card ── */}
                   {(() => {
-                    const cts = hike.cachedTrailScore
+                    const cts = prefsLoaded ? hike.cachedTrailScore : undefined
                     const tsInfo = cts !== undefined ? tsLabel(cts) : null
                     if (tsInfo && cts !== undefined) {
                       return (
