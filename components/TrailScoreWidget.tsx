@@ -49,7 +49,10 @@ export function TrailScoreWidget({ result, cached }: {
               </div>
               <div className="flex justify-between mt-1 text-[10px] text-stone-400">
                 <span>🌿 Natura {bd.b1.toFixed(1)}</span>
-                <span>🏛 Cultura {bd.b2.toFixed(1)}</span>
+                {bd.b2 > bd.b1
+                  ? <span>🏛 Cultura {bd.b2.toFixed(1)} ↑</span>
+                  : <span className="opacity-50">🏛 Cultura {bd.b2.toFixed(1)}</span>
+                }
               </div>
             </div>
 
