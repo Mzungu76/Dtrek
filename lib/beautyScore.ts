@@ -53,6 +53,7 @@ function scoreNatura(
   terrain:  TerrainContext,
   elevGain: number,
   altMax:   number,
+  distKm:   number,
 ): CategoryScore {
   let score = 0
   const reasons: string[] = []
@@ -74,6 +75,7 @@ function scoreNatura(
   else if (elevGain >= 800)  { score += 2;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
   else if (elevGain >= 500)  { score += 1.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
   else if (elevGain >= 200)  { score += 1;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  else if (elevGain >= 50)   { score += 0.5 }
 
   // Zona altitudinale — bellezza intrinseca indipendente dai POI
   if      (altMax >= 3000) { score += 5;   reasons.push(`zona alpina alta (${Math.round(altMax)} m s.l.m.)`) }
@@ -81,7 +83,14 @@ function scoreNatura(
   else if (altMax >= 2000) { score += 3.5; reasons.push(`zona alpina (${Math.round(altMax)} m s.l.m.)`) }
   else if (altMax >= 1500) { score += 2.5; reasons.push(`zona sub-alpina (${Math.round(altMax)} m s.l.m.)`) }
   else if (altMax >= 1000) { score += 1.5; reasons.push(`fascia montana (${Math.round(altMax)} m s.l.m.)`) }
-  else if (altMax >= 500)  { score += 0.5; reasons.push(`fascia collinare (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 500)  { score += 0.8; reasons.push(`fascia collinare (${Math.round(altMax)} m s.l.m.)`) }
+  else                     { score += 0.3 }
+
+  // Lunghezza — percorsi più lunghi sono più immersi nell'ambiente
+  if      (distKm >= 20) { score += 1.5; reasons.push(`percorso lungo ${Math.round(distKm)} km`) }
+  else if (distKm >= 12) { score += 1 }
+  else if (distKm >= 7)  { score += 0.5 }
+  else if (distKm >= 4)  { score += 0.2 }
 
   // Dati terreno OSM (way/relation)
   if (terrain.isNationalPark)              { score += 2.5; reasons.push('parco nazionale') }
@@ -126,6 +135,7 @@ function scorePaesaggio(
   terrain:  TerrainContext,
   altMax:   number,
   elevGain: number,
+  distKm:   number,
 ): CategoryScore {
   let score = 0
   const reasons: string[] = []
@@ -140,14 +150,21 @@ function scorePaesaggio(
   else if (altMax >= 1500) { score += 4;   reasons.push(`quota ${Math.round(altMax)} m`) }
   else if (altMax >= 1000) { score += 2.5; reasons.push(`quota ${Math.round(altMax)} m`) }
   else if (altMax >= 500)  { score += 1.5; reasons.push(`quota ${Math.round(altMax)} m`) }
+  else                     { score += 0.3 }
 
   // Dati terreno OSM
   if (terrain.hasGlacier)    { score += 2.5; reasons.push('ghiacciaio') }
   if (terrain.hasLake)       { score += 2;   reasons.push('lago') }
   if (terrain.hasCoast)      { score += 2;   reasons.push('vista mare/costa') }
   if (terrain.openTerrain)   { score += 1.5; reasons.push('terreno aperto (panorami)') }
+  if (terrain.hasForest)     { score += 0.5; reasons.push('bosco/foresta') }
   if (terrain.isNationalPark) { score += 1;  reasons.push('parco nazionale') }
   else if (terrain.isProtected) { score += 0.8; reasons.push('area protetta') }
+
+  // Lunghezza — percorsi lunghi espongono a scenari variati
+  if      (distKm >= 15) { score += 1;   reasons.push(`percorso ${Math.round(distKm)} km`) }
+  else if (distKm >= 8)  { score += 0.5 }
+  else if (distKm >= 4)  { score += 0.2 }
 
   // Wikipedia — paesaggi e scenari (peso 1.8, cap 7)
   const scenicWiki = wikiMatches(wiki, [
@@ -228,15 +245,17 @@ function scoreInteresse(pois: PoiItem[], wiki: WikiPage[]): CategoryScore {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function computeBeautyScore(
-  pois:     PoiItem[],
-  wiki:     WikiPage[],
-  terrain:  TerrainContext,
-  elevGain: number,
-  altMax:   number,
+  pois:            PoiItem[],
+  wiki:            WikiPage[],
+  terrain:         TerrainContext,
+  elevGain:        number,
+  altMax:          number,
+  distanceMeters?: number,
 ): BeautyScore {
+  const distKm = (distanceMeters ?? 0) / 1000
   const categories = [
-    scoreNatura(pois, wiki, terrain, elevGain, altMax),
-    scorePaesaggio(pois, wiki, terrain, altMax, elevGain),
+    scoreNatura(pois, wiki, terrain, elevGain, altMax, distKm),
+    scorePaesaggio(pois, wiki, terrain, altMax, elevGain, distKm),
     scoreArcheologia(pois, wiki),
     scoreArchitettura(pois, wiki),
     scoreInteresse(pois, wiki),
