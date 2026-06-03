@@ -394,6 +394,12 @@ export default function EscursionePage() {
       {showShare && (() => {
         const polyline = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
         const step = Math.max(1, Math.ceil(polyline.length / 250))
+        // Downsample altitude track to ~140 points for the share-card elevation profile
+        const altPts = activity.trackPoints
+          .filter(p => p.altitudeMeters !== undefined)
+          .map(p => p.altitudeMeters!)
+        const aStep = Math.max(1, Math.ceil(altPts.length / 140))
+        const elevationProfile = altPts.length > 4 ? altPts.filter((_, i) => i % aStep === 0) : undefined
         const actMeta: ActivityMeta = {
           id: activity.id, title: activity.title ?? activity.notes ?? 'Escursione',
           startTime: activity.startTime, distanceMeters: activity.distanceMeters,
@@ -404,6 +410,9 @@ export default function EscursionePage() {
           maxSpeedMs: activity.maxSpeedMs, tags: activity.tags,
           userNotes: activity.userNotes, fileName: activity.fileName,
           routePolyline: polyline.filter((_, i) => i % step === 0),
+          trailScore: activity.trailScore,
+          linkedBeautyScore: activity.linkedBeautyScore,
+          elevationProfile,
         }
         return <ShareModal kind="activity" activity={actMeta} onClose={() => setShowShare(false)} />
       })()}

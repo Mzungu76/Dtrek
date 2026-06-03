@@ -64,6 +64,7 @@ export default function ShareModal(props: ShareModalProps) {
     showMap: true, showRoute: true,
     showDistance: true, showElevation: true,
     showDuration: true, showHR: true, showCalories: true, showDate: true,
+    showProfile: true, showScore: true,
   })
   const [statsOpts, setStatsOpts] = useState<StatsShareOpts>({
     showTotals: true, showStreaks: true, showRecords: true,
@@ -155,6 +156,8 @@ export default function ShareModal(props: ShareModalProps) {
   const options = () => {
     if (props.kind === 'activity') {
       const hasPolyline = !!(props.activity.routePolyline && props.activity.routePolyline.length > 1)
+      const hasProfile  = !!(props.activity.elevationProfile && props.activity.elevationProfile.length > 3)
+      const hasScore    = typeof props.activity.trailScore === 'number' && props.activity.trailScore > 0
       return (
         <div className="space-y-2.5">
           {hasPolyline && (
@@ -165,6 +168,8 @@ export default function ShareModal(props: ShareModalProps) {
               )}
             </>
           )}
+          {hasScore   && <Toggle label="Badge TrailScore"    checked={actOpts.showScore}   onChange={v => setActOpts(o => ({ ...o, showScore: v }))} />}
+          {hasProfile && <Toggle label="Profilo altimetrico" checked={actOpts.showProfile} onChange={v => setActOpts(o => ({ ...o, showProfile: v }))} />}
           <Toggle label="Data"               checked={actOpts.showDate}      onChange={v => setActOpts(o => ({ ...o, showDate: v }))} />
           <Toggle label="Distanza"           checked={actOpts.showDistance}  onChange={v => setActOpts(o => ({ ...o, showDistance: v }))} />
           <Toggle label="Dislivello"         checked={actOpts.showElevation} onChange={v => setActOpts(o => ({ ...o, showElevation: v }))} />
