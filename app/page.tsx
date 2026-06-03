@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
-import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, updatePlannedMeta, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -328,6 +328,10 @@ export default function HomePage() {
         prefRitmo,
       }, pesoNatura)
       updated.push({ ...hike, cachedTrailScore: ts })
+      // Write to DB so TS persists across sessions with current prefs
+      if (hike.cachedTrailScore !== ts) {
+        updatePlannedMeta(hike.id, { cachedTrailScore: ts }).catch(() => {})
+      }
     }
     if (updated.length) {
       const updMap = Object.fromEntries(updated.map(h => [h.id, h]))
