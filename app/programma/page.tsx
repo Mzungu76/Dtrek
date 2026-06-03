@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
-import { getAllPlanned, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, updatePlannedMeta, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { computeTrailScore, tsLabel } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -112,6 +112,10 @@ export default function ProgrammaPage() {
         prefRitmo,
       }, pesoNatura)
       updMap[hike.id] = ts
+      // Write to DB so TS persists across sessions with current prefs
+      if (hike.cachedTrailScore !== ts) {
+        updatePlannedMeta(hike.id, { cachedTrailScore: ts }).catch(() => {})
+      }
     }
     setHikes(prev => {
       const hasChanges = prev.some(h => updMap[h.id] !== undefined && updMap[h.id] !== h.cachedTrailScore)
