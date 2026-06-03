@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Upload, BarChart2, BookOpen, Map, CalendarClock, User, ArrowDownToLine, LogOut, Settings } from 'lucide-react'
+import { Upload, BarChart2, BookOpen, Map, CalendarClock, Compass, User, ArrowDownToLine, LogOut, Settings } from 'lucide-react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { href: '/statistiche', label: 'Statistiche', icon: BarChart2     },
   { href: '/mappa',       label: 'Mappa',       icon: Map           },
   { href: '/programma',   label: 'Programma',   icon: CalendarClock },
+  { href: '/esplora',     label: 'Esplora',     icon: Compass       },
 ]
 
 function isActive(href: string, path: string) {
