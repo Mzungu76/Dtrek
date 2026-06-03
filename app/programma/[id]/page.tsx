@@ -261,6 +261,7 @@ export default function PlannedHikePage() {
       {
         distanceMeters: hike.distanceMeters,
         elevationGain:  hike.elevationGain,
+        altitudeMax:    hike.altitudeMax,
         userAge:        userAge > 0 ? userAge : undefined,
         personalDelta:  personalDelta ?? undefined,
         hrHikeCount,

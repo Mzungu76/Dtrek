@@ -2,9 +2,14 @@
 //
 // Componenti:
 //   B  = Bellezza (da OSM POI + Wikipedia + terreno, ponderata Natura/Cultura)
+//        Auto-boost montagna: su sentieri alpini il peso Natura viene aumentato
+//        automaticamente (fino a +20%) perché la cultura è irrilevante in quota.
 //   F  = Fatica = F_std (Naismith + SAC) corretta con profilo personale
 //
-//   TS = clamp(B / F × 33, 0, 100)
+//   TS = clamp(B / √F × 20, 0, 100)
+//
+//   La radice quadrata di F attenua la penalizzazione dei trail difficili:
+//   B=10, F=1.5 → TS≈100 (Imperdibile); B=10, F=8 → TS≈70 (Eccellente)
 //
 // Correzione personale (delta):
 //   • Se disponibile FC media (percorso completato):
@@ -37,6 +42,7 @@ export interface TrailScoreInputs {
   distanceMeters:    number
   elevationGain:     number
   sacScale?:         string   // T1–T6
+  altitudeMax?:      number
   surfaces?:         string[]
   // Correzione personale (opzionale)
   userAge?:          number
@@ -63,8 +69,9 @@ export interface TrailScoreBreakdown {
   hrHikeCount: number   // uscite con FC usate per il delta personale
   userFCmax:   number   // FCmax utente usata
   terrainLabel: string  // "T2", "sentiero", "default", …
-  sfidaBonus:  number   // aggiustamento preferenza Sforzo
-  ritmoBonus:  number   // aggiustamento preferenza Ritmo
+  sfidaBonus:          number   // aggiustamento preferenza Sforzo
+  ritmoBonus:          number   // aggiustamento preferenza Ritmo
+  mountainNaturaBoost: number   // auto-boost pesoNatura per sentieri montani (0 se assente)
 }
 
 export interface TrailScoreResult {
@@ -151,14 +158,23 @@ export function computeTrailScore(
   const deltaEff    = r1(delta * difficultyW)
   const fFinal      = Math.min(Math.max(fStd + deltaEff, 1.5), 10)
 
-  // ── Bellezza ──
-  const pesoCultura = 100 - pesoNatura
+  // ── Bellezza ── con auto-boost natura per sentieri montani
+  const altMax = inputs.altitudeMax ?? 0
+  const sacVal = ({ T1:1, T2:2, T3:3, T4:4, T5:5, T6:6 } as Record<string,number>)[inputs.sacScale ?? ''] ?? 0
+  // Se quota o scala SAC indicano terreno montano, riduce il peso della cultura
+  // (su un sentiero alpino non ci sono cattedrali né siti archeol. — non è un difetto)
+  const altBoost = altMax >= 2500 ? 20 : altMax >= 2000 ? 15 : altMax >= 1500 ? 10 : altMax >= 1200 ? 5 : 0
+  const sacBoost = sacVal >= 4 ? 20 : sacVal >= 3 ? 10 : sacVal >= 2 ? 5 : 0
+  const mountainNaturaBoost = Math.min(20, Math.max(altBoost, sacBoost))
+  const effectivePesoNatura = Math.min(100, pesoNatura + mountainNaturaBoost)
+  const effectivePesoCultura = 100 - effectivePesoNatura
+
   const catMap = Object.fromEntries(beautyScore.categories.map(c => [c.key, c.score]))
   const b1 = ((catMap.natura ?? 0) + (catMap.paesaggio ?? 0)) / 2
   const b2 = ((catMap.archeologia ?? 0) + (catMap.architettura ?? 0) + (catMap.interesse ?? 0)) / 3
-  const B  = (b1 * pesoNatura + b2 * pesoCultura) / 100
+  const B  = (b1 * effectivePesoNatura + b2 * effectivePesoCultura) / 100
 
-  const tsBase = Math.round((B / fFinal) * 33)
+  const tsBase = Math.round((B / Math.sqrt(fFinal)) * 20)
 
   // ── Preferenze escursionistiche ──
   const sfidaNorm  = ((inputs.prefSforzo ?? 50) - 50) / 50  // -1 to +1
@@ -192,6 +208,7 @@ export function computeTrailScore(
       terrainLabel,
       sfidaBonus,
       ritmoBonus,
+      mountainNaturaBoost,
     },
   }
 }

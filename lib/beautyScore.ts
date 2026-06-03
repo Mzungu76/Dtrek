@@ -52,6 +52,7 @@ function scoreNatura(
   wiki:     WikiPage[],
   terrain:  TerrainContext,
   elevGain: number,
+  altMax:   number,
 ): CategoryScore {
   let score = 0
   const reasons: string[] = []
@@ -71,6 +72,11 @@ function scoreNatura(
   if      (elevGain >= 1000) { score += 2;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
   else if (elevGain >= 500)  { score += 1.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
   else if (elevGain >= 200)  { score += 1;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+
+  // Zona altitudinale — bellezza intrinseca indipendente dai POI
+  if      (altMax >= 3000) { score += 3;   reasons.push(`zona alpina alta (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 2000) { score += 2;   reasons.push(`zona alpina (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 1500) { score += 1.5; reasons.push(`zona sub-alpina (${Math.round(altMax)} m s.l.m.)`) }
 
   // Dati terreno OSM (way/relation)
   if (terrain.isNationalPark)              { score += 2.5; reasons.push('parco nazionale') }
@@ -123,11 +129,12 @@ function scorePaesaggio(
   if (viewpoints.length) { score += Math.min(viewpoints.length * 2.5, 7); reasons.push(`${viewpoints.length} belvedere`) }
 
   // Quota massima
-  if      (altMax >= 2000) { score += 2;   reasons.push(`quota ${Math.round(altMax)} m`) }
+  if      (altMax >= 3000) { score += 5;   reasons.push(`quota alpina alta ${Math.round(altMax)} m`) }
+  else if (altMax >= 2500) { score += 4;   reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 2000) { score += 3;   reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 1500) { score += 2;   reasons.push(`quota ${Math.round(altMax)} m`) }
   else if (altMax >= 1000) { score += 1.5; reasons.push(`quota ${Math.round(altMax)} m`) }
   else if (altMax >= 500)  { score += 1;   reasons.push(`quota ${Math.round(altMax)} m`) }
-
-  if (elevGain >= 800) score += 0.5
 
   // Dati terreno OSM
   if (terrain.hasGlacier)    { score += 2.5; reasons.push('ghiacciaio') }
@@ -223,7 +230,7 @@ export function computeBeautyScore(
   altMax:   number,
 ): BeautyScore {
   const categories = [
-    scoreNatura(pois, wiki, terrain, elevGain),
+    scoreNatura(pois, wiki, terrain, elevGain, altMax),
     scorePaesaggio(pois, wiki, terrain, altMax, elevGain),
     scoreArcheologia(pois, wiki),
     scoreArchitettura(pois, wiki),

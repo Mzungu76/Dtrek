@@ -127,6 +127,14 @@ export function TrailScoreWidget({ result, cached }: {
             </div>
           )}
 
+          {/* Auto-boost montagna */}
+          {bd.mountainNaturaBoost > 0 && (
+            <div className="border-t border-stone-100 px-6 py-2.5 text-xs text-stone-500 flex items-center gap-2">
+              <span>🏔️</span>
+              <span>Sentiero montano: peso Natura auto-aumentato di +{bd.mountainNaturaBoost}% (meno peso alla cultura)</span>
+            </div>
+          )}
+
           {/* Correzione personale */}
           {bd.deltaSource !== 'none' && (
             <div className="border-t border-stone-100 px-6 py-2.5 text-xs text-stone-500 flex items-start gap-2">
