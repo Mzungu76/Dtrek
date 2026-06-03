@@ -169,6 +169,9 @@ export default function EsploraPage() {
 
       setAdding({ id: t.id, phase: 'save' })
 
+      // Convert polyline to TrackPoints so MapView can render the route
+      const trackPoints = routePolyline.map(([lat, lon]) => ({ time: '', lat, lon }))
+
       // Step 2: save to planned_hikes
       const notes = [
         t.description,
@@ -193,7 +196,7 @@ export default function EsploraPage() {
         altitudeMax:    t.altitudeMax   ?? 0,
         altitudeMin:    t.altitudeMin   ?? 0,
         estimatedTimeSeconds: naisimithSecs(t.distanceKm, t.elevationGain),
-        trackPoints:   [],
+        trackPoints,
         routePolyline,
         userNotes: notes,
         tags,
