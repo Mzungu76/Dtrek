@@ -279,10 +279,12 @@ export default function HomePage() {
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
   const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating' | 'ts'>('date')
   const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'ts'>('date')
-  const [userAge,    setUserAge]    = useState(0)
-  const [pesoNatura, setPesoNatura] = useState(50)
-  const [prefSforzo, setPrefSforzo] = useState(50)
-  const [prefRitmo,  setPrefRitmo]  = useState(50)
+  const [userAge,       setUserAge]       = useState(0)
+  const [pesoNatura,    setPesoNatura]    = useState(50)
+  const [prefSforzo,    setPrefSforzo]    = useState(50)
+  const [prefRitmo,     setPrefRitmo]     = useState(50)
+  const [personalDelta, setPersonalDelta] = useState<number | null>(null)
+  const [hrHikeCount,   setHrHikeCount]   = useState(0)
   const monthBarRef                 = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -301,6 +303,8 @@ export default function HomePage() {
       if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
       if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
       if (d.prefRitmo          != null) setPrefRitmo(d.prefRitmo)
+      if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
+      if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
     }).catch(() => {})
   }, [])
 
@@ -324,6 +328,8 @@ export default function HomePage() {
         distanceMeters: hike.distanceMeters,
         elevationGain:  hike.elevationGain,
         userAge:        userAge > 0 ? userAge : undefined,
+        personalDelta:  personalDelta ?? undefined,
+        hrHikeCount,
         prefSforzo,
         prefRitmo,
       }, pesoNatura)
@@ -337,7 +343,7 @@ export default function HomePage() {
       const updMap = Object.fromEntries(updated.map(h => [h.id, h]))
       setPlanned(prev => prev.map(h => updMap[h.id] ?? h))
     }
-  }, [planned.length, userAge, pesoNatura, prefSforzo, prefRitmo])
+  }, [planned.length, userAge, pesoNatura, prefSforzo, prefRitmo, personalDelta, hrHikeCount])
 
   const months = useMemo(() => {
     const now = new Date()

@@ -39,12 +39,14 @@ export interface TrailScoreInputs {
   sacScale?:         string   // T1–T6
   surfaces?:         string[]
   // Correzione personale (opzionale)
-  userAge?:          number   // per derivare FCmax utente
-  userMaxHeartRate?: number   // override esplicito FCmax
-  avgHeartRate?:     number   // FC media percorso completato
+  userAge?:          number
+  userMaxHeartRate?: number
+  avgHeartRate?:     number   // FC media percorso completato (priorità massima)
+  personalDelta?:    number   // delta medio storico da uscite precedenti
+  hrHikeCount?:      number   // quante uscite con FC hanno contribuito al delta
   // Preferenze escursionistiche (0–100, default 50 = neutro)
-  prefSforzo?:       number   // 0=Passeggiata, 100=Sfida
-  prefRitmo?:        number   // 0=Contemplativo, 100=Efficiente
+  prefSforzo?:       number
+  prefRitmo?:        number
 }
 
 export interface TrailScoreBreakdown {
@@ -56,8 +58,9 @@ export interface TrailScoreBreakdown {
   terrainMult: number   // moltiplicatore terreno (da SAC/superficie)
   delta:       number   // correzione personale grezza
   deltaEff:    number   // correzione effettiva (delta × difficultyW)
-  deltaSource: 'none' | 'profile' | 'hr'
+  deltaSource: 'none' | 'profile' | 'personal' | 'hr'
   difficultyW: number   // peso difficoltà 0–1
+  hrHikeCount: number   // uscite con FC usate per il delta personale
   userFCmax:   number   // FCmax utente usata
   terrainLabel: string  // "T2", "sentiero", "default", …
   sfidaBonus:  number   // aggiustamento preferenza Sforzo
@@ -133,6 +136,10 @@ export function computeTrailScore(
     const actualFcPct   = (inputs.avgHeartRate / userFCmax) * 100
     delta       = (actualFcPct - expectedFcPct) / 10
     deltaSource = 'hr'
+  } else if (inputs.personalDelta !== undefined && (inputs.hrHikeCount ?? 0) >= 4) {
+    // Profilo calibrato su uscite reali (priorità su sola età)
+    delta       = inputs.personalDelta
+    deltaSource = 'personal'
   } else if (inputs.userAge && inputs.userAge > 0) {
     // Deviazione FCmax rispetto allo standard
     delta       = (STD_FCMAX - userFCmax) / 10
@@ -180,6 +187,7 @@ export function computeTrailScore(
       deltaEff,
       deltaSource,
       difficultyW: r1(difficultyW),
+      hrHikeCount: inputs.hrHikeCount ?? 0,
       userFCmax,
       terrainLabel,
       sfidaBonus,

@@ -131,11 +131,13 @@ export function TrailScoreWidget({ result, cached }: {
           {bd.deltaSource !== 'none' && (
             <div className="border-t border-stone-100 px-6 py-2.5 text-xs text-stone-500 flex items-start gap-2">
               <span className="shrink-0 mt-0.5">
-                {bd.deltaSource === 'hr' ? '❤️' : '👤'}
+                {bd.deltaSource === 'hr' ? '❤️' : bd.deltaSource === 'personal' ? '🏃' : '👤'}
               </span>
               <span>
                 {bd.deltaSource === 'hr'
                   ? `Correzione FC: FC media ${Math.round((bd.delta * 10) + (50 + bd.fStd * 4))}% vs attesa ${Math.round(50 + bd.fStd * 4)}% → fatica ${bd.deltaEff > 0 ? 'aumentata' : 'ridotta'} di ${Math.abs(bd.deltaEff).toFixed(1)} (peso difficoltà ×${bd.difficultyW.toFixed(2)})`
+                  : bd.deltaSource === 'personal'
+                  ? `Profilo da ${bd.hrHikeCount} uscite: fatica ${bd.deltaEff > 0 ? 'aumentata' : 'ridotta'} di ${Math.abs(bd.deltaEff).toFixed(1)} rispetto alla media (${bd.deltaEff > 0 ? '+' : ''}${bd.deltaEff.toFixed(1)})`
                   : `Correzione profilo: FCmax ${bd.userFCmax} bpm vs standard ${185} bpm → ${bd.deltaEff > 0 ? 'percorso più impegnativo del previsto' : 'percorso meno impegnativo del previsto'} (${bd.deltaEff > 0 ? '+' : ''}${bd.deltaEff.toFixed(1)} su fatica)`
                 }
               </span>

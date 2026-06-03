@@ -111,6 +111,8 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS pref_sforzo          SMALLINT
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS pref_ritmo           SMALLINT DEFAULT 50;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_face_data_url  TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS display_name         TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS personal_delta       DOUBLE PRECISION;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hr_hike_count        SMALLINT DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_activities_merita_score ON activities (merita_score DESC NULLS LAST);
 

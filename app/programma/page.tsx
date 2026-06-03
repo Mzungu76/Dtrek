@@ -55,10 +55,12 @@ export default function ProgrammaPage() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [sortBy,    setSortBy]    = useState<'date' | 'km' | 'dplus' | 'ts' | 'suitability'>('date')
-  const [userAge,    setUserAge]    = useState(0)
-  const [pesoNatura, setPesoNatura] = useState(50)
-  const [prefSforzo, setPrefSforzo] = useState(50)
-  const [prefRitmo,  setPrefRitmo]  = useState(50)
+  const [userAge,       setUserAge]       = useState(0)
+  const [pesoNatura,    setPesoNatura]    = useState(50)
+  const [prefSforzo,    setPrefSforzo]    = useState(50)
+  const [prefRitmo,     setPrefRitmo]     = useState(50)
+  const [personalDelta, setPersonalDelta] = useState<number | null>(null)
+  const [hrHikeCount,   setHrHikeCount]   = useState(0)
 
   const sortedHikes = useMemo(() => {
     const arr = [...hikes]
@@ -85,6 +87,8 @@ export default function ProgrammaPage() {
       if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
       if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
       if (d.prefRitmo          != null) setPrefRitmo(d.prefRitmo)
+      if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
+      if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
     }).catch(() => {})
   }, [])
 
@@ -108,6 +112,8 @@ export default function ProgrammaPage() {
         distanceMeters: hike.distanceMeters,
         elevationGain:  hike.elevationGain,
         userAge:        userAge > 0 ? userAge : undefined,
+        personalDelta:  personalDelta ?? undefined,
+        hrHikeCount,
         prefSforzo,
         prefRitmo,
       }, pesoNatura)
@@ -122,7 +128,7 @@ export default function ProgrammaPage() {
       if (!hasChanges) return prev
       return prev.map(h => updMap[h.id] !== undefined ? { ...h, cachedTrailScore: updMap[h.id] } : h)
     })
-  }, [hikes.length, userAge, pesoNatura, prefSforzo, prefRitmo])
+  }, [hikes.length, userAge, pesoNatura, prefSforzo, prefRitmo, personalDelta, hrHikeCount])
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()
