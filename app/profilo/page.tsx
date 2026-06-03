@@ -227,10 +227,11 @@ function LootSettingsSection() {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     })
+    const json = await res.json().catch(() => ({}))
     setSaving(false)
     setStatus(res.ok
       ? { ok: true,  msg: 'Profilo salvato.' }
-      : { ok: false, msg: 'Errore durante il salvataggio.' })
+      : { ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
   }
 
   const culturaW = 100 - naturaW
