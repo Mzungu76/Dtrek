@@ -1,6 +1,12 @@
 'use client'
-import { useState, useRef } from 'react'
-import { Compass, Search, MapPin, Route, TrendingUp, Clock, Plus, Loader2, ExternalLink } from 'lucide-react'
+import { useState, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
+import {
+  Compass, Search, MapPin, Route, TrendingUp, Clock,
+  Plus, Loader2, ExternalLink, X, ArrowUpRight,
+} from 'lucide-react'
+
+const TrailPreviewMap = dynamic(() => import('@/components/TrailPreviewMap'), { ssr: false })
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,8 +17,8 @@ interface GeoResult {
 }
 
 interface TrailResult {
-  id: string
-  source: 'osm' | 'hp'
+  id: string          // "osm-{relId}"
+  osmId: number
   name: string
   from?: string
   to?: string
@@ -21,13 +27,9 @@ interface TrailResult {
   elevationLoss: number | null
   sacScale?: string
   caiScale?: string
-  difficulty?: string
   ref?: string
   description?: string
   network?: string
-  url?: string
-  lat?: number
-  lon?: number
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -36,9 +38,7 @@ function parseOsmDistance(s?: string): number | null {
   if (!s) return null
   const n = parseFloat(s)
   if (isNaN(n)) return null
-  // "12500 m" or ends with 'm' (not 'km') → meters
   if (s.match(/\d\s*m$/) && !s.includes('km')) return n / 1000
-  // if value > 500 without unit, assume meters
   return n > 500 ? n / 1000 : n
 }
 
@@ -46,7 +46,7 @@ function parseOsmRelation(rel: { id: number; tags: Record<string, string> }): Tr
   const t = rel.tags
   return {
     id: `osm-${rel.id}`,
-    source: 'osm',
+    osmId: rel.id,
     name: t.name,
     from: t.from,
     to: t.to,
@@ -58,26 +58,6 @@ function parseOsmRelation(rel: { id: number; tags: Record<string, string> }): Tr
     ref: t.ref,
     description: t.description,
     network: t.network,
-  }
-}
-
-const HP_DIFFICULTY: Record<string, string> = {
-  green: 'T1', greenBlue: 'T1–T2', blue: 'T2', blueBlack: 'T2–T3', black: 'T3', dblack: 'T4+',
-}
-
-function parseHpTrail(hp: Record<string, unknown>): TrailResult {
-  return {
-    id: `hp-${hp.id}`,
-    source: 'hp',
-    name: hp.name as string,
-    distanceKm: Math.round((hp.length as number) * 1.609),
-    elevationGain: Math.round((hp.ascent as number) * 0.3048),
-    elevationLoss: Math.round((hp.descent as number) * 0.3048),
-    difficulty: HP_DIFFICULTY[hp.difficulty as string] ?? String(hp.difficulty),
-    description: hp.summary as string,
-    url: hp.url as string,
-    lat: hp.latitude as number,
-    lon: hp.longitude as number,
   }
 }
 
@@ -98,22 +78,36 @@ const NETWORK_LABEL: Record<string, string> = {
   lwn: 'Locale', rwn: 'Regionale', nwn: 'Nazionale', iwn: 'Internazionale',
 }
 
+const SAC_LABEL: Record<string, string> = {
+  T1: 'T1 – Escursionismo', T2: 'T2 – Montagna',
+  T3: 'T3 – Alpinismo base', T4: 'T4 – Alpinismo',
+  T5: 'T5 – Avanzato', T6: 'T6 – Estremo',
+}
+
+// ── Preview state ──────────────────────────────────────────────────────────────
+
+interface PreviewState {
+  trail: TrailResult
+  polyline: [number, number][] | null   // null = loading, [] = not available
+  geoError: boolean
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function EsploraPage() {
-  const [query, setQuery]               = useState('')
-  const [geoResults, setGeoResults]     = useState<GeoResult[]>([])
-  const [selectedGeo, setSelectedGeo]   = useState<GeoResult | null>(null)
-  const [radius, setRadius]             = useState(20)
-  const [source, setSource]             = useState<'osm' | 'hp'>('osm')
-  const [trails, setTrails]             = useState<TrailResult[]>([])
-  const [searched, setSearched]         = useState(false)
-  const [loading, setLoading]           = useState(false)
-  const [geoLoading, setGeoLoading]     = useState(false)
-  const [adding, setAdding]             = useState<string | null>(null)
-  const [added, setAdded]               = useState<Set<string>>(new Set())
-  const [error, setError]               = useState<string | null>(null)
-  const geoTimer                        = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [query, setQuery]             = useState('')
+  const [geoResults, setGeoResults]   = useState<GeoResult[]>([])
+  const [selectedGeo, setSelectedGeo] = useState<GeoResult | null>(null)
+  const [radius, setRadius]           = useState(20)
+  const [trails, setTrails]           = useState<TrailResult[]>([])
+  const [searched, setSearched]       = useState(false)
+  const [loading, setLoading]         = useState(false)
+  const [geoLoading, setGeoLoading]   = useState(false)
+  const [adding, setAdding]           = useState<string | null>(null)
+  const [added, setAdded]             = useState<Set<string>>(new Set())
+  const [error, setError]             = useState<string | null>(null)
+  const [preview, setPreview]         = useState<PreviewState | null>(null)
+  const geoTimer                      = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Geocoding ──
   function handleQueryChange(v: string) {
@@ -145,31 +139,42 @@ export default function EsploraPage() {
     setLoading(true); setError(null); setTrails([]); setSearched(true)
     try {
       const { lat, lon } = selectedGeo
-      if (source === 'osm') {
-        const res = await fetch(`/api/cerca-trail?lat=${lat}&lon=${lon}&radius=${radius * 1000}`)
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error ?? 'Errore Overpass')
-        const seen = new Set<number>()
-        const results = (json.elements ?? [])
-          .filter((e: { id: number; tags?: Record<string, string> }) => {
-            if (!e.tags?.name || seen.has(e.id)) return false
-            seen.add(e.id)
-            return true
-          })
-          .map(parseOsmRelation)
-        setTrails(results)
-      } else {
-        const res = await fetch(`/api/hiking-project?lat=${lat}&lon=${lon}&maxDistance=${radius}`)
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error ?? 'Errore Hiking Project')
-        setTrails((json.trails ?? []).map(parseHpTrail))
-      }
+      const res = await fetch(`/api/cerca-trail?lat=${lat}&lon=${lon}&radius=${radius * 1000}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Errore Overpass')
+      const seen = new Set<number>()
+      const results = (json.elements ?? [])
+        .filter((e: { id: number; tags?: Record<string, string> }) => {
+          if (!e.tags?.name || seen.has(e.id)) return false
+          seen.add(e.id)
+          return true
+        })
+        .map(parseOsmRelation)
+      setTrails(results)
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
     }
   }
+
+  // ── Open preview ──
+  const openPreview = useCallback(async (t: TrailResult) => {
+    setPreview({ trail: t, polyline: null, geoError: false })
+    try {
+      const res = await fetch(`/api/trail-geometry?id=${t.osmId}`)
+      const json = await res.json()
+      setPreview(prev => prev?.trail.id === t.id
+        ? { ...prev, polyline: json.polyline ?? [], geoError: !json.polyline?.length }
+        : prev
+      )
+    } catch {
+      setPreview(prev => prev?.trail.id === t.id
+        ? { ...prev, polyline: [], geoError: true }
+        : prev
+      )
+    }
+  }, [])
 
   // ── Add to programma ──
   async function addToPlanned(t: TrailResult) {
@@ -179,27 +184,30 @@ export default function EsploraPage() {
         t.description,
         t.from && t.to ? `Da ${t.from} a ${t.to}` : null,
         t.ref          ? `Ref: ${t.ref}` : null,
-        t.url          ? `Link: ${t.url}` : null,
+        `https://www.openstreetmap.org/relation/${t.osmId}`,
       ].filter(Boolean).join('\n')
 
       const tags = [
-        t.source === 'osm' ? 'OpenStreetMap' : 'Hiking Project',
-        t.sacScale ?? t.difficulty,
+        'OpenStreetMap',
+        t.sacScale,
         t.caiScale ? `CAI ${t.caiScale}` : null,
         NETWORK_LABEL[t.network ?? ''],
       ].filter((x): x is string => !!x)
+
+      const polyline = preview?.trail.id === t.id && preview.polyline?.length
+        ? preview.polyline
+        : []
 
       const body = {
         id: t.id,
         title: t.name,
         distanceMeters: (t.distanceKm ?? 0) * 1000,
-        elevationGain:  t.elevationGain  ?? 0,
-        elevationLoss:  t.elevationLoss  ?? 0,
-        altitudeMax: 0,
-        altitudeMin: 0,
+        elevationGain: t.elevationGain  ?? 0,
+        elevationLoss: t.elevationLoss  ?? 0,
+        altitudeMax: 0, altitudeMin: 0,
         estimatedTimeSeconds: naisimithSecs(t.distanceKm, t.elevationGain),
         trackPoints: [],
-        routePolyline: (t.lat && t.lon) ? [[t.lat, t.lon]] : [],
+        routePolyline: polyline,
         userNotes: notes,
         tags,
       }
@@ -234,10 +242,8 @@ export default function EsploraPage() {
           </div>
         </div>
 
-        {/* Search Panel */}
+        {/* Search panel */}
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 mb-6">
-
-          {/* Location input */}
           <div className="relative mb-4">
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -264,15 +270,11 @@ export default function EsploraPage() {
               </button>
             </div>
 
-            {/* Autocomplete dropdown */}
             {geoResults.length > 0 && (
               <div className="absolute top-full left-0 right-28 mt-1 bg-white rounded-xl border border-stone-200 shadow-lg z-20 overflow-hidden">
                 {geoResults.map((g, i) => (
-                  <button
-                    key={i}
-                    onClick={() => selectGeo(g)}
-                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-start gap-2"
-                  >
+                  <button key={i} onClick={() => selectGeo(g)}
+                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-start gap-2">
                     <MapPin className="w-3.5 h-3.5 text-stone-400 mt-0.5 shrink-0" />
                     <span className="text-stone-700 line-clamp-1">{g.display_name}</span>
                   </button>
@@ -281,31 +283,14 @@ export default function EsploraPage() {
             )}
           </div>
 
-          {/* Radius + source */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3 flex-1 min-w-[200px]">
-              <span className="text-sm text-stone-600 shrink-0">Raggio</span>
-              <input
-                type="range" min={5} max={100} step={5} value={radius}
-                onChange={e => setRadius(parseInt(e.target.value))}
-                className="flex-1 accent-sky-600"
-              />
-              <span className="text-sm font-semibold text-sky-700 w-14 text-right">{radius} km</span>
-            </div>
-
-            <div className="flex rounded-xl border border-stone-200 overflow-hidden text-sm">
-              {(['osm', 'hp'] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setSource(s)}
-                  className={`px-3 py-1.5 font-medium transition ${
-                    source === s ? 'bg-sky-600 text-white' : 'text-stone-600 hover:bg-stone-50'
-                  } ${s === 'hp' ? 'border-l border-stone-200' : ''}`}
-                >
-                  {s === 'osm' ? '🗺 OpenStreetMap' : '🌐 Hiking Project'}
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-stone-600 shrink-0">Raggio</span>
+            <input
+              type="range" min={5} max={50} step={5} value={radius}
+              onChange={e => setRadius(parseInt(e.target.value))}
+              className="flex-1 accent-sky-600"
+            />
+            <span className="text-sm font-semibold text-sky-700 w-14 text-right">{radius} km</span>
           </div>
         </div>
 
@@ -313,13 +298,12 @@ export default function EsploraPage() {
         {error && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
             {error}
-            {(error.includes('504') || error.includes('unavailable') || error.includes('non disponibile')) && (
+            {(error.toLowerCase().includes('504') || error.toLowerCase().includes('non disponibile')) && (
               <span className="block mt-1 text-red-500">Prova a ridurre il raggio di ricerca.</span>
             )}
           </div>
         )}
 
-        {/* Results header */}
         {trails.length > 0 && (
           <p className="text-sm text-stone-500 mb-4">
             <span className="font-semibold text-stone-700">{trails.length}</span> trail trovati vicino a{' '}
@@ -327,27 +311,22 @@ export default function EsploraPage() {
           </p>
         )}
 
-        {/* Loading */}
-        {loading && (
+        {loading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="w-8 h-8 animate-spin text-sky-500" />
           </div>
-        )}
-
-        {/* Trail cards */}
-        {!loading && trails.length > 0 && (
+        ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {trails.map(t => {
-              const dur = naisimithSecs(t.distanceKm, t.elevationGain)
-              const isAdded   = added.has(t.id)
-              const isAdding  = adding === t.id
+              const dur     = naisimithSecs(t.distanceKm, t.elevationGain)
+              const isAdded = added.has(t.id)
 
               return (
-                <div
+                <button
                   key={t.id}
-                  className="bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col gap-2"
+                  onClick={() => openPreview(t)}
+                  className="text-left bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-md hover:border-sky-200 transition-all p-4 flex flex-col gap-2"
                 >
-                  {/* Name + badge */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-stone-800 text-sm leading-tight">{t.name}</h3>
@@ -358,99 +337,43 @@ export default function EsploraPage() {
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                      {(t.sacScale || t.difficulty) && (
+                      {t.sacScale && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
-                          {t.sacScale ?? t.difficulty}
+                          {t.sacScale}
                         </span>
                       )}
-                      {t.ref && (
-                        <span className="text-[10px] text-stone-400">{t.ref}</span>
-                      )}
+                      {t.ref && <span className="text-[10px] text-stone-400">{t.ref}</span>}
+                      {isAdded && <span className="text-[10px] text-emerald-600 font-semibold">✓ aggiunto</span>}
                     </div>
                   </div>
 
-                  {/* Stats */}
                   <div className="flex items-center gap-3 text-xs text-stone-600">
-                    {t.distanceKm != null ? (
-                      <span className="flex items-center gap-1">
-                        <Route className="w-3 h-3 text-stone-400" />
-                        {t.distanceKm.toFixed(1)} km
-                      </span>
-                    ) : (
-                      <span className="text-stone-300 text-[11px]">km N/D</span>
-                    )}
-                    {t.elevationGain != null ? (
-                      <span className="flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3 text-stone-400" />
-                        {t.elevationGain} m
-                      </span>
-                    ) : (
-                      <span className="text-stone-300 text-[11px]">D+ N/D</span>
-                    )}
-                    {dur > 0 && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-stone-400" />
-                        {formatDur(dur)}
-                      </span>
-                    )}
+                    {t.distanceKm != null
+                      ? <span className="flex items-center gap-1"><Route className="w-3 h-3 text-stone-400" />{t.distanceKm.toFixed(1)} km</span>
+                      : <span className="text-stone-300 text-[11px]">km N/D</span>}
+                    {t.elevationGain != null
+                      ? <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3 text-stone-400" />{t.elevationGain} m</span>
+                      : <span className="text-stone-300 text-[11px]">D+ N/D</span>}
+                    {dur > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-stone-400" />{formatDur(dur)}</span>}
                   </div>
 
-                  {/* Description */}
                   {t.description && (
-                    <p className="text-[11px] text-stone-500 line-clamp-2 leading-relaxed">
-                      {t.description}
-                    </p>
+                    <p className="text-[11px] text-stone-500 line-clamp-2 leading-relaxed">{t.description}</p>
                   )}
 
-                  {/* Footer */}
-                  <div className="flex items-center justify-between mt-auto pt-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        t.source === 'osm' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-                      }`}>
-                        {t.source === 'osm' ? '🗺 OSM' : '🌐 HP'}
-                      </span>
-                      {t.network && NETWORK_LABEL[t.network] && (
-                        <span className="text-[10px] text-stone-400">{NETWORK_LABEL[t.network]}</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {t.url && (
-                        <a
-                          href={t.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-                      <button
-                        onClick={() => addToPlanned(t)}
-                        disabled={isAdded || isAdding}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition disabled:opacity-60 ${
-                          isAdded
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-sky-600 hover:bg-sky-700 text-white'
-                        }`}
-                      >
-                        {isAdding
-                          ? <Loader2 className="w-3 h-3 animate-spin" />
-                          : isAdded
-                            ? '✓ Aggiunto'
-                            : <><Plus className="w-3 h-3" /> Programma</>
-                        }
-                      </button>
-                    </div>
+                  <div className="flex items-center gap-1.5 mt-auto pt-1">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-50 text-emerald-700">🗺 OSM</span>
+                    {t.network && NETWORK_LABEL[t.network] && (
+                      <span className="text-[10px] text-stone-400">{NETWORK_LABEL[t.network]}</span>
+                    )}
+                    <span className="ml-auto text-[11px] text-sky-600 font-medium">Anteprima →</span>
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
         )}
 
-        {/* Empty states */}
         {!loading && searched && trails.length === 0 && !error && (
           <div className="text-center py-16 text-stone-400">
             <Compass className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -463,8 +386,131 @@ export default function EsploraPage() {
             <p className="text-sm">Cerca una città o un&apos;area per scoprire i trail nelle vicinanze</p>
           </div>
         )}
-
       </div>
+
+      {/* ── Preview modal ── */}
+      {preview && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="sticky top-0 bg-white border-b border-stone-100 px-5 py-4 flex items-start justify-between gap-3 z-10">
+              <div className="flex-1 min-w-0">
+                <h2 className="font-bold text-stone-800 text-base leading-tight">{preview.trail.name}</h2>
+                {(preview.trail.from || preview.trail.to) && (
+                  <p className="text-xs text-stone-400 mt-0.5">
+                    {[preview.trail.from, preview.trail.to].filter(Boolean).join(' → ')}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setPreview(null)} className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Map */}
+            <div className="px-5 pt-4">
+              {preview.polyline === null ? (
+                <div className="h-[220px] rounded-xl bg-stone-100 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-stone-400" />
+                </div>
+              ) : preview.polyline.length > 1 ? (
+                <TrailPreviewMap polyline={preview.polyline} height="220px" />
+              ) : (
+                <div className="h-[220px] rounded-xl bg-stone-100 flex flex-col items-center justify-center gap-2 text-stone-400">
+                  <Compass className="w-8 h-8 opacity-30" />
+                  <p className="text-xs">Traccia non disponibile su OSM</p>
+                </div>
+              )}
+            </div>
+
+            {/* Stats */}
+            <div className="px-5 py-4 grid grid-cols-3 gap-3 border-b border-stone-100">
+              {[
+                { icon: Route, label: 'Distanza', value: preview.trail.distanceKm != null ? `${preview.trail.distanceKm.toFixed(1)} km` : 'N/D' },
+                { icon: TrendingUp, label: 'Dislivello', value: preview.trail.elevationGain != null ? `${preview.trail.elevationGain} m` : 'N/D' },
+                { icon: Clock, label: 'Durata', value: (() => { const s = naisimithSecs(preview.trail.distanceKm, preview.trail.elevationGain); return s > 0 ? formatDur(s) : 'N/D' })() },
+              ].map(({ icon: Icon, label, value }) => (
+                <div key={label} className="text-center">
+                  <Icon className="w-4 h-4 text-stone-400 mx-auto mb-1" />
+                  <div className="text-sm font-bold text-stone-800">{value}</div>
+                  <div className="text-[10px] text-stone-400">{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Details */}
+            <div className="px-5 py-4 space-y-2.5">
+              {preview.trail.sacScale && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-stone-500 w-20 shrink-0">Difficoltà</span>
+                  <span className="text-xs text-stone-700 font-medium">
+                    {SAC_LABEL[preview.trail.sacScale] ?? preview.trail.sacScale}
+                  </span>
+                </div>
+              )}
+              {preview.trail.caiScale && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-stone-500 w-20 shrink-0">Scala CAI</span>
+                  <span className="text-xs text-stone-700">{preview.trail.caiScale}</span>
+                </div>
+              )}
+              {preview.trail.ref && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-stone-500 w-20 shrink-0">Riferimento</span>
+                  <span className="text-xs text-stone-700">{preview.trail.ref}</span>
+                </div>
+              )}
+              {preview.trail.network && NETWORK_LABEL[preview.trail.network] && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-stone-500 w-20 shrink-0">Rete</span>
+                  <span className="text-xs text-stone-700">{NETWORK_LABEL[preview.trail.network]}</span>
+                </div>
+              )}
+              {preview.trail.description && (
+                <div className="pt-1">
+                  <p className="text-xs text-stone-600 leading-relaxed">{preview.trail.description}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="px-5 pb-6 pt-2 flex items-center gap-2">
+              <a
+                href={`https://www.openstreetmap.org/relation/${preview.trail.osmId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 hover:bg-stone-50 text-sm text-stone-600 font-medium transition"
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                OpenStreetMap
+              </a>
+
+              <button
+                onClick={() => addToPlanned(preview.trail)}
+                disabled={added.has(preview.trail.id) || adding === preview.trail.id}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-60 ${
+                  added.has(preview.trail.id)
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-sky-600 hover:bg-sky-700 text-white'
+                }`}
+              >
+                {adding === preview.trail.id
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : added.has(preview.trail.id)
+                    ? '✓ Aggiunto al programma'
+                    : <><Plus className="w-4 h-4" /> Aggiungi al programma</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
