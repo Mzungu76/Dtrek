@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   const { data } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo')
     .eq('user_id', user.id)
     .single()
 
@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
     userHeightCm:       (data?.user_height_cm as number) ?? 0,
     derivedFCmax:       age > 0 ? deriveFCmax(age) : 0,
     beautyNaturaWeight: (data?.beauty_natura_weight as number) ?? 50,
+    prefSforzo:         (data?.pref_sforzo         as number) ?? 50,
+    prefRitmo:          (data?.pref_ritmo           as number) ?? 50,
   })
 }
 
@@ -47,6 +49,8 @@ export async function POST(req: NextRequest) {
     userWeightKg?: number
     userHeightCm?: number
     beautyNaturaWeight?: number
+    prefSforzo?: number
+    prefRitmo?: number
   }
 
   const upsertData: Record<string, unknown> = {
@@ -95,6 +99,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Peso fuori range (0–100)' }, { status: 400 })
     }
     upsertData.beauty_natura_weight = w
+  }
+
+  if (body.prefSforzo !== undefined) {
+    const s = Math.round(body.prefSforzo)
+    if (s < 0 || s > 100) return NextResponse.json({ error: 'prefSforzo fuori range (0–100)' }, { status: 400 })
+    upsertData.pref_sforzo = s
+  }
+
+  if (body.prefRitmo !== undefined) {
+    const r = Math.round(body.prefRitmo)
+    if (r < 0 || r > 100) return NextResponse.json({ error: 'prefRitmo fuori range (0–100)' }, { status: 400 })
+    upsertData.pref_ritmo = r
   }
 
   const { error } = await supabase

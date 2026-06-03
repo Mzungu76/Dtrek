@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
-import { getAllPlanned, updatePlannedMeta, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -281,6 +281,8 @@ export default function HomePage() {
   const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'ts'>('date')
   const [userAge,    setUserAge]    = useState(0)
   const [pesoNatura, setPesoNatura] = useState(50)
+  const [prefSforzo, setPrefSforzo] = useState(50)
+  const [prefRitmo,  setPrefRitmo]  = useState(50)
   const monthBarRef                 = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -297,15 +299,18 @@ export default function HomePage() {
     fetch('/api/user-settings').then(r => r.json()).then(d => {
       if (d.userAge)                    setUserAge(d.userAge)
       if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+      if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
+      if (d.prefRitmo          != null) setPrefRitmo(d.prefRitmo)
     }).catch(() => {})
   }, [])
 
-  // Compute + cache TS for planned hikes that have beauty categories but no cachedTrailScore
+  // Compute TS client-side from cached categories + current prefs (all hikes, every time prefs change)
   useEffect(() => {
     const toCompute = planned.filter(
-      h => !h.cachedTrailScore && (h.cachedBeautyScore?.categories?.length ?? 0) > 0
+      h => (h.cachedBeautyScore?.categories?.length ?? 0) > 0
     )
     if (!toCompute.length) return
+    const updated: typeof planned = []
     for (const hike of toCompute) {
       const cats = hike.cachedBeautyScore!.categories!
       const bs: BeautyScore = {
@@ -319,11 +324,16 @@ export default function HomePage() {
         distanceMeters: hike.distanceMeters,
         elevationGain:  hike.elevationGain,
         userAge:        userAge > 0 ? userAge : undefined,
+        prefSforzo,
+        prefRitmo,
       }, pesoNatura)
-      updatePlannedMeta(hike.id, { cachedTrailScore: ts }).catch(() => {})
-      setPlanned(prev => prev.map(h => h.id === hike.id ? { ...h, cachedTrailScore: ts } : h))
+      updated.push({ ...hike, cachedTrailScore: ts })
     }
-  }, [planned, userAge, pesoNatura])
+    if (updated.length) {
+      const updMap = Object.fromEntries(updated.map(h => [h.id, h]))
+      setPlanned(prev => prev.map(h => updMap[h.id] ?? h))
+    }
+  }, [planned.length, userAge, pesoNatura, prefSforzo, prefRitmo])
 
   const months = useMemo(() => {
     const now = new Date()

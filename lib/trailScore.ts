@@ -42,6 +42,9 @@ export interface TrailScoreInputs {
   userAge?:          number   // per derivare FCmax utente
   userMaxHeartRate?: number   // override esplicito FCmax
   avgHeartRate?:     number   // FC media percorso completato
+  // Preferenze escursionistiche (0–100, default 50 = neutro)
+  prefSforzo?:       number   // 0=Passeggiata, 100=Sfida
+  prefRitmo?:        number   // 0=Contemplativo, 100=Efficiente
 }
 
 export interface TrailScoreBreakdown {
@@ -57,6 +60,8 @@ export interface TrailScoreBreakdown {
   difficultyW: number   // peso difficoltà 0–1
   userFCmax:   number   // FCmax utente usata
   terrainLabel: string  // "T2", "sentiero", "default", …
+  sfidaBonus:  number   // aggiustamento preferenza Sforzo
+  ritmoBonus:  number   // aggiustamento preferenza Ritmo
 }
 
 export interface TrailScoreResult {
@@ -146,7 +151,19 @@ export function computeTrailScore(
   const b2 = ((catMap.archeologia ?? 0) + (catMap.architettura ?? 0) + (catMap.interesse ?? 0)) / 3
   const B  = (b1 * pesoNatura + b2 * pesoCultura) / 100
 
-  const ts = Math.min(Math.max(Math.round((B / fFinal) * 33), 0), 100)
+  const tsBase = Math.round((B / fFinal) * 33)
+
+  // ── Preferenze escursionistiche ──
+  const sfidaNorm  = ((inputs.prefSforzo ?? 50) - 50) / 50  // -1 to +1
+  const effortNorm = (fFinal - 1.5) / 8.5                    // 0 to 1
+  const sfidaBonus = Math.round(sfidaNorm * effortNorm * 20)
+
+  const ritmoNorm        = ((inputs.prefRitmo ?? 50) - 50) / 50
+  const beautyDensity    = B / Math.max(tNaismith, 0.5)
+  const bDensityNorm     = Math.min(Math.max((beautyDensity - 0.3) / 4.7, 0), 1)
+  const ritmoBonus       = Math.round(ritmoNorm * (bDensityNorm - 0.5) * 20)
+
+  const ts = Math.min(Math.max(tsBase + sfidaBonus + ritmoBonus, 0), 100)
 
   return {
     ts,
@@ -165,6 +182,8 @@ export function computeTrailScore(
       difficultyW: r1(difficultyW),
       userFCmax,
       terrainLabel,
+      sfidaBonus,
+      ritmoBonus,
     },
   }
 }

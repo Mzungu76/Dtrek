@@ -75,6 +75,8 @@ export default function EscursionePage() {
   const [trailResult,     setTrailResult]     = useState<TrailScoreResult | null>(null)
   const [userAge,         setUserAge]         = useState(0)
   const [pesoNatura,      setPesoNatura]      = useState(50)
+  const [prefSforzo,      setPrefSforzo]      = useState(50)
+  const [prefRitmo,       setPrefRitmo]       = useState(50)
 
   const EMPTY_TERRAIN: TerrainContext = {
     hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
@@ -135,6 +137,8 @@ export default function EscursionePage() {
       .then(d => {
         if (d.userAge)                    setUserAge(d.userAge)
         if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+        if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefRitmo          != null) setPrefRitmo(d.prefRitmo)
       })
       .catch(() => {})
   }, [])
@@ -157,6 +161,8 @@ export default function EscursionePage() {
         elevationGain:    activity.elevationGain,
         avgHeartRate:     activity.avgHeartRate > 0 ? activity.avgHeartRate : undefined,
         userAge:          userAge > 0 ? userAge : undefined,
+        prefSforzo,
+        prefRitmo,
       },
       pesoNatura,
     )
@@ -165,7 +171,7 @@ export default function EscursionePage() {
       updateActivityMeta(id, { trailScore: result.ts }).catch(() => {})
       setActivity(prev => prev ? { ...prev, trailScore: result.ts } : prev)
     }
-  }, [beautyScore, activity, poisFullyLoaded, userAge, pesoNatura, id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [beautyScore, activity, poisFullyLoaded, userAge, pesoNatura, prefSforzo, prefRitmo, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">

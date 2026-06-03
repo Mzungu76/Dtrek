@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
-import { getAllPlanned, updatePlannedMeta, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { computeTrailScore, tsLabel } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -55,8 +55,10 @@ export default function ProgrammaPage() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [sortBy,    setSortBy]    = useState<'date' | 'km' | 'dplus' | 'ts' | 'suitability'>('date')
-  const [userAge,   setUserAge]   = useState(0)
+  const [userAge,    setUserAge]    = useState(0)
   const [pesoNatura, setPesoNatura] = useState(50)
+  const [prefSforzo, setPrefSforzo] = useState(50)
+  const [prefRitmo,  setPrefRitmo]  = useState(50)
 
   const sortedHikes = useMemo(() => {
     const arr = [...hikes]
@@ -81,15 +83,18 @@ export default function ProgrammaPage() {
     fetch('/api/user-settings').then(r => r.json()).then(d => {
       if (d.userAge)                    setUserAge(d.userAge)
       if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+      if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
+      if (d.prefRitmo          != null) setPrefRitmo(d.prefRitmo)
     }).catch(() => {})
   }, [])
 
-  // Compute + cache TS for hikes that have beauty categories but no cachedTrailScore
+  // Compute TS client-side from cached categories + current prefs (all hikes, every time prefs change)
   useEffect(() => {
     const toCompute = hikes.filter(
-      h => !h.cachedTrailScore && (h.cachedBeautyScore?.categories?.length ?? 0) > 0
+      h => (h.cachedBeautyScore?.categories?.length ?? 0) > 0
     )
     if (!toCompute.length) return
+    const updMap: Record<string, number> = {}
     for (const hike of toCompute) {
       const cats = hike.cachedBeautyScore!.categories!
       const bs: BeautyScore = {
@@ -103,11 +108,17 @@ export default function ProgrammaPage() {
         distanceMeters: hike.distanceMeters,
         elevationGain:  hike.elevationGain,
         userAge:        userAge > 0 ? userAge : undefined,
+        prefSforzo,
+        prefRitmo,
       }, pesoNatura)
-      updatePlannedMeta(hike.id, { cachedTrailScore: ts }).catch(() => {})
-      setHikes(prev => prev.map(h => h.id === hike.id ? { ...h, cachedTrailScore: ts } : h))
+      updMap[hike.id] = ts
     }
-  }, [hikes, userAge, pesoNatura])
+    setHikes(prev => {
+      const hasChanges = prev.some(h => updMap[h.id] !== undefined && updMap[h.id] !== h.cachedTrailScore)
+      if (!hasChanges) return prev
+      return prev.map(h => updMap[h.id] !== undefined ? { ...h, cachedTrailScore: updMap[h.id] } : h)
+    })
+  }, [hikes.length, userAge, pesoNatura, prefSforzo, prefRitmo])
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()
