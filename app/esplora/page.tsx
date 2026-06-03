@@ -313,6 +313,9 @@ export default function EsploraPage() {
         {error && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
             {error}
+            {(error.includes('504') || error.includes('unavailable') || error.includes('non disponibile')) && (
+              <span className="block mt-1 text-red-500">Prova a ridurre il raggio di ricerca.</span>
+            )}
           </div>
         )}
 

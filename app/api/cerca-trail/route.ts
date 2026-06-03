@@ -17,11 +17,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'lat/lon required' }, { status: 400 })
   }
 
-  const query = `[out:json][timeout:30];
-(
-  relation["type"="route"]["route"="hiking"]["name"](around:${radius},${lat},${lon});
-  relation["type"="route"]["route"="foot"]["name"](around:${radius},${lat},${lon});
-);
+  const query = `[out:json][timeout:20][maxsize:5242880];
+relation["type"="route"]["route"="hiking"]["name"](around:${radius},${lat},${lon});
 out tags;`
 
   for (const endpoint of ENDPOINTS) {
@@ -30,7 +27,7 @@ out tags;`
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(22_000),
       })
       if (!res.ok) continue
       return NextResponse.json(await res.json())
