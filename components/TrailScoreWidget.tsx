@@ -25,7 +25,6 @@ export function TrailScoreWidget({ result, cached }: {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
               style={{ backgroundColor: color }}>{label}</span>
           </div>
-          <p className="text-sm text-stone-500">Ne è valsa la pena?</p>
           {bd && (
             <p className="text-[10px] text-stone-400 mt-0.5">
               Bellezza {result!.b}/10 · Fatica {bd.fFinal}/10
@@ -115,6 +114,18 @@ export function TrailScoreWidget({ result, cached }: {
               </div>
             </div>
           </div>
+
+          {/* Bonus preferenze */}
+          {(bd.sfidaBonus !== 0 || bd.ritmoBonus !== 0) && (
+            <div className="border-t border-stone-100 px-6 py-2.5 text-xs text-stone-500 flex flex-wrap gap-x-4 gap-y-1">
+              {bd.sfidaBonus !== 0 && (
+                <span>{bd.sfidaBonus > 0 ? '⚡' : '🚶'} {bd.sfidaBonus > 0 ? 'Sfida' : 'Passeggiata'}: {bd.sfidaBonus > 0 ? '+' : ''}{bd.sfidaBonus} pts</span>
+              )}
+              {bd.ritmoBonus !== 0 && (
+                <span>{bd.ritmoBonus > 0 ? '⚡' : '🐢'} {bd.ritmoBonus > 0 ? 'Efficiente' : 'Contemplativo'}: {bd.ritmoBonus > 0 ? '+' : ''}{bd.ritmoBonus} pts</span>
+              )}
+            </div>
+          )}
 
           {/* Correzione personale */}
           {bd.deltaSource !== 'none' && (

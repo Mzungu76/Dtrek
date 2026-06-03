@@ -4,7 +4,7 @@ import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock, Leaf, PersonStanding,
+  Loader2, ShieldCheck, Sparkles, Lock, Leaf, PersonStanding, Footprints, Timer,
 } from 'lucide-react'
 
 // ── Claude API key section ─────────────────────────────────────────────────
@@ -192,6 +192,8 @@ function LootSettingsSection() {
   const [weight,    setWeight]    = useState(0)
   const [height,    setHeight]    = useState(0)
   const [naturaW,   setNaturaW]   = useState(50)
+  const [sforzaW,   setSforzaW]   = useState(50)
+  const [ritmoW,    setRitmoW]    = useState(50)
   const [loading,   setLoading]   = useState(true)
   const [saving,    setSaving]    = useState(false)
   const [status,    setStatus]    = useState<{ ok: boolean; msg: string } | null>(null)
@@ -207,6 +209,8 @@ function LootSettingsSection() {
         if (d.userWeightKg)   setWeight(d.userWeightKg)
         if (d.userHeightCm)   setHeight(d.userHeightCm)
         if (d.beautyNaturaWeight !== undefined) setNaturaW(d.beautyNaturaWeight)
+        if (d.prefSforzo         !== undefined) setSforzaW(d.prefSforzo)
+        if (d.prefRitmo          !== undefined) setRitmoW(d.prefRitmo)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -214,7 +218,7 @@ function LootSettingsSection() {
 
   async function handleSave() {
     setSaving(true); setStatus(null)
-    const body: Record<string, number> = { beautyNaturaWeight: naturaW }
+    const body: Record<string, number> = { beautyNaturaWeight: naturaW, prefSforzo: sforzaW, prefRitmo: ritmoW }
     if (age > 0)    body.userAge       = age
     if (weight > 0) body.userWeightKg  = weight
     if (height > 0) body.userHeightCm  = height
@@ -320,6 +324,50 @@ function LootSettingsSection() {
             <div className="flex justify-between mt-1.5 px-16">
               <span className="text-[10px] text-stone-400">solo paesaggio</span>
               <span className="text-[10px] text-stone-400">solo storia/cultura</span>
+            </div>
+          </div>
+
+          {/* Sforzo slider: Passeggiata ↔ Sfida */}
+          <div>
+            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-3">
+              <Footprints className="w-4 h-4 text-terra-500" />
+              Sforzo: Passeggiata vs Sfida
+            </label>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-stone-600 font-semibold w-24 shrink-0">🚶 Passeggiata</span>
+              <input
+                type="range" min={0} max={100} step={5}
+                value={sforzaW}
+                onChange={e => { setSforzaW(parseInt(e.target.value)); setStatus(null) }}
+                className="flex-1 accent-terra-600"
+              />
+              <span className="text-xs text-terra-700 font-semibold w-16 text-right shrink-0">Sfida ⚡</span>
+            </div>
+            <div className="flex justify-between mt-1.5 px-[6.5rem]">
+              <span className="text-[10px] text-stone-400">percorsi facili</span>
+              <span className="text-[10px] text-stone-400 text-right">amo la fatica</span>
+            </div>
+          </div>
+
+          {/* Ritmo slider: Contemplativo ↔ Efficiente */}
+          <div>
+            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-3">
+              <Timer className="w-4 h-4 text-sky-500" />
+              Ritmo: Contemplativo vs Efficiente
+            </label>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-stone-600 font-semibold w-24 shrink-0">🐢 Contemplativo</span>
+              <input
+                type="range" min={0} max={100} step={5}
+                value={ritmoW}
+                onChange={e => { setRitmoW(parseInt(e.target.value)); setStatus(null) }}
+                className="flex-1 accent-sky-600"
+              />
+              <span className="text-xs text-sky-700 font-semibold w-16 text-right shrink-0">Efficiente ⚡</span>
+            </div>
+            <div className="flex justify-between mt-1.5 px-[6.5rem]">
+              <span className="text-[10px] text-stone-400">immergersi</span>
+              <span className="text-[10px] text-stone-400 text-right">bellezza/ora</span>
             </div>
           </div>
 
