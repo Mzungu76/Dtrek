@@ -66,26 +66,26 @@ function scoreNatura(
   const springs    = pois.filter(p => p.type === 'spring')
 
   if (peaks.length)      { score += Math.min(peaks.length * 1.5, 4);     reasons.push(`${peaks.length} cim${peaks.length > 1 ? 'e' : 'a'}`) }
-  if (waterfalls.length) { score += Math.min(waterfalls.length * 2.5, 5); reasons.push(`${waterfalls.length} cascata${waterfalls.length > 1 ? 'e' : ''}`) }
+  if (waterfalls.length) { score += Math.min(waterfalls.length * 1.5, 4); reasons.push(`${waterfalls.length} cascata${waterfalls.length > 1 ? 'e' : ''}`) }
   if (caves.length)      { score += Math.min(caves.length * 2, 4);        reasons.push(`${caves.length} grott${caves.length > 1 ? 'e' : 'a'}`) }
   if (springs.length)    { score += Math.min(springs.length * 0.5, 1.5);  reasons.push(`${springs.length} sorgent${springs.length > 1 ? 'i' : 'e'}`) }
 
   // Dislivello
-  if      (elevGain >= 1500) { score += 3;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
-  else if (elevGain >= 1000) { score += 2.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
-  else if (elevGain >= 800)  { score += 2;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
-  else if (elevGain >= 500)  { score += 1.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
-  else if (elevGain >= 200)  { score += 1;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
-  else if (elevGain >= 50)   { score += 0.5 }
+  if      (elevGain >= 1500) { score += 2.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  else if (elevGain >= 1000) { score += 2.0; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  else if (elevGain >= 800)  { score += 1.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  else if (elevGain >= 500)  { score += 1.0; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  else if (elevGain >= 200)  { score += 0.7; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  else if (elevGain >= 50)   { score += 0.3 }
 
-  // Zona altitudinale — bellezza intrinseca indipendente dai POI
-  if      (altMax >= 3000) { score += 5;   reasons.push(`zona alpina alta (${Math.round(altMax)} m s.l.m.)`) }
-  else if (altMax >= 2500) { score += 4;   reasons.push(`alta montagna (${Math.round(altMax)} m s.l.m.)`) }
-  else if (altMax >= 2000) { score += 3.5; reasons.push(`zona alpina (${Math.round(altMax)} m s.l.m.)`) }
-  else if (altMax >= 1500) { score += 2.5; reasons.push(`zona sub-alpina (${Math.round(altMax)} m s.l.m.)`) }
-  else if (altMax >= 1000) { score += 1.5; reasons.push(`fascia montana (${Math.round(altMax)} m s.l.m.)`) }
-  else if (altMax >= 500)  { score += 0.8; reasons.push(`fascia collinare (${Math.round(altMax)} m s.l.m.)`) }
-  else                     { score += 0.3 }
+  // Zona altitudinale — bonus marginale: il terrain OSM cattura già foresta/openTerrain/lago
+  if      (altMax >= 3000) { score += 2.0; reasons.push(`zona alpina alta (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 2500) { score += 1.5; reasons.push(`alta montagna (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 2000) { score += 1.2; reasons.push(`zona alpina (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 1500) { score += 0.8; reasons.push(`zona sub-alpina (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 1000) { score += 0.5; reasons.push(`fascia montana (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 500)  { score += 0.3; reasons.push(`fascia collinare (${Math.round(altMax)} m s.l.m.)`) }
+  else                     { score += 0.1 }
 
   // Lunghezza — percorsi più lunghi sono più immersi nell'ambiente
   if      (distKm >= 20) { score += 1.5; reasons.push(`percorso lungo ${Math.round(distKm)} km`) }
@@ -94,15 +94,15 @@ function scoreNatura(
   else if (distKm >= 4)  { score += 0.2 }
 
   // Dati terreno OSM (way/relation)
-  if (terrain.isNationalPark)              { score += 2.5; reasons.push('parco nazionale') }
-  else if (terrain.isProtected)            { score += 2;   reasons.push('area naturale protetta') }
-  if (terrain.hasGlacier)                  { score += 3;   reasons.push('ghiacciaio') }
-  if (terrain.hasRiver)                    { score += 1.5; reasons.push('fiume') }
-  if (terrain.hasStream)                   { score += 1;   reasons.push('torrente/ruscello') }
-  if (terrain.hasLake)                     { score += 2;   reasons.push('lago') }
-  if (terrain.hasPond)                     { score += 0.8; reasons.push('stagno/pozza') }
-  if (terrain.hasForest)                   { score += 1.5; reasons.push('bosco/foresta') }
-  if (terrain.openTerrain)                 { score += 1;   reasons.push('terreno aperto') }
+  if (terrain.isNationalPark)              { score += 2.0; reasons.push('parco nazionale') }
+  else if (terrain.isProtected)            { score += 1.5; reasons.push('area naturale protetta') }
+  if (terrain.hasGlacier)                  { score += 2.5; reasons.push('ghiacciaio') }
+  if (terrain.hasRiver)                    { score += 1.0; reasons.push('fiume') }
+  if (terrain.hasStream)                   { score += 0.5; reasons.push('torrente/ruscello') }
+  if (terrain.hasLake)                     { score += 1.5; reasons.push('lago') }
+  if (terrain.hasPond)                     { score += 0.5; reasons.push('stagno/pozza') }
+  if (terrain.hasForest)                   { score += 0.8; reasons.push('bosco/foresta') }
+  if (terrain.openTerrain)                 { score += 0.7; reasons.push('terreno aperto') }
   if (terrain.sacScale && terrain.sacScale >= 'T3') { score += 0.5; reasons.push(`sentiero ${terrain.sacScale}`) }
 
   // Wikipedia — keyword naturalistiche espanse
@@ -114,7 +114,7 @@ function scoreNatura(
   ])
   const parkIds = new Set(parkWiki.map(p => p.title))
   if (parkWiki.length > 0) {
-    score += Math.min(parkWiki.length * 3, 5)
+    score += Math.min(parkWiki.length * 2.5, 4)
     reasons.push(parkWiki[0].title)
   }
 
@@ -125,7 +125,7 @@ function scoreNatura(
     'sorgente', 'natura', 'ambiente naturale', 'habitat',
   ]).filter(p => !parkIds.has(p.title))
   if (natWiki.length > 0) {
-    score += Math.min(natWiki.length * 1.5, 4)
+    score += Math.min(natWiki.length * 0.6, 2.5)
     if (parkWiki.length === 0) reasons.push(`${natWiki.length} luoghi naturali`)
   }
 
@@ -145,16 +145,16 @@ function scorePaesaggio(
   const reasons: string[] = []
 
   const viewpoints = pois.filter(p => p.type === 'viewpoint')
-  if (viewpoints.length) { score += Math.min(viewpoints.length * 2.5, 7); reasons.push(`${viewpoints.length} belvedere`) }
+  if (viewpoints.length) { score += Math.min(viewpoints.length * 2.0, 5); reasons.push(`${viewpoints.length} belvedere`) }
 
   // Quota massima — panorami e scenari aumentano con l'altitudine
-  if      (altMax >= 3000) { score += 7;   reasons.push(`quota alpina alta ${Math.round(altMax)} m`) }
-  else if (altMax >= 2500) { score += 6;   reasons.push(`quota ${Math.round(altMax)} m`) }
-  else if (altMax >= 2000) { score += 5;   reasons.push(`quota ${Math.round(altMax)} m`) }
-  else if (altMax >= 1500) { score += 4;   reasons.push(`quota ${Math.round(altMax)} m`) }
-  else if (altMax >= 1000) { score += 2.5; reasons.push(`quota ${Math.round(altMax)} m`) }
-  else if (altMax >= 500)  { score += 1.5; reasons.push(`quota ${Math.round(altMax)} m`) }
-  else                     { score += 0.3 }
+  if      (altMax >= 3000) { score += 4.5; reasons.push(`quota alpina alta ${Math.round(altMax)} m`) }
+  else if (altMax >= 2500) { score += 3.5; reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 2000) { score += 2.5; reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 1500) { score += 2.0; reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 1000) { score += 1.5; reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 500)  { score += 0.7; reasons.push(`quota ${Math.round(altMax)} m`) }
+  else                     { score += 0.2 }
 
   // Dati terreno OSM
   if (terrain.hasGlacier)    { score += 2.5; reasons.push('ghiacciaio') }
@@ -173,7 +173,7 @@ function scorePaesaggio(
   else if (distKm >= 8)  { score += 0.5 }
   else if (distKm >= 4)  { score += 0.2 }
 
-  // Wikipedia — paesaggi e scenari (peso 1.8, cap 7)
+  // Wikipedia — paesaggi e scenari (peso ridotto: terrain OSM ora cattura la maggior parte)
   const scenicWiki = wikiMatches(wiki, [
     'lago', 'fiume', 'torrente', 'cascata', 'gola', 'forra', 'gorge',
     'panorama', 'belvedere', 'caldera', 'pianura', 'costa', 'mare', 'golfo',
@@ -181,7 +181,7 @@ function scorePaesaggio(
     'tufo', 'altopiano', 'canyon', 'paesaggio', 'scenario',
   ])
   if (scenicWiki.length > 0) {
-    score += Math.min(scenicWiki.length * 1.8, 7)
+    score += Math.min(scenicWiki.length * 1.0, 4)
     reasons.push(`${scenicWiki.length} luoghi panoramici`)
   }
 
