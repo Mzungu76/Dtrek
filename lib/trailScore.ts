@@ -196,7 +196,7 @@ export function computeTrailScore(
     ? (b1 * effectivePesoNatura + b2 * effectivePesoCultura) / 100
     : b1)
 
-  const tsBase = Math.round((B / Math.sqrt(fFinal)) * 20)
+  const tsBase = Math.round((B / Math.sqrt(fFinal)) * 25)
 
   // ── Preferenze escursionistiche ──
   const sfidaNorm  = ((inputs.prefSforzo ?? 50) - 50) / 50  // -1 to +1
