@@ -168,6 +168,7 @@ export default function PlannedHikePage() {
   const [personalDelta,   setPersonalDelta]   = useState<number | null>(null)
   const [hrHikeCount,     setHrHikeCount]     = useState(0)
   const [trailResult,     setTrailResult]     = useState<TrailScoreResult | null>(null)
+  const [prefsLoaded,     setPrefsLoaded]     = useState(false)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -263,12 +264,12 @@ export default function PlannedHikePage() {
       if (d.prefDurata          != null) setPrefDurata(d.prefDurata)
       if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
       if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setPrefsLoaded(true))
   }, [])
 
-  // Compute TrailScore when beauty score is ready
+  // Compute TrailScore when beauty score and user prefs are ready
   useEffect(() => {
-    if (!beautyScore || !hike) return
+    if (!beautyScore || !hike || !prefsLoaded) return
     const result = computeTrailScore(
       beautyScore,
       {
@@ -290,7 +291,7 @@ export default function PlannedHikePage() {
       updatePlannedMeta(hike.id, { cachedTrailScore: result.ts }).catch(() => {})
       setHike(prev => prev ? { ...prev, cachedTrailScore: result.ts } : prev)
     }
-  }, [beautyScore, hike?.id, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [beautyScore, hike?.id, prefsLoaded, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
@@ -540,10 +541,10 @@ export default function PlannedHikePage() {
         )}
 
         {/* TrailScore */}
-        {(trailResult || hike.cachedTrailScore !== undefined) && (
+        {trailResult && (
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
             <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">TrailScore</h2>
-            <TrailScoreWidget result={trailResult} cached={hike.cachedTrailScore} />
+            <TrailScoreWidget result={trailResult} />
           </div>
         )}
 
