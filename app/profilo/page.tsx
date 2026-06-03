@@ -193,7 +193,7 @@ function LootSettingsSection() {
   const [height,    setHeight]    = useState(0)
   const [naturaW,   setNaturaW]   = useState(50)
   const [sforzaW,   setSforzaW]   = useState(50)
-  const [duraW,     setDuraW]     = useState(50)
+  const [duraW,     setDuraW]     = useState(270)
   const [loading,   setLoading]   = useState(true)
   const [saving,    setSaving]    = useState(false)
   const [status,    setStatus]    = useState<{ ok: boolean; msg: string } | null>(null)
@@ -350,27 +350,50 @@ function LootSettingsSection() {
             </div>
           </div>
 
-          {/* Durata slider: Breve ↔ Lunga */}
-          <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-3">
-              <Timer className="w-4 h-4 text-sky-500" />
-              Durata preferita
-            </label>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-stone-600 font-semibold w-24 shrink-0">⏱️ Breve (2–3h)</span>
-              <input
-                type="range" min={0} max={100} step={5}
-                value={duraW}
-                onChange={e => { setDuraW(parseInt(e.target.value)); setStatus(null) }}
-                className="flex-1 accent-sky-600"
-              />
-              <span className="text-xs text-sky-700 font-semibold w-16 text-right shrink-0">Lunga (6h+) 🏕️</span>
-            </div>
-            <div className="flex justify-between mt-1.5 px-[6.5rem]">
-              <span className="text-[10px] text-stone-400">uscita veloce</span>
-              <span className="text-[10px] text-stone-400 text-right">giornata intera</span>
-            </div>
-          </div>
+          {/* Durata slider: 1h – 8h+ con tacche ogni 30min */}
+          {(() => {
+            const duraLabel = duraW >= 480 ? '8h+'
+              : duraW % 60 === 0 ? `${duraW / 60}h`
+              : `${Math.floor(duraW / 60)}h 30min`
+            return (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700">
+                    <Timer className="w-4 h-4 text-sky-500" />
+                    Durata preferita
+                  </label>
+                  <span className="text-sm font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full">
+                    {duraLabel}
+                  </span>
+                </div>
+                <input
+                  type="range" min={60} max={480} step={30}
+                  value={duraW}
+                  onChange={e => { setDuraW(parseInt(e.target.value)); setStatus(null) }}
+                  className="w-full accent-sky-600"
+                />
+                {/* Tacche ogni 30min — etichette alle ore intere */}
+                <div className="relative h-6 mt-0.5">
+                  {Array.from({ length: 15 }, (_, i) => {
+                    const mins = 60 + i * 30
+                    const isHour = mins % 60 === 0
+                    const pct = (i / 14) * 100
+                    return (
+                      <div key={i} className="absolute flex flex-col items-center -translate-x-1/2"
+                           style={{ left: `${pct}%` }}>
+                        <div className={`w-px ${isHour ? 'h-2 bg-stone-400' : 'h-1.5 bg-stone-200'}`} />
+                        {isHour && (
+                          <span className="text-[9px] text-stone-400 mt-0.5 whitespace-nowrap">
+                            {mins >= 480 ? '8h+' : `${mins / 60}h`}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
 
           <button
             onClick={handleSave}
