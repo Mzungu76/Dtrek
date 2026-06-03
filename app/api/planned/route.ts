@@ -90,6 +90,14 @@ const META_COLS = [
   'route_polyline', 'assessment', 'cached_beauty_score', 'cached_trail_score', 'cached_guide',
 ].join(', ')
 
+// Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
+const META_COLS_CORE = [
+  'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
+  'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
+  'altitude_max', 'altitude_min', 'estimated_time_seconds',
+  'route_polyline', 'assessment', 'cached_beauty_score',
+].join(', ')
+
 // ── GET /api/planned          → PlannedHikeMeta[] ────────────────────────────
 // ── GET /api/planned?id=X     → PlannedHike (full, with trackPoints) ─────────
 export async function GET(req: NextRequest) {
@@ -111,15 +119,27 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(rowToHike(data, true))
     }
 
-    const { data, error } = await supabase
+    // Try full columns; fall back to core if newer ALTER TABLE columns don't exist yet
+    let listData: Record<string, unknown>[] | null = null
+    const { data: d1, error: e1 } = await supabase
       .from('planned_hikes')
       .select(META_COLS)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (e1) {
+      const { data: d2, error: e2 } = await supabase
+        .from('planned_hikes')
+        .select(META_COLS_CORE)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      if (e2) throw e2
+      listData = d2 as unknown as Record<string, unknown>[] | null
+    } else {
+      listData = d1 as unknown as Record<string, unknown>[] | null
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return NextResponse.json((data ?? [] as any[]).map((r: any) => rowToHike(r, false) as PlannedHikeMeta))
+    return NextResponse.json((listData ?? [] as any[]).map((r: any) => rowToHike(r, false) as PlannedHikeMeta))
   } catch (e) {
     console.error('GET /api/planned:', e)
     return NextResponse.json({ error: errMsg(e) }, { status: 500 })
