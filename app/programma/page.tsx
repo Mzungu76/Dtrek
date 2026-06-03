@@ -58,7 +58,7 @@ export default function ProgrammaPage() {
   const [userAge,       setUserAge]       = useState(0)
   const [pesoNatura,    setPesoNatura]    = useState(50)
   const [prefSforzo,    setPrefSforzo]    = useState(50)
-  const [prefRitmo,     setPrefRitmo]     = useState(50)
+  const [prefDurata,     setPrefDurata]     = useState(50)
   const [personalDelta, setPersonalDelta] = useState<number | null>(null)
   const [hrHikeCount,   setHrHikeCount]   = useState(0)
 
@@ -86,7 +86,7 @@ export default function ProgrammaPage() {
       if (d.userAge)                    setUserAge(d.userAge)
       if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
       if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
-      if (d.prefRitmo          != null) setPrefRitmo(d.prefRitmo)
+      if (d.prefDurata          != null) setPrefDurata(d.prefDurata)
       if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
       if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
     }).catch(() => {})
@@ -117,7 +117,7 @@ export default function ProgrammaPage() {
         personalDelta:  personalDelta ?? undefined,
         hrHikeCount,
         prefSforzo,
-        prefRitmo,
+        prefDurata,
       }, pesoNatura)
       updMap[hike.id] = ts
       // Write to DB so TS persists across sessions with current prefs
@@ -130,7 +130,7 @@ export default function ProgrammaPage() {
       if (!hasChanges) return prev
       return prev.map(h => updMap[h.id] !== undefined ? { ...h, cachedTrailScore: updMap[h.id] } : h)
     })
-  }, [hikes.length, userAge, pesoNatura, prefSforzo, prefRitmo, personalDelta, hrHikeCount])
+  }, [hikes.length, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount])
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()

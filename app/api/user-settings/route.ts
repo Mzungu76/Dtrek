@@ -19,14 +19,14 @@ export async function GET(req: NextRequest) {
   let data: Record<string, unknown> | null = null
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo, hiker_face_data_url, display_name, personal_delta, hr_hike_count')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count')
     .eq('user_id', user.id)
     .single()
   if (e1) {
     // Some column missing — retry without the newest optional columns
     const { data: d2 } = await supabase
       .from('user_settings')
-      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo, hiker_face_data_url, display_name')
+      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_durata, hiker_face_data_url, display_name')
       .eq('user_id', user.id)
       .single()
     data = d2 as Record<string, unknown> | null
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     derivedFCmax:       age > 0 ? deriveFCmax(age) : 0,
     beautyNaturaWeight: (data?.beauty_natura_weight as number) ?? 50,
     prefSforzo:         (data?.pref_sforzo           as number) ?? 50,
-    prefRitmo:          (data?.pref_ritmo             as number) ?? 50,
+    prefDurata:          (data?.pref_durata             as number) ?? 50,
     hikerFaceDataUrl:   (data?.hiker_face_data_url   as string) ?? null,
     displayName:        (data?.display_name           as string) ?? null,
     personalDelta:      (data?.personal_delta         as number) ?? null,
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     userHeightCm?: number
     beautyNaturaWeight?: number
     prefSforzo?: number
-    prefRitmo?: number
+    prefDurata?: number
     hikerFaceDataUrl?: string | null
     displayName?: string | null
   }
@@ -126,10 +126,10 @@ export async function POST(req: NextRequest) {
     upsertData.pref_sforzo = s
   }
 
-  if (body.prefRitmo !== undefined) {
-    const r = Math.round(body.prefRitmo)
-    if (r < 0 || r > 100) return NextResponse.json({ error: 'prefRitmo fuori range (0–100)' }, { status: 400 })
-    upsertData.pref_ritmo = r
+  if (body.prefDurata !== undefined) {
+    const r = Math.round(body.prefDurata)
+    if (r < 0 || r > 100) return NextResponse.json({ error: 'prefDurata fuori range (0–100)' }, { status: 400 })
+    upsertData.pref_durata = r
   }
 
   if (body.hikerFaceDataUrl !== undefined) {
