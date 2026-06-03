@@ -7,7 +7,7 @@ import { it } from 'date-fns/locale'
 import { computeGlobalStats } from '@/lib/blobStore'
 import { getPersonalRecords, computeStreaks, formatPaceMinkm, COMPARISON_COLORS } from '@/lib/stats'
 
-export type ShareFormat = '1:1' | '16:9'
+export type ShareFormat = '1:1' | '16:9' | '9:16'
 
 export interface ActivityShareOpts {
   showMap:       boolean   // real OSM/CartoDB tiles
@@ -55,11 +55,18 @@ const DARK = {
 }
 
 function makeCanvas(fmt: ShareFormat): [HTMLCanvasElement, CanvasRenderingContext2D, number, number] {
-  const [w, h] = fmt === '1:1' ? [1080, 1080] : [1200, 630]
+  const [w, h] =
+    fmt === '1:1'  ? [1080, 1080] :
+    fmt === '9:16' ? [1080, 1920] :
+                     [1200, 630]
   const canvas = document.createElement('canvas')
   canvas.width = w; canvas.height = h
   return [canvas, canvas.getContext('2d')!, w, h]
 }
+
+// Portrait-ish formats (square + story) share most layout decisions:
+// more vertical room, narrower columns than landscape.
+function isTall(fmt: ShareFormat): boolean { return fmt !== '16:9' }
 
 function drawDarkBg(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const g = ctx.createLinearGradient(w * 0.6, 0, 0, h)
@@ -303,8 +310,8 @@ export async function generateActivityImage(
 
   // ── Full-bleed map ────────────────────────────────────────────────────────
   if (useMap) {
-    const topH = fmt === '1:1' ? 200 : 170    // gradient header height
-    const botH = fmt === '1:1' ? 190 : 160    // gradient footer height
+    const topH = fmt === '9:16' ? 280 : fmt === '1:1' ? 200 : 170    // gradient header height
+    const botH = fmt === '9:16' ? 300 : fmt === '1:1' ? 190 : 160    // gradient footer height
 
     // 1. Map tiles fill the whole canvas
     const tileCtx = await drawTiledMap(
@@ -331,8 +338,8 @@ export async function generateActivityImage(
     ctx.fillStyle = botGrad; ctx.fillRect(0, h - botH, w, botH)
 
     // 5. Title
-    const PAD  = fmt === '1:1' ? 52 : 44
-    const titleSz = fmt === '1:1' ? 62 : 48
+    const PAD  = isTall(fmt) ? 56 : 44
+    const titleSz = fmt === '9:16' ? 74 : fmt === '1:1' ? 62 : 48
     ctx.font = `bold ${titleSz}px ${FONT}`
     ctx.fillStyle = '#ffffff'
     ctx.textAlign = 'left'
@@ -341,7 +348,7 @@ export async function generateActivityImage(
     ctx.shadowBlur = 0
 
     if (opts.showDate) {
-      const dateSz = fmt === '1:1' ? 26 : 22
+      const dateSz = fmt === '9:16' ? 30 : fmt === '1:1' ? 26 : 22
       ctx.font = `${dateSz}px ${FONT}`
       ctx.fillStyle = 'rgba(255,255,255,0.75)'
       ctx.fillText(
@@ -360,10 +367,10 @@ export async function generateActivityImage(
 
     if (pillData.length > 0) {
       const colW    = Math.floor((w - 2 * PAD) / pillData.length)
-      const valY    = h - (fmt === '1:1' ? 52 : 44)
-      const lblY    = valY + (fmt === '1:1' ? 28 : 24)
-      const valSz   = fmt === '1:1' ? 34 : 28
-      const lblSz   = fmt === '1:1' ? 13 : 11
+      const valY    = h - (fmt === '9:16' ? 110 : fmt === '1:1' ? 52 : 44)
+      const lblY    = valY + (fmt === '9:16' ? 32 : fmt === '1:1' ? 28 : 24)
+      const valSz   = fmt === '9:16' ? 42 : fmt === '1:1' ? 34 : 28
+      const lblSz   = fmt === '9:16' ? 15 : fmt === '1:1' ? 13 : 11
 
       pillData.forEach((p, i) => {
         const cx = PAD + i * colW + colW / 2
@@ -386,7 +393,7 @@ export async function generateActivityImage(
   // ── Dark background (abstract route or no route) ─────────────────────────
   drawDarkBg(ctx, w, h)
 
-  const PAD = fmt === '1:1' ? 56 : 50
+  const PAD = isTall(fmt) ? 56 : 50
   const pillData: { label: string; value: string }[] = []
   if (opts.showDistance)  pillData.push({ label: 'Distanza',   value: `${(activity.distanceMeters / 1000).toFixed(1)} km` })
   if (opts.showElevation) pillData.push({ label: 'Dislivello', value: `${Math.round(activity.elevationGain)} m` })
@@ -462,7 +469,7 @@ export async function generateStatsImage(
       { label: 'Dislivello D+',   value: `${Math.round(stats.totalElevationGain).toLocaleString('it')} m` },
       { label: 'Calorie totali',  value: `${stats.totalCalories.toLocaleString('it')} kcal` },
     ]
-    const cols  = fmt === '1:1' ? 2 : 4
+    const cols  = isTall(fmt) ? 2 : 4
     const pillW = Math.floor((w - 2 * PAD - (cols - 1) * 14) / cols)
     const pillH = 80
     totals.forEach((t, i) => {
@@ -498,7 +505,7 @@ export async function generateStatsImage(
     y += sh + 18
   }
 
-  if (opts.showRecords && fmt === '1:1') {
+  if (opts.showRecords && isTall(fmt)) {
     const items: { label: string; value: string }[] = []
     if (records.longestKm)   items.push({ label: 'Più lunga',      value: `${(records.longestKm.distanceMeters / 1000).toFixed(1)} km` })
     if (records.highestGain) items.push({ label: 'Più dislivello', value: `${Math.round(records.highestGain.elevationGain)} m D+` })

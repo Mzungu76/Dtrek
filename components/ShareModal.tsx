@@ -1,6 +1,13 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { X, Download, Facebook, Copy, Check, Share2, Loader2 } from 'lucide-react'
+
+const KIND_TITLE: Record<string, string> = {
+  activity:   'La mia escursione',
+  stats:      'Le mie statistiche di trekking',
+  comparison: 'Confronto escursioni',
+  map:        'Le mie escursioni',
+}
 import {
   ShareFormat,
   ActivityShareOpts, StatsShareOpts, ComparisonShareOpts, MapShareOpts,
@@ -38,11 +45,20 @@ export type ShareModalProps = ActivityShareProps | StatsShareProps | CompareShar
 
 export default function ShareModal(props: ShareModalProps) {
   const { onClose } = props
-  const [fmt, setFmt]           = useState<ShareFormat>('1:1')
+  const [fmt, setFmt]           = useState<ShareFormat>('9:16')
   const [imageUrl, setImageUrl] = useState('')
   const [generating, setGen]    = useState(false)
   const [copied, setCopied]     = useState(false)
+  const [canNativeShare, setCanNativeShare] = useState(false)
   const cancelRef               = useRef(false)
+
+  // Native share sheet is only useful when the device can share files (mobile)
+  useEffect(() => {
+    try {
+      const probe = new File([new Blob()], 'p.png', { type: 'image/png' })
+      setCanNativeShare(!!navigator.canShare && navigator.canShare({ files: [probe] }))
+    } catch { setCanNativeShare(false) }
+  }, [])
 
   const [actOpts, setActOpts] = useState<ActivityShareOpts>({
     showMap: true, showRoute: true,
@@ -97,6 +113,25 @@ export default function ShareModal(props: ShareModalProps) {
     a.href = imageUrl
     a.download = `dtrek-${props.kind}-${Date.now()}.png`
     a.click()
+  }
+
+  const handleNativeShare = async () => {
+    if (!imageUrl) return
+    try {
+      const blob = await fetch(imageUrl).then(r => r.blob())
+      const file = new File([blob], `dtrek-${props.kind}-${Date.now()}.png`, { type: 'image/png' })
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: KIND_TITLE[props.kind] ?? 'DTrek',
+          text:  `${KIND_TITLE[props.kind] ?? ''} · tracciato con DTrek 🥾`,
+        })
+      } else {
+        handleDownload()
+      }
+    } catch {
+      // user cancelled the share sheet — no-op
+    }
   }
 
   const handleFacebook = () => {
@@ -188,8 +223,12 @@ export default function ShareModal(props: ShareModalProps) {
             <div>
               <p className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-2">Anteprima</p>
               <div
-                className="rounded-xl overflow-hidden bg-[#1a3c26] flex items-center justify-center relative"
-                style={{ aspectRatio: fmt === '1:1' ? '1/1' : '16/9' }}
+                className="rounded-xl overflow-hidden bg-[#1a3c26] flex items-center justify-center relative mx-auto"
+                style={{
+                  aspectRatio: fmt === '1:1' ? '1/1' : fmt === '9:16' ? '9/16' : '16/9',
+                  maxHeight: '56vh',
+                  width: fmt === '9:16' ? 'auto' : '100%',
+                }}
               >
                 {generating && (
                   <div className="absolute inset-0 flex items-center justify-center bg-[#1a3c26]">
@@ -214,19 +253,27 @@ export default function ShareModal(props: ShareModalProps) {
               <div>
                 <p className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-2">Formato</p>
                 <div className="flex gap-2">
-                  {(['1:1', '16:9'] as ShareFormat[]).map(f => (
+                  {([
+                    { f: '9:16', main: 'Storia',  sub: '9:16' },
+                    { f: '1:1',  main: 'Post',    sub: '1:1'  },
+                    { f: '16:9', main: 'Orizz.',  sub: '16:9' },
+                  ] as { f: ShareFormat; main: string; sub: string }[]).map(({ f, main, sub }) => (
                     <button
                       key={f}
                       onClick={() => setFmt(f)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all
+                      className={`flex-1 py-2 rounded-lg border transition-all flex flex-col items-center leading-tight
                         ${fmt === f
                           ? 'bg-forest-50 border-forest-400 text-forest-700'
                           : 'bg-white border-stone-200 text-stone-500 hover:border-stone-300'}`}
                     >
-                      {f === '1:1' ? '1:1 — Instagram' : '16:9 — Facebook'}
+                      <span className="text-sm font-semibold">{main}</span>
+                      <span className="text-[10px] opacity-70">{sub}</span>
                     </button>
                   ))}
                 </div>
+                <p className="text-[10px] text-stone-400 mt-1.5">
+                  Storia per Instagram / TikTok / WhatsApp Status · Post per il feed · Orizzontale per Facebook
+                </p>
               </div>
 
               {/* Content */}
@@ -243,10 +290,22 @@ export default function ShareModal(props: ShareModalProps) {
 
               {/* Actions */}
               <div className="space-y-2">
+                {canNativeShare && (
+                  <button
+                    onClick={handleNativeShare}
+                    disabled={!imageUrl || generating}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium text-sm transition-colors disabled:opacity-40"
+                  >
+                    <Share2 className="w-4 h-4" /> Condividi
+                  </button>
+                )}
                 <button
                   onClick={handleDownload}
                   disabled={!imageUrl || generating}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium text-sm transition-colors disabled:opacity-40"
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-40
+                    ${canNativeShare
+                      ? 'bg-white border border-stone-200 text-stone-600 hover:border-stone-300'
+                      : 'bg-forest-600 hover:bg-forest-700 text-white'}`}
                 >
                   <Download className="w-4 h-4" /> Scarica immagine (.png)
                 </button>
