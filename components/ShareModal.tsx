@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { X, Download, Facebook, Copy, Check, Share2, Loader2 } from 'lucide-react'
+import { X, Download, Facebook, Copy, Check, Share2, Loader2, Globe, ExternalLink, Trash2 } from 'lucide-react'
 
 const KIND_TITLE: Record<string, string> = {
   activity:   'La mia escursione',
@@ -50,7 +50,58 @@ export default function ShareModal(props: ShareModalProps) {
   const [generating, setGen]    = useState(false)
   const [copied, setCopied]     = useState(false)
   const [canNativeShare, setCanNativeShare] = useState(false)
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [linkBusy, setLinkBusy]     = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
   const cancelRef               = useRef(false)
+
+  const activityId = props.kind === 'activity' ? props.activity.id : null
+  const publicUrl  = shareToken && typeof window !== 'undefined' ? `${window.location.origin}/s/${shareToken}` : ''
+
+  // Load any existing public-link token for this activity
+  useEffect(() => {
+    if (!activityId) return
+    let cancelled = false
+    fetch(`/api/share?id=${encodeURIComponent(activityId)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d) setShareToken(d.token ?? null) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [activityId])
+
+  const createLink = async () => {
+    if (!activityId) return
+    setLinkBusy(true)
+    try {
+      const res = await fetch('/api/share', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activityId }),
+      })
+      const d = await res.json()
+      if (res.ok && d.token) setShareToken(d.token)
+    } finally { setLinkBusy(false) }
+  }
+
+  const revokeLink = async () => {
+    if (!activityId) return
+    setLinkBusy(true)
+    try {
+      await fetch(`/api/share?id=${encodeURIComponent(activityId)}`, { method: 'DELETE' })
+      setShareToken(null)
+    } finally { setLinkBusy(false) }
+  }
+
+  const copyLink = async () => {
+    if (!publicUrl) return
+    try {
+      if (canNativeShare && navigator.share) {
+        await navigator.share({ title: 'La mia escursione su DTrek', url: publicUrl })
+      } else {
+        await navigator.clipboard.writeText(publicUrl)
+        setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2200)
+      }
+    } catch { /* cancelled */ }
+  }
 
   // Native share sheet is only useful when the device can share files (mobile)
   useEffect(() => {
@@ -334,6 +385,68 @@ export default function ShareModal(props: ShareModalProps) {
                   </button>
                 </div>
               </div>
+
+              {/* Public link — activity only */}
+              {props.kind === 'activity' && (
+                <div className="border-t border-stone-100 pt-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Globe className="w-4 h-4 text-sky-600" />
+                    <p className="text-xs font-semibold text-stone-700 uppercase tracking-widest">Link pubblico</p>
+                  </div>
+                  <p className="text-xs text-stone-500 leading-relaxed mb-3">
+                    Crea un link condivisibile ovunque (WhatsApp, Telegram, X…): mostra un&apos;anteprima ricca con mappa, statistiche e TrailScore. Solo chi ha il link può vederlo.
+                  </p>
+                  {!shareToken ? (
+                    <button
+                      onClick={createLink}
+                      disabled={linkBusy}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
+                    >
+                      {linkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                      Crea link pubblico
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2">
+                        <input
+                          readOnly
+                          value={publicUrl}
+                          onFocus={e => e.target.select()}
+                          className="flex-1 bg-transparent text-xs text-stone-600 outline-none min-w-0"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={copyLink}
+                          className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all border
+                            ${linkCopied
+                              ? 'bg-sky-50 border-sky-300 text-sky-700'
+                              : 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600'}`}
+                        >
+                          {linkCopied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                          {linkCopied ? 'Copiato!' : canNativeShare ? 'Condividi link' : 'Copia link'}
+                        </button>
+                        <a
+                          href={publicUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 py-2.5 border border-stone-200 rounded-xl text-sm font-medium text-stone-600 hover:border-stone-300 transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" /> Apri
+                        </a>
+                      </div>
+                      <button
+                        onClick={revokeLink}
+                        disabled={linkBusy}
+                        className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium text-red-500 hover:text-red-600 transition-colors disabled:opacity-40"
+                      >
+                        {linkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        Disattiva link pubblico
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

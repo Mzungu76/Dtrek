@@ -134,6 +134,14 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score DOUBLE PRE
 
 CREATE INDEX IF NOT EXISTS idx_planned_trail_score ON planned_hikes (cached_trail_score DESC NULLS LAST);
 
+-- ── Link pubblici condivisibili ───────────────────────────────────────────────
+-- Quando share_token è valorizzato, l'escursione è visibile pubblicamente
+-- alla pagina /s/{token}. È opt-in: l'utente lo genera dalla condivisione e
+-- può revocarlo (token → NULL). La lettura pubblica usa il client service-role
+-- (bypassa RLS) filtrando per token non indovinabile.
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE;
+CREATE INDEX IF NOT EXISTS idx_activities_share_token ON activities (share_token);
+
 -- Invalidate stale TrailScore values (computed with old formula, before beauty categories caching)
 UPDATE activities
 SET trail_score = NULL
