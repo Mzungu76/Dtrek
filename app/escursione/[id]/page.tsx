@@ -99,7 +99,7 @@ export default function EscursionePage() {
     if (cached?.categories?.length) return cached as import('@/lib/beautyScore').BeautyScore
     // Otherwise compute from live POI/wiki data
     if (!activity || (pois.length === 0 && allWikiPages.length === 0)) return null
-    return computeBeautyScore(pois, allWikiPages, EMPTY_TERRAIN, activity.elevationGain, activity.altitudeMax)
+    return computeBeautyScore(pois, allWikiPages, EMPTY_TERRAIN, activity.elevationGain, activity.altitudeMax, activity.distanceMeters)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pois, allWikiPages, activity])
 

@@ -172,7 +172,12 @@ export function computeTrailScore(
   const catMap = Object.fromEntries(beautyScore.categories.map(c => [c.key, c.score]))
   const b1 = ((catMap.natura ?? 0) + (catMap.paesaggio ?? 0)) / 2
   const b2 = ((catMap.archeologia ?? 0) + (catMap.architettura ?? 0) + (catMap.interesse ?? 0)) / 3
-  const B  = (b1 * effectivePesoNatura + b2 * effectivePesoCultura) / 100
+  // Natura è il pavimento: la cultura aumenta B solo quando supera la natura.
+  // Questo evita di penalizzare percorsi senza dati culturali OSM (molto comune in montagna
+  // e nelle zone rurali dove OSM è poco aggiornato).
+  const B = Math.min(10, b2 > b1
+    ? (b1 * effectivePesoNatura + b2 * effectivePesoCultura) / 100
+    : b1)
 
   const tsBase = Math.round((B / Math.sqrt(fFinal)) * 20)
 

@@ -187,7 +187,7 @@ export default function PlannedHikePage() {
     if (cached?.categories?.length) return cached as import('@/lib/beautyScore').BeautyScore
     // Otherwise compute from live POI/wiki data
     if (!hike || (pois.length === 0 && allWikiPages.length === 0)) return null
-    return computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax)
+    return computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax, hike.distanceMeters)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pois, allWikiPages, terrain, hike])
 
