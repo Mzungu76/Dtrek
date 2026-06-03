@@ -395,10 +395,11 @@ function LootSettingsSection() {
 // ── Profile page ───────────────────────────────────────────────────────────
 
 export default function ProfiloPage() {
-  const [faceUrl,  setFaceUrl]  = useState<string | null>(null)
-  const [name,     setName]     = useState('')
-  const [saved,    setSaved]    = useState(false)
-  const [saving,   setSaving]   = useState(false)
+  const [faceUrl,    setFaceUrl]    = useState<string | null>(null)
+  const [name,       setName]       = useState('')
+  const [saved,      setSaved]      = useState(false)
+  const [saving,     setSaving]     = useState(false)
+  const [saveError,  setSaveError]  = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -443,18 +444,23 @@ export default function ProfiloPage() {
 
   async function handleSave() {
     setSaving(true)
+    setSaveError(null)
     try {
-      await fetch('/api/user-settings', {
+      const res = await fetch('/api/user-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hikerFaceDataUrl: faceUrl ?? null, displayName: name.trim() || null }),
       })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error ?? `Errore ${res.status}`)
+      }
       // Mirror to localStorage so Navbar / RouteMap3D update immediately in this session
       saveProfile({ hikerFaceDataUrl: faceUrl ?? undefined, displayName: name.trim() || undefined })
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
-    } catch {
-      /* ignore — best-effort save */
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Errore durante il salvataggio')
     } finally {
       setSaving(false)
     }
@@ -527,6 +533,9 @@ export default function ProfiloPage() {
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><Check className="w-4 h-4" /> Salvato!</> : 'Salva profilo'}
         </button>
+        {saveError && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{saveError}</p>
+        )}
 
         {/* TrailScore settings */}
         <div className="pt-2">

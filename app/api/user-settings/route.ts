@@ -15,11 +15,24 @@ export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data } = await supabase
+  // Try full select; fall back to a reduced set if newer columns haven't been migrated yet
+  let data: Record<string, unknown> | null = null
+  const { data: d1, error: e1 } = await supabase
     .from('user_settings')
     .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo, hiker_face_data_url, display_name, personal_delta, hr_hike_count')
     .eq('user_id', user.id)
     .single()
+  if (e1) {
+    // Some column missing — retry without the newest optional columns
+    const { data: d2 } = await supabase
+      .from('user_settings')
+      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo, hiker_face_data_url, display_name')
+      .eq('user_id', user.id)
+      .single()
+    data = d2 as Record<string, unknown> | null
+  } else {
+    data = d1 as Record<string, unknown> | null
+  }
 
   const key = data?.claude_api_key as string | null | undefined
   const age = (data?.user_age as number) ?? 0
