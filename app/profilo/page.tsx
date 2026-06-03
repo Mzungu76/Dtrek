@@ -394,15 +394,25 @@ function LootSettingsSection() {
 // ── Profile page ───────────────────────────────────────────────────────────
 
 export default function ProfiloPage() {
-  const [faceUrl, setFaceUrl] = useState<string | null>(null)
-  const [name,    setName]    = useState('')
-  const [saved,   setSaved]   = useState(false)
+  const [faceUrl,  setFaceUrl]  = useState<string | null>(null)
+  const [name,     setName]     = useState('')
+  const [saved,    setSaved]    = useState(false)
+  const [saving,   setSaving]   = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    // Fast local read first
     const p = getProfile()
-    setFaceUrl(p.hikerFaceDataUrl ?? null)
-    setName(p.displayName ?? '')
+    if (p.hikerFaceDataUrl) setFaceUrl(p.hikerFaceDataUrl)
+    if (p.displayName)      setName(p.displayName)
+    // Then sync from Supabase (cross-device)
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.hikerFaceDataUrl) { setFaceUrl(d.hikerFaceDataUrl); saveProfile({ hikerFaceDataUrl: d.hikerFaceDataUrl }) }
+        if (d.displayName)      { setName(d.displayName);         saveProfile({ displayName: d.displayName }) }
+      })
+      .catch(() => {})
   }, [])
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -430,10 +440,23 @@ export default function ProfiloPage() {
     e.target.value = ''
   }
 
-  function handleSave() {
-    saveProfile({ hikerFaceDataUrl: faceUrl ?? undefined, displayName: name || undefined })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await fetch('/api/user-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hikerFaceDataUrl: faceUrl ?? null, displayName: name.trim() || null }),
+      })
+      // Mirror to localStorage so Navbar / RouteMap3D update immediately in this session
+      saveProfile({ hikerFaceDataUrl: faceUrl ?? undefined, displayName: name.trim() || undefined })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch {
+      /* ignore — best-effort save */
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -496,11 +519,12 @@ export default function ProfiloPage() {
 
         <button
           onClick={handleSave}
-          className={`w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+          disabled={saving}
+          className={`w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 ${
             saved ? 'bg-green-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white shadow-md'
           }`}
         >
-          {saved ? <><Check className="w-4 h-4" /> Salvato!</> : 'Salva profilo'}
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><Check className="w-4 h-4" /> Salvato!</> : 'Salva profilo'}
         </button>
 
         {/* TrailScore settings */}

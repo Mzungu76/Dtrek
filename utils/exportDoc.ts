@@ -3,7 +3,7 @@ import {
   AlignmentType, Table, TableRow, TableCell, WidthType,
   BorderStyle, ShadingType,
 } from 'docx'
-import { StoredActivity } from '@/lib/store'
+import { StoredActivity } from '@/lib/blobStore'
 import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'

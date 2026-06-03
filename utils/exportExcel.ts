@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { StoredActivity } from '@/lib/store'
+import { StoredActivity } from '@/lib/blobStore'
 import { formatDuration, msToKmh } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
