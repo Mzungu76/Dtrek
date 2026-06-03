@@ -69,14 +69,19 @@ function scoreNatura(
   if (springs.length)    { score += Math.min(springs.length * 0.5, 1.5);  reasons.push(`${springs.length} sorgent${springs.length > 1 ? 'i' : 'e'}`) }
 
   // Dislivello
-  if      (elevGain >= 1000) { score += 2;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  if      (elevGain >= 1500) { score += 3;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  else if (elevGain >= 1000) { score += 2.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
+  else if (elevGain >= 800)  { score += 2;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
   else if (elevGain >= 500)  { score += 1.5; reasons.push(`dislivello ${Math.round(elevGain)} m`) }
   else if (elevGain >= 200)  { score += 1;   reasons.push(`dislivello ${Math.round(elevGain)} m`) }
 
   // Zona altitudinale — bellezza intrinseca indipendente dai POI
-  if      (altMax >= 3000) { score += 3;   reasons.push(`zona alpina alta (${Math.round(altMax)} m s.l.m.)`) }
-  else if (altMax >= 2000) { score += 2;   reasons.push(`zona alpina (${Math.round(altMax)} m s.l.m.)`) }
-  else if (altMax >= 1500) { score += 1.5; reasons.push(`zona sub-alpina (${Math.round(altMax)} m s.l.m.)`) }
+  if      (altMax >= 3000) { score += 5;   reasons.push(`zona alpina alta (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 2500) { score += 4;   reasons.push(`alta montagna (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 2000) { score += 3.5; reasons.push(`zona alpina (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 1500) { score += 2.5; reasons.push(`zona sub-alpina (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 1000) { score += 1.5; reasons.push(`fascia montana (${Math.round(altMax)} m s.l.m.)`) }
+  else if (altMax >= 500)  { score += 0.5; reasons.push(`fascia collinare (${Math.round(altMax)} m s.l.m.)`) }
 
   // Dati terreno OSM (way/relation)
   if (terrain.isNationalPark)              { score += 2.5; reasons.push('parco nazionale') }
@@ -128,13 +133,13 @@ function scorePaesaggio(
   const viewpoints = pois.filter(p => p.type === 'viewpoint')
   if (viewpoints.length) { score += Math.min(viewpoints.length * 2.5, 7); reasons.push(`${viewpoints.length} belvedere`) }
 
-  // Quota massima
-  if      (altMax >= 3000) { score += 5;   reasons.push(`quota alpina alta ${Math.round(altMax)} m`) }
-  else if (altMax >= 2500) { score += 4;   reasons.push(`quota ${Math.round(altMax)} m`) }
-  else if (altMax >= 2000) { score += 3;   reasons.push(`quota ${Math.round(altMax)} m`) }
-  else if (altMax >= 1500) { score += 2;   reasons.push(`quota ${Math.round(altMax)} m`) }
-  else if (altMax >= 1000) { score += 1.5; reasons.push(`quota ${Math.round(altMax)} m`) }
-  else if (altMax >= 500)  { score += 1;   reasons.push(`quota ${Math.round(altMax)} m`) }
+  // Quota massima — panorami e scenari aumentano con l'altitudine
+  if      (altMax >= 3000) { score += 7;   reasons.push(`quota alpina alta ${Math.round(altMax)} m`) }
+  else if (altMax >= 2500) { score += 6;   reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 2000) { score += 5;   reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 1500) { score += 4;   reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 1000) { score += 2.5; reasons.push(`quota ${Math.round(altMax)} m`) }
+  else if (altMax >= 500)  { score += 1.5; reasons.push(`quota ${Math.round(altMax)} m`) }
 
   // Dati terreno OSM
   if (terrain.hasGlacier)    { score += 2.5; reasons.push('ghiacciaio') }

@@ -163,9 +163,9 @@ export function computeTrailScore(
   const sacVal = ({ T1:1, T2:2, T3:3, T4:4, T5:5, T6:6 } as Record<string,number>)[inputs.sacScale ?? ''] ?? 0
   // Se quota o scala SAC indicano terreno montano, riduce il peso della cultura
   // (su un sentiero alpino non ci sono cattedrali né siti archeol. — non è un difetto)
-  const altBoost = altMax >= 2500 ? 20 : altMax >= 2000 ? 15 : altMax >= 1500 ? 10 : altMax >= 1200 ? 5 : 0
-  const sacBoost = sacVal >= 4 ? 20 : sacVal >= 3 ? 10 : sacVal >= 2 ? 5 : 0
-  const mountainNaturaBoost = Math.min(20, Math.max(altBoost, sacBoost))
+  const altBoost = altMax >= 2500 ? 45 : altMax >= 2000 ? 35 : altMax >= 1600 ? 25 : altMax >= 1200 ? 12 : 0
+  const sacBoost = sacVal >= 4 ? 45 : sacVal >= 3 ? 25 : sacVal >= 2 ? 12 : 0
+  const mountainNaturaBoost = Math.min(50, Math.max(altBoost, sacBoost))
   const effectivePesoNatura = Math.min(100, pesoNatura + mountainNaturaBoost)
   const effectivePesoCultura = 100 - effectivePesoNatura
 
