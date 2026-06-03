@@ -20,7 +20,7 @@ import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import PdfExportButton from '@/components/PdfExportButton'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
-import type { PoiItem, TerrainContext } from '@/lib/overpass'
+import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeBeautyScore } from '@/lib/beautyScore'
 import { format } from 'date-fns'
@@ -75,6 +75,7 @@ export default function EscursionePage() {
   const [trailResult,     setTrailResult]     = useState<TrailScoreResult | null>(null)
   const [userAge,         setUserAge]         = useState(0)
   const [pesoNatura,      setPesoNatura]      = useState(50)
+  const [terrain,         setTerrain]         = useState<TerrainContext | null>(null)
 
   const EMPTY_TERRAIN: TerrainContext = {
     hasForest: false, hasRiver: false, hasStream: false,
@@ -95,14 +96,14 @@ export default function EscursionePage() {
   )
 
   const beautyScore = useMemo(() => {
-    // If full cached data available (with categories), reconstruct from it — no live recompute
+    // Use cached score only if it was computed with terrain (version >= 1)
     const cached = activity?.linkedBeautyScore
-    if (cached?.categories?.length) return cached as import('@/lib/beautyScore').BeautyScore
-    // Otherwise compute from live POI/wiki data
+    if (cached?.categories?.length && (cached as import('@/lib/beautyScore').BeautyScore).version) return cached as import('@/lib/beautyScore').BeautyScore
+    // Otherwise compute from live POI/wiki data + terrain context
     if (!activity || (pois.length === 0 && allWikiPages.length === 0)) return null
-    return computeBeautyScore(pois, allWikiPages, EMPTY_TERRAIN, activity.elevationGain, activity.altitudeMax, activity.distanceMeters)
+    return computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, activity.elevationGain, activity.altitudeMax, activity.distanceMeters)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pois, allWikiPages, activity])
+  }, [pois, allWikiPages, terrain, activity])
 
   useEffect(() => {
     getActivityById(id).then(a => {
@@ -112,20 +113,27 @@ export default function EscursionePage() {
       setNotesVal(a.userNotes ?? '')
       setRatingVal(a.userRating ?? 0)
       setRatingNote(a.userRatingNote ?? '')
-      const hasFullCache = a.trailScore !== undefined && (a.linkedBeautyScore?.categories?.length ?? 0) > 0
+      // Full cache requires version >= 1 (terrain-aware)
+      const cachedBS = a.linkedBeautyScore as import('@/lib/beautyScore').BeautyScore | undefined
+      const hasFullCache = a.trailScore !== undefined && (cachedBS?.categories?.length ?? 0) > 0 && (cachedBS?.version ?? 0) >= 1
       const gps = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (hasFullCache) {
-        // All data cached — no network fetch needed, mark ready immediately
         setPoisFullyLoaded(true)
       } else if (gps.length > 0) {
+        // Fetch terrain and POIs in parallel; only mark ready when both complete
+        let poisDone = false, terrainDone = false
+        const checkDone = () => { if (poisDone && terrainDone) setPoisFullyLoaded(true) }
+        fetchTerrainContext(gps)
+          .then(t => { setTerrain(t); terrainDone = true; checkDone() })
+          .catch(() => { terrainDone = true; checkDone() })
         fetchHikingPoisFromWikidata(gps, 300)
           .then(newPois => {
             setPois(newPois)
             fetchWikiForNamedPois(newPois)
-              .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
-              .catch(() => { setPoisFullyLoaded(true) })
+              .then(entries => { setPoiWikiEntries(entries); poisDone = true; checkDone() })
+              .catch(() => { poisDone = true; checkDone() })
           })
-          .catch(() => { setPoisFullyLoaded(true) })
+          .catch(() => { poisDone = true; checkDone() })
       }
     }).finally(() => setLoading(false))
   }, [id, router])
@@ -140,10 +148,11 @@ export default function EscursionePage() {
       .catch(() => {})
   }, [])
 
-  // Salva beauty score quando i POI sono pronti (solo se mancano le categories in cache)
+  // Salva beauty score quando POI + terrain sono pronti (invalida cache senza versione)
   useEffect(() => {
     if (!beautyScore || !activity || !poisFullyLoaded) return
-    if (activity.linkedBeautyScore?.categories?.length) return  // already fully cached
+    const cachedBS = activity.linkedBeautyScore as import('@/lib/beautyScore').BeautyScore | undefined
+    if (cachedBS?.categories?.length && (cachedBS?.version ?? 0) >= 1) return  // already terrain-aware cache
     updateActivityMeta(id, { linkedBeautyScore: beautyScore }).catch(() => {})
     setActivity(prev => prev ? { ...prev, linkedBeautyScore: beautyScore } : prev)
   }, [beautyScore, activity, poisFullyLoaded, id])

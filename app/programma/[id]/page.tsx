@@ -11,7 +11,7 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
+import { fetchTerrainContext, type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeBeautyScore } from '@/lib/beautyScore'
@@ -183,10 +183,10 @@ export default function PlannedHikePage() {
     [wikiPages, poiWikiEntries],
   )
   const beautyScore = useMemo(() => {
-    // If full cached data available (with categories), reconstruct from it
+    // Use cached score only if terrain-aware (version >= 1)
     const cached = hike?.cachedBeautyScore
-    if (cached?.categories?.length) return cached as import('@/lib/beautyScore').BeautyScore
-    // Otherwise compute from live POI/wiki data
+    if (cached?.categories?.length && (cached as import('@/lib/beautyScore').BeautyScore).version) return cached as import('@/lib/beautyScore').BeautyScore
+    // Otherwise compute from live POI/wiki data + terrain context
     if (!hike || (pois.length === 0 && allWikiPages.length === 0)) return null
     return computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax, hike.distanceMeters)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,36 +201,48 @@ export default function PlannedHikePage() {
       setDateVal(h.plannedDate ?? '')
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
-        const hasFullCache = (h.cachedTrailScore !== undefined) && ((h.cachedBeautyScore?.categories?.length ?? 0) > 0)
+        // Full cache requires version >= 1 (terrain-aware)
+        const cachedBS = h.cachedBeautyScore as import('@/lib/beautyScore').BeautyScore | undefined
+        const hasFullCache = (h.cachedTrailScore !== undefined) && ((cachedBS?.categories?.length ?? 0) > 0) && ((cachedBS?.version ?? 0) >= 1)
         if (hasFullCache) {
-          // Full TS + beauty cached — no network fetch needed
           setPoisFullyLoaded(true)
         } else if (h.cachedPois?.length) {
-          // Use cached POI data immediately — no API call needed
+          // Cached POIs available — use them but still fetch terrain for proper beauty score
           setPois(h.cachedPois as PoiItem[])
           if (h.cachedPoiWiki?.length) setPoiWikiEntries(h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[])
-          setPoisFullyLoaded(true)
-        } else {
-          // Fresh fetch from Wikidata (cloud-IP friendly, no proxy needed)
           setLoadingTerrain(true)
+          fetchTerrainContext(gps)
+            .then(t => setTerrain(t))
+            .catch(() => {})
+            .finally(() => { setLoadingTerrain(false); setPoisFullyLoaded(true) })
+        } else {
+          // Fresh fetch — terrain and POIs in parallel, mark ready when both done
+          setLoadingTerrain(true)
+          let poisDone = false, terrainDone = false
+          const checkDone = () => {
+            if (poisDone && terrainDone) { setLoadingTerrain(false); setPoisFullyLoaded(true) }
+          }
+          fetchTerrainContext(gps)
+            .then(t => { setTerrain(t); terrainDone = true; checkDone() })
+            .catch(() => { terrainDone = true; checkDone() })
           fetchHikingPoisFromWikidata(gps, 300)
             .then(newPois => {
               setPois(newPois)
               fetchWikiForNamedPois(newPois)
-                .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
-                .catch(() => { setPoisFullyLoaded(true) })
+                .then(entries => { setPoiWikiEntries(entries); poisDone = true; checkDone() })
+                .catch(() => { poisDone = true; checkDone() })
             })
-            .catch(() => { setPoisFullyLoaded(true) })
-            .finally(() => setLoadingTerrain(false))
+            .catch(() => { poisDone = true; checkDone() })
         }
       }
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  // Save beauty score the first time POIs are fully loaded (skip if categories already cached)
+  // Save beauty score when POI + terrain are ready (invalidates legacy cache without version)
   useEffect(() => {
     if (!beautyScore || !hike || !poisFullyLoaded) return
-    if (hike.cachedBeautyScore?.categories?.length) return  // already fully cached
+    const cachedBS = hike.cachedBeautyScore as import('@/lib/beautyScore').BeautyScore | undefined
+    if (cachedBS?.categories?.length && (cachedBS?.version ?? 0) >= 1) return  // already terrain-aware cache
     updatePlannedMeta(hike.id, { cachedBeautyScore: beautyScore }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedBeautyScore: beautyScore } : prev)
   }, [beautyScore, hike, poisFullyLoaded])
