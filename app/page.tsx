@@ -282,7 +282,7 @@ export default function HomePage() {
   const [userAge,       setUserAge]       = useState(0)
   const [pesoNatura,    setPesoNatura]    = useState(50)
   const [prefSforzo,    setPrefSforzo]    = useState(50)
-  const [prefRitmo,     setPrefRitmo]     = useState(50)
+  const [prefDurata,     setPrefDurata]     = useState(50)
   const [personalDelta, setPersonalDelta] = useState<number | null>(null)
   const [hrHikeCount,   setHrHikeCount]   = useState(0)
   const monthBarRef                 = useRef<HTMLDivElement>(null)
@@ -302,7 +302,7 @@ export default function HomePage() {
       if (d.userAge)                    setUserAge(d.userAge)
       if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
       if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
-      if (d.prefRitmo          != null) setPrefRitmo(d.prefRitmo)
+      if (d.prefDurata          != null) setPrefDurata(d.prefDurata)
       if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
       if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
     }).catch(() => {})
@@ -333,7 +333,7 @@ export default function HomePage() {
         personalDelta:  personalDelta ?? undefined,
         hrHikeCount,
         prefSforzo,
-        prefRitmo,
+        prefDurata,
       }, pesoNatura)
       updated.push({ ...hike, cachedTrailScore: ts })
       // Write to DB so TS persists across sessions with current prefs
@@ -345,7 +345,7 @@ export default function HomePage() {
       const updMap = Object.fromEntries(updated.map(h => [h.id, h]))
       setPlanned(prev => prev.map(h => updMap[h.id] ?? h))
     }
-  }, [planned.length, userAge, pesoNatura, prefSforzo, prefRitmo, personalDelta, hrHikeCount])
+  }, [planned.length, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount])
 
   const months = useMemo(() => {
     const now = new Date()

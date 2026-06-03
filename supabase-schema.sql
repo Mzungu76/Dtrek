@@ -108,7 +108,7 @@ ALTER TABLE activities    ADD COLUMN IF NOT EXISTS merita_score DOUBLE PRECISION
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS max_heart_rate       INTEGER;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS beauty_natura_weight INTEGER DEFAULT 50;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS pref_sforzo          SMALLINT DEFAULT 50;
-ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS pref_ritmo           SMALLINT DEFAULT 50;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS pref_durata          SMALLINT DEFAULT 50;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_face_data_url  TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS display_name         TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS personal_delta       DOUBLE PRECISION;

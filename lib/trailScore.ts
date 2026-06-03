@@ -66,7 +66,7 @@ export interface TrailScoreInputs {
   hrHikeCount?:      number   // quante uscite con FC hanno contribuito al delta
   // Preferenze escursionistiche (0–100, default 50 = neutro)
   prefSforzo?:       number
-  prefRitmo?:        number
+  prefDurata?:       number
 }
 
 export interface TrailScoreBreakdown {
@@ -86,7 +86,7 @@ export interface TrailScoreBreakdown {
   userFCmax:   number   // FCmax utente usata
   terrainLabel: string  // "T2", "sentiero", "default", …
   sfidaBonus:          number   // aggiustamento preferenza Sforzo
-  ritmoBonus:          number   // aggiustamento preferenza Ritmo
+  duraBonus:           number   // aggiustamento preferenza Durata (breve/lunga)
   mountainNaturaBoost: number   // auto-boost pesoNatura per sentieri montani (0 se assente)
 }
 
@@ -196,12 +196,12 @@ export function computeTrailScore(
   const effortNorm = (fFinal - 1.5) / 8.5                    // 0 to 1
   const sfidaBonus = Math.round(sfidaNorm * effortNorm * 20)
 
-  const ritmoNorm        = ((inputs.prefRitmo ?? 50) - 50) / 50
-  const beautyDensity    = B / Math.max(tNaismith, 0.5)
-  const bDensityNorm     = Math.min(Math.max((beautyDensity - 0.3) / 4.7, 0), 1)
-  const ritmoBonus       = Math.round(ritmoNorm * (bDensityNorm - 0.5) * 20)
+  const duraNorm     = ((inputs.prefDurata ?? 50) - 50) / 50   // -1=breve, +1=lunga
+  const trailDur     = tNaismith + tDesc
+  const trailDurNorm = Math.min(Math.max((trailDur - 2.5) / 4.5, 0), 1)  // 0 at ≤2.5h, 1 at ≥7h
+  const duraBonus    = Math.round(duraNorm * (trailDurNorm - 0.5) * 40)   // max ±20 pts
 
-  const ts = Math.min(Math.max(tsBase + sfidaBonus + ritmoBonus, 0), 100)
+  const ts = Math.min(Math.max(tsBase + sfidaBonus + duraBonus, 0), 100)
 
   return {
     ts,
@@ -224,7 +224,7 @@ export function computeTrailScore(
       userFCmax,
       terrainLabel,
       sfidaBonus,
-      ritmoBonus,
+      duraBonus,
       mountainNaturaBoost: 0,
     },
   }

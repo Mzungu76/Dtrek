@@ -125,13 +125,13 @@ export function TrailScoreWidget({ result, cached }: {
           </div>
 
           {/* Bonus preferenze */}
-          {(bd.sfidaBonus !== 0 || bd.ritmoBonus !== 0) && (
+          {(bd.sfidaBonus !== 0 || bd.duraBonus !== 0) && (
             <div className="border-t border-stone-100 px-6 py-2.5 text-xs text-stone-500 flex flex-wrap gap-x-4 gap-y-1">
               {bd.sfidaBonus !== 0 && (
                 <span>{bd.sfidaBonus > 0 ? '⚡' : '🚶'} {bd.sfidaBonus > 0 ? 'Sfida' : 'Passeggiata'}: {bd.sfidaBonus > 0 ? '+' : ''}{bd.sfidaBonus} pts</span>
               )}
-              {bd.ritmoBonus !== 0 && (
-                <span>{bd.ritmoBonus > 0 ? '⚡' : '🐢'} {bd.ritmoBonus > 0 ? 'Efficiente' : 'Contemplativo'}: {bd.ritmoBonus > 0 ? '+' : ''}{bd.ritmoBonus} pts</span>
+              {bd.duraBonus !== 0 && (
+                <span>{bd.duraBonus > 0 ? '🏕️' : '⏱️'} {bd.duraBonus > 0 ? 'Lunga' : 'Breve'}: {bd.duraBonus > 0 ? '+' : ''}{bd.duraBonus} pts</span>
               )}
             </div>
           )}
