@@ -156,6 +156,7 @@ export default function EscursionePage() {
       {
         distanceMeters:   activity.distanceMeters,
         elevationGain:    activity.elevationGain,
+        elevationLoss:    activity.elevationLoss,
         altitudeMax:      activity.altitudeMax,
         avgHeartRate:     activity.avgHeartRate > 0 ? activity.avgHeartRate : undefined,
         userAge:          userAge > 0 ? userAge : undefined,

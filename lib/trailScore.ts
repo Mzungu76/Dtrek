@@ -3,13 +3,20 @@
 // Componenti:
 //   B  = Bellezza (da OSM POI + Wikipedia + terreno, ponderata Natura/Cultura)
 //        Auto-boost montagna: su sentieri alpini il peso Natura viene aumentato
-//        automaticamente (fino a +20%) perché la cultura è irrilevante in quota.
-//   F  = Fatica = F_std (Naismith + SAC) corretta con profilo personale
+//        automaticamente (fino a +50%) perché la cultura è irrilevante in quota.
+//   F  = Fatica = F_std (Naismith + Langmuir + SAC + fattore fisiologico quota)
+//                 corretta con profilo personale
 //
 //   TS = clamp(B / √F × 20, 0, 100)
 //
 //   La radice quadrata di F attenua la penalizzazione dei trail difficili:
 //   B=10, F=1.5 → TS≈100 (Imperdibile); B=10, F=8 → TS≈70 (Eccellente)
+//
+// Calcolo fatica (riferimento: IBP Index / FFRandonnée):
+//   tNaismith = distKm/4.5 + elevGain/600           (Naismith 1892)
+//   tDesc     = max(0, elevLoss−200) × 0.25 / 600   (Langmuir: discesa impegnativa)
+//   altMult   = 1.04–1.12 per quota >2500m           (riduzione VO2max da ipossia)
+//   F_std     = clamp((tNaismith+tDesc) × terrainMult × 1.4 × altMult, 1.5, 10)
 //
 // Correzione personale (delta):
 //   • Se disponibile FC media (percorso completato):
@@ -24,7 +31,9 @@
 //       difficultyW = F_std / 10   → su trail facili la correzione conta meno
 //
 // Base scientifica:
-//   Regola di Naismith (1892) · Scale SAC/CAI · Formula Tanaka per FCmax
+//   Regola di Naismith (1892) · Correzione di Langmuir · Scale SAC/CAI
+//   IBP Index (FFRandonnée) · HikeMetrics Intensity Score
+//   Formula Tanaka per FCmax · Metodo SBE (Scenic Beauty Estimation)
 
 import type { BeautyScore } from './beautyScore'
 
@@ -41,6 +50,7 @@ export function deriveFCmax(age?: number): number {
 export interface TrailScoreInputs {
   distanceMeters:    number
   elevationGain:     number
+  elevationLoss?:    number   // dislivello negativo (Langmuir correction)
   sacScale?:         string   // T1–T6
   altitudeMax?:      number
   surfaces?:         string[]
@@ -60,7 +70,9 @@ export interface TrailScoreBreakdown {
   b2:          number   // Cultura 0–10
   fStd:        number   // fatica standard 0–10
   fFinal:      number   // fatica corretta 0–10
-  tNaismith:   number   // ore stimate (escursionista std)
+  tNaismith:   number   // ore stimate (escursionista std, solo salita)
+  tDesc:       number   // ore aggiuntive per discesa (Langmuir)
+  altPhysioMult: number // fattore fisiologico quota (1.0 = nessun effetto)
   terrainMult: number   // moltiplicatore terreno (da SAC/superficie)
   delta:       number   // correzione personale grezza
   deltaEff:    number   // correzione effettiva (delta × difficultyW)
@@ -124,10 +136,16 @@ export function computeTrailScore(
 ): TrailScoreResult {
   const distKm = Math.max(inputs.distanceMeters / 1000, 0.1)
 
-  // ── Fatica standard (Naismith) ──
+  // ── Fatica standard (Naismith + Langmuir + quota) ──
   const tNaismith = distKm / 4.5 + inputs.elevationGain / 600
+  // Langmuir correction: dislivello negativo oltre i primi 200m "liberi" aggiunge fatica
+  // (0.25 × coefficiente salita: ogni 10m di discesa impegnativa ≈ 2.5m equivalenti di salita)
+  const tDesc = Math.max(0, (inputs.elevationLoss ?? 0) - 200) * 0.25 / 600
   const { mult: tMult, label: terrainLabel } = getTerrainMult(inputs.sacScale, inputs.surfaces)
-  const fStd = Math.min(Math.max(tNaismith * tMult * 1.4, 1.5), 10)
+  // Fattore fisiologico di quota: riduzione VO2max da ipossia (IBP Index / HikeMetrics)
+  const altMax = inputs.altitudeMax ?? 0
+  const altPhysioMult = altMax >= 3500 ? 1.12 : altMax >= 3000 ? 1.08 : altMax >= 2500 ? 1.04 : 1.0
+  const fStd = Math.min(Math.max((tNaismith + tDesc) * tMult * 1.4 * altPhysioMult, 1.5), 10)
 
   // ── Correzione personale ──
   const userFCmax = (inputs.userMaxHeartRate && inputs.userMaxHeartRate > 0)
@@ -159,7 +177,6 @@ export function computeTrailScore(
   const fFinal      = Math.min(Math.max(fStd + deltaEff, 1.5), 10)
 
   // ── Bellezza ── con auto-boost natura per sentieri montani
-  const altMax = inputs.altitudeMax ?? 0
   const sacVal = ({ T1:1, T2:2, T3:3, T4:4, T5:5, T6:6 } as Record<string,number>)[inputs.sacScale ?? ''] ?? 0
   // Se quota o scala SAC indicano terreno montano, riduce il peso della cultura
   // (su un sentiero alpino non ci sono cattedrali né siti archeol. — non è un difetto)
@@ -203,6 +220,8 @@ export function computeTrailScore(
       fStd:        r1(fStd),
       fFinal:      r1(fFinal),
       tNaismith:   r1(tNaismith),
+      tDesc:       r1(tDesc),
+      altPhysioMult: r1(altPhysioMult),
       terrainMult: r1(tMult),
       delta:       r1(delta),
       deltaEff,

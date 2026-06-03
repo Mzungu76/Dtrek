@@ -327,6 +327,7 @@ export default function HomePage() {
       const { ts } = computeTrailScore(bs, {
         distanceMeters: hike.distanceMeters,
         elevationGain:  hike.elevationGain,
+        elevationLoss:  hike.elevationLoss,
         altitudeMax:    hike.altitudeMax,
         userAge:        userAge > 0 ? userAge : undefined,
         personalDelta:  personalDelta ?? undefined,
