@@ -1,9 +1,13 @@
 // TrailScore (TS) — punteggio unico che risponde "ne è valsa la pena?"
 //
 // Componenti:
-//   B  = Bellezza (da OSM POI + Wikipedia + terreno, ponderata Natura/Cultura)
-//        Auto-boost montagna: su sentieri alpini il peso Natura viene aumentato
-//        automaticamente (fino a +50%) perché la cultura è irrilevante in quota.
+//   B  = media pesata tra b1 (natura+paesaggio) e b2 (archeologia+architettura+interesse),
+//        corretta dalle preferenze utente (pesoNatura 0–100).
+//        b2 è limitato inferiormente a b1: B = (b1×pesoNatura + max(b2,b1)×pesoCultura) / 100
+//        → quando b2 < b1, B = b1 indipendentemente dal peso; quando b2 > b1 la cultura
+//        aumenta B proporzionalmente alle preferenze.
+//        Auto-boost montagna: su sentieri alpini pesoNatura viene aumentato automaticamente
+//        (fino a +50%) perché la cultura è irrilevante in quota.
 //   F  = Fatica = F_std (Naismith + Langmuir + SAC + fattore fisiologico quota)
 //                 corretta con profilo personale
 //
@@ -189,12 +193,12 @@ export function computeTrailScore(
   const catMap = Object.fromEntries(beautyScore.categories.map(c => [c.key, c.score]))
   const b1 = ((catMap.natura ?? 0) + (catMap.paesaggio ?? 0)) / 2
   const b2 = ((catMap.archeologia ?? 0) + (catMap.architettura ?? 0) + (catMap.interesse ?? 0)) / 3
-  // Natura è il pavimento: la cultura aumenta B solo quando supera la natura.
-  // Questo evita di penalizzare percorsi senza dati culturali OSM (molto comune in montagna
-  // e nelle zone rurali dove OSM è poco aggiornato).
-  const B = Math.min(10, b2 > b1
-    ? (b1 * effectivePesoNatura + b2 * effectivePesoCultura) / 100
-    : b1)
+  // B = media pesata b1 (natura+paesaggio) e b2 (cultura), corretta dalle preferenze utente.
+  // b2 è limitato inferiormente a b1: la cultura può solo aggiungere, mai sottrarre dalla
+  // bellezza naturale base. Quando b2 = 0 (nessun dato OSM culturale) → b2eff = b1 → B = b1,
+  // garantendo che trail senza patrimonio culturale censito non vengano penalizzati.
+  const b2eff = Math.max(b2, b1)
+  const B = Math.min(10, (b1 * effectivePesoNatura + b2eff * effectivePesoCultura) / 100)
 
   const tsBase = Math.round((B / Math.sqrt(fFinal)) * 25)
 
