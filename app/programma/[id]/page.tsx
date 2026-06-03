@@ -164,6 +164,8 @@ export default function PlannedHikePage() {
   const [pesoNatura,      setPesoNatura]      = useState(50)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefRitmo,       setPrefRitmo]       = useState(50)
+  const [personalDelta,   setPersonalDelta]   = useState<number | null>(null)
+  const [hrHikeCount,     setHrHikeCount]     = useState(0)
   const [trailResult,     setTrailResult]     = useState<TrailScoreResult | null>(null)
 
   // Must be before early returns
@@ -246,6 +248,8 @@ export default function PlannedHikePage() {
       if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
       if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
       if (d.prefRitmo          != null) setPrefRitmo(d.prefRitmo)
+      if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
+      if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
     }).catch(() => {})
   }, [])
 
@@ -258,6 +262,8 @@ export default function PlannedHikePage() {
         distanceMeters: hike.distanceMeters,
         elevationGain:  hike.elevationGain,
         userAge:        userAge > 0 ? userAge : undefined,
+        personalDelta:  personalDelta ?? undefined,
+        hrHikeCount,
         prefSforzo,
         prefRitmo,
       },
@@ -269,7 +275,7 @@ export default function PlannedHikePage() {
       updatePlannedMeta(hike.id, { cachedTrailScore: result.ts }).catch(() => {})
       setHike(prev => prev ? { ...prev, cachedTrailScore: result.ts } : prev)
     }
-  }, [beautyScore, hike?.id, userAge, pesoNatura, prefSforzo, prefRitmo]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [beautyScore, hike?.id, userAge, pesoNatura, prefSforzo, prefRitmo, personalDelta, hrHikeCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">

@@ -4,6 +4,51 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { TrackPoint } from '@/lib/tcxParser'
 
+// ── Personal delta recomputation ──────────────────────────────────────────────
+
+async function recomputePersonalDelta(userId: string) {
+  try {
+    const { data: settings } = await supabase
+      .from('user_settings').select('user_age').eq('user_id', userId).single()
+    const userAge = (settings?.user_age as number) ?? 0
+    const userFCmax = userAge >= 10 ? Math.round(211 - 0.64 * userAge) : 185
+
+    const { data: acts } = await supabase
+      .from('activities')
+      .select('avg_heart_rate, distance_meters, elevation_gain, start_time')
+      .eq('user_id', userId)
+      .gt('avg_heart_rate', 0)
+      .gt('distance_meters', 0)
+      .order('start_time', { ascending: false })
+      .limit(50)
+
+    if (!acts?.length) return
+
+    const now = Date.now()
+    let sumW = 0, sumDeltaW = 0
+    for (const act of acts) {
+      const distKm   = (act.distance_meters as number) / 1000
+      const elevGain = (act.elevation_gain  as number) ?? 0
+      const tNaismith = distKm / 4.5 + elevGain / 600
+      const fStd      = Math.min(Math.max(tNaismith * 1.10 * 1.4, 1.5), 10)
+      const expectedFcPct = 50 + fStd * 4
+      const actualFcPct   = ((act.avg_heart_rate as number) / userFCmax) * 100
+      const delta         = (actualFcPct - expectedFcPct) / 10
+      const daysSince     = (now - new Date(act.start_time as string).getTime()) / 86400000
+      const w             = (fStd / 10) * Math.exp(-daysSince / 180)
+      sumW += w; sumDeltaW += delta * w
+    }
+
+    const personalDelta = sumW > 0 ? Math.round((sumDeltaW / sumW) * 100) / 100 : 0
+    await supabase.from('user_settings').upsert(
+      { user_id: userId, personal_delta: personalDelta, hr_hike_count: acts.length, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    )
+  } catch (e) {
+    console.error('recomputePersonalDelta:', e)
+  }
+}
+
 export const dynamic = 'force-dynamic'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -137,6 +182,9 @@ export async function POST(req: NextRequest) {
       .upsert({ ...activityToRow(activity), user_id: user.id }, { onConflict: 'id' })
 
     if (error) throw error
+    if (activity.avgHeartRate && activity.avgHeartRate > 0) {
+      recomputePersonalDelta(user.id)  // fire-and-forget
+    }
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('POST /api/activity:', e)

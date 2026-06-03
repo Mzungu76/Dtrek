@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   const { data } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo, hiker_face_data_url, display_name')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo, hiker_face_data_url, display_name, personal_delta, hr_hike_count')
     .eq('user_id', user.id)
     .single()
 
@@ -37,6 +37,8 @@ export async function GET(req: NextRequest) {
     prefRitmo:          (data?.pref_ritmo             as number) ?? 50,
     hikerFaceDataUrl:   (data?.hiker_face_data_url   as string) ?? null,
     displayName:        (data?.display_name           as string) ?? null,
+    personalDelta:      (data?.personal_delta         as number) ?? null,
+    hrHikeCount:        (data?.hr_hike_count          as number) ?? 0,
   })
 }
 
