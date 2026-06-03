@@ -77,7 +77,8 @@ export default function EscursionePage() {
   const [pesoNatura,      setPesoNatura]      = useState(50)
 
   const EMPTY_TERRAIN: TerrainContext = {
-    hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
+    hasForest: false, hasRiver: false, hasStream: false,
+    hasLake: false, hasPond: false, hasGlacier: false, hasCoast: false,
     isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [],
   }
 

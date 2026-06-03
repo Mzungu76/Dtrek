@@ -13,6 +13,7 @@ export type PoiType =
   | 'cave'
   | 'shelter'
   | 'ruins'
+  | 'bridge'
   | 'archaeological' | 'castle' | 'fountain' | 'bench' | 'chapel' | 'picnic' | 'tower' | 'monument'
 
 export interface PoiItem {
@@ -38,6 +39,7 @@ export const POI_META: Record<PoiType, { label: string; emoji: string; color: st
   cave:      { label: 'Grotta',     emoji: '🕳',  color: '#78350f' },
   shelter:   { label: 'Riparo',     emoji: '🛖',  color: '#a16207' },
   ruins:     { label: 'Rovine',     emoji: '🏛',  color: '#713f12' },
+  bridge:    { label: 'Ponte',      emoji: '🌉',  color: '#64748b' },
   archaeological: { label: 'Sito Archeologico', emoji: '🏛', color: '#92400e' },
   castle:         { label: 'Castello',           emoji: '🏰', color: '#5b21b6' },
   fountain:       { label: 'Fontana',            emoji: '⛲', color: '#0891b2' },
@@ -74,7 +76,10 @@ export function trackBbox(track: [number, number][], pad = 0.006): string {
 
 export interface TerrainContext {
   hasForest:      boolean
+  hasRiver:       boolean   // waterway=river
+  hasStream:      boolean   // waterway=stream/beck/burn/ditch
   hasLake:        boolean
+  hasPond:        boolean   // natural=water + water=pond/reservoir
   hasGlacier:     boolean
   hasCoast:       boolean
   isProtected:    boolean   // riserva naturale / area protetta
@@ -92,8 +97,15 @@ export async function fetchTerrainContext(track: [number, number][]): Promise<Te
 (
   way["natural"="wood"](${bbox});
   way["landuse"="forest"](${bbox});
+  way["waterway"="river"](${bbox});
+  way["waterway"="stream"](${bbox});
+  way["waterway"="beck"](${bbox});
+  way["waterway"="burn"](${bbox});
+  way["waterway"="ditch"](${bbox});
   way["natural"="water"]["water"="lake"](${bbox});
   relation["natural"="water"]["water"="lake"](${bbox});
+  way["natural"="water"]["water"~"pond|reservoir"](${bbox});
+  relation["natural"="water"]["water"~"pond|reservoir"](${bbox});
   way["natural"="glacier"](${bbox});
   way["natural"="coastline"](${bbox});
   way["natural"="fell"](${bbox});
@@ -126,10 +138,13 @@ out tags;`
 
   for (const el of data.elements as any[]) {
     const t = el.tags ?? {}
-    if (t['natural'] === 'wood'  || t['landuse'] === 'forest')              ctx.hasForest      = true
-    if (t['natural'] === 'water' && t['water'] === 'lake')                  ctx.hasLake        = true
-    if (t['natural'] === 'glacier')                                          ctx.hasGlacier     = true
-    if (t['natural'] === 'coastline')                                        ctx.hasCoast       = true
+    if (t['natural'] === 'wood'  || t['landuse'] === 'forest')              ctx.hasForest  = true
+    if (t['waterway'] === 'river')                                           ctx.hasRiver   = true
+    if (['stream','beck','burn','ditch'].includes(t['waterway'] ?? ''))      ctx.hasStream  = true
+    if (t['natural'] === 'water' && t['water'] === 'lake')                  ctx.hasLake    = true
+    if (t['natural'] === 'water' && ['pond','reservoir'].includes(t['water'] ?? '')) ctx.hasPond = true
+    if (t['natural'] === 'glacier')                                          ctx.hasGlacier = true
+    if (t['natural'] === 'coastline')                                        ctx.hasCoast   = true
     if (['fell','heath','grassland','scree','bare_rock'].includes(t['natural'])) ctx.openTerrain = true
     if (t['boundary'] === 'national_park')                                  { ctx.isNationalPark = true; ctx.isProtected = true }
     if (t['boundary'] === 'protected_area' || t['leisure'] === 'nature_reserve') ctx.isProtected = true
@@ -143,7 +158,8 @@ out tags;`
 }
 
 function emptyTerrain(): TerrainContext {
-  return { hasForest: false, hasLake: false, hasGlacier: false, hasCoast: false,
+  return { hasForest: false, hasRiver: false, hasStream: false,
+           hasLake: false, hasPond: false, hasGlacier: false, hasCoast: false,
            isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [] }
 }
 
@@ -182,6 +198,8 @@ export async function fetchPoisNearTrack(
   node["historic"="tower"](${bbox});
   node["historic"="monument"](${bbox});
   node["historic"="memorial"](${bbox});
+  node["man_made"="bridge"](${bbox});
+  way["man_made"="bridge"]["name"](${bbox});
 );
 out body;`
 
@@ -223,6 +241,7 @@ out body;`
     else if (t['tourism']      === 'picnic_site')                             type = 'picnic'
     else if (t['man_made']     === 'tower' || t['historic'] === 'tower')      type = 'tower'
     else if (t['historic']     === 'monument' || t['historic'] === 'memorial') type = 'monument'
+    else if (t['man_made']     === 'bridge')                                  type = 'bridge'
 
     pois.push({
       id:   el.id,
