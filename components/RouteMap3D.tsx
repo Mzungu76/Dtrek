@@ -20,6 +20,11 @@ const SPEEDS = [
   { label: '3×', v: 3   },
 ]
 
+const VIDEO_PRESETS = {
+  epico:  { duration: 30, styleIdx: 0, label: 'Epico',  desc: '30s · cinematico',   grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
+  snappy: { duration: 15, styleIdx: 1, label: 'Snappy', desc: '15s · social-ready', grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
+} as const
+
 const STYLES = [
   { label: 'Outdoor',   url: () => `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${KEY}` },
   { label: 'Satellite', url: () => `https://api.maptiler.com/maps/hybrid/style.json?key=${KEY}` },
@@ -35,6 +40,7 @@ const VIDEO_DIMS: Record<string, [number, number]> = {
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type VideoState = 'idle' | 'config' | 'postprod' | 'rendering' | 'done'
+type VideoPreset = 'epico' | 'snappy' | 'custom'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
 type PlacingStep = 'pos'
 
@@ -451,6 +457,93 @@ function cleanupRouteReveal(map: MLMap) {
   try{map.setPaintProperty('route-casing','line-opacity',0.55)}catch{}
 }
 
+// ── Ambient audio generator ────────────────────────────────────────────────────
+
+function createAmbientAudio(
+  audioCtx: AudioContext,
+  dest: MediaStreamAudioDestinationNode,
+  style: 'epico' | 'snappy',
+): () => void {
+  const master = audioCtx.createGain()
+  master.gain.setValueAtTime(0, audioCtx.currentTime)
+  master.connect(dest)
+
+  const freqs = style === 'epico'
+    ? [55, 82.4, 110, 164.8]
+    : [65.4, 98, 130.8, 196]
+
+  const allNodes: (OscillatorNode | AudioBufferSourceNode)[] = []
+  freqs.forEach((f, i) => {
+    const osc = audioCtx.createOscillator()
+    osc.type = 'sine'; osc.frequency.value = f
+    const lfo = audioCtx.createOscillator()
+    lfo.type = 'sine'; lfo.frequency.value = 0.04 + i * 0.015
+    const lfoG = audioCtx.createGain(); lfoG.gain.value = f * 0.007
+    lfo.connect(lfoG); lfoG.connect(osc.frequency)
+    const g = audioCtx.createGain(); g.gain.value = 0.22 / freqs.length
+    osc.connect(g); g.connect(master)
+    allNodes.push(osc, lfo)
+  })
+
+  const SR = audioCtx.sampleRate
+  const buf = audioCtx.createBuffer(1, SR * 4, SR)
+  const d = buf.getChannelData(0)
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.6
+  const noise = audioCtx.createBufferSource()
+  noise.buffer = buf; noise.loop = true
+  const lp = audioCtx.createBiquadFilter()
+  lp.type = 'lowpass'; lp.frequency.value = style === 'epico' ? 350 : 550; lp.Q.value = 1
+  const ng = audioCtx.createGain(); ng.gain.value = 0.05
+  noise.connect(lp); lp.connect(ng); ng.connect(master)
+  allNodes.push(noise)
+
+  return function start() {
+    allNodes.forEach(n => { try { n.start() } catch {} })
+    master.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 2.5)
+  }
+}
+
+// ── Elevation profile in video HUD ────────────────────────────────────────────
+
+function drawVideoElevProfile(
+  ctx: CanvasRenderingContext2D,
+  series: number[], progress: number,
+  x: number, y: number, w: number, h: number, sc: number,
+) {
+  if (series.length < 2) return
+  const minA = Math.min(...series), maxA = Math.max(...series), range = maxA - minA || 1
+  ctx.save()
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  rrect(ctx, x, y, w, h, 10*sc); ctx.fill()
+  const pad = 6*sc
+  const pts2 = series.map((a, i) => ({
+    px: x + pad + (i / (series.length - 1)) * (w - 2*pad),
+    py: y + h - pad - ((a - minA) / range) * (h - 2*pad) * 0.88,
+  }))
+  const grad = ctx.createLinearGradient(0, y, 0, y + h)
+  grad.addColorStop(0, 'rgba(96,165,250,0.5)'); grad.addColorStop(1, 'rgba(59,130,246,0.04)')
+  ctx.beginPath()
+  pts2.forEach(({px,py}, i) => i === 0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py))
+  ctx.lineTo(pts2[pts2.length-1].px, y+h-pad); ctx.lineTo(pts2[0].px, y+h-pad); ctx.closePath()
+  ctx.fillStyle = grad; ctx.fill()
+  ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 1.5*sc; ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+  ctx.beginPath()
+  pts2.forEach(({px,py}, i) => i === 0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py)); ctx.stroke()
+  const curX = x + pad + progress * (w - 2*pad)
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.2*sc; ctx.setLineDash([3*sc,2*sc])
+  ctx.beginPath(); ctx.moveTo(curX, y+pad); ctx.lineTo(curX, y+h-pad); ctx.stroke(); ctx.setLineDash([])
+  const ci = Math.min(Math.round(progress*(series.length-1)), series.length-1)
+  const cp = pts2[ci]
+  if (cp) {
+    ctx.fillStyle = '#60a5fa'; ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5*sc
+    ctx.beginPath(); ctx.arc(cp.px, cp.py, 3.5*sc, 0, Math.PI*2); ctx.fill(); ctx.stroke()
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.38)'; ctx.font = `${Math.round(9*sc)}px -apple-system,sans-serif`
+  ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(`${Math.round(minA)}m`, x+pad, y+h-1*sc)
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText(`${Math.round(maxA)}m`, x+w-pad, y+pad)
+  ctx.restore()
+}
+
 // BearingPicker removed — orientation is now set directly on the map
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -461,9 +554,11 @@ interface Props {
   onClose: () => void
   plannedDate?: string
   plannedTrackPoints?: TrackPoint[]
+  trailScore?: number
+  trailColor?: string
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, trailScore, trailColor }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -521,6 +616,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [renderProgress,    setRenderProgress]   = useState(0)
   const [renderFrame,       setRenderFrame]      = useState(0)
   const [renderTotal,       setRenderTotal]      = useState(0)
+  const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
+  const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
+  const audioCtxRef = useRef<AudioContext | null>(null)
 
   // Post-production
   const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
@@ -921,7 +1019,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       'video/webm;codecs=vp8',
       'video/webm',
     ].find(t=>MediaRecorder.isTypeSupported(t))??''
-    const stream=(composite as any).captureStream(30) as MediaStream
+    // Audio: ambient soundtrack mixed into the recording stream
+    let audioStream: MediaStream | undefined
+    if (videoEnableAudio) {
+      try {
+        const audioCtx = new AudioContext()
+        const audioDest = audioCtx.createMediaStreamDestination()
+        audioCtxRef.current = audioCtx
+        const startAudio = createAmbientAudio(audioCtx, audioDest, videoPreset === 'snappy' ? 'snappy' : 'epico')
+        startAudio()
+        audioStream = audioDest.stream
+      } catch {}
+    }
+    const videoStream=(composite as any).captureStream(30) as MediaStream
+    const stream = audioStream
+      ? new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
+      : videoStream
     const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:25_000_000})
     videoChunksRef.current=[]
     recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
@@ -930,6 +1043,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       setVideoRecordedBlob(blob); setVideoState('done')
       if(mEl) mEl.style.opacity='1'
       try { cleanupRouteReveal(map) } catch {}
+      try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
       // Restore container to CSS-driven dimensions
       cont.style.width=''; cont.style.height=''; map.resize()
     }
@@ -971,6 +1085,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const photoTriggerRouteFrames = sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
     const TOTAL_FRAMES = ROUTE_FRAMES + sortedPhotos.length * PHOTO_REVEAL_FRAMES
 
+    // Pre-compute peak position on route (for peak callout)
+    const peakRouteP = (() => {
+      let maxA = -Infinity, peakIdx = 0
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i].altitudeMeters ?? 0
+        if (a > maxA) { maxA = a; peakIdx = i }
+      }
+      return peakIdx / Math.max(1, pts.length - 1)
+    })()
+
     function frameToState(frameIdx: number): {p:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}} {
       let pauseOffset = 0
       for (let i = 0; i < sortedPhotos.length; i++) {
@@ -1001,19 +1125,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const {p, reveal} = frameToState(frameIdx)
       setRenderProgress(frameIdx/TOTAL_FRAMES); setRenderFrame(frameIdx)
 
-      // During photo reveal: hold camera, show photo fullscreen
+      // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
       if (reveal) {
         requestAnimationFrame(()=>{
           const t = reveal.revealFrame / PHOTO_REVEAL_FRAMES
           const alpha = t<0.12 ? t/0.12 : t>0.88 ? (1-t)/0.12 : 1
-          // Draw photo fullscreen (cover-fit)
+          // Ken Burns: slow zoom + gentle drift per photo
           const img = reveal.img
+          const photoIdx = sortedPhotos.findIndex(s => s.photo.id === reveal.photo.id)
+          const kbScale = 1 + 0.07 * t
+          const driftDir = (photoIdx % 2 === 0) ? 1 : -1
+          const kbDX = driftDir * outW * 0.03 * t
+          const kbDY = outH * 0.02 * t
           const srcA = img.width / img.height
           const dstA = outW / outH
           let sx=0,sy=0,sw=img.width,sh=img.height
           if(srcA>dstA){sw=Math.round(sh*dstA);sx=(img.width-sw)/2}
           else{sh=Math.round(sw/dstA);sy=(img.height-sh)/2}
-          ctx.drawImage(img,sx,sy,sw,sh,0,0,outW,outH)
+          ctx.save()
+          ctx.translate(outW/2 + kbDX, outH/2 + kbDY)
+          ctx.scale(kbScale, kbScale)
+          ctx.drawImage(img, sx, sy, sw, sh, -outW/2, -outH/2, outW, outH)
+          ctx.restore()
           // Vignette
           const vig=ctx.createRadialGradient(outW/2,outH/2,outW*0.3,outW/2,outH/2,outW*0.75)
           vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,0,0,0.35)')
@@ -1078,8 +1211,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       requestAnimationFrame(()=>{
         if(!mapRef.current) return
 
-        // Color grading: warm cinematic look
-        try { ctx.filter='contrast(1.05) saturate(1.18) brightness(1.02)' } catch {}
+        // Color grading: cinematic look (intensity varies by preset)
+        const grading = videoPreset==='snappy' ? VIDEO_PRESETS.snappy.grading : VIDEO_PRESETS.epico.grading
+        try { ctx.filter=grading } catch {}
         ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
@@ -1102,12 +1236,37 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           }
         }
 
+        const sc2=Math.min(outW,outH)/1080
+
+        // Animated elevation profile (upper center, hidden during title card)
+        if(altitudeSeries.length>1&&!(videoShowTitle&&displayTitle&&frameIdx<Math.round(TARGET_FPS*1.8))){
+          const elW=Math.round(outW*0.36), elH=Math.round(34*sc2)
+          const elX=Math.round((outW-elW)/2), elY=Math.round(18*sc2)
+          drawVideoElevProfile(ctx,altitudeSeries,p,elX,elY,elW,elH,sc2)
+        }
+
+        // Peak callout: appears when camera is near the route's highest point
+        const peakDist=Math.abs(p-peakRouteP)
+        if(peakDist<0.042&&altitudeSeries.length>0&&activShot.id!=='intro'&&frameIdx>TITLE_DUR){
+          const peakAlpha=Math.pow(Math.max(0,1-peakDist/0.042),0.5)*0.9
+          const maxAlt=Math.round(Math.max(...altitudeSeries))
+          const label=`▲ ${maxAlt} m`
+          ctx.save()
+          ctx.font=`700 ${Math.round(20*sc2)}px -apple-system,sans-serif`
+          const lw=ctx.measureText(label).width+Math.round(28*sc2), lh=Math.round(38*sc2)
+          const lx=Math.round((outW-lw)/2), ly=Math.round(outH*0.115)
+          ctx.globalAlpha=peakAlpha
+          ctx.fillStyle='rgba(0,0,0,0.6)'; rrect(ctx,lx,ly,lw,lh,lh/2); ctx.fill()
+          ctx.fillStyle='#60a5fa'; ctx.textAlign='center'; ctx.textBaseline='middle'
+          ctx.fillText(label,outW/2,ly+lh/2)
+          ctx.globalAlpha=1; ctx.restore()
+        }
+
         // Title card (first 2.2s)
         if(videoShowTitle&&displayTitle&&frameIdx<TITLE_DUR){
           const fi=frameIdx/(TARGET_FPS*0.55), fo=frameIdx>(TITLE_DUR-TARGET_FPS*0.55)?(TITLE_DUR-frameIdx)/(TARGET_FPS*0.55):1
           const alpha=Math.min(1,Math.min(fi,fo))
           ctx.fillStyle=`rgba(0,0,0,${alpha*0.58})`; ctx.fillRect(0,0,outW,outH)
-          const sc2=Math.min(outW,outH)/1080
           ctx.globalAlpha=alpha
           ctx.fillStyle='rgba(255,255,255,0.52)'; ctx.font=`700 ${Math.round(20*sc2)}px -apple-system,sans-serif`
           ctx.textAlign='center'; ctx.textBaseline='bottom'
@@ -1127,11 +1286,44 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:activShot?.label})
         }
 
-        // Fade to black at the end of outro (last 6% of video)
-        const FADE_START=0.94
+        // End card: branded closing frame fades in over the last 8% of the video
+        const FADE_START=0.92
         if(p>FADE_START){
-          const fa=Math.pow((p-FADE_START)/(1-FADE_START),1.4)
-          ctx.globalAlpha=fa; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
+          const fa=Math.pow((p-FADE_START)/(1-FADE_START),1.2)
+          if(fa<0.82){
+            ctx.globalAlpha=fa*0.95; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
+          } else {
+            ctx.globalAlpha=fa; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
+            const cardAlpha=Math.min(1,(fa-0.82)/0.18)
+            ctx.globalAlpha=cardAlpha
+            // DTrek brand
+            ctx.fillStyle='#22d3ee'; ctx.textAlign='center'; ctx.textBaseline='middle'
+            ctx.font=`800 ${Math.round(26*sc2)}px -apple-system,sans-serif`
+            ctx.fillText('DTrek',outW/2,outH/2-Math.round(92*sc2))
+            // Title
+            ctx.fillStyle='white'; ctx.font=`700 ${Math.round(44*sc2)}px -apple-system,sans-serif`
+            let et=displayTitle; while(ctx.measureText(et).width>outW-Math.round(80*sc2)&&et.length>4) et=et.slice(0,-4)+'…'
+            ctx.fillText(et,outW/2,outH/2-Math.round(30*sc2))
+            // Stats
+            const statItems:{v:string;l:string;col:string}[]=[
+              {v:`${+totalKm.toFixed(1)} km`,l:'distanza',col:'white'},
+              {v:`${elevGain} m`,l:'D+',col:'white'},
+            ]
+            if(trailScore!==undefined) statItems.push({v:String(Math.round(trailScore)),l:'TrailScore',col:trailColor??'#22d3ee'})
+            const sw2=Math.round(150*sc2), sgap=Math.round(20*sc2)
+            const tw2=statItems.length*sw2+(statItems.length-1)*sgap
+            const sx0=outW/2-tw2/2+sw2/2, sy2=outH/2+Math.round(52*sc2)
+            statItems.forEach((s,i)=>{
+              const sx3=sx0+i*(sw2+sgap)
+              ctx.fillStyle=s.col; ctx.font=`800 ${Math.round(40*sc2)}px -apple-system,sans-serif`
+              ctx.fillText(s.v,sx3,sy2)
+              ctx.fillStyle='rgba(255,255,255,0.42)'; ctx.font=`500 ${Math.round(14*sc2)}px -apple-system,sans-serif`
+              ctx.fillText(s.l,sx3,sy2+Math.round(30*sc2))
+            })
+            ctx.fillStyle='rgba(255,255,255,0.22)'; ctx.font=`400 ${Math.round(12*sc2)}px -apple-system,sans-serif`
+            ctx.fillText('Tracciato con DTrek',outW/2,outH/2+Math.round(130*sc2))
+            ctx.globalAlpha=1
+          }
         }
 
         frameCountRef.current++
@@ -1141,12 +1333,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     setVideoState('rendering')
     renderNextFrame()
-  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,shotPlan])
+  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,shotPlan,videoPreset,videoEnableAudio,trailScore,trailColor,altitudeSeries])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
     mediaRecorderRef.current=null; compositeCanvasRef.current=null
+    try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
     if(mapRef.current) try{cleanupRouteReveal(mapRef.current)}catch{}
     setVideoState('idle'); setRenderProgress(0); setVideoRecordedBlob(null)
@@ -1325,6 +1518,26 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <h2 className="text-white font-bold text-lg">Impostazioni video</h2>
               <button onClick={()=>setVideoState('idle')} className="text-white/50 hover:text-white"><X className="w-5 h-5"/></button>
             </div>
+            {/* Preset */}
+            <div>
+              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">PRESET</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(['epico','snappy'] as const).map(pr=>(
+                  <button key={pr} onClick={()=>{
+                    setVideoPreset(pr)
+                    setVideoDuration(VIDEO_PRESETS[pr].duration)
+                    switchStyle(VIDEO_PRESETS[pr].styleIdx)
+                  }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                    <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
+                    <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
+                  </button>
+                ))}
+                <button onClick={()=>setVideoPreset('custom')} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset==='custom'?'bg-white/25 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                  <span className="text-sm font-bold">Custom</span>
+                  <span className="text-[10px] opacity-65 mt-0.5">manuale</span>
+                </button>
+              </div>
+            </div>
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">STILE MAPPA</p>
               <div className="flex gap-2">
@@ -1375,8 +1588,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 ))}
               </div>
             </div>
+            <div>
+              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">AUDIO</p>
+              <button onClick={()=>setVideoEnableAudio(v=>!v)}
+                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${videoEnableAudio?'bg-white text-stone-900':'bg-white/10 text-white/60 hover:bg-white/20'}`}>
+                {videoEnableAudio?'Colonna sonora ambient — attiva':'Colonna sonora ambient (drone pad)'}
+              </button>
+            </div>
             <p className="text-white/30 text-[11px] text-center">
-              1080p · 10 Mbps · rendering frame-by-frame + color grading cinematico
+              1080p · 25 Mbps · rendering frame-by-frame · Ken Burns · end card · profilo altimetrico
             </p>
             <div className="flex gap-3">
               <button onClick={()=>setVideoState('idle')} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">Annulla</button>
@@ -1524,7 +1744,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <div className="mb-5 bg-white/5 rounded-xl px-3 py-2.5 border border-white/8">
               <p className="text-white/45 text-[10px] font-semibold uppercase tracking-wider mb-1">Effetti automatici attivi</p>
               <p className="text-white/38 text-[10px] leading-relaxed">
-                ✦ Percorso rivelato progressivamente in arancione &nbsp;·&nbsp; ✦ Color grading cinematico (contrasto+saturazione) &nbsp;·&nbsp; ✦ Title card all'apertura &nbsp;·&nbsp; ✦ Camera fluida bird-in-flight con expo-smoothing
+                ✦ Ken Burns sulle foto &nbsp;·&nbsp; ✦ Profilo altimetrico animato &nbsp;·&nbsp; ✦ Callout quota di vetta &nbsp;·&nbsp; ✦ End card con statistiche &nbsp;·&nbsp; ✦ Color grading per preset &nbsp;·&nbsp; ✦ Camera fluida con expo-smoothing
               </p>
             </div>
 
