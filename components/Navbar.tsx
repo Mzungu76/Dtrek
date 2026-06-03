@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { Upload, BarChart2, BookOpen, Map, CalendarClock, User, ArrowDownToLine, LogOut, Settings } from 'lucide-react'
-import { getProfile } from '@/lib/userProfile'
+import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
@@ -94,7 +94,21 @@ function UserMenu({ user }: { user: SupabaseUser }) {
   const [faceUrl, setFaceUrl] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { setFaceUrl(getProfile().hikerFaceDataUrl ?? null) }, [])
+  useEffect(() => {
+    // Fast local read
+    const local = getProfile().hikerFaceDataUrl
+    if (local) setFaceUrl(local)
+    // Cross-device sync from Supabase
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.hikerFaceDataUrl) {
+          setFaceUrl(d.hikerFaceDataUrl)
+          saveProfile({ hikerFaceDataUrl: d.hikerFaceDataUrl })
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // Close on outside click
   useEffect(() => {

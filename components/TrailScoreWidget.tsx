@@ -5,7 +5,7 @@ export function TrailScoreWidget({ result, cached }: {
   result: TrailScoreResult | null
   cached?: number
 }) {
-  const ts = result?.ts ?? cached
+  const ts = result?.ts !== undefined ? result.ts : cached
   if (ts === undefined) return null
   const { label, color } = result ? result : tsLabel(ts)
   const bd = result?.breakdown
@@ -76,7 +76,7 @@ export function TrailScoreWidget({ result, cached }: {
                 <span>⛰️ Std {bd.fStd.toFixed(1)}</span>
                 <span>⏱ {bd.tNaismith.toFixed(1)}h</span>
                 {bd.deltaEff !== 0 && (
-                  <span style={{ color: bd.deltaEff > 0 ? '#dc2626' : '#16a34a' }}>
+                  <span style={{ color: bd.deltaEff > 0 ? '#dc2626' : bd.deltaEff < 0 ? '#16a34a' : '#a8a29e' }}>
                     👤 {bd.deltaEff > 0 ? '+' : ''}{bd.deltaEff.toFixed(1)}
                   </span>
                 )}

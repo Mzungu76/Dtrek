@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   const { data } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_ritmo, hiker_face_data_url, display_name')
     .eq('user_id', user.id)
     .single()
 
@@ -33,8 +33,10 @@ export async function GET(req: NextRequest) {
     userHeightCm:       (data?.user_height_cm as number) ?? 0,
     derivedFCmax:       age > 0 ? deriveFCmax(age) : 0,
     beautyNaturaWeight: (data?.beauty_natura_weight as number) ?? 50,
-    prefSforzo:         (data?.pref_sforzo         as number) ?? 50,
-    prefRitmo:          (data?.pref_ritmo           as number) ?? 50,
+    prefSforzo:         (data?.pref_sforzo           as number) ?? 50,
+    prefRitmo:          (data?.pref_ritmo             as number) ?? 50,
+    hikerFaceDataUrl:   (data?.hiker_face_data_url   as string) ?? null,
+    displayName:        (data?.display_name           as string) ?? null,
   })
 }
 
@@ -51,6 +53,8 @@ export async function POST(req: NextRequest) {
     beautyNaturaWeight?: number
     prefSforzo?: number
     prefRitmo?: number
+    hikerFaceDataUrl?: string | null
+    displayName?: string | null
   }
 
   const upsertData: Record<string, unknown> = {
@@ -111,6 +115,14 @@ export async function POST(req: NextRequest) {
     const r = Math.round(body.prefRitmo)
     if (r < 0 || r > 100) return NextResponse.json({ error: 'prefRitmo fuori range (0–100)' }, { status: 400 })
     upsertData.pref_ritmo = r
+  }
+
+  if (body.hikerFaceDataUrl !== undefined) {
+    upsertData.hiker_face_data_url = body.hikerFaceDataUrl || null
+  }
+
+  if (body.displayName !== undefined) {
+    upsertData.display_name = (body.displayName ?? '').trim() || null
   }
 
   const { error } = await supabase
