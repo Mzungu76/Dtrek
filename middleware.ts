@@ -7,10 +7,11 @@ const AUTH_PATHS = ['/login', '/signup', '/auth/']
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow static assets and auth pages without a session check
+  // Allow static assets, auth pages, and public share links without a session check
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/') ||
+    pathname.startsWith('/s/') ||
     pathname.match(/\.(ico|png|jpg|jpeg|svg|webp|json|js|css|woff2?)$/) ||
     AUTH_PATHS.some((p) => pathname.startsWith(p))
   ) {
