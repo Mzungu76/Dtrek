@@ -196,11 +196,12 @@ export function computeTrailScore(
   const effortNorm = (fFinal - 1.5) / 8.5                    // 0 to 1
   const sfidaBonus = Math.round(sfidaNorm * effortNorm * 20)
 
-  // prefDurata in minuti (60–480): midpoint 270 (4.5h) = neutro
-  const duraNorm     = Math.min(Math.max(((inputs.prefDurata ?? 270) - 270) / 210, -1), 1)
-  const trailDur     = tNaismith + tDesc
-  const trailDurNorm = Math.min(Math.max((trailDur - 2.5) / 4.5, 0), 1)  // 0 at ≤2.5h, 1 at ≥7h
-  const duraBonus    = Math.round(duraNorm * (trailDurNorm - 0.5) * 40)   // max ±20 pts
+  // duraBonus: massimo (+20) se il trail dura esattamente quanto preferito,
+  // decresce linearmente fino a -20 quando la differenza raggiunge 3.5h
+  const prefHours = (inputs.prefDurata ?? 270) / 60   // minuti → ore
+  const trailDur  = tNaismith + tDesc
+  const diff      = Math.abs(trailDur - prefHours)
+  const duraBonus = Math.max(Math.round(20 - (diff / 3.5) * 40), -20)
 
   const ts = Math.min(Math.max(tsBase + sfidaBonus + duraBonus, 0), 100)
 
