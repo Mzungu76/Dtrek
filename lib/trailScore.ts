@@ -9,10 +9,12 @@
 //   F  = Fatica = F_std (Naismith + Langmuir + SAC + fattore fisiologico quota)
 //                 corretta con profilo personale
 //
-//   TS = clamp(B / √F × 25, 0, 100)
+//   TS = clamp(50 × log₁₀((B+1)/(F+1)) + 50, 0, 100)
 //
-//   La radice quadrata di F attenua la penalizzazione dei trail difficili:
-//   B=10, F=1.5 → TS≈100 (Imperdibile); B=10, F=8 → TS≈70 (Eccellente)
+//   Formula logaritmica ispirata alla legge di Weber-Fechner (la percezione umana
+//   è logaritmica, non lineare) e al metodo SBE (Scenic Beauty Estimation):
+//   B=F qualsiasi → TS=50 (neutro); B=10,F=1.5 → TS≈82 (Imperdibile);
+//   B=10,F=10 → TS=50; B=0,F=10 → TS≈0 (Solo per esperti)
 //
 // Calcolo fatica (riferimento: IBP Index / FFRandonnée):
 //   tNaismith = distKm/4.5 + elevGain/600           (Naismith 1892)
@@ -187,7 +189,7 @@ export function computeTrailScore(
   const b2 = ((catMap.archeologia ?? 0) + (catMap.architettura ?? 0) + (catMap.interesse ?? 0)) / 3
   const B = Math.min(10, (b1 * effectivePesoNatura + b2 * effectivePesoCultura) / 100)
 
-  const tsBase = Math.round((B / Math.sqrt(fFinal)) * 25)
+  const tsBase = Math.round(50 * Math.log10((B + 1) / (fFinal + 1)) + 50)
 
   // ── Preferenze escursionistiche ──
   const sfidaNorm  = ((inputs.prefSforzo ?? 50) - 50) / 50  // -1 to +1
