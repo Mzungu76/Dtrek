@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
+import { getAllActivities, updateActivityMeta } from '@/lib/blobStore'
 import { computeTrailScore } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import {
@@ -264,7 +265,26 @@ function LootSettingsSection() {
           return { id: h.id, ts }
         })
       await Promise.all(updates.map(u => updatePlannedMeta(u.id, { cachedTrailScore: u.ts })))
-      setStatus({ ok: true, msg: `Profilo salvato · ${updates.length} punteggi aggiornati.` })
+
+      // Ricalcola anche il TS di tutte le attività completate con il linkedBeautyScore salvato
+      const activities = await getAllActivities()
+      const actUpdates = activities
+        .filter(a => (a.linkedBeautyScore?.categories?.length ?? 0) > 0)
+        .map(a => {
+          const bs = a.linkedBeautyScore as BeautyScore
+          const { ts } = computeTrailScore(bs, {
+            distanceMeters: a.distanceMeters,
+            elevationGain:  a.elevationGain,
+            elevationLoss:  a.elevationLoss,
+            altitudeMax:    a.altitudeMax,
+            avgHeartRate:   a.avgHeartRate > 0 ? a.avgHeartRate : undefined,
+            userAge:        age > 0 ? age : undefined,
+          }, naturaW)
+          return { id: a.id, ts }
+        })
+      await Promise.all(actUpdates.map(u => updateActivityMeta(u.id, { trailScore: u.ts })))
+
+      setStatus({ ok: true, msg: `Profilo salvato · ${updates.length + actUpdates.length} punteggi aggiornati.` })
     } catch {
       setStatus({ ok: true, msg: 'Profilo salvato.' })
     } finally {

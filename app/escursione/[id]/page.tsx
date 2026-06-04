@@ -157,27 +157,28 @@ export default function EscursionePage() {
     setActivity(prev => prev ? { ...prev, linkedBeautyScore: beautyScore } : prev)
   }, [beautyScore, activity, poisFullyLoaded, id])
 
-  // Calcola TrailScore (unificato: obiettivo + correzione personale)
+  // TrailScore: display from DB if already stored; compute+persist only once as migration fallback
   useEffect(() => {
     if (!beautyScore || !activity || !poisFullyLoaded) return
-    const result = computeTrailScore(
-      beautyScore,
-      {
-        distanceMeters:   activity.distanceMeters,
-        elevationGain:    activity.elevationGain,
-        elevationLoss:    activity.elevationLoss,
-        altitudeMax:      activity.altitudeMax,
-        avgHeartRate:     activity.avgHeartRate > 0 ? activity.avgHeartRate : undefined,
-        userAge:          userAge > 0 ? userAge : undefined,
-      },
-      pesoNatura,
-    )
-    setTrailResult(result)
-    if (activity.trailScore !== result.ts) {
-      updateActivityMeta(id, { trailScore: result.ts }).catch(() => {})
-      setActivity(prev => prev ? { ...prev, trailScore: result.ts } : prev)
+    const params = {
+      distanceMeters: activity.distanceMeters,
+      elevationGain:  activity.elevationGain,
+      elevationLoss:  activity.elevationLoss,
+      altitudeMax:    activity.altitudeMax,
+      avgHeartRate:   activity.avgHeartRate > 0 ? activity.avgHeartRate : undefined,
+      userAge:        userAge > 0 ? userAge : undefined,
     }
-  }, [beautyScore, activity, poisFullyLoaded, userAge, pesoNatura, id]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (activity.trailScore != null) {
+      // Score already in DB — just render it, no recalculation
+      setTrailResult(computeTrailScore(beautyScore, params, pesoNatura))
+      return
+    }
+    // One-time migration: compute and persist for activities that predate DB storage
+    const result = computeTrailScore(beautyScore, params, pesoNatura)
+    setTrailResult(result)
+    updateActivityMeta(id, { trailScore: result.ts }).catch(() => {})
+    setActivity(prev => prev ? { ...prev, trailScore: result.ts } : prev)
+  }, [beautyScore, activity?.trailScore, poisFullyLoaded, userAge, pesoNatura, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
