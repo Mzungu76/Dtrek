@@ -7,6 +7,7 @@ import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import RouteThumb from '@/components/RouteThumb'
+import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
@@ -14,6 +15,8 @@ import {
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
+import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
+import type { BeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -150,6 +153,11 @@ export default function PlannedHikePage() {
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
+  const [ctsResult,      setCtsResult]     = useState<TrailScoreResult | null>(null)
+  const [prefsLoaded,    setPrefsLoaded]   = useState(false)
+  const [pesoNatura,     setPesoNatura]    = useState(50)
+  const [prefSforzo,     setPrefSforzo]    = useState(50)
+  const [prefDurata,     setPrefDurata]    = useState(270)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -195,6 +203,34 @@ export default function PlannedHikePage() {
     updatePlannedMeta(hike.id, { cachedPois: pois, cachedPoiWiki: poiWikiEntries }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedPois: pois, cachedPoiWiki: poiWikiEntries } : prev)
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load user prefs for CTS display
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+        if (d.prefSforzo        != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefDurata        != null) setPrefDurata(d.prefDurata)
+      })
+      .catch(() => {})
+      .finally(() => setPrefsLoaded(true))
+  }, [])
+
+  // Compute CTS for breakdown display — NEVER saves
+  useEffect(() => {
+    const bs = (hike as { cachedBeautyScore?: BeautyScore } | null)?.cachedBeautyScore
+    if (!bs?.categories?.length || !prefsLoaded) return
+    const computed = computeTrailScore(bs, {
+      distanceMeters: hike!.distanceMeters,
+      elevationGain:  hike!.elevationGain,
+      elevationLoss:  hike!.elevationLoss,
+      altitudeMax:    hike!.altitudeMax,
+      prefSforzo,
+      prefDurata,
+    }, pesoNatura)
+    setCtsResult({ ...computed, ts: (hike as { cachedTrailScore?: number }).cachedTrailScore ?? computed.ts })
+  }, [hike?.id, prefsLoaded, pesoNatura, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   if (loading) return (
@@ -441,6 +477,17 @@ export default function PlannedHikePage() {
           <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
             <h2 className="font-display text-xl font-semibold text-stone-700 mb-5">Valutazione personalizzata</h2>
             <AssessmentPanel a={hike.assessment} />
+          </div>
+        )}
+
+        {/* Comfort TrailScore */}
+        {(ctsResult || (hike as { cachedTrailScore?: number }).cachedTrailScore != null) && (
+          <div className="space-y-2">
+            <h2 className="font-display text-xl font-semibold text-stone-700">Comfort TrailScore</h2>
+            <ComfortTrailScoreWidget
+              result={ctsResult}
+              cached={(hike as { cachedTrailScore?: number }).cachedTrailScore}
+            />
           </div>
         )}
 

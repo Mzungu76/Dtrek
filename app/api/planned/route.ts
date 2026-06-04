@@ -51,6 +51,8 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedPois:            row.cached_pois as unknown[] | undefined,
     cachedPoiWiki:         row.cached_poi_wiki as unknown[] | undefined,
     cachedGuide:           row.cached_guide as string | undefined,
+    cachedBeautyScore:     row.cached_beauty_score as PlannedHike['cachedBeautyScore'] | undefined,
+    cachedTrailScore:      row.cached_trail_score as number | undefined,
   }
 }
 
@@ -75,6 +77,8 @@ function hikeToRow(h: PlannedHike) {
     cached_pois:            h.cachedPois ?? null,
     cached_poi_wiki:        h.cachedPoiWiki ?? null,
     cached_guide:           h.cachedGuide ?? null,
+    cached_beauty_score:    h.cachedBeautyScore ?? null,
+    cached_trail_score:     h.cachedTrailScore ?? null,
   }
 }
 
@@ -84,6 +88,7 @@ const META_COLS = [
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
   'route_polyline', 'assessment', 'cached_guide',
+  'cached_beauty_score', 'cached_trail_score',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
@@ -217,6 +222,8 @@ export async function PATCH(req: NextRequest) {
       cachedPois?: unknown[]
       cachedPoiWiki?: unknown[]
       cachedGuide?: string
+      cachedBeautyScore?: PlannedHike['cachedBeautyScore']
+      cachedTrailScore?: number
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -227,6 +234,8 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedPois         !== undefined) dbPatch.cached_pois          = patch.cachedPois
     if (patch.cachedPoiWiki      !== undefined) dbPatch.cached_poi_wiki      = patch.cachedPoiWiki
     if (patch.cachedGuide        !== undefined) dbPatch.cached_guide         = patch.cachedGuide
+    if (patch.cachedBeautyScore  !== undefined) dbPatch.cached_beauty_score  = patch.cachedBeautyScore
+    if (patch.cachedTrailScore   !== undefined) dbPatch.cached_trail_score   = patch.cachedTrailScore
 
     const { error } = await supabase
       .from('planned_hikes')

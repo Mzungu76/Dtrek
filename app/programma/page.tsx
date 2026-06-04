@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllPlanned, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -52,7 +53,7 @@ export default function ProgrammaPage() {
   const [hikes,   setHikes]   = useState<PlannedHikeMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [sortBy,    setSortBy]    = useState<'date' | 'km' | 'dplus' | 'suitability'>('date')
+  const [sortBy,    setSortBy]    = useState<'date' | 'km' | 'dplus' | 'suitability' | 'cts'>('date')
 
   const sortedHikes = useMemo(() => {
     const arr = [...hikes]
@@ -60,6 +61,7 @@ export default function ProgrammaPage() {
       case 'km':          return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
       case 'dplus':       return arr.sort((a, b) => b.elevationGain - a.elevationGain)
       case 'suitability': return arr.sort((a, b) => (b.assessment?.suitabilityScore ?? 0) - (a.assessment?.suitabilityScore ?? 0))
+      case 'cts':         return arr.sort((a, b) => ((b as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore ?? -1) - ((a as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore ?? -1))
       default:            return arr.sort((a, b) => {
         const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
         const db = b.plannedDate ? new Date(b.plannedDate).getTime() : 0
@@ -114,6 +116,7 @@ export default function ProgrammaPage() {
                     { id: 'km',          label: 'Km' },
                     { id: 'dplus',       label: 'D+' },
                     { id: 'suitability', label: 'Adatta' },
+                    { id: 'cts',         label: 'CTS' },
                   ] as const).map(s => (
                     <button key={s.id} onClick={() => setSortBy(s.id)}
                       className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all
@@ -216,9 +219,20 @@ export default function ProgrammaPage() {
 
                   {/* Info section */}
                   <div className="p-3 flex flex-col gap-2 flex-1">
-                    <p className="text-sm font-semibold text-stone-800 truncate leading-tight">
-                      {hike.title}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-stone-800 truncate leading-tight flex-1">
+                        {hike.title}
+                      </p>
+                      {(hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore != null && (() => {
+                        const cts = ctsLabel((hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore!)
+                        return (
+                          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-lg text-white whitespace-nowrap"
+                            style={{ backgroundColor: cts.color }}>
+                            CTS {Math.round((hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore!)}
+                          </span>
+                        )
+                      })()}
+                    </div>
 
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
                       <span className="flex items-center gap-0.5 text-sky-700 font-medium">

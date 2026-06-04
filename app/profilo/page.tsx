@@ -2,9 +2,13 @@
 import { useEffect, useRef, useState } from 'react'
 import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
+import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
+import { getAllActivities, updateActivityMeta } from '@/lib/blobStore'
+import { computeTrailScore } from '@/lib/trailScore'
+import type { BeautyScore } from '@/lib/beautyScore'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding,
+  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge,
 } from 'lucide-react'
 
 // ── Claude API key section ─────────────────────────────────────────────────
@@ -131,6 +135,169 @@ function ClaudeKeySection() {
 
       {status && (
         <p className={`mt-3 ml-7 text-xs font-medium ${status.ok ? 'text-forest-600' : 'text-red-600'}`}>
+          {status.ok ? '✓ ' : '✗ '}{status.msg}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Comfort TrailScore settings ───────────────────────────────────────────────
+
+function ComfortTrailScoreSection() {
+  const [pesoNatura,  setPesoNatura]  = useState(50)
+  const [prefSforzo,  setPrefSforzo]  = useState(50)
+  const [prefDurata,  setPrefDurata]  = useState(270)
+  const [loading,     setLoading]     = useState(true)
+  const [saving,      setSaving]      = useState(false)
+  const [status,      setStatus]      = useState<{ ok: boolean; msg: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+        if (d.prefSforzo        != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefDurata        != null) setPrefDurata(d.prefDurata)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleSave() {
+    setSaving(true); setStatus(null)
+    const res = await fetch('/api/user-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ beautyNaturaWeight: pesoNatura, prefSforzo, prefDurata }),
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      setSaving(false)
+      setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
+      return
+    }
+
+    // Batch recalculate CTS for all hikes and activities
+    let updated = 0
+    try {
+      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const naturaW = prefs.beautyNaturaWeight ?? pesoNatura
+
+      const [hikes, activities] = await Promise.all([getAllPlanned(), getAllActivities()])
+
+      await Promise.all([
+        ...hikes
+          .filter(h => (h as { cachedBeautyScore?: BeautyScore }).cachedBeautyScore?.categories?.length)
+          .map(h => {
+            const bs = (h as { cachedBeautyScore: BeautyScore }).cachedBeautyScore
+            const { ts } = computeTrailScore(bs, {
+              distanceMeters: h.distanceMeters,
+              elevationGain:  h.elevationGain,
+              elevationLoss:  h.elevationLoss,
+              altitudeMax:    h.altitudeMax,
+              prefSforzo:     prefs.prefSforzo ?? prefSforzo,
+              prefDurata:     prefs.prefDurata ?? prefDurata,
+            }, naturaW)
+            updated++
+            return updatePlannedMeta(h.id, { cachedTrailScore: ts })
+          }),
+        ...activities
+          .filter(a => (a as { linkedBeautyScore?: BeautyScore }).linkedBeautyScore?.categories?.length)
+          .map(a => {
+            const bs = (a as { linkedBeautyScore: BeautyScore }).linkedBeautyScore
+            const { ts } = computeTrailScore(bs, {
+              distanceMeters: a.distanceMeters,
+              elevationGain:  a.elevationGain,
+              elevationLoss:  a.elevationLoss ?? 0,
+              altitudeMax:    a.altitudeMax,
+              avgHeartRate:   a.avgHeartRate,
+              prefSforzo:     prefs.prefSforzo ?? prefSforzo,
+              prefDurata:     prefs.prefDurata ?? prefDurata,
+            }, naturaW)
+            updated++
+            return updateActivityMeta(a.id, { trailScore: ts })
+          }),
+      ])
+    } catch {}
+
+    setSaving(false)
+    setStatus({ ok: true, msg: updated > 0 ? `Salvato · ${updated} CTS aggiornati.` : 'Salvato.' })
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
+      <div className="flex items-center gap-2.5">
+        <Gauge className="w-5 h-5 text-forest-600 shrink-0" />
+        <div>
+          <h2 className="text-sm font-semibold text-stone-800">Comfort TrailScore — preferenze</h2>
+          <p className="text-xs text-stone-400">Personalizza come viene calcolato il tuo CTS</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-stone-400 text-xs">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {/* Peso natura */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-medium text-stone-600">Peso natura vs. cultura</label>
+              <span className="text-xs font-mono text-stone-500">{pesoNatura}% natura</span>
+            </div>
+            <input type="range" min={0} max={100} value={pesoNatura}
+              onChange={e => setPesoNatura(Number(e.target.value))}
+              className="w-full accent-forest-600" />
+            <div className="flex justify-between text-[10px] text-stone-400 mt-0.5">
+              <span>Solo cultura</span><span>Equilibrato</span><span>Solo natura</span>
+            </div>
+          </div>
+
+          {/* Preferenza sforzo */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-medium text-stone-600">Preferenza sforzo</label>
+              <span className="text-xs font-mono text-stone-500">{prefSforzo}/100</span>
+            </div>
+            <input type="range" min={0} max={100} value={prefSforzo}
+              onChange={e => setPrefSforzo(Number(e.target.value))}
+              className="w-full accent-forest-600" />
+            <div className="flex justify-between text-[10px] text-stone-400 mt-0.5">
+              <span>Passeggiata</span><span>Moderato</span><span>Sfida</span>
+            </div>
+          </div>
+
+          {/* Preferenza durata */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-medium text-stone-600">Durata ideale</label>
+              <span className="text-xs font-mono text-stone-500">
+                {prefDurata >= 60 ? `${Math.floor(prefDurata / 60)}h${prefDurata % 60 > 0 ? ` ${prefDurata % 60}min` : ''}` : `${prefDurata} min`}
+              </span>
+            </div>
+            <input type="range" min={60} max={480} step={30} value={prefDurata}
+              onChange={e => setPrefDurata(Number(e.target.value))}
+              className="w-full accent-forest-600" />
+            <div className="flex justify-between text-[10px] text-stone-400 mt-0.5">
+              <span>1h</span><span>4h30</span><span>8h</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition"
+          >
+            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {saving ? 'Aggiornamento CTS…' : 'Salva e ricalcola CTS'}
+          </button>
+        </div>
+      )}
+
+      {status && (
+        <p className={`text-xs font-medium ${status.ok ? 'text-forest-600' : 'text-red-600'}`}>
           {status.ok ? '✓ ' : '✗ '}{status.msg}
         </p>
       )}
@@ -462,6 +629,12 @@ export default function ProfiloPage() {
         <div className="pt-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">Dati biometrici</p>
           <BiometricSettingsSection />
+        </div>
+
+        {/* CTS settings */}
+        <div className="pt-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">Comfort TrailScore</p>
+          <ComfortTrailScoreSection />
         </div>
 
         {/* AI settings */}

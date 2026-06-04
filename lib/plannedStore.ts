@@ -1,6 +1,7 @@
 import type { TrackPoint } from './tcxParser'
 import type { HikeAssessment } from './hikeAssessment'
 import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
+import type { BeautyScore } from './beautyScore'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 
@@ -24,6 +25,8 @@ export interface PlannedHike {
   cachedPois?:          unknown[]
   cachedPoiWiki?:       unknown[]
   cachedGuide?:         string
+  cachedBeautyScore?:   BeautyScore
+  cachedTrailScore?:    number
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -97,7 +100,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedBeautyScore' | 'cachedTrailScore'>>,
 ): Promise<void> {
   await apiFetch('/api/planned', {
     method: 'PATCH',
