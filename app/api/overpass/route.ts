@@ -14,16 +14,21 @@ export async function POST(req: NextRequest) {
   const body = await req.text()
 
   for (const endpoint of ENDPOINTS) {
+    const ac = new AbortController()
+    const timer = setTimeout(() => ac.abort(), 8000)
     let upstream: Response
     try {
       upstream = await fetch(endpoint, {
         method:  'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
+        signal:  ac.signal,
       })
     } catch {
+      clearTimeout(timer)
       continue
     }
+    clearTimeout(timer)
 
     if (!upstream.ok) continue
 

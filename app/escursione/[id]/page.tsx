@@ -169,8 +169,9 @@ export default function EscursionePage() {
       userAge:        userAge > 0 ? userAge : undefined,
     }
     if (activity.trailScore != null) {
-      // Score already in DB — just render it, no recalculation
-      setTrailResult(computeTrailScore(beautyScore, params, pesoNatura))
+      // Score already in DB — compute breakdown for display but keep ts = stored value
+      const computed = computeTrailScore(beautyScore, params, pesoNatura)
+      setTrailResult({ ...computed, ts: activity.trailScore })
       return
     }
     // One-time migration: compute and persist for activities that predate DB storage
