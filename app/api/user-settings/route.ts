@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     derivedFCmax:       age > 0 ? deriveFCmax(age) : 0,
     beautyNaturaWeight: (data?.beauty_natura_weight as number) ?? 50,
     prefSforzo:         (data?.pref_sforzo           as number) ?? 50,
-    prefDurata:          (data?.pref_durata             as number) ?? 50,
+    prefDurata:          (data?.pref_durata             as number) ?? 270,
     hikerFaceDataUrl:   (data?.hiker_face_data_url   as string) ?? null,
     displayName:        (data?.display_name           as string) ?? null,
     personalDelta:      (data?.personal_delta         as number) ?? null,
