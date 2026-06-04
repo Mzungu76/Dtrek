@@ -23,20 +23,27 @@ import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import PdfExportButton from '@/components/PdfExportButton'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
-import { type PoiItem } from '@/lib/overpass'
+import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
+import { computeBeautyScore } from '@/lib/beautyScore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
+
+const EMPTY_TERRAIN: TerrainContext = {
+  hasForest: false, hasRiver: false, hasStream: false, hasLake: false,
+  hasPond: false, hasGlacier: false, hasCoast: false, isProtected: false,
+  isNationalPark: false, openTerrain: false, surfaces: [],
+}
 
 function ratingColor(n: number) {
   return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
@@ -73,6 +80,7 @@ export default function EscursionePage() {
   const [poiWikiEntries,  setPoiWikiEntries]  = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
   const [ctsResult,       setCtsResult]       = useState<TrailScoreResult | null>(null)
+  const [ctsComputing,    setCtsComputing]    = useState(false)
   const [prefsLoaded,     setPrefsLoaded]     = useState(false)
   const [pesoNatura,      setPesoNatura]      = useState(50)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
@@ -175,6 +183,43 @@ export default function EscursionePage() {
     setSaving(true)
     await deleteActivity(id)
     router.push('/')
+  }
+
+  const handleComputeCts = async () => {
+    const gps = (activity.trackPoints ?? [])
+      .filter(p => p.lat && p.lon)
+      .map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    setCtsComputing(true)
+    try {
+      const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+      const [rawPois, terrain] = await Promise.all([
+        Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
+        Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
+      ])
+      const pois = rawPois as PoiItem[]
+      const rawWiki = pois.length
+        ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+        : []
+      const wiki = (rawWiki as { wiki: WikiPage }[]).map(e => e.wiki)
+      const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, activity.elevationGain, activity.altitudeMax, activity.distanceMeters)
+      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const { ts } = computeTrailScore(bs, {
+        distanceMeters: activity.distanceMeters,
+        elevationGain:  activity.elevationGain,
+        elevationLoss:  activity.elevationLoss ?? 0,
+        altitudeMax:    activity.altitudeMax,
+        avgHeartRate:   activity.avgHeartRate,
+        prefSforzo:     prefs.prefSforzo,
+        prefDurata:     prefs.prefDurata,
+      }, prefs.beautyNaturaWeight ?? 50)
+      await updateActivityMeta(id, { linkedBeautyScore: bs, trailScore: ts })
+      setActivity(prev => prev ? { ...prev, linkedBeautyScore: bs, trailScore: ts } : prev)
+    } catch (e) {
+      console.error('CTS computation error:', e)
+    } finally {
+      setCtsComputing(false)
+    }
   }
 
   const dateStr   = format(new Date(activity.startTime), "EEEE d MMMM yyyy", { locale: it })
@@ -480,13 +525,29 @@ export default function EscursionePage() {
         })()}
 
         {/* Comfort TrailScore */}
-        {(ctsResult || (activity as StoredActivity & { trailScore?: number }).trailScore != null) && (
+        {hasGps && (
           <section className="space-y-2">
             <h2 className="font-display text-xl font-semibold text-stone-700">Comfort TrailScore</h2>
-            <ComfortTrailScoreWidget
-              result={ctsResult}
-              cached={(activity as StoredActivity & { trailScore?: number }).trailScore}
-            />
+            {(ctsResult || (activity as StoredActivity & { trailScore?: number }).trailScore != null) ? (
+              <ComfortTrailScoreWidget
+                result={ctsResult}
+                cached={(activity as StoredActivity & { trailScore?: number }).trailScore}
+              />
+            ) : (
+              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 flex items-center justify-between gap-4">
+                <p className="text-sm text-stone-500">Il punteggio non è ancora stato calcolato per questa escursione.</p>
+                <button
+                  onClick={handleComputeCts}
+                  disabled={ctsComputing}
+                  className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                >
+                  {ctsComputing
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Calcolo…</>
+                    : <><RefreshCw className="w-4 h-4" /> Calcola CTS</>
+                  }
+                </button>
+              </div>
+            )}
           </section>
         )}
 
