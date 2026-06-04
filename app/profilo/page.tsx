@@ -2,6 +2,9 @@
 import { useEffect, useRef, useState } from 'react'
 import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
+import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
+import { computeTrailScore } from '@/lib/trailScore'
+import type { BeautyScore } from '@/lib/beautyScore'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
   Loader2, ShieldCheck, Sparkles, Lock, Leaf, PersonStanding, Footprints, Timer,
@@ -228,10 +231,45 @@ function LootSettingsSection() {
       body:    JSON.stringify(body),
     })
     const json = await res.json().catch(() => ({}))
-    setSaving(false)
-    setStatus(res.ok
-      ? { ok: true,  msg: 'Profilo salvato.' }
-      : { ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
+    if (!res.ok) {
+      setSaving(false)
+      setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
+      return
+    }
+
+    // Ricalcola i TrailScore di tutti i percorsi pianificati con le nuove preferenze e
+    // sovrascrive immediatamente il valore in database. Nessun ricalcolo avverrà mai
+    // al semplice caricamento delle pagine.
+    setStatus({ ok: true, msg: 'Salvato. Aggiornamento punteggi in corso…' })
+    try {
+      const prefs = {
+        userAge:       age > 0 ? age : undefined,
+        personalDelta: (json.personalDelta ?? undefined) as number | undefined,
+        hrHikeCount:   0 as number,
+        prefSforzo:    sforzaW,
+        prefDurata:    duraW,
+      }
+      const hikes = await getAllPlanned()
+      const updates = hikes
+        .filter(h => (h.cachedBeautyScore?.categories?.length ?? 0) > 0)
+        .map(h => {
+          const bs = h.cachedBeautyScore as BeautyScore
+          const { ts } = computeTrailScore(bs, {
+            distanceMeters: h.distanceMeters,
+            elevationGain:  h.elevationGain,
+            elevationLoss:  h.elevationLoss,
+            altitudeMax:    h.altitudeMax,
+            ...prefs,
+          }, naturaW)
+          return { id: h.id, ts }
+        })
+      await Promise.all(updates.map(u => updatePlannedMeta(u.id, { cachedTrailScore: u.ts })))
+      setStatus({ ok: true, msg: `Profilo salvato · ${updates.length} punteggi aggiornati.` })
+    } catch {
+      setStatus({ ok: true, msg: 'Profilo salvato.' })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const culturaW = 100 - naturaW
