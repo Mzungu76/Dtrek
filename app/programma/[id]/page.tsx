@@ -255,7 +255,7 @@ export default function PlannedHikePage() {
     setHike(prev => prev ? { ...prev, cachedPois: pois, cachedPoiWiki: poiWikiEntries } : prev)
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch user profile for TrailScore personal correction
+  // Fetch user profile — needed only for the one-time fallback computation below
   useEffect(() => {
     fetch('/api/user-settings').then(r => r.json()).then(d => {
       if (d.userAge)                    setUserAge(d.userAge)
@@ -267,9 +267,19 @@ export default function PlannedHikePage() {
     }).catch(() => {}).finally(() => setPrefsLoaded(true))
   }, [])
 
-  // Compute TrailScore when beauty score and user prefs are ready
+  // Compute TrailScore ONLY if it is missing from DB (first import before the new upload flow,
+  // or hike created before this architecture change). Normal case: score already in DB, skip.
   useEffect(() => {
     if (!beautyScore || !hike || !prefsLoaded) return
+    if (hike.cachedTrailScore != null) {
+      // Score already in DB — just populate the display result without saving
+      setTrailResult(computeTrailScore(beautyScore, {
+        distanceMeters: hike.distanceMeters, elevationGain: hike.elevationGain,
+        elevationLoss: hike.elevationLoss, altitudeMax: hike.altitudeMax,
+      }, pesoNatura))
+      return
+    }
+    // One-time fallback: compute and persist for hikes that lack a stored score
     const result = computeTrailScore(
       beautyScore,
       {
@@ -286,11 +296,8 @@ export default function PlannedHikePage() {
       pesoNatura,
     )
     setTrailResult(result)
-    // Cache TS if it changed
-    if (hike.cachedTrailScore !== result.ts) {
-      updatePlannedMeta(hike.id, { cachedTrailScore: result.ts }).catch(() => {})
-      setHike(prev => prev ? { ...prev, cachedTrailScore: result.ts } : prev)
-    }
+    updatePlannedMeta(hike.id, { cachedTrailScore: result.ts }).catch(() => {})
+    setHike(prev => prev ? { ...prev, cachedTrailScore: result.ts } : prev)
   }, [beautyScore, hike?.id, prefsLoaded, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (

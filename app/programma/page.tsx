@@ -3,9 +3,8 @@ import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
-import { getAllPlanned, updatePlannedMeta, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
-import { computeTrailScore, tsLabel } from '@/lib/trailScore'
-import type { BeautyScore } from '@/lib/beautyScore'
+import { getAllPlanned, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { tsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -55,13 +54,6 @@ export default function ProgrammaPage() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [sortBy,    setSortBy]    = useState<'date' | 'km' | 'dplus' | 'ts' | 'suitability'>('date')
-  const [userAge,       setUserAge]       = useState(0)
-  const [pesoNatura,    setPesoNatura]    = useState(50)
-  const [prefSforzo,    setPrefSforzo]    = useState(50)
-  const [prefDurata,     setPrefDurata]     = useState(270)
-  const [personalDelta, setPersonalDelta] = useState<number | null>(null)
-  const [hrHikeCount,   setHrHikeCount]   = useState(0)
-  const [prefsLoaded,   setPrefsLoaded]   = useState(false)
 
   const sortedHikes = useMemo(() => {
     const arr = [...hikes]
@@ -81,58 +73,6 @@ export default function ProgrammaPage() {
   useEffect(() => {
     getAllPlanned(setHikes).then(setHikes).finally(() => setLoading(false))
   }, [])
-
-  useEffect(() => {
-    fetch('/api/user-settings').then(r => r.json()).then(d => {
-      if (d.userAge)                    setUserAge(d.userAge)
-      if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
-      if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
-      if (d.prefDurata          != null) setPrefDurata(d.prefDurata)
-      if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
-      if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
-    }).catch(() => {}).finally(() => setPrefsLoaded(true))
-  }, [])
-
-  // Compute TS client-side from cached categories + current prefs (all hikes, every time prefs change)
-  useEffect(() => {
-    if (!prefsLoaded) return
-    const toCompute = hikes.filter(
-      h => (h.cachedBeautyScore?.categories?.length ?? 0) > 0
-    )
-    if (!toCompute.length) return
-    const updMap: Record<string, number> = {}
-    for (const hike of toCompute) {
-      const cats = hike.cachedBeautyScore!.categories!
-      const bs: BeautyScore = {
-        categories:  cats as BeautyScore['categories'],
-        overall:     hike.cachedBeautyScore!.overall,
-        grade:       hike.cachedBeautyScore!.grade,
-        gradeLabel:  hike.cachedBeautyScore!.gradeLabel ?? '',
-        color:       hike.cachedBeautyScore!.color,
-      }
-      const { ts } = computeTrailScore(bs, {
-        distanceMeters: hike.distanceMeters,
-        elevationGain:  hike.elevationGain,
-        elevationLoss:  hike.elevationLoss,
-        altitudeMax:    hike.altitudeMax,
-        userAge:        userAge > 0 ? userAge : undefined,
-        personalDelta:  personalDelta ?? undefined,
-        hrHikeCount,
-        prefSforzo,
-        prefDurata,
-      }, pesoNatura)
-      updMap[hike.id] = ts
-      // Write to DB so TS persists across sessions with current prefs
-      if (hike.cachedTrailScore !== ts) {
-        updatePlannedMeta(hike.id, { cachedTrailScore: ts }).catch(() => {})
-      }
-    }
-    setHikes(prev => {
-      const hasChanges = prev.some(h => updMap[h.id] !== undefined && updMap[h.id] !== h.cachedTrailScore)
-      if (!hasChanges) return prev
-      return prev.map(h => updMap[h.id] !== undefined ? { ...h, cachedTrailScore: updMap[h.id] } : h)
-    })
-  }, [hikes.length, prefsLoaded, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount])
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -237,7 +177,7 @@ export default function ProgrammaPage() {
                 >
                   {/* ── TS header — top of card ── */}
                   {(() => {
-                    const cts = prefsLoaded ? hike.cachedTrailScore : undefined
+                    const cts = hike.cachedTrailScore
                     const tsInfo = cts !== undefined ? tsLabel(cts) : null
                     if (tsInfo && cts !== undefined) {
                       return (

@@ -6,10 +6,14 @@ import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivity } from '@/lib/blobStore'
 import { parseGpx } from '@/lib/gpxParser'
-import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { savePlanned, updatePlannedMeta, deletePlanned, getAllPlanned, getPlannedById, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
+import { computeBeautyScore } from '@/lib/beautyScore'
+import type { TerrainContext, PoiItem } from '@/lib/overpass'
+import type { WikiPage } from '@/lib/wikipedia'
+import { computeTrailScore } from '@/lib/trailScore'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'saving' | 'success' | 'error'
@@ -379,6 +383,40 @@ function GpxUploader() {
       }
 
       await savePlanned(hike)
+
+      // Compute beauty score + TrailScore immediately after save — scores are stored once here,
+      // never recalculated on page load. Recalculated only when user changes settings.
+      if (hike.cachedPois && hike.cachedPois.length > 0) {
+        try {
+          const EMPTY_TERRAIN: TerrainContext = {
+            hasForest:false,hasRiver:false,hasStream:false,hasLake:false,hasPond:false,
+            hasGlacier:false,hasCoast:false,isProtected:false,isNationalPark:false,
+            openTerrain:false,surfaces:[],
+          }
+          const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+          const bs = computeBeautyScore(
+            hike.cachedPois as PoiItem[],
+            (hike.cachedPoiWiki ?? []) as WikiPage[],
+            EMPTY_TERRAIN,
+            hike.elevationGain,
+            hike.altitudeMax,
+            hike.distanceMeters,
+          )
+          const { ts } = computeTrailScore(bs, {
+            distanceMeters: hike.distanceMeters,
+            elevationGain:  hike.elevationGain,
+            elevationLoss:  hike.elevationLoss,
+            altitudeMax:    hike.altitudeMax,
+            userAge:        prefs.userAge > 0 ? prefs.userAge : undefined,
+            personalDelta:  prefs.personalDelta ?? undefined,
+            hrHikeCount:    prefs.hrHikeCount,
+            prefSforzo:     prefs.prefSforzo  ?? 50,
+            prefDurata:     prefs.prefDurata  ?? 270,
+          }, prefs.beautyNaturaWeight ?? 50)
+          updatePlannedMeta(parsed.id, { cachedBeautyScore: bs, cachedTrailScore: ts }).catch(() => {})
+        } catch {}
+      }
+
       setStatus('success')
       setTimeout(() => router.push(`/programma/${encodeURIComponent(parsed.id)}`), 1200)
     } catch (e) {
