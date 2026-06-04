@@ -432,7 +432,6 @@ export default function StatistichePage() {
       { label: 'Durata stim.', get: (h: PlannedHikeMeta) => h.estimatedTimeSeconds / 3600 },
       { label: 'Quota max',   get: (h: PlannedHikeMeta) => h.altitudeMax },
       { label: 'D+/km',       get: (h: PlannedHikeMeta) => difficultyIndex(h.elevationGain, h.distanceMeters) },
-      { label: 'Bellezza',    get: (h: PlannedHikeMeta) => (h.cachedBeautyScore?.overall ?? 0) * 10 },
     ]
     return metrics.map(m => {
       const vals = selectedPlannedMeta.map(h => m.get(h))
@@ -1069,7 +1068,6 @@ export default function StatistichePage() {
                                     <p className="text-sm font-medium text-stone-700 truncate">{h.title}</p>
                                     <p className="text-xs text-stone-400">
                                       {(h.distanceMeters/1000).toFixed(1)} km · ↑{Math.round(h.elevationGain)} m
-                                      {h.cachedBeautyScore && ` · ★ ${h.cachedBeautyScore.overall.toFixed(1)}`}
                                     </p>
                                   </div>
                                 </button>
@@ -1108,7 +1106,6 @@ export default function StatistichePage() {
                                       { label: 'Indice diff.',    fmt: (h: PlannedHikeMeta) => `${difficultyIndex(h.elevationGain, h.distanceMeters)} m/km` },
                                       { label: 'Difficoltà',      fmt: (h: PlannedHikeMeta) => h.assessment?.difficulty ?? '—' },
                                       { label: 'Adatta a te',     fmt: (h: PlannedHikeMeta) => h.assessment ? `${h.assessment.suitabilityScore}%` : '—' },
-                                      { label: 'Bellezza',        fmt: (h: PlannedHikeMeta) => h.cachedBeautyScore ? `${h.cachedBeautyScore.overall.toFixed(1)}/10` : '—' },
                                     ].map(({ label, fmt }) => (
                                       <tr key={label}>
                                         <td className="px-4 py-2.5 text-stone-500 font-medium text-xs">{label}</td>

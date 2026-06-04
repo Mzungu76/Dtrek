@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase }            from '@/lib/supabase'
 import { getUserFromRequest }  from '@/lib/supabaseAuth'
-import { deriveFCmax }         from '@/lib/trailScore'
+
+/** Tanaka formula for max heart rate: 211 − 0.64 × age */
+function deriveFCmax(age: number): number {
+  return Math.round(211 - 0.64 * age)
+}
 
 export const dynamic = 'force-dynamic'
 

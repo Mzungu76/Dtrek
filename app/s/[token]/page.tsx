@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: { params: { token: string } }
   if (!a) return { title: 'Escursione non trovata · DTrek' }
 
   const km   = (a.distanceMeters / 1000).toFixed(1)
-  const desc = `${km} km · ${Math.round(a.elevationGain)} m D+ · ${fmtDur(a.totalTimeSeconds)}${a.trailScore !== undefined ? ` · TrailScore ${Math.round(a.trailScore)}` : ''}`
+  const desc = `${km} km · ${Math.round(a.elevationGain)} m D+ · ${fmtDur(a.totalTimeSeconds)}`
   const title = `${a.title} · DTrek`
 
   return {
@@ -93,16 +93,6 @@ export default async function PublicSharePage({ params }: { params: { token: str
               <p className="text-sm text-stone-500 mt-1">
                 {a.ownerName ? `di ${a.ownerName}` : 'Escursione'}{dateStr ? ` · ${dateStr}` : ''}
               </p>
-              {a.trailScore !== undefined && (
-                <div className="inline-flex items-center gap-2 mt-3 rounded-full pl-1 pr-3 py-1" style={{ backgroundColor: (a.trailColor ?? '#16a34a') + '18' }}>
-                  <span className="flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-bold" style={{ backgroundColor: a.trailColor ?? '#16a34a' }}>
-                    {Math.round(a.trailScore)}
-                  </span>
-                  <span className="text-sm font-semibold" style={{ color: a.trailColor ?? '#16a34a' }}>
-                    TrailScore · {a.trailLabel}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
         </section>

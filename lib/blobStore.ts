@@ -10,10 +10,7 @@ export interface StoredActivity extends TcxActivity {
   userRatingNote?: string
   linkedPlannedId?: string
   linkedPlannedTrackPoints?: TrackPoint[]
-  linkedBeautyScore?: { overall: number; grade: string; color: string; gradeLabel?: string; categories?: { key: string; label: string; emoji: string; score: number; grade: string; gradeLabel: string; color: string; reasons: string[] }[] }
   soddisfazione?: number  // satisfaction 1–10
-  lootScore?: number      // cached LootScore 0–100
-  trailScore?: number     // cached TrailScore 0–100
 }
 
 export interface ActivityMeta {
@@ -36,10 +33,7 @@ export interface ActivityMeta {
   routePolyline?: [number, number][]
   userRating?: number
   userRatingNote?: string
-  linkedBeautyScore?: { overall: number; grade: string; color: string; gradeLabel?: string; categories?: { key: string; label: string; emoji: string; score: number; grade: string; gradeLabel: string; color: string; reasons: string[] }[] }
   soddisfazione?: number
-  lootScore?: number
-  trailScore?: number
   elevationProfile?: number[]  // downsampled altitude (m) for share-card profile chart
 }
 
@@ -74,10 +68,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     fileName:        a.fileName,
     userRating:      a.userRating,
     userRatingNote:  a.userRatingNote,
-    linkedBeautyScore: a.linkedBeautyScore,
     soddisfazione:   a.soddisfazione,
-    lootScore:       a.lootScore,
-    trailScore:      a.trailScore,
   }
 }
 
@@ -147,7 +138,7 @@ export async function saveActivity(activity: StoredActivity): Promise<void> {
 /** Patches Supabase, then applies the same patch to local cached copies. */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'linkedBeautyScore' | 'soddisfazione' | 'lootScore' | 'trailScore'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione'>>
 ): Promise<void> {
   // Update local caches optimistically (before API) so scores always persist locally
   lsGet<StoredActivity>(LS_KEYS.activity(id)).then((local) => {

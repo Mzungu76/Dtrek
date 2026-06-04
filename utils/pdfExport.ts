@@ -591,30 +591,15 @@ export async function exportActivityPdf(activity: StoredActivity): Promise<void>
     }
   }
 
-  // Rating + beauty score combined
-  const hasRating = !!activity.userRating
-  const hasBeauty = !!activity.linkedBeautyScore
-  if (hasRating || hasBeauty) {
+  // Rating
+  if (activity.userRating) {
     if (y + 18 > 270) { doc.addPage(); y = 14 }
     y = sectionBar(doc, 'Valutazioni', M, y + 2, W, FOREST)
-
-    if (hasRating) {
-      const rc: [number,number,number] = activity.userRating! >= 9 ? [22,163,74] : activity.userRating! >= 7 ? [132,204,22] : activity.userRating! >= 5 ? [249,115,22] : [239,68,68]
-      doc.setFillColor(...rc); doc.roundedRect(M, y, 18, 13, 2, 2, 'F')
-      txt(doc, String(activity.userRating!), M+5, y+9, { size: 15, bold: true, color: WHITE })
-      txt(doc, '/10  Il tuo voto', M+20, y+5.5, { size: 8 })
-      if (activity.userRatingNote) txt(doc, safeText(`"${activity.userRatingNote}"`), M+20, y+10.5, { size: 8, color: STONE })
-    }
-
-    if (hasBeauty) {
-      const bs = activity.linkedBeautyScore!
-      const bc = hexColor(bs.color)
-      const bx = hasRating ? M + 100 : M
-      doc.setFillColor(...bc); doc.roundedRect(bx, y, 18, 13, 2, 2, 'F')
-      txt(doc, bs.overall.toFixed(1), bx+2, y+9, { size: 13, bold: true, color: WHITE })
-      txt(doc, '/10  Pagella automatica (OSM + Wikipedia)', bx+20, y+5.5, { size: 8 })
-      txt(doc, safeText(bs.grade), bx+20, y+10.5, { size: 8, color: STONE })
-    }
+    const rc: [number,number,number] = activity.userRating >= 9 ? [22,163,74] : activity.userRating >= 7 ? [132,204,22] : activity.userRating >= 5 ? [249,115,22] : [239,68,68]
+    doc.setFillColor(...rc); doc.roundedRect(M, y, 18, 13, 2, 2, 'F')
+    txt(doc, String(activity.userRating), M+5, y+9, { size: 15, bold: true, color: WHITE })
+    txt(doc, '/10  Il tuo voto', M+20, y+5.5, { size: 8 })
+    if (activity.userRatingNote) txt(doc, safeText(`"${activity.userRatingNote}"`), M+20, y+10.5, { size: 8, color: STONE })
     y += 18
   }
 
@@ -688,20 +673,7 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
     const mapH = 55
     const mapImg = await fetchSatMap(sampledPoly, 1440, Math.round(1440 * mapH / W), '#38bdf8')
 
-    if (hike.cachedBeautyScore) {
-      // Map + beauty score side by side
-      const mapW = W - 38
-      doc.addImage(mapImg, 'JPEG', M, y, mapW, mapH)
-      const bs = hike.cachedBeautyScore
-      const bc = hexColor(bs.color)
-      const sx = M + mapW + 3
-      const scoreBoxW = W - mapW - 3
-      doc.setFillColor(...bc); doc.roundedRect(sx, y, scoreBoxW, 18, 3, 3, 'F')
-      txt(doc, bs.overall.toFixed(1), sx + 3, y + 13, { size: 18, bold: true, color: WHITE })
-      txt(doc, '/10', sx + 3, y + 21, { size: 7.5, color: STONE })
-      txt(doc, 'Pagella automatica', sx + 3, y + 25.5, { size: 7, color: STONE })
-      txt(doc, 'OSM + Wikipedia', sx + 3, y + 30, { size: 7, color: STONE })
-    } else {
+    {
       doc.addImage(mapImg, 'JPEG', M, y, W, mapH)
     }
     y += mapH + 3

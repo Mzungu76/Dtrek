@@ -21,8 +21,6 @@ export interface PlannedHike {
   routePolyline?:       [number, number][]
   trackPoints?:         TrackPoint[]
   assessment?:          HikeAssessment
-  cachedBeautyScore?:   { overall: number; grade: string; color: string; gradeLabel?: string; categories?: { key: string; label: string; emoji: string; score: number; grade: string; gradeLabel: string; color: string; reasons: string[] }[] }
-  cachedTrailScore?:    number
   cachedPois?:          unknown[]
   cachedPoiWiki?:       unknown[]
   cachedGuide?:         string
@@ -99,7 +97,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide'>>,
 ): Promise<void> {
   await apiFetch('/api/planned', {
     method: 'PATCH',

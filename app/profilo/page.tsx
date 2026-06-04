@@ -2,13 +2,9 @@
 import { useEffect, useRef, useState } from 'react'
 import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
-import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
-import { getAllActivities, updateActivityMeta } from '@/lib/blobStore'
-import { computeTrailScore } from '@/lib/trailScore'
-import type { BeautyScore } from '@/lib/beautyScore'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock, Leaf, PersonStanding, Footprints, Timer,
+  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding,
 } from 'lucide-react'
 
 // ── Claude API key section ─────────────────────────────────────────────────
@@ -189,18 +185,15 @@ function SubscriptionTeaser() {
   )
 }
 
-// ── TrailScore / biometric settings ───────────────────────────────────────────
+// ── Biometric settings ────────────────────────────────────────────────────────
 
-function LootSettingsSection() {
-  const [age,       setAge]       = useState(0)
-  const [weight,    setWeight]    = useState(0)
-  const [height,    setHeight]    = useState(0)
-  const [naturaW,   setNaturaW]   = useState(50)
-  const [sforzaW,   setSforzaW]   = useState(50)
-  const [duraW,     setDuraW]     = useState(270)
-  const [loading,   setLoading]   = useState(true)
-  const [saving,    setSaving]    = useState(false)
-  const [status,    setStatus]    = useState<{ ok: boolean; msg: string } | null>(null)
+function BiometricSettingsSection() {
+  const [age,     setAge]     = useState(0)
+  const [weight,  setWeight]  = useState(0)
+  const [height,  setHeight]  = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [saving,  setSaving]  = useState(false)
+  const [status,  setStatus]  = useState<{ ok: boolean; msg: string } | null>(null)
 
   // Derived FCmax via Tanaka: 211 − 0.64 × age
   const derivedFCmax = age >= 10 && age <= 90 ? Math.round(211 - 0.64 * age) : 0
@@ -209,12 +202,9 @@ function LootSettingsSection() {
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
-        if (d.userAge)        setAge(d.userAge)
-        if (d.userWeightKg)   setWeight(d.userWeightKg)
-        if (d.userHeightCm)   setHeight(d.userHeightCm)
-        if (d.beautyNaturaWeight !== undefined) setNaturaW(d.beautyNaturaWeight)
-        if (d.prefSforzo         !== undefined) setSforzaW(d.prefSforzo)
-        if (d.prefDurata         !== undefined) setDuraW(d.prefDurata)
+        if (d.userAge)      setAge(d.userAge)
+        if (d.userWeightKg) setWeight(d.userWeightKg)
+        if (d.userHeightCm) setHeight(d.userHeightCm)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -222,85 +212,31 @@ function LootSettingsSection() {
 
   async function handleSave() {
     setSaving(true); setStatus(null)
-    const body: Record<string, number> = { beautyNaturaWeight: naturaW, prefSforzo: sforzaW, prefDurata: duraW }
-    if (age > 0)    body.userAge       = age
-    if (weight > 0) body.userWeightKg  = weight
-    if (height > 0) body.userHeightCm  = height
+    const body: Record<string, number> = {}
+    if (age > 0)    body.userAge      = age
+    if (weight > 0) body.userWeightKg = weight
+    if (height > 0) body.userHeightCm = height
     const res = await fetch('/api/user-settings', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     })
     const json = await res.json().catch(() => ({}))
+    setSaving(false)
     if (!res.ok) {
-      setSaving(false)
       setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
-      return
-    }
-
-    // Ricalcola i TrailScore di tutti i percorsi pianificati con le nuove preferenze e
-    // sovrascrive immediatamente il valore in database. Nessun ricalcolo avverrà mai
-    // al semplice caricamento delle pagine.
-    setStatus({ ok: true, msg: 'Salvato. Aggiornamento punteggi in corso…' })
-    try {
-      const prefs = {
-        userAge:       age > 0 ? age : undefined,
-        personalDelta: (json.personalDelta ?? undefined) as number | undefined,
-        hrHikeCount:   0 as number,
-        prefSforzo:    sforzaW,
-        prefDurata:    duraW,
-      }
-      const hikes = await getAllPlanned()
-      const updates = hikes
-        .filter(h => (h.cachedBeautyScore?.categories?.length ?? 0) > 0)
-        .map(h => {
-          const bs = h.cachedBeautyScore as BeautyScore
-          const { ts } = computeTrailScore(bs, {
-            distanceMeters: h.distanceMeters,
-            elevationGain:  h.elevationGain,
-            elevationLoss:  h.elevationLoss,
-            altitudeMax:    h.altitudeMax,
-            ...prefs,
-          }, naturaW)
-          return { id: h.id, ts }
-        })
-      await Promise.all(updates.map(u => updatePlannedMeta(u.id, { cachedTrailScore: u.ts })))
-
-      // Ricalcola anche il TS di tutte le attività completate con il linkedBeautyScore salvato
-      const activities = await getAllActivities()
-      const actUpdates = activities
-        .filter(a => (a.linkedBeautyScore?.categories?.length ?? 0) > 0)
-        .map(a => {
-          const bs = a.linkedBeautyScore as BeautyScore
-          const { ts } = computeTrailScore(bs, {
-            distanceMeters: a.distanceMeters,
-            elevationGain:  a.elevationGain,
-            elevationLoss:  a.elevationLoss,
-            altitudeMax:    a.altitudeMax,
-            avgHeartRate:   a.avgHeartRate > 0 ? a.avgHeartRate : undefined,
-            userAge:        age > 0 ? age : undefined,
-          }, naturaW)
-          return { id: a.id, ts }
-        })
-      await Promise.all(actUpdates.map(u => updateActivityMeta(u.id, { trailScore: u.ts })))
-
-      setStatus({ ok: true, msg: `Profilo salvato · ${updates.length + actUpdates.length} punteggi aggiornati.` })
-    } catch {
-      setStatus({ ok: true, msg: 'Profilo salvato.' })
-    } finally {
-      setSaving(false)
+    } else {
+      setStatus({ ok: true, msg: 'Dati salvati correttamente.' })
     }
   }
-
-  const culturaW = 100 - naturaW
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
       <div className="flex items-center gap-2.5">
-        <span className="text-lg font-bold text-forest-700">TS</span>
+        <PersonStanding className="w-5 h-5 text-forest-600 shrink-0" />
         <div>
-          <h2 className="text-sm font-semibold text-stone-800">TrailScore — profilo personale</h2>
-          <p className="text-xs text-stone-400">Parametri fisiologici per il calcolo della fatica reale</p>
+          <h2 className="text-sm font-semibold text-stone-800">Dati biometrici</h2>
+          <p className="text-xs text-stone-400">Parametri fisiologici usati per la valutazione AI dei percorsi</p>
         </div>
       </div>
 
@@ -310,148 +246,52 @@ function LootSettingsSection() {
         </div>
       ) : (
         <>
-          {/* Biometric profile */}
-          <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-3">
-              <PersonStanding className="w-4 h-4 text-forest-600" />
-              Dati antropometrici
-            </label>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Età</p>
-                <div className="relative">
-                  <input
-                    type="number" min={10} max={90}
-                    value={age || ''}
-                    onChange={e => { setAge(parseInt(e.target.value) || 0); setStatus(null) }}
-                    placeholder="40"
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">anni</span>
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Peso</p>
-                <div className="relative">
-                  <input
-                    type="number" min={30} max={250}
-                    value={weight || ''}
-                    onChange={e => { setWeight(parseInt(e.target.value) || 0); setStatus(null) }}
-                    placeholder="70"
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">kg</span>
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Altezza</p>
-                <div className="relative">
-                  <input
-                    type="number" min={100} max={250}
-                    value={height || ''}
-                    onChange={e => { setHeight(parseInt(e.target.value) || 0); setStatus(null) }}
-                    placeholder="170"
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">cm</span>
-                </div>
-              </div>
-            </div>
-            {derivedFCmax > 0 && (
-              <p className="mt-2 text-xs text-forest-700 bg-forest-50 rounded-lg px-3 py-1.5">
-                FC max derivata (formula Tanaka): <span className="font-bold">{derivedFCmax} bpm</span>
-              </p>
-            )}
-          </div>
-
-          {/* Natura / Cultura slider */}
-          <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-3">
-              <Leaf className="w-4 h-4 text-forest-500" />
-              Peso bellezza: Natura vs Cultura
-            </label>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-forest-700 font-semibold w-16">Natura {naturaW}%</span>
-              <input
-                type="range" min={0} max={100} step={5}
-                value={naturaW}
-                onChange={e => { setNaturaW(parseInt(e.target.value)); setStatus(null) }}
-                className="flex-1 accent-forest-600"
-              />
-              <span className="text-xs text-amber-700 font-semibold w-20 text-right">Cultura {culturaW}%</span>
-            </div>
-            <div className="flex justify-between mt-1.5 px-16">
-              <span className="text-[10px] text-stone-400">solo paesaggio</span>
-              <span className="text-[10px] text-stone-400">solo storia/cultura</span>
-            </div>
-          </div>
-
-          {/* Sforzo slider: Passeggiata ↔ Sfida */}
-          <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700 mb-3">
-              <Footprints className="w-4 h-4 text-terra-500" />
-              Sforzo: Passeggiata vs Sfida
-            </label>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-stone-600 font-semibold w-24 shrink-0">🚶 Passeggiata</span>
-              <input
-                type="range" min={0} max={100} step={5}
-                value={sforzaW}
-                onChange={e => { setSforzaW(parseInt(e.target.value)); setStatus(null) }}
-                className="flex-1 accent-terra-600"
-              />
-              <span className="text-xs text-terra-700 font-semibold w-16 text-right shrink-0">Sfida ⚡</span>
-            </div>
-            <div className="flex justify-between mt-1.5 px-[6.5rem]">
-              <span className="text-[10px] text-stone-400">percorsi facili</span>
-              <span className="text-[10px] text-stone-400 text-right">amo la fatica</span>
-            </div>
-          </div>
-
-          {/* Durata slider: 1h – 8h+ con tacche ogni 30min */}
-          {(() => {
-            const duraLabel = duraW >= 480 ? '8h+'
-              : duraW % 60 === 0 ? `${duraW / 60}h`
-              : `${Math.floor(duraW / 60)}h 30min`
-            return (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="flex items-center gap-1.5 text-sm font-medium text-stone-700">
-                    <Timer className="w-4 h-4 text-sky-500" />
-                    Durata preferita
-                  </label>
-                  <span className="text-sm font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full">
-                    {duraLabel}
-                  </span>
-                </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Età</p>
+              <div className="relative">
                 <input
-                  type="range" min={60} max={480} step={30}
-                  value={duraW}
-                  onChange={e => { setDuraW(parseInt(e.target.value)); setStatus(null) }}
-                  className="w-full accent-sky-600"
+                  type="number" min={10} max={90}
+                  value={age || ''}
+                  onChange={e => { setAge(parseInt(e.target.value) || 0); setStatus(null) }}
+                  placeholder="40"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
                 />
-                {/* Tacche ogni 30min — etichette alle ore intere */}
-                <div className="relative h-6 mt-0.5">
-                  {Array.from({ length: 15 }, (_, i) => {
-                    const mins = 60 + i * 30
-                    const isHour = mins % 60 === 0
-                    const pct = (i / 14) * 100
-                    return (
-                      <div key={i} className="absolute flex flex-col items-center -translate-x-1/2"
-                           style={{ left: `${pct}%` }}>
-                        <div className={`w-px ${isHour ? 'h-2 bg-stone-400' : 'h-1.5 bg-stone-200'}`} />
-                        {isHour && (
-                          <span className="text-[9px] text-stone-400 mt-0.5 whitespace-nowrap">
-                            {mins >= 480 ? '8h+' : `${mins / 60}h`}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">anni</span>
               </div>
-            )
-          })()}
+            </div>
+            <div>
+              <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Peso</p>
+              <div className="relative">
+                <input
+                  type="number" min={30} max={250}
+                  value={weight || ''}
+                  onChange={e => { setWeight(parseInt(e.target.value) || 0); setStatus(null) }}
+                  placeholder="70"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">kg</span>
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Altezza</p>
+              <div className="relative">
+                <input
+                  type="number" min={100} max={250}
+                  value={height || ''}
+                  onChange={e => { setHeight(parseInt(e.target.value) || 0); setStatus(null) }}
+                  placeholder="170"
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">cm</span>
+              </div>
+            </div>
+          </div>
+          {derivedFCmax > 0 && (
+            <p className="text-xs text-forest-700 bg-forest-50 rounded-lg px-3 py-1.5">
+              FC max derivata (formula Tanaka): <span className="font-bold">{derivedFCmax} bpm</span>
+            </p>
+          )}
 
           <button
             onClick={handleSave}
@@ -618,10 +458,10 @@ export default function ProfiloPage() {
           <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{saveError}</p>
         )}
 
-        {/* TrailScore settings */}
+        {/* Biometric settings */}
         <div className="pt-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">TrailScore</p>
-          <LootSettingsSection />
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">Dati biometrici</p>
+          <BiometricSettingsSection />
         </div>
 
         {/* AI settings */}

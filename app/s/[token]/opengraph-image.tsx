@@ -65,14 +65,6 @@ export default async function OgImage({ params }: { params: { token: string } })
                 <div style={{ fontSize: 17, color: 'rgba(255,255,255,0.5)', letterSpacing: 1 }}>{s.l}</div>
               </div>
             ))}
-            {a.trailScore !== undefined && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 92, height: 92, borderRadius: 92, background: a.trailColor ?? '#16a34a', fontSize: 42, fontWeight: 800 }}>
-                  {Math.round(a.trailScore)}
-                </div>
-                <div style={{ display: 'flex', fontSize: 16, color: 'rgba(255,255,255,0.7)', marginTop: 8 }}>TrailScore</div>
-              </div>
-            )}
           </div>
         </div>
       </div>

@@ -11,12 +11,9 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { fetchTerrainContext, type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
+import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import { computeBeautyScore } from '@/lib/beautyScore'
-import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
-import { TrailScoreWidget } from '@/components/TrailScoreWidget'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -30,12 +27,6 @@ import PdfExportButton from '@/components/PdfExportButton'
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
-
-const EMPTY_TERRAIN: TerrainContext = {
-  hasForest: false, hasRiver: false, hasStream: false,
-  hasLake: false, hasPond: false, hasGlacier: false, hasCoast: false,
-  isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [],
-}
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
@@ -157,18 +148,8 @@ export default function PlannedHikePage() {
   const [showStreetView, setShowStreetView] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
-  const [terrain,        setTerrain]       = useState<TerrainContext | null>(null)
-  const [loadingTerrain, setLoadingTerrain] = useState(false)  // kept for beauty-score spinner
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
-  const [userAge,         setUserAge]         = useState(0)
-  const [pesoNatura,      setPesoNatura]      = useState(50)
-  const [prefSforzo,      setPrefSforzo]      = useState(50)
-  const [prefDurata,       setPrefDurata]       = useState(270)
-  const [personalDelta,   setPersonalDelta]   = useState<number | null>(null)
-  const [hrHikeCount,     setHrHikeCount]     = useState(0)
-  const [trailResult,     setTrailResult]     = useState<TrailScoreResult | null>(null)
-  const [prefsLoaded,     setPrefsLoaded]     = useState(false)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -178,20 +159,6 @@ export default function PlannedHikePage() {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [hike])
 
-  // Merge geo-wiki + POI-wiki for beauty scoring; terrain enriches but isn't required
-  const allWikiPages = useMemo(
-    () => [...wikiPages, ...poiWikiEntries.map(e => e.wiki)],
-    [wikiPages, poiWikiEntries],
-  )
-  const beautyScore = useMemo(() => {
-    // Use cached score only if terrain-aware (version >= 1)
-    const cached = hike?.cachedBeautyScore
-    if (cached?.categories?.length && (cached as import('@/lib/beautyScore').BeautyScore).version) return cached as import('@/lib/beautyScore').BeautyScore
-    // Otherwise compute from live POI/wiki data + terrain context
-    if (!hike || (pois.length === 0 && allWikiPages.length === 0)) return null
-    return computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, hike.elevationGain, hike.altitudeMax, hike.distanceMeters)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pois, allWikiPages, terrain, hike])
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -202,112 +169,33 @@ export default function PlannedHikePage() {
       setDateVal(h.plannedDate ?? '')
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
-        // Full cache requires version >= 1 (terrain-aware)
-        const cachedBS = h.cachedBeautyScore as import('@/lib/beautyScore').BeautyScore | undefined
-        const hasFullCache = (h.cachedTrailScore !== undefined) && ((cachedBS?.categories?.length ?? 0) > 0) && ((cachedBS?.version ?? 0) >= 1)
-        if (hasFullCache) {
-          setPoisFullyLoaded(true)
-        } else if (h.cachedPois?.length) {
-          // Cached POIs available — use them but still fetch terrain for proper beauty score
+        if (h.cachedPois?.length) {
+          // Use cached POIs
           setPois(h.cachedPois as PoiItem[])
           if (h.cachedPoiWiki?.length) setPoiWikiEntries(h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[])
-          setLoadingTerrain(true)
-          fetchTerrainContext(gps)
-            .then(t => setTerrain(t))
-            .catch(() => {})
-            .finally(() => { setLoadingTerrain(false); setPoisFullyLoaded(true) })
+          setPoisFullyLoaded(true)
         } else {
-          // Fresh fetch — terrain and POIs in parallel, mark ready when both done
-          setLoadingTerrain(true)
-          let poisDone = false, terrainDone = false
-          const checkDone = () => {
-            if (poisDone && terrainDone) { setLoadingTerrain(false); setPoisFullyLoaded(true) }
-          }
-          fetchTerrainContext(gps)
-            .then(t => { setTerrain(t); terrainDone = true; checkDone() })
-            .catch(() => { terrainDone = true; checkDone() })
+          // Fresh fetch
           fetchHikingPoisFromWikidata(gps, 300)
             .then(newPois => {
               setPois(newPois)
               fetchWikiForNamedPois(newPois)
-                .then(entries => { setPoiWikiEntries(entries); poisDone = true; checkDone() })
-                .catch(() => { poisDone = true; checkDone() })
+                .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
+                .catch(() => { setPoisFullyLoaded(true) })
             })
-            .catch(() => { poisDone = true; checkDone() })
+            .catch(() => { setPoisFullyLoaded(true) })
         }
       }
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  // Save beauty score when POI + terrain are ready (invalidates legacy cache without version)
-  useEffect(() => {
-    if (!beautyScore || !hike || !poisFullyLoaded) return
-    const cachedBS = hike.cachedBeautyScore as import('@/lib/beautyScore').BeautyScore | undefined
-    if (cachedBS?.categories?.length && (cachedBS?.version ?? 0) >= 1) return  // already terrain-aware cache
-    updatePlannedMeta(hike.id, { cachedBeautyScore: beautyScore }).catch(() => {})
-    setHike(prev => prev ? { ...prev, cachedBeautyScore: beautyScore } : prev)
-  }, [beautyScore, hike, poisFullyLoaded])
-
-  // Save POI data to DB after first successful Overpass fetch
+  // Save POI data to DB after first successful fetch
   useEffect(() => {
     if (!poisFullyLoaded || !hike || (hike.cachedPois?.length ?? 0) > 0 || !pois.length) return
     updatePlannedMeta(hike.id, { cachedPois: pois, cachedPoiWiki: poiWikiEntries }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedPois: pois, cachedPoiWiki: poiWikiEntries } : prev)
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch user profile — needed only for the one-time fallback computation below
-  useEffect(() => {
-    fetch('/api/user-settings').then(r => r.json()).then(d => {
-      if (d.userAge)                    setUserAge(d.userAge)
-      if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
-      if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
-      if (d.prefDurata          != null) setPrefDurata(d.prefDurata)
-      if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
-      if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
-    }).catch(() => {}).finally(() => setPrefsLoaded(true))
-  }, [])
-
-  // Compute TrailScore ONLY if it is missing from DB (first import before the new upload flow,
-  // or hike created before this architecture change). Normal case: score already in DB, skip.
-  useEffect(() => {
-    if (!beautyScore || !hike || !prefsLoaded) return
-    if (hike.cachedTrailScore != null) {
-      // Score already in DB — compute breakdown for the widget but keep ts = stored value
-      // so card and detail always show the same number.
-      const computed = computeTrailScore(beautyScore, {
-        distanceMeters: hike.distanceMeters,
-        elevationGain:  hike.elevationGain,
-        elevationLoss:  hike.elevationLoss,
-        altitudeMax:    hike.altitudeMax,
-        userAge:        userAge > 0 ? userAge : undefined,
-        personalDelta:  personalDelta ?? undefined,
-        hrHikeCount,
-        prefSforzo,
-        prefDurata,
-      }, pesoNatura)
-      setTrailResult({ ...computed, ts: hike.cachedTrailScore })
-      return
-    }
-    // One-time fallback: compute and persist for hikes that lack a stored score
-    const result = computeTrailScore(
-      beautyScore,
-      {
-        distanceMeters: hike.distanceMeters,
-        elevationGain:  hike.elevationGain,
-        elevationLoss:  hike.elevationLoss,
-        altitudeMax:    hike.altitudeMax,
-        userAge:        userAge > 0 ? userAge : undefined,
-        personalDelta:  personalDelta ?? undefined,
-        hrHikeCount,
-        prefSforzo,
-        prefDurata,
-      },
-      pesoNatura,
-    )
-    setTrailResult(result)
-    updatePlannedMeta(hike.id, { cachedTrailScore: result.ts }).catch(() => {})
-    setHike(prev => prev ? { ...prev, cachedTrailScore: result.ts } : prev)
-  }, [beautyScore, hike?.id, prefsLoaded, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
@@ -553,14 +441,6 @@ export default function PlannedHikePage() {
           <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
             <h2 className="font-display text-xl font-semibold text-stone-700 mb-5">Valutazione personalizzata</h2>
             <AssessmentPanel a={hike.assessment} />
-          </div>
-        )}
-
-        {/* TrailScore */}
-        {trailResult && (
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
-            <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">TrailScore</h2>
-            <TrailScoreWidget result={trailResult} />
           </div>
         )}
 
