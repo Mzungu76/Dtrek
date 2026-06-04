@@ -12,19 +12,25 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { type PoiItem, POI_META } from '@/lib/overpass'
+import { fetchTerrainContext, type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
-import type { BeautyScore } from '@/lib/beautyScore'
+import { computeBeautyScore, type BeautyScore } from '@/lib/beautyScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, RefreshCw,
 } from 'lucide-react'
+
+const EMPTY_TERRAIN: TerrainContext = {
+  hasForest: false, hasRiver: false, hasStream: false, hasLake: false,
+  hasPond: false, hasGlacier: false, hasCoast: false, isProtected: false,
+  isNationalPark: false, openTerrain: false, surfaces: [],
+}
 import PdfExportButton from '@/components/PdfExportButton'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
@@ -154,6 +160,7 @@ export default function PlannedHikePage() {
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
   const [ctsResult,      setCtsResult]     = useState<TrailScoreResult | null>(null)
+  const [ctsComputing,   setCtsComputing]  = useState(false)
   const [prefsLoaded,    setPrefsLoaded]   = useState(false)
   const [pesoNatura,     setPesoNatura]    = useState(50)
   const [prefSforzo,     setPrefSforzo]    = useState(50)
@@ -260,6 +267,42 @@ export default function PlannedHikePage() {
     setSaving(true)
     try { await deletePlanned(id); router.push('/programma') }
     finally { setSaving(false) }
+  }
+
+  const handleComputeCts = async () => {
+    const gps = (hike.trackPoints ?? [])
+      .filter(p => p.lat && p.lon)
+      .map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    setCtsComputing(true)
+    try {
+      const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+      const [rawPois, terrain] = await Promise.all([
+        Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
+        Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
+      ])
+      const pois = rawPois as PoiItem[]
+      const rawWiki = pois.length
+        ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+        : []
+      const wiki = (rawWiki as { wiki: WikiPage }[]).map(e => e.wiki)
+      const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, hike.elevationGain, hike.altitudeMax, hike.distanceMeters)
+      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const { ts } = computeTrailScore(bs, {
+        distanceMeters: hike.distanceMeters,
+        elevationGain:  hike.elevationGain,
+        elevationLoss:  hike.elevationLoss,
+        altitudeMax:    hike.altitudeMax,
+        prefSforzo:     prefs.prefSforzo,
+        prefDurata:     prefs.prefDurata,
+      }, prefs.beautyNaturaWeight ?? 50)
+      await updatePlannedMeta(id, { cachedBeautyScore: bs, cachedTrailScore: ts })
+      setHike(prev => prev ? { ...prev, cachedBeautyScore: bs, cachedTrailScore: ts } : prev)
+    } catch (e) {
+      console.error('CTS computation error:', e)
+    } finally {
+      setCtsComputing(false)
+    }
   }
 
   const distKm    = hike.distanceMeters / 1000
@@ -481,13 +524,29 @@ export default function PlannedHikePage() {
         )}
 
         {/* Comfort TrailScore */}
-        {(ctsResult || (hike as { cachedTrailScore?: number }).cachedTrailScore != null) && (
+        {hasGps && (
           <div className="space-y-2">
             <h2 className="font-display text-xl font-semibold text-stone-700">Comfort TrailScore</h2>
-            <ComfortTrailScoreWidget
-              result={ctsResult}
-              cached={(hike as { cachedTrailScore?: number }).cachedTrailScore}
-            />
+            {(ctsResult || (hike as { cachedTrailScore?: number }).cachedTrailScore != null) ? (
+              <ComfortTrailScoreWidget
+                result={ctsResult}
+                cached={(hike as { cachedTrailScore?: number }).cachedTrailScore}
+              />
+            ) : (
+              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 flex items-center justify-between gap-4">
+                <p className="text-sm text-stone-500">Il punteggio non è ancora stato calcolato per questa escursione.</p>
+                <button
+                  onClick={handleComputeCts}
+                  disabled={ctsComputing}
+                  className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                >
+                  {ctsComputing
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Calcolo…</>
+                    : <><RefreshCw className="w-4 h-4" /> Calcola CTS</>
+                  }
+                </button>
+              </div>
+            )}
           </div>
         )}
 
