@@ -10,10 +10,13 @@ import SpeedChart from '@/components/SpeedChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import RouteThumb from '@/components/RouteThumb'
+import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import {
   getActivityById, updateActivityMeta, deleteActivity,
   type StoredActivity, type ActivityMeta,
 } from '@/lib/blobStore'
+import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
+import type { BeautyScore } from '@/lib/beautyScore'
 import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
@@ -69,6 +72,11 @@ export default function EscursionePage() {
   const [showStreetView,  setShowStreetView]  = useState(false)
   const [poiWikiEntries,  setPoiWikiEntries]  = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
+  const [ctsResult,       setCtsResult]       = useState<TrailScoreResult | null>(null)
+  const [prefsLoaded,     setPrefsLoaded]     = useState(false)
+  const [pesoNatura,      setPesoNatura]      = useState(50)
+  const [prefSforzo,      setPrefSforzo]      = useState(50)
+  const [prefDurata,      setPrefDurata]      = useState(270)
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat && p.lon)
@@ -99,6 +107,35 @@ export default function EscursionePage() {
       }
     }).finally(() => setLoading(false))
   }, [id, router])
+
+  // Load user prefs for CTS display
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
+        if (d.prefSforzo        != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefDurata        != null) setPrefDurata(d.prefDurata)
+      })
+      .catch(() => {})
+      .finally(() => setPrefsLoaded(true))
+  }, [])
+
+  // Compute CTS for breakdown display — NEVER saves
+  useEffect(() => {
+    const bs = (activity as (StoredActivity & { linkedBeautyScore?: BeautyScore }) | null)?.linkedBeautyScore
+    if (!bs?.categories?.length || !prefsLoaded) return
+    const computed = computeTrailScore(bs, {
+      distanceMeters: activity!.distanceMeters,
+      elevationGain:  activity!.elevationGain,
+      elevationLoss:  activity!.elevationLoss ?? 0,
+      altitudeMax:    activity!.altitudeMax,
+      avgHeartRate:   activity!.avgHeartRate,
+      prefSforzo,
+      prefDurata,
+    }, pesoNatura)
+    setCtsResult({ ...computed, ts: (activity as StoredActivity & { trailScore?: number }).trailScore ?? computed.ts })
+  }, [activity?.id, prefsLoaded, pesoNatura, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   if (loading) return (
@@ -441,6 +478,17 @@ export default function EscursionePage() {
             </div>
           )
         })()}
+
+        {/* Comfort TrailScore */}
+        {(ctsResult || (activity as StoredActivity & { trailScore?: number }).trailScore != null) && (
+          <section className="space-y-2">
+            <h2 className="font-display text-xl font-semibold text-stone-700">Comfort TrailScore</h2>
+            <ComfortTrailScoreWidget
+              result={ctsResult}
+              cached={(activity as StoredActivity & { trailScore?: number }).trailScore}
+            />
+          </section>
+        )}
 
         {/* Wikipedia */}
         {hasGps && (

@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -157,6 +158,17 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
               <Flame className="w-2.5 h-2.5" />{activity.calories} kcal
             </div>
           )}
+          {(activity as ActivityMeta & { trailScore?: number }).trailScore != null && (() => {
+            const cts = ctsLabel((activity as ActivityMeta & { trailScore?: number }).trailScore!)
+            return (
+              <div className="mt-1">
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-white"
+                  style={{ backgroundColor: cts.color }}>
+                  CTS {Math.round((activity as ActivityMeta & { trailScore?: number }).trailScore!)}
+                </span>
+              </div>
+            )
+          })()}
         </div>
       </div>
     </Link>
@@ -241,7 +253,7 @@ export default function HomePage() {
   const [monthIdx,   setMonthIdx]   = useState(-1)
   const [view,       setView]       = useState<'calendar' | 'list'>('list')
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
-  const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating'>('date')
+  const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating' | 'cts'>('date')
   const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus'>('date')
   const monthBarRef = useRef<HTMLDivElement>(null)
 
@@ -329,6 +341,7 @@ export default function HomePage() {
       case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
       case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
       case 'rating': return arr.sort((a, b) => (b.userRating ?? 0) - (a.userRating ?? 0))
+      case 'cts':    return arr.sort((a, b) => ((b as ActivityMeta & { trailScore?: number }).trailScore ?? -1) - ((a as ActivityMeta & { trailScore?: number }).trailScore ?? -1))
       default:       return arr.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
     }
   }, [activities, sortBy])
@@ -605,6 +618,7 @@ export default function HomePage() {
                       { id: 'km',     label: 'Km' },
                       { id: 'dplus',  label: 'D+' },
                       { id: 'rating', label: 'Voto' },
+                      { id: 'cts',    label: 'CTS' },
                     ] as const).map(s => (
                       <button key={s.id} onClick={() => setSortBy(s.id)}
                         className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all

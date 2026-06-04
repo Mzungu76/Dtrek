@@ -1,5 +1,6 @@
 import { TcxActivity, type TrackPoint } from './tcxParser'
 import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
+import type { BeautyScore } from './beautyScore'
 
 export interface StoredActivity extends TcxActivity {
   userNotes?: string
@@ -11,6 +12,8 @@ export interface StoredActivity extends TcxActivity {
   linkedPlannedId?: string
   linkedPlannedTrackPoints?: TrackPoint[]
   soddisfazione?: number  // satisfaction 1–10
+  linkedBeautyScore?: BeautyScore
+  trailScore?: number
 }
 
 export interface ActivityMeta {
@@ -35,6 +38,8 @@ export interface ActivityMeta {
   userRatingNote?: string
   soddisfazione?: number
   elevationProfile?: number[]  // downsampled altitude (m) for share-card profile chart
+  linkedBeautyScore?: BeautyScore
+  trailScore?: number
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -69,6 +74,8 @@ function toMeta(a: StoredActivity): ActivityMeta {
     userRating:      a.userRating,
     userRatingNote:  a.userRatingNote,
     soddisfazione:   a.soddisfazione,
+    linkedBeautyScore: a.linkedBeautyScore,
+    trailScore:      a.trailScore,
   }
 }
 
@@ -138,7 +145,7 @@ export async function saveActivity(activity: StoredActivity): Promise<void> {
 /** Patches Supabase, then applies the same patch to local cached copies. */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore'>>
 ): Promise<void> {
   // Update local caches optimistically (before API) so scores always persist locally
   lsGet<StoredActivity>(LS_KEYS.activity(id)).then((local) => {

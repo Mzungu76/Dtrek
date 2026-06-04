@@ -6,13 +6,22 @@ import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivity } from '@/lib/blobStore'
 import { parseGpx } from '@/lib/gpxParser'
-import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
+import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
+import { computeBeautyScore, type BeautyScore } from '@/lib/beautyScore'
+import { computeTrailScore } from '@/lib/trailScore'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
-type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'saving' | 'success' | 'error'
+type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
+
+const EMPTY_TERRAIN: TerrainContext = {
+  hasForest: false, hasRiver: false, hasStream: false, hasLake: false,
+  hasPond: false, hasGlacier: false, hasCoast: false, isProtected: false,
+  isNationalPark: false, openTerrain: false, surfaces: [],
+}
 type GpxStatus = 'idle' | 'parsed' | 'saving' | 'success' | 'error'
 
 // ── Activity uploader (TCX / GPX / FIT) ───────────────────────────────────────
@@ -78,6 +87,44 @@ function ActivityUploader() {
         } catch {}
       }
 
+      // ── CTS analysis (best-effort, 9s deadline) ───────────────────
+      setStatus('analyzing')
+      let linkedBeautyScore: BeautyScore | undefined
+      let trailScore: number | undefined
+      try {
+        const gps = (parsedActivity.trackPoints ?? [])
+          .filter(p => p.lat && p.lon)
+          .map(p => [p.lat!, p.lon!] as [number, number])
+        if (gps.length >= 2) {
+          const deadline = new Promise<null>(r => setTimeout(() => r(null), 9000))
+          const [rawPois, terrain] = await Promise.all([
+            Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
+            Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
+          ])
+          const pois = rawPois as PoiItem[]
+          const rawWiki = pois.length
+            ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+            : []
+          const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
+          const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, parsedActivity.elevationGain, parsedActivity.altitudeMax, parsedActivity.distanceMeters)
+          const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+          const { ts } = computeTrailScore(bs, {
+            distanceMeters: parsedActivity.distanceMeters,
+            elevationGain:  parsedActivity.elevationGain,
+            elevationLoss:  parsedActivity.elevationLoss ?? 0,
+            altitudeMax:    parsedActivity.altitudeMax,
+            avgHeartRate:   parsedActivity.avgHeartRate,
+            userAge:        prefs.userAge,
+            personalDelta:  prefs.personalDelta,
+            hrHikeCount:    prefs.hrHikeCount,
+            prefSforzo:     prefs.prefSforzo,
+            prefDurata:     prefs.prefDurata,
+          }, prefs.beautyNaturaWeight ?? 50)
+          linkedBeautyScore = bs
+          trailScore = ts
+        }
+      } catch {} // non-blocking — save proceeds regardless
+
       // ── Save ───────────────────────────────────────────────────────
       setStatus('saving')
       await saveActivity({
@@ -86,6 +133,8 @@ function ActivityUploader() {
         fileName,
         linkedPlannedId:          selectedPlanned?.id,
         linkedPlannedTrackPoints,
+        linkedBeautyScore,
+        trailScore,
       })
       if (selectedPlanned) {
         await deletePlanned(selectedPlanned.id).catch(() => {})
@@ -168,6 +217,16 @@ function ActivityUploader() {
         <div className="w-10 h-10 border-4 border-forest-200 border-t-forest-600 rounded-full animate-spin" />
         <p className="text-stone-600 font-medium">Analisi in corso…</p>
         <p className="text-stone-400 text-sm font-mono">{fileName}</p>
+      </div>
+    </div>
+  )
+
+  if (status === 'analyzing') return (
+    <div className="drop-zone rounded-2xl p-12 text-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 border-4 border-forest-200 border-t-forest-600 rounded-full animate-spin" />
+        <p className="text-stone-600 font-medium">Analisi percorso…</p>
+        <p className="text-stone-400 text-xs">Calcolo Comfort TrailScore</p>
       </div>
     </div>
   )
@@ -376,6 +435,28 @@ function GpxUploader() {
       }
 
       await savePlanned(hike)
+
+      // Compute and persist CTS (fire-and-forget, uses already-fetched POIs)
+      if (gps.length >= 2 && hike.cachedPois?.length) {
+        ;(async () => {
+          try {
+            const terrain = await fetchTerrainContext(gps).catch(() => EMPTY_TERRAIN)
+            const rawWiki = hike.cachedPoiWiki ?? []
+            const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
+            const bs = computeBeautyScore(hike.cachedPois as PoiItem[], wiki, terrain, hike.elevationGain, hike.altitudeMax, hike.distanceMeters)
+            const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+            const { ts } = computeTrailScore(bs, {
+              distanceMeters: hike.distanceMeters,
+              elevationGain:  hike.elevationGain,
+              elevationLoss:  hike.elevationLoss,
+              altitudeMax:    hike.altitudeMax,
+              prefSforzo:     prefs.prefSforzo,
+              prefDurata:     prefs.prefDurata,
+            }, prefs.beautyNaturaWeight ?? 50)
+            await updatePlannedMeta(hike.id, { cachedBeautyScore: bs, cachedTrailScore: ts })
+          } catch {}
+        })()
+      }
 
       setStatus('success')
       setTimeout(() => router.push(`/programma/${encodeURIComponent(parsed.id)}`), 1200)
