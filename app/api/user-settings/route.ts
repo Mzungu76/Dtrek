@@ -19,23 +19,25 @@ export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Try full select; fall back to a reduced set if newer columns haven't been migrated yet
+  // Try full select (all columns); progressively fall back if newer columns don't exist yet
   let data: Record<string, unknown> | null = null
+
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
     .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count')
     .eq('user_id', user.id)
     .single()
-  if (e1) {
-    // Some column missing — retry without the newest optional columns
-    const { data: d2 } = await supabase
+
+  if (!e1) {
+    data = d1 as Record<string, unknown> | null
+  } else {
+    // Retry without CTS + hr columns (they may not be migrated yet)
+    const { data: d2, error: e2 } = await supabase
       .from('user_settings')
-      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_durata, hiker_face_data_url, display_name')
+      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, hiker_face_data_url, display_name')
       .eq('user_id', user.id)
       .single()
-    data = d2 as Record<string, unknown> | null
-  } else {
-    data = d1 as Record<string, unknown> | null
+    if (!e2) data = d2 as Record<string, unknown> | null
   }
 
   const key = data?.claude_api_key as string | null | undefined
@@ -144,9 +146,23 @@ export async function POST(req: NextRequest) {
     upsertData.display_name = (body.displayName ?? '').trim() || null
   }
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from('user_settings')
     .upsert(upsertData, { onConflict: 'user_id' })
+
+  if (error?.message?.includes('column') || error?.message?.includes('schema cache')) {
+    // CTS columns not yet migrated — retry without them
+    const safe = { ...upsertData }
+    delete safe.beauty_natura_weight
+    delete safe.pref_sforzo
+    delete safe.pref_durata
+    delete safe.personal_delta
+    delete safe.hr_hike_count
+    const { error: e2 } = await supabase
+      .from('user_settings')
+      .upsert(safe, { onConflict: 'user_id' })
+    error = e2
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
