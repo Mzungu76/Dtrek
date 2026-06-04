@@ -272,10 +272,17 @@ export default function PlannedHikePage() {
   useEffect(() => {
     if (!beautyScore || !hike || !prefsLoaded) return
     if (hike.cachedTrailScore != null) {
-      // Score already in DB — just populate the display result without saving
+      // Score already in DB — render widget with full params so breakdown matches the stored TS
       setTrailResult(computeTrailScore(beautyScore, {
-        distanceMeters: hike.distanceMeters, elevationGain: hike.elevationGain,
-        elevationLoss: hike.elevationLoss, altitudeMax: hike.altitudeMax,
+        distanceMeters: hike.distanceMeters,
+        elevationGain:  hike.elevationGain,
+        elevationLoss:  hike.elevationLoss,
+        altitudeMax:    hike.altitudeMax,
+        userAge:        userAge > 0 ? userAge : undefined,
+        personalDelta:  personalDelta ?? undefined,
+        hrHikeCount,
+        prefSforzo,
+        prefDurata,
       }, pesoNatura))
       return
     }

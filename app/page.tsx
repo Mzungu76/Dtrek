@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
-import { getAllPlanned, updatePlannedMeta, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -12,8 +12,7 @@ import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
   ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown,
 } from 'lucide-react'
-import { tsLabel, computeTrailScore } from '@/lib/trailScore'
-import type { BeautyScore } from '@/lib/beautyScore'
+import { tsLabel } from '@/lib/trailScore'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -279,13 +278,7 @@ export default function HomePage() {
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
   const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating' | 'ts'>('date')
   const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'ts'>('date')
-  const [userAge,       setUserAge]       = useState(0)
-  const [pesoNatura,    setPesoNatura]    = useState(50)
-  const [prefSforzo,    setPrefSforzo]    = useState(50)
-  const [prefDurata,     setPrefDurata]     = useState(270)
-  const [personalDelta, setPersonalDelta] = useState<number | null>(null)
-  const [hrHikeCount,   setHrHikeCount]   = useState(0)
-  const monthBarRef                 = useRef<HTMLDivElement>(null)
+  const monthBarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     Promise.all([
@@ -295,57 +288,6 @@ export default function HomePage() {
       .then(([acts, plan]) => { setActivities(acts); setPlanned(plan) })
       .finally(() => setLoading(false))
   }, [])
-
-  // Fetch user profile for TS personal correction
-  useEffect(() => {
-    fetch('/api/user-settings').then(r => r.json()).then(d => {
-      if (d.userAge)                    setUserAge(d.userAge)
-      if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
-      if (d.prefSforzo         != null) setPrefSforzo(d.prefSforzo)
-      if (d.prefDurata          != null) setPrefDurata(d.prefDurata)
-      if (d.personalDelta      != null) setPersonalDelta(d.personalDelta)
-      if (d.hrHikeCount        != null) setHrHikeCount(d.hrHikeCount)
-    }).catch(() => {})
-  }, [])
-
-  // Compute TS client-side from cached categories + current prefs (all hikes, every time prefs change)
-  useEffect(() => {
-    const toCompute = planned.filter(
-      h => (h.cachedBeautyScore?.categories?.length ?? 0) > 0
-    )
-    if (!toCompute.length) return
-    const updated: typeof planned = []
-    for (const hike of toCompute) {
-      const cats = hike.cachedBeautyScore!.categories!
-      const bs: BeautyScore = {
-        categories:  cats as BeautyScore['categories'],
-        overall:     hike.cachedBeautyScore!.overall,
-        grade:       hike.cachedBeautyScore!.grade,
-        gradeLabel:  hike.cachedBeautyScore!.gradeLabel ?? '',
-        color:       hike.cachedBeautyScore!.color,
-      }
-      const { ts } = computeTrailScore(bs, {
-        distanceMeters: hike.distanceMeters,
-        elevationGain:  hike.elevationGain,
-        elevationLoss:  hike.elevationLoss,
-        altitudeMax:    hike.altitudeMax,
-        userAge:        userAge > 0 ? userAge : undefined,
-        personalDelta:  personalDelta ?? undefined,
-        hrHikeCount,
-        prefSforzo,
-        prefDurata,
-      }, pesoNatura)
-      updated.push({ ...hike, cachedTrailScore: ts })
-      // Write to DB so TS persists across sessions with current prefs
-      if (hike.cachedTrailScore !== ts) {
-        updatePlannedMeta(hike.id, { cachedTrailScore: ts }).catch(() => {})
-      }
-    }
-    if (updated.length) {
-      const updMap = Object.fromEntries(updated.map(h => [h.id, h]))
-      setPlanned(prev => prev.map(h => updMap[h.id] ?? h))
-    }
-  }, [planned.length, userAge, pesoNatura, prefSforzo, prefDurata, personalDelta, hrHikeCount])
 
   const months = useMemo(() => {
     const now = new Date()

@@ -81,6 +81,27 @@ function ActivityUploader() {
           if (validPts.length >= 2) linkedPlannedTrackPoints = validPts
         } catch {}
       }
+      let trailScore: number | undefined
+      if (selectedPlanned?.cachedBeautyScore?.categories?.length) {
+        try {
+          const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+          const { ts } = computeTrailScore(
+            selectedPlanned.cachedBeautyScore as import('@/lib/beautyScore').BeautyScore,
+            {
+              distanceMeters: parsedActivity.distanceMeters,
+              elevationGain:  parsedActivity.elevationGain,
+              elevationLoss:  parsedActivity.elevationLoss,
+              altitudeMax:    parsedActivity.altitudeMax,
+              avgHeartRate:   parsedActivity.avgHeartRate > 0 ? parsedActivity.avgHeartRate : undefined,
+              userAge:        prefs.userAge ?? undefined,
+              personalDelta:  prefs.personalDelta ?? undefined,
+              hrHikeCount:    prefs.hrHikeCount ?? 0,
+            },
+            prefs.beautyNaturaWeight ?? 50,
+          )
+          trailScore = ts
+        } catch {}
+      }
       await saveActivity({
         ...parsedActivity,
         title:                    titleVal.trim() || undefined,
@@ -88,6 +109,7 @@ function ActivityUploader() {
         linkedPlannedId:          selectedPlanned?.id,
         linkedPlannedTrackPoints,
         linkedBeautyScore:        selectedPlanned?.cachedBeautyScore,
+        trailScore,
       })
       if (selectedPlanned) {
         await deletePlanned(selectedPlanned.id).catch(() => {})
