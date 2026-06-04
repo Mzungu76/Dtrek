@@ -4,7 +4,6 @@
 // are reachable. Returns a curated, privacy-safe subset (no private notes).
 
 import { supabase } from './supabase'
-import { tsLabel } from './trailScore'
 
 export interface PublicActivity {
   title:            string
@@ -18,11 +17,6 @@ export interface PublicActivity {
   calories:         number
   routePolyline:    [number, number][]
   elevationProfile: number[]
-  trailScore?:      number
-  trailLabel?:      string
-  trailColor?:      string
-  beautyGrade?:     string
-  beautyLabel?:     string
   ownerName?:       string
 }
 
@@ -35,7 +29,7 @@ export async function fetchPublicActivity(token: string): Promise<PublicActivity
 
   const { data, error } = await supabase
     .from('activities')
-    .select('title,start_time,distance_meters,total_time_seconds,elevation_gain,elevation_loss,altitude_max,avg_heart_rate,calories,route_polyline,track_points,trail_score,linked_beauty_score,user_id')
+    .select('title,start_time,distance_meters,total_time_seconds,elevation_gain,elevation_loss,altitude_max,avg_heart_rate,calories,route_polyline,track_points,user_id')
     .eq('share_token', token)
     .single()
 
@@ -55,10 +49,6 @@ export async function fetchPublicActivity(token: string): Promise<PublicActivity
   const step = Math.max(1, Math.ceil(alts.length / 120))
   const elevationProfile = alts.length > 4 ? alts.filter((_, i) => i % step === 0) : []
 
-  const bs = data.linked_beauty_score as { grade?: string; gradeLabel?: string } | null
-  const ts = typeof data.trail_score === 'number' && data.trail_score > 0 ? data.trail_score : undefined
-  const tl = ts !== undefined ? tsLabel(ts) : undefined
-
   return {
     title:            (data.title as string) || 'Escursione',
     startTime:        data.start_time as string,
@@ -71,11 +61,6 @@ export async function fetchPublicActivity(token: string): Promise<PublicActivity
     calories:         (data.calories as number) ?? 0,
     routePolyline:    (data.route_polyline as [number, number][]) ?? [],
     elevationProfile,
-    trailScore:       ts,
-    trailLabel:       tl?.label,
-    trailColor:       tl?.color,
-    beautyGrade:      bs?.grade,
-    beautyLabel:      bs?.gradeLabel,
     ownerName,
   }
 }

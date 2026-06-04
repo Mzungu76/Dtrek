@@ -81,7 +81,6 @@ export async function GET(req: NextRequest) {
         user_rating:          a.userRating ?? null,
         user_rating_note:     a.userRatingNote ?? null,
         linked_planned_id:    a.linkedPlannedId ?? null,
-        linked_beauty_score:  a.linkedBeautyScore ?? null,
         route_polyline:       downsamplePolyline(a.trackPoints ?? []),
         track_points:         a.trackPoints ?? [],
       }
@@ -127,7 +126,6 @@ export async function GET(req: NextRequest) {
         route_polyline:         h.routePolyline ?? downsamplePolyline(h.trackPoints ?? []),
         track_points:           h.trackPoints ?? [],
         assessment:             h.assessment ?? null,
-        cached_beauty_score:    h.cachedBeautyScore ?? null,
       }
 
       const { error } = await supabase

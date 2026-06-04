@@ -12,7 +12,7 @@ const META_COLS = [
   'avg_heart_rate', 'max_heart_rate', 'avg_speed_ms', 'max_speed_ms',
   'altitude_max', 'altitude_min', 'elevation_gain', 'elevation_loss',
   'file_name', 'user_notes', 'tags', 'user_rating', 'user_rating_note',
-  'route_polyline', 'linked_beauty_score', 'soddisfazione', 'loot_score', 'trail_score',
+  'route_polyline', 'soddisfazione',
 ].join(', ')
 
 function rowToMeta(row: Record<string, unknown>): ActivityMeta {
@@ -36,10 +36,7 @@ function rowToMeta(row: Record<string, unknown>): ActivityMeta {
     routePolyline:   row.route_polyline as [number, number][] | undefined,
     userRating:      row.user_rating as number | undefined,
     userRatingNote:  row.user_rating_note as string | undefined,
-    linkedBeautyScore: row.linked_beauty_score as ActivityMeta['linkedBeautyScore'],
     soddisfazione:   row.soddisfazione as number | undefined,
-    lootScore:       row.loot_score as number | undefined,
-    trailScore:      row.trail_score as number | undefined,
   }
 }
 

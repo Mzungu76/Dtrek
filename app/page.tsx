@@ -12,8 +12,6 @@ import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
   ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown,
 } from 'lucide-react'
-import { tsLabel } from '@/lib/trailScore'
-
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
 function getLeadingEmpty(year: number, month: number): number {
@@ -92,35 +90,15 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
       <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
 
         {/* ── Score banner — top of card, visible at first glance ── */}
-        {(() => {
-          const ts = activity.trailScore
-          const tsInfo = ts !== undefined ? tsLabel(ts) : null
-          if (rating && rColor) {
-            return (
-              <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
-                style={{ backgroundColor: rColor + '22', borderBottom: `1.5px solid ${rColor}40` }}>
-                <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}</span>
-                <span className="text-[10px] text-stone-400">/10</span>
-                {tsInfo && ts !== undefined && (
-                  <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
-                    style={{ backgroundColor: tsInfo.color }}>
-                    TS {ts}
-                  </span>
-                )}
-              </div>
-            )
-          }
-          if (tsInfo && ts !== undefined) {
-            return (
-              <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
-                style={{ backgroundColor: tsInfo.color + '18', borderBottom: `1.5px solid ${tsInfo.color}30` }}>
-                <span className="text-xs font-bold" style={{ color: tsInfo.color }}>TS {ts}</span>
-                <span className="text-[10px] font-semibold ml-auto" style={{ color: tsInfo.color }}>{tsInfo.label}</span>
-              </div>
-            )
-          }
-          return <div className="h-1 shrink-0 bg-forest-100" />
-        })()}
+        {rating && rColor ? (
+          <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
+            style={{ backgroundColor: rColor + '22', borderBottom: `1.5px solid ${rColor}40` }}>
+            <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}</span>
+            <span className="text-[10px] text-stone-400">/10</span>
+          </div>
+        ) : (
+          <div className="h-1 shrink-0 bg-forest-100" />
+        )}
 
         {/* Thumbnail */}
         <div className="flex-1 relative bg-gradient-to-b from-forest-50 to-stone-50 min-h-0 overflow-hidden">
@@ -215,21 +193,8 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
       {/* Full card */}
       <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
 
-        {/* TS banner */}
-        {(() => {
-          const cts = hike.cachedTrailScore
-          const tsInfo = cts !== undefined ? tsLabel(cts) : null
-          if (tsInfo && cts !== undefined) {
-            return (
-              <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
-                style={{ backgroundColor: tsInfo.color + '18', borderBottom: `1.5px solid ${tsInfo.color}30` }}>
-                <span className="text-xs font-bold" style={{ color: tsInfo.color }}>TS {cts}</span>
-                <span className="text-[10px] font-semibold ml-auto" style={{ color: tsInfo.color }}>{tsInfo.label}</span>
-              </div>
-            )
-          }
-          return <div className="h-1 shrink-0 bg-sky-100" />
-        })()}
+        {/* Top bar */}
+        <div className="h-1 shrink-0 bg-sky-100" />
 
         <div className="flex-1 relative bg-gradient-to-b from-sky-50 to-stone-50 min-h-0 overflow-hidden">
           <div className="absolute inset-2">
@@ -276,8 +241,8 @@ export default function HomePage() {
   const [monthIdx,   setMonthIdx]   = useState(-1)
   const [view,       setView]       = useState<'calendar' | 'list'>('list')
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
-  const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating' | 'ts'>('date')
-  const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'ts'>('date')
+  const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating'>('date')
+  const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus'>('date')
   const monthBarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -364,7 +329,6 @@ export default function HomePage() {
       case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
       case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
       case 'rating': return arr.sort((a, b) => (b.userRating ?? 0) - (a.userRating ?? 0))
-      case 'ts':     return arr.sort((a, b) => (b.trailScore ?? -1) - (a.trailScore ?? -1))
       default:       return arr.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
     }
   }, [activities, sortBy])
@@ -374,7 +338,6 @@ export default function HomePage() {
     switch (planSortBy) {
       case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
       case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
-      case 'ts':     return arr.sort((a, b) => (b.cachedTrailScore ?? -1) - (a.cachedTrailScore ?? -1))
       default:       return arr.sort((a, b) => {
         const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
         const db = b.plannedDate ? new Date(b.plannedDate).getTime() : 0
@@ -642,7 +605,6 @@ export default function HomePage() {
                       { id: 'km',     label: 'Km' },
                       { id: 'dplus',  label: 'D+' },
                       { id: 'rating', label: 'Voto' },
-                      { id: 'ts',     label: 'TS' },
                     ] as const).map(s => (
                       <button key={s.id} onClick={() => setSortBy(s.id)}
                         className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
@@ -675,7 +637,6 @@ export default function HomePage() {
                       { id: 'date',  label: 'Data' },
                       { id: 'km',   label: 'Km' },
                       { id: 'dplus', label: 'D+' },
-                      { id: 'ts',   label: 'TS' },
                     ] as const).map(s => (
                       <button key={s.id} onClick={() => setPlanSortBy(s.id)}
                         className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all

@@ -6,7 +6,6 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { computeGlobalStats } from '@/lib/blobStore'
 import { getPersonalRecords, computeStreaks, formatPaceMinkm, COMPARISON_COLORS } from '@/lib/stats'
-import { tsLabel } from '@/lib/trailScore'
 
 export type ShareFormat = '1:1' | '16:9' | '9:16'
 
@@ -20,7 +19,6 @@ export interface ActivityShareOpts {
   showCalories:  boolean
   showDate:      boolean
   showProfile:   boolean   // elevation profile band
-  showScore:     boolean   // TrailScore badge
 }
 
 export interface StatsShareOpts {
@@ -131,43 +129,6 @@ function drawLogo(ctx: CanvasRenderingContext2D, w: number, h: number, scale = 1
   // Wordmark
   ctx.fillStyle = 'rgba(255,255,255,0.92)'
   ctx.fillText(txt, rightX, baseY)
-  ctx.restore()
-}
-
-// TrailScore badge — circular score chip with grade label, color-coded.
-function drawScoreBadge(
-  ctx: CanvasRenderingContext2D,
-  cx: number, cy: number, score: number, scale = 1,
-) {
-  const { label, color } = tsLabel(score)
-  const r = 46 * scale
-  ctx.save()
-  // Disc
-  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 12 * scale
-  ctx.fillStyle = color
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill()
-  ctx.shadowBlur = 0
-  // Inner ring
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2 * scale
-  ctx.beginPath(); ctx.arc(cx, cy, r - 6 * scale, 0, Math.PI * 2); ctx.stroke()
-  // Score number
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.font = `bold ${Math.round(40 * scale)}px ${FONT}`
-  ctx.fillText(String(Math.round(score)), cx, cy - 4 * scale)
-  ctx.font = `bold ${Math.round(11 * scale)}px ${FONT}`
-  ctx.fillStyle = 'rgba(255,255,255,0.8)'
-  ctx.fillText('TRAILSCORE', cx, cy + 22 * scale)
-  ctx.restore()
-  // Grade label pill under the disc
-  ctx.save()
-  ctx.font = `bold ${Math.round(15 * scale)}px ${FONT}`
-  const lw = ctx.measureText(label).width + 22 * scale
-  const ph = 26 * scale, py = cy + r + 8 * scale
-  rr(ctx, cx - lw / 2, py, lw, ph, ph / 2)
-  ctx.fillStyle = color; ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 6 * scale
-  ctx.fill(); ctx.shadowBlur = 0
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillText(label, cx, py + ph / 2 + scale)
   ctx.restore()
 }
 
@@ -422,7 +383,6 @@ export async function generateActivityImage(
 
   const profile        = activity.elevationProfile
   const showProfileBand = opts.showProfile && !!(profile && profile.length > 3)
-  const showScoreBadge  = opts.showScore   && typeof activity.trailScore === 'number' && activity.trailScore > 0
 
   // ── Full-bleed map ────────────────────────────────────────────────────────
   if (useMap) {
@@ -459,7 +419,7 @@ export async function generateActivityImage(
     const PAD  = isTall(fmt) ? 56 : 44
     const titleSz = fmt === '9:16' ? 74 : fmt === '1:1' ? 62 : 48
     const badgeScale = fmt === '9:16' ? 1.2 : fmt === '1:1' ? 1.0 : 0.8
-    const titleMaxW  = w - 2 * PAD - (showScoreBadge ? 150 * badgeScale : 0)
+    const titleMaxW  = w - 2 * PAD
     ctx.font = `bold ${titleSz}px ${FONT}`
     ctx.fillStyle = '#ffffff'
     ctx.textAlign = 'left'
@@ -475,12 +435,6 @@ export async function generateActivityImage(
         format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it }),
         PAD, PAD + titleSz * 0.82 + dateSz + 10,
       )
-    }
-
-    // 5b. TrailScore badge — top-right corner
-    if (showScoreBadge) {
-      const bR = 46 * badgeScale
-      drawScoreBadge(ctx, w - PAD - bR, PAD + bR + 6 * badgeScale, activity.trailScore!, badgeScale)
     }
 
     // 6. Stats row at bottom
@@ -544,18 +498,13 @@ export async function generateActivityImage(
   const dBadgeScale = 0.95
   let y = PAD + 44
   ctx.font = `bold 50px ${FONT}`; ctx.fillStyle = DARK.white; ctx.textAlign = 'left'
-  ctx.fillText(fitText(ctx, activity.title ?? 'Escursione', w - 2 * PAD - (showScoreBadge ? 150 * dBadgeScale : 0)), PAD, y)
+  ctx.fillText(fitText(ctx, activity.title ?? 'Escursione', w - 2 * PAD), PAD, y)
   y += 14
   if (opts.showDate) {
     ctx.font = `22px ${FONT}`; ctx.fillStyle = DARK.muted
     ctx.fillText(format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it }), PAD, y + 30)
     y += 60
   } else { y += 20 }
-
-  if (showScoreBadge) {
-    const bR = 46 * dBadgeScale
-    drawScoreBadge(ctx, w - PAD - bR, PAD + bR + 4, activity.trailScore!, dBadgeScale)
-  }
 
   if (useAbstract) {
     const pillsH = pillData.length > 0 ? 78 : 0

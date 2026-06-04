@@ -4,7 +4,6 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllPlanned, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
-import { tsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -53,14 +52,13 @@ export default function ProgrammaPage() {
   const [hikes,   setHikes]   = useState<PlannedHikeMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [sortBy,    setSortBy]    = useState<'date' | 'km' | 'dplus' | 'ts' | 'suitability'>('date')
+  const [sortBy,    setSortBy]    = useState<'date' | 'km' | 'dplus' | 'suitability'>('date')
 
   const sortedHikes = useMemo(() => {
     const arr = [...hikes]
     switch (sortBy) {
       case 'km':          return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
       case 'dplus':       return arr.sort((a, b) => b.elevationGain - a.elevationGain)
-      case 'ts':          return arr.sort((a, b) => (b.cachedTrailScore ?? -1) - (a.cachedTrailScore ?? -1))
       case 'suitability': return arr.sort((a, b) => (b.assessment?.suitabilityScore ?? 0) - (a.assessment?.suitabilityScore ?? 0))
       default:            return arr.sort((a, b) => {
         const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
@@ -115,7 +113,6 @@ export default function ProgrammaPage() {
                     { id: 'date',        label: 'Data' },
                     { id: 'km',          label: 'Km' },
                     { id: 'dplus',       label: 'D+' },
-                    { id: 'ts',          label: 'TS' },
                     { id: 'suitability', label: 'Adatta' },
                   ] as const).map(s => (
                     <button key={s.id} onClick={() => setSortBy(s.id)}
@@ -175,37 +172,15 @@ export default function ProgrammaPage() {
                   href={`/programma/${encodeURIComponent(hike.id)}`}
                   className="bg-white rounded-2xl border border-sky-100 shadow-sm hover:border-sky-400 hover:shadow-md transition-all overflow-hidden flex flex-col group"
                 >
-                  {/* ── TS header — top of card ── */}
-                  {(() => {
-                    const cts = hike.cachedTrailScore
-                    const tsInfo = cts !== undefined ? tsLabel(cts) : null
-                    if (tsInfo && cts !== undefined) {
-                      return (
-                        <div className="flex items-center gap-2 px-3 py-2 shrink-0"
-                          style={{ backgroundColor: tsInfo.color + '18', borderBottom: `1.5px solid ${tsInfo.color}30` }}>
-                          <span className="text-base font-bold" style={{ color: tsInfo.color }}>TS {cts}</span>
-                          <span className="text-xs font-semibold" style={{ color: tsInfo.color }}>{tsInfo.label}</span>
-                          {hike.plannedDate && (
-                            <span className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
-                              <CalendarDays className="w-3 h-3" />
-                              {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
-                            </span>
-                          )}
-                        </div>
-                      )
-                    }
-                    return (
-                      <div className="flex items-center justify-between px-3 py-1.5 shrink-0 bg-stone-50 border-b border-stone-100">
-                        <span className="text-[10px] text-stone-400 italic">Apri per il punteggio</span>
-                        {hike.plannedDate && (
-                          <span className="flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
-                            <CalendarDays className="w-3 h-3" />
-                            {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })()}
+                  {/* Date header */}
+                  {hike.plannedDate && (
+                    <div className="flex items-center justify-end px-3 py-1.5 shrink-0 bg-stone-50 border-b border-stone-100">
+                      <span className="flex items-center gap-0.5 text-[10px] font-semibold text-stone-500">
+                        <CalendarDays className="w-3 h-3" />
+                        {format(new Date(hike.plannedDate), 'd MMM', { locale: it })}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Route thumbnail */}
                   <div className="relative h-32 bg-gradient-to-b from-sky-50 to-stone-50 overflow-hidden">
