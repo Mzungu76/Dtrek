@@ -554,11 +554,9 @@ interface Props {
   onClose: () => void
   plannedDate?: string
   plannedTrackPoints?: TrackPoint[]
-  trailScore?: number
-  trailColor?: string
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, trailScore, trailColor }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -1309,7 +1307,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               {v:`${+totalKm.toFixed(1)} km`,l:'distanza',col:'white'},
               {v:`${elevGain} m`,l:'D+',col:'white'},
             ]
-            if(trailScore!==undefined) statItems.push({v:String(Math.round(trailScore)),l:'TrailScore',col:trailColor??'#22d3ee'})
             const sw2=Math.round(150*sc2), sgap=Math.round(20*sc2)
             const tw2=statItems.length*sw2+(statItems.length-1)*sgap
             const sx0=outW/2-tw2/2+sw2/2, sy2=outH/2+Math.round(52*sc2)
@@ -1333,7 +1330,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     setVideoState('rendering')
     renderNextFrame()
-  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,shotPlan,videoPreset,videoEnableAudio,trailScore,trailColor,altitudeSeries])
+  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,shotPlan,videoPreset,videoEnableAudio,altitudeSeries])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)

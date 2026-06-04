@@ -20,9 +20,8 @@ import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import PdfExportButton from '@/components/PdfExportButton'
 import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
-import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
+import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import { computeBeautyScore } from '@/lib/beautyScore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -30,8 +29,6 @@ import {
   Heart, Zap, Mountain, Clock, Route, Flame,
   Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images,
 } from 'lucide-react'
-import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
-import { TrailScoreWidget } from '@/components/TrailScoreWidget'
 import ShareModal from '@/components/ShareModal'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
@@ -72,16 +69,6 @@ export default function EscursionePage() {
   const [showStreetView,  setShowStreetView]  = useState(false)
   const [poiWikiEntries,  setPoiWikiEntries]  = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
-  const [trailResult,     setTrailResult]     = useState<TrailScoreResult | null>(null)
-  const [userAge,         setUserAge]         = useState(0)
-  const [pesoNatura,      setPesoNatura]      = useState(50)
-  const [terrain,         setTerrain]         = useState<TerrainContext | null>(null)
-
-  const EMPTY_TERRAIN: TerrainContext = {
-    hasForest: false, hasRiver: false, hasStream: false,
-    hasLake: false, hasPond: false, hasGlacier: false, hasCoast: false,
-    isProtected: false, isNationalPark: false, openTerrain: false, surfaces: [],
-  }
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat && p.lon)
@@ -90,20 +77,6 @@ export default function EscursionePage() {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [activity])
 
-  const allWikiPages = useMemo(
-    () => [...wikiPages, ...poiWikiEntries.map(e => e.wiki)],
-    [wikiPages, poiWikiEntries],
-  )
-
-  const beautyScore = useMemo(() => {
-    // Use cached score only if it was computed with terrain (version >= 1)
-    const cached = activity?.linkedBeautyScore
-    if (cached?.categories?.length && (cached as import('@/lib/beautyScore').BeautyScore).version) return cached as import('@/lib/beautyScore').BeautyScore
-    // Otherwise compute from live POI/wiki data + terrain context
-    if (!activity || (pois.length === 0 && allWikiPages.length === 0)) return null
-    return computeBeautyScore(pois, allWikiPages, terrain ?? EMPTY_TERRAIN, activity.elevationGain, activity.altitudeMax, activity.distanceMeters)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pois, allWikiPages, terrain, activity])
 
   useEffect(() => {
     getActivityById(id).then(a => {
@@ -113,73 +86,20 @@ export default function EscursionePage() {
       setNotesVal(a.userNotes ?? '')
       setRatingVal(a.userRating ?? 0)
       setRatingNote(a.userRatingNote ?? '')
-      // Full cache requires version >= 1 (terrain-aware)
-      const cachedBS = a.linkedBeautyScore as import('@/lib/beautyScore').BeautyScore | undefined
-      const hasFullCache = a.trailScore !== undefined && (cachedBS?.categories?.length ?? 0) > 0 && (cachedBS?.version ?? 0) >= 1
       const gps = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-      if (hasFullCache) {
-        setPoisFullyLoaded(true)
-      } else if (gps.length > 0) {
-        // Fetch terrain and POIs in parallel; only mark ready when both complete
-        let poisDone = false, terrainDone = false
-        const checkDone = () => { if (poisDone && terrainDone) setPoisFullyLoaded(true) }
-        fetchTerrainContext(gps)
-          .then(t => { setTerrain(t); terrainDone = true; checkDone() })
-          .catch(() => { terrainDone = true; checkDone() })
+      if (gps.length > 0) {
         fetchHikingPoisFromWikidata(gps, 300)
           .then(newPois => {
             setPois(newPois)
             fetchWikiForNamedPois(newPois)
-              .then(entries => { setPoiWikiEntries(entries); poisDone = true; checkDone() })
-              .catch(() => { poisDone = true; checkDone() })
+              .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
+              .catch(() => { setPoisFullyLoaded(true) })
           })
-          .catch(() => { poisDone = true; checkDone() })
+          .catch(() => { setPoisFullyLoaded(true) })
       }
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  useEffect(() => {
-    fetch('/api/user-settings')
-      .then(r => r.json())
-      .then(d => {
-        if (d.userAge)                    setUserAge(d.userAge)
-        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
-      })
-      .catch(() => {})
-  }, [])
-
-  // Salva beauty score quando POI + terrain sono pronti (invalida cache senza versione)
-  useEffect(() => {
-    if (!beautyScore || !activity || !poisFullyLoaded) return
-    const cachedBS = activity.linkedBeautyScore as import('@/lib/beautyScore').BeautyScore | undefined
-    if (cachedBS?.categories?.length && (cachedBS?.version ?? 0) >= 1) return  // already terrain-aware cache
-    updateActivityMeta(id, { linkedBeautyScore: beautyScore }).catch(() => {})
-    setActivity(prev => prev ? { ...prev, linkedBeautyScore: beautyScore } : prev)
-  }, [beautyScore, activity, poisFullyLoaded, id])
-
-  // TrailScore: display from DB if already stored; compute+persist only once as migration fallback
-  useEffect(() => {
-    if (!beautyScore || !activity || !poisFullyLoaded) return
-    const params = {
-      distanceMeters: activity.distanceMeters,
-      elevationGain:  activity.elevationGain,
-      elevationLoss:  activity.elevationLoss,
-      altitudeMax:    activity.altitudeMax,
-      avgHeartRate:   activity.avgHeartRate > 0 ? activity.avgHeartRate : undefined,
-      userAge:        userAge > 0 ? userAge : undefined,
-    }
-    if (activity.trailScore != null) {
-      // Score already in DB — compute breakdown for display but keep ts = stored value
-      const computed = computeTrailScore(beautyScore, params, pesoNatura)
-      setTrailResult({ ...computed, ts: activity.trailScore })
-      return
-    }
-    // One-time migration: compute and persist for activities that predate DB storage
-    const result = computeTrailScore(beautyScore, params, pesoNatura)
-    setTrailResult(result)
-    updateActivityMeta(id, { trailScore: result.ts }).catch(() => {})
-    setActivity(prev => prev ? { ...prev, trailScore: result.ts } : prev)
-  }, [beautyScore, activity?.trailScore, poisFullyLoaded, userAge, pesoNatura, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
@@ -412,8 +332,6 @@ export default function EscursionePage() {
           maxSpeedMs: activity.maxSpeedMs, tags: activity.tags,
           userNotes: activity.userNotes, fileName: activity.fileName,
           routePolyline: polyline.filter((_, i) => i % step === 0),
-          trailScore: activity.trailScore,
-          linkedBeautyScore: activity.linkedBeautyScore,
           elevationProfile,
         }
         return <ShareModal kind="activity" activity={actMeta} onClose={() => setShowShare(false)} />
@@ -445,9 +363,6 @@ export default function EscursionePage() {
 
         {/* Weather */}
         {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
-
-        {/* TrailScore — unificato con correzione personale */}
-        <TrailScoreWidget result={trailResult} cached={activity.trailScore} />
 
         {/* Map */}
         <section>

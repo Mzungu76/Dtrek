@@ -48,8 +48,6 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     routePolyline:         row.route_polyline as [number, number][] | undefined,
     trackPoints:           includeTracks ? (row.track_points as TrackPoint[]) ?? [] : undefined,
     assessment:            row.assessment as PlannedHike['assessment'],
-    cachedBeautyScore:     row.cached_beauty_score as PlannedHike['cachedBeautyScore'],
-    cachedTrailScore:      row.cached_trail_score as number | undefined,
     cachedPois:            row.cached_pois as unknown[] | undefined,
     cachedPoiWiki:         row.cached_poi_wiki as unknown[] | undefined,
     cachedGuide:           row.cached_guide as string | undefined,
@@ -74,8 +72,6 @@ function hikeToRow(h: PlannedHike) {
     route_polyline:         h.routePolyline ?? downsamplePolyline(h.trackPoints ?? []),
     track_points:           h.trackPoints ?? [],
     assessment:             h.assessment ?? null,
-    cached_beauty_score:    h.cachedBeautyScore ?? null,
-    cached_trail_score:     h.cachedTrailScore ?? null,
     cached_pois:            h.cachedPois ?? null,
     cached_poi_wiki:        h.cachedPoiWiki ?? null,
     cached_guide:           h.cachedGuide ?? null,
@@ -87,7 +83,7 @@ const META_COLS = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment', 'cached_beauty_score', 'cached_trail_score', 'cached_guide',
+  'route_polyline', 'assessment', 'cached_guide',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
@@ -95,7 +91,7 @@ const META_COLS_CORE = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment', 'cached_beauty_score',
+  'route_polyline', 'assessment',
 ].join(', ')
 
 // ── GET /api/planned          → PlannedHikeMeta[] ────────────────────────────
@@ -218,8 +214,6 @@ export async function PATCH(req: NextRequest) {
       userNotes?: string
       tags?: string[]
       plannedDate?: string
-      cachedBeautyScore?: PlannedHike['cachedBeautyScore']
-      cachedTrailScore?: number
       cachedPois?: unknown[]
       cachedPoiWiki?: unknown[]
       cachedGuide?: string
@@ -230,8 +224,6 @@ export async function PATCH(req: NextRequest) {
     if (patch.userNotes          !== undefined) dbPatch.user_notes           = patch.userNotes
     if (patch.tags               !== undefined) dbPatch.tags                 = patch.tags
     if (patch.plannedDate        !== undefined) dbPatch.planned_date         = patch.plannedDate || null
-    if (patch.cachedBeautyScore  !== undefined) dbPatch.cached_beauty_score  = patch.cachedBeautyScore
-    if (patch.cachedTrailScore   !== undefined) dbPatch.cached_trail_score   = patch.cachedTrailScore
     if (patch.cachedPois         !== undefined) dbPatch.cached_pois          = patch.cachedPois
     if (patch.cachedPoiWiki      !== undefined) dbPatch.cached_poi_wiki      = patch.cachedPoiWiki
     if (patch.cachedGuide        !== undefined) dbPatch.cached_guide         = patch.cachedGuide

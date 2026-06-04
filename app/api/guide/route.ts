@@ -192,7 +192,6 @@ export async function POST(req: NextRequest) {
     altitudeMin:          data.altitude_min,
     estimatedTimeSeconds: data.estimated_time_seconds,
     assessment:           data.assessment           ?? undefined,
-    cachedBeautyScore:    data.cached_beauty_score  ?? undefined,
     cachedPois:           data.cached_pois          ?? undefined,
     cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,
   }

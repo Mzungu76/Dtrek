@@ -4,51 +4,6 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { TrackPoint } from '@/lib/tcxParser'
 
-// ── Personal delta recomputation ──────────────────────────────────────────────
-
-async function recomputePersonalDelta(userId: string) {
-  try {
-    const { data: settings } = await supabase
-      .from('user_settings').select('user_age').eq('user_id', userId).single()
-    const userAge = (settings?.user_age as number) ?? 0
-    const userFCmax = userAge >= 10 ? Math.round(211 - 0.64 * userAge) : 185
-
-    const { data: acts } = await supabase
-      .from('activities')
-      .select('avg_heart_rate, distance_meters, elevation_gain, start_time')
-      .eq('user_id', userId)
-      .gt('avg_heart_rate', 0)
-      .gt('distance_meters', 0)
-      .order('start_time', { ascending: false })
-      .limit(50)
-
-    if (!acts?.length) return
-
-    const now = Date.now()
-    let sumW = 0, sumDeltaW = 0
-    for (const act of acts) {
-      const distKm   = (act.distance_meters as number) / 1000
-      const elevGain = (act.elevation_gain  as number) ?? 0
-      const tNaismith = distKm / 4.5 + elevGain / 600
-      const fStd      = Math.min(Math.max(tNaismith * 1.10 * 1.4, 1.5), 10)
-      const expectedFcPct = 50 + fStd * 4
-      const actualFcPct   = ((act.avg_heart_rate as number) / userFCmax) * 100
-      const delta         = (actualFcPct - expectedFcPct) / 10
-      const daysSince     = (now - new Date(act.start_time as string).getTime()) / 86400000
-      const w             = (fStd / 10) * Math.exp(-daysSince / 180)
-      sumW += w; sumDeltaW += delta * w
-    }
-
-    const personalDelta = sumW > 0 ? Math.round((sumDeltaW / sumW) * 100) / 100 : 0
-    await supabase.from('user_settings').upsert(
-      { user_id: userId, personal_delta: personalDelta, hr_hike_count: acts.length, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id' },
-    )
-  } catch (e) {
-    console.error('recomputePersonalDelta:', e)
-  }
-}
-
 export const dynamic = 'force-dynamic'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -103,10 +58,7 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     userRatingNote:  row.user_rating_note as string | undefined,
     linkedPlannedId: row.linked_planned_id as string | undefined,
     linkedPlannedTrackPoints: row.linked_planned_track_points as TrackPoint[] | undefined,
-    linkedBeautyScore: row.linked_beauty_score as StoredActivity['linkedBeautyScore'],
     soddisfazione: row.soddisfazione as number | undefined,
-    lootScore:     row.loot_score as number | undefined,
-    trailScore:    row.trail_score as number | undefined,
   }
 }
 
@@ -137,10 +89,7 @@ function activityToRow(a: StoredActivity) {
     user_rating_note:     a.userRatingNote ?? null,
     linked_planned_id:            a.linkedPlannedId ?? null,
     linked_planned_track_points:  a.linkedPlannedTrackPoints ?? null,
-    linked_beauty_score:          a.linkedBeautyScore ?? null,
     soddisfazione:                a.soddisfazione ?? null,
-    loot_score:                   a.lootScore ?? null,
-    trail_score:                  a.trailScore ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }
@@ -182,9 +131,6 @@ export async function POST(req: NextRequest) {
       .upsert({ ...activityToRow(activity), user_id: user.id }, { onConflict: 'id' })
 
     if (error) throw error
-    if (activity.avgHeartRate && activity.avgHeartRate > 0) {
-      recomputePersonalDelta(user.id)  // fire-and-forget
-    }
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('POST /api/activity:', e)
@@ -207,10 +153,7 @@ export async function PATCH(req: NextRequest) {
       userRating?: number
       userRatingNote?: string
       linkedPlannedId?: string
-      linkedBeautyScore?: StoredActivity['linkedBeautyScore']
       soddisfazione?: number
-      lootScore?: number
-      trailScore?: number
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -220,10 +163,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.userRating        !== undefined) dbPatch.user_rating         = patch.userRating
     if (patch.userRatingNote    !== undefined) dbPatch.user_rating_note    = patch.userRatingNote
     if (patch.linkedPlannedId   !== undefined) dbPatch.linked_planned_id   = patch.linkedPlannedId
-    if (patch.linkedBeautyScore !== undefined) dbPatch.linked_beauty_score = patch.linkedBeautyScore
     if (patch.soddisfazione     !== undefined) dbPatch.soddisfazione       = patch.soddisfazione
-    if (patch.lootScore         !== undefined) dbPatch.loot_score          = patch.lootScore
-    if (patch.trailScore        !== undefined) dbPatch.trail_score         = patch.trailScore
 
     const { error } = await supabase
       .from('activities')
