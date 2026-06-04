@@ -3,13 +3,22 @@ import { useEffect, useRef, useState } from 'react'
 import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
-import { getAllActivities, updateActivityMeta } from '@/lib/blobStore'
+import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blobStore'
 import { computeTrailScore } from '@/lib/trailScore'
-import type { BeautyScore } from '@/lib/beautyScore'
+import { computeBeautyScore, type BeautyScore } from '@/lib/beautyScore'
+import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
+import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
+import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge,
+  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw,
 } from 'lucide-react'
+
+const EMPTY_TERRAIN: TerrainContext = {
+  hasForest: false, hasRiver: false, hasStream: false, hasLake: false,
+  hasPond: false, hasGlacier: false, hasCoast: false, isProtected: false,
+  isNationalPark: false, openTerrain: false, surfaces: [],
+}
 
 // ── Claude API key section ─────────────────────────────────────────────────
 
@@ -145,12 +154,14 @@ function ClaudeKeySection() {
 // ── Comfort TrailScore settings ───────────────────────────────────────────────
 
 function ComfortTrailScoreSection() {
-  const [pesoNatura,  setPesoNatura]  = useState(50)
-  const [prefSforzo,  setPrefSforzo]  = useState(50)
-  const [prefDurata,  setPrefDurata]  = useState(270)
-  const [loading,     setLoading]     = useState(true)
-  const [saving,      setSaving]      = useState(false)
-  const [status,      setStatus]      = useState<{ ok: boolean; msg: string } | null>(null)
+  const [pesoNatura,     setPesoNatura]     = useState(50)
+  const [prefSforzo,     setPrefSforzo]     = useState(50)
+  const [prefDurata,     setPrefDurata]     = useState(270)
+  const [loading,        setLoading]        = useState(true)
+  const [saving,         setSaving]         = useState(false)
+  const [status,         setStatus]         = useState<{ ok: boolean; msg: string } | null>(null)
+  const [batchRunning,   setBatchRunning]   = useState(false)
+  const [batchProgress,  setBatchProgress]  = useState('')
 
   useEffect(() => {
     fetch('/api/user-settings')
@@ -225,6 +236,64 @@ function ComfortTrailScoreSection() {
     setStatus({ ok: true, msg: updated > 0 ? `Salvato · ${updated} CTS aggiornati.` : 'Salvato.' })
   }
 
+  async function handleBatchComputeCts() {
+    setBatchRunning(true)
+    setBatchProgress('Recupero escursioni…')
+    let computed = 0
+    try {
+      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const naturaW = prefs.beautyNaturaWeight ?? pesoNatura
+      const activities = await getAllActivities()
+      const missing = activities.filter(
+        a => !(a as { linkedBeautyScore?: BeautyScore }).linkedBeautyScore?.categories?.length
+      )
+      if (missing.length === 0) {
+        setBatchProgress('Tutte le escursioni hanno già il CTS.')
+        setTimeout(() => { setBatchRunning(false); setBatchProgress('') }, 2500)
+        return
+      }
+      for (let i = 0; i < missing.length; i++) {
+        const meta = missing[i]
+        setBatchProgress(`${i + 1}/${missing.length} — ${meta.title ?? 'Escursione'}`)
+        try {
+          const full = await getActivityById(meta.id)
+          if (!full) continue
+          const gps = (full.trackPoints ?? [])
+            .filter(p => p.lat && p.lon)
+            .map(p => [p.lat!, p.lon!] as [number, number])
+          if (gps.length < 2) continue
+          const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+          const [rawPois, terrain] = await Promise.all([
+            Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
+            Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
+          ])
+          const pois = rawPois as PoiItem[]
+          const rawWiki = pois.length
+            ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+            : []
+          const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
+          const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, full.elevationGain, full.altitudeMax, full.distanceMeters)
+          const { ts } = computeTrailScore(bs, {
+            distanceMeters: full.distanceMeters,
+            elevationGain:  full.elevationGain,
+            elevationLoss:  full.elevationLoss ?? 0,
+            altitudeMax:    full.altitudeMax,
+            avgHeartRate:   full.avgHeartRate,
+            prefSforzo:     prefs.prefSforzo ?? prefSforzo,
+            prefDurata:     prefs.prefDurata ?? prefDurata,
+          }, naturaW)
+          await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: ts })
+          computed++
+          // Small delay to avoid rate-limiting Wikidata/Overpass
+          await new Promise(r => setTimeout(r, 500))
+        } catch {}
+      }
+    } catch {}
+    setBatchRunning(false)
+    setBatchProgress(computed > 0 ? `Completato · ${computed} CTS calcolati.` : 'Nessun CTS calcolato.')
+    setTimeout(() => setBatchProgress(''), 4000)
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
       <div className="flex items-center gap-2.5">
@@ -285,14 +354,29 @@ function ComfortTrailScoreSection() {
             </div>
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition"
-          >
-            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {saving ? 'Aggiornamento CTS…' : 'Salva e ricalcola CTS'}
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving || batchRunning}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition"
+            >
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {saving ? 'Aggiornamento CTS…' : 'Salva e ricalcola CTS'}
+            </button>
+            <button
+              onClick={handleBatchComputeCts}
+              disabled={saving || batchRunning}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-700 text-sm font-medium border border-stone-200 transition"
+            >
+              {batchRunning
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {batchProgress || 'Calcolo in corso…'}</>
+                : <><RefreshCw className="w-3.5 h-3.5" /> Calcola CTS su escursioni senza punteggio</>
+              }
+            </button>
+            {!batchRunning && batchProgress && (
+              <p className="text-xs text-forest-600 font-medium">✓ {batchProgress}</p>
+            )}
+          </div>
         </div>
       )}
 
