@@ -183,8 +183,10 @@ interface PlannedCardProps {
 }
 
 function PlannedCard({ hike, date, showFullDate = false, compact = false }: PlannedCardProps) {
-  const isFuture = date > new Date()
-  const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
+  const isFuture   = date > new Date()
+  const dateLabel  = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
+  const ctsScore   = (hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore
+  const ctsData    = ctsScore != null ? ctsLabel(ctsScore) : null
   return (
     <Link
       href={`/programma/${encodeURIComponent(hike.id)}`}
@@ -203,8 +205,17 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
       {/* Full card */}
       <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
 
-        {/* Top bar */}
-        <div className="h-1 shrink-0 bg-sky-100" />
+        {/* Top bar — CTS badge if available, otherwise thin sky bar */}
+        {ctsData ? (
+          <div className="flex items-center justify-end px-2.5 py-1.5 shrink-0"
+            style={{ backgroundColor: ctsData.color + '22', borderBottom: `1.5px solid ${ctsData.color}40` }}>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
+              CTS {Math.round(ctsScore!)}
+            </span>
+          </div>
+        ) : (
+          <div className="h-1 shrink-0 bg-sky-100" />
+        )}
 
         <div className="flex-1 relative bg-gradient-to-b from-sky-50 to-stone-50 min-h-0 overflow-hidden">
           <div className="absolute inset-2">
