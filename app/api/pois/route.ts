@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import type { PoiItem, PoiType } from '@/lib/overpass'
-import { haversineM } from '@/lib/geoUtils'
+import { haversineM, gnaGeomToCentroid } from '@/lib/geoUtils'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +12,14 @@ const OVERPASS_ENDPOINTS = [
 ]
 
 const USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
+
+// Source priority for deduplication (lower = higher quality)
+const SOURCE_PRIORITY: Record<string, number> = {
+  ptpr_lazio: 1,
+  gna:        2,
+  wikidata:   3,
+  overpass:   4,
+}
 
 // ── Wikidata class QID → PoiType ─────────────────────────────────────────────
 
@@ -46,7 +54,45 @@ const WD_TYPE: Record<string, PoiType> = {
   Q12323:   'monument',
   Q4989906: 'monument',
   Q12280:   'bridge',
-  Q4886:    'ruins',            // borgo (treat as ruins/interest point)
+  Q4886:    'ruins',            // borgo
+}
+
+// ── GNA tipologia → PoiType ───────────────────────────────────────────────────
+
+const GNA_TYPE_MAP: Record<string, PoiType> = {
+  necropoli:           'archaeological',
+  sepoltura:           'archaeological',
+  tomba:               'archaeological',
+  insediamento:        'archaeological',
+  villaggio:           'archaeological',
+  oppidum:             'archaeological',
+  castelliere:         'archaeological',
+  villa:               'archaeological',
+  terme:               'archaeological',
+  anfiteatro:          'archaeological',
+  teatro:              'archaeological',
+  foro:                'archaeological',
+  castello:            'castle',
+  torre:               'tower',
+  rocca:               'castle',
+  fortezza:            'castle',
+  chiesa:              'chapel',
+  abbazia:             'chapel',
+  convento:            'chapel',
+  monastero:           'chapel',
+  via:                 'ruins',
+  strada:              'ruins',
+  percorso:            'ruins',
+  tratturo:            'ruins',
+}
+
+function gnaTypologyToPoiType(tipologia?: string): PoiType {
+  if (!tipologia) return 'archaeological'
+  const lower = tipologia.toLowerCase()
+  for (const [key, type] of Object.entries(GNA_TYPE_MAP)) {
+    if (lower.includes(key)) return type
+  }
+  return 'archaeological'
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -59,6 +105,118 @@ function wikiUrlToTag(url: string): string | undefined {
   const m = url.match(/https?:\/\/([a-z]+)\.wikipedia\.org\/wiki\/(.+)/)
   if (!m) return undefined
   return `${m[1]}:${decodeURIComponent(m[2]).replace(/_/g, ' ')}`
+}
+
+// ── GNA WFS (server-side) ─────────────────────────────────────────────────────
+
+const GNA_BASE = 'https://gna.cultura.gov.it/ogc/wfs'
+const GNA_LAYERS = ['gna:mosi_puntuali', 'gna:mosi_lineari', 'gna:mosi_poligonali']
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseGnaFeatures(geojson: any, _layer: string): PoiItem[] {
+  const features = geojson?.features ?? []
+  const pois: PoiItem[] = []
+
+  for (const f of features) {
+    const props = f.properties ?? {}
+    const name: string | undefined = props.denominazione || props.DENOMINAZIONE || props.nome || props.NOME
+    if (!name) continue
+
+    const centroid = gnaGeomToCentroid(f.geometry)
+    if (!centroid) continue
+    const { lat, lon } = centroid
+    if (isNaN(lat) || isNaN(lon)) continue
+
+    const type = gnaTypologyToPoiType(props.tipologia ?? props.TIPOLOGIA)
+
+    const descParts: string[] = []
+    if (props.cronologia || props.CRONOLOGIA)    descParts.push(props.cronologia ?? props.CRONOLOGIA)
+    if (props.comune     || props.COMUNE)        descParts.push(props.comune ?? props.COMUNE)
+    if (props.provincia  || props.PROVINCIA)     descParts.push(props.provincia ?? props.PROVINCIA)
+    descParts.push('Fonte: GNA — Geoportale Nazionale Archeologia (MiC)')
+
+    const sourceId = String(props.id_gna ?? props.ID_GNA ?? props.gid ?? props.GID ?? '')
+
+    pois.push({
+      id: 0,
+      type,
+      name,
+      lat,
+      lon,
+      distFromTrack: 0,
+      tags: {
+        description: descParts.join(' · '),
+        source:      'gna',
+        sourceId,
+      },
+    })
+  }
+
+  return pois
+}
+
+async function fetchGnaPois(bbox: string): Promise<PoiItem[]> {
+  const [s, w, n, e] = bbox.split(',')
+
+  const results = await Promise.allSettled(GNA_LAYERS.map(async layer => {
+    const url = `${GNA_BASE}?service=WFS&version=2.0.0&request=GetFeature` +
+      `&typeName=${layer}` +
+      `&bbox=${w},${s},${e},${n},EPSG:4326` +
+      `&outputFormat=application/json` +
+      `&count=200`
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(20000),
+    })
+    if (!res.ok) throw new Error(`GNA ${layer} HTTP ${res.status}`)
+    return parseGnaFeatures(await res.json(), layer)
+  }))
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<PoiItem[]> => r.status === 'fulfilled')
+    .flatMap(r => r.value)
+}
+
+// ── PTPR Lazio (Supabase static import) ──────────────────────────────────────
+
+function buildPtprDescription(props: Record<string, unknown> | null, layer: string): string {
+  const parts: string[] = []
+  if (layer === 'punti')  parts.push('Bene puntuale di interesse archeologico')
+  if (layer === 'aree')   parts.push('Area di interesse archeologico tutelata')
+  if (layer === 'linee')  parts.push('Bene lineare di interesse archeologico')
+  const tipoBene = props?.TIPO_BENE ?? props?.tipo_bene
+  if (tipoBene) parts.push(String(tipoBene))
+  const epoca = props?.EPOCA ?? props?.epoca
+  if (epoca) parts.push(`Epoca: ${epoca}`)
+  parts.push('Fonte: PTPR Regione Lazio — Tavola B (CC BY 4.0)')
+  return parts.join(' · ')
+}
+
+async function fetchPtprPois(bbox: string): Promise<PoiItem[]> {
+  const [s, w, n, e] = bbox.split(',').map(Number)
+
+  const { data, error } = await supabase
+    .from('ptpr_pois')
+    .select('id, name, poi_type, lat, lon, layer, raw_props')
+    .gte('lat', s).lte('lat', n)
+    .gte('lon', w).lte('lon', e)
+
+  if (error || !data) return []
+
+  return data.map(row => ({
+    id:            0,
+    type:          (row.poi_type ?? 'archaeological') as PoiType,
+    name:          row.name ?? 'Sito archeologico tutelato',
+    lat:           row.lat,
+    lon:           row.lon,
+    distFromTrack: 0,
+    tags: {
+      description: buildPtprDescription(row.raw_props as Record<string, unknown> | null, row.layer),
+      source:      'ptpr_lazio',
+      sourceId:    row.id,
+    },
+  }))
 }
 
 // ── Wikidata SPARQL (server-side) ─────────────────────────────────────────────
@@ -129,7 +287,10 @@ LIMIT 200`
       lon,
       ele: row.elev ? Math.round(parseFloat(row.elev.value)) : undefined,
       distFromTrack: 0,
-      tags: wikiTag ? { wikipedia: wikiTag } : undefined,
+      tags: {
+        ...(wikiTag ? { wikipedia: wikiTag } : {}),
+        source: 'wikidata',
+      },
     })
   }
 
@@ -206,11 +367,12 @@ function parseOverpassElements(
       distFromTrack: 0,
       tags: {
         ...(wikiTag ? { wikipedia: wikiTag } : {}),
-        ...(tags.description    ? { description:           tags.description }    : {}),
-        ...(tags['description:it'] ? { 'description:it':  tags['description:it'] } : {}),
-        ...(tags.inscription    ? { inscription:           tags.inscription }    : {}),
+        ...(tags.description        ? { description:                tags.description }        : {}),
+        ...(tags['description:it']  ? { 'description:it':           tags['description:it'] }  : {}),
+        ...(tags.inscription        ? { inscription:                tags.inscription }        : {}),
         ...(tags['historic:civilization'] ? { 'historic:civilization': tags['historic:civilization'] } : {}),
-        ...(tags.note           ? { note:                  tags.note }           : {}),
+        ...(tags.note               ? { note:                       tags.note }               : {}),
+        source: 'overpass',
       },
     })
   }
@@ -253,20 +415,24 @@ out body; >; out skel qt;`
   throw new Error('All Overpass endpoints unavailable')
 }
 
-// ── Merge + deduplicate ───────────────────────────────────────────────────────
+// ── Deduplication with source priority ───────────────────────────────────────
 
-function mergePois(wikidata: PoiItem[], overpass: PoiItem[]): PoiItem[] {
-  const merged = [...wikidata]
-  for (const op of overpass) {
-    // Deduplicate: skip if a Wikidata POI is within 50m
-    const tooClose = merged.some(
-      wd => haversineM(wd.lat, wd.lon, op.lat, op.lon) < 50
-    )
-    if (!tooClose) {
-      merged.push(op)
+function deduplicateByProximity(pois: PoiItem[], thresholdM = 50): PoiItem[] {
+  const kept: PoiItem[] = []
+  for (const poi of pois) {
+    const poiSource = poi.tags?.source as string | undefined
+    const duplicate = kept.find(k => haversineM(poi.lat, poi.lon, k.lat, k.lon) < thresholdM)
+    if (!duplicate) {
+      kept.push(poi)
+    } else {
+      const newPrio = SOURCE_PRIORITY[poiSource ?? 'overpass'] ?? 4
+      const oldPrio = SOURCE_PRIORITY[(duplicate.tags?.source as string | undefined) ?? 'overpass'] ?? 4
+      if (newPrio < oldPrio) {
+        kept[kept.indexOf(duplicate)] = poi
+      }
     }
   }
-  return merged
+  return kept
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
@@ -292,23 +458,43 @@ export async function GET(req: NextRequest) {
       .single()
 
     if (cached?.pois) {
-      return NextResponse.json(cached.pois as PoiItem[])
+      // Handle both legacy array format and new {pois, meta} object format
+      const payload = cached.pois as PoiItem[] | { pois: PoiItem[] }
+      return NextResponse.json(Array.isArray(payload) ? payload : payload.pois)
     }
 
-    // Fetch from both sources in parallel — tolerate individual failures
-    const [wdResult, opResult] = await Promise.allSettled([
+    // Fetch from all 4 sources in parallel — tolerate individual failures
+    const [gnaResult, ptprResult, wikidataResult, overpassResult] = await Promise.allSettled([
+      fetchGnaPois(bbox),
+      fetchPtprPois(bbox),
       fetchWikidataPois(bbox),
       fetchOverpassPois(bbox),
     ])
 
-    const wdPois = wdResult.status === 'fulfilled' ? wdResult.value : []
-    const opPois = opResult.status === 'fulfilled' ? opResult.value : []
-    const pois   = mergePois(wdPois, opPois)
+    const allPois = [
+      ...(gnaResult.status      === 'fulfilled' ? gnaResult.value      : []),
+      ...(ptprResult.status     === 'fulfilled' ? ptprResult.value     : []),
+      ...(wikidataResult.status === 'fulfilled' ? wikidataResult.value : []),
+      ...(overpassResult.status === 'fulfilled' ? overpassResult.value : []),
+    ]
 
-    // Cache result (fire-and-forget — don't block response)
+    const pois = deduplicateByProximity(allPois, 50)
+
+    // Cache result with source metadata (fire-and-forget)
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    const cachePayload = {
+      pois,
+      meta: {
+        gna_count:      gnaResult.status      === 'fulfilled' ? gnaResult.value.length      : -1,
+        ptpr_count:     ptprResult.status     === 'fulfilled' ? ptprResult.value.length     : -1,
+        wikidata_count: wikidataResult.status === 'fulfilled' ? wikidataResult.value.length : -1,
+        overpass_count: overpassResult.status === 'fulfilled' ? overpassResult.value.length : -1,
+        merged_count:   pois.length,
+        cached_at:      new Date().toISOString(),
+      },
+    }
     void supabase.from('poi_cache')
-      .upsert({ bbox_key: bboxKey, pois, expires_at: expiresAt }, { onConflict: 'bbox_key' })
+      .upsert({ bbox_key: bboxKey, pois: cachePayload, expires_at: expiresAt }, { onConflict: 'bbox_key' })
 
     return NextResponse.json(pois)
   } catch (e) {

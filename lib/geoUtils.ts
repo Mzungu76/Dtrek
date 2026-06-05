@@ -32,3 +32,37 @@ export function computeBbox(track: [number, number][], pad = 0.01): string {
 export function normalizeBboxKey(bbox: string): string {
   return bbox.split(',').map(v => (Math.round(parseFloat(v) * 100) / 100).toFixed(2)).join('_')
 }
+
+interface GeoJsonGeometry {
+  type: string
+  coordinates: unknown
+}
+
+/** Returns the centroid {lat, lon} of any GeoJSON geometry (Point, Polygon, LineString, Multi*). */
+export function gnaGeomToCentroid(geometry: GeoJsonGeometry): { lat: number; lon: number } | null {
+  try {
+    if (geometry.type === 'Point') {
+      const c = geometry.coordinates as [number, number]
+      return { lat: c[1], lon: c[0] }
+    }
+    if (geometry.type === 'Polygon') {
+      const ring = (geometry.coordinates as [number, number][][])[0]
+      return {
+        lat: ring.reduce((s, c) => s + c[1], 0) / ring.length,
+        lon: ring.reduce((s, c) => s + c[0], 0) / ring.length,
+      }
+    }
+    if (geometry.type === 'LineString') {
+      const coords = geometry.coordinates as [number, number][]
+      const mid = Math.floor(coords.length / 2)
+      return { lat: coords[mid][1], lon: coords[mid][0] }
+    }
+    if (geometry.type === 'MultiPolygon') {
+      return gnaGeomToCentroid({ type: 'Polygon', coordinates: (geometry.coordinates as unknown[][][][])[0] })
+    }
+    if (geometry.type === 'MultiLineString') {
+      return gnaGeomToCentroid({ type: 'LineString', coordinates: (geometry.coordinates as unknown[][][])[0] })
+    }
+  } catch {}
+  return null
+}
