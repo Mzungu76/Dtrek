@@ -1,0 +1,9 @@
+# Shapefiles are large binary files — import locally, not via git
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qpj
+*.sbn
+*.sbx
