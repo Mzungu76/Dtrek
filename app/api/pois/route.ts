@@ -281,7 +281,7 @@ export async function GET(req: NextRequest) {
     const bboxKey = normalizeBboxKey(bbox)
 
     // Lazy cleanup of expired entries (fire-and-forget)
-    supabase.from('poi_cache').delete().lt('expires_at', new Date().toISOString()).then(() => {}).catch(() => {})
+    void supabase.from('poi_cache').delete().lt('expires_at', new Date().toISOString())
 
     // Check cache
     const { data: cached } = await supabase
