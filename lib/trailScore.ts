@@ -147,13 +147,17 @@ export function computeTrailScore(
   const deltaEff    = delta * difficultyW
   const fFinal      = clamp(fStd * (1 + deltaEff), 0, 10)
 
-  // Beauty score components
-  const natura   = beauty.categories.find(c => c.key === 'natura')?.score ?? 0
-  const cultura  = beauty.categories.filter(c => c.key !== 'natura').reduce((s, c) => s + c.score, 0) / 4
-  const pesoN    = pesoNatura / 100
-  const B        = natura * pesoN + cultura * (1 - pesoN)
-  const b1       = beauty.categories.find(c => c.key === 'natura')?.score ?? 0
-  const b2       = beauty.categories.find(c => c.key === 'paesaggio')?.score ?? 0
+  // Beauty score components — recompute b1/b2 from categories per spec
+  const catNatura      = beauty.categories.find(c => c.key === 'natura')?.score      ?? 0
+  const catPaesaggio   = beauty.categories.find(c => c.key === 'paesaggio')?.score   ?? 0
+  const catArcheologia = beauty.categories.find(c => c.key === 'archeologia')?.score ?? 0
+  const catArchitettura = beauty.categories.find(c => c.key === 'architettura')?.score ?? 0
+  const catInteresse   = beauty.categories.find(c => c.key === 'interesse')?.score   ?? 0
+
+  const b1 = catNatura * 0.55 + catPaesaggio * 0.45
+  const b2 = catArcheologia * 0.35 + catArchitettura * 0.40 + catInteresse * 0.25
+  const pesoN = pesoNatura / 100
+  const B = b1 * pesoN + b2 * (1 - pesoN)
 
   const tsBase = clamp(50 * Math.log10((B + 1) / (fFinal + 1)) + 50, 0, 100)
 
