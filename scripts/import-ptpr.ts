@@ -33,20 +33,28 @@ proj4.defs(
   '+proj=utm +zone=33 +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +units=m +no_defs',
 )
 
-const DRY_RUN = process.argv.includes('--dry-run')
+const DRY_RUN    = process.argv.includes('--dry-run')
+const TO_JSON_IDX = process.argv.indexOf('--to-json')
+const TO_JSON_FILE = TO_JSON_IDX !== -1 ? process.argv[TO_JSON_IDX + 1] : null
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
+if (!TO_JSON_FILE && !DRY_RUN && (!SUPABASE_URL || !SUPABASE_KEY)) {
   console.error(
     'Set SUPABASE_URL and SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) env vars.\n' +
-    'Example: SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_KEY=eyJ... npx tsx scripts/import-ptpr.ts',
+    'Example: SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_KEY=eyJ... npx tsx scripts/import-ptpr.ts\n' +
+    'Or use --to-json <file> to dump rows as JSON without a live Supabase connection.',
   )
   process.exit(1)
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+// Defer client creation — not needed for --dry-run or --to-json
+let supabase: ReturnType<typeof createClient> | null = null
+function getSupabase() {
+  if (!supabase) supabase = createClient(SUPABASE_URL!, SUPABASE_KEY!)
+  return supabase
+}
 
 const ATTRIBUTION = 'PTPR Regione Lazio — Tavola B (CC BY 4.0)'
 
@@ -112,10 +120,10 @@ interface PtprRow {
   raw_props: Record<string, unknown>
 }
 
-async function importLayer(shpPath: string, layer: string, region = 'lazio'): Promise<void> {
+async function importLayer(shpPath: string, layer: string, region = 'lazio'): Promise<PtprRow[]> {
   if (!fs.existsSync(shpPath)) {
     console.warn(`  [SKIP] File not found: ${shpPath}`)
-    return
+    return []
   }
 
   const dbfPath = shpPath.replace(/\.shp$/i, '.dbf')
@@ -196,13 +204,15 @@ async function importLayer(shpPath: string, layer: string, region = 'lazio'): Pr
 
   if (DRY_RUN) {
     console.log('  [DRY RUN] Sample row:', JSON.stringify(rows[0], null, 2))
-    return
+    return rows
   }
+
+  if (TO_JSON_FILE) return rows   // caller collects all rows and writes the file
 
   const CHUNK = 500
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK)
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('ptpr_pois')
       .upsert(chunk, { onConflict: 'source_id,layer' })
     if (error) {
@@ -211,6 +221,7 @@ async function importLayer(shpPath: string, layer: string, region = 'lazio'): Pr
       console.log(`  Upserted rows ${i}–${Math.min(i + CHUNK, rows.length)}`)
     }
   }
+  return rows
 }
 
 async function main() {
@@ -244,6 +255,8 @@ async function main() {
     linee_arch:         'linee',
   }
 
+  const allRows: PtprRow[] = []
+
   for (const file of files) {
     const base = path.basename(file, '.shp').toLowerCase()
     const layer = LAYER_MAP[base] ?? (
@@ -251,11 +264,15 @@ async function main() {
       base.includes('area') || base.includes('aree') ? 'aree' :
       base.includes('line') ? 'linee' : 'unknown'
     )
-    await importLayer(path.join(dir, file), layer)
+    const rows = await importLayer(path.join(dir, file), layer)
+    allRows.push(...rows)
   }
 
-  if (!DRY_RUN) {
-    const { count } = await supabase
+  if (TO_JSON_FILE) {
+    fs.writeFileSync(TO_JSON_FILE, JSON.stringify(allRows, null, 0))
+    console.log(`\nWrote ${allRows.length} rows to ${TO_JSON_FILE}`)
+  } else if (!DRY_RUN) {
+    const { count } = await getSupabase()
       .from('ptpr_pois')
       .select('*', { count: 'exact', head: true })
       .eq('region', 'lazio')
