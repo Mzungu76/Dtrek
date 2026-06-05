@@ -51,8 +51,9 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedPois:            row.cached_pois as unknown[] | undefined,
     cachedPoiWiki:         row.cached_poi_wiki as unknown[] | undefined,
     cachedGuide:           row.cached_guide as string | undefined,
-    cachedBeautyScore:     row.cached_beauty_score as PlannedHike['cachedBeautyScore'] | undefined,
-    cachedTrailScore:      row.cached_trail_score as number | undefined,
+    cachedBeautyScore:            row.cached_beauty_score            as PlannedHike['cachedBeautyScore'] | undefined,
+    cachedTrailScore:             row.cached_trail_score             as number | undefined,
+    cachedTrailScoreConfidence:   row.cached_trail_score_confidence  as PlannedHike['cachedTrailScoreConfidence'] | undefined,
   }
 }
 
@@ -77,8 +78,9 @@ function hikeToRow(h: PlannedHike) {
     cached_pois:            h.cachedPois ?? null,
     cached_poi_wiki:        h.cachedPoiWiki ?? null,
     cached_guide:           h.cachedGuide ?? null,
-    cached_beauty_score:    h.cachedBeautyScore ?? null,
-    cached_trail_score:     h.cachedTrailScore ?? null,
+    cached_beauty_score:              h.cachedBeautyScore ?? null,
+    cached_trail_score:               h.cachedTrailScore ?? null,
+    cached_trail_score_confidence:    h.cachedTrailScoreConfidence ?? null,
   }
 }
 
@@ -88,7 +90,7 @@ const META_COLS = [
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
   'route_polyline', 'assessment', 'cached_guide',
-  'cached_beauty_score', 'cached_trail_score',
+  'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
@@ -224,18 +226,20 @@ export async function PATCH(req: NextRequest) {
       cachedGuide?: string
       cachedBeautyScore?: PlannedHike['cachedBeautyScore']
       cachedTrailScore?: number
+      cachedTrailScoreConfidence?: string
     }
 
     const dbPatch: Record<string, unknown> = {}
-    if (patch.title              !== undefined) dbPatch.title                = patch.title
-    if (patch.userNotes          !== undefined) dbPatch.user_notes           = patch.userNotes
-    if (patch.tags               !== undefined) dbPatch.tags                 = patch.tags
-    if (patch.plannedDate        !== undefined) dbPatch.planned_date         = patch.plannedDate || null
-    if (patch.cachedPois         !== undefined) dbPatch.cached_pois          = patch.cachedPois
-    if (patch.cachedPoiWiki      !== undefined) dbPatch.cached_poi_wiki      = patch.cachedPoiWiki
-    if (patch.cachedGuide        !== undefined) dbPatch.cached_guide         = patch.cachedGuide
-    if (patch.cachedBeautyScore  !== undefined) dbPatch.cached_beauty_score  = patch.cachedBeautyScore
-    if (patch.cachedTrailScore   !== undefined) dbPatch.cached_trail_score   = patch.cachedTrailScore
+    if (patch.title                        !== undefined) dbPatch.title                          = patch.title
+    if (patch.userNotes                    !== undefined) dbPatch.user_notes                     = patch.userNotes
+    if (patch.tags                         !== undefined) dbPatch.tags                           = patch.tags
+    if (patch.plannedDate                  !== undefined) dbPatch.planned_date                   = patch.plannedDate || null
+    if (patch.cachedPois                   !== undefined) dbPatch.cached_pois                    = patch.cachedPois
+    if (patch.cachedPoiWiki                !== undefined) dbPatch.cached_poi_wiki                = patch.cachedPoiWiki
+    if (patch.cachedGuide                  !== undefined) dbPatch.cached_guide                   = patch.cachedGuide
+    if (patch.cachedBeautyScore            !== undefined) dbPatch.cached_beauty_score            = patch.cachedBeautyScore
+    if (patch.cachedTrailScore             !== undefined) dbPatch.cached_trail_score             = patch.cachedTrailScore
+    if (patch.cachedTrailScoreConfidence   !== undefined) dbPatch.cached_trail_score_confidence  = patch.cachedTrailScoreConfidence
 
     const { error } = await supabase
       .from('planned_hikes')

@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max')
     .eq('user_id', user.id)
     .single()
 
@@ -51,13 +51,19 @@ export async function GET(req: NextRequest) {
     userWeightKg:       (data?.user_weight_kg as number) ?? 0,
     userHeightCm:       (data?.user_height_cm as number) ?? 0,
     derivedFCmax:       age > 0 ? deriveFCmax(age) : 0,
-    beautyNaturaWeight: (data?.beauty_natura_weight as number) ?? 50,
-    prefSforzo:         (data?.pref_sforzo           as number) ?? 50,
-    prefDurata:          (data?.pref_durata             as number) ?? 270,
-    hikerFaceDataUrl:   (data?.hiker_face_data_url   as string) ?? null,
-    displayName:        (data?.display_name           as string) ?? null,
-    personalDelta:      (data?.personal_delta         as number) ?? null,
-    hrHikeCount:        (data?.hr_hike_count          as number) ?? 0,
+    beautyNaturaWeight:       (data?.beauty_natura_weight       as number) ?? 55,
+    beautyPaesaggioWeight:    (data?.beauty_paesaggio_weight    as number) ?? 45,
+    beautyArcheologiaWeight:  (data?.beauty_archeologia_weight  as number) ?? 35,
+    beautyArchitetturaWeight: (data?.beauty_architettura_weight as number) ?? 40,
+    beautyInteresseWeight:    (data?.beauty_interesse_weight    as number) ?? 25,
+    prefSforzo:               (data?.pref_sforzo                as number) ?? 50,
+    prefDurata:               (data?.pref_durata                as number) ?? 270,
+    hikerFaceDataUrl:         (data?.hiker_face_data_url        as string) ?? null,
+    displayName:              (data?.display_name               as string) ?? null,
+    personalDelta:            (data?.personal_delta             as number) ?? null,
+    hrHikeCount:              (data?.hr_hike_count              as number) ?? 0,
+    hrRest:                   (data?.hr_rest                    as number) ?? 55,
+    hrMax:                    (data?.hr_max                     as number) ?? null,
   })
 }
 
@@ -72,10 +78,16 @@ export async function POST(req: NextRequest) {
     userWeightKg?: number
     userHeightCm?: number
     beautyNaturaWeight?: number
+    beautyPaesaggioWeight?: number
+    beautyArcheologiaWeight?: number
+    beautyArchitetturaWeight?: number
+    beautyInteresseWeight?: number
     prefSforzo?: number
     prefDurata?: number
     hikerFaceDataUrl?: string | null
     displayName?: string | null
+    hrRest?: number
+    hrMax?: number | null
   }
 
   const upsertData: Record<string, unknown> = {
@@ -117,13 +129,36 @@ export async function POST(req: NextRequest) {
     upsertData.user_height_cm = h
   }
 
-  // Peso Natura/Cultura slider (0–100)
-  if (body.beautyNaturaWeight !== undefined) {
-    const w = Math.round(body.beautyNaturaWeight)
-    if (w < 0 || w > 100) {
-      return NextResponse.json({ error: 'Peso fuori range (0–100)' }, { status: 400 })
+  // Beauty category weights (each 0–100)
+  for (const [bodyKey, dbCol] of [
+    ['beautyNaturaWeight',       'beauty_natura_weight'],
+    ['beautyPaesaggioWeight',    'beauty_paesaggio_weight'],
+    ['beautyArcheologiaWeight',  'beauty_archeologia_weight'],
+    ['beautyArchitetturaWeight', 'beauty_architettura_weight'],
+    ['beautyInteresseWeight',    'beauty_interesse_weight'],
+  ] as [string, string][]) {
+    const val = (body as Record<string, unknown>)[bodyKey]
+    if (val !== undefined) {
+      const w = Math.round(val as number)
+      if (w < 0 || w > 100) return NextResponse.json({ error: `${bodyKey} fuori range (0–100)` }, { status: 400 })
+      upsertData[dbCol] = w
     }
-    upsertData.beauty_natura_weight = w
+  }
+
+  // HR fields
+  if (body.hrRest !== undefined) {
+    const v = Math.round(body.hrRest)
+    if (v < 30 || v > 100) return NextResponse.json({ error: 'hrRest fuori range (30–100)' }, { status: 400 })
+    upsertData.hr_rest = v
+  }
+  if (body.hrMax !== undefined) {
+    if (body.hrMax === null) {
+      upsertData.hr_max = null
+    } else {
+      const v = Math.round(body.hrMax)
+      if (v < 100 || v > 250) return NextResponse.json({ error: 'hrMax fuori range (100–250)' }, { status: 400 })
+      upsertData.hr_max = v
+    }
   }
 
   if (body.prefSforzo !== undefined) {
@@ -154,10 +189,16 @@ export async function POST(req: NextRequest) {
     // CTS columns not yet migrated — retry without them
     const safe = { ...upsertData }
     delete safe.beauty_natura_weight
+    delete safe.beauty_paesaggio_weight
+    delete safe.beauty_archeologia_weight
+    delete safe.beauty_architettura_weight
+    delete safe.beauty_interesse_weight
     delete safe.pref_sforzo
     delete safe.pref_durata
     delete safe.personal_delta
     delete safe.hr_hike_count
+    delete safe.hr_rest
+    delete safe.hr_max
     const { error: e2 } = await supabase
       .from('user_settings')
       .upsert(safe, { onConflict: 'user_id' })

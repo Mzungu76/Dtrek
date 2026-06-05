@@ -4,11 +4,11 @@ import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getAllPlanned, getPlannedById, updatePlannedMeta } from '@/lib/plannedStore'
 import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blobStore'
-import { computeTrailScore } from '@/lib/trailScore'
-import { computeBeautyScore, type BeautyScore } from '@/lib/beautyScore'
-import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
+import { computeTrailScore, getCtsFallback, type CtsConfidence } from '@/lib/trailScore'
+import { computeBeautyScore, normalizeWeights, type BeautyScore, type BeautyWeightPrefs } from '@/lib/beautyScore'
 import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
+import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
   Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw,
@@ -153,10 +153,45 @@ function ClaudeKeySection() {
 
 // ── Comfort TrailScore settings ───────────────────────────────────────────────
 
+async function batchUpdate<T>(
+  items: T[],
+  fn: (item: T) => Promise<void>,
+  chunkSize = 5,
+  delayMs = 200,
+): Promise<{ ok: number; failed: number }> {
+  let ok = 0, failed = 0
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize)
+    await Promise.allSettled(chunk.map(async item => {
+      try { await fn(item); ok++ }
+      catch { failed++ }
+    }))
+    if (i + chunkSize < items.length) await new Promise(r => setTimeout(r, delayMs))
+  }
+  return { ok, failed }
+}
+
+async function fetchPoisForGps(gps: [number, number][]): Promise<PoiItem[]> {
+  if (gps.length < 2) return []
+  const bbox = computeBbox(gps)
+  try {
+    const res = await fetch(`/api/pois?bbox=${bbox}`)
+    if (!res.ok) return []
+    const all: PoiItem[] = await res.json()
+    return all.filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
+  } catch { return [] }
+}
+
 function ComfortTrailScoreSection() {
-  const [pesoNatura,     setPesoNatura]     = useState(50)
-  const [prefSforzo,     setPrefSforzo]     = useState(50)
-  const [prefDurata,     setPrefDurata]     = useState(270)
+  const [pesoNatura,       setPesoNatura]       = useState(55)
+  const [pesoPaesaggio,    setPesoPaesaggio]    = useState(45)
+  const [pesoArcheologia,  setPesoArcheologia]  = useState(35)
+  const [pesoArchitettura, setPesoArchitettura] = useState(40)
+  const [pesoInteresse,    setPesoInteresse]    = useState(25)
+  const [hrRest,           setHrRest]           = useState(55)
+  const [hrMax,            setHrMax]            = useState<number | null>(null)
+  const [prefSforzo,       setPrefSforzo]       = useState(50)
+  const [prefDurata,       setPrefDurata]       = useState(270)
   const [loading,        setLoading]        = useState(true)
   const [saving,         setSaving]         = useState(false)
   const [status,         setStatus]         = useState<{ ok: boolean; msg: string } | null>(null)
@@ -169,9 +204,15 @@ function ComfortTrailScoreSection() {
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
-        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
-        if (d.prefSforzo        != null) setPrefSforzo(d.prefSforzo)
-        if (d.prefDurata        != null) setPrefDurata(d.prefDurata)
+        if (d.beautyNaturaWeight      != null) setPesoNatura(d.beautyNaturaWeight)
+        if (d.beautyPaesaggioWeight   != null) setPesoPaesaggio(d.beautyPaesaggioWeight)
+        if (d.beautyArcheologiaWeight != null) setPesoArcheologia(d.beautyArcheologiaWeight)
+        if (d.beautyArchitetturaWeight != null) setPesoArchitettura(d.beautyArchitetturaWeight)
+        if (d.beautyInteresseWeight   != null) setPesoInteresse(d.beautyInteresseWeight)
+        if (d.hrRest  != null) setHrRest(d.hrRest)
+        if (d.hrMax   != null) setHrMax(d.hrMax)
+        if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefDurata != null) setPrefDurata(d.prefDurata)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -182,7 +223,17 @@ function ComfortTrailScoreSection() {
     const res = await fetch('/api/user-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ beautyNaturaWeight: pesoNatura, prefSforzo, prefDurata }),
+      body: JSON.stringify({
+        beautyNaturaWeight: pesoNatura,
+        beautyPaesaggioWeight: pesoPaesaggio,
+        beautyArcheologiaWeight: pesoArcheologia,
+        beautyArchitetturaWeight: pesoArchitettura,
+        beautyInteresseWeight: pesoInteresse,
+        hrRest,
+        hrMax: hrMax ?? null,
+        prefSforzo,
+        prefDurata,
+      }),
     })
     if (!res.ok) {
       const json = await res.json().catch(() => ({}))
@@ -191,12 +242,18 @@ function ComfortTrailScoreSection() {
       return
     }
 
-    // Batch recalculate CTS for all hikes and activities
+    // Lightweight recalculation — reuse cached BeautyScore, just recalculate CTS with new weights
     let updated = 0
     try {
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const naturaW = prefs.beautyNaturaWeight ?? pesoNatura
-
+      const rawW: Partial<BeautyWeightPrefs> = {
+        natura: prefs.beautyNaturaWeight ?? pesoNatura,
+        paesaggio: prefs.beautyPaesaggioWeight ?? pesoPaesaggio,
+        archeologia: prefs.beautyArcheologiaWeight ?? pesoArcheologia,
+        architettura: prefs.beautyArchitetturaWeight ?? pesoArchitettura,
+        interesse: prefs.beautyInteresseWeight ?? pesoInteresse,
+      }
+      const w = normalizeWeights(rawW)
       const [hikes, activities] = await Promise.all([getAllPlanned(), getAllActivities()])
 
       await Promise.all([
@@ -204,22 +261,24 @@ function ComfortTrailScoreSection() {
           .filter(h => (h as { cachedBeautyScore?: BeautyScore }).cachedBeautyScore?.categories?.length)
           .map(h => {
             const bs = (h as { cachedBeautyScore: BeautyScore }).cachedBeautyScore
-            const { ts } = computeTrailScore(bs, {
+            const { ts, confidence } = computeTrailScore(bs, {
               distanceMeters: h.distanceMeters,
               elevationGain:  h.elevationGain,
               elevationLoss:  h.elevationLoss,
               altitudeMax:    h.altitudeMax,
               prefSforzo:     prefs.prefSforzo ?? prefSforzo,
               prefDurata:     prefs.prefDurata ?? prefDurata,
-            }, naturaW)
+              hrRest:         prefs.hrRest ?? hrRest,
+              hrMax:          prefs.hrMax ?? hrMax ?? undefined,
+            }, w.natura * 100)
             updated++
-            return updatePlannedMeta(h.id, { cachedTrailScore: ts })
+            return updatePlannedMeta(h.id, { cachedTrailScore: ts, cachedTrailScoreConfidence: confidence })
           }),
         ...activities
           .filter(a => (a as { linkedBeautyScore?: BeautyScore }).linkedBeautyScore?.categories?.length)
           .map(a => {
             const bs = (a as { linkedBeautyScore: BeautyScore }).linkedBeautyScore
-            const { ts } = computeTrailScore(bs, {
+            const { ts, confidence } = computeTrailScore(bs, {
               distanceMeters: a.distanceMeters,
               elevationGain:  a.elevationGain,
               elevationLoss:  a.elevationLoss ?? 0,
@@ -227,9 +286,11 @@ function ComfortTrailScoreSection() {
               avgHeartRate:   a.avgHeartRate,
               prefSforzo:     prefs.prefSforzo ?? prefSforzo,
               prefDurata:     prefs.prefDurata ?? prefDurata,
-            }, naturaW)
+              hrRest:         prefs.hrRest ?? hrRest,
+              hrMax:          prefs.hrMax ?? hrMax ?? undefined,
+            }, w.natura * 100)
             updated++
-            return updateActivityMeta(a.id, { trailScore: ts })
+            return updateActivityMeta(a.id, { trailScore: ts, trailScoreConfidence: confidence })
           }),
       ])
     } catch {}
@@ -244,7 +305,15 @@ function ComfortTrailScoreSection() {
     let computed = 0
     try {
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const naturaW = prefs.beautyNaturaWeight ?? pesoNatura
+      const rawW: Partial<BeautyWeightPrefs> = {
+        natura: prefs.beautyNaturaWeight ?? pesoNatura,
+        paesaggio: prefs.beautyPaesaggioWeight ?? pesoPaesaggio,
+        archeologia: prefs.beautyArcheologiaWeight ?? pesoArcheologia,
+        architettura: prefs.beautyArchitetturaWeight ?? pesoArchitettura,
+        interesse: prefs.beautyInteresseWeight ?? pesoInteresse,
+      }
+      const w = normalizeWeights(rawW)
+
       const activities = await getAllActivities()
       const missing = activities.filter(
         a => !(a as { linkedBeautyScore?: BeautyScore }).linkedBeautyScore?.categories?.length
@@ -254,27 +323,34 @@ function ComfortTrailScoreSection() {
         setTimeout(() => { setBatchRunning(false); setBatchProgress('') }, 2500)
         return
       }
-      for (let i = 0; i < missing.length; i++) {
-        const meta = missing[i]
-        setBatchProgress(`${i + 1}/${missing.length} — ${meta.title ?? 'Escursione'}`)
-        try {
-          const full = await getActivityById(meta.id)
-          if (!full) continue
-          const gps = (full.trackPoints ?? [])
-            .filter(p => p.lat && p.lon)
-            .map(p => [p.lat!, p.lon!] as [number, number])
-          if (gps.length < 2) continue
-          const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
-          const [rawPois, terrain] = await Promise.all([
-            Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
-            Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
-          ])
-          const pois = rawPois as PoiItem[]
-          const rawWiki = pois.length
-            ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
-            : []
-          const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
-          const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, full.elevationGain, full.altitudeMax, full.distanceMeters)
+
+      let i = 0
+      await batchUpdate(missing, async meta => {
+        setBatchProgress(`${++i}/${missing.length} — ${meta.title ?? 'Escursione'}`)
+        const full = await getActivityById(meta.id)
+        if (!full) return
+        const gps = (full.trackPoints ?? [])
+          .filter(p => p.lat && p.lon)
+          .map(p => [p.lat!, p.lon!] as [number, number])
+
+        const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+        const [pois, terrain] = await Promise.all([
+          Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
+          Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN) as Promise<TerrainContext>,
+        ])
+        const rawWiki = pois.length
+          ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+          : []
+        const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
+        const bs = computeBeautyScore(pois, wiki, terrain, full.elevationGain, full.altitudeMax, full.distanceMeters, rawW)
+
+        let confidence: CtsConfidence = 'high'
+        let finalTs: number
+        if (pois.length === 0) {
+          confidence = 'default'
+          finalTs = getCtsFallback(activities)
+        } else {
+          if (pois.length < 3 || bs.overall < 2) confidence = 'estimated'
           const { ts } = computeTrailScore(bs, {
             distanceMeters: full.distanceMeters,
             elevationGain:  full.elevationGain,
@@ -283,13 +359,14 @@ function ComfortTrailScoreSection() {
             avgHeartRate:   full.avgHeartRate,
             prefSforzo:     prefs.prefSforzo ?? prefSforzo,
             prefDurata:     prefs.prefDurata ?? prefDurata,
-          }, naturaW)
-          await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: ts })
-          computed++
-          // Small delay to avoid rate-limiting Wikidata/Overpass
-          await new Promise(r => setTimeout(r, 500))
-        } catch {}
-      }
+            hrRest:         prefs.hrRest ?? hrRest,
+            hrMax:          prefs.hrMax ?? hrMax ?? undefined,
+          }, w.natura * 100)
+          finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
+        }
+        await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence })
+        computed++
+      })
     } catch {}
     setBatchRunning(false)
     setBatchProgress(computed > 0 ? `Completato · ${computed} CTS calcolati.` : 'Nessun CTS calcolato.')
@@ -301,34 +378,46 @@ function ComfortTrailScoreSection() {
     setFullRecalcProgress('Recupero preferenze…')
     let computed = 0
     try {
-      const prefs   = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const naturaW = prefs.beautyNaturaWeight ?? pesoNatura
+      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const rawW: Partial<BeautyWeightPrefs> = {
+        natura: prefs.beautyNaturaWeight ?? pesoNatura,
+        paesaggio: prefs.beautyPaesaggioWeight ?? pesoPaesaggio,
+        archeologia: prefs.beautyArcheologiaWeight ?? pesoArcheologia,
+        architettura: prefs.beautyArchitetturaWeight ?? pesoArchitettura,
+        interesse: prefs.beautyInteresseWeight ?? pesoInteresse,
+      }
+      const w = normalizeWeights(rawW)
 
       const [activities, hikes] = await Promise.all([getAllActivities(), getAllPlanned()])
       const total = activities.length + hikes.length
 
-      // Recalculate all activities
-      for (let i = 0; i < activities.length; i++) {
-        const meta = activities[i]
-        setFullRecalcProgress(`${i + 1}/${total} — ${meta.title ?? 'Escursione'}`)
-        try {
-          const full = await getActivityById(meta.id)
-          if (!full) continue
-          const gps = (full.trackPoints ?? [])
-            .filter(p => p.lat && p.lon)
-            .map(p => [p.lat!, p.lon!] as [number, number])
-          if (gps.length < 2) continue
-          const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
-          const [rawPois, terrain] = await Promise.all([
-            Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
-            Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
-          ])
-          const pois = rawPois as PoiItem[]
-          const rawWiki = pois.length
-            ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
-            : []
-          const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
-          const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, full.elevationGain, full.altitudeMax, full.distanceMeters)
+      let idx = 0
+      await batchUpdate(activities, async meta => {
+        setFullRecalcProgress(`${++idx}/${total} — ${meta.title ?? 'Escursione'}`)
+        const full = await getActivityById(meta.id)
+        if (!full) return
+        const gps = (full.trackPoints ?? [])
+          .filter(p => p.lat && p.lon)
+          .map(p => [p.lat!, p.lon!] as [number, number])
+
+        const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+        const [pois, terrain] = await Promise.all([
+          Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
+          Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN) as Promise<TerrainContext>,
+        ])
+        const rawWiki = pois.length
+          ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+          : []
+        const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
+        const bs = computeBeautyScore(pois, wiki, terrain, full.elevationGain, full.altitudeMax, full.distanceMeters, rawW)
+
+        let confidence: CtsConfidence = 'high'
+        let finalTs: number
+        if (pois.length === 0) {
+          confidence = 'default'
+          finalTs = getCtsFallback(activities)
+        } else {
+          if (pois.length < 3 || bs.overall < 2) confidence = 'estimated'
           const { ts } = computeTrailScore(bs, {
             distanceMeters: full.distanceMeters,
             elevationGain:  full.elevationGain,
@@ -337,35 +426,41 @@ function ComfortTrailScoreSection() {
             avgHeartRate:   full.avgHeartRate,
             prefSforzo:     prefs.prefSforzo ?? prefSforzo,
             prefDurata:     prefs.prefDurata ?? prefDurata,
-          }, naturaW)
-          await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: ts })
-          computed++
-          await new Promise(r => setTimeout(r, 500))
-        } catch {}
-      }
+            hrRest:         prefs.hrRest ?? hrRest,
+            hrMax:          prefs.hrMax ?? hrMax ?? undefined,
+          }, w.natura * 100)
+          finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
+        }
+        await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence })
+        computed++
+      })
 
-      // Recalculate all planned hikes
-      for (let i = 0; i < hikes.length; i++) {
-        const meta = hikes[i]
-        setFullRecalcProgress(`${activities.length + i + 1}/${total} — ${meta.title ?? 'Pianificata'}`)
-        try {
-          const full = await getPlannedById(meta.id)
-          if (!full) continue
-          const gps = (full.trackPoints ?? [])
-            .filter(p => p.lat && p.lon)
-            .map(p => [p.lat!, p.lon!] as [number, number])
-          if (gps.length < 2) continue
-          const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
-          const [rawPois, terrain] = await Promise.all([
-            Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
-            Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
-          ])
-          const pois = rawPois as PoiItem[]
-          const rawWiki = pois.length
-            ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
-            : []
-          const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
-          const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, full.elevationGain, full.altitudeMax, full.distanceMeters)
+      await batchUpdate(hikes, async meta => {
+        setFullRecalcProgress(`${++idx}/${total} — ${meta.title ?? 'Pianificata'}`)
+        const full = await getPlannedById(meta.id)
+        if (!full) return
+        const gps = (full.trackPoints ?? [])
+          .filter(p => p.lat && p.lon)
+          .map(p => [p.lat!, p.lon!] as [number, number])
+
+        const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+        const [pois, terrain] = await Promise.all([
+          Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
+          Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN) as Promise<TerrainContext>,
+        ])
+        const rawWiki = pois.length
+          ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+          : []
+        const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
+        const bs = computeBeautyScore(pois, wiki, terrain, full.elevationGain, full.altitudeMax, full.distanceMeters, rawW)
+
+        let confidence: CtsConfidence = 'high'
+        let finalTs: number
+        if (pois.length === 0) {
+          confidence = 'default'
+          finalTs = getCtsFallback(activities)
+        } else {
+          if (pois.length < 3 || bs.overall < 2) confidence = 'estimated'
           const { ts } = computeTrailScore(bs, {
             distanceMeters: full.distanceMeters,
             elevationGain:  full.elevationGain,
@@ -373,12 +468,14 @@ function ComfortTrailScoreSection() {
             altitudeMax:    full.altitudeMax,
             prefSforzo:     prefs.prefSforzo ?? prefSforzo,
             prefDurata:     prefs.prefDurata ?? prefDurata,
-          }, naturaW)
-          await updatePlannedMeta(full.id, { cachedBeautyScore: bs, cachedTrailScore: ts })
-          computed++
-          await new Promise(r => setTimeout(r, 500))
-        } catch {}
-      }
+            hrRest:         prefs.hrRest ?? hrRest,
+            hrMax:          prefs.hrMax ?? hrMax ?? undefined,
+          }, w.natura * 100)
+          finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
+        }
+        await updatePlannedMeta(full.id, { cachedBeautyScore: bs, cachedTrailScore: finalTs, cachedTrailScoreConfidence: confidence })
+        computed++
+      })
     } catch {}
     setFullRecalcRunning(false)
     setFullRecalcProgress(computed > 0 ? `Completato · ${computed} CTS ricalcolati.` : 'Nessun CTS ricalcolato.')
@@ -401,17 +498,58 @@ function ComfortTrailScoreSection() {
         </div>
       ) : (
         <div className="space-y-5">
-          {/* Peso natura */}
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-xs font-medium text-stone-600">Peso natura vs. cultura</label>
-              <span className="text-xs font-mono text-stone-500">{pesoNatura}% natura</span>
-            </div>
-            <input type="range" min={0} max={100} value={pesoNatura}
-              onChange={e => setPesoNatura(Number(e.target.value))}
-              className="w-full accent-forest-600" />
-            <div className="flex justify-between text-[10px] text-stone-400 mt-0.5">
-              <span>Solo cultura</span><span>Equilibrato</span><span>Solo natura</span>
+
+          {/* Pesi per la Bellezza */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Pesi per la Bellezza</p>
+
+            {([
+              { label: 'Natura',        val: pesoNatura,       set: setPesoNatura,       hint: 'Vette, cascate, grotte, foreste' },
+              { label: 'Paesaggio',     val: pesoPaesaggio,    set: setPesoPaesaggio,    hint: 'Panorami, punti vista, laghi' },
+              { label: 'Archeologia',   val: pesoArcheologia,  set: setPesoArcheologia,  hint: 'Rovine, necropoli, siti antichi' },
+              { label: 'Architettura',  val: pesoArchitettura, set: setPesoArchitettura, hint: 'Castelli, chiese, borghi' },
+              { label: 'Interesse',     val: pesoInteresse,    set: setPesoInteresse,    hint: 'Sorgenti, curiosità locali' },
+            ] as const).map(({ label, val, set, hint }) => (
+              <div key={label}>
+                <div className="flex justify-between items-center mb-0.5">
+                  <label className="text-xs font-medium text-stone-600">{label}</label>
+                  <span className="text-xs font-mono text-stone-400">{val}</span>
+                </div>
+                <input type="range" min={0} max={100} value={val}
+                  onChange={e => set(Number(e.target.value))}
+                  className="w-full accent-forest-600" />
+                <p className="text-[10px] text-stone-400 mt-0.5">{hint}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* HR settings */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Frequenza cardiaca (Karvonen)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">FC riposo</p>
+                <div className="relative">
+                  <input
+                    type="number" min={30} max={100} value={hrRest}
+                    onChange={e => setHrRest(parseInt(e.target.value) || 55)}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">bpm</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">FC max (opz.)</p>
+                <div className="relative">
+                  <input
+                    type="number" min={100} max={250} value={hrMax ?? ''}
+                    onChange={e => setHrMax(parseInt(e.target.value) || null)}
+                    placeholder="Tanaka"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">bpm</span>
+                </div>
+              </div>
             </div>
           </div>
 
