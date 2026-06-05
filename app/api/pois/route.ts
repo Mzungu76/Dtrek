@@ -307,9 +307,8 @@ export async function GET(req: NextRequest) {
 
     // Cache result (fire-and-forget — don't block response)
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-    supabase.from('poi_cache')
+    void supabase.from('poi_cache')
       .upsert({ bbox_key: bboxKey, pois, expires_at: expiresAt }, { onConflict: 'bbox_key' })
-      .then(() => {}).catch(() => {})
 
     return NextResponse.json(pois)
   } catch (e) {
