@@ -102,22 +102,22 @@ export async function updatePlannedMeta(
   id: string,
   meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedBeautyScore' | 'cachedTrailScore'>>,
 ): Promise<void> {
-  await apiFetch('/api/planned', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, ...meta }),
-  })
-  // Patch full cached hike
+  // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {
     if (local) lsSet(LS_KEYS.planned(id), { ...local, ...meta }).catch(() => {})
   }).catch(() => {})
-  // Patch list cache
   lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList).then((list) => {
     if (!list) return
     lsSet(LS_KEYS.plannedList,
       list.map((h) => h.id === id ? { ...h, ...meta } : h)
     ).catch(() => {})
   }).catch(() => {})
+  await apiFetch('/api/planned', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...meta }),
+  })
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cts-updated'))
 }
 
 /** Deletes from Supabase, then removes from local cache. */

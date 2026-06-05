@@ -74,6 +74,12 @@ export default function ProgrammaPage() {
     getAllPlanned(setHikes).then(setHikes).finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    const refresh = () => { getAllPlanned(setHikes).then(setHikes).catch(() => {}) }
+    window.addEventListener('cts-updated', refresh)
+    return () => window.removeEventListener('cts-updated', refresh)
+  }, [])
+
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()
     if (!confirm('Eliminare questa escursione pianificata?')) return

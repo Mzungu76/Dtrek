@@ -163,6 +163,7 @@ export async function updateActivityMeta(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, ...meta }),
   })
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cts-updated'))
 }
 
 /** Deletes from Supabase, then removes from local cache. */

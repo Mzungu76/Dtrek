@@ -275,6 +275,15 @@ export default function HomePage() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    const refresh = () => {
+      getAllActivities(setActivities).then(setActivities).catch(() => {})
+      getAllPlanned(setPlanned).then(setPlanned).catch(() => {})
+    }
+    window.addEventListener('cts-updated', refresh)
+    return () => window.removeEventListener('cts-updated', refresh)
+  }, [])
+
   const months = useMemo(() => {
     const now = new Date()
     let curY = now.getFullYear(), curM = now.getMonth()
