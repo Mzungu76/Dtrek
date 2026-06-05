@@ -4,10 +4,15 @@
  * Usage:
  *   npx tsx scripts/import-ptpr.ts [--dry-run]
  *
- * Files expected in data/ptpr/ (exact names verified from filesystem):
- *   puntiarcheologici.shp / .dbf
- *   aree_archeologiche.shp / .dbf
- *   linee_archeologiche.shp / .dbf
+ * Files expected in data/ptpr/:
+ *   puntiarcheologici.shp / .dbf  (2,963 records)
+ *   aree_archeologiche.shp / .dbf  (2,090 records)
+ *   linee_archeologiche.shp / .dbf (1,626 records)
+ *
+ * Verified DBF field names:
+ *   punti:  ID_RL, NOME, TIPO_OGG, NOTE_, allegati
+ *   aree:   ID_RL, NOME, COMUNE, VINCOLO, Shape_Area, allegati
+ *   linee:  ID_RL, NOME, TIPO, NOTE_, FONTE, VINCOLO, Shape_Leng, allegati
  *
  * Original projection: ED50 fuso 33N (EPSG:23033)
  * Output projection: WGS84 (EPSG:4326)
@@ -22,7 +27,6 @@ import fs from 'fs'
 import path from 'path'
 import { createClient } from '@supabase/supabase-js'
 
-// ── EPSG:23033 definition ──────────────────────────────────────────────────────
 // ED50 / UTM zone 33N — standard projection for Italian cadastral data
 proj4.defs(
   'EPSG:23033',
@@ -31,7 +35,6 @@ proj4.defs(
 
 const DRY_RUN = process.argv.includes('--dry-run')
 
-// ── Supabase client (service key — bypasses RLS) ──────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -45,14 +48,12 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-// ── Coordinate conversion ─────────────────────────────────────────────────────
+const ATTRIBUTION = 'PTPR Regione Lazio — Tavola B (CC BY 4.0)'
 
 function toWgs84(coords: number[]): [number, number] {
   const [lon, lat] = proj4('EPSG:23033', 'EPSG:4326', [coords[0], coords[1]])
   return [lon, lat]
 }
-
-// ── Centroid extraction (after coordinate conversion) ─────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractCentroid(geometry: any): { lat: number; lon: number } | null {
@@ -66,6 +67,7 @@ function extractCentroid(geometry: any): { lat: number; lon: number } | null {
 
     if (geometry.type === 'Polygon') {
       const ring: number[][] = geometry.coordinates[0]
+      if (!ring || ring.length === 0) return null
       const converted = ring.map(c => toWgs84(c))
       return {
         lat: converted.reduce((s, c) => s + c[1], 0) / converted.length,
@@ -75,40 +77,33 @@ function extractCentroid(geometry: any): { lat: number; lon: number } | null {
 
     if (geometry.type === 'LineString') {
       const coords: number[][] = geometry.coordinates
+      if (!coords || coords.length === 0) return null
       const mid = Math.floor(coords.length / 2)
       const [lon, lat] = toWgs84(coords[mid])
       return { lat, lon }
     }
 
     if (geometry.type === 'MultiPolygon') {
+      if (!geometry.coordinates || geometry.coordinates.length === 0) return null
       return extractCentroid({ type: 'Polygon', coordinates: geometry.coordinates[0] })
     }
 
     if (geometry.type === 'MultiLineString') {
+      if (!geometry.coordinates || geometry.coordinates.length === 0) return null
       return extractCentroid({ type: 'LineString', coordinates: geometry.coordinates[0] })
     }
   } catch {}
   return null
 }
 
-// ── Field name resolution (shapefile column names vary between PTPR versions) ──
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function pickField(props: any, ...candidates: string[]): string | null {
-  for (const key of candidates) {
-    if (props[key] != null && props[key] !== '') return String(props[key])
-    // Try lowercase variant
-    const lower = key.toLowerCase()
-    if (props[lower] != null && props[lower] !== '') return String(props[lower])
-  }
-  return null
+function str(v: unknown): string {
+  return v != null ? String(v).trim() : ''
 }
-
-// ── Layer import ──────────────────────────────────────────────────────────────
 
 interface PtprRow {
   source_id: string | null
   name: string | null
+  description: string | null
   poi_type: string
   layer: string
   lat: number
@@ -117,11 +112,7 @@ interface PtprRow {
   raw_props: Record<string, unknown>
 }
 
-async function importLayer(
-  shpPath: string,
-  layer: string,
-  region = 'lazio',
-): Promise<void> {
+async function importLayer(shpPath: string, layer: string, region = 'lazio'): Promise<void> {
   if (!fs.existsSync(shpPath)) {
     console.warn(`  [SKIP] File not found: ${shpPath}`)
     return
@@ -148,26 +139,54 @@ async function importLayer(
 
     // Sanity check: result should be roughly in Italy (WGS84)
     if (centroid.lat < 35 || centroid.lat > 48 || centroid.lon < 6 || centroid.lon > 19) {
-      console.warn(`  Suspicious coords after reprojection: ${centroid.lat}, ${centroid.lon} — skipping`)
+      console.warn(`  Suspicious coords: ${centroid.lat}, ${centroid.lon} — skipping`)
       skipped++
       continue
     }
 
-    const sourceId = pickField(props, 'OBJECTID', 'objectid', 'FID', 'fid', 'ID', 'id')
-    const name = pickField(
-      props,
-      'DENOMINAZI', 'DENOMINAZIONE', 'denominazi', 'denominazione',
-      'NOME', 'nome', 'NAME', 'name',
-      'DESCRIZIONE', 'descrizione',
-    )
+    // source_id — same for all layers
+    const sourceId = props['ID_RL'] != null ? String(props['ID_RL']) : null
+
+    // name — NOME if non-empty, else layer-specific fallback
+    const nome = str(props['NOME'])
+    const name = nome
+      || (layer === 'linee' ? str(props['TIPO']) : '')
+      || 'Sito archeologico tutelato'
+
+    // description — compose from layer-specific fields, append attribution
+    const parts: string[] = []
+    if (layer === 'punti') {
+      const tipo = str(props['TIPO_OGG'])
+      const note = str(props['NOTE_'])
+      if (tipo) parts.push(tipo)
+      if (note) parts.push(note)
+    } else if (layer === 'aree') {
+      const note = str(props['NOTE_'])
+      const comune = str(props['COMUNE'])
+      const vincolo = str(props['VINCOLO'])
+      if (note) parts.push(note)
+      if (comune) parts.push(`Comune: ${comune}`)
+      if (vincolo) parts.push(vincolo)
+    } else if (layer === 'linee') {
+      const tipo = str(props['TIPO'])
+      const note = str(props['NOTE_'])
+      const fonte = str(props['FONTE'])
+      if (tipo) parts.push(tipo)
+      if (note) parts.push(note)
+      if (fonte) parts.push(`Fonte: ${fonte}`)
+    }
+    const description = parts.length > 0
+      ? parts.join(' · ') + ' · ' + ATTRIBUTION
+      : ATTRIBUTION
 
     rows.push({
       source_id: sourceId,
       name,
-      poi_type:  'archaeological',
+      description,
+      poi_type: 'archaeological',
       layer,
-      lat:       centroid.lat,
-      lon:       centroid.lon,
+      lat: centroid.lat,
+      lon: centroid.lon,
       region,
       raw_props: props,
     })
@@ -183,21 +202,20 @@ async function importLayer(
   const CHUNK = 500
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK)
-    const { error } = await supabase.from('ptpr_pois').insert(chunk)
+    const { error } = await supabase
+      .from('ptpr_pois')
+      .upsert(chunk, { onConflict: 'source_id,layer' })
     if (error) {
       console.error(`  Chunk ${i}–${i + CHUNK}: ${error.message}`)
     } else {
-      console.log(`  Inserted rows ${i}–${Math.min(i + CHUNK, rows.length)}`)
+      console.log(`  Upserted rows ${i}–${Math.min(i + CHUNK, rows.length)}`)
     }
   }
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-
 async function main() {
   const dir = path.join(process.cwd(), 'data', 'ptpr')
 
-  // Verify actual filenames in the directory
   let files: string[] = []
   try {
     files = fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.shp'))
@@ -214,7 +232,6 @@ async function main() {
   console.log(`Found shapefiles: ${files.join(', ')}`)
   if (DRY_RUN) console.log('[DRY RUN mode — no data will be written to Supabase]')
 
-  // Map known layer names; fall back to filename-based detection
   const LAYER_MAP: Record<string, string> = {
     puntiarcheologici:  'punti',
     puntiarcha:         'punti',
@@ -222,7 +239,7 @@ async function main() {
     aree_archeologiche: 'aree',
     areearch:           'aree',
     aree_arch:          'aree',
-    linee_archeologiche:'linee',
+    linee_archeologiche: 'linee',
     lineearch:          'linee',
     linee_arch:         'linee',
   }
