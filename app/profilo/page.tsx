@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
-import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
+import { getAllPlanned, getPlannedById, updatePlannedMeta } from '@/lib/plannedStore'
 import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blobStore'
 import { computeTrailScore } from '@/lib/trailScore'
 import { computeBeautyScore, type BeautyScore } from '@/lib/beautyScore'
@@ -160,8 +160,10 @@ function ComfortTrailScoreSection() {
   const [loading,        setLoading]        = useState(true)
   const [saving,         setSaving]         = useState(false)
   const [status,         setStatus]         = useState<{ ok: boolean; msg: string } | null>(null)
-  const [batchRunning,   setBatchRunning]   = useState(false)
-  const [batchProgress,  setBatchProgress]  = useState('')
+  const [batchRunning,       setBatchRunning]       = useState(false)
+  const [batchProgress,      setBatchProgress]      = useState('')
+  const [fullRecalcRunning,  setFullRecalcRunning]  = useState(false)
+  const [fullRecalcProgress, setFullRecalcProgress] = useState('')
 
   useEffect(() => {
     fetch('/api/user-settings')
@@ -294,6 +296,95 @@ function ComfortTrailScoreSection() {
     setTimeout(() => setBatchProgress(''), 4000)
   }
 
+  async function handleFullRecalcCts() {
+    setFullRecalcRunning(true)
+    setFullRecalcProgress('Recupero preferenze…')
+    let computed = 0
+    try {
+      const prefs   = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const naturaW = prefs.beautyNaturaWeight ?? pesoNatura
+
+      const [activities, hikes] = await Promise.all([getAllActivities(), getAllPlanned()])
+      const total = activities.length + hikes.length
+
+      // Recalculate all activities
+      for (let i = 0; i < activities.length; i++) {
+        const meta = activities[i]
+        setFullRecalcProgress(`${i + 1}/${total} — ${meta.title ?? 'Escursione'}`)
+        try {
+          const full = await getActivityById(meta.id)
+          if (!full) continue
+          const gps = (full.trackPoints ?? [])
+            .filter(p => p.lat && p.lon)
+            .map(p => [p.lat!, p.lon!] as [number, number])
+          if (gps.length < 2) continue
+          const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+          const [rawPois, terrain] = await Promise.all([
+            Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
+            Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
+          ])
+          const pois = rawPois as PoiItem[]
+          const rawWiki = pois.length
+            ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+            : []
+          const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
+          const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, full.elevationGain, full.altitudeMax, full.distanceMeters)
+          const { ts } = computeTrailScore(bs, {
+            distanceMeters: full.distanceMeters,
+            elevationGain:  full.elevationGain,
+            elevationLoss:  full.elevationLoss ?? 0,
+            altitudeMax:    full.altitudeMax,
+            avgHeartRate:   full.avgHeartRate,
+            prefSforzo:     prefs.prefSforzo ?? prefSforzo,
+            prefDurata:     prefs.prefDurata ?? prefDurata,
+          }, naturaW)
+          await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: ts })
+          computed++
+          await new Promise(r => setTimeout(r, 500))
+        } catch {}
+      }
+
+      // Recalculate all planned hikes
+      for (let i = 0; i < hikes.length; i++) {
+        const meta = hikes[i]
+        setFullRecalcProgress(`${activities.length + i + 1}/${total} — ${meta.title ?? 'Pianificata'}`)
+        try {
+          const full = await getPlannedById(meta.id)
+          if (!full) continue
+          const gps = (full.trackPoints ?? [])
+            .filter(p => p.lat && p.lon)
+            .map(p => [p.lat!, p.lon!] as [number, number])
+          if (gps.length < 2) continue
+          const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+          const [rawPois, terrain] = await Promise.all([
+            Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
+            Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
+          ])
+          const pois = rawPois as PoiItem[]
+          const rawWiki = pois.length
+            ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
+            : []
+          const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
+          const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, full.elevationGain, full.altitudeMax, full.distanceMeters)
+          const { ts } = computeTrailScore(bs, {
+            distanceMeters: full.distanceMeters,
+            elevationGain:  full.elevationGain,
+            elevationLoss:  full.elevationLoss,
+            altitudeMax:    full.altitudeMax,
+            prefSforzo:     prefs.prefSforzo ?? prefSforzo,
+            prefDurata:     prefs.prefDurata ?? prefDurata,
+          }, naturaW)
+          await updatePlannedMeta(full.id, { cachedBeautyScore: bs, cachedTrailScore: ts })
+          computed++
+          await new Promise(r => setTimeout(r, 500))
+        } catch {}
+      }
+    } catch {}
+    setFullRecalcRunning(false)
+    setFullRecalcProgress(computed > 0 ? `Completato · ${computed} CTS ricalcolati.` : 'Nessun CTS ricalcolato.')
+    setTimeout(() => setFullRecalcProgress(''), 4000)
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
       <div className="flex items-center gap-2.5">
@@ -357,7 +448,7 @@ function ComfortTrailScoreSection() {
           <div className="flex flex-col gap-2">
             <button
               onClick={handleSave}
-              disabled={saving || batchRunning}
+              disabled={saving || batchRunning || fullRecalcRunning}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition"
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -365,7 +456,7 @@ function ComfortTrailScoreSection() {
             </button>
             <button
               onClick={handleBatchComputeCts}
-              disabled={saving || batchRunning}
+              disabled={saving || batchRunning || fullRecalcRunning}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-700 text-sm font-medium border border-stone-200 transition"
             >
               {batchRunning
@@ -375,6 +466,19 @@ function ComfortTrailScoreSection() {
             </button>
             {!batchRunning && batchProgress && (
               <p className="text-xs text-forest-600 font-medium">✓ {batchProgress}</p>
+            )}
+            <button
+              onClick={handleFullRecalcCts}
+              disabled={saving || batchRunning || fullRecalcRunning}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-700 text-sm font-medium border border-red-200 transition"
+            >
+              {fullRecalcRunning
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {fullRecalcProgress || 'Ricalcolo in corso…'}</>
+                : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutti i CTS da zero</>
+              }
+            </button>
+            {!fullRecalcRunning && fullRecalcProgress && (
+              <p className="text-xs text-forest-600 font-medium">✓ {fullRecalcProgress}</p>
             )}
           </div>
         </div>
