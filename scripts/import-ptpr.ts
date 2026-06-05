@@ -1,100 +1,189 @@
 /**
- * One-time script: import PTPR Regione Lazio (Tavola B) GeoJSON files into Supabase ptpr_pois.
+ * One-time import: PTPR Regione Lazio (Tavola B) shapefiles → Supabase ptpr_pois
  *
- * Prerequisites:
- *   1. Download the 3 PTPR layers from dati.lazio.it / geoportale.regione.lazio.it
- *   2. Reproject from ED50 fuso 33N (EPSG:23033) to WGS84 using ogr2ogr:
- *        ogr2ogr -f GeoJSON -t_srs EPSG:4326 scripts/punti_arch_wgs84.geojson puntiarcheologici.shp
- *        ogr2ogr -f GeoJSON -t_srs EPSG:4326 scripts/aree_arch_wgs84.geojson  aree_archeologiche.shp
- *        ogr2ogr -f GeoJSON -t_srs EPSG:4326 scripts/linee_arch_wgs84.geojson linee_archeologiche.shp
- *   3. Run: SUPABASE_URL=... SUPABASE_SERVICE_KEY=... npx tsx scripts/import-ptpr.ts
+ * Usage:
+ *   npx tsx scripts/import-ptpr.ts [--dry-run]
  *
- * To add more regions later: convert their shapefiles to WGS84 GeoJSON and call
- * importLayer() with the appropriate region name. No code changes needed.
+ * Files expected in data/ptpr/ (exact names verified from filesystem):
+ *   puntiarcheologici.shp / .dbf
+ *   aree_archeologiche.shp / .dbf
+ *   linee_archeologiche.shp / .dbf
+ *
+ * Original projection: ED50 fuso 33N (EPSG:23033)
+ * Output projection: WGS84 (EPSG:4326)
+ *
+ * Dependencies: shapefile, proj4 (both in devDependencies)
+ * No system binaries required.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import * as shapefile from 'shapefile'
+import proj4 from 'proj4'
 import fs from 'fs'
 import path from 'path'
+import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = process.env.SUPABASE_URL
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
+// ── EPSG:23033 definition ──────────────────────────────────────────────────────
+// ED50 / UTM zone 33N — standard projection for Italian cadastral data
+proj4.defs(
+  'EPSG:23033',
+  '+proj=utm +zone=33 +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +units=m +no_defs',
+)
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY')
+const DRY_RUN = process.argv.includes('--dry-run')
+
+// ── Supabase client (service key — bypasses RLS) ──────────────────────────────
+const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error(
+    'Set SUPABASE_URL and SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) env vars.\n' +
+    'Example: SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_KEY=eyJ... npx tsx scripts/import-ptpr.ts',
+  )
   process.exit(1)
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-interface GeoJsonGeometry {
-  type: string
-  coordinates: unknown
+// ── Coordinate conversion ─────────────────────────────────────────────────────
+
+function toWgs84(coords: number[]): [number, number] {
+  const [lon, lat] = proj4('EPSG:23033', 'EPSG:4326', [coords[0], coords[1]])
+  return [lon, lat]
 }
 
-function extractCentroid(geometry: GeoJsonGeometry): { lat: number; lon: number } | null {
+// ── Centroid extraction (after coordinate conversion) ─────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractCentroid(geometry: any): { lat: number; lon: number } | null {
   try {
+    if (!geometry) return null
+
     if (geometry.type === 'Point') {
-      const c = geometry.coordinates as [number, number]
-      return { lat: c[1], lon: c[0] }
+      const [lon, lat] = toWgs84(geometry.coordinates)
+      return { lat, lon }
     }
+
     if (geometry.type === 'Polygon') {
-      const ring = (geometry.coordinates as [number, number][][])[0]
+      const ring: number[][] = geometry.coordinates[0]
+      const converted = ring.map(c => toWgs84(c))
       return {
-        lat: ring.reduce((s, c) => s + c[1], 0) / ring.length,
-        lon: ring.reduce((s, c) => s + c[0], 0) / ring.length,
+        lat: converted.reduce((s, c) => s + c[1], 0) / converted.length,
+        lon: converted.reduce((s, c) => s + c[0], 0) / converted.length,
       }
     }
+
     if (geometry.type === 'LineString') {
-      const coords = geometry.coordinates as [number, number][]
+      const coords: number[][] = geometry.coordinates
       const mid = Math.floor(coords.length / 2)
-      return { lat: coords[mid][1], lon: coords[mid][0] }
+      const [lon, lat] = toWgs84(coords[mid])
+      return { lat, lon }
     }
+
     if (geometry.type === 'MultiPolygon') {
-      return extractCentroid({ type: 'Polygon', coordinates: (geometry.coordinates as unknown[][][][])[0] })
+      return extractCentroid({ type: 'Polygon', coordinates: geometry.coordinates[0] })
     }
+
     if (geometry.type === 'MultiLineString') {
-      return extractCentroid({ type: 'LineString', coordinates: (geometry.coordinates as unknown[][][])[0] })
+      return extractCentroid({ type: 'LineString', coordinates: geometry.coordinates[0] })
     }
   } catch {}
   return null
 }
 
+// ── Field name resolution (shapefile column names vary between PTPR versions) ──
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function importLayer(geojsonPath: string, layer: string, region = 'lazio') {
-  if (!fs.existsSync(geojsonPath)) {
-    console.warn(`File not found, skipping: ${geojsonPath}`)
+function pickField(props: any, ...candidates: string[]): string | null {
+  for (const key of candidates) {
+    if (props[key] != null && props[key] !== '') return String(props[key])
+    // Try lowercase variant
+    const lower = key.toLowerCase()
+    if (props[lower] != null && props[lower] !== '') return String(props[lower])
+  }
+  return null
+}
+
+// ── Layer import ──────────────────────────────────────────────────────────────
+
+interface PtprRow {
+  source_id: string | null
+  name: string | null
+  poi_type: string
+  layer: string
+  lat: number
+  lon: number
+  region: string
+  raw_props: Record<string, unknown>
+}
+
+async function importLayer(
+  shpPath: string,
+  layer: string,
+  region = 'lazio',
+): Promise<void> {
+  if (!fs.existsSync(shpPath)) {
+    console.warn(`  [SKIP] File not found: ${shpPath}`)
     return
   }
 
-  console.log(`Importing ${layer} from ${path.basename(geojsonPath)}…`)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fc = JSON.parse(fs.readFileSync(geojsonPath, 'utf8')) as { features: any[] }
+  const dbfPath = shpPath.replace(/\.shp$/i, '.dbf')
+  console.log(`\nImporting ${layer} from ${path.basename(shpPath)}…`)
 
-  const rows = fc.features
+  const rows: PtprRow[] = []
+  let skipped = 0
+
+  const source = await shapefile.open(shpPath, dbfPath, { encoding: 'latin1' })
+
+  while (true) {
+    const { value: feature, done } = await source.read()
+    if (done) break
+    if (!feature?.geometry) { skipped++; continue }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((f: any) => {
-      const coords = extractCentroid(f.geometry)
-      if (!coords) return null
-      return {
-        source_id: f.properties?.OBJECTID?.toString() ?? f.properties?.objectid?.toString() ?? null,
-        name:      f.properties?.DENOMINAZI ?? f.properties?.denominazi ?? f.properties?.NOME ?? f.properties?.nome ?? null,
-        poi_type:  'archaeological',
-        layer,
-        lat:       coords.lat,
-        lon:       coords.lon,
-        region,
-        raw_props: f.properties ?? null,
-      }
+    const props: any = feature.properties ?? {}
+
+    const centroid = extractCentroid(feature.geometry)
+    if (!centroid || isNaN(centroid.lat) || isNaN(centroid.lon)) { skipped++; continue }
+
+    // Sanity check: result should be roughly in Italy (WGS84)
+    if (centroid.lat < 35 || centroid.lat > 48 || centroid.lon < 6 || centroid.lon > 19) {
+      console.warn(`  Suspicious coords after reprojection: ${centroid.lat}, ${centroid.lon} — skipping`)
+      skipped++
+      continue
+    }
+
+    const sourceId = pickField(props, 'OBJECTID', 'objectid', 'FID', 'fid', 'ID', 'id')
+    const name = pickField(
+      props,
+      'DENOMINAZI', 'DENOMINAZIONE', 'denominazi', 'denominazione',
+      'NOME', 'nome', 'NAME', 'name',
+      'DESCRIZIONE', 'descrizione',
+    )
+
+    rows.push({
+      source_id: sourceId,
+      name,
+      poi_type:  'archaeological',
+      layer,
+      lat:       centroid.lat,
+      lon:       centroid.lon,
+      region,
+      raw_props: props,
     })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((r: any) => r !== null && r.lat && r.lon && !isNaN(r.lat) && !isNaN(r.lon))
+  }
 
-  console.log(`  ${rows.length} valid features`)
+  console.log(`  ${rows.length} valid features, ${skipped} skipped`)
+
+  if (DRY_RUN) {
+    console.log('  [DRY RUN] Sample row:', JSON.stringify(rows[0], null, 2))
+    return
+  }
 
   const CHUNK = 500
   for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await supabase.from('ptpr_pois').insert(rows.slice(i, i + CHUNK))
+    const chunk = rows.slice(i, i + CHUNK)
+    const { error } = await supabase.from('ptpr_pois').insert(chunk)
     if (error) {
       console.error(`  Chunk ${i}–${i + CHUNK}: ${error.message}`)
     } else {
@@ -103,14 +192,60 @@ async function importLayer(geojsonPath: string, layer: string, region = 'lazio')
   }
 }
 
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 async function main() {
-  const dir = path.join(process.cwd(), 'scripts')
+  const dir = path.join(process.cwd(), 'data', 'ptpr')
 
-  await importLayer(path.join(dir, 'punti_arch_wgs84.geojson'), 'punti', 'lazio')
-  await importLayer(path.join(dir, 'aree_arch_wgs84.geojson'),  'aree',  'lazio')
-  await importLayer(path.join(dir, 'linee_arch_wgs84.geojson'), 'linee', 'lazio')
+  // Verify actual filenames in the directory
+  let files: string[] = []
+  try {
+    files = fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.shp'))
+  } catch {
+    console.error(`Cannot read directory: ${dir}`)
+    process.exit(1)
+  }
 
-  console.log('Done.')
+  if (files.length === 0) {
+    console.error(`No .shp files found in ${dir}`)
+    process.exit(1)
+  }
+
+  console.log(`Found shapefiles: ${files.join(', ')}`)
+  if (DRY_RUN) console.log('[DRY RUN mode — no data will be written to Supabase]')
+
+  // Map known layer names; fall back to filename-based detection
+  const LAYER_MAP: Record<string, string> = {
+    puntiarcheologici:  'punti',
+    puntiarcha:         'punti',
+    punti_arch:         'punti',
+    aree_archeologiche: 'aree',
+    areearch:           'aree',
+    aree_arch:          'aree',
+    linee_archeologiche:'linee',
+    lineearch:          'linee',
+    linee_arch:         'linee',
+  }
+
+  for (const file of files) {
+    const base = path.basename(file, '.shp').toLowerCase()
+    const layer = LAYER_MAP[base] ?? (
+      base.includes('punt') ? 'punti' :
+      base.includes('area') || base.includes('aree') ? 'aree' :
+      base.includes('line') ? 'linee' : 'unknown'
+    )
+    await importLayer(path.join(dir, file), layer)
+  }
+
+  if (!DRY_RUN) {
+    const { count } = await supabase
+      .from('ptpr_pois')
+      .select('*', { count: 'exact', head: true })
+      .eq('region', 'lazio')
+    console.log(`\nTotal rows in ptpr_pois (lazio): ${count}`)
+  }
+
+  console.log('\nDone.')
 }
 
 main().catch(err => { console.error(err); process.exit(1) })
