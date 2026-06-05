@@ -55,6 +55,8 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
   const showDots  = dotCount && dotCount > 1
   const rating    = activity.userRating
   const rColor    = rating ? ratingColor(rating) : null
+  const trailScore = (activity as ActivityMeta & { trailScore?: number }).trailScore
+  const ctsData    = trailScore != null ? ctsLabel(trailScore) : null
 
   return (
     <Link
@@ -91,11 +93,18 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
       <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
 
         {/* ── Score banner — top of card, visible at first glance ── */}
-        {rating && rColor ? (
-          <div className="flex items-center gap-2 px-2.5 py-1.5 shrink-0"
-            style={{ backgroundColor: rColor + '22', borderBottom: `1.5px solid ${rColor}40` }}>
-            <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}</span>
-            <span className="text-[10px] text-stone-400">/10</span>
+        {(rating || ctsData) ? (
+          <div className="flex items-center justify-between px-2.5 py-1.5 shrink-0"
+            style={{ backgroundColor: (rColor ?? ctsData!.color) + '22', borderBottom: `1.5px solid ${(rColor ?? ctsData!.color)}40` }}>
+            {rating && rColor
+              ? <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}<span className="text-[10px] font-normal text-stone-400 ml-1">/10</span></span>
+              : <span />
+            }
+            {ctsData && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
+                CTS {Math.round(trailScore!)}
+              </span>
+            )}
           </div>
         ) : (
           <div className="h-1 shrink-0 bg-forest-100" />
@@ -158,17 +167,6 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
               <Flame className="w-2.5 h-2.5" />{activity.calories} kcal
             </div>
           )}
-          {(activity as ActivityMeta & { trailScore?: number }).trailScore != null && (() => {
-            const cts = ctsLabel((activity as ActivityMeta & { trailScore?: number }).trailScore!)
-            return (
-              <div className="mt-1">
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-white"
-                  style={{ backgroundColor: cts.color }}>
-                  CTS {Math.round((activity as ActivityMeta & { trailScore?: number }).trailScore!)}
-                </span>
-              </div>
-            )
-          })()}
         </div>
       </div>
     </Link>
