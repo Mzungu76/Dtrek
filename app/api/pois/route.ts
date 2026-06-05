@@ -180,17 +180,21 @@ async function fetchGnaPois(bbox: string): Promise<PoiItem[]> {
 
 // ── PTPR Lazio (Supabase static import) ──────────────────────────────────────
 
-function buildPtprDescription(props: Record<string, unknown> | null, layer: string): string {
-  const parts: string[] = []
-  if (layer === 'punti')  parts.push('Bene puntuale di interesse archeologico')
-  if (layer === 'aree')   parts.push('Area di interesse archeologico tutelata')
-  if (layer === 'linee')  parts.push('Bene lineare di interesse archeologico')
-  const tipoBene = props?.TIPO_BENE ?? props?.tipo_bene
-  if (tipoBene) parts.push(String(tipoBene))
-  const epoca = props?.EPOCA ?? props?.epoca
-  if (epoca) parts.push(`Epoca: ${epoca}`)
-  parts.push('Fonte: PTPR Regione Lazio — Tavola B (CC BY 4.0)')
-  return parts.join(' · ')
+function ptprNomeToPoiType(nome: string): PoiType {
+  const n = nome.toLowerCase()
+  if (n.includes('necropoli') || n.includes('tomba') || n.includes('sepolcro')) return 'archaeological'
+  if (n.includes('villa') || n.includes('abitato') || n.includes('insediamento')) return 'archaeological'
+  if (n.includes('grotta') || n.includes('grotte')) return 'cave'
+  if (n.includes('ponte') || n.includes('acquedotto') || n.includes('cisterna') || n.includes('basoli') || n.includes('muratura')) return 'ruins'
+  if (n.includes('preistorico')) return 'archaeological'
+  return 'archaeological'
+}
+
+function ptprTipoLineaToPoiType(tipo: string): PoiType {
+  const t = tipo.toLowerCase()
+  if (t.includes('strada') || t.includes('strade')) return 'ruins'
+  if (t.includes('acquedotto')) return 'ruins'
+  return 'ruins'
 }
 
 async function fetchPtprPois(bbox: string): Promise<PoiItem[]> {
@@ -198,25 +202,38 @@ async function fetchPtprPois(bbox: string): Promise<PoiItem[]> {
 
   const { data, error } = await supabase
     .from('ptpr_pois')
-    .select('id, name, poi_type, lat, lon, layer, raw_props')
+    .select('id, name, layer, lat, lon, description, raw_props')
     .gte('lat', s).lte('lat', n)
     .gte('lon', w).lte('lon', e)
 
   if (error || !data) return []
 
-  return data.map(row => ({
-    id:            0,
-    type:          (row.poi_type ?? 'archaeological') as PoiType,
-    name:          row.name ?? 'Sito archeologico tutelato',
-    lat:           row.lat,
-    lon:           row.lon,
-    distFromTrack: 0,
-    tags: {
-      description: buildPtprDescription(row.raw_props as Record<string, unknown> | null, row.layer),
-      source:      'ptpr_lazio',
-      sourceId:    row.id,
-    },
-  }))
+  return data.map(row => {
+    const rawProps = row.raw_props as Record<string, unknown> | null
+    const name = (row.name ?? 'Sito archeologico tutelato') as string
+
+    let type: PoiType
+    if (row.layer === 'linee') {
+      const tipo = rawProps?.TIPO ? String(rawProps.TIPO) : ''
+      type = tipo ? ptprTipoLineaToPoiType(tipo) : ptprNomeToPoiType(name)
+    } else {
+      type = ptprNomeToPoiType(name)
+    }
+
+    return {
+      id:            0,
+      type,
+      name,
+      lat:           row.lat,
+      lon:           row.lon,
+      distFromTrack: 0,
+      tags: {
+        description: (row.description as string | null) ?? `PTPR Regione Lazio — Tavola B (CC BY 4.0)`,
+        source:      'ptpr_lazio',
+        sourceId:    row.id,
+      },
+    }
+  })
 }
 
 // ── Wikidata SPARQL (server-side) ─────────────────────────────────────────────
