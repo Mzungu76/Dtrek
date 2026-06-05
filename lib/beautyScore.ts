@@ -165,6 +165,32 @@ function scoreInteresse(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+export interface BeautyWeightPrefs {
+  natura:        number
+  paesaggio:     number
+  archeologia:   number
+  architettura:  number
+  interesse:     number
+}
+
+const DEFAULT_WEIGHTS: BeautyWeightPrefs = {
+  natura: 55, paesaggio: 45, archeologia: 35, architettura: 40, interesse: 25,
+}
+
+export function normalizeWeights(raw: Partial<BeautyWeightPrefs>): BeautyWeightPrefs {
+  const w = { ...DEFAULT_WEIGHTS, ...raw }
+  const b1Sum = w.natura + w.paesaggio
+  const b2Sum = w.archeologia + w.architettura + w.interesse
+  if (b1Sum === 0 || b2Sum === 0) return DEFAULT_WEIGHTS
+  return {
+    natura:       w.natura       / b1Sum,
+    paesaggio:    w.paesaggio    / b1Sum,
+    archeologia:  w.archeologia  / b2Sum,
+    architettura: w.architettura / b2Sum,
+    interesse:    w.interesse    / b2Sum,
+  }
+}
+
 export function computeBeautyScore(
   pois: PoiItem[],
   wiki: WikiPage[],
@@ -172,6 +198,7 @@ export function computeBeautyScore(
   elevGain: number,
   altMax: number,
   _distanceMeters?: number,
+  rawWeights?: Partial<BeautyWeightPrefs>,
 ): BeautyScore {
   const natura      = scoreNatura(pois, terrain, elevGain, altMax)
   const paesaggio   = scorePaesaggio(pois, terrain, altMax)
@@ -179,8 +206,9 @@ export function computeBeautyScore(
   const architettura = scoreArchitettura(pois)
   const interesse   = scoreInteresse(pois, wiki)
 
-  const b1 = natura.score * 0.55 + paesaggio.score * 0.45
-  const b2 = archeologia.score * 0.35 + architettura.score * 0.40 + interesse.score * 0.25
+  const w  = normalizeWeights(rawWeights ?? {})
+  const b1 = natura.score * w.natura + paesaggio.score * w.paesaggio
+  const b2 = archeologia.score * w.archeologia + architettura.score * w.architettura + interesse.score * w.interesse
   const overall = clamp((b1 + b2) / 2)
 
   const overallGrade = toGrade(overall)

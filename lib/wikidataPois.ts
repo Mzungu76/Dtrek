@@ -32,6 +32,12 @@ const WD_TYPE: Record<string, PoiType> = {
   Q180817:  'ruins',        // archaeological ruins
   Q12323:   'monument',     // monument
   Q4989906: 'monument',
+  Q12280:   'bridge',       // ponte / bridge
+  Q16917:   'chapel',       // chiesa cattolica (Roman Catholic church)
+  Q1734:    'chapel',       // church building (generico)
+  Q44613:   'chapel',       // monastero / convento
+  Q82117:   'pass',         // col / valico (alternativo a Q133056)
+  Q83405:   'chapel',       // eremo / hermitage
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {

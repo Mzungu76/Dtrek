@@ -1,5 +1,8 @@
 // lib/trailScore.ts
 import type { BeautyScore } from './beautyScore'
+import type { ActivityMeta } from './blobStore'
+
+export type CtsConfidence = 'high' | 'estimated' | 'default'
 
 export interface TrailScoreInputs {
   distanceMeters: number
@@ -14,6 +17,8 @@ export interface TrailScoreInputs {
   hrHikeCount?: number
   prefSforzo?: number   // 0–100, default 50
   prefDurata?: number   // minutes, default 270
+  hrRest?: number       // resting HR for Karvonen HII
+  hrMax?: number        // max HR override (falls back to Tanaka formula)
 }
 
 export interface TrailScoreBreakdown {
@@ -31,6 +36,7 @@ export interface TrailScoreBreakdown {
 export interface TrailScoreResult {
   ts: number; b: number
   label: string; color: string
+  confidence: CtsConfidence
   breakdown: TrailScoreBreakdown
 }
 
@@ -58,7 +64,6 @@ function sacTerrainMult(sacScale?: string): number {
 
 function surfaceTerrainMult(surfaces?: string[]): number {
   if (!surfaces || surfaces.length === 0) return 1.00
-  // Use the max multiplier among surfaces present
   const mults = surfaces.map(s => {
     switch (s) {
       case 'sentiero':   return 1.20
@@ -79,6 +84,12 @@ function terrainLabel(sacScale?: string, surfaces?: string[]): string {
   return 'Non specificato'
 }
 
+// Karvonen Heart Rate Intensity Index — range [0, 1]
+function computeHII(avgHr: number, hrRest: number, hrMax: number): number {
+  const reserve = hrMax - hrRest
+  return reserve > 0 ? Math.max(0, Math.min(1, (avgHr - hrRest) / reserve)) : 0.65
+}
+
 // ── ctsLabel ──────────────────────────────────────────────────────────────────
 
 export function ctsLabel(ts: number): { label: string; color: string } {
@@ -88,6 +99,12 @@ export function ctsLabel(ts: number): { label: string; color: string } {
   if (ts >= 40) return { label: 'Buono',        color: '#ca8a04' }
   if (ts >= 25) return { label: 'Nella media',  color: '#ea580c' }
   return              { label: 'Impegnativo',  color: '#dc2626' }
+}
+
+/** Returns the user's average CTS from existing activities, or 50 if no history. */
+export function getCtsFallback(activities: ActivityMeta[]): number {
+  const scores = activities.map(a => a.trailScore).filter((s): s is number => s != null)
+  return scores.length ? Math.round(scores.reduce((a, b) => a + b) / scores.length) : 50
 }
 
 // ── computeTrailScore ─────────────────────────────────────────────────────────
@@ -102,6 +119,7 @@ export function computeTrailScore(
     sacScale, surfaces, avgHeartRate, userAge,
     personalDelta, hrHikeCount = 0,
     prefSforzo = 50, prefDurata = 270,
+    hrRest, hrMax,
   } = inputs
 
   const distKm = distanceMeters / 1000
@@ -133,10 +151,12 @@ export function computeTrailScore(
   // Delta (personal effort correction)
   let delta = 0
   let deltaSource: TrailScoreBreakdown['deltaSource'] = 'none'
-  const userFCmax = deriveFCmax(userAge)
+  const userFCmax = hrMax ?? deriveFCmax(userAge)
 
   if (avgHeartRate && avgHeartRate > 0) {
-    delta = (avgHeartRate / userFCmax - 0.65) / 0.35
+    // Karvonen HII with asymmetric clamp: fatigue can rise more than it can fall
+    const hii = computeHII(avgHeartRate, hrRest ?? 55, userFCmax)
+    delta = Math.max(-0.3, Math.min(0.5, (hii - 0.65) / 0.35))
     deltaSource = 'hr'
   } else if (personalDelta != null && hrHikeCount >= 4) {
     delta = personalDelta
@@ -144,7 +164,7 @@ export function computeTrailScore(
   }
 
   const difficultyW = fStd / 10
-  const deltaEff    = delta * difficultyW
+  const deltaEff    = delta * difficultyW * 0.3   // max ±15% weight on F
   const fFinal      = clamp(fStd * (1 + deltaEff), 0, 10)
 
   // Beauty score components — recompute b1/b2 from categories per spec
@@ -179,6 +199,7 @@ export function computeTrailScore(
     b: B,
     label,
     color,
+    confidence: 'high',
     breakdown: {
       b1, b2,
       fStd, fFinal,

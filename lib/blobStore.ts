@@ -1,6 +1,7 @@
 import { TcxActivity, type TrackPoint } from './tcxParser'
 import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
 import type { BeautyScore } from './beautyScore'
+import type { CtsConfidence } from './trailScore'
 
 export interface StoredActivity extends TcxActivity {
   userNotes?: string
@@ -14,6 +15,7 @@ export interface StoredActivity extends TcxActivity {
   soddisfazione?: number  // satisfaction 1–10
   linkedBeautyScore?: BeautyScore
   trailScore?: number
+  trailScoreConfidence?: CtsConfidence
 }
 
 export interface ActivityMeta {
@@ -40,6 +42,7 @@ export interface ActivityMeta {
   elevationProfile?: number[]  // downsampled altitude (m) for share-card profile chart
   linkedBeautyScore?: BeautyScore
   trailScore?: number
+  trailScoreConfidence?: CtsConfidence
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -74,8 +77,9 @@ function toMeta(a: StoredActivity): ActivityMeta {
     userRating:      a.userRating,
     userRatingNote:  a.userRatingNote,
     soddisfazione:   a.soddisfazione,
-    linkedBeautyScore: a.linkedBeautyScore,
-    trailScore:      a.trailScore,
+    linkedBeautyScore:       a.linkedBeautyScore,
+    trailScore:              a.trailScore,
+    trailScoreConfidence:    a.trailScoreConfidence,
   }
 }
 
@@ -145,7 +149,7 @@ export async function saveActivity(activity: StoredActivity): Promise<void> {
 /** Patches Supabase, then applies the same patch to local cached copies. */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore' | 'trailScoreConfidence'>>
 ): Promise<void> {
   // Update local caches optimistically (before API) so scores always persist locally
   lsGet<StoredActivity>(LS_KEYS.activity(id)).then((local) => {
@@ -163,6 +167,7 @@ export async function updateActivityMeta(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, ...meta }),
   })
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cts-updated'))
 }
 
 /** Deletes from Supabase, then removes from local cache. */

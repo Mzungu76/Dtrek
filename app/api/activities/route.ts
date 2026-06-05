@@ -13,7 +13,7 @@ const META_COLS = [
   'altitude_max', 'altitude_min', 'elevation_gain', 'elevation_loss',
   'file_name', 'user_notes', 'tags', 'user_rating', 'user_rating_note',
   'route_polyline', 'soddisfazione',
-  'linked_beauty_score', 'trail_score',
+  'linked_beauty_score', 'trail_score', 'trail_score_confidence',
 ].join(', ')
 
 function rowToMeta(row: Record<string, unknown>): ActivityMeta {
@@ -38,8 +38,9 @@ function rowToMeta(row: Record<string, unknown>): ActivityMeta {
     userRating:      row.user_rating as number | undefined,
     userRatingNote:  row.user_rating_note as string | undefined,
     soddisfazione:   row.soddisfazione as number | undefined,
-    linkedBeautyScore: row.linked_beauty_score as import('@/lib/blobStore').ActivityMeta['linkedBeautyScore'] | undefined,
-    trailScore:      row.trail_score as number | undefined,
+    linkedBeautyScore:    row.linked_beauty_score   as import('@/lib/blobStore').ActivityMeta['linkedBeautyScore'] | undefined,
+    trailScore:           row.trail_score            as number | undefined,
+    trailScoreConfidence: row.trail_score_confidence as import('@/lib/blobStore').ActivityMeta['trailScoreConfidence'] | undefined,
   }
 }
 

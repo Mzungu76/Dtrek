@@ -74,6 +74,12 @@ export default function ProgrammaPage() {
     getAllPlanned(setHikes).then(setHikes).finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    const refresh = () => { getAllPlanned(setHikes).then(setHikes).catch(() => {}) }
+    window.addEventListener('cts-updated', refresh)
+    return () => window.removeEventListener('cts-updated', refresh)
+  }, [])
+
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()
     if (!confirm('Eliminare questa escursione pianificata?')) return
@@ -224,11 +230,14 @@ export default function ProgrammaPage() {
                         {hike.title}
                       </p>
                       {(hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore != null && (() => {
-                        const cts = ctsLabel((hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore!)
+                        const score = (hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore!
+                        const conf  = (hike as PlannedHikeMeta & { cachedTrailScoreConfidence?: string }).cachedTrailScoreConfidence
+                        const sfx   = conf === 'default' ? '≈' : conf === 'estimated' ? '~' : ''
+                        const cts   = ctsLabel(score)
                         return (
                           <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-lg text-white whitespace-nowrap"
                             style={{ backgroundColor: cts.color }}>
-                            CTS {Math.round((hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore!)}
+                            CTS {Math.round(score)}{sfx}
                           </span>
                         )
                       })()}

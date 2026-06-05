@@ -55,8 +55,10 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
   const showDots  = dotCount && dotCount > 1
   const rating    = activity.userRating
   const rColor    = rating ? ratingColor(rating) : null
-  const trailScore = (activity as ActivityMeta & { trailScore?: number }).trailScore
-  const ctsData    = trailScore != null ? ctsLabel(trailScore) : null
+  const trailScore   = (activity as ActivityMeta & { trailScore?: number }).trailScore
+  const ctsConf      = (activity as ActivityMeta & { trailScoreConfidence?: string }).trailScoreConfidence
+  const ctsSuffix    = ctsConf === 'default' ? '≈' : ctsConf === 'estimated' ? '~' : ''
+  const ctsData      = trailScore != null ? ctsLabel(trailScore) : null
 
   return (
     <Link
@@ -102,7 +104,7 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             }
             {ctsData && (
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
-                CTS {Math.round(trailScore!)}
+                CTS {Math.round(trailScore!)}{ctsSuffix}
               </span>
             )}
           </div>
@@ -186,6 +188,8 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
   const isFuture   = date > new Date()
   const dateLabel  = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
   const ctsScore   = (hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore
+  const ctsConf    = (hike as PlannedHikeMeta & { cachedTrailScoreConfidence?: string }).cachedTrailScoreConfidence
+  const ctsSuffix  = ctsConf === 'default' ? '≈' : ctsConf === 'estimated' ? '~' : ''
   const ctsData    = ctsScore != null ? ctsLabel(ctsScore) : null
   return (
     <Link
@@ -210,7 +214,7 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
           <div className="flex items-center justify-end px-2.5 py-1.5 shrink-0"
             style={{ backgroundColor: ctsData.color + '22', borderBottom: `1.5px solid ${ctsData.color}40` }}>
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
-              CTS {Math.round(ctsScore!)}
+              CTS {Math.round(ctsScore!)}{ctsSuffix}
             </span>
           </div>
         ) : (
@@ -273,6 +277,15 @@ export default function HomePage() {
     ])
       .then(([acts, plan]) => { setActivities(acts); setPlanned(plan) })
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      getAllActivities(setActivities).then(setActivities).catch(() => {})
+      getAllPlanned(setPlanned).then(setPlanned).catch(() => {})
+    }
+    window.addEventListener('cts-updated', refresh)
+    return () => window.removeEventListener('cts-updated', refresh)
   }, [])
 
   const months = useMemo(() => {

@@ -22,10 +22,11 @@ import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import PdfExportButton from '@/components/PdfExportButton'
-import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
 import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import { computeBeautyScore } from '@/lib/beautyScore'
+import { computeBeautyScore, normalizeWeights, type BeautyWeightPrefs } from '@/lib/beautyScore'
+import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -85,6 +86,7 @@ export default function EscursionePage() {
   const [pesoNatura,      setPesoNatura]      = useState(50)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefDurata,      setPrefDurata]      = useState(270)
+  const [beautyWeights,   setBeautyWeights]   = useState<Partial<BeautyWeightPrefs>>({})
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat && p.lon)
@@ -104,10 +106,15 @@ export default function EscursionePage() {
       setRatingNote(a.userRatingNote ?? '')
       const gps = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length > 0) {
-        fetchHikingPoisFromWikidata(gps, 300)
-          .then(newPois => {
-            setPois(newPois)
-            fetchWikiForNamedPois(newPois)
+        const bbox = computeBbox(gps)
+        fetch(`/api/pois?bbox=${bbox}`)
+          .then(r => r.json())
+          .then((all: PoiItem[]) => {
+            const nearby = all
+              .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
+              .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
+            setPois(nearby)
+            fetchWikiForNamedPois(nearby)
               .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
               .catch(() => { setPoisFullyLoaded(true) })
           })
@@ -124,6 +131,13 @@ export default function EscursionePage() {
         if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
         if (d.prefSforzo        != null) setPrefSforzo(d.prefSforzo)
         if (d.prefDurata        != null) setPrefDurata(d.prefDurata)
+        setBeautyWeights({
+          natura:       d.beautyNaturaWeight       ?? 55,
+          paesaggio:    d.beautyPaesaggioWeight    ?? 45,
+          archeologia:  d.beautyArcheologiaWeight  ?? 35,
+          architettura: d.beautyArchitetturaWeight ?? 40,
+          interesse:    d.beautyInteresseWeight    ?? 25,
+        })
       })
       .catch(() => {})
       .finally(() => setPrefsLoaded(true))
@@ -193,18 +207,33 @@ export default function EscursionePage() {
     setCtsComputing(true)
     try {
       const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
-      const [rawPois, terrain] = await Promise.all([
-        Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
+      const bbox = computeBbox(gps)
+      const [allPoisRes, terrain] = await Promise.all([
+        Promise.race([
+          fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>,
+          deadline,
+        ]).then(r => r ?? []),
         Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
       ])
-      const pois = rawPois as PoiItem[]
+      const allPois = allPoisRes as PoiItem[]
+      const pois = allPois
+        .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
+        .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
+
       const rawWiki = pois.length
         ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
         : []
       const wiki = (rawWiki as { wiki: WikiPage }[]).map(e => e.wiki)
-      const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, activity.elevationGain, activity.altitudeMax, activity.distanceMeters)
+      const weights = normalizeWeights(beautyWeights)
+      const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, activity.elevationGain, activity.altitudeMax, activity.distanceMeters, weights)
+
+      // Determine confidence based on POI coverage
+      let confidence: CtsConfidence = 'high'
+      if (pois.length === 0) confidence = 'default'
+      else if (pois.length < 3 || bs.overall < 2) confidence = 'estimated'
+
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const { ts } = computeTrailScore(bs, {
+      let { ts } = computeTrailScore(bs, {
         distanceMeters: activity.distanceMeters,
         elevationGain:  activity.elevationGain,
         elevationLoss:  activity.elevationLoss ?? 0,
@@ -212,9 +241,13 @@ export default function EscursionePage() {
         avgHeartRate:   activity.avgHeartRate,
         prefSforzo:     prefs.prefSforzo,
         prefDurata:     prefs.prefDurata,
+        hrRest:         prefs.hrRest,
+        hrMax:          prefs.hrMax ?? undefined,
       }, prefs.beautyNaturaWeight ?? 50)
-      await updateActivityMeta(id, { linkedBeautyScore: bs, trailScore: ts })
-      setActivity(prev => prev ? { ...prev, linkedBeautyScore: bs, trailScore: ts } : prev)
+      if (confidence === 'estimated') ts = Math.round(ts * 0.9)
+
+      await updateActivityMeta(id, { linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence })
+      setActivity(prev => prev ? { ...prev, linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence } : prev)
     } catch (e) {
       console.error('CTS computation error:', e)
     } finally {
