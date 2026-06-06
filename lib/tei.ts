@@ -158,7 +158,7 @@ function proximityFactor(distM: number): number {
 
 function computeVcult(segments: GpxSegment[], pois: PoiItem[]): number {
   const cultPois = pois.filter(p => relevanceGrade(p) > 0)
-  if (cultPois.length === 0) return 1
+  if (cultPois.length === 0) return 2
 
   let weightedSum = 0
   let totalLength = 0
@@ -185,7 +185,7 @@ function computeVcult(segments: GpxSegment[], pois: PoiItem[]): number {
     }
   }
 
-  if (totalLength === 0) return 1
+  if (totalLength === 0) return 2
   return clamp(weightedSum / totalLength)
 }
 
@@ -313,7 +313,7 @@ function computeFantr(
       const asphaltSegs = segments.filter(seg =>
         asphaltEls.some(h => haversineM(seg.centroid[0], seg.centroid[1], h.lat, h.lon) <= 50)
       )
-      if (asphaltSegs.length / segments.length > 0.20) fantr += 0.25
+      if (asphaltSegs.length / segments.length > 0.20) fantr += 0.15
     }
   }
 
@@ -322,7 +322,7 @@ function computeFantr(
     const hasPowerLine = track.some(pt =>
       powerLines.some(pl => haversineM(pt[0], pt[1], pl.lat, pl.lon) <= 100)
     )
-    if (hasPowerLine) fantr += 0.10
+    if (hasPowerLine) fantr += 0.05
   }
 
   // Heavy traffic roads within 50m for >500m of route
@@ -333,10 +333,10 @@ function computeFantr(
         closeLength += seg.lengthM
       }
     }
-    if (closeLength > 500) fantr += 0.15
+    if (closeLength > 500) fantr += 0.10
   }
 
-  return Math.min(fantr, 0.40)
+  return Math.min(fantr, 0.25)
 }
 
 // ── Main: computeTEI ──────────────────────────────────────────────────────────
@@ -360,7 +360,7 @@ export function computeTEI(input: TeiInput): TeiResult {
     osmData?.powerLines ?? [],
   )
 
-  const raw   = vCult * 0.30 + vTopo * 0.25 + vIdro * 0.20 + vFond * 0.15 + vGeo * 0.10
+  const raw   = vCult * 0.20 + vTopo * 0.30 + vIdro * 0.20 + vFond * 0.20 + vGeo * 0.10
   const score = clamp(raw * (1 - fAntr))
 
   const { label, color } = teiLabel(score)
