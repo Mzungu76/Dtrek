@@ -7,37 +7,52 @@
  */
 import type { PoiItem, PoiType } from './overpass'
 
-// Wikidata class QID → PoiType
+// Wikidata class QID → PoiType (keep in sync with app/api/pois/route.ts WD_TYPE)
 const WD_TYPE: Record<string, PoiType> = {
-  Q8502:    'peak',         // mountain
-  Q116:     'peak',         // generic mountain
-  Q16468:   'peak',         // mountain peak
-  Q207326:  'peak',         // volcano
-  Q1055:    'peak',         // summit
-  Q1377:    'hut',          // mountain hut
-  Q179049:  'hut',          // alpine hut
-  Q928830:  'bivouac',      // bivouac shelter
-  Q133056:  'pass',         // mountain pass / col
-  Q34038:   'waterfall',    // waterfall
-  Q35509:   'cave',         // cave
-  Q23413:   'castle',       // castle
+  Q8502:    'peak',
+  Q116:     'peak',
+  Q16468:   'peak',
+  Q207326:  'peak',
+  Q1055:    'peak',
+  Q133056:  'pass',
+  Q82117:   'pass',
+  Q1377:    'hut',
+  Q179049:  'hut',
+  Q928830:  'bivouac',
+  Q34038:   'waterfall',
+  Q21167:   'spring',
+  Q130436:  'spring',       // sorgente termale
+  Q35509:   'cave',
+  Q1254933: 'viewpoint',
+  Q2065736: 'viewpoint',
+  Q11952:   'cross',
+  Q16970:   'chapel',
+  Q16917:   'chapel',
+  Q1734:    'chapel',
+  Q44613:   'chapel',
+  Q83405:   'chapel',
+  Q1276:    'chapel',       // abbazia
+  Q11173:   'chapel',       // santuario
+  Q2977:    'chapel',       // cattedrale
+  Q23413:   'castle',
+  Q29398:   'castle',       // fortezza
   Q839954:  'archaeological',
-  Q1254933: 'viewpoint',    // panoramic viewpoint
-  Q2065736: 'viewpoint',    // observation point
-  Q11952:   'cross',        // cross
-  Q21167:   'spring',       // natural spring
-  Q16970:   'chapel',       // chapel
-  Q12518:   'tower',        // tower
-  Q79007:   'ruins',        // ruins
-  Q180817:  'ruins',        // archaeological ruins
-  Q12323:   'monument',     // monument
+  Q39614:   'archaeological',
+  Q12518:   'tower',
+  Q79007:   'ruins',
+  Q180817:  'ruins',
+  Q22692:   'ruins',        // acquedotto romano
+  Q4895796: 'ruins',        // campo di battaglia
+  Q4440864: 'ruins',        // porta urbica
+  Q4886:    'ruins',
+  Q12323:   'monument',
   Q4989906: 'monument',
-  Q12280:   'bridge',       // ponte / bridge
-  Q16917:   'chapel',       // chiesa cattolica (Roman Catholic church)
-  Q1734:    'chapel',       // church building (generico)
-  Q44613:   'chapel',       // monastero / convento
-  Q82117:   'pass',         // col / valico (alternativo a Q133056)
-  Q83405:   'chapel',       // eremo / hermitage
+  Q13217555:'monument',     // pietra miliare
+  Q2016147: 'monument',     // monumento naturale
+  Q39715:   'monument',     // faro
+  Q38720:   'monument',     // mulino a vento
+  Q11303:   'monument',     // mulino ad acqua
+  Q12280:   'bridge',
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {

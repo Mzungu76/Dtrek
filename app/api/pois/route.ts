@@ -24,37 +24,63 @@ const SOURCE_PRIORITY: Record<string, number> = {
 // ── Wikidata class QID → PoiType ─────────────────────────────────────────────
 
 const WD_TYPE: Record<string, PoiType> = {
+  // Peak / Pass
   Q8502:    'peak',
   Q116:     'peak',
   Q16468:   'peak',
-  Q207326:  'peak',
-  Q1055:    'peak',
+  Q207326:  'peak',             // volcano
+  Q1055:    'peak',             // summit
+  Q133056:  'pass',
+  Q82117:   'pass',             // col
+  // Hut / Bivouac
   Q1377:    'hut',
   Q179049:  'hut',
   Q928830:  'bivouac',
-  Q133056:  'pass',
-  Q82117:   'pass',
+  // Water
   Q34038:   'waterfall',
+  Q21167:   'spring',
+  Q130436:  'spring',           // sorgente termale / hot spring
+  // Cave
   Q35509:   'cave',
-  Q23413:   'castle',
-  Q839954:  'archaeological',
-  Q39614:   'archaeological',   // necropoli
+  // Viewpoint
   Q1254933: 'viewpoint',
   Q2065736: 'viewpoint',
+  // Cross
   Q11952:   'cross',
-  Q21167:   'spring',
+  // Religious
   Q16970:   'chapel',
   Q16917:   'chapel',           // chiesa cattolica
   Q1734:    'chapel',           // church building
-  Q44613:   'chapel',           // monastero
+  Q44613:   'chapel',           // monastero / convento
   Q83405:   'chapel',           // eremo
+  Q1276:    'chapel',           // abbazia
+  Q11173:   'chapel',           // santuario
+  Q2977:    'chapel',           // cattedrale
+  // Castle / Fort
+  Q23413:   'castle',
+  Q29398:   'castle',           // fortezza
+  // Archaeological
+  Q839954:  'archaeological',
+  Q39614:   'archaeological',   // necropoli
+  // Tower
   Q12518:   'tower',
+  // Ruins / Historic
   Q79007:   'ruins',
   Q180817:  'ruins',
+  Q22692:   'ruins',            // acquedotto romano
+  Q4895796: 'ruins',            // campo di battaglia
+  Q4440864: 'ruins',            // porta urbica
+  Q4886:    'ruins',            // borgo abbandonato
+  // Monument
   Q12323:   'monument',
   Q4989906: 'monument',
+  Q13217555:'monument',         // pietra miliare
+  Q2016147: 'monument',         // monumento naturale
+  Q39715:   'monument',         // faro (lighthouse)
+  Q38720:   'monument',         // mulino a vento
+  Q11303:   'monument',         // mulino ad acqua
+  // Bridge
   Q12280:   'bridge',
-  Q4886:    'ruins',            // borgo
 }
 
 // ── GNA tipologia → PoiType ───────────────────────────────────────────────────
@@ -347,6 +373,23 @@ const HISTORIC_TYPE_MAP: Record<string, PoiType> = {
   memorial:            'monument',
   city_gate:           'ruins',
   boundary_stone:      'monument',
+  manor:               'castle',
+  milestone:           'monument',
+  battlefield:         'ruins',
+  aqueduct:            'ruins',
+  well:                'spring',
+  aircraft:            'ruins',
+  wreck:               'ruins',
+}
+
+// Default names for unnamed features that are still interesting to hikers
+const OVERPASS_DEFAULT_NAMES: Partial<Record<PoiType, string>> = {
+  spring:    'Acqua potabile',
+  shelter:   'Riparo',
+  fountain:  'Fontana',
+  picnic:    'Area picnic',
+  cross:     'Croce',
+  ruins:     'Ruderi',
 }
 
 function parseOverpassElements(
@@ -367,25 +410,72 @@ function parseOverpassElements(
     if (isNaN(lat) || isNaN(lon)) continue
 
     const tags = el.tags ?? {}
-    const name: string | undefined = tags.name || tags['name:it']
-    if (!name) continue
+    const historic: string | undefined = tags.historic
+    const manMade: string | undefined = tags['man_made']
+    const towerType: string | undefined = tags['tower:type']
 
     let type: PoiType | undefined
-    const historic: string | undefined = tags.historic
+
+    // ── Historic ───────────────────────────────────────────────────────────────
     if (historic && HISTORIC_TYPE_MAP[historic]) {
       type = HISTORIC_TYPE_MAP[historic]
-    } else if (tags.natural === 'waterfall') {
+    } else if (historic) {
+      type = 'ruins'
+    }
+    // ── Natural ────────────────────────────────────────────────────────────────
+    else if (tags.natural === 'peak' || tags.natural === 'volcano') {
+      type = 'peak'
+    } else if (tags.natural === 'saddle') {
+      type = 'pass'
+    } else if (tags.natural === 'waterfall' || tags.waterway === 'waterfall') {
       type = 'waterfall'
     } else if (tags.natural === 'cave_entrance') {
       type = 'cave'
     } else if (tags.natural === 'spring') {
       type = 'spring'
-    } else if (tags.tourism === 'viewpoint') {
+    } else if (tags.natural === 'tree') {
+      type = 'monument'
+    }
+    // ── Tourism ────────────────────────────────────────────────────────────────
+    else if (tags.tourism === 'viewpoint') {
       type = 'viewpoint'
-    } else if (historic) {
+    } else if (tags.tourism === 'alpine_hut' || tags.tourism === 'wilderness_hut') {
+      type = 'hut'
+    } else if (tags.tourism === 'picnic_site') {
+      type = 'picnic'
+    }
+    // ── Amenity ────────────────────────────────────────────────────────────────
+    else if (tags.amenity === 'drinking_water') {
+      type = 'spring'
+    } else if (tags.amenity === 'shelter') {
+      type = 'shelter'
+    } else if (tags.amenity === 'fountain') {
+      type = 'fountain'
+    }
+    // ── Man-made ───────────────────────────────────────────────────────────────
+    else if (manMade === 'cross') {
+      type = 'cross'
+    } else if (manMade === 'lighthouse') {
+      type = 'monument'
+    } else if (manMade === 'windmill') {
+      type = 'monument'
+    } else if (manMade === 'obelisk') {
+      type = 'monument'
+    } else if (manMade === 'tower') {
+      if (towerType === 'observation' || towerType === 'watchtower') type = 'viewpoint'
+      else if (towerType === 'defensive')  type = 'tower'
+      else if (towerType === 'bell_tower') type = 'chapel'
+    }
+    // ── Military ───────────────────────────────────────────────────────────────
+    else if (tags.military === 'bunker') {
       type = 'ruins'
     }
+
     if (!type) continue
+
+    const explicitName: string | undefined = tags.name || tags['name:it']
+    const name = explicitName ?? OVERPASS_DEFAULT_NAMES[type]
+    if (!name) continue
 
     const wikiTag = tags.wikipedia ?? (tags.wikidata ? `d:${tags.wikidata}` : undefined)
 
@@ -399,11 +489,11 @@ function parseOverpassElements(
       distFromTrack: 0,
       tags: {
         ...(wikiTag ? { wikipedia: wikiTag } : {}),
-        ...(tags.description        ? { description:                tags.description }        : {}),
-        ...(tags['description:it']  ? { 'description:it':           tags['description:it'] }  : {}),
-        ...(tags.inscription        ? { inscription:                tags.inscription }        : {}),
-        ...(tags['historic:civilization'] ? { 'historic:civilization': tags['historic:civilization'] } : {}),
-        ...(tags.note               ? { note:                       tags.note }               : {}),
+        ...(tags.description            ? { description:                tags.description }            : {}),
+        ...(tags['description:it']      ? { 'description:it':           tags['description:it'] }      : {}),
+        ...(tags.inscription            ? { inscription:                tags.inscription }            : {}),
+        ...(tags['historic:civilization'] ? { 'historic:civilization':  tags['historic:civilization'] } : {}),
+        ...(tags.note                   ? { note:                       tags.note }                   : {}),
         source: 'overpass',
       },
     })
@@ -420,10 +510,21 @@ async function fetchOverpassPois(bbox: string): Promise<PoiItem[]> {
 (
   node["historic"](${s},${w},${n},${e});
   way["historic"](${s},${w},${n},${e});
-  node["natural"~"^(waterfall|spring|cave_entrance)$"](${s},${w},${n},${e});
-  node["tourism"="viewpoint"](${s},${w},${n},${e});
+  node["natural"~"^(peak|saddle|volcano|waterfall|spring|cave_entrance)$"](${s},${w},${n},${e});
+  node["waterway"="waterfall"](${s},${w},${n},${e});
+  node["natural"="tree"]["denotation"="natural_monument"](${s},${w},${n},${e});
+  node["tourism"~"^(viewpoint|alpine_hut|wilderness_hut|picnic_site)$"](${s},${w},${n},${e});
+  way["tourism"~"^(alpine_hut|wilderness_hut)$"](${s},${w},${n},${e});
+  node["amenity"~"^(drinking_water|shelter|fountain)$"](${s},${w},${n},${e});
+  node["man_made"="cross"](${s},${w},${n},${e});
+  node["man_made"="lighthouse"](${s},${w},${n},${e});
+  node["man_made"="windmill"](${s},${w},${n},${e});
+  node["man_made"="obelisk"](${s},${w},${n},${e});
+  node["man_made"="tower"]["tower:type"~"^(observation|watchtower|defensive|bell_tower)$"](${s},${w},${n},${e});
+  node["military"="bunker"](${s},${w},${n},${e});
+  way["military"="bunker"](${s},${w},${n},${e});
 );
-out body; >; out skel qt;`
+out body center; out skel qt;`
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
