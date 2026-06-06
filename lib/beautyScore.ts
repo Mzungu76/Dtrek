@@ -184,8 +184,8 @@ export interface BeautySliders {
 
 /** Derives normalized BeautyWeightPrefs from the 3 trade-off sliders. Weights sum to 1. */
 export function slidersToWeights(s: BeautySliders): BeautyWeightPrefs {
-  const wNat = s.naturaCultura / 100
-  const wCul = 1 - wNat
+  const wNat = 1 - s.naturaCultura / 100   // slider=0 (Natura side) → wNat=1
+  const wCul = s.naturaCultura / 100        // slider=100 (Cultura side) → wCul=1
   return {
     natura:       wNat * (s.naturaType    / 100),
     paesaggio:    wNat * (1 - s.naturaType    / 100),
@@ -228,16 +228,17 @@ export function computeBeautyScore(
   const architettura = scoreArchitettura(pois)
   const interesse   = scoreInteresse(pois, wiki)
 
-  const w  = normalizeWeights(rawWeights ?? {})
-  const b1 = natura.score * w.natura + paesaggio.score * w.paesaggio
-  const b2 = archeologia.score * w.archeologia + architettura.score * w.architettura + interesse.score * w.interesse
+  // Use raw weights (not normalized-per-group) so inter-group balance reflects the slider.
+  const rw = { ...DEFAULT_WEIGHTS, ...(rawWeights ?? {}) }
+  const b1Sum = rw.natura + rw.paesaggio || 1
+  const b2Sum = rw.archeologia + rw.architettura + rw.interesse || 1
+  const b1 = natura.score * (rw.natura / b1Sum) + paesaggio.score * (rw.paesaggio / b1Sum)
+  const b2 = archeologia.score * (rw.archeologia / b2Sum) + architettura.score * (rw.architettura / b2Sum) + interesse.score * (rw.interesse / b2Sum)
 
-  // Weighted group average: respects the natura/cultura balance encoded in the weights.
-  // Avoids the old (b1+b2)/2 which always mixed groups 50/50 regardless of user prefs.
-  const wNatGroup = w.natura + w.paesaggio
-  const wCulGroup = w.archeologia + w.architettura + w.interesse
-  const denom = wNatGroup + wCulGroup || 1
-  const overall = clamp(b1 * (wNatGroup / denom) + b2 * (wCulGroup / denom))
+  const totalNat = rw.natura + rw.paesaggio
+  const totalCul = rw.archeologia + rw.architettura + rw.interesse
+  const totalSum = totalNat + totalCul || 1
+  const overall = clamp(b1 * (totalNat / totalSum) + b2 * (totalCul / totalSum))
 
   const overallGrade = toGrade(overall)
 

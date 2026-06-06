@@ -124,7 +124,7 @@ function gnaTypologyToPoiType(tipologia?: string): PoiType {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function normalizeBboxKey(bbox: string): string {
-  return bbox.split(',').map(v => (Math.round(parseFloat(v) * 100) / 100).toFixed(2)).join('_')
+  return 'v2_' + bbox.split(',').map(v => (Math.round(parseFloat(v) * 100) / 100).toFixed(2)).join('_')
 }
 
 function wikiUrlToTag(url: string): string | undefined {
@@ -620,7 +620,7 @@ export async function GET(req: NextRequest) {
     const pois = deduplicateByProximity(allPois, 50)
 
     // Cache result with source metadata (fire-and-forget)
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
     const cachePayload = {
       pois,
       meta: {
