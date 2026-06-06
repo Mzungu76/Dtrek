@@ -21,10 +21,11 @@ export interface OsmElement {
 }
 
 export interface OsmTeiData {
-  waterways: OsmElement[]
-  highways: OsmElement[]
+  waterways:    OsmElement[]
+  highways:     OsmElement[]
   antrHighways: OsmElement[]
-  powerLines: OsmElement[]
+  powerLines:   OsmElement[]
+  waterShore?:  OsmElement[]  // sampled shoreline points from natural=water areas (lakes/ponds)
 }
 
 export interface TeiBreakdown {
@@ -229,6 +230,7 @@ function computeVidro(
   segments: GpxSegment[],
   pois: PoiItem[],
   waterways: OsmElement[],
+  waterShore: OsmElement[] = [],
 ): number {
   const waterPois = pois.filter(p => p.type === 'waterfall' || p.type === 'spring')
 
@@ -240,7 +242,11 @@ function computeVidro(
     const hasWaterway = waterways.some(
       w => haversineM(seg.centroid[0], seg.centroid[1], w.lat, w.lon) <= 50
     )
-    if (hasWaterPoi || hasWaterway) waterSegCount++
+    // Lake shores use 100m radius: large lakes are represented by shore nodes, not centers
+    const hasLakeShore = waterShore.length > 0 && waterShore.some(
+      w => haversineM(seg.centroid[0], seg.centroid[1], w.lat, w.lon) <= 100
+    )
+    if (hasWaterPoi || hasWaterway || hasLakeShore) waterSegCount++
   }
 
   if (segments.length === 0) return 1
@@ -343,7 +349,7 @@ export function computeTEI(input: TeiInput): TeiResult {
 
   const vCult = computeVcult(segments, pois)
   const vTopo = computeVtopo(elevGain, distanceMeters, segments)
-  const vIdro = computeVidro(segments, pois, osmData?.waterways ?? [])
+  const vIdro = computeVidro(segments, pois, osmData?.waterways ?? [], osmData?.waterShore ?? [])
   const vFond = computeVfond(segments, osmData?.highways ?? [])
   const vGeo  = 5.0  // placeholder until Viewshed on DEM
 
@@ -390,20 +396,25 @@ function mkCat(key: string, label: string, emoji: string, score: number): Catego
 }
 
 export function teiToBeautyScore(tei: TeiResult): BeautyScore {
-  const { vCult, vTopo, vIdro, vFond, vGeo } = tei.breakdown
+  const { vCult, vTopo, vIdro, vFond, vGeo, fAntr, raw } = tei.breakdown
   const { grade, gradeLabel, color } = teiGrade(tei.score)
-  return {
-    overall:    tei.score,
-    grade,
-    gradeLabel,
-    color,
-    version:    2,
-    categories: [
-      mkCat('v_cult', 'V. Culturale',    '🏛',  vCult),
-      mkCat('v_topo', 'V. Topografico',  '⛰',   vTopo),
-      mkCat('v_idro', 'V. Idrografico',  '💧',  vIdro),
-      mkCat('v_fond', 'V. Fondo',        '🛤',  vFond),
-      mkCat('v_geo',  'V. Geodiversità', '🌍',  vGeo),
-    ],
+  const categories: CategoryScore[] = [
+    mkCat('v_cult', 'V. Culturale',    '🏛',  vCult),
+    mkCat('v_topo', 'V. Topografico',  '⛰',   vTopo),
+    mkCat('v_idro', 'V. Idrografico',  '💧',  vIdro),
+    mkCat('v_fond', 'V. Fondo',        '🛤',  vFond),
+    mkCat('v_geo',  'V. Geodiversità', '🌍',  vGeo),
+  ]
+  // Store penalty metadata as special categories so the widget can explain the score reduction
+  if (fAntr > 0.001) {
+    categories.push({
+      key: 'tei_raw', label: 'Punteggio grezzo', emoji: '📊',
+      score: raw, grade: '-', gradeLabel: raw.toFixed(1), color: '#64748b', reasons: [],
+    })
+    categories.push({
+      key: 'f_antr', label: 'Penalità antropica', emoji: '🏗',
+      score: fAntr, grade: '-', gradeLabel: `-${Math.round(fAntr * 100)}%`, color: '#dc2626', reasons: [],
+    })
   }
+  return { overall: tei.score, grade, gradeLabel, color, version: 2, categories }
 }

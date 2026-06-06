@@ -18,20 +18,58 @@ function extractCenter(el: any): { lat: number; lon: number } | null {
   return null
 }
 
+function sampleGeom(
+  geom: Array<{ lat: number; lon: number }>,
+  maxPts = 30,
+): Array<{ lat: number; lon: number }> {
+  if (geom.length <= maxPts) return geom
+  const step = Math.ceil(geom.length / maxPts)
+  return geom.filter((_, i) => i % step === 0)
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseOsmTei(elements: any[]): OsmTeiData {
   const waterways:    OsmElement[] = []
   const highways:     OsmElement[] = []
   const antrHighways: OsmElement[] = []
   const powerLines:   OsmElement[] = []
+  const waterShore:   OsmElement[] = []
 
   for (const el of elements) {
+    const tags: Record<string, string> = el.tags ?? {}
+
+    // Water area ways (lakes, ponds) — geometry is the shoreline polygon
+    if (tags.natural === 'water' && el.geometry && Array.isArray(el.geometry)) {
+      for (const pt of sampleGeom(el.geometry)) {
+        if (!isNaN(pt.lat) && !isNaN(pt.lon)) {
+          waterShore.push({ lat: pt.lat, lon: pt.lon, tags })
+        }
+      }
+      continue
+    }
+
+    // Water area relations (large lakes like Bolsena) — member ways carry the geometry
+    if (tags.natural === 'water' && el.members && Array.isArray(el.members)) {
+      let processed = 0
+      for (const member of el.members) {
+        if (processed >= 6) break  // cap members to limit data volume
+        if (member.geometry && Array.isArray(member.geometry)) {
+          for (const pt of sampleGeom(member.geometry, 20)) {
+            if (!isNaN(pt.lat) && !isNaN(pt.lon)) {
+              waterShore.push({ lat: pt.lat, lon: pt.lon, tags })
+            }
+          }
+          processed++
+        }
+      }
+      continue
+    }
+
     const center = extractCenter(el)
     if (!center) continue
     const { lat, lon } = center
     if (isNaN(lat) || isNaN(lon)) continue
 
-    const tags: Record<string, string> = el.tags ?? {}
     const element: OsmElement = { lat, lon, tags }
 
     const waterway = tags.waterway
@@ -59,7 +97,7 @@ function parseOsmTei(elements: any[]): OsmTeiData {
     }
   }
 
-  return { waterways, highways, antrHighways, powerLines }
+  return { waterways, highways, antrHighways, powerLines, waterShore }
 }
 
 export async function GET(req: NextRequest) {
@@ -72,14 +110,19 @@ export async function GET(req: NextRequest) {
     const [s, w, n, e] = bbox.split(',')
 
     const query = `
-[out:json][timeout:25];
+[out:json][timeout:30];
 (
   way["waterway"~"^(river|stream|canal|drain|brook|ditch)$"](${s},${w},${n},${e});
   way["highway"]["surface"](${s},${w},${n},${e});
   way["highway"~"^(primary|secondary|tertiary|trunk|motorway)$"](${s},${w},${n},${e});
   way["power"="line"](${s},${w},${n},${e});
 );
-out center; out skel qt;`
+out center;
+(
+  way["natural"="water"](${s},${w},${n},${e});
+  relation["natural"="water"](${s},${w},${n},${e});
+);
+out geom;`
 
     for (const endpoint of OVERPASS_ENDPOINTS) {
       try {
@@ -90,7 +133,7 @@ out center; out skel qt;`
             'User-Agent': USER_AGENT,
           },
           body: `data=${encodeURIComponent(query)}`,
-          signal: AbortSignal.timeout(25000),
+          signal: AbortSignal.timeout(30000),
         })
         if (!res.ok) continue
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
