@@ -558,6 +558,7 @@ export default function PlannedHikePage() {
               <ComfortTrailScoreWidget
                 result={ctsResult}
                 cached={(hike as { cachedTrailScore?: number }).cachedTrailScore}
+                beautyScore={(hike as { cachedBeautyScore?: BeautyScore }).cachedBeautyScore}
               />
             ) : (
               <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 flex items-center justify-between gap-4">

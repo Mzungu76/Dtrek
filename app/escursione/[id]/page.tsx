@@ -561,6 +561,7 @@ export default function EscursionePage() {
               <ComfortTrailScoreWidget
                 result={ctsResult}
                 cached={(activity as StoredActivity & { trailScore?: number }).trailScore}
+                beautyScore={(activity as StoredActivity & { linkedBeautyScore?: BeautyScore }).linkedBeautyScore}
               />
             ) : (
               <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 flex items-center justify-between gap-4">
