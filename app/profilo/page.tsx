@@ -5,20 +5,14 @@ import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getAllPlanned, getPlannedById, updatePlannedMeta } from '@/lib/plannedStore'
 import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blobStore'
 import { computeTrailScore, getCtsFallback, type CtsConfidence } from '@/lib/trailScore'
-import { computeBeautyScore, slidersToWeights, type BeautyScore } from '@/lib/beautyScore'
-import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
-import { fetchWikiForNamedPois } from '@/lib/wikipedia'
+import { type BeautyScore } from '@/lib/beautyScore'
+import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
+import { type PoiItem } from '@/lib/overpass'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
   Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw,
 } from 'lucide-react'
-
-const EMPTY_TERRAIN: TerrainContext = {
-  hasForest: false, hasRiver: false, hasStream: false, hasLake: false,
-  hasPond: false, hasGlacier: false, hasCoast: false, isProtected: false,
-  isNationalPark: false, openTerrain: false, surfaces: [],
-}
 
 // ── Claude API key section ─────────────────────────────────────────────────
 
@@ -183,9 +177,6 @@ async function fetchPoisForGps(gps: [number, number][]): Promise<PoiItem[]> {
 }
 
 function ComfortTrailScoreSection() {
-  const [naturaCultura, setNaturaCultura] = useState(50) // 0=solo natura, 100=solo cultura
-  const [naturaType,    setNaturaType]    = useState(50) // 0=panoramica, 100=selvaggia
-  const [culturaType,   setCulturaType]   = useState(50) // 0=castelli, 100=rovine
   const [hrRest,           setHrRest]           = useState(55)
   const [hrMax,            setHrMax]            = useState<number | null>(null)
   const [prefSforzo,       setPrefSforzo]       = useState(50)
@@ -202,9 +193,6 @@ function ComfortTrailScoreSection() {
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
-        if (d.beautyNaturaCultura != null) setNaturaCultura(d.beautyNaturaCultura)
-        if (d.beautyNaturaType    != null) setNaturaType(d.beautyNaturaType)
-        if (d.beautyCulturaType   != null) setCulturaType(d.beautyCulturaType)
         if (d.hrRest  != null) setHrRest(d.hrRest)
         if (d.hrMax   != null) setHrMax(d.hrMax)
         if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
@@ -220,9 +208,6 @@ function ComfortTrailScoreSection() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        beautyNaturaCultura: naturaCultura,
-        beautyNaturaType:    naturaType,
-        beautyCulturaType:   culturaType,
         hrRest,
         hrMax: hrMax ?? null,
         prefSforzo,
@@ -236,15 +221,10 @@ function ComfortTrailScoreSection() {
       return
     }
 
-    // Lightweight recalculation — reuse cached BeautyScore, just recalculate CTS with new weights
+    // Lightweight recalculation — reuse cached TEI/BeautyScore, just recalculate CTS with new prefs
     let updated = 0
     try {
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const rawW = slidersToWeights({
-        naturaCultura: prefs.beautyNaturaCultura ?? naturaCultura,
-        naturaType:    prefs.beautyNaturaType    ?? naturaType,
-        culturaType:   prefs.beautyCulturaType   ?? culturaType,
-      })
       const [hikes, activities] = await Promise.all([getAllPlanned(), getAllActivities()])
 
       await Promise.all([
@@ -296,11 +276,6 @@ function ComfortTrailScoreSection() {
     let computed = 0
     try {
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const rawW = slidersToWeights({
-        naturaCultura: prefs.beautyNaturaCultura ?? naturaCultura,
-        naturaType:    prefs.beautyNaturaType    ?? naturaType,
-        culturaType:   prefs.beautyCulturaType   ?? culturaType,
-      })
 
       const activities = await getAllActivities()
       const missing = activities.filter(
@@ -322,23 +297,35 @@ function ComfortTrailScoreSection() {
           .map(p => [p.lat!, p.lon!] as [number, number])
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
-        const [pois, terrain] = await Promise.all([
+        const bbox = computeBbox(gps)
+        const [pois, osmData] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
-          Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN) as Promise<TerrainContext>,
+          Promise.race([
+            fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
         ])
-        const rawWiki = pois.length
-          ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
-          : []
-        const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
-        const bs = computeBeautyScore(pois, wiki, terrain, full.elevationGain, full.altitudeMax, full.distanceMeters, rawW)
 
-        let confidence: CtsConfidence = 'high'
+        const elevProfile = (full.trackPoints ?? [])
+          .filter(p => p.lat && p.lon)
+          .map(p => p.altitudeMeters ?? 0)
+
+        const tei = computeTEI({
+          track: gps,
+          elevGain: full.elevationGain,
+          distanceMeters: full.distanceMeters,
+          altitudeMax: full.altitudeMax,
+          elevProfile,
+          pois,
+          osmData,
+        })
+        const bs = teiToBeautyScore(tei)
+        const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
+
         let finalTs: number
         if (pois.length === 0) {
-          confidence = 'default'
           finalTs = getCtsFallback(activities)
         } else {
-          if (pois.length < 3 || bs.overall < 2) confidence = 'estimated'
           const { ts } = computeTrailScore(bs, {
             distanceMeters: full.distanceMeters,
             elevationGain:  full.elevationGain,
@@ -367,12 +354,6 @@ function ComfortTrailScoreSection() {
     let computed = 0
     try {
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const rawW = slidersToWeights({
-        naturaCultura: prefs.beautyNaturaCultura ?? naturaCultura,
-        naturaType:    prefs.beautyNaturaType    ?? naturaType,
-        culturaType:   prefs.beautyCulturaType   ?? culturaType,
-      })
-
       const [activities, hikes] = await Promise.all([getAllActivities(), getAllPlanned()])
       const total = activities.length + hikes.length
 
@@ -386,23 +367,35 @@ function ComfortTrailScoreSection() {
           .map(p => [p.lat!, p.lon!] as [number, number])
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
-        const [pois, terrain] = await Promise.all([
+        const bbox = computeBbox(gps)
+        const [pois, osmData] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
-          Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN) as Promise<TerrainContext>,
+          Promise.race([
+            fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
         ])
-        const rawWiki = pois.length
-          ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
-          : []
-        const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
-        const bs = computeBeautyScore(pois, wiki, terrain, full.elevationGain, full.altitudeMax, full.distanceMeters, rawW)
 
-        let confidence: CtsConfidence = 'high'
+        const elevProfile = (full.trackPoints ?? [])
+          .filter(p => p.lat && p.lon)
+          .map(p => p.altitudeMeters ?? 0)
+
+        const tei = computeTEI({
+          track: gps,
+          elevGain: full.elevationGain,
+          distanceMeters: full.distanceMeters,
+          altitudeMax: full.altitudeMax,
+          elevProfile,
+          pois,
+          osmData,
+        })
+        const bs = teiToBeautyScore(tei)
+        const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
+
         let finalTs: number
         if (pois.length === 0) {
-          confidence = 'default'
           finalTs = getCtsFallback(activities)
         } else {
-          if (pois.length < 3 || bs.overall < 2) confidence = 'estimated'
           const { ts } = computeTrailScore(bs, {
             distanceMeters: full.distanceMeters,
             elevationGain:  full.elevationGain,
@@ -429,23 +422,35 @@ function ComfortTrailScoreSection() {
           .map(p => [p.lat!, p.lon!] as [number, number])
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
-        const [pois, terrain] = await Promise.all([
+        const bbox = computeBbox(gps)
+        const [pois, osmData] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
-          Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN) as Promise<TerrainContext>,
+          Promise.race([
+            fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
         ])
-        const rawWiki = pois.length
-          ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
-          : []
-        const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
-        const bs = computeBeautyScore(pois, wiki, terrain, full.elevationGain, full.altitudeMax, full.distanceMeters, rawW)
 
-        let confidence: CtsConfidence = 'high'
+        const elevProfile = (full.trackPoints ?? [])
+          .filter(p => p.lat && p.lon)
+          .map(p => p.altitudeMeters ?? 0)
+
+        const tei = computeTEI({
+          track: gps,
+          elevGain: full.elevationGain,
+          distanceMeters: full.distanceMeters,
+          altitudeMax: full.altitudeMax,
+          elevProfile,
+          pois,
+          osmData,
+        })
+        const bs = teiToBeautyScore(tei)
+        const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
+
         let finalTs: number
         if (pois.length === 0) {
-          confidence = 'default'
           finalTs = getCtsFallback(activities)
         } else {
-          if (pois.length < 3 || bs.overall < 2) confidence = 'estimated'
           const { ts } = computeTrailScore(bs, {
             distanceMeters: full.distanceMeters,
             elevationGain:  full.elevationGain,
@@ -483,53 +488,6 @@ function ComfortTrailScoreSection() {
         </div>
       ) : (
         <div className="space-y-5">
-
-          {/* Pesi per la Bellezza — 3 sliders a scelta obbligata */}
-          <div className="space-y-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Cosa cerchi in un percorso?</p>
-
-            {/* Slider 1: Natura vs Cultura */}
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <span className="text-xs font-medium text-stone-600">🌿 Natura</span>
-                <span className="text-xs font-medium text-stone-600">🏛 Cultura</span>
-              </div>
-              <input type="range" min={0} max={100} value={naturaCultura}
-                onChange={e => setNaturaCultura(Number(e.target.value))}
-                className="w-full accent-forest-600" />
-              <p className="text-[10px] text-stone-400 mt-0.5 text-center">
-                {naturaCultura < 30 ? 'Preferisci natura selvaggia' : naturaCultura > 70 ? 'Preferisci siti storici e culturali' : 'Bilanciato'}
-              </p>
-            </div>
-
-            {/* Slider 2: Selvaggia vs Panoramica (within natura) */}
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <span className="text-xs font-medium text-stone-600">🏔 Selvaggia</span>
-                <span className="text-xs font-medium text-stone-600">🌄 Panoramica</span>
-              </div>
-              <input type="range" min={0} max={100} value={100 - naturaType}
-                onChange={e => setNaturaType(100 - Number(e.target.value))}
-                className="w-full accent-forest-600" />
-              <p className="text-[10px] text-stone-400 mt-0.5 text-center">
-                {naturaType > 70 ? 'Vette, grotte, cascate' : naturaType < 30 ? 'Panorami, belvedere, laghi' : 'Bilanciato'}
-              </p>
-            </div>
-
-            {/* Slider 3: Rovine vs Castelli (within cultura) */}
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <span className="text-xs font-medium text-stone-600">🏺 Rovine</span>
-                <span className="text-xs font-medium text-stone-600">⛪ Castelli</span>
-              </div>
-              <input type="range" min={0} max={100} value={100 - culturaType}
-                onChange={e => setCulturaType(100 - Number(e.target.value))}
-                className="w-full accent-forest-600" />
-              <p className="text-[10px] text-stone-400 mt-0.5 text-center">
-                {culturaType > 70 ? 'Siti archeologici, necropoli' : culturaType < 30 ? 'Castelli, chiese, borghi' : 'Bilanciato'}
-              </p>
-            </div>
-          </div>
 
           {/* HR settings */}
           <div className="space-y-3">
