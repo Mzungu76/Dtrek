@@ -10,18 +10,14 @@ import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, updatePlanne
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
-import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
-import { computeBeautyScore, type BeautyScore } from '@/lib/beautyScore'
+import { type PoiItem } from '@/lib/overpass'
+import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
+import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTrailScore } from '@/lib/trailScore'
+import { computeBbox } from '@/lib/geoUtils'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
-
-const EMPTY_TERRAIN: TerrainContext = {
-  hasForest: false, hasRiver: false, hasStream: false, hasLake: false,
-  hasPond: false, hasGlacier: false, hasCoast: false, isProtected: false,
-  isNationalPark: false, openTerrain: false, surfaces: [],
-}
 type GpxStatus = 'idle' | 'parsed' | 'saving' | 'success' | 'error'
 
 // ── Activity uploader (TCX / GPX / FIT) ───────────────────────────────────────
@@ -97,16 +93,26 @@ function ActivityUploader() {
           .map(p => [p.lat!, p.lon!] as [number, number])
         if (gps.length >= 2) {
           const deadline = new Promise<null>(r => setTimeout(() => r(null), 9000))
-          const [rawPois, terrain] = await Promise.all([
-            Promise.race([fetchPoisNearTrack(gps, 300), deadline]).then(r => r ?? []),
-            Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
-          ])
+          const rawPois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline]).then(r => r ?? [])
           const pois = rawPois as PoiItem[]
-          const rawWiki = pois.length
-            ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
-            : []
-          const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
-          const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, parsedActivity.elevationGain, parsedActivity.altitudeMax, parsedActivity.distanceMeters)
+          const bbox = computeBbox(gps)
+          const elevProfile = (parsedActivity.trackPoints ?? [])
+            .filter(p => p.lat && p.lon)
+            .map(p => p.altitudeMeters ?? 0)
+          const osmData = await Promise.race([
+            fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined)
+          const tei = computeTEI({
+            track: gps,
+            elevGain: parsedActivity.elevationGain,
+            distanceMeters: parsedActivity.distanceMeters,
+            altitudeMax: parsedActivity.altitudeMax,
+            elevProfile,
+            pois,
+            osmData,
+          })
+          const bs = teiToBeautyScore(tei)
           const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
           const { ts } = computeTrailScore(bs, {
             distanceMeters: parsedActivity.distanceMeters,
@@ -440,10 +446,23 @@ function GpxUploader() {
       if (gps.length >= 2 && hike.cachedPois?.length) {
         ;(async () => {
           try {
-            const terrain = await fetchTerrainContext(gps).catch(() => EMPTY_TERRAIN)
-            const rawWiki = hike.cachedPoiWiki ?? []
-            const wiki = (rawWiki as { wiki: import('@/lib/wikipedia').WikiPage }[]).map(e => e.wiki)
-            const bs = computeBeautyScore(hike.cachedPois as PoiItem[], wiki, terrain, hike.elevationGain, hike.altitudeMax, hike.distanceMeters)
+            const bbox = computeBbox(gps)
+            const elevProfile = (parsed.trackPoints ?? [])
+              .filter(p => p.lat && p.lon)
+              .map(p => p.altitudeMeters ?? 0)
+            const osmData = await fetch(`/api/tei-overpass?bbox=${bbox}`)
+              .then(r => r.json() as Promise<OsmTeiData>)
+              .catch(() => undefined)
+            const tei = computeTEI({
+              track: gps,
+              elevGain: hike.elevationGain,
+              distanceMeters: hike.distanceMeters,
+              altitudeMax: hike.altitudeMax,
+              elevProfile,
+              pois: hike.cachedPois as PoiItem[],
+              osmData,
+            })
+            const bs = teiToBeautyScore(tei)
             const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
             const { ts } = computeTrailScore(bs, {
               distanceMeters: hike.distanceMeters,
@@ -452,7 +471,7 @@ function GpxUploader() {
               altitudeMax:    hike.altitudeMax,
               prefSforzo:     prefs.prefSforzo,
               prefDurata:     prefs.prefDurata,
-            }, prefs.beautyNaturaWeight ?? 50)
+            })
             await updatePlannedMeta(hike.id, { cachedBeautyScore: bs, cachedTrailScore: ts })
           } catch {}
         })()

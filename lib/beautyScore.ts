@@ -1,4 +1,5 @@
-// lib/beautyScore.ts
+// lib/beautyScore.ts — DEPRECATED: replaced by lib/tei.ts (TEI v2)
+// Kept for backward compat — do not use in new code
 import type { PoiItem, TerrainContext } from './overpass'
 import type { WikiPage } from './wikipedia'
 

@@ -14,12 +14,15 @@ function MiniBar({ value, max = 10, color }: { value: number; max?: number; colo
   )
 }
 
-// ── Beauty breakdown ──────────────────────────────────────────────────────────
+// ── Beauty / TEI breakdown ────────────────────────────────────────────────────
 
 function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
+  const isTei = beauty.version === 2
   return (
     <div className="space-y-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Dettaglio Bellezza</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+        {isTei ? 'Dettaglio TEI' : 'Dettaglio Bellezza'}
+      </p>
       {beauty.categories.map(cat => (
         <div key={cat.key}>
           <div className="flex items-center gap-2 mb-0.5">
@@ -164,10 +167,10 @@ export function ComfortTrailScoreWidget({
       {/* Summary bars */}
       {bd && (
         <div className="px-5 py-4 bg-white space-y-3">
-          {/* Beauty bar */}
+          {/* Beauty / TEI bar */}
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-stone-500">
-              <span>🌄 Bellezza</span>
+              <span>{beautyScore?.version === 2 ? '🏆 TEI' : '🌄 Bellezza'}</span>
               <span className="font-semibold">{result!.b.toFixed(1)}/10</span>
             </div>
             <div className="h-2 bg-stone-100 rounded-full overflow-hidden">

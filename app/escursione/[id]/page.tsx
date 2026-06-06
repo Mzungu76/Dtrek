@@ -22,9 +22,9 @@ import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import PdfExportButton from '@/components/PdfExportButton'
-import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
+import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import { computeBeautyScore, slidersToWeights } from '@/lib/beautyScore'
+import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -39,12 +39,6 @@ import ShareModal from '@/components/ShareModal'
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
-
-const EMPTY_TERRAIN: TerrainContext = {
-  hasForest: false, hasRiver: false, hasStream: false, hasLake: false,
-  hasPond: false, hasGlacier: false, hasCoast: false, isProtected: false,
-  isNationalPark: false, openTerrain: false, surfaces: [],
-}
 
 function ratingColor(n: number) {
   return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
@@ -83,9 +77,6 @@ export default function EscursionePage() {
   const [ctsResult,       setCtsResult]       = useState<TrailScoreResult | null>(null)
   const [ctsComputing,    setCtsComputing]    = useState(false)
   const [prefsLoaded,     setPrefsLoaded]     = useState(false)
-  const [naturaCultura,   setNaturaCultura]   = useState(50)
-  const [naturaType,      setNaturaType]      = useState(50)
-  const [culturaType,     setCulturaType]     = useState(50)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefDurata,      setPrefDurata]      = useState(270)
 
@@ -129,9 +120,6 @@ export default function EscursionePage() {
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
-        setNaturaCultura(d.beautyNaturaCultura ?? 50)
-        setNaturaType(d.beautyNaturaType       ?? 50)
-        setCulturaType(d.beautyCulturaType     ?? 50)
         if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
         if (d.prefDurata != null) setPrefDurata(d.prefDurata)
       })
@@ -153,7 +141,7 @@ export default function EscursionePage() {
       prefDurata,
     })
     setCtsResult({ ...computed, ts: (activity as StoredActivity & { trailScore?: number }).trailScore ?? computed.ts })
-  }, [activity?.id, prefsLoaded, naturaCultura, naturaType, culturaType, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activity?.id, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   if (loading) return (
@@ -204,29 +192,36 @@ export default function EscursionePage() {
     try {
       const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
       const bbox = computeBbox(gps)
-      const [allPoisRes, terrain] = await Promise.all([
+      const [allPoisRes, osmData] = await Promise.all([
         Promise.race([
           fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>,
           deadline,
         ]).then(r => r ?? []),
-        Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
+        Promise.race([
+          fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+          deadline,
+        ]).then(r => r ?? undefined).catch(() => undefined),
       ])
       const allPois = allPoisRes as PoiItem[]
       const pois = allPois
         .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
         .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
 
-      const rawWiki = pois.length
-        ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
-        : []
-      const wiki = (rawWiki as { wiki: WikiPage }[]).map(e => e.wiki)
-      const weights = slidersToWeights({ naturaCultura, naturaType, culturaType })
-      const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, activity.elevationGain, activity.altitudeMax, activity.distanceMeters, weights)
+      const elevProfile = (activity.trackPoints ?? [])
+        .filter(p => p.lat && p.lon)
+        .map(p => p.altitudeMeters ?? 0)
 
-      // Determine confidence based on POI coverage
-      let confidence: CtsConfidence = 'high'
-      if (pois.length === 0) confidence = 'default'
-      else if (pois.length < 3 || bs.overall < 2) confidence = 'estimated'
+      const tei = computeTEI({
+        track: gps,
+        elevGain: activity.elevationGain,
+        distanceMeters: activity.distanceMeters,
+        altitudeMax: activity.altitudeMax,
+        elevProfile,
+        pois,
+        osmData,
+      })
+      const bs = teiToBeautyScore(tei)
+      const confidence: CtsConfidence = tei.confidence
 
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
       let { ts } = computeTrailScore(bs, {
