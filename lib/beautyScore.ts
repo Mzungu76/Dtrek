@@ -173,6 +173,29 @@ export interface BeautyWeightPrefs {
   interesse:     number
 }
 
+/** Three semantic trade-off sliders that replace the old 5 independent sliders. */
+export interface BeautySliders {
+  /** 0 = only natura/paesaggio, 100 = only cultura/archeologia/architettura */
+  naturaCultura: number
+  /** 0 = only paesaggio (panoramic), 100 = only natura (wild) — within the natura group */
+  naturaType:    number
+  /** 0 = only architettura/interesse (castles), 100 = only archeologia (ruins) — within the cultura group */
+  culturaType:   number
+}
+
+/** Derives normalized BeautyWeightPrefs from the 3 trade-off sliders. Weights sum to 1. */
+export function slidersToWeights(s: BeautySliders): BeautyWeightPrefs {
+  const wNat = s.naturaCultura / 100
+  const wCul = 1 - wNat
+  return {
+    natura:       wNat * (s.naturaType    / 100),
+    paesaggio:    wNat * (1 - s.naturaType    / 100),
+    archeologia:  wCul * (s.culturaType   / 100),
+    architettura: wCul * (1 - s.culturaType   / 100) * 0.6,
+    interesse:    wCul * (1 - s.culturaType   / 100) * 0.4,
+  }
+}
+
 const DEFAULT_WEIGHTS: BeautyWeightPrefs = {
   natura: 55, paesaggio: 45, archeologia: 35, architettura: 40, interesse: 25,
 }
@@ -209,7 +232,13 @@ export function computeBeautyScore(
   const w  = normalizeWeights(rawWeights ?? {})
   const b1 = natura.score * w.natura + paesaggio.score * w.paesaggio
   const b2 = archeologia.score * w.archeologia + architettura.score * w.architettura + interesse.score * w.interesse
-  const overall = clamp((b1 + b2) / 2)
+
+  // Weighted group average: respects the natura/cultura balance encoded in the weights.
+  // Avoids the old (b1+b2)/2 which always mixed groups 50/50 regardless of user prefs.
+  const wNatGroup = w.natura + w.paesaggio
+  const wCulGroup = w.archeologia + w.architettura + w.interesse
+  const denom = wNatGroup + wCulGroup || 1
+  const overall = clamp(b1 * (wNatGroup / denom) + b2 * (wCulGroup / denom))
 
   const overallGrade = toGrade(overall)
 
