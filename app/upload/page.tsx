@@ -7,7 +7,7 @@ import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivity } from '@/lib/blobStore'
 import { parseGpx } from '@/lib/gpxParser'
 import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
-import { fetchHikingPoisFromWikidata } from '@/lib/wikidataPois'
+import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
 import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
@@ -98,7 +98,7 @@ function ActivityUploader() {
         if (gps.length >= 2) {
           const deadline = new Promise<null>(r => setTimeout(() => r(null), 9000))
           const [rawPois, terrain] = await Promise.all([
-            Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline]).then(r => r ?? []),
+            Promise.race([fetchPoisNearTrack(gps, 300), deadline]).then(r => r ?? []),
             Promise.race([fetchTerrainContext(gps), deadline]).then(r => r ?? EMPTY_TERRAIN),
           ])
           const pois = rawPois as PoiItem[]
@@ -425,7 +425,7 @@ function GpxUploader() {
       if (gps.length >= 2) {
         try {
           const deadline = new Promise<null>(r => setTimeout(() => r(null), 7000))
-          const pois = await Promise.race([fetchHikingPoisFromWikidata(gps, 300), deadline])
+          const pois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline])
           if (pois?.length) {
             hike.cachedPois = pois
             const poiWiki = await Promise.race([fetchWikiForNamedPois(pois), deadline])
