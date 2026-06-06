@@ -181,13 +181,15 @@ export function computeTrailScore(
   const tsBase = clamp(50 * Math.log10((B + 1) / (fFinal + 1)) + 50, 0, 100)
 
   // Preference bonuses
-  const sforzaNorm = (prefSforzo - 50) / 50  // [-1, +1]
-  const sfidaBonus = sforzaNorm * 20 * (fFinal / 10)
+  const sforzaNorm = (prefSforzo - 50) / 50          // [−1, +1]
+  const fNorm      = (fFinal - 5) / 5                // [−1, +1], pivot su difficoltà media 5
+  const sfidaBonus = clamp(sforzaNorm * fNorm * 12, -12, 12)
 
-  const duraOre    = tNaismith + tDesa + tDescRaw  // estimated hours
+  const duraOre    = tNaismith + tDesa + tDescRaw    // stima Naismith (ore)
   const prefDuraOre = prefDurata / 60
-  const duraNorm   = clamp((duraOre - prefDuraOre) / prefDuraOre, -1, 1) * -1
-  const duraBonus  = duraNorm * 15
+  const relDiff    = (duraOre - prefDuraOre) / prefDuraOre
+  const σ          = relDiff >= 0 ? 0.5 : 0.7        // troppo lungo decade più in fretta
+  const duraBonus  = -(1 - Math.exp(-0.5 * (relDiff / σ) ** 2)) * 12
 
   const ts = clamp(tsBase + sfidaBonus + duraBonus, 0, 100)
 
