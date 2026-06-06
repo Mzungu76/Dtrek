@@ -41,22 +41,22 @@ function scoreNatura(
 
   // cime/vette
   const peaks = pois.filter(p => p.type === 'peak' || p.type === 'pass').length
-  const peakScore = Math.min(peaks * 1.5, 4.5)
+  const peakScore = Math.min(peaks * 3.0, 9.0)
   if (peakScore > 0) { s += peakScore; reasons.push(`${peaks} cima/valico`) }
 
   // cascate
   const waterfalls = pois.filter(p => p.type === 'waterfall').length
-  const waterfallScore = Math.min(waterfalls * 2.0, 4.0)
+  const waterfallScore = Math.min(waterfalls * 4.0, 8.0)
   if (waterfallScore > 0) { s += waterfallScore; reasons.push(`${waterfalls} cascata`) }
 
   // grotte
   const caves = pois.filter(p => p.type === 'cave').length
-  const caveScore = Math.min(caves * 1.5, 3.0)
+  const caveScore = Math.min(caves * 3.0, 6.0)
   if (caveScore > 0) { s += caveScore; reasons.push(`${caves} grotta`) }
 
   // sorgenti
   const springs = pois.filter(p => p.type === 'spring').length
-  const springScore = Math.min(springs * 0.8, 2.0)
+  const springScore = Math.min(springs * 1.6, 4.0)
   if (springScore > 0) { s += springScore; reasons.push(`${springs} sorgente`) }
 
   // zone altitudinali
@@ -89,7 +89,7 @@ function scorePaesaggio(
 
   // punti panoramici
   const viewpoints = pois.filter(p => p.type === 'viewpoint').length
-  const vpScore = Math.min(viewpoints * 1.5, 4.5)
+  const vpScore = Math.min(viewpoints * 3.0, 9.0)
   if (vpScore > 0) { s += vpScore; reasons.push(`${viewpoints} belvedere`) }
 
   // quota alta
@@ -115,7 +115,7 @@ function scorePaesaggio(
 
 function scoreArcheologia(pois: PoiItem[]): { score: number; reasons: string[] } {
   const archPois = pois.filter(p => p.type === 'ruins' || p.type === 'archaeological')
-  const s = Math.min(archPois.length * 2.0, 8.0)
+  const s = Math.min(archPois.length * 4.0, 10.0)
   const reasons = s > 0 ? [`${archPois.length} sito/rovine archeologiche`] : []
   return { score: clamp(s), reasons }
 }
@@ -125,20 +125,19 @@ function scoreArchitettura(pois: PoiItem[]): { score: number; reasons: string[] 
   let s = 0
 
   const castles = pois.filter(p => p.type === 'castle').length
-  const castleScore = Math.min(castles * 2.0, 4.0)
+  const castleScore = Math.min(castles * 4.0, 8.0)
   if (castleScore > 0) { s += castleScore; reasons.push(`${castles} castello`) }
 
-  // chapel maps to 'church' conceptually
   const churches = pois.filter(p => p.type === 'chapel').length
-  const churchScore = Math.min(churches * 1.0, 3.0)
+  const churchScore = Math.min(churches * 2.0, 6.0)
   if (churchScore > 0) { s += churchScore; reasons.push(`${churches} chiesa/cappella`) }
 
   const bridges = pois.filter(p => p.type === 'bridge').length
-  const bridgeScore = Math.min(bridges * 1.5, 3.0)
+  const bridgeScore = Math.min(bridges * 3.0, 6.0)
   if (bridgeScore > 0) { s += bridgeScore; reasons.push(`${bridges} ponte`) }
 
   const historic = pois.filter(p => p.type === 'monument' || p.type === 'tower').length
-  const historicScore = Math.min(historic * 1.0, 2.0)
+  const historicScore = Math.min(historic * 2.0, 4.0)
   if (historicScore > 0) { s += historicScore; reasons.push(`${historic} monumento/torre`) }
 
   return { score: clamp(s), reasons }

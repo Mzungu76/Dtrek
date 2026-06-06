@@ -384,12 +384,17 @@ const HISTORIC_TYPE_MAP: Record<string, PoiType> = {
 
 // Default names for unnamed features that are still interesting to hikers
 const OVERPASS_DEFAULT_NAMES: Partial<Record<PoiType, string>> = {
-  spring:    'Acqua potabile',
+  waterfall: 'Cascata',
+  cave:      'Grotta',
+  viewpoint: 'Belvedere',
+  hut:       'Rifugio',
   shelter:   'Riparo',
+  spring:    'Acqua potabile',
   fountain:  'Fontana',
   picnic:    'Area picnic',
   cross:     'Croce',
   ruins:     'Ruderi',
+  bivouac:   'Bivacco',
 }
 
 function parseOverpassElements(
