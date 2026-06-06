@@ -18,12 +18,16 @@ function MiniBar({ value, max = 10, color }: { value: number; max?: number; colo
 
 function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
   const isTei = beauty.version === 2
+  const mainCats = beauty.categories.filter(c => c.key !== 'f_antr' && c.key !== 'tei_raw')
+  const rawCat   = beauty.categories.find(c => c.key === 'tei_raw')
+  const antrCat  = beauty.categories.find(c => c.key === 'f_antr')
+
   return (
     <div className="space-y-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
         {isTei ? 'Dettaglio TEI' : 'Dettaglio Bellezza'}
       </p>
-      {beauty.categories.map(cat => (
+      {mainCats.map(cat => (
         <div key={cat.key}>
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-xs w-4 text-center">{cat.emoji}</span>
@@ -40,10 +44,34 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
           )}
         </div>
       ))}
-      <div className="mt-1 pt-2 border-t border-stone-100 flex items-center gap-2">
-        <span className="text-xs text-stone-500 flex-1">Punteggio complessivo</span>
-        <span className="text-xs font-bold text-emerald-700">{b.toFixed(1)} / 10</span>
-      </div>
+
+      {/* Anthropic penalty explanation — shown only when f_antr > 0 */}
+      {rawCat && antrCat && (
+        <div className="mt-1 pt-2 border-t border-stone-100 space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Penalità ambiente</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs w-4 text-center">{rawCat.emoji}</span>
+            <span className="text-xs text-stone-500 flex-1">{rawCat.label}</span>
+            <span className="text-[11px] text-stone-600">{rawCat.score.toFixed(1)} / 10</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs w-4 text-center">{antrCat.emoji}</span>
+            <span className="text-xs text-stone-500 flex-1">{antrCat.label}</span>
+            <span className="text-[11px] font-semibold" style={{ color: antrCat.color }}>{antrCat.gradeLabel}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-stone-500 flex-1 pl-6">Punteggio finale</span>
+            <span className="text-xs font-bold text-emerald-700">{b.toFixed(1)} / 10</span>
+          </div>
+        </div>
+      )}
+
+      {!antrCat && (
+        <div className="mt-1 pt-2 border-t border-stone-100 flex items-center gap-2">
+          <span className="text-xs text-stone-500 flex-1">Punteggio complessivo</span>
+          <span className="text-xs font-bold text-emerald-700">{b.toFixed(1)} / 10</span>
+        </div>
+      )}
     </div>
   )
 }
