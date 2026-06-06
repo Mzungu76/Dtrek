@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max')
     .eq('user_id', user.id)
     .single()
 
@@ -56,6 +56,9 @@ export async function GET(req: NextRequest) {
     beautyArcheologiaWeight:  (data?.beauty_archeologia_weight  as number) ?? 35,
     beautyArchitetturaWeight: (data?.beauty_architettura_weight as number) ?? 40,
     beautyInteresseWeight:    (data?.beauty_interesse_weight    as number) ?? 25,
+    beautyNaturaCultura:      (data?.beauty_natura_cultura      as number) ?? 50,
+    beautyNaturaType:         (data?.beauty_natura_type         as number) ?? 50,
+    beautyCulturaType:        (data?.beauty_cultura_type        as number) ?? 50,
     prefSforzo:               (data?.pref_sforzo                as number) ?? 50,
     prefDurata:               (data?.pref_durata                as number) ?? 270,
     hikerFaceDataUrl:         (data?.hiker_face_data_url        as string) ?? null,
@@ -82,6 +85,9 @@ export async function POST(req: NextRequest) {
     beautyArcheologiaWeight?: number
     beautyArchitetturaWeight?: number
     beautyInteresseWeight?: number
+    beautyNaturaCultura?: number
+    beautyNaturaType?: number
+    beautyCulturaType?: number
     prefSforzo?: number
     prefDurata?: number
     hikerFaceDataUrl?: string | null
@@ -129,13 +135,16 @@ export async function POST(req: NextRequest) {
     upsertData.user_height_cm = h
   }
 
-  // Beauty category weights (each 0–100)
+  // Beauty weights — old 5 and new 3 slider columns (each 0–100)
   for (const [bodyKey, dbCol] of [
     ['beautyNaturaWeight',       'beauty_natura_weight'],
     ['beautyPaesaggioWeight',    'beauty_paesaggio_weight'],
     ['beautyArcheologiaWeight',  'beauty_archeologia_weight'],
     ['beautyArchitetturaWeight', 'beauty_architettura_weight'],
     ['beautyInteresseWeight',    'beauty_interesse_weight'],
+    ['beautyNaturaCultura',      'beauty_natura_cultura'],
+    ['beautyNaturaType',         'beauty_natura_type'],
+    ['beautyCulturaType',        'beauty_cultura_type'],
   ] as [string, string][]) {
     const val = (body as Record<string, unknown>)[bodyKey]
     if (val !== undefined) {
@@ -193,6 +202,9 @@ export async function POST(req: NextRequest) {
     delete safe.beauty_archeologia_weight
     delete safe.beauty_architettura_weight
     delete safe.beauty_interesse_weight
+    delete safe.beauty_natura_cultura
+    delete safe.beauty_natura_type
+    delete safe.beauty_cultura_type
     delete safe.pref_sforzo
     delete safe.pref_durata
     delete safe.personal_delta

@@ -24,7 +24,7 @@ import { exportActivityToGpx } from '@/utils/exportGpx'
 import PdfExportButton from '@/components/PdfExportButton'
 import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import { computeBeautyScore, normalizeWeights, type BeautyWeightPrefs } from '@/lib/beautyScore'
+import { computeBeautyScore, slidersToWeights } from '@/lib/beautyScore'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -83,10 +83,11 @@ export default function EscursionePage() {
   const [ctsResult,       setCtsResult]       = useState<TrailScoreResult | null>(null)
   const [ctsComputing,    setCtsComputing]    = useState(false)
   const [prefsLoaded,     setPrefsLoaded]     = useState(false)
-  const [pesoNatura,      setPesoNatura]      = useState(50)
+  const [naturaCultura,   setNaturaCultura]   = useState(50)
+  const [naturaType,      setNaturaType]      = useState(50)
+  const [culturaType,     setCulturaType]     = useState(50)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefDurata,      setPrefDurata]      = useState(270)
-  const [beautyWeights,   setBeautyWeights]   = useState<Partial<BeautyWeightPrefs>>({})
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat && p.lon)
@@ -128,16 +129,11 @@ export default function EscursionePage() {
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
-        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
-        if (d.prefSforzo        != null) setPrefSforzo(d.prefSforzo)
-        if (d.prefDurata        != null) setPrefDurata(d.prefDurata)
-        setBeautyWeights({
-          natura:       d.beautyNaturaWeight       ?? 55,
-          paesaggio:    d.beautyPaesaggioWeight    ?? 45,
-          archeologia:  d.beautyArcheologiaWeight  ?? 35,
-          architettura: d.beautyArchitetturaWeight ?? 40,
-          interesse:    d.beautyInteresseWeight    ?? 25,
-        })
+        setNaturaCultura(d.beautyNaturaCultura ?? 50)
+        setNaturaType(d.beautyNaturaType       ?? 50)
+        setCulturaType(d.beautyCulturaType     ?? 50)
+        if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefDurata != null) setPrefDurata(d.prefDurata)
       })
       .catch(() => {})
       .finally(() => setPrefsLoaded(true))
@@ -155,9 +151,9 @@ export default function EscursionePage() {
       avgHeartRate:   activity!.avgHeartRate,
       prefSforzo,
       prefDurata,
-    }, pesoNatura)
+    })
     setCtsResult({ ...computed, ts: (activity as StoredActivity & { trailScore?: number }).trailScore ?? computed.ts })
-  }, [activity?.id, prefsLoaded, pesoNatura, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activity?.id, prefsLoaded, naturaCultura, naturaType, culturaType, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   if (loading) return (
@@ -224,7 +220,7 @@ export default function EscursionePage() {
         ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
         : []
       const wiki = (rawWiki as { wiki: WikiPage }[]).map(e => e.wiki)
-      const weights = normalizeWeights(beautyWeights)
+      const weights = slidersToWeights({ naturaCultura, naturaType, culturaType })
       const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, activity.elevationGain, activity.altitudeMax, activity.distanceMeters, weights)
 
       // Determine confidence based on POI coverage
@@ -243,7 +239,7 @@ export default function EscursionePage() {
         prefDurata:     prefs.prefDurata,
         hrRest:         prefs.hrRest,
         hrMax:          prefs.hrMax ?? undefined,
-      }, prefs.beautyNaturaWeight ?? 50)
+      })
       if (confidence === 'estimated') ts = Math.round(ts * 0.9)
 
       await updateActivityMeta(id, { linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence })

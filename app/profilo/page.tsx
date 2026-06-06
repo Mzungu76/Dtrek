@@ -5,7 +5,7 @@ import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getAllPlanned, getPlannedById, updatePlannedMeta } from '@/lib/plannedStore'
 import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blobStore'
 import { computeTrailScore, getCtsFallback, type CtsConfidence } from '@/lib/trailScore'
-import { computeBeautyScore, normalizeWeights, type BeautyScore, type BeautyWeightPrefs } from '@/lib/beautyScore'
+import { computeBeautyScore, slidersToWeights, type BeautyScore } from '@/lib/beautyScore'
 import { fetchTerrainContext, type PoiItem, type TerrainContext } from '@/lib/overpass'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
@@ -183,11 +183,9 @@ async function fetchPoisForGps(gps: [number, number][]): Promise<PoiItem[]> {
 }
 
 function ComfortTrailScoreSection() {
-  const [pesoNatura,       setPesoNatura]       = useState(55)
-  const [pesoPaesaggio,    setPesoPaesaggio]    = useState(45)
-  const [pesoArcheologia,  setPesoArcheologia]  = useState(35)
-  const [pesoArchitettura, setPesoArchitettura] = useState(40)
-  const [pesoInteresse,    setPesoInteresse]    = useState(25)
+  const [naturaCultura, setNaturaCultura] = useState(50) // 0=solo natura, 100=solo cultura
+  const [naturaType,    setNaturaType]    = useState(50) // 0=panoramica, 100=selvaggia
+  const [culturaType,   setCulturaType]   = useState(50) // 0=castelli, 100=rovine
   const [hrRest,           setHrRest]           = useState(55)
   const [hrMax,            setHrMax]            = useState<number | null>(null)
   const [prefSforzo,       setPrefSforzo]       = useState(50)
@@ -204,11 +202,9 @@ function ComfortTrailScoreSection() {
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
-        if (d.beautyNaturaWeight      != null) setPesoNatura(d.beautyNaturaWeight)
-        if (d.beautyPaesaggioWeight   != null) setPesoPaesaggio(d.beautyPaesaggioWeight)
-        if (d.beautyArcheologiaWeight != null) setPesoArcheologia(d.beautyArcheologiaWeight)
-        if (d.beautyArchitetturaWeight != null) setPesoArchitettura(d.beautyArchitetturaWeight)
-        if (d.beautyInteresseWeight   != null) setPesoInteresse(d.beautyInteresseWeight)
+        if (d.beautyNaturaCultura != null) setNaturaCultura(d.beautyNaturaCultura)
+        if (d.beautyNaturaType    != null) setNaturaType(d.beautyNaturaType)
+        if (d.beautyCulturaType   != null) setCulturaType(d.beautyCulturaType)
         if (d.hrRest  != null) setHrRest(d.hrRest)
         if (d.hrMax   != null) setHrMax(d.hrMax)
         if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
@@ -224,11 +220,9 @@ function ComfortTrailScoreSection() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        beautyNaturaWeight: pesoNatura,
-        beautyPaesaggioWeight: pesoPaesaggio,
-        beautyArcheologiaWeight: pesoArcheologia,
-        beautyArchitetturaWeight: pesoArchitettura,
-        beautyInteresseWeight: pesoInteresse,
+        beautyNaturaCultura: naturaCultura,
+        beautyNaturaType:    naturaType,
+        beautyCulturaType:   culturaType,
         hrRest,
         hrMax: hrMax ?? null,
         prefSforzo,
@@ -246,14 +240,11 @@ function ComfortTrailScoreSection() {
     let updated = 0
     try {
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const rawW: Partial<BeautyWeightPrefs> = {
-        natura: prefs.beautyNaturaWeight ?? pesoNatura,
-        paesaggio: prefs.beautyPaesaggioWeight ?? pesoPaesaggio,
-        archeologia: prefs.beautyArcheologiaWeight ?? pesoArcheologia,
-        architettura: prefs.beautyArchitetturaWeight ?? pesoArchitettura,
-        interesse: prefs.beautyInteresseWeight ?? pesoInteresse,
-      }
-      const w = normalizeWeights(rawW)
+      const rawW = slidersToWeights({
+        naturaCultura: prefs.beautyNaturaCultura ?? naturaCultura,
+        naturaType:    prefs.beautyNaturaType    ?? naturaType,
+        culturaType:   prefs.beautyCulturaType   ?? culturaType,
+      })
       const [hikes, activities] = await Promise.all([getAllPlanned(), getAllActivities()])
 
       await Promise.all([
@@ -270,7 +261,7 @@ function ComfortTrailScoreSection() {
               prefDurata:     prefs.prefDurata ?? prefDurata,
               hrRest:         prefs.hrRest ?? hrRest,
               hrMax:          prefs.hrMax ?? hrMax ?? undefined,
-            }, w.natura * 100)
+            })
             updated++
             return updatePlannedMeta(h.id, { cachedTrailScore: ts, cachedTrailScoreConfidence: confidence })
           }),
@@ -288,7 +279,7 @@ function ComfortTrailScoreSection() {
               prefDurata:     prefs.prefDurata ?? prefDurata,
               hrRest:         prefs.hrRest ?? hrRest,
               hrMax:          prefs.hrMax ?? hrMax ?? undefined,
-            }, w.natura * 100)
+            })
             updated++
             return updateActivityMeta(a.id, { trailScore: ts, trailScoreConfidence: confidence })
           }),
@@ -305,14 +296,11 @@ function ComfortTrailScoreSection() {
     let computed = 0
     try {
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const rawW: Partial<BeautyWeightPrefs> = {
-        natura: prefs.beautyNaturaWeight ?? pesoNatura,
-        paesaggio: prefs.beautyPaesaggioWeight ?? pesoPaesaggio,
-        archeologia: prefs.beautyArcheologiaWeight ?? pesoArcheologia,
-        architettura: prefs.beautyArchitetturaWeight ?? pesoArchitettura,
-        interesse: prefs.beautyInteresseWeight ?? pesoInteresse,
-      }
-      const w = normalizeWeights(rawW)
+      const rawW = slidersToWeights({
+        naturaCultura: prefs.beautyNaturaCultura ?? naturaCultura,
+        naturaType:    prefs.beautyNaturaType    ?? naturaType,
+        culturaType:   prefs.beautyCulturaType   ?? culturaType,
+      })
 
       const activities = await getAllActivities()
       const missing = activities.filter(
@@ -361,7 +349,7 @@ function ComfortTrailScoreSection() {
             prefDurata:     prefs.prefDurata ?? prefDurata,
             hrRest:         prefs.hrRest ?? hrRest,
             hrMax:          prefs.hrMax ?? hrMax ?? undefined,
-          }, w.natura * 100)
+          })
           finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
         }
         await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence })
@@ -379,14 +367,11 @@ function ComfortTrailScoreSection() {
     let computed = 0
     try {
       const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const rawW: Partial<BeautyWeightPrefs> = {
-        natura: prefs.beautyNaturaWeight ?? pesoNatura,
-        paesaggio: prefs.beautyPaesaggioWeight ?? pesoPaesaggio,
-        archeologia: prefs.beautyArcheologiaWeight ?? pesoArcheologia,
-        architettura: prefs.beautyArchitetturaWeight ?? pesoArchitettura,
-        interesse: prefs.beautyInteresseWeight ?? pesoInteresse,
-      }
-      const w = normalizeWeights(rawW)
+      const rawW = slidersToWeights({
+        naturaCultura: prefs.beautyNaturaCultura ?? naturaCultura,
+        naturaType:    prefs.beautyNaturaType    ?? naturaType,
+        culturaType:   prefs.beautyCulturaType   ?? culturaType,
+      })
 
       const [activities, hikes] = await Promise.all([getAllActivities(), getAllPlanned()])
       const total = activities.length + hikes.length
@@ -428,7 +413,7 @@ function ComfortTrailScoreSection() {
             prefDurata:     prefs.prefDurata ?? prefDurata,
             hrRest:         prefs.hrRest ?? hrRest,
             hrMax:          prefs.hrMax ?? hrMax ?? undefined,
-          }, w.natura * 100)
+          })
           finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
         }
         await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence })
@@ -470,7 +455,7 @@ function ComfortTrailScoreSection() {
             prefDurata:     prefs.prefDurata ?? prefDurata,
             hrRest:         prefs.hrRest ?? hrRest,
             hrMax:          prefs.hrMax ?? hrMax ?? undefined,
-          }, w.natura * 100)
+          })
           finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
         }
         await updatePlannedMeta(full.id, { cachedBeautyScore: bs, cachedTrailScore: finalTs, cachedTrailScoreConfidence: confidence })
@@ -499,28 +484,51 @@ function ComfortTrailScoreSection() {
       ) : (
         <div className="space-y-5">
 
-          {/* Pesi per la Bellezza */}
-          <div className="space-y-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Pesi per la Bellezza</p>
+          {/* Pesi per la Bellezza — 3 sliders a scelta obbligata */}
+          <div className="space-y-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Cosa cerchi in un percorso?</p>
 
-            {([
-              { label: 'Natura',        val: pesoNatura,       set: setPesoNatura,       hint: 'Vette, cascate, grotte, foreste' },
-              { label: 'Paesaggio',     val: pesoPaesaggio,    set: setPesoPaesaggio,    hint: 'Panorami, punti vista, laghi' },
-              { label: 'Archeologia',   val: pesoArcheologia,  set: setPesoArcheologia,  hint: 'Rovine, necropoli, siti antichi' },
-              { label: 'Architettura',  val: pesoArchitettura, set: setPesoArchitettura, hint: 'Castelli, chiese, borghi' },
-              { label: 'Interesse',     val: pesoInteresse,    set: setPesoInteresse,    hint: 'Sorgenti, curiosità locali' },
-            ] as const).map(({ label, val, set, hint }) => (
-              <div key={label}>
-                <div className="flex justify-between items-center mb-0.5">
-                  <label className="text-xs font-medium text-stone-600">{label}</label>
-                  <span className="text-xs font-mono text-stone-400">{val}</span>
-                </div>
-                <input type="range" min={0} max={100} value={val}
-                  onChange={e => set(Number(e.target.value))}
-                  className="w-full accent-forest-600" />
-                <p className="text-[10px] text-stone-400 mt-0.5">{hint}</p>
+            {/* Slider 1: Natura vs Cultura */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-xs font-medium text-stone-600">🌿 Natura</span>
+                <span className="text-xs font-medium text-stone-600">🏛 Cultura</span>
               </div>
-            ))}
+              <input type="range" min={0} max={100} value={naturaCultura}
+                onChange={e => setNaturaCultura(Number(e.target.value))}
+                className="w-full accent-forest-600" />
+              <p className="text-[10px] text-stone-400 mt-0.5 text-center">
+                {naturaCultura < 30 ? 'Preferisci natura selvaggia' : naturaCultura > 70 ? 'Preferisci siti storici e culturali' : 'Bilanciato'}
+              </p>
+            </div>
+
+            {/* Slider 2: Selvaggia vs Panoramica (within natura) */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-xs font-medium text-stone-600">🏔 Selvaggia</span>
+                <span className="text-xs font-medium text-stone-600">🌄 Panoramica</span>
+              </div>
+              <input type="range" min={0} max={100} value={100 - naturaType}
+                onChange={e => setNaturaType(100 - Number(e.target.value))}
+                className="w-full accent-forest-600" />
+              <p className="text-[10px] text-stone-400 mt-0.5 text-center">
+                {naturaType > 70 ? 'Vette, grotte, cascate' : naturaType < 30 ? 'Panorami, belvedere, laghi' : 'Bilanciato'}
+              </p>
+            </div>
+
+            {/* Slider 3: Rovine vs Castelli (within cultura) */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-xs font-medium text-stone-600">🏺 Rovine</span>
+                <span className="text-xs font-medium text-stone-600">⛪ Castelli</span>
+              </div>
+              <input type="range" min={0} max={100} value={100 - culturaType}
+                onChange={e => setCulturaType(100 - Number(e.target.value))}
+                className="w-full accent-forest-600" />
+              <p className="text-[10px] text-stone-400 mt-0.5 text-center">
+                {culturaType > 70 ? 'Siti archeologici, necropoli' : culturaType < 30 ? 'Castelli, chiese, borghi' : 'Bilanciato'}
+              </p>
+            </div>
           </div>
 
           {/* HR settings */}

@@ -15,7 +15,7 @@ import {
 import { fetchTerrainContext, type PoiItem, type TerrainContext, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/lib/trailScore'
-import { computeBeautyScore, normalizeWeights, type BeautyScore, type BeautyWeightPrefs } from '@/lib/beautyScore'
+import { computeBeautyScore, slidersToWeights, type BeautyScore } from '@/lib/beautyScore'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
@@ -162,10 +162,11 @@ export default function PlannedHikePage() {
   const [ctsResult,      setCtsResult]     = useState<TrailScoreResult | null>(null)
   const [ctsComputing,   setCtsComputing]  = useState(false)
   const [prefsLoaded,    setPrefsLoaded]   = useState(false)
-  const [pesoNatura,     setPesoNatura]    = useState(50)
+  const [naturaCultura,  setNaturaCultura] = useState(50)
+  const [naturaType,     setNaturaType]    = useState(50)
+  const [culturaType,    setCulturaType]   = useState(50)
   const [prefSforzo,     setPrefSforzo]    = useState(50)
   const [prefDurata,     setPrefDurata]    = useState(270)
-  const [beautyWeights,  setBeautyWeights] = useState<Partial<BeautyWeightPrefs>>({})
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -222,16 +223,11 @@ export default function PlannedHikePage() {
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
-        if (d.beautyNaturaWeight != null) setPesoNatura(d.beautyNaturaWeight)
-        if (d.prefSforzo        != null) setPrefSforzo(d.prefSforzo)
-        if (d.prefDurata        != null) setPrefDurata(d.prefDurata)
-        setBeautyWeights({
-          natura:       d.beautyNaturaWeight       ?? 55,
-          paesaggio:    d.beautyPaesaggioWeight    ?? 45,
-          archeologia:  d.beautyArcheologiaWeight  ?? 35,
-          architettura: d.beautyArchitetturaWeight ?? 40,
-          interesse:    d.beautyInteresseWeight    ?? 25,
-        })
+        setNaturaCultura(d.beautyNaturaCultura ?? 50)
+        setNaturaType(d.beautyNaturaType       ?? 50)
+        setCulturaType(d.beautyCulturaType     ?? 50)
+        if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefDurata != null) setPrefDurata(d.prefDurata)
       })
       .catch(() => {})
       .finally(() => setPrefsLoaded(true))
@@ -248,9 +244,9 @@ export default function PlannedHikePage() {
       altitudeMax:    hike!.altitudeMax,
       prefSforzo,
       prefDurata,
-    }, pesoNatura)
+    })
     setCtsResult({ ...computed, ts: (hike as { cachedTrailScore?: number }).cachedTrailScore ?? computed.ts })
-  }, [hike?.id, prefsLoaded, pesoNatura, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike?.id, prefsLoaded, naturaCultura, naturaType, culturaType, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   if (loading) return (
@@ -307,7 +303,7 @@ export default function PlannedHikePage() {
         ? await Promise.race([fetchWikiForNamedPois(pois), deadline]).then(r => r ?? [])
         : []
       const wiki = (rawWiki as { wiki: WikiPage }[]).map(e => e.wiki)
-      const weights = normalizeWeights(beautyWeights)
+      const weights = slidersToWeights({ naturaCultura, naturaType, culturaType })
       const bs = computeBeautyScore(pois, wiki, terrain as TerrainContext, hike.elevationGain, hike.altitudeMax, hike.distanceMeters, weights)
 
       let confidence: CtsConfidence = 'high'
@@ -324,7 +320,7 @@ export default function PlannedHikePage() {
         prefDurata:     prefs.prefDurata,
         hrRest:         prefs.hrRest,
         hrMax:          prefs.hrMax ?? undefined,
-      }, prefs.beautyNaturaWeight ?? 50)
+      })
       if (confidence === 'estimated') ts = Math.round(ts * 0.9)
 
       await updatePlannedMeta(id, { cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence })
