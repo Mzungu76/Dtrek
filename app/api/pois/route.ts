@@ -165,12 +165,27 @@ async function fetchGnaPois(bbox: string): Promise<PoiItem[]> {
       `&outputFormat=application/json` +
       `&count=200`
 
-    const res = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(20000),
-    })
-    if (!res.ok) throw new Error(`GNA ${layer} HTTP ${res.status}`)
-    return parseGnaFeatures(await res.json(), layer)
+    let res: Response
+    try {
+      res = await fetch(url, {
+        headers: { 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(20000),
+      })
+    } catch (err) {
+      console.warn(`[GNA] ${layer} fetch failed:`, String(err))
+      throw err
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.warn(`[GNA] ${layer} HTTP ${res.status} — body: ${body.slice(0, 500)}`)
+      throw new Error(`GNA ${layer} HTTP ${res.status}`)
+    }
+
+    const json = await res.json()
+    const count = (json?.features ?? []).length
+    console.log(`[GNA] ${layer} → ${count} features`)
+    return parseGnaFeatures(json, layer)
   }))
 
   return results
@@ -463,8 +478,9 @@ export async function GET(req: NextRequest) {
 
     const bboxKey = normalizeBboxKey(bbox)
 
-    // Lazy cleanup of expired entries (fire-and-forget)
-    void supabase.from('poi_cache').delete().lt('expires_at', new Date().toISOString())
+    // Lazy cleanup of expired entries (fire-and-forget — .then() triggers lazy execution)
+    supabase.from('poi_cache').delete().lt('expires_at', new Date().toISOString())
+      .then(({ error }) => { if (error) console.warn('[poi_cache] cleanup error:', error.message) })
 
     // Check cache
     const { data: cached } = await supabase
@@ -510,8 +526,12 @@ export async function GET(req: NextRequest) {
         cached_at:      new Date().toISOString(),
       },
     }
-    void supabase.from('poi_cache')
+    supabase.from('poi_cache')
       .upsert({ bbox_key: bboxKey, pois: cachePayload, expires_at: expiresAt }, { onConflict: 'bbox_key' })
+      .then(({ error }) => {
+        if (error) console.error('[poi_cache] upsert error:', error.message, error.code)
+        else console.log(`[poi_cache] cached ${pois.length} POIs for ${bboxKey}`)
+      })
 
     return NextResponse.json(pois)
   } catch (e) {
