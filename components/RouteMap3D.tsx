@@ -374,17 +374,11 @@ function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opts: HUDO
 
 // ── Cinematic shot planner ─────────────────────────────────────────────────────
 
-function planShots(pts: TrackPoint[]): ShotSegment[] {
+function planShots(pts: TrackPoint[], zIn = 10.5, zFoll = 13.8): ShotSegment[] {
   const N=pts.length; if(N<2) return []
-  const alts=pts.map(p=>p.altitudeMeters??0), maxA=Math.max(...alts), minA=Math.min(...alts)
-  let peakP=0.5, bestSum=-Infinity, W=Math.round(N*0.08)
-  for(let i=W;i<N-W;i++){const s=alts.slice(i-W,i+W).reduce((a,b)=>a+b,0);if(s>bestSum){bestSum=s;peakP=i/(N-1)}}
-  const hasPeak=(maxA-minA)>200&&peakP>0.25&&peakP<0.85
   const shots:ShotSegment[]=[]
-  // 3 shots only: no mid-section camera acrobatics that cause nausea
-  shots.push({id:'intro',label:'Intro aereo',startP:0,endP:0.08,pitch:[20,48],zoom:[10.5,13.8],bearingMode:'follow'})
-  shots.push({id:'follow',label:'Seguimento',startP:0.08,endP:0.83,pitch:[48,48],zoom:[13.8,13.8],bearingMode:'follow'})
-  shots.push({id:'outro',label:'Pullback finale',startP:0.83,endP:1.0,pitch:[48,8],zoom:[13.8,7.5],bearingMode:'orbit-ccw',orbitDeg:100})
+  shots.push({id:'intro',label:'Intro aereo',startP:0,endP:0.08,pitch:[20,48],zoom:[zIn,zFoll],bearingMode:'follow'})
+  shots.push({id:'follow',label:'Seguimento',startP:0.08,endP:1.0,pitch:[48,48],zoom:[zFoll,zFoll],bearingMode:'follow'})
   return shots
 }
 
@@ -616,6 +610,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [renderTotal,       setRenderTotal]      = useState(0)
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
   const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
+  const [photoDurationSec,  setPhotoDurationSec] = useState(3.5)
+  const [zoomIntro,         setZoomIntro]        = useState(10.5)
+  const [zoomFollow,        setZoomFollow]        = useState(13.8)
+  const [zoomOutro,         setZoomOutro]         = useState(7.5)
   const audioCtxRef = useRef<AudioContext | null>(null)
 
   // Post-production
@@ -942,7 +940,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   // ── Post-production helpers ───────────────────────────────────────────────────
 
-  function goToPostProd() { setShotPlan(planShots(gpsRef.current)); setVideoState('postprod') }
+  function goToPostProd() { setShotPlan(planShots(gpsRef.current, zoomIntro, zoomFollow)); setVideoState('postprod') }
 
   function moveShot(id: string, dir: -1|1) {
     setShotPlan(prev=>{
@@ -987,7 +985,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       await new Promise<void>(r=>map.once('idle',r as any))
     }
     // Position at intro start
-    map.jumpTo({center:[pts[0].lon!,pts[0].lat!],zoom:10.5,pitch:20,bearing:introBearing})
+    map.jumpTo({center:[pts[0].lon!,pts[0].lat!],zoom:zoomIntro,pitch:20,bearing:introBearing})
     await new Promise<void>(r=>map.once('idle',r as any))
 
     // Hide HTML marker during rendering
@@ -996,7 +994,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Initialize smooth camera from intro starting pose
     smoothBearRef.current=introBearing
     smoothPitchRef.current=20
-    smoothZoomRef.current=10.5
+    smoothZoomRef.current=zoomIntro
     orbitBaseRef.current=introBearing
 
     // Setup progressive route reveal
@@ -1070,7 +1068,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const cr=coverRect(srcW,srcH,outW,outH)
 
     const TARGET_FPS=30
-    const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * 3.5)  // 3.5s per photo
+    const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
     const sortedPhotos = [...routePhotos]
       .sort((a,b)=>a.progress-b.progress)
       .filter(ph => photoImgsRef.current.has(ph.id))
@@ -1078,10 +1076,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     // Route frames = base video duration; photo reveals are added on top
     const ROUTE_FRAMES = Math.round(TARGET_FPS * videoDuration)
-    // Build a timeline mapping frame → {routeP, revealPhoto?}
     // Each photo inserts PHOTO_REVEAL_FRAMES of pause after reaching its position
     const photoTriggerRouteFrames = sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
-    const TOTAL_FRAMES = ROUTE_FRAMES + sortedPhotos.length * PHOTO_REVEAL_FRAMES
+    // Outro: separate phase after route completes (~17% of route duration, min 3s)
+    const OUTRO_FRAMES = Math.round(TARGET_FPS * Math.max(3, videoDuration * 0.17))
+    const TOTAL_FRAMES = ROUTE_FRAMES + sortedPhotos.length * PHOTO_REVEAL_FRAMES + OUTRO_FRAMES
+    const outroStartBearRef = { current: -1 as number }
 
     // Pre-compute peak position on route (for peak callout)
     const peakRouteP = (() => {
@@ -1093,7 +1093,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return peakIdx / Math.max(1, pts.length - 1)
     })()
 
-    function frameToState(frameIdx: number): {p:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}} {
+    function frameToState(frameIdx: number): {p:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number} {
       let pauseOffset = 0
       for (let i = 0; i < sortedPhotos.length; i++) {
         const triggerF = photoTriggerRouteFrames[i] + pauseOffset
@@ -1103,8 +1103,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
         pauseOffset += PHOTO_REVEAL_FRAMES
       }
-      const routeFrame = Math.min(frameIdx - pauseOffset, ROUTE_FRAMES)
-      return {p: routeFrame / ROUTE_FRAMES}
+      const routeFrame = frameIdx - pauseOffset
+      if (routeFrame >= ROUTE_FRAMES) {
+        const outroFrame = routeFrame - ROUTE_FRAMES
+        return {p: 1.0, outroP: Math.min(1, outroFrame / Math.max(1, OUTRO_FRAMES - 1))}
+      }
+      return {p: Math.min(1, routeFrame / ROUTE_FRAMES)}
     }
 
     setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
@@ -1120,7 +1124,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const frameIdx=frameCountRef.current
       if(frameIdx>=TOTAL_FRAMES){recorder.stop();return}
 
-      const {p, reveal} = frameToState(frameIdx)
+      const {p, reveal, outroP} = frameToState(frameIdx)
       setRenderProgress(frameIdx/TOTAL_FRAMES); setRenderFrame(frameIdx)
 
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
@@ -1161,6 +1165,67 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           }
           // Fade overlay
           ctx.globalAlpha=1-alpha; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
+          frameCountRef.current++
+          renderNextFrame()
+        })
+        return
+      }
+
+      // Outro phase: camera orbits and pulls back from route end after traversal completes
+      if (outroP !== undefined) {
+        if (outroStartBearRef.current < 0) outroStartBearRef.current = smoothBearRef.current
+        const outroBearing = (outroStartBearRef.current - outroP * 100 + 360) % 360
+        const outroPitch = lerp(48, 8, outroP)
+        const outroZoom_val = lerp(zoomFollow, zoomOutro, outroP)
+        smoothBearRef.current = lerpAngle(smoothBearRef.current, outroBearing, 0.04)
+        smoothPitchRef.current = lerp(smoothPitchRef.current, outroPitch, 0.06)
+        smoothZoomRef.current = lerp(smoothZoomRef.current, outroZoom_val, 0.06)
+        mapRef.current?.jumpTo({
+          center: [pts[N-1].lon!, pts[N-1].lat!],
+          bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
+        })
+        requestAnimationFrame(() => {
+          if (!mapRef.current) return
+          const grading = videoPreset==='snappy' ? VIDEO_PRESETS.snappy.grading : VIDEO_PRESETS.epico.grading
+          try { ctx.filter=grading } catch {}
+          ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
+          try { ctx.filter='none' } catch {}
+          const sc2 = Math.min(outW, outH) / 1080
+          // End card fades in during outro
+          const FADE_START = 0.35
+          if (outroP > FADE_START) {
+            const fa = Math.pow((outroP - FADE_START) / (1 - FADE_START), 1.2)
+            if (fa < 0.82) {
+              ctx.globalAlpha = fa * 0.95; ctx.fillStyle = 'black'; ctx.fillRect(0, 0, outW, outH); ctx.globalAlpha = 1
+            } else {
+              ctx.globalAlpha = fa; ctx.fillStyle = 'black'; ctx.fillRect(0, 0, outW, outH); ctx.globalAlpha = 1
+              const cardAlpha = Math.min(1, (fa - 0.82) / 0.18)
+              ctx.globalAlpha = cardAlpha
+              ctx.fillStyle = '#22d3ee'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+              ctx.font = `800 ${Math.round(26*sc2)}px -apple-system,sans-serif`
+              ctx.fillText('DTrek', outW/2, outH/2 - Math.round(92*sc2))
+              ctx.fillStyle = 'white'; ctx.font = `700 ${Math.round(44*sc2)}px -apple-system,sans-serif`
+              let et = displayTitle; while(ctx.measureText(et).width > outW - Math.round(80*sc2) && et.length > 4) et = et.slice(0,-4)+'…'
+              ctx.fillText(et, outW/2, outH/2 - Math.round(30*sc2))
+              const statItems:{v:string;l:string;col:string}[] = [
+                {v:`${+totalKm.toFixed(1)} km`, l:'distanza', col:'white'},
+                {v:`${elevGain} m`, l:'D+', col:'white'},
+              ]
+              const sw2 = Math.round(150*sc2), sgap = Math.round(20*sc2)
+              const tw2 = statItems.length*sw2+(statItems.length-1)*sgap
+              const sx0 = outW/2-tw2/2+sw2/2, sy2 = outH/2+Math.round(52*sc2)
+              statItems.forEach((s,i)=>{
+                const sx3 = sx0+i*(sw2+sgap)
+                ctx.fillStyle = s.col; ctx.font = `800 ${Math.round(40*sc2)}px -apple-system,sans-serif`
+                ctx.fillText(s.v, sx3, sy2)
+                ctx.fillStyle = 'rgba(255,255,255,0.42)'; ctx.font = `500 ${Math.round(14*sc2)}px -apple-system,sans-serif`
+                ctx.fillText(s.l, sx3, sy2+Math.round(30*sc2))
+              })
+              ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.font = `400 ${Math.round(12*sc2)}px -apple-system,sans-serif`
+              ctx.fillText('Tracciato con DTrek', outW/2, outH/2+Math.round(130*sc2))
+              ctx.globalAlpha = 1
+            }
+          }
           frameCountRef.current++
           renderNextFrame()
         })
@@ -1215,22 +1280,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // Map pin at GPS position
-        const mp=mapRef.current!.project([lon,lat] as [number,number])
+        // Map pin: stays at route start during intro, follows GPS otherwise
+        const pinLon = activShot?.id === 'intro' ? pts[0].lon! : lon
+        const pinLat = activShot?.id === 'intro' ? pts[0].lat! : lat
+        const mp=mapRef.current!.project([pinLon,pinLat] as [number,number])
         const px=(mp.x-cr.sx)/cr.sw*outW, py=(mp.y-cr.sy)/cr.sh*outH
         if(px>=-60&&px<=outW+60&&py>=-80&&py<=outH+60){
           drawMapPin(ctx,px,py,outW/1080,faceImgRef.current)
         }
 
-        // Photo pins on canvas (hidden during outro pullback)
-        if(activShot.id!=='outro'){
-          for(const s of sortedPhotos){
-            const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
-            const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
-            const ppx=(pmp.x-cr.sx)/cr.sw*outW, ppy=(pmp.y-cr.sy)/cr.sh*outH
-            if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
-              drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
-            }
+        // Photo pins on canvas
+        for(const s of sortedPhotos){
+          const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
+          const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
+          const ppx=(pmp.x-cr.sx)/cr.sw*outW, ppy=(pmp.y-cr.sy)/cr.sh*outH
+          if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
+            drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
           }
         }
 
@@ -1284,45 +1349,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:activShot?.label})
         }
 
-        // End card: branded closing frame fades in over the last 8% of the video
-        const FADE_START=0.92
-        if(p>FADE_START){
-          const fa=Math.pow((p-FADE_START)/(1-FADE_START),1.2)
-          if(fa<0.82){
-            ctx.globalAlpha=fa*0.95; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
-          } else {
-            ctx.globalAlpha=fa; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
-            const cardAlpha=Math.min(1,(fa-0.82)/0.18)
-            ctx.globalAlpha=cardAlpha
-            // DTrek brand
-            ctx.fillStyle='#22d3ee'; ctx.textAlign='center'; ctx.textBaseline='middle'
-            ctx.font=`800 ${Math.round(26*sc2)}px -apple-system,sans-serif`
-            ctx.fillText('DTrek',outW/2,outH/2-Math.round(92*sc2))
-            // Title
-            ctx.fillStyle='white'; ctx.font=`700 ${Math.round(44*sc2)}px -apple-system,sans-serif`
-            let et=displayTitle; while(ctx.measureText(et).width>outW-Math.round(80*sc2)&&et.length>4) et=et.slice(0,-4)+'…'
-            ctx.fillText(et,outW/2,outH/2-Math.round(30*sc2))
-            // Stats
-            const statItems:{v:string;l:string;col:string}[]=[
-              {v:`${+totalKm.toFixed(1)} km`,l:'distanza',col:'white'},
-              {v:`${elevGain} m`,l:'D+',col:'white'},
-            ]
-            const sw2=Math.round(150*sc2), sgap=Math.round(20*sc2)
-            const tw2=statItems.length*sw2+(statItems.length-1)*sgap
-            const sx0=outW/2-tw2/2+sw2/2, sy2=outH/2+Math.round(52*sc2)
-            statItems.forEach((s,i)=>{
-              const sx3=sx0+i*(sw2+sgap)
-              ctx.fillStyle=s.col; ctx.font=`800 ${Math.round(40*sc2)}px -apple-system,sans-serif`
-              ctx.fillText(s.v,sx3,sy2)
-              ctx.fillStyle='rgba(255,255,255,0.42)'; ctx.font=`500 ${Math.round(14*sc2)}px -apple-system,sans-serif`
-              ctx.fillText(s.l,sx3,sy2+Math.round(30*sc2))
-            })
-            ctx.fillStyle='rgba(255,255,255,0.22)'; ctx.font=`400 ${Math.round(12*sc2)}px -apple-system,sans-serif`
-            ctx.fillText('Tracciato con DTrek',outW/2,outH/2+Math.round(130*sc2))
-            ctx.globalAlpha=1
-          }
-        }
-
         frameCountRef.current++
         renderNextFrame()
       })
@@ -1330,7 +1356,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     setVideoState('rendering')
     renderNextFrame()
-  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,shotPlan,videoPreset,videoEnableAudio,altitudeSeries])
+  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,shotPlan,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -1592,6 +1618,26 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 {videoEnableAudio?'Colonna sonora ambient — attiva':'Colonna sonora ambient (drone pad)'}
               </button>
             </div>
+            <div>
+              <p className="text-white/45 text-[11px] font-semibold mb-3 tracking-wider">ZOOM CINEMATICO</p>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-white/55 text-xs w-28 shrink-0">Zoom iniziale</span>
+                  <input type="range" min={7} max={14} step={0.5} value={zoomIntro} onChange={e=>setZoomIntro(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                  <span className="text-white text-xs font-bold w-8 text-right">{zoomIntro.toFixed(1)}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-white/55 text-xs w-28 shrink-0">Zoom percorso</span>
+                  <input type="range" min={10} max={16} step={0.5} value={zoomFollow} onChange={e=>setZoomFollow(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                  <span className="text-white text-xs font-bold w-8 text-right">{zoomFollow.toFixed(1)}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-white/55 text-xs w-28 shrink-0">Zoom finale</span>
+                  <input type="range" min={5} max={12} step={0.5} value={zoomOutro} onChange={e=>setZoomOutro(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                  <span className="text-white text-xs font-bold w-8 text-right">{zoomOutro.toFixed(1)}</span>
+                </div>
+              </div>
+            </div>
             <p className="text-white/30 text-[11px] text-center">
               1080p · 25 Mbps · rendering frame-by-frame · Ken Burns · end card · profilo altimetrico
             </p>
@@ -1669,6 +1715,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Photo duration */}
+            <div className="mb-5">
+              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DURATA POLAROID</p>
+              <div className="flex items-center gap-3">
+                <input type="range" min={3} max={10} step={0.5} value={photoDurationSec} onChange={e=>setPhotoDurationSec(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                <span className="text-white text-sm font-bold w-16 text-right">{photoDurationSec.toFixed(1)}s / foto</span>
               </div>
             </div>
 
