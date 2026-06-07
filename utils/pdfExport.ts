@@ -1,5 +1,5 @@
 /**
- * DTrek PDF export — jsPDF + inline Canvas charts + MapTiler satellite tiles.
+ * DTrek PDF export — jsPDF + inline Canvas charts + OpenStreetMap tiles.
  */
 
 import { format } from 'date-fns'
@@ -186,7 +186,7 @@ function loadTileImage(url: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Fetch MapTiler satellite tiles, stitch them, draw the route polyline on top.
+ * Fetch OpenStreetMap tiles, stitch them, draw the route polyline on top.
  * Falls back to plain vector route on any error.
  */
 async function fetchSatMap(
@@ -195,8 +195,7 @@ async function fetchSatMap(
   outH: number,
   lineColor: string,
 ): Promise<string> {
-  const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
-  if (!KEY || pts.length < 2) return chartRouteFallback(pts, outW, outH, lineColor)
+  if (pts.length < 2) return chartRouteFallback(pts, outW, outH, lineColor)
 
   try {
     const lats = pts.map(p => p[0])
@@ -237,11 +236,11 @@ async function fetchSatMap(
       Array.from({ length: tilesW * tilesH }, (_, idx) => {
         const tx = minTX + (idx % tilesW)
         const ty = minTY + Math.floor(idx / tilesW)
-        const url = `https://api.maptiler.com/tiles/satellite/${zoom}/${tx}/${ty}.jpg?key=${KEY}`
+        const url = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`
         return loadTileImage(url)
           .then(img => fctx.drawImage(img, (tx - minTX) * TILE_SIZE, (ty - minTY) * TILE_SIZE))
           .catch(() => {
-            fctx.fillStyle = '#1a2a3a'
+            fctx.fillStyle = '#e8e8e8'
             fctx.fillRect((tx - minTX) * TILE_SIZE, (ty - minTY) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
           })
       })
@@ -297,7 +296,7 @@ async function fetchSatMap(
     const octx = out.getContext('2d')!
     octx.drawImage(full, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
 
-    return out.toDataURL('image/jpeg', 0.93)
+    return out.toDataURL('image/png')
   } catch {
     return chartRouteFallback(pts, outW, outH, lineColor)
   }
@@ -535,11 +534,11 @@ export async function exportActivityPdf(activity: StoredActivity): Promise<void>
   const step0 = Math.max(1, Math.ceil(rawPoly.length / 300))
   const poly = rawPoly.filter((_,i) => i % step0 === 0).map(p => [p.lat!, p.lon!] as [number,number])
   if (poly.length > 1) {
-    y = sectionBar(doc, 'Mappa Satellitare', M, y, W, FOREST)
+    y = sectionBar(doc, 'Mappa del Percorso', M, y, W, FOREST)
     const mapH = 55  // mm
     const mapImg = await fetchSatMap(poly, 1440, Math.round(1440 * mapH / W), '#22c55e')
     if (mapImg) {
-      doc.addImage(mapImg, 'JPEG', M, y, W, mapH)
+      doc.addImage(mapImg, 'PNG', M, y, W, mapH)
       // Info overlay text (top-right of map box)
       txt(doc, `${rawPoly.length.toLocaleString('it')} punti GPS`, M + W, y + 4.5, { size: 6.5, color: STONE, align: 'right' })
     }
@@ -669,12 +668,12 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
   const sampledPoly = poly.filter((_,i) => i % stepP === 0)
 
   if (sampledPoly.length > 1) {
-    y = sectionBar(doc, 'Mappa Satellitare', M, y, W, SKY)
+    y = sectionBar(doc, 'Mappa del Percorso', M, y, W, SKY)
     const mapH = 55
     const mapImg = await fetchSatMap(sampledPoly, 1440, Math.round(1440 * mapH / W), '#38bdf8')
 
     {
-      doc.addImage(mapImg, 'JPEG', M, y, W, mapH)
+      doc.addImage(mapImg, 'PNG', M, y, W, mapH)
     }
     y += mapH + 3
   }
@@ -827,7 +826,7 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
   gStats.forEach((s, i) => statBox(doc, s.label, s.value, undefined, M + i * (bw + 2), y, bw, bh))
   y += bh + 4
 
-  // ── Satellite map ─────────────────────────────────────────────────────────────
+  // ── Route map (OSM) ───────────────────────────────────────────────────────────
   const pts = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number,number])
   const step = Math.max(1, Math.ceil(pts.length / 300))
   const sampled = pts.length > 1 ? pts.filter((_, i) => i % step === 0) : (hike.routePolyline ?? []) as [number,number][]
@@ -835,7 +834,7 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
   if (sampled.length > 1) {
     const mapH = 58
     const mapImg = await fetchSatMap(sampled, 1440, Math.round(1440 * mapH / W), '#f59e0b')
-    if (mapImg) { doc.addImage(mapImg, 'JPEG', M, y, W, mapH); y += mapH + 4 }
+    if (mapImg) { doc.addImage(mapImg, 'PNG', M, y, W, mapH); y += mapH + 4 }
   }
 
   // ── Guide sections ────────────────────────────────────────────────────────────
