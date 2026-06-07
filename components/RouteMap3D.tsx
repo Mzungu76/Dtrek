@@ -1108,13 +1108,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       .filter(ph => photoImgsRef.current.has(ph.id))
       .map(ph => ({photo:ph, img:photoImgsRef.current.get(ph.id)!}))
 
-    // Route frames = base video duration; photo reveals are added on top
+    // Intro: fixed duration where p=0 (route frozen, camera swoops in)
+    const INTRO_FRAMES = Math.round(TARGET_FPS * Math.max(2, videoDuration * 0.08))
+    // Route frames: full traversal 0→1 starts AFTER intro
     const ROUTE_FRAMES = Math.round(TARGET_FPS * videoDuration)
-    // Each photo inserts PHOTO_REVEAL_FRAMES of pause after reaching its position
+    // Each photo inserts PHOTO_REVEAL_FRAMES of pause after reaching its position (after intro)
     const photoTriggerRouteFrames = sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
     // Outro: separate phase after route completes (~17% of route duration, min 3s)
     const OUTRO_FRAMES = Math.round(TARGET_FPS * Math.max(3, videoDuration * 0.17))
-    const TOTAL_FRAMES = ROUTE_FRAMES + sortedPhotos.length * PHOTO_REVEAL_FRAMES + OUTRO_FRAMES
+    const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + sortedPhotos.length * PHOTO_REVEAL_FRAMES + OUTRO_FRAMES
     const outroStartBearRef = { current: -1 as number }
 
     // Pre-compute peak position on route (for peak callout)
@@ -1127,17 +1129,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return peakIdx / Math.max(1, pts.length - 1)
     })()
 
-    function frameToState(frameIdx: number): {p:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number} {
+    function frameToState(frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number} {
+      // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
+      if (frameIdx < INTRO_FRAMES) {
+        return {p: 0, introP: frameIdx / Math.max(1, INTRO_FRAMES - 1)}
+      }
+      const afterIntro = frameIdx - INTRO_FRAMES
       let pauseOffset = 0
       for (let i = 0; i < sortedPhotos.length; i++) {
         const triggerF = photoTriggerRouteFrames[i] + pauseOffset
-        if (frameIdx < triggerF) break
-        if (frameIdx < triggerF + PHOTO_REVEAL_FRAMES) {
-          return {p: sortedPhotos[i].photo.progress, reveal: {...sortedPhotos[i], revealFrame: frameIdx - triggerF}}
+        if (afterIntro < triggerF) break
+        if (afterIntro < triggerF + PHOTO_REVEAL_FRAMES) {
+          return {p: sortedPhotos[i].photo.progress, reveal: {...sortedPhotos[i], revealFrame: afterIntro - triggerF}}
         }
         pauseOffset += PHOTO_REVEAL_FRAMES
       }
-      const routeFrame = frameIdx - pauseOffset
+      const routeFrame = afterIntro - pauseOffset
       if (routeFrame >= ROUTE_FRAMES) {
         const outroFrame = routeFrame - ROUTE_FRAMES
         return {p: 1.0, outroP: Math.min(1, outroFrame / Math.max(1, OUTRO_FRAMES - 1))}
@@ -1158,7 +1165,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const frameIdx=frameCountRef.current
       if(frameIdx>=TOTAL_FRAMES){recorder.stop();return}
 
-      const {p, reveal, outroP} = frameToState(frameIdx)
+      const {p, introP, reveal, outroP} = frameToState(frameIdx)
       setRenderProgress(frameIdx/TOTAL_FRAMES); setRenderFrame(frameIdx)
 
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
@@ -1267,41 +1274,42 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
 
       const rawIdx=p*(N-1), i0=Math.floor(rawIdx), i1=Math.min(i0+1,N-1), frac=rawIdx-i0
+      // During intro p=0 → lon/lat = pts[0]; follow/outro → actual position
       const lon=pts[i0].lon!+(pts[i1].lon!-pts[i0].lon!)*frac
       const lat=pts[i0].lat!+(pts[i1].lat!-pts[i0].lat!)*frac
       const alt=(pts[i0].altitudeMeters??0)+((pts[i1].altitudeMeters??0)-(pts[i0].altitudeMeters??0))*frac
 
-      // Route bearing: look 12% ahead so camera anticipates direction (more natural)
-      const lookIdx=Math.min(Math.round((p+0.12)*(N-1)),smoothRouteBears.length-1)
-      const routeBear=smoothRouteBears[lookIdx]
-
-      // Find active shot
-      const activShot=currentShots.find(s=>p>=s.startP&&p<=s.endP)??currentShots[currentShots.length-1]
-      const prevP=frameToState(frameIdx-1).p
-      const prevShot=currentShots.find(s=>prevP>=s.startP&&prevP<=s.endP)
-      if(activShot&&prevShot&&activShot.id!==prevShot.id) orbitBaseRef.current=mapRef.current?.getBearing()??0
-
-      // Compute target camera
-      const cam=shotCamera(activShot,routeBear,p,orbitBaseRef)
-      // Intro: stable bearing (no look-ahead jitter when center is fixed)
-      const targetBear=activShot.id==='intro'?introBearing:cam.bearing
-      // Exponential smoothing on all axes → seamless transitions between shots
-      smoothBearRef.current = lerpAngle(smoothBearRef.current, targetBear, 0.022)
-      smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
-      smoothZoomRef.current = lerp(smoothZoomRef.current, cam.zoom, 0.06)
-
-      // Pin center to route start/end during orbit shots — avoids abrupt movements from moving GPS center
-      const camCenterLon=activShot.id==='intro'?pts[0].lon!:lon
-      const camCenterLat=activShot.id==='intro'?pts[0].lat!:lat
-      mapRef.current?.jumpTo({
-        center:[camCenterLon,camCenterLat], bearing:smoothBearRef.current,
-        pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
-      })
-
-      // Progressive route reveal (every 20 frames)
-      if(frameIdx%20===0&&mapRef.current){
-        const cov=pts.slice(0,Math.min(i0+2,N)).map(pp=>[pp.lon!,pp.lat!])
-        try{(mapRef.current.getSource('route-traveled') as any)?.setData({type:'Feature',geometry:{type:'LineString',coordinates:cov},properties:{}})}catch{}
+      if (introP !== undefined) {
+        // ── Intro: camera swoops in, route stays at p=0, pin hidden ──────────
+        const introShot = currentShots.find(s => s.id === 'intro') ?? currentShots[0]
+        const targetPitch = lerp(introShot.pitch[0], introShot.pitch[1], introP)
+        const targetZoom  = lerp(introShot.zoom[0],  introShot.zoom[1],  introP)
+        smoothBearRef.current  = lerpAngle(smoothBearRef.current, introBearing, 0.022)
+        smoothPitchRef.current = lerp(smoothPitchRef.current, targetPitch, 0.06)
+        smoothZoomRef.current  = lerp(smoothZoomRef.current, targetZoom, 0.06)
+        mapRef.current?.jumpTo({
+          center: [pts[0].lon!, pts[0].lat!], bearing: smoothBearRef.current,
+          pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
+        })
+      } else {
+        // ── Follow: camera tracks GPS, pin moves ──────────────────────────────
+        // Route bearing: look 12% ahead so camera anticipates direction
+        const lookIdx=Math.min(Math.round((p+0.12)*(N-1)),smoothRouteBears.length-1)
+        const routeBear=smoothRouteBears[lookIdx]
+        const followShot = currentShots.find(s => s.id === 'follow') ?? currentShots[currentShots.length-1]
+        const cam = shotCamera(followShot, routeBear, p, orbitBaseRef)
+        smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
+        smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
+        smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom, 0.06)
+        mapRef.current?.jumpTo({
+          center:[lon,lat], bearing:smoothBearRef.current,
+          pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
+        })
+        // Progressive route reveal (every 20 frames)
+        if(frameIdx%20===0&&mapRef.current){
+          const cov=pts.slice(0,Math.min(i0+2,N)).map(pp=>[pp.lon!,pp.lat!])
+          try{(mapRef.current.getSource('route-traveled') as any)?.setData({type:'Feature',geometry:{type:'LineString',coordinates:cov},properties:{}})}catch{}
+        }
       }
 
       // Capture frame after rAF (map settles after jumpTo)
@@ -1314,22 +1322,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // Map pin: hidden during intro (camera still panning), visible from follow phase onward
-        if (activShot?.id !== 'intro') {
+        // Map pin + photo pins: hidden during intro, visible from follow phase onward
+        if (introP === undefined) {
           const mp=mapRef.current!.project([lon,lat] as [number,number])
           const px=(mp.x-cr.sx)/cr.sw*outW, py=(mp.y-cr.sy)/cr.sh*outH
           if(px>=-60&&px<=outW+60&&py>=-80&&py<=outH+60){
             drawMapPin(ctx,px,py,outW/1080,faceImgRef.current)
           }
-        }
-
-        // Photo pins on canvas
-        for(const s of sortedPhotos){
-          const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
-          const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
-          const ppx=(pmp.x-cr.sx)/cr.sw*outW, ppy=(pmp.y-cr.sy)/cr.sh*outH
-          if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
-            drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
+          for(const s of sortedPhotos){
+            const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
+            const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
+            const ppx=(pmp.x-cr.sx)/cr.sw*outW, ppy=(pmp.y-cr.sy)/cr.sh*outH
+            if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
+              drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
+            }
           }
         }
 
@@ -1342,9 +1348,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           drawVideoElevProfile(ctx,altitudeSeries,p,elX,elY,elW,elH,sc2)
         }
 
-        // Peak callout: appears when camera is near the route's highest point
+        // Peak callout: appears when camera is near the route's highest point (follow phase only)
         const peakDist=Math.abs(p-peakRouteP)
-        if(peakDist<0.042&&altitudeSeries.length>0&&activShot.id!=='intro'&&frameIdx>TITLE_DUR){
+        if(peakDist<0.042&&altitudeSeries.length>0&&introP===undefined&&frameIdx>TITLE_DUR){
           const peakAlpha=Math.pow(Math.max(0,1-peakDist/0.042),0.5)*0.9
           const maxAlt=Math.round(Math.max(...altitudeSeries))
           const label=`▲ ${maxAlt} m`
@@ -1380,7 +1386,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
           const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:rawHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:rawHr[si]}:undefined
           const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
-          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:activShot?.label})
+          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
         }
 
         frameCountRef.current++
