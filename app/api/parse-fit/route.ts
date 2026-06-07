@@ -3,7 +3,8 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const FitParser = require('fit-file-parser')
+const _fitMod = require('fit-file-parser')
+const FitParser = _fitMod.default ?? _fitMod
 
 export const dynamic = 'force-dynamic'
 
