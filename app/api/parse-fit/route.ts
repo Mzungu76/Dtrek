@@ -49,8 +49,14 @@ export async function POST(req: NextRequest) {
   const rawPoints: TrackPoint[] = records
     .filter(r => r.position_lat != null && r.position_long != null)
     .map(r => {
-      const lat = (r.position_lat as number) * SEMI_TO_DEG
-      const lon = (r.position_long as number) * SEMI_TO_DEG
+      let lat = r.position_lat as number
+      let lon = r.position_long as number
+      // Garmin/standard FIT: coordinates in semicircles (|value| >> 90, typically ~500M for Italy)
+      // Zepp/Amazfit FIT: fit-file-parser already applies scale factor → outputs degrees directly
+      if (Math.abs(lat) > 90) {
+        lat = lat * SEMI_TO_DEG
+        lon = lon * SEMI_TO_DEG
+      }
       const time = r.timestamp instanceof Date ? r.timestamp.toISOString() : new Date().toISOString()
       const pt: TrackPoint = { time, lat, lon }
       if (r.altitude != null) pt.altitudeMeters = r.altitude as number
