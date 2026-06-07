@@ -1159,7 +1159,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
 
-    const currentShots=shotPlan.length>0?shotPlan:planShots(pts)
+    // Always recompute shots with current slider values so intro/follow/outro
+    // all use the same zoomFollow, even if sliders were changed after goToPostProd
+    const currentShots=planShots(pts, zoomIntro, zoomFollow)
 
     const TITLE_DUR = Math.round(TARGET_FPS * 2.2)  // 2.2s title card
     // Strip database code prefix (e.g. "dtrek1234567890" or "dtrek1234567890 - Titolo")
@@ -1405,7 +1407,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     setVideoState('rendering')
     renderNextFrame()
-  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,shotPlan,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro])
+  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
