@@ -1,14 +1,15 @@
 'use client'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getPlannedById, updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import type { WikiPage } from '@/lib/wikipedia'
 import {
   ArrowLeft, BookOpen, Volume2, VolumeX, Play, Pause, Square,
   RefreshCw, Loader2, MapPin, Mountain, Clock, Route,
-  Leaf, Utensils, ShieldCheck, Compass, Info, FileDown,
+  Leaf, Utensils, ShieldCheck, Compass, Info, FileDown, ExternalLink,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -117,6 +118,14 @@ export default function GuidaPage() {
   const [error,       setError]       = useState<string | null>(null)
   const [guideLength, setGuideLength] = useState<GuideLength>('media')
   const [exporting,   setExporting]   = useState(false)
+
+  // Photos from Wikipedia thumbnails of nearby POIs
+  const poiPhotos = useMemo(() => {
+    if (!hike?.cachedPoiWiki) return []
+    return (hike.cachedPoiWiki as Array<{ poi: unknown; wiki: WikiPage }>)
+      .filter(w => w.wiki?.thumbnail)
+      .map(w => ({ title: w.wiki.title, thumbnail: w.wiki.thumbnail!, url: w.wiki.url, description: w.wiki.description }))
+  }, [hike?.cachedPoiWiki])
 
   // Voice state (UI)
   const [isPlaying,     setIsPlaying]     = useState(false)
@@ -413,6 +422,44 @@ export default function GuidaPage() {
             )}
           </div>
         </div>
+
+        {/* ── Photo strip — Wikipedia thumbnails of nearby POIs ─────────────── */}
+        {poiPhotos.length > 0 && (
+          <div className="mb-8">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-3">
+              Luoghi del percorso
+            </p>
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
+              {poiPhotos.map((photo, i) => (
+                <a
+                  key={i}
+                  href={photo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-none snap-start w-44 rounded-xl overflow-hidden relative group shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
+                >
+                  <div className="h-28 overflow-hidden bg-stone-100">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.thumbnail}
+                      alt={photo.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  </div>
+                  <div className="px-2.5 py-2 bg-white">
+                    <p className="text-xs font-semibold text-stone-800 leading-tight line-clamp-1">{photo.title}</p>
+                    {photo.description && (
+                      <p className="text-[10px] text-stone-400 mt-0.5 leading-tight line-clamp-1">{photo.description}</p>
+                    )}
+                    <span className="flex items-center gap-0.5 text-[10px] text-amber-600 mt-1">
+                      <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
+                    </span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── No guide yet: length selector + generate ──────────────────────── */}
         {!hasGuide && !generating && (

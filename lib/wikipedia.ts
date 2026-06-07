@@ -22,6 +22,48 @@ const WIKI_WORTHY = new Set<PoiItem['type']>([
   'castle', 'monument', 'tower', 'hut', 'bivouac',
 ])
 
+// Generic names that are just the category word — no specific article exists for them
+const GENERIC_POI_NAMES = new Set([
+  'cascata', 'cascate', 'cascatella', 'cascatelle',
+  'grotta', 'grotte', 'caverna', 'caverne',
+  'rovine', 'rovina', 'ruderi', 'rudere',
+  'torre', 'torri', 'sorgente', 'sorgenti',
+  'fontana', 'fontanile', 'rifugio', 'bivacco',
+  'monumento', 'monastero', 'chiesa', 'cappella',
+  'valico', 'passo', 'cima', 'vetta', 'monte',
+])
+
+// Max distance (km) between POI and the Wikipedia article's own coordinates
+const MAX_DIST_KM: Record<string, number> = {
+  waterfall: 8, cave: 8, spring: 5,
+  ruins: 15, archaeological: 15,
+  castle: 20, monument: 10, tower: 15,
+  peak: 30, pass: 25,
+  hut: 8, bivouac: 8,
+}
+
+function distKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371
+  const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180
+  const dφ = (lat2 - lat1) * Math.PI / 180
+  const dλ = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function isSpecificName(name: string): boolean {
+  return !GENERIC_POI_NAMES.has(name.toLowerCase().trim()) && name.trim().length > 4
+}
+
+// Articles found via text search must have coordinates close to the POI.
+// Articles without coordinates are concept/disambiguation pages → rejected.
+function isNearPoi(wiki: WikiPage, poi: PoiItem): boolean {
+  if (!wiki.lat || !wiki.lon) return false   // no coordinates = concept article
+  if (!poi.lat || !poi.lon) return true      // POI has no coords, can't check → allow
+  const maxKm = MAX_DIST_KM[poi.type as string] ?? 20
+  return distKm(wiki.lat, wiki.lon, poi.lat, poi.lon) <= maxKm
+}
+
 // Fetch the REST summary for a given title from any Wikimedia project
 async function fetchSummary(
   title: string,
@@ -84,19 +126,24 @@ async function searchAndFetch(
 /**
  * Look up information for each named POI that is physically on/near the route.
  * Cascade: OSM wikipedia= tag → Italian Wikipedia → English Wikipedia → Italian Wikivoyage
+ *
+ * Text-search results (steps 2-4) are validated geographically: the Wikipedia article
+ * must have coordinates within MAX_DIST_KM of the POI. Articles without coordinates
+ * (concept pages, disambiguation) are rejected. This prevents "cascatella" → "Cascate
+ * delle Marmore" or "grotta" → "Grotta (geologia)" type false matches.
  */
 export async function fetchWikiForNamedPois(
   pois: PoiItem[],
 ): Promise<{ poi: PoiItem; wiki: WikiPage }[]> {
   const candidates = pois
-    .filter(p => p.name && WIKI_WORTHY.has(p.type))
+    .filter(p => p.name && WIKI_WORTHY.has(p.type) && isSpecificName(p.name))
     .slice(0, 10)
 
   if (candidates.length === 0) return []
 
   const results = await Promise.all(candidates.map(async poi => {
     try {
-      // 1. OSM wikipedia= tag — authoritative, direct link
+      // 1. OSM wikipedia= tag — authoritative, no proximity check needed
       const wikiTag = poi.tags?.['wikipedia'] ?? ''
       if (wikiTag) {
         const tagLang    = wikiTag.includes(':') ? wikiTag.split(':')[0] : 'it'
@@ -106,17 +153,17 @@ export async function fetchWikiForNamedPois(
         if (wiki) return { poi, wiki }
       }
 
-      // 2. Italian Wikipedia
+      // 2. Italian Wikipedia — proximity required
       const itWiki = await searchAndFetch(poi.name!, 'it', 'wikipedia')
-      if (itWiki) return { poi, wiki: itWiki }
+      if (itWiki && isNearPoi(itWiki, poi)) return { poi, wiki: itWiki }
 
-      // 3. English Wikipedia (catches peaks / castles with no Italian article)
+      // 3. English Wikipedia — proximity required
       const enWiki = await searchAndFetch(poi.name!, 'en', 'wikipedia')
-      if (enWiki) return { poi, wiki: enWiki }
+      if (enWiki && isNearPoi(enWiki, poi)) return { poi, wiki: enWiki }
 
-      // 4. Italian Wikivoyage (travel guide; covers historic towns, parks, attractions)
+      // 4. Italian Wikivoyage — proximity required
       const voyWiki = await searchAndFetch(poi.name!, 'it', 'wikivoyage')
-      if (voyWiki) return { poi, wiki: voyWiki }
+      if (voyWiki && isNearPoi(voyWiki, poi)) return { poi, wiki: voyWiki }
 
       return null
     } catch {
