@@ -107,12 +107,21 @@ export async function POST(req: NextRequest) {
   const sport   = (sess.sport as string) ?? 'Hiking'
   const nameEl  = (fitData.file_ids as Record<string, unknown>[] | undefined)?.[0]
 
-  // Activity title from sport field
-  const notes = nameEl?.['product_name'] as string | undefined
-    ?? sport.charAt(0).toUpperCase() + sport.slice(1)
+  // Activity title — sport name only (device name is unhelpful as default)
+  const notes = sport.charAt(0).toUpperCase() + sport.slice(1)
+
+  // ID based on authoritative session values (start_time from device firmware,
+  // total_distance and total_elapsed_time as reported by the watch) to avoid
+  // collisions from our computed haversine distance which can be 0 on buggy imports.
+  const sessStartRaw = sess.start_time instanceof Date
+    ? (sess.start_time as Date).toISOString()
+    : (sess.start_time as string | undefined) ?? startTime
+  const sessStartDigits = sessStartRaw.replace(/\D/g, '').slice(0, 14)
+  const sessDist  = Math.floor((sess.total_distance  as number) ?? distanceMeters)
+  const sessTimer = Math.floor((sess.total_timer_time as number) ?? totalTimeSeconds)
 
   const activity: TcxActivity = {
-    id:                 'fit_' + startTime.replace(/\D/g, '').slice(0, 14) + '_' + Math.floor(distanceMeters),
+    id:                 `fit_${sessStartDigits}_${sessDist}_${sessTimer}`,
     sport,
     notes,
     device:             (sess.sub_sport as string) ?? '',

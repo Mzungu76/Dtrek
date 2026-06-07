@@ -322,7 +322,7 @@ function ActivityUploader() {
             {plannedHikes.map(h => (
               <button
                 key={h.id}
-                onClick={() => setSelectedPlanned(h)}
+                onClick={() => { setSelectedPlanned(h); setTitleVal(h.title) }}
                 className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-all
                   ${selectedPlanned?.id === h.id
                     ? 'border-sky-400 bg-sky-50 shadow-sm'
