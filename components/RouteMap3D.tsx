@@ -548,9 +548,10 @@ interface Props {
   onClose: () => void
   plannedDate?: string
   plannedTrackPoints?: TrackPoint[]
+  activityId?: string
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -623,6 +624,39 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const placingPhotoRef = useRef<{id:string;step:PlacingStep}|null>(null)
   useEffect(()=>{ placingPhotoRef.current=placingPhoto },[placingPhoto])
   const [photoBeingAdded, setPhotoBeingAdded]= useState(false)
+  const photosSaveReady = useRef(false)   // true after first mount effect runs
+
+  // Load persisted photos from localStorage on mount
+  useEffect(() => {
+    if (activityId) {
+      const saved = localStorage.getItem(`dtrek_vp_${activityId}`)
+      if (saved) {
+        try {
+          const photos: RoutePhoto[] = JSON.parse(saved)
+          if (photos.length > 0) {
+            photos.forEach(photo => {
+              const img = new Image()
+              img.onload = () => { photoImgsRef.current.set(photo.id, img) }
+              img.src = photo.dataUrl
+            })
+            setRoutePhotos(photos)
+          }
+        } catch {}
+      }
+    }
+    photosSaveReady.current = true
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist photos whenever they change (skip initial mount render)
+  useEffect(() => {
+    if (!photosSaveReady.current || !activityId) return
+    const key = `dtrek_vp_${activityId}`
+    if (routePhotos.length === 0) {
+      localStorage.removeItem(key)
+    } else {
+      try { localStorage.setItem(key, JSON.stringify(routePhotos)) } catch {}
+    }
+  }, [routePhotos, activityId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const gps = useRef(trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined))
 
@@ -1280,13 +1314,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // Map pin: stays at route start during intro, follows GPS otherwise
-        const pinLon = activShot?.id === 'intro' ? pts[0].lon! : lon
-        const pinLat = activShot?.id === 'intro' ? pts[0].lat! : lat
-        const mp=mapRef.current!.project([pinLon,pinLat] as [number,number])
-        const px=(mp.x-cr.sx)/cr.sw*outW, py=(mp.y-cr.sy)/cr.sh*outH
-        if(px>=-60&&px<=outW+60&&py>=-80&&py<=outH+60){
-          drawMapPin(ctx,px,py,outW/1080,faceImgRef.current)
+        // Map pin: hidden during intro (camera still panning), visible from follow phase onward
+        if (activShot?.id !== 'intro') {
+          const mp=mapRef.current!.project([lon,lat] as [number,number])
+          const px=(mp.x-cr.sx)/cr.sw*outW, py=(mp.y-cr.sy)/cr.sh*outH
+          if(px>=-60&&px<=outW+60&&py>=-80&&py<=outH+60){
+            drawMapPin(ctx,px,py,outW/1080,faceImgRef.current)
+          }
         }
 
         // Photo pins on canvas
