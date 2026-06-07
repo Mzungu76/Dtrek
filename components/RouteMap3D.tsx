@@ -1010,9 +1010,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     map.resize()
     await new Promise<void>(r=>map.once('idle',r as any))
 
-    // Stable intro bearing: direction from route start toward first 5% of route
-    const introLookIdx=Math.min(Math.round(0.05*(pts.length-1)),pts.length-2)
-    const introBearing=bearingDeg(pts[0].lat!,pts[0].lon!,pts[introLookIdx].lat!,pts[introLookIdx].lon!)
+    // Pre-compute smooth route bearings here so introBearing uses the same value
+    // as the follow phase (which looks 12% ahead), eliminating the bearing jerk at intro→follow
+    const N=pts.length
+    const rawRouteBears=Array.from({length:Math.max(1,N-1)},(_,i)=>bearingDeg(pts[i].lat!,pts[i].lon!,pts[Math.min(i+1,N-1)].lat!,pts[Math.min(i+1,N-1)].lon!))
+    const smoothRouteBears=circularMeanBearings(rawRouteBears,35)
+    // Intro bearing must match what follow uses at p=0 (look 12% ahead) to avoid bearing jerk
+    const introLookIdx=Math.min(Math.round(0.12*(N-1)),smoothRouteBears.length-1)
+    const introBearing=smoothRouteBears[introLookIdx]
     // Pre-warm tiles along entire route at recording zoom
     const keyIdxs = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(t =>
       Math.min(Math.round(t*(pts.length-1)), pts.length-1))
@@ -1081,11 +1086,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
     mediaRecorderRef.current=recorder; recorder.start(100)
 
-    // Pre-compute smooth route bearings to avoid per-frame jitter
-    const N=pts.length
-    const rawRouteBears=Array.from({length:Math.max(1,N-1)},(_,i)=>bearingDeg(pts[i].lat!,pts[i].lon!,pts[Math.min(i+1,N-1)].lat!,pts[Math.min(i+1,N-1)].lon!))
-    // Circular mean (handles 350°/10° north crossings) + wide window
-    const smoothRouteBears=circularMeanBearings(rawRouteBears,35)
+    // N, rawRouteBears, smoothRouteBears computed above (before introBearing)
 
     // Body data pre-computation
     const SAMPLES=Math.min(300,N), step=(N-1)/(SAMPLES-1)
@@ -1326,11 +1327,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // Map pin + photo pins: hidden during intro, visible from follow phase onward
+        // Map pin + photo pins: hidden during intro, fades in/out at transitions
         if (introP === undefined) {
-          // Pin: always at canvas center — jumpTo centers the camera on [lon,lat],
-          // but map.project() drifts when 3D terrain elevation shifts the perspective
-          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+          // Fade in during first 3% of route (intro→follow), fade out during last 3% (follow→outro)
+          const pinAlpha = Math.min(1.0, p / 0.03) * Math.min(1.0, (1.0 - p) / 0.03)
+          if (pinAlpha > 0) {
+            // Pin: always at canvas center — jumpTo centers the camera on [lon,lat],
+            // but map.project() drifts when 3D terrain elevation shifts the perspective
+            ctx.globalAlpha = pinAlpha
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            ctx.globalAlpha = 1
+          }
           for(const s of sortedPhotos){
             const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
             const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
