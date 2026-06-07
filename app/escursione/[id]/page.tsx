@@ -621,7 +621,8 @@ export default function EscursionePage() {
       {show3D && (
         <RouteMap3D trackPoints={activity.trackPoints} title={activity.title ?? activity.notes}
           onClose={() => setShow3D(false)} plannedTrackPoints={activity.linkedPlannedTrackPoints}
-          activityId={activity.id} />
+          activityId={activity.id}
+          distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain} />
       )}
       {showStreetView && centerPt?.lat && centerPt?.lon && (
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity.title ?? undefined}

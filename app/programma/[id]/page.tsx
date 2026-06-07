@@ -670,6 +670,7 @@ export default function PlannedHikePage() {
           plannedDate={hike.plannedDate}
           onClose={() => setShow3D(false)}
           activityId={hike.id}
+          distanceMeters={hike.distanceMeters} elevationGain={hike.elevationGain}
         />
       )}
 

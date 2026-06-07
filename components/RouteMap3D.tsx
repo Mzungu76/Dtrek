@@ -549,9 +549,11 @@ interface Props {
   plannedDate?: string
   plannedTrackPoints?: TrackPoint[]
   activityId?: string
+  distanceMeters?: number
+  elevationGain?: number
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -1098,7 +1100,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const smoothSpeed=smoothArray(rawSpeed,4)
     const hrMax=Math.max(...rawHr), hrMin=Math.min(...rawHr.filter(v=>v>0),hrMax)
     const spMax=Math.max(...smoothSpeed), hasHr=hrMax>0, hasSpeed=spMax>0
-    const totalKm=totalDistRef.current/1000, {gain:elevGain}=elevStatsRef.current
+    // Prefer authoritative stored values over recomputed-from-GPS (which can differ due to downsampling)
+    const totalKm=(distanceProp ?? totalDistRef.current) / 1000
+    const elevGain = elevGainProp ?? elevStatsRef.current.gain
     const cr=coverRect(srcW,srcH,outW,outH)
 
     const TARGET_FPS=30
