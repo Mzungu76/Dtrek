@@ -1328,11 +1328,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
         // Map pin + photo pins: hidden during intro, visible from follow phase onward
         if (introP === undefined) {
-          const mp=mapRef.current!.project([lon,lat] as [number,number])
-          const px=(mp.x-cr.sx)/cr.sw*outW, py=(mp.y-cr.sy)/cr.sh*outH
-          if(px>=-60&&px<=outW+60&&py>=-80&&py<=outH+60){
-            drawMapPin(ctx,px,py,outW/1080,faceImgRef.current)
-          }
+          // Pin: always at canvas center — jumpTo centers the camera on [lon,lat],
+          // but map.project() drifts when 3D terrain elevation shifts the perspective
+          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
           for(const s of sortedPhotos){
             const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
             const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
