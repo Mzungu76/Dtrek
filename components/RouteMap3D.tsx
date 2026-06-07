@@ -1018,11 +1018,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Intro bearing must match what follow uses at p=0 (look 12% ahead) to avoid bearing jerk
     const introLookIdx=Math.min(Math.round(0.12*(N-1)),smoothRouteBears.length-1)
     const introBearing=smoothRouteBears[introLookIdx]
-    // Pre-warm tiles along entire route at recording zoom
+    // Pre-warm tiles at actual recording conditions (follow phase: zoomFollow + pitch 48°)
+    // Prewarm at pitch:0 / zoom:14 missed tiles visible at oblique pitch and higher zoom,
+    // causing tile pop-in exactly at the intro→follow transition when pitch first reaches 48°
     const keyIdxs = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(t =>
       Math.min(Math.round(t*(pts.length-1)), pts.length-1))
     for (const ki of keyIdxs) {
-      map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:14,pitch:0,bearing:0})
+      map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomFollow,pitch:48,bearing:introBearing})
+      await new Promise<void>(r=>map.once('idle',r as any))
+    }
+    // Also prewarm at intro zoom/pitch so tiles for the swooping intro are ready
+    for (const ki of keyIdxs.slice(0, 3)) {
+      map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomIntro,pitch:20,bearing:introBearing})
       await new Promise<void>(r=>map.once('idle',r as any))
     }
     // Position at intro start
@@ -1154,7 +1161,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const outroFrame = routeFrame - ROUTE_FRAMES
         return {p: 1.0, outroP: Math.min(1, outroFrame / Math.max(1, OUTRO_FRAMES - 1))}
       }
-      return {p: Math.min(1, routeFrame / ROUTE_FRAMES)}
+      // Divide by ROUTE_FRAMES-1 so the last follow frame reaches p=1.0 (exactly pts[N-1]),
+      // preventing a small center jump at the follow→outro transition
+      return {p: Math.min(1, routeFrame / Math.max(1, ROUTE_FRAMES - 1))}
     }
 
     setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
