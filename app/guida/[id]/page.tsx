@@ -51,6 +51,46 @@ function parseGuide(text: string): Section[] {
   })
 }
 
+// ── Body renderer: handles ### subsections and [curiosita] callouts ────────────
+
+function renderBodyLines(body: string, color: string): React.ReactNode {
+  const lines = body.split('\n').filter(Boolean)
+  let paraCount = 0
+  return (
+    <>
+      {lines.map((line, i) => {
+        if (line.startsWith('### ')) {
+          return (
+            <h3 key={i} className="font-bold text-sm mt-5 mb-2 first:mt-0" style={{ color }}>
+              {line.slice(4)}
+            </h3>
+          )
+        }
+        const cm = line.match(/^\[curiosita\](.*?)\[\/curiosita\]$/)
+        if (cm) {
+          return (
+            <div
+              key={i}
+              className="my-4 rounded-xl p-4"
+              style={{ backgroundColor: color + '14', borderLeft: `3px solid ${color}` }}
+            >
+              <p className="text-[11px] font-bold italic mb-1.5" style={{ color }}>Curiosità</p>
+              <p className="text-stone-600 text-[14px] leading-relaxed italic">{cm[1].trim()}</p>
+            </div>
+          )
+        }
+        const isFirst = paraCount === 0
+        paraCount++
+        return (
+          <p key={i} className={`text-stone-700 leading-relaxed text-[15px] ${isFirst ? '' : 'mt-3'}`}>
+            {line}
+          </p>
+        )
+      })}
+    </>
+  )
+}
+
 // ── Chunk-based TTS ───────────────────────────────────────────────────────────
 
 interface ChunkEntry { text: string; sectionIdx: number }
@@ -423,44 +463,6 @@ export default function GuidaPage() {
           </div>
         </div>
 
-        {/* ── Photo strip — Wikipedia thumbnails of nearby POIs ─────────────── */}
-        {poiPhotos.length > 0 && (
-          <div className="mb-8">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-3">
-              Luoghi del percorso
-            </p>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
-              {poiPhotos.map((photo, i) => (
-                <a
-                  key={i}
-                  href={photo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-none snap-start w-44 rounded-xl overflow-hidden relative group shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
-                >
-                  <div className="h-28 overflow-hidden bg-stone-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={photo.thumbnail}
-                      alt={photo.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  </div>
-                  <div className="px-2.5 py-2 bg-white">
-                    <p className="text-xs font-semibold text-stone-800 leading-tight line-clamp-1">{photo.title}</p>
-                    {photo.description && (
-                      <p className="text-[10px] text-stone-400 mt-0.5 leading-tight line-clamp-1">{photo.description}</p>
-                    )}
-                    <span className="flex items-center gap-0.5 text-[10px] text-amber-600 mt-1">
-                      <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
-                    </span>
-                  </div>
-                </a>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* ── No guide yet: length selector + generate ──────────────────────── */}
         {!hasGuide && !generating && (
           <div className="flex flex-col items-center justify-center py-14 gap-8 text-center">
@@ -590,52 +592,90 @@ export default function GuidaPage() {
         {/* ── Guide sections ─────────────────────────────────────────────────── */}
         {sections.length > 0 && (
           <div className="space-y-6">
-            {sections.map((s, i) => (
-              <div
-                key={i}
-                className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all duration-300 ${
-                  activeSection === i
-                    ? 'border-amber-300 shadow-amber-100 shadow-md ring-1 ring-amber-200'
-                    : 'border-amber-50 hover:border-amber-100'
-                }`}
-              >
+            {sections.map((s, i) => {
+              const isLuoghi = s.title.toLowerCase().includes('luoghi')
+              return (
                 <div
-                  className="flex items-center justify-between gap-3 px-5 py-3.5 cursor-pointer select-none"
-                  style={{ borderBottom: `2px solid ${s.color}18` }}
-                  onClick={() => speakSection(i)}
+                  key={i}
+                  className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all duration-300 ${
+                    activeSection === i
+                      ? 'border-amber-300 shadow-amber-100 shadow-md ring-1 ring-amber-200'
+                      : 'border-stone-100 hover:border-amber-100'
+                  }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: s.color + '18', color: s.color }}
-                    >
-                      {s.icon}
-                    </span>
-                    <h2 className="font-bold text-stone-800 text-base">{s.title}</h2>
-                  </div>
-                  <button
-                    onClick={e => { e.stopPropagation(); speakSection(i) }}
-                    className="p-1.5 rounded-full hover:bg-amber-50 text-stone-300 hover:text-amber-500 transition-colors shrink-0"
-                    title="Ascolta questa sezione"
+                  {/* Section header with number badge */}
+                  <div
+                    className="flex items-center justify-between gap-3 px-5 py-4 cursor-pointer select-none"
+                    style={{ borderBottom: `2px solid ${s.color}22` }}
+                    onClick={() => speakSection(i)}
                   >
-                    <Volume2 className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="px-5 py-4">
-                  {s.body.split('\n').filter(Boolean).map((para, pi) => (
-                    <p
-                      key={pi}
-                      className={`text-stone-700 leading-relaxed text-[15px] ${pi > 0 ? 'mt-3' : ''} ${
-                        activeSection === i ? 'text-stone-800' : ''
-                      }`}
+                    <div className="flex items-center gap-3">
+                      {/* Numbered square badge */}
+                      <span
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0 tracking-tight"
+                        style={{ backgroundColor: s.color }}
+                      >
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span style={{ color: s.color }}>{s.icon}</span>
+                        <h2 className="font-bold text-stone-800 text-base">{s.title}</h2>
+                      </div>
+                    </div>
+                    <button
+                      onClick={e => { e.stopPropagation(); speakSection(i) }}
+                      className="p-1.5 rounded-full hover:bg-amber-50 text-stone-300 hover:text-amber-500 transition-colors shrink-0"
+                      title="Ascolta questa sezione"
                     >
-                      {para}
-                    </p>
-                  ))}
+                      <Volume2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Section body */}
+                  <div className={`px-5 py-4 ${activeSection === i ? 'bg-amber-50/30' : ''}`}>
+                    {renderBodyLines(s.body, s.color)}
+
+                    {/* Inline photos for "I luoghi da non perdere" */}
+                    {isLuoghi && poiPhotos.length > 0 && (
+                      <div className="mt-5">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-3">
+                          Foto dei luoghi
+                        </p>
+                        <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                          {poiPhotos.map((photo, pi) => (
+                            <a
+                              key={pi}
+                              href={photo.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-none snap-start w-44 rounded-xl overflow-hidden group shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
+                            >
+                              <div className="h-28 overflow-hidden bg-stone-100">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={photo.thumbnail}
+                                  alt={photo.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              </div>
+                              <div className="px-2.5 py-2 bg-white">
+                                <p className="text-xs font-semibold text-stone-800 leading-tight line-clamp-1">{photo.title}</p>
+                                {photo.description && (
+                                  <p className="text-[10px] text-stone-400 mt-0.5 leading-tight line-clamp-1">{photo.description}</p>
+                                )}
+                                <span className="flex items-center gap-0.5 text-[10px] text-amber-600 mt-1">
+                                  <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
+                                </span>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
 
             {generating && (
               <div className="flex items-center gap-2 px-5 py-4 bg-white rounded-2xl border border-amber-100">

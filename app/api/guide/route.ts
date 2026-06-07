@@ -26,7 +26,9 @@ ordinarie sono il tuo punto di forza.
 
 Usa la seconda persona singolare (tu/ti). Scrivi in italiano vivace, mai pedante.
 Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio). Non usare asterischi per il grassetto.
-Non usare bullet point eccessivi: preferisci frasi di narrazione fluida.`
+Non usare bullet point eccessivi: preferisci frasi di narrazione fluida.
+Nella sezione "I luoghi da non perdere", usa ### (tre cancelletti e spazio) come sottotitolo per ogni luogo specifico prima di descriverlo (es: ### Castello di Calcata).
+Per le curiosità e aneddoti più memorabili, racchiudili in un riquadro speciale usando il formato esatto su una riga separata: [curiosita] testo della curiosità [/curiosita]`
 
 // ── POI helpers ───────────────────────────────────────────────────────────────
 
@@ -206,7 +208,7 @@ export async function POST(req: NextRequest) {
 
   // Stream Claude response
   const stream = client.messages.stream({
-    model:      'claude-haiku-4-5-20251001',
+    model:      'claude-sonnet-4-6',
     max_tokens: maxTokens,
     system:     SYSTEM,
     messages:   [{ role: 'user', content: prompt }],
