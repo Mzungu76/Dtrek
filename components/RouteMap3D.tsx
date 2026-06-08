@@ -1065,14 +1065,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     ctx.imageSmoothingEnabled=true
     ctx.imageSmoothingQuality='high'
 
-    // H.264 High Profile (avc1.640028) → migliore qualità per bit rispetto al Baseline generico
+    // Codec: H.264 dove supportato nativamente (Safari/iOS), VP9 su Chrome/Firefox.
+    // NON specificare profili H.264 (avc1.640028 ecc.) — alcuni browser li dichiarano
+    // supportati ma producono output scadente con l'encoder software di fallback.
     const mimeType=[
-      'video/mp4;codecs=avc1.640028',  // High Profile Level 4.0
-      'video/mp4;codecs=avc1.4d0028',  // Main Profile Level 4.0 (fallback)
-      'video/mp4;codecs=avc1',
-      'video/mp4',
-      'video/webm;codecs=vp9',
-      'video/webm;codecs=vp8',
+      'video/mp4;codecs=avc1',   // H.264 — Safari, Chrome/Android, Chrome/Windows
+      'video/mp4',               // H.264 generico (fallback)
+      'video/webm;codecs=vp9',   // VP9 — Chrome/Firefox desktop (buona qualità)
+      'video/webm;codecs=vp8',   // VP8 — browser più vecchi
       'video/webm',
     ].find(t=>MediaRecorder.isTypeSupported(t))??''
     // Audio: ambient soundtrack mixed into the recording stream
@@ -1091,8 +1091,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const stream = audioStream
       ? new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
       : videoStream
-    // Bitrate Instagram: 4 Mbps @ 30fps, 5 Mbps @ 60fps (range consigliato 3.5-5 Mbps)
-    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:videoFps===60?5_000_000:4_000_000,audioBitsPerSecond:128_000})
+    // Bitrate sorgente: 20 Mbps @30fps / 25 Mbps @60fps.
+    // NB: 3.5-5 Mbps è la bitrate di DELIVERY di Instagram agli spettatori, NON quella
+    // dell'upload. Il file sorgente deve essere ad alta qualità perché il codificatore
+    // browser (MediaRecorder) è molto meno efficiente di x264/FFmpeg — a bassa bitrate
+    // produce artefatti visibili. Instagram comprimerà per la distribuzione.
+    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:videoFps===60?25_000_000:20_000_000,audioBitsPerSecond:192_000})
     videoChunksRef.current=[]
     recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
     recorder.onstop=()=>{
@@ -1822,7 +1826,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               </div>
             </div>
             <p className="text-white/30 text-[11px] text-center">
-              MP4 · H.264 High Profile · AAC 44.1 kHz · {videoFps}fps · {videoFps===60?'5':'4'} Mbps · rendering frame-by-frame
+              MP4 · H.264/VP9 · AAC 44.1 kHz · {videoFps}fps · {videoFps===60?'25':'20'} Mbps sorgente · rendering frame-by-frame
             </p>
             <div className="flex gap-3">
               <button onClick={()=>setVideoState('idle')} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">Annulla</button>
