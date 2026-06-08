@@ -21,9 +21,11 @@ const SPEEDS = [
 ]
 
 const VIDEO_PRESETS = {
-  instagram: { duration: 30, styleIdx: 1, label: 'Instagram', desc: '30s · feed & reels',   grading: 'contrast(1.08) saturate(1.28) brightness(1.03)' },
-  epico:     { duration: 30, styleIdx: 0, label: 'Epico',     desc: '30s · cinematico',      grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
-  snappy:    { duration: 15, styleIdx: 1, label: 'Snappy',    desc: '15s · social-ready',    grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
+  reels:  { duration: 30, styleIdx: 1, orientation: '9:16'   as const, label: 'Reels',    desc: '9:16 · 1080×1920',   grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  feed45: { duration: 30, styleIdx: 1, orientation: '4:5'    as const, label: 'Feed 4:5', desc: '4:5 · 1080×1350',    grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  feed11: { duration: 30, styleIdx: 1, orientation: '1:1'    as const, label: 'Feed 1:1', desc: '1:1 · 1080×1080',    grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  epico:  { duration: 30, styleIdx: 0, orientation: '9:16'   as const, label: 'Epico',    desc: '9:16 · cinematico',   grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
+  snappy: { duration: 15, styleIdx: 1, orientation: '9:16'   as const, label: 'Snappy',   desc: '9:16 · social-ready', grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
 } as const
 
 const STYLES = [
@@ -33,16 +35,17 @@ const STYLES = [
 ]
 
 const VIDEO_DIMS: Record<string, [number, number]> = {
-  '9:16': [1080, 1920],
-  '4:5':  [1080, 1350],
-  '16:9': [1920, 1080],
-  '1:1':  [1080, 1080],
+  '9:16':   [1080, 1920],
+  '4:5':    [1080, 1350],
+  '1:1':    [1080, 1080],
+  '1.91:1': [1080,  566],
+  '16:9':   [1920, 1080],
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type VideoState = 'idle' | 'config' | 'postprod' | 'rendering' | 'done'
-type VideoPreset = 'instagram' | 'epico' | 'snappy' | 'custom'
+type VideoPreset = 'reels' | 'feed45' | 'feed11' | 'epico' | 'snappy' | 'custom'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
 type PlacingStep = 'pos'
 
@@ -604,7 +607,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Video config
   const [videoState,        setVideoState]       = useState<VideoState>('idle')
   const [videoDuration,     setVideoDuration]    = useState(30)
-  const [videoOrientation,  setVideoOrientation] = useState<'9:16'|'4:5'|'16:9'|'1:1'>('9:16')
+  const [videoOrientation,  setVideoOrientation] = useState<'9:16'|'4:5'|'1:1'|'1.91:1'|'16:9'>('9:16')
+  const [videoFps,          setVideoFps]         = useState<30|60>(30)
+  const [coverPhotoId,      setCoverPhotoId]      = useState<string|null>(null)
   const [videoShowTitle,    setVideoShowTitle]   = useState(true)
   const [videoShowStats,    setVideoShowStats]   = useState(true)
   const [videoShowProgress, setVideoShowProgress]= useState(true)
@@ -1077,16 +1082,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const audioCtx = new AudioContext({ sampleRate: 44100 })
         const audioDest = audioCtx.createMediaStreamDestination()
         audioCtxRef.current = audioCtx
-        const startAudio = createAmbientAudio(audioCtx, audioDest, (videoPreset === 'snappy' || videoPreset === 'instagram') ? 'snappy' : 'epico')
+        const startAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
         startAudio()
         audioStream = audioDest.stream
       } catch {}
     }
-    const videoStream=(composite as any).captureStream(30) as MediaStream
+    const videoStream=(composite as any).captureStream(videoFps) as MediaStream
     const stream = audioStream
       ? new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
       : videoStream
-    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:10_000_000,audioBitsPerSecond:128_000})
+    // Bitrate Instagram: 4 Mbps @ 30fps, 5 Mbps @ 60fps (range consigliato 3.5-5 Mbps)
+    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:videoFps===60?5_000_000:4_000_000,audioBitsPerSecond:128_000})
     videoChunksRef.current=[]
     recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
     recorder.onstop=()=>{
@@ -1120,7 +1126,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const elevGain = elevGainProp ?? elevStatsRef.current.gain
     const cr=coverRect(srcW,srcH,outW,outH)
 
-    const TARGET_FPS=30
+    const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
     const sortedPhotos = [...routePhotos]
       .sort((a,b)=>a.progress-b.progress)
@@ -1488,6 +1494,32 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
   }, [title, distanceProp, elevGainProp, plannedDate, videoOrientation])
 
+  const downloadCover = useCallback(() => {
+    if (!coverPhotoId) return
+    const photo = routePhotos.find(p => p.id === coverPhotoId)
+    if (!photo) return
+    const img = photoImgsRef.current.get(coverPhotoId)
+    if (!img) return
+    const [w, h] = VIDEO_DIMS[videoOrientation]
+    const can = document.createElement('canvas'); can.width = w; can.height = h
+    const c = can.getContext('2d')!
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'
+    const imgAR = img.width / img.height, canAR = w / h
+    let sx = 0, sy = 0, sw = img.width, sh = img.height
+    if (imgAR > canAR) { sw = Math.round(sh * canAR); sx = (img.width - sw) / 2 }
+    else { sh = Math.round(sw / canAR); sy = (img.height - sh) / 2 }
+    c.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
+    can.toBlob(blob => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `dtrek-cover-${Date.now()}.jpg`; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setShareToast('Copertina salvata!')
+      setTimeout(() => setShareToast(''), 2500)
+    }, 'image/jpeg', 0.92)
+  }, [coverPhotoId, routePhotos, videoOrientation])
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
@@ -1639,23 +1671,40 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <h2 className="text-white font-bold text-lg">Impostazioni video</h2>
               <button onClick={()=>setVideoState('idle')} className="text-white/50 hover:text-white"><X className="w-5 h-5"/></button>
             </div>
-            {/* Preset */}
-            <div>
-              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">PRESET</p>
+            {/* Preset Instagram */}
+            <div className="space-y-2">
+              <p className="text-white/45 text-[11px] font-semibold tracking-wider">FORMATO INSTAGRAM</p>
               <div className="grid grid-cols-3 gap-2">
-                {(['instagram','epico','snappy'] as const).map(pr=>(
+                {(['reels','feed45','feed11'] as const).map(pr=>(
                   <button key={pr} onClick={()=>{
                     setVideoPreset(pr)
                     setVideoDuration(VIDEO_PRESETS[pr].duration)
                     switchStyle(VIDEO_PRESETS[pr].styleIdx)
-                    if (pr === 'instagram') { setVideoOrientation('9:16'); setVideoEnableAudio(true) }
+                    setVideoOrientation(VIDEO_PRESETS[pr].orientation)
+                    setVideoFps(30)
+                    setVideoEnableAudio(true)
                   }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                     <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
                     <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
                   </button>
                 ))}
               </div>
-              <button onClick={()=>setVideoPreset('custom')} className={`mt-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${videoPreset==='custom'?'bg-white/25 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+              <p className="text-white/45 text-[11px] font-semibold tracking-wider pt-1">STILE CINEMATICO</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(['epico','snappy'] as const).map(pr=>(
+                  <button key={pr} onClick={()=>{
+                    setVideoPreset(pr)
+                    setVideoDuration(VIDEO_PRESETS[pr].duration)
+                    switchStyle(VIDEO_PRESETS[pr].styleIdx)
+                    setVideoOrientation(VIDEO_PRESETS[pr].orientation)
+                    setVideoFps(30)
+                  }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                    <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
+                    <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={()=>setVideoPreset('custom')} className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${videoPreset==='custom'?'bg-white/25 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                 Custom — impostazioni manuali
               </button>
             </div>
@@ -1699,15 +1748,35 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             </div>
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">FORMATO</p>
-              <div className="flex gap-2">
-                {(['9:16','4:5','16:9','1:1'] as const).map(o=>(
-                  <button key={o} onClick={()=>setVideoOrientation(o)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoOrientation===o?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                    {o}
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  {key:'9:16',   sub:'Reels/Story'},
+                  {key:'4:5',    sub:'Feed verticale'},
+                  {key:'1:1',    sub:'Feed quadrato'},
+                  {key:'1.91:1', sub:'Feed orizzontale'},
+                  {key:'16:9',   sub:'YouTube/PC'},
+                ] as const).map(({key,sub})=>(
+                  <button key={key} onClick={()=>setVideoOrientation(key as any)}
+                    className={`py-2.5 rounded-xl flex flex-col items-center transition-all ${videoOrientation===key?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                    <span className="text-sm font-bold">{key}</span>
+                    <span className="text-[9px] opacity-60 mt-0.5">{sub}</span>
                   </button>
                 ))}
               </div>
             </div>
+            {videoOrientation==='9:16'&&(
+              <div>
+                <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">FRAME RATE</p>
+                <div className="flex gap-2">
+                  {([30,60] as const).map(fps=>(
+                    <button key={fps} onClick={()=>setVideoFps(fps)}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoFps===fps?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                      {fps} fps{fps===60?' · Reels':''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">OVERLAY</p>
               <div className="grid grid-cols-2 gap-2">
@@ -1753,7 +1822,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               </div>
             </div>
             <p className="text-white/30 text-[11px] text-center">
-              1080p · 10 Mbps · H.264 High Profile · AAC 44.1 kHz · rendering frame-by-frame · Ken Burns
+              MP4 · H.264 High Profile · AAC 44.1 kHz · {videoFps}fps · {videoFps===60?'5':'4'} Mbps · rendering frame-by-frame
             </p>
             <div className="flex gap-3">
               <button onClick={()=>setVideoState('idle')} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">Annulla</button>
@@ -1957,7 +2026,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <Film className="w-7 h-7 text-green-400"/>
               </div>
               <h2 className="text-white font-bold text-lg">Video pronto!</h2>
-              <p className="text-white/50 text-sm mt-1">1080p · {videoDuration}s · {videoOrientation}</p>
+              <p className="text-white/50 text-sm mt-1">1080p · {videoDuration}s · {videoOrientation} · {videoFps}fps</p>
             </div>
             <div className="flex flex-col gap-2.5">
               <button onClick={handleVideoShare} className="w-full py-3.5 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-bold flex items-center justify-center gap-2">
@@ -1967,6 +2036,29 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <Download className="w-4 h-4"/>Scarica
               </button>
             </div>
+
+            {/* ── Copertina ────────────────────────────────────────────── */}
+            {routePhotos.length>0&&(
+              <div className="border-t border-white/10 pt-4 space-y-2.5">
+                <p className="text-white/45 text-[11px] font-semibold tracking-wider">COPERTINA VIDEO</p>
+                <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1">
+                  {routePhotos.map(photo=>(
+                    <button key={photo.id} onClick={()=>setCoverPhotoId(prev=>prev===photo.id?null:photo.id)}
+                      className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${coverPhotoId===photo.id?'border-blue-400 scale-105 shadow-lg shadow-blue-500/30':'border-white/10 opacity-55 hover:opacity-90'}`}>
+                      <img src={photo.dataUrl} className="w-full h-full object-cover" alt=""/>
+                    </button>
+                  ))}
+                </div>
+                {coverPhotoId?(
+                  <button onClick={downloadCover}
+                    className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all">
+                    <Download className="w-3.5 h-3.5"/>Scarica copertina .jpg
+                  </button>
+                ):(
+                  <p className="text-white/30 text-[11px] text-center">Tocca una foto per usarla come copertina su Instagram</p>
+                )}
+              </div>
+            )}
 
             {/* ── Caption Instagram ─────────────────────────────────────── */}
             <div className="border-t border-white/10 pt-4 space-y-2.5">
@@ -2009,9 +2101,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             </div>
 
             <div className="flex gap-2.5">
-              <button onClick={()=>{setVideoState('postprod');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null)}}
+              <button onClick={()=>{setVideoState('postprod');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null)}}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">← Montaggio</button>
-              <button onClick={()=>{setVideoState('idle');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null)}}
+              <button onClick={()=>{setVideoState('idle');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null)}}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">Chiudi</button>
             </div>
           </div>
