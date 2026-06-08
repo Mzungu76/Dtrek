@@ -582,9 +582,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const renderAbortRef     = useRef(false)
 
   // Smooth camera refs (exponential interpolation)
-  const smoothBearRef  = useRef(0)
-  const smoothPitchRef = useRef(65)
-  const smoothZoomRef  = useRef(14)
+  const smoothBearRef   = useRef(0)
+  const smoothPitchRef  = useRef(65)
+  const smoothZoomRef   = useRef(14)
+  const smoothCenterRef = useRef<[number, number]>([0, 0])
 
   // Face image
   const faceImgRef   = useRef<HTMLImageElement | null>(null)
@@ -1063,6 +1064,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     smoothBearRef.current=introBearing
     smoothPitchRef.current=20
     smoothZoomRef.current=zoomIntro
+    smoothCenterRef.current=[pts[0].lon!, pts[0].lat!]
     orbitBaseRef.current=introBearing
 
     // Setup progressive route reveal
@@ -1271,6 +1273,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           center: [pts[N-1].lon!, pts[N-1].lat!],
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
         })
+        map.triggerRepaint()
         map!.once('render' as any, () => {
           if (!mapRef.current) return
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
@@ -1347,8 +1350,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
         smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom, 0.06)
+        // Smooth center to eliminate velocity discontinuity at intro→follow (0 → moving)
+        smoothCenterRef.current = [
+          lerp(smoothCenterRef.current[0], lon, 0.08),
+          lerp(smoothCenterRef.current[1], lat, 0.08),
+        ]
         mapRef.current?.jumpTo({
-          center:[lon,lat], bearing:smoothBearRef.current,
+          center: smoothCenterRef.current, bearing:smoothBearRef.current,
           pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
         })
         // Progressive route reveal (every 20 frames)
@@ -1359,6 +1367,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
 
       // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
+      map.triggerRepaint()
       map!.once('render' as any, ()=>{
         if(!mapRef.current) return
 
@@ -1382,7 +1391,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           for(const s of sortedPhotos){
             const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
             const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
-            const ppx=(pmp.x-cr.sx)/cr.sw*outW, ppy=(pmp.y-cr.sy)/cr.sh*outH
+            // project() returns coords in the original outW×outH space (unchanged by setPixelRatio),
+            // so normalise against mapCanvas.width (= outW*2 after 2× supersampling) not cr.sw
+            const ppx=pmp.x-cr.sx*outW/mapCanvas.width, ppy=pmp.y-cr.sy*outH/mapCanvas.height
             if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
               drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
             }
