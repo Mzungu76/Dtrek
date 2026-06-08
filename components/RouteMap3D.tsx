@@ -33,6 +33,7 @@ const STYLES = [
 
 const VIDEO_DIMS: Record<string, [number, number]> = {
   '9:16': [1080, 1920],
+  '4:5':  [1080, 1350],
   '16:9': [1920, 1080],
   '1:1':  [1080, 1080],
 }
@@ -602,7 +603,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Video config
   const [videoState,        setVideoState]       = useState<VideoState>('idle')
   const [videoDuration,     setVideoDuration]    = useState(30)
-  const [videoOrientation,  setVideoOrientation] = useState<'9:16'|'16:9'|'1:1'>('9:16')
+  const [videoOrientation,  setVideoOrientation] = useState<'9:16'|'4:5'|'16:9'|'1:1'>('9:16')
   const [videoShowTitle,    setVideoShowTitle]   = useState(true)
   const [videoShowStats,    setVideoShowStats]   = useState(true)
   const [videoShowProgress, setVideoShowProgress]= useState(true)
@@ -1067,7 +1068,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     let audioStream: MediaStream | undefined
     if (videoEnableAudio) {
       try {
-        const audioCtx = new AudioContext()
+        const audioCtx = new AudioContext({ sampleRate: 44100 })
         const audioDest = audioCtx.createMediaStreamDestination()
         audioCtxRef.current = audioCtx
         const startAudio = createAmbientAudio(audioCtx, audioDest, videoPreset === 'snappy' ? 'snappy' : 'epico')
@@ -1079,7 +1080,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const stream = audioStream
       ? new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
       : videoStream
-    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:25_000_000})
+    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:4_000_000,audioBitsPerSecond:128_000})
     videoChunksRef.current=[]
     recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
     recorder.onstop=()=>{
@@ -1646,7 +1647,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">FORMATO</p>
               <div className="flex gap-2">
-                {(['9:16','16:9','1:1'] as const).map(o=>(
+                {(['9:16','4:5','16:9','1:1'] as const).map(o=>(
                   <button key={o} onClick={()=>setVideoOrientation(o)}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoOrientation===o?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                     {o}
@@ -1699,7 +1700,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               </div>
             </div>
             <p className="text-white/30 text-[11px] text-center">
-              1080p · 25 Mbps · rendering frame-by-frame · Ken Burns · end card · profilo altimetrico
+              1080p · 4 Mbps · H.264/AAC · ottimizzato Instagram · rendering frame-by-frame · Ken Burns
             </p>
             <div className="flex gap-3">
               <button onClick={()=>setVideoState('idle')} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">Annulla</button>
