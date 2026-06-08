@@ -1020,6 +1020,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     map.resize()
     await new Promise<void>(r=>map.once('idle',r as any))
 
+    // 2× supersampling: map renders at 2× pixel density, drawImage downscales for sharper tiles
+    if (typeof (map as any).setPixelRatio === 'function') {
+      ;(map as any).setPixelRatio(dpr * 2)
+      map.resize()
+      await new Promise<void>(r=>map.once('idle',r as any))
+    }
+
     // Pre-compute smooth route bearings here so introBearing uses the same value
     // as the follow phase (which looks 12% ahead), eliminating the bearing jerk at intro→follow
     const N=pts.length
@@ -1028,17 +1035,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Intro bearing must match what follow uses at p=0 (look 12% ahead) to avoid bearing jerk
     const introLookIdx=Math.min(Math.round(0.12*(N-1)),smoothRouteBears.length-1)
     const introBearing=smoothRouteBears[introLookIdx]
-    // Pre-warm tiles at actual recording conditions (follow phase: zoomFollow + pitch 48°)
-    // Prewarm at pitch:0 / zoom:14 missed tiles visible at oblique pitch and higher zoom,
-    // causing tile pop-in exactly at the intro→follow transition when pitch first reaches 48°
-    const keyIdxs = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(t =>
-      Math.min(Math.round(t*(pts.length-1)), pts.length-1))
-    for (const ki of keyIdxs) {
-      map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomFollow,pitch:48,bearing:introBearing})
+    // 20-position pre-warm at actual recording conditions (follow phase: zoomFollow + pitch 48°
+    // with real route bearings) — eliminates tile pop-in from oblique view at non-north bearings
+    const PREWARM_STEPS = 20
+    const prewarmIdxs = Array.from({length:PREWARM_STEPS},(_,i)=>
+      Math.min(Math.round(i/(PREWARM_STEPS-1)*(pts.length-1)),pts.length-1))
+    for (const ki of prewarmIdxs) {
+      const bearing = smoothRouteBears[Math.min(ki,smoothRouteBears.length-1)]??introBearing
+      map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomFollow,pitch:48,bearing})
       await new Promise<void>(r=>map.once('idle',r as any))
     }
-    // Also prewarm at intro zoom/pitch so tiles for the swooping intro are ready
-    for (const ki of keyIdxs.slice(0, 3)) {
+    // Outro position (zoomed out) and intro zoom/pitch
+    map.jumpTo({center:[pts[N-1].lon!,pts[N-1].lat!],zoom:zoomOutro,pitch:8,bearing:introBearing})
+    await new Promise<void>(r=>map.once('idle',r as any))
+    for (const ki of prewarmIdxs.slice(0,5)) {
       map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomIntro,pitch:20,bearing:introBearing})
       await new Promise<void>(r=>map.once('idle',r as any))
     }
@@ -1105,7 +1115,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       if(mEl) mEl.style.opacity='1'
       try { cleanupRouteReveal(map) } catch {}
       try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
-      // Restore container to CSS-driven dimensions
+      // Restore pixel ratio and container to CSS-driven dimensions
+      if (typeof (map as any).setPixelRatio === 'function') {
+        ;(map as any).setPixelRatio(dpr)
+      }
       cont.style.width=''; cont.style.height=''; map.resize()
     }
     mediaRecorderRef.current=recorder; recorder.start(100)
@@ -1258,7 +1271,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           center: [pts[N-1].lon!, pts[N-1].lat!],
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
         })
-        requestAnimationFrame(() => {
+        map.once('render' as any, () => {
           if (!mapRef.current) return
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
@@ -1345,8 +1358,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
       }
 
-      // Capture frame after rAF (map settles after jumpTo)
-      requestAnimationFrame(()=>{
+      // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
+      map.once('render' as any, ()=>{
         if(!mapRef.current) return
 
         // Color grading: applica il grading del preset corrente
