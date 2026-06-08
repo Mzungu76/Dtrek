@@ -1060,8 +1060,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     ctx.imageSmoothingEnabled=true
     ctx.imageSmoothingQuality='high'
 
-    // Prefer H.264/MP4: iOS Safari records natively → no re-encoding on Instagram/TikTok
+    // H.264 High Profile (avc1.640028) → migliore qualità per bit rispetto al Baseline generico
     const mimeType=[
+      'video/mp4;codecs=avc1.640028',  // High Profile Level 4.0
+      'video/mp4;codecs=avc1.4d0028',  // Main Profile Level 4.0 (fallback)
       'video/mp4;codecs=avc1',
       'video/mp4',
       'video/webm;codecs=vp9',
@@ -1084,7 +1086,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const stream = audioStream
       ? new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
       : videoStream
-    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:4_000_000,audioBitsPerSecond:128_000})
+    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:10_000_000,audioBitsPerSecond:128_000})
     videoChunksRef.current=[]
     recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
     recorder.onstop=()=>{
@@ -1337,8 +1339,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       requestAnimationFrame(()=>{
         if(!mapRef.current) return
 
-        // Color grading: cinematic look (intensity varies by preset)
-        const grading = videoPreset==='snappy' ? VIDEO_PRESETS.snappy.grading : VIDEO_PRESETS.epico.grading
+        // Color grading: applica il grading del preset corrente
+        const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
         try { ctx.filter=grading } catch {}
         ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
@@ -1751,7 +1753,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               </div>
             </div>
             <p className="text-white/30 text-[11px] text-center">
-              1080p · 4 Mbps · H.264/AAC · ottimizzato Instagram · rendering frame-by-frame · Ken Burns
+              1080p · 10 Mbps · H.264 High Profile · AAC 44.1 kHz · rendering frame-by-frame · Ken Burns
             </p>
             <div className="flex gap-3">
               <button onClick={()=>setVideoState('idle')} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">Annulla</button>
