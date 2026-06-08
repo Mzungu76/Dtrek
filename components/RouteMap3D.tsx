@@ -1271,7 +1271,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           center: [pts[N-1].lon!, pts[N-1].lat!],
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
         })
-        map.once('render' as any, () => {
+        map!.once('render' as any, () => {
           if (!mapRef.current) return
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
@@ -1359,7 +1359,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
 
       // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
-      map.once('render' as any, ()=>{
+      map!.once('render' as any, ()=>{
         if(!mapRef.current) return
 
         // Color grading: applica il grading del preset corrente
