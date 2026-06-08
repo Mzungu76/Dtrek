@@ -21,8 +21,9 @@ const SPEEDS = [
 ]
 
 const VIDEO_PRESETS = {
-  epico:  { duration: 30, styleIdx: 0, label: 'Epico',  desc: '30s · cinematico',   grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
-  snappy: { duration: 15, styleIdx: 1, label: 'Snappy', desc: '15s · social-ready', grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
+  instagram: { duration: 30, styleIdx: 1, label: 'Instagram', desc: '30s · feed & reels',   grading: 'contrast(1.08) saturate(1.28) brightness(1.03)' },
+  epico:     { duration: 30, styleIdx: 0, label: 'Epico',     desc: '30s · cinematico',      grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
+  snappy:    { duration: 15, styleIdx: 1, label: 'Snappy',    desc: '15s · social-ready',    grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
 } as const
 
 const STYLES = [
@@ -41,7 +42,7 @@ const VIDEO_DIMS: Record<string, [number, number]> = {
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type VideoState = 'idle' | 'config' | 'postprod' | 'rendering' | 'done'
-type VideoPreset = 'epico' | 'snappy' | 'custom'
+type VideoPreset = 'instagram' | 'epico' | 'snappy' | 'custom'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
 type PlacingStep = 'pos'
 
@@ -1071,7 +1072,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const audioCtx = new AudioContext({ sampleRate: 44100 })
         const audioDest = audioCtx.createMediaStreamDestination()
         audioCtxRef.current = audioCtx
-        const startAudio = createAmbientAudio(audioCtx, audioDest, videoPreset === 'snappy' ? 'snappy' : 'epico')
+        const startAudio = createAmbientAudio(audioCtx, audioDest, (videoPreset === 'snappy' || videoPreset === 'instagram') ? 'snappy' : 'epico')
         startAudio()
         audioStream = audioDest.stream
       } catch {}
@@ -1244,7 +1245,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         })
         requestAnimationFrame(() => {
           if (!mapRef.current) return
-          const grading = videoPreset==='snappy' ? VIDEO_PRESETS.snappy.grading : VIDEO_PRESETS.epico.grading
+          const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
           ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
@@ -1606,21 +1607,21 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">PRESET</p>
               <div className="grid grid-cols-3 gap-2">
-                {(['epico','snappy'] as const).map(pr=>(
+                {(['instagram','epico','snappy'] as const).map(pr=>(
                   <button key={pr} onClick={()=>{
                     setVideoPreset(pr)
                     setVideoDuration(VIDEO_PRESETS[pr].duration)
                     switchStyle(VIDEO_PRESETS[pr].styleIdx)
+                    if (pr === 'instagram') { setVideoOrientation('9:16'); setVideoEnableAudio(true) }
                   }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                     <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
                     <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
                   </button>
                 ))}
-                <button onClick={()=>setVideoPreset('custom')} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset==='custom'?'bg-white/25 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                  <span className="text-sm font-bold">Custom</span>
-                  <span className="text-[10px] opacity-65 mt-0.5">manuale</span>
-                </button>
               </div>
+              <button onClick={()=>setVideoPreset('custom')} className={`mt-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${videoPreset==='custom'?'bg-white/25 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                Custom — impostazioni manuali
+              </button>
             </div>
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">STILE MAPPA</p>
@@ -1643,6 +1644,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   </button>
                 ))}
               </div>
+              {(()=>{
+                const est = Math.round(Math.max(2, videoDuration*0.08) + videoDuration + routePhotos.length*photoDurationSec + Math.max(3, videoDuration*0.17))
+                const over = est > 60
+                return (
+                  <div className={`mt-2 rounded-xl px-3.5 py-2.5 ${over ? 'bg-amber-500/15 border border-amber-500/30' : 'bg-white/5'}`}>
+                    <p className={`text-xs font-semibold ${over ? 'text-amber-300' : 'text-white/40'}`}>
+                      Durata stimata con intro/outro{routePhotos.length>0?` e ${routePhotos.length} foto`:''}: ~{est}s
+                    </p>
+                    {over && (
+                      <p className="text-amber-300/75 text-[11px] mt-1 leading-relaxed">
+                        Supera il limite di 60s per i caroselli Instagram. Riduci la durata o rimuovi alcune foto.
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">FORMATO</p>
