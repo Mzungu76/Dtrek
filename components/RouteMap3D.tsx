@@ -6,7 +6,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
   Download, Share2, ChevronLeft, ChevronRight, ImagePlus,
-  Loader2, GripVertical, Check, Navigation, Layers,
+  Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
@@ -620,6 +620,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [zoomFollow,        setZoomFollow]        = useState(13.8)
   const [zoomOutro,         setZoomOutro]         = useState(7.5)
   const audioCtxRef = useRef<AudioContext | null>(null)
+  const [captionData,    setCaptionData]    = useState<{caption:string;hashtags:string}|null>(null)
+  const [captionLoading, setCaptionLoading] = useState(false)
+  const [captionCopied,  setCaptionCopied]  = useState(false)
 
   // Post-production
   const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
@@ -1452,6 +1455,37 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   const totalKm=+(totalDistRef.current/1000).toFixed(1)
 
+  const generateCaption = useCallback(async () => {
+    setCaptionLoading(true)
+    setCaptionData(null)
+    try {
+      const km   = (distanceProp ?? totalDistRef.current) / 1000
+      const gain = elevGainProp  ?? elevStatsRef.current.gain
+      const alt  = elevStatsRef.current.altMax
+      const res  = await fetch('/api/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          title:         title ?? 'Escursione',
+          distanceKm:    +km.toFixed(1),
+          elevationGain: gain,
+          maxAlt:        alt,
+          date:          plannedDate,
+          videoFormat:   videoOrientation,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.message ?? `Errore ${res.status}`)
+      setCaptionData(json)
+    } catch (e: any) {
+      setShareToast(e.message || 'Errore generazione caption')
+      setTimeout(() => setShareToast(''), 3000)
+    } finally {
+      setCaptionLoading(false)
+    }
+  }, [title, distanceProp, elevGainProp, plannedDate, videoOrientation])
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
@@ -1931,10 +1965,51 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <Download className="w-4 h-4"/>Scarica
               </button>
             </div>
+
+            {/* ── Caption Instagram ─────────────────────────────────────── */}
+            <div className="border-t border-white/10 pt-4 space-y-2.5">
+              <p className="text-white/45 text-[11px] font-semibold tracking-wider">CAPTION INSTAGRAM</p>
+              {!captionData ? (
+                <button onClick={generateCaption} disabled={captionLoading}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60 transition-all">
+                  {captionLoading
+                    ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Generazione…</>
+                    : <><Sparkles className="w-4 h-4"/>Genera Caption con AI</>
+                  }
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <div className="bg-white/8 rounded-xl px-3.5 py-3 text-white/85 text-sm leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto">
+                    {captionData.caption}
+                  </div>
+                  {captionData.hashtags && (
+                    <div className="bg-white/5 rounded-xl px-3.5 py-2.5 text-blue-300/70 text-xs leading-relaxed max-h-20 overflow-y-auto">
+                      {captionData.hashtags}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={()=>{
+                      const full = captionData.hashtags
+                        ? `${captionData.caption}\n\n${captionData.hashtags}`
+                        : captionData.caption
+                      navigator.clipboard.writeText(full)
+                      setCaptionCopied(true); setTimeout(()=>setCaptionCopied(false), 2000)
+                    }} className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-all">
+                      {captionCopied ? <><Check className="w-3.5 h-3.5 text-green-400"/>Copiata!</> : <><Copy className="w-3.5 h-3.5"/>Copia tutto</>}
+                    </button>
+                    <button onClick={()=>{ setCaptionData(null); setCaptionCopied(false) }}
+                      className="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/15 text-white/55 text-sm font-semibold transition-all" title="Rigenera">
+                      ↺
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2.5">
-              <button onClick={()=>{setVideoState('postprod');setVideoRecordedBlob(null);setRenderProgress(0)}}
+              <button onClick={()=>{setVideoState('postprod');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null)}}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">← Montaggio</button>
-              <button onClick={()=>{setVideoState('idle');setVideoRecordedBlob(null);setRenderProgress(0)}}
+              <button onClick={()=>{setVideoState('idle');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null)}}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">Chiudi</button>
             </div>
           </div>
