@@ -44,7 +44,7 @@ const VIDEO_DIMS: Record<string, [number, number]> = {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type VideoState = 'idle' | 'config' | 'postprod' | 'rendering' | 'done'
+type VideoState = 'idle' | 'config' | 'postprod' | 'rendering' | 'finalizing' | 'done'
 type VideoPreset = 'reels' | 'feed45' | 'feed11' | 'epico' | 'snappy' | 'custom'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
 type PlacingStep = 'pos'
@@ -1102,6 +1102,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       videoEncoderRef.current=null; audioEncoderRef.current=null
       muxerRef.current=null; muxerTargetRef.current=null
       if (!ve) return
+      // Show "finalizing" so the UI doesn't look frozen while the encoder drains its queue
+      setVideoState('finalizing')
       // Each step wrapped independently so a failure in one doesn't skip the rest
       try { await ve.flush() } catch (err) { console.error('video flush:', err) }
       try { if (ae && ae.state !== 'closed') await ae.flush() } catch {}
@@ -1299,6 +1301,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Strip database code prefix (e.g. "dtrek1234567890" or "dtrek1234567890 - Titolo")
     const displayTitle=(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'')
 
+    // Fires callback after MapLibre renders the current frame, with a 200ms fallback.
+    // Prevents the render loop from stalling if MapLibre skips a render cycle
+    // (e.g. when the camera has fully converged and the map considers the scene unchanged).
+    function onNextRender(cb: () => void) {
+      let fired = false
+      const fire = () => { if (!fired) { fired = true; cb() } }
+      map!.once('render' as any, fire)
+      setTimeout(fire, 200)
+    }
+
     function renderNextFrame() {
       if(renderAbortRef.current) return
       const frameIdx=frameCountRef.current
@@ -1350,11 +1362,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // Fade overlay
           ctx.globalAlpha=1-alpha; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
           if (videoEncoderRef.current) {
-            try {
-              const _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) })
-              videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 })
-              _vf.close()
-            } catch {}
+            let _vf: InstanceType<typeof VideoFrame> | null = null
+            try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }) } catch {}
+            finally { _vf?.close() }
           }
           frameCountRef.current++
           renderNextFrame()
@@ -1379,7 +1389,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
         })
         map!.triggerRepaint()
-        map!.once('render' as any, () => {
+        onNextRender(() => {
           if (!mapRef.current) return
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
@@ -1443,11 +1453,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             }
           }
           if (videoEncoderRef.current) {
-            try {
-              const _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) })
-              videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 })
-              _vf.close()
-            } catch {}
+            let _vf: InstanceType<typeof VideoFrame> | null = null
+            try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }) } catch {}
+            finally { _vf?.close() }
           }
           frameCountRef.current++
           renderNextFrame()
@@ -1501,7 +1509,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
       // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
       map!.triggerRepaint()
-      map!.once('render' as any, ()=>{
+      onNextRender(()=>{
         if(!mapRef.current) return
 
         // Color grading: applica il grading del preset corrente
@@ -1585,11 +1593,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
 
         if (videoEncoderRef.current) {
-                    try {
-                      const _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) })
-                      videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 })
-                      _vf.close()
-                    } catch {}
+                    let _vf: InstanceType<typeof VideoFrame> | null = null
+                    try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }) } catch {}
+                    finally { _vf?.close() }
                   }
         frameCountRef.current++
         renderNextFrame()
@@ -2167,22 +2173,25 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       )}
 
       {/* ══ RENDERING ═══════════════════════════════════════════════════════════ */}
-      {videoState==='rendering'&&(
+      {(videoState==='rendering'||videoState==='finalizing')&&(
         <div className="absolute inset-0 z-20 pointer-events-none flex flex-col">
           <div className="absolute inset-0 bg-black/35 pointer-events-auto"/>
           <div className="absolute top-4 left-4 right-4 pointer-events-auto">
             <div className="bg-black/80 backdrop-blur-md rounded-2xl px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"/>
-                  <span className="text-white text-sm font-bold tracking-wide">RENDERING</span>
+                  <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${videoState==='finalizing'?'bg-amber-400':'bg-red-500'}`}/>
+                  <span className="text-white text-sm font-bold tracking-wide">{videoState==='finalizing'?'ELABORAZIONE':'RENDERING'}</span>
                 </div>
-                <button onClick={cancelRendering} className="text-white/60 hover:text-white text-xs font-semibold px-3 py-1 bg-white/10 rounded-full">Annulla</button>
+                {videoState==='rendering'&&<button onClick={cancelRendering} className="text-white/60 hover:text-white text-xs font-semibold px-3 py-1 bg-white/10 rounded-full">Annulla</button>}
               </div>
               <div className="w-full h-2 bg-white/15 rounded-full overflow-hidden mb-2">
-                <div className="h-full bg-blue-500 rounded-full" style={{width:`${renderProgress*100}%`,transition:'none'}}/>
+                <div className={`h-full rounded-full ${videoState==='finalizing'?'bg-amber-400':'bg-blue-500'}`} style={{width:`${videoState==='finalizing'?100:renderProgress*100}%`,transition:'none'}}/>
               </div>
-              <p className="text-white/55 text-xs">Frame {renderFrame}/{renderTotal} · {Math.round(renderProgress*100)}%</p>
+              {videoState==='finalizing'
+                ? <p className="text-white/55 text-xs">Compressione video in corso…</p>
+                : <p className="text-white/55 text-xs">Frame {renderFrame}/{renderTotal} · {Math.round(renderProgress*100)}%</p>
+              }
               <p className="text-white/30 text-[10px] mt-0.5">Frame-by-frame rendering — qualità cinematografica garantita</p>
             </div>
           </div>
