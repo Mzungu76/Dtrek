@@ -841,9 +841,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     map.on('style.load',()=>{setupLayers();setMapReady(true)})
 
     return ()=>{
+      renderAbortRef.current=true
       cancelAnimationFrame(animRef.current)
       isPlayingRef.current=false
       if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
+      try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
+      try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
+      muxerRef.current=null; muxerTargetRef.current=null
       if(videoObjUrlRef.current) URL.revokeObjectURL(videoObjUrlRef.current)
       map.remove(); mapRef.current=null; markerRef.current=null
     }
@@ -1111,8 +1115,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const buf = tgt?.buffer
       if (buf instanceof ArrayBuffer && buf.byteLength > 0) {
         setVideoRecordedBlob(new Blob([buf], { type: 'video/mp4' }))
+        setVideoState('done')
+      } else {
+        console.error('mp4-muxer produced empty buffer — encoding failed')
+        setShareToast('Errore: il video non è stato generato correttamente')
+        setTimeout(() => setShareToast(''), 4000)
+        setVideoState('idle')
       }
-      setVideoState('done')
       if(mEl) mEl.style.opacity='1'
       try { cleanupRouteReveal(map) } catch {}
       try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
@@ -1616,6 +1625,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
     if(mapRef.current) try{cleanupRouteReveal(mapRef.current)}catch{}
+    // Restore container size and map DPR (set at render start, normally restored by finishRecording)
+    const map=mapRef.current; const cont=map?.getContainer()
+    if(cont){cont.style.width='';cont.style.height=''}
+    if(map){try{map.resize()}catch{};if(typeof(map as any).setPixelRatio==='function'){try{(map as any).setPixelRatio(window.devicePixelRatio)}catch{}}}
     setVideoState('idle'); setRenderProgress(0); setVideoRecordedBlob(null)
   },[])
 
