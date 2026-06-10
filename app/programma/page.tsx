@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllPlanned, deletePlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { ctsLabel } from '@/lib/trailScore'
+import type { SafetyScore } from '@/lib/safetyScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -229,18 +230,29 @@ export default function ProgrammaPage() {
                       <p className="text-sm font-semibold text-stone-800 truncate leading-tight flex-1">
                         {hike.title}
                       </p>
-                      {(hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore != null && (() => {
-                        const score = (hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore!
-                        const conf  = (hike as PlannedHikeMeta & { cachedTrailScoreConfidence?: string }).cachedTrailScoreConfidence
-                        const sfx   = conf === 'default' ? '≈' : conf === 'estimated' ? '~' : ''
-                        const cts   = ctsLabel(score)
-                        return (
-                          <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-lg text-white whitespace-nowrap"
-                            style={{ backgroundColor: cts.color }}>
-                            CTS {Math.round(score)}{sfx}
-                          </span>
-                        )
-                      })()}
+                      <div className="flex gap-1.5 shrink-0">
+                        {(hike as PlannedHikeMeta & { cachedSafetyScore?: SafetyScore }).cachedSafetyScore && (() => {
+                          const safety = (hike as PlannedHikeMeta & { cachedSafetyScore?: SafetyScore }).cachedSafetyScore!
+                          return (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg text-white whitespace-nowrap"
+                              style={{ backgroundColor: safety.color }}>
+                              🛡 {Math.round(safety.overall)}
+                            </span>
+                          )
+                        })()}
+                        {(hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore != null && (() => {
+                          const score = (hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore!
+                          const conf  = (hike as PlannedHikeMeta & { cachedTrailScoreConfidence?: string }).cachedTrailScoreConfidence
+                          const sfx   = conf === 'default' ? '≈' : conf === 'estimated' ? '~' : ''
+                          const cts   = ctsLabel(score)
+                          return (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg text-white whitespace-nowrap"
+                              style={{ backgroundColor: cts.color }}>
+                              CTS {Math.round(score)}{sfx}
+                            </span>
+                          )
+                        })()}
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">

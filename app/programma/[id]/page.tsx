@@ -8,10 +8,12 @@ import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import RouteThumb from '@/components/RouteThumb'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
+import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
+import { computeSafetyScore, type SafetyScore } from '@/lib/safetyScore'
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/lib/trailScore'
@@ -160,6 +162,7 @@ export default function PlannedHikePage() {
   const [prefsLoaded,    setPrefsLoaded]   = useState(false)
   const [prefSforzo,     setPrefSforzo]    = useState(50)
   const [prefDurata,     setPrefDurata]    = useState(270)
+  const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -237,6 +240,28 @@ export default function PlannedHikePage() {
     })
     setCtsResult({ ...computed, ts: (hike as { cachedTrailScore?: number }).cachedTrailScore ?? computed.ts })
   }, [hike?.id, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Compute Safety Score — saves if not cached
+  useEffect(() => {
+    if (!hike) return
+    const cached = (hike as { cachedSafetyScore?: SafetyScore }).cachedSafetyScore
+    if (cached) {
+      setSafetyScore(cached)
+      return
+    }
+    const safety = computeSafetyScore({
+      distanceMeters: hike.distanceMeters,
+      elevationGain:  hike.elevationGain,
+      elevationLoss:  hike.elevationLoss,
+      altitudeMax:    hike.altitudeMax,
+      altitudeMin:    hike.altitudeMin,
+      estimatedTimeSeconds: hike.estimatedTimeSeconds,
+      routePolyline: hike.routePolyline,
+      plannedDate: hike.plannedDate,
+    })
+    setSafetyScore(safety)
+    updatePlannedMeta(hike.id, { cachedSafetyScore: safety }).catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   if (loading) return (
@@ -573,6 +598,14 @@ export default function PlannedHikePage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Safety Score */}
+        {hasGps && safetyScore && (
+          <div className="space-y-2">
+            <h2 className="font-display text-xl font-semibold text-stone-700">Valutazione Sicurezza</h2>
+            <SafetyScoreWidget safety={safetyScore} />
           </div>
         )}
 
