@@ -126,8 +126,8 @@ function drawMapPin(
   sc: number,                // scale (outW/1080)
   faceImg: HTMLImageElement | null,
 ) {
-  const R    = 28 * sc
-  const tipH = 14 * sc
+  const R    = 32 * sc
+  const tipH = 16 * sc
   const ccY  = cy - R - tipH   // circle center (pin tip is at cy)
 
   ctx.save()
@@ -179,7 +179,7 @@ function drawPhotoPin(
   sc: number,
   img: HTMLImageElement,
 ) {
-  const W = 34*sc, H = 34*sc, R = 5*sc, tipH = 7*sc
+  const W = 39*sc, H = 39*sc, R = 6*sc, tipH = 8*sc
   const bx = cx - W/2, by = cy - H - tipH
   ctx.save()
   ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=8*sc; ctx.shadowOffsetY=3*sc
@@ -580,6 +580,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const orbitBaseRef       = useRef(0)
   const frameCountRef      = useRef(0)
   const renderAbortRef     = useRef(false)
+  // WebCodecs path refs
+  const videoEncoderRef  = useRef<any>(null)
+  const audioEncoderRef  = useRef<any>(null)
+  const muxerRef         = useRef<any>(null)
+  const muxerTargetRef   = useRef<any>(null)
 
   // Smooth camera refs (exponential interpolation)
   const smoothBearRef  = useRef(0)
@@ -1085,52 +1090,119 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       'video/webm;codecs=vp8',   // VP8 — browser più vecchi
       'video/webm',
     ].find(t=>MediaRecorder.isTypeSupported(t))??''
-    // Audio: ambient soundtrack mixed into the recording stream
-    let audioStream: MediaStream | undefined
-    if (videoEnableAudio) {
-      try {
-        const audioCtx = new AudioContext({ sampleRate: 44100 })
-        const audioDest = audioCtx.createMediaStreamDestination()
-        audioCtxRef.current = audioCtx
-        const startAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
-        startAudio()
-        audioStream = audioDest.stream
-      } catch {}
-    }
-    const videoStream=(composite as any).captureStream(videoFps) as MediaStream
-    const stream = audioStream
-      ? new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
-      : videoStream
-    // Bitrate sorgente: 20 Mbps @30fps / 25 Mbps @60fps.
-    // NB: 3.5-5 Mbps è la bitrate di DELIVERY di Instagram agli spettatori, NON quella
-    // dell'upload. Il file sorgente deve essere ad alta qualità perché il codificatore
-    // browser (MediaRecorder) è molto meno efficiente di x264/FFmpeg — a bassa bitrate
-    // produce artefatti visibili. Instagram comprimerà per la distribuzione.
-    const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:videoFps===60?25_000_000:20_000_000,audioBitsPerSecond:192_000})
-    videoChunksRef.current=[]
-    recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
-    recorder.onstop=()=>{
-      const blob=new Blob(videoChunksRef.current,{type:mimeType||'video/webm'})
-      setVideoRecordedBlob(blob); setVideoState('done')
-      if(mEl) mEl.style.opacity='1'
-      try { cleanupRouteReveal(map) } catch {}
-      try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
-      // Restore pixel ratio and container to CSS-driven dimensions
-      if (typeof (map as any).setPixelRatio === 'function') {
-        ;(map as any).setPixelRatio(dpr)
+    // ── Recording setup: WebCodecs (preferred) or MediaRecorder fallback ────────
+    const hasWebCodecs = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined'
+
+    const finishRecording = async () => {
+      if (videoEncoderRef.current) {
+        try {
+          await videoEncoderRef.current.flush()
+          if (audioEncoderRef.current && audioEncoderRef.current.state !== 'closed') {
+            await audioEncoderRef.current.flush()
+          }
+          muxerRef.current?.finalize()
+          const buf = muxerTargetRef.current?.buffer
+          if (buf) setVideoRecordedBlob(new Blob([buf], { type: 'video/mp4' }))
+        } catch (err) { console.error(err) }
+        setVideoState('done')
+        if(mEl) mEl.style.opacity='1'
+        try { cleanupRouteReveal(map) } catch {}
+        try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
+        if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
+        cont.style.width=''; cont.style.height=''; map.resize()
+        videoEncoderRef.current=null; audioEncoderRef.current=null
+        muxerRef.current=null; muxerTargetRef.current=null
       }
-      cont.style.width=''; cont.style.height=''; map.resize()
     }
-    mediaRecorderRef.current=recorder; recorder.start(100)
-    const recStart = performance.now()
-    // Pace rendering to real-time: captureStream captures at wall-clock fps,
-    // so if rendering is faster than target fps the output video is shorter than intended.
-    const scheduleNextFrame = () => {
-      const nf = frameCountRef.current
-      const delay = Math.max(0, recStart + (nf / TARGET_FPS) * 1000 - performance.now())
-      if (delay > 4) setTimeout(renderNextFrame, delay)
-      else renderNextFrame()
+
+    if (hasWebCodecs) {
+      // Each frame gets an explicit timestamp → correct duration regardless of render speed
+      if (videoEnableAudio) {
+        try {
+          const audioCtx = new AudioContext({ sampleRate: 44100 })
+          const audioDest = audioCtx.createMediaStreamDestination()
+          audioCtxRef.current = audioCtx
+          const startAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
+          startAudio()
+          if (typeof AudioEncoder !== 'undefined') {
+            const aeCheck = await (AudioEncoder as any).isConfigSupported?.({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100 }).catch(() => null)
+            if (aeCheck?.supported !== false) {
+              const ae = new (AudioEncoder as any)({
+                output: (chunk: any, meta: any) => { try { muxerRef.current?.addAudioChunk(chunk, meta) } catch {} },
+                error: () => {}
+              })
+              ae.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 192_000 })
+              audioEncoderRef.current = ae
+              let audioTimestampUs = 0
+              const proc = audioCtx.createScriptProcessor(4096, 2, 2)
+              proc.onaudioprocess = (e: AudioProcessingEvent) => {
+                if (renderAbortRef.current || ae.state === 'closed') return
+                const l = e.inputBuffer.getChannelData(0), r = e.inputBuffer.getChannelData(1)
+                const buf = new Float32Array(l.length * 2); buf.set(l, 0); buf.set(r, l.length)
+                try {
+                  const ad = new (AudioData as any)({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: l.length, numberOfChannels: 2, timestamp: audioTimestampUs, data: buf })
+                  ae.encode(ad); ad.close()
+                } catch {}
+                audioTimestampUs += l.length / 44100 * 1_000_000
+              }
+              audioCtx.createMediaStreamSource(audioDest.stream).connect(proc)
+              proc.connect(audioCtx.destination)
+            }
+          }
+        } catch {}
+      }
+      const { Muxer, ArrayBufferTarget } = await import('mp4-muxer')
+      const muxTarget = new ArrayBufferTarget()
+      muxerTargetRef.current = muxTarget
+      const muxOpts: any = {
+        target: muxTarget,
+        video: { codec: 'avc', width: outW, height: outH, frameRate: videoFps },
+        fastStart: 'in-memory',
+        firstTimestampBehavior: 'offset',
+      }
+      if (videoEnableAudio && audioEncoderRef.current) {
+        muxOpts.audio = { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 }
+      }
+      muxerRef.current = new Muxer(muxOpts)
+      const ve = new VideoEncoder({
+        output: (chunk: any, meta: any) => { try { muxerRef.current?.addVideoChunk(chunk, meta) } catch {} },
+        error: () => {}
+      })
+      ve.configure({ codec: 'avc1.640028', width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
+      videoEncoderRef.current = ve
+
+    } else {
+      // MediaRecorder fallback (browsers without WebCodecs)
+      let audioStream: MediaStream | undefined
+      if (videoEnableAudio) {
+        try {
+          const audioCtx = new AudioContext({ sampleRate: 44100 })
+          const audioDest = audioCtx.createMediaStreamDestination()
+          audioCtxRef.current = audioCtx
+          const startAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
+          startAudio()
+          audioStream = audioDest.stream
+        } catch {}
+      }
+      const videoStream=(composite as any).captureStream(videoFps) as MediaStream
+      const stream = audioStream
+        ? new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
+        : videoStream
+      const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:videoFps===60?25_000_000:20_000_000,audioBitsPerSecond:192_000})
+      videoChunksRef.current=[]
+      recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
+      recorder.onstop=()=>{
+        const blob=new Blob(videoChunksRef.current,{type:mimeType||'video/webm'})
+        setVideoRecordedBlob(blob); setVideoState('done')
+        if(mEl) mEl.style.opacity='1'
+        try { cleanupRouteReveal(map) } catch {}
+        try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
+        if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
+        cont.style.width=''; cont.style.height=''; map.resize()
+      }
+      mediaRecorderRef.current=recorder; recorder.start(100)
     }
+
 
     // N, rawRouteBears, smoothRouteBears computed above (before introBearing)
 
@@ -1218,7 +1290,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     function renderNextFrame() {
       if(renderAbortRef.current) return
       const frameIdx=frameCountRef.current
-      if(frameIdx>=TOTAL_FRAMES){recorder.stop();return}
+      if(frameIdx>=TOTAL_FRAMES){
+        if(videoEncoderRef.current){ finishRecording().catch(console.error) }
+        else { mediaRecorderRef.current?.stop() }
+        return
+      }
 
       const {p, introP, reveal, outroP} = frameToState(frameIdx)
       setRenderProgress(frameIdx/TOTAL_FRAMES); setRenderFrame(frameIdx)
@@ -1261,8 +1337,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           }
           // Fade overlay
           ctx.globalAlpha=1-alpha; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
+          if (videoEncoderRef.current) {
+            try {
+              const _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) })
+              videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 })
+              _vf.close()
+            } catch {}
+          }
           frameCountRef.current++
-          scheduleNextFrame()
+          renderNextFrame()
         })
         return
       }
@@ -1288,6 +1371,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
+          // User pin visible at start of outro, fades out over first 20%
+          if (outroP < 0.2) {
+            ctx.globalAlpha = 1 - outroP / 0.2
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            ctx.globalAlpha = 1
+          }
           // End card fades in during outro
           const FADE_START = 0.35
           if (outroP > FADE_START) {
@@ -1323,8 +1412,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               ctx.globalAlpha = 1
             }
           }
+          if (videoEncoderRef.current) {
+            try {
+              const _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) })
+              videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 })
+              _vf.close()
+            } catch {}
+          }
           frameCountRef.current++
-          scheduleNextFrame()
+          renderNextFrame()
         })
         return
       }
@@ -1379,10 +1475,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // Map pin + photo pins: hidden during intro, fades in/out at transitions
-        if (introP === undefined) {
-          // Fade in during first 3% of route (intro→follow), fade out during last 3% (follow→outro)
-          const pinAlpha = Math.min(1.0, p / 0.03) * Math.min(1.0, (1.0 - p) / 0.03)
+        // Map pin + photo pins: visible during follow, fade at intro end and outro start
+        if (introP === undefined || introP > 0.7) {
+          // Follow: fade in first 3%, fade out last 3%; Intro end: fade in over last 30% of intro
+          const pinAlpha = introP !== undefined
+            ? (introP - 0.7) / 0.3
+            : Math.min(1.0, p / 0.03) * Math.min(1.0, (1.0 - p) / 0.03)
           if (pinAlpha > 0) {
             // Pin: always at canvas center — jumpTo centers the camera on [lon,lat],
             // but map.project() drifts when 3D terrain elevation shifts the perspective
@@ -1391,15 +1489,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             ctx.globalAlpha = 1
           }
           for(const s of sortedPhotos){
+            // Only show when camera is near the photo's route position (avoid drifting at angles)
+            const pinDist = Math.abs(p - s.photo.progress)
+            if (pinDist > 0.12) continue
             const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
             const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
-            // project() returns CSS-pixel coords [0..container.clientWidth].
-            // Scale to output canvas coords by outW/container.clientWidth (= devicePixelRatio).
-            // This is invariant to setPixelRatio since cont.offsetWidth (CSS) never changes.
             const projectScale = outW / cont.offsetWidth
             const ppx = pmp.x * projectScale, ppy = pmp.y * projectScale
             if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
+              ctx.globalAlpha = Math.max(0, 1 - pinDist / 0.12)
               drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
+              ctx.globalAlpha = 1
             }
           }
         }
@@ -1454,8 +1554,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
         }
 
+        if (videoEncoderRef.current) {
+                    try {
+                      const _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) })
+                      videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 })
+                      _vf.close()
+                    } catch {}
+                  }
         frameCountRef.current++
-        scheduleNextFrame()
+        renderNextFrame()
       })
     }
 
@@ -1467,6 +1574,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
     mediaRecorderRef.current=null; compositeCanvasRef.current=null
+    try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
+    try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
+    muxerRef.current=null; muxerTargetRef.current=null
     try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
     if(mapRef.current) try{cleanupRouteReveal(mapRef.current)}catch{}
