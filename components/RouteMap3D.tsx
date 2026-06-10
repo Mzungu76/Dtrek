@@ -1473,16 +1473,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
         smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom, 0.06)
-        // Blend center from intro end-point over first 30 follow frames so the camera
-        // eases into motion rather than lurching from static to full speed in one frame
-        const FOLLOW_EASE = 30
-        const cBlend = (followFrame !== undefined && followFrame < FOLLOW_EASE)
-          ? (followFrame / FOLLOW_EASE) ** 2
-          : 1
-        const centerLon = cBlend < 1 ? lerp(pts[0].lon!, lon, cBlend) : lon
-        const centerLat = cBlend < 1 ? lerp(pts[0].lat!, lat, cBlend) : lat
         mapRef.current?.jumpTo({
-          center:[centerLon, centerLat], bearing:smoothBearRef.current,
+          center:[lon,lat], bearing:smoothBearRef.current,
           pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
         })
         // Progressive route reveal (every 20 frames)
