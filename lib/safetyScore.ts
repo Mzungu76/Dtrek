@@ -105,7 +105,7 @@ function getWildlifeRisks(region: string, altitudeMax: number, month: number): W
     // Marsican bear (rarest)
     risks.push({
       animal: 'Orso marsicano',
-      encounterProbability: 'molto bassa',
+      encounterProbability: 'bassa',
       dangerLevel: 'alto',
       tip: 'Estremamente raro; fai rumore, non approcciare',
     })
