@@ -337,7 +337,7 @@ export function computeSafetyScore(params: {
   let wildlifeItems: SafetyRiskItem[] = []
 
   const hasHighDangerWildlife = wildlifeRisks.some(
-    w => w.dangerLevel === 'alto' && w.encounterProbability !== 'molto bassa'
+    w => w.dangerLevel === 'alto' && w.encounterProbability !== 'alta'
   )
   const hasModDangerWildlife = wildlifeRisks.some(
     w => w.dangerLevel === 'moderato' && w.encounterProbability === 'media'
