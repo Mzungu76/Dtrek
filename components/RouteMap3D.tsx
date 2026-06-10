@@ -1264,7 +1264,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return peakIdx / Math.max(1, pts.length - 1)
     })()
 
-    function frameToState(frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number} {
+    function frameToState(frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number} {
       // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
       if (frameIdx < INTRO_FRAMES) {
         return {p: 0, introP: frameIdx / Math.max(1, INTRO_FRAMES - 1)}
@@ -1286,7 +1286,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
       // Divide by ROUTE_FRAMES-1 so the last follow frame reaches p=1.0 (exactly pts[N-1]),
       // preventing a small center jump at the follow→outro transition
-      return {p: Math.min(1, routeFrame / Math.max(1, ROUTE_FRAMES - 1))}
+      return {p: Math.min(1, routeFrame / Math.max(1, ROUTE_FRAMES - 1)), followFrame: routeFrame}
     }
 
     setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
@@ -1308,7 +1308,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         return
       }
 
-      const {p, introP, reveal, outroP} = frameToState(frameIdx)
+      const {p, introP, reveal, outroP, followFrame} = frameToState(frameIdx)
       setRenderProgress(frameIdx/TOTAL_FRAMES); setRenderFrame(frameIdx)
 
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
@@ -1365,7 +1365,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // Outro phase: camera orbits and pulls back from route end after traversal completes
       if (outroP !== undefined) {
         if (outroStartBearRef.current < 0) outroStartBearRef.current = smoothBearRef.current
-        const outroBearing = (outroStartBearRef.current - outroP * 100 + 360) % 360
+        // Ease-in² on orbit so it starts at near-zero angular velocity, eliminating the
+        // bearing velocity discontinuity at the follow→outro transition
+        const easedOutroP = outroP * outroP
+        const outroBearing = (outroStartBearRef.current - easedOutroP * 100 + 360) % 360
         const outroPitch = lerp(48, 8, outroP)
         const outroZoom_val = lerp(zoomFollow, zoomOutro, outroP)
         smoothBearRef.current = lerpAngle(smoothBearRef.current, outroBearing, 0.04)
@@ -1446,11 +1449,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       if (introP !== undefined) {
         // ── Intro: camera swoops in, route stays at p=0, pin hidden ──────────
         const introShot = currentShots.find(s => s.id === 'intro') ?? currentShots[0]
-        const targetPitch = lerp(introShot.pitch[0], introShot.pitch[1], introP)
-        const targetZoom  = lerp(introShot.zoom[0],  introShot.zoom[1],  introP)
+        // Ease-out on introP: target reaches follow values by ~80% of intro, giving
+        // the IIR filter time to converge before the follow phase starts.
+        const easedIntroP = 1 - Math.pow(1 - introP, 2)
+        const targetPitch = lerp(introShot.pitch[0], introShot.pitch[1], easedIntroP)
+        const targetZoom  = lerp(introShot.zoom[0],  introShot.zoom[1],  easedIntroP)
+        // Faster lerp in the last 30% of intro to ensure full convergence
+        const lerpF = introP > 0.7 ? lerp(0.07, 0.14, (introP - 0.7) / 0.3) : 0.07
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, introBearing, 0.022)
-        smoothPitchRef.current = lerp(smoothPitchRef.current, targetPitch, 0.06)
-        smoothZoomRef.current  = lerp(smoothZoomRef.current, targetZoom, 0.06)
+        smoothPitchRef.current = lerp(smoothPitchRef.current, targetPitch, lerpF)
+        smoothZoomRef.current  = lerp(smoothZoomRef.current, targetZoom, lerpF)
         mapRef.current?.jumpTo({
           center: [pts[0].lon!, pts[0].lat!], bearing: smoothBearRef.current,
           pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
@@ -1465,8 +1473,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
         smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom, 0.06)
+        // Blend center from intro end-point over first 30 follow frames so the camera
+        // eases into motion rather than lurching from static to full speed in one frame
+        const FOLLOW_EASE = 30
+        const cBlend = (followFrame !== undefined && followFrame < FOLLOW_EASE)
+          ? (followFrame / FOLLOW_EASE) ** 2
+          : 1
+        const centerLon = cBlend < 1 ? lerp(pts[0].lon!, lon, cBlend) : lon
+        const centerLat = cBlend < 1 ? lerp(pts[0].lat!, lat, cBlend) : lat
         mapRef.current?.jumpTo({
-          center:[lon,lat], bearing:smoothBearRef.current,
+          center:[centerLon, centerLat], bearing:smoothBearRef.current,
           pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
         })
         // Progressive route reveal (every 20 frames)
@@ -1501,15 +1517,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             ctx.globalAlpha = 1
           }
           for(const s of sortedPhotos){
-            // Only show when camera is near the photo's route position (avoid drifting at angles)
+            // Narrow window (±4%) so the pin is only visible when the camera is close
+            // to the photo's GPS location — reduces 3D-perspective drift dramatically
             const pinDist = Math.abs(p - s.photo.progress)
-            if (pinDist > 0.12) continue
+            if (pinDist > 0.04) continue
             const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
             const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
             const projectScale = outW / cont.offsetWidth
             const ppx = pmp.x * projectScale, ppy = pmp.y * projectScale
             if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
-              ctx.globalAlpha = Math.max(0, 1 - pinDist / 0.12)
+              ctx.globalAlpha = Math.max(0, 1 - pinDist / 0.04)
               drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
               ctx.globalAlpha = 1
             }
