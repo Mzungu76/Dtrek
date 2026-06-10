@@ -1335,6 +1335,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
       if (reveal) {
         requestAnimationFrame(()=>{
+          if (renderAbortRef.current) return
+          try {
           const t = reveal.revealFrame / PHOTO_REVEAL_FRAMES
           const alpha = t<0.12 ? t/0.12 : t>0.88 ? (1-t)/0.12 : 1
           // Ken Burns: slow zoom + gentle drift per photo
@@ -1375,6 +1377,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }) } catch {}
             finally { _vf?.close() }
           }
+          } catch (err) { console.error('[dtrek] reveal frame error:', err) }
           frameCountRef.current++
           renderNextFrame()
         })
@@ -1397,12 +1400,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           center: [pts[N-1].lon!, pts[N-1].lat!],
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
         })
-        map!.triggerRepaint()
+        try { map!.triggerRepaint() } catch {}
         onNextRender(() => {
           if (!mapRef.current) return
+          try {
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
-          ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
+          if (mapCanvas.width > 0 && mapCanvas.height > 0) ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
           // Photo pins: fade out over the first 30% of outro
@@ -1466,6 +1470,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }) } catch {}
             finally { _vf?.close() }
           }
+          } catch (err) { console.error('[dtrek] outro frame error:', err) }
           frameCountRef.current++
           renderNextFrame()
         })
@@ -1517,14 +1522,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
 
       // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
-      map!.triggerRepaint()
+      try { map!.triggerRepaint() } catch {}
       onNextRender(()=>{
         if(!mapRef.current) return
+        try {
 
         // Color grading: applica il grading del preset corrente
         const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
         try { ctx.filter=grading } catch {}
-        ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
+        if (mapCanvas.width > 0 && mapCanvas.height > 0) ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
         // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
@@ -1602,10 +1608,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
 
         if (videoEncoderRef.current) {
-                    let _vf: InstanceType<typeof VideoFrame> | null = null
-                    try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }) } catch {}
-                    finally { _vf?.close() }
-                  }
+          let _vf: InstanceType<typeof VideoFrame> | null = null
+          try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }) } catch {}
+          finally { _vf?.close() }
+        }
+        } catch (err) { console.error('[dtrek] frame error:', err) }
         frameCountRef.current++
         renderNextFrame()
       })
