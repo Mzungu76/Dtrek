@@ -1122,6 +1122,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       cont.style.width=''; cont.style.height=''; map.resize()
     }
     mediaRecorderRef.current=recorder; recorder.start(100)
+    const recStart = performance.now()
+    // Pace rendering to real-time: captureStream captures at wall-clock fps,
+    // so if rendering is faster than target fps the output video is shorter than intended.
+    const scheduleNextFrame = () => {
+      const nf = frameCountRef.current
+      const delay = Math.max(0, recStart + (nf / TARGET_FPS) * 1000 - performance.now())
+      if (delay > 4) setTimeout(renderNextFrame, delay)
+      else renderNextFrame()
+    }
 
     // N, rawRouteBears, smoothRouteBears computed above (before introBearing)
 
@@ -1253,7 +1262,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // Fade overlay
           ctx.globalAlpha=1-alpha; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
           frameCountRef.current++
-          renderNextFrame()
+          scheduleNextFrame()
         })
         return
       }
@@ -1315,7 +1324,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             }
           }
           frameCountRef.current++
-          renderNextFrame()
+          scheduleNextFrame()
         })
         return
       }
@@ -1446,7 +1455,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
 
         frameCountRef.current++
-        renderNextFrame()
+        scheduleNextFrame()
       })
     }
 
