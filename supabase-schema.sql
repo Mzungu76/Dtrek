@@ -130,7 +130,11 @@ CREATE INDEX IF NOT EXISTS idx_activities_loot_score  ON activities (loot_score 
 CREATE INDEX IF NOT EXISTS idx_activities_trail_score ON activities (trail_score DESC NULLS LAST);
 
 -- TrailScore cache for planned hikes
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score DOUBLE PRECISION;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score             DOUBLE PRECISION;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score_confidence  TEXT;
+
+-- SafetyScore cache for planned hikes
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_safety_score JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_planned_trail_score ON planned_hikes (cached_trail_score DESC NULLS LAST);
 

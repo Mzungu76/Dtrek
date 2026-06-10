@@ -3,6 +3,7 @@ import type { HikeAssessment } from './hikeAssessment'
 import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
+import type { SafetyScore } from './safetyScore'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 
@@ -29,6 +30,7 @@ export interface PlannedHike {
   cachedBeautyScore?:            BeautyScore
   cachedTrailScore?:             number
   cachedTrailScoreConfidence?:   CtsConfidence
+  cachedSafetyScore?:            SafetyScore
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -102,7 +104,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore'>>,
 ): Promise<void> {
   // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {

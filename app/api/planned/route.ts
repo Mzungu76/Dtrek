@@ -5,6 +5,7 @@ import type { PlannedHike, PlannedHikeMeta } from '@/lib/plannedStore'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { readIndex } from '@/lib/blobIndex'
 import { assessHike } from '@/lib/hikeAssessment'
+import type { SafetyScore } from '@/lib/safetyScore'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +55,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedBeautyScore:            row.cached_beauty_score            as PlannedHike['cachedBeautyScore'] | undefined,
     cachedTrailScore:             row.cached_trail_score             as number | undefined,
     cachedTrailScoreConfidence:   row.cached_trail_score_confidence  as PlannedHike['cachedTrailScoreConfidence'] | undefined,
+    cachedSafetyScore:            row.cached_safety_score            as SafetyScore | undefined,
   }
 }
 
@@ -81,6 +83,7 @@ function hikeToRow(h: PlannedHike) {
     cached_beauty_score:              h.cachedBeautyScore ?? null,
     cached_trail_score:               h.cachedTrailScore ?? null,
     cached_trail_score_confidence:    h.cachedTrailScoreConfidence ?? null,
+    cached_safety_score:              h.cachedSafetyScore ?? null,
   }
 }
 
@@ -91,6 +94,7 @@ const META_COLS = [
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
   'route_polyline', 'assessment', 'cached_guide',
   'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence',
+  'cached_safety_score',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
@@ -227,6 +231,7 @@ export async function PATCH(req: NextRequest) {
       cachedBeautyScore?: PlannedHike['cachedBeautyScore']
       cachedTrailScore?: number
       cachedTrailScoreConfidence?: string
+      cachedSafetyScore?: SafetyScore
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -240,6 +245,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedBeautyScore            !== undefined) dbPatch.cached_beauty_score            = patch.cachedBeautyScore
     if (patch.cachedTrailScore             !== undefined) dbPatch.cached_trail_score             = patch.cachedTrailScore
     if (patch.cachedTrailScoreConfidence   !== undefined) dbPatch.cached_trail_score_confidence  = patch.cachedTrailScoreConfidence
+    if (patch.cachedSafetyScore            !== undefined) dbPatch.cached_safety_score            = patch.cachedSafetyScore
 
     const { error } = await supabase
       .from('planned_hikes')
