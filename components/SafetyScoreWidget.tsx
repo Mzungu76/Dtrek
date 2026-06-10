@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, AlertTriangle, AlertCircle, Info, Shield, Zap } from 'lucide-react'
-import type { SafetyScore } from '@/lib/safetyScore'
+import { ChevronDown, ChevronUp, AlertTriangle, Info, Shield, Zap } from 'lucide-react'
+import type { SafetyScore, WildlifeRisk, SafetyRiskItem } from '@/lib/safetyScore'
 
 function MiniBar({ value, max = 100, color }: { value: number; max?: number; color: string }) {
   return (
@@ -41,7 +41,7 @@ function CategoryBar({
   )
 }
 
-function WildlifeLegend({ risks }: { risks: ReturnType<typeof import('@/lib/safetyScore').computeSafetyScore>['wildlifeRisks'] }) {
+function WildlifeLegend({ risks }: { risks: WildlifeRisk[] }) {
   if (risks.length === 0) return null
 
   return (
@@ -88,7 +88,7 @@ function WildlifeLegend({ risks }: { risks: ReturnType<typeof import('@/lib/safe
   )
 }
 
-function RisksLegend({ risks }: { risks: ReturnType<typeof import('@/lib/safetyScore').computeSafetyScore>['allRisks'] }) {
+function RisksLegend({ risks }: { risks: SafetyRiskItem[] }) {
   const dangers = risks.filter(r => r.type === 'danger')
   const warnings = risks.filter(r => r.type === 'warning')
   const infos = risks.filter(r => r.type === 'info')
