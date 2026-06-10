@@ -1094,25 +1094,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const hasWebCodecs = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined'
 
     const finishRecording = async () => {
-      if (videoEncoderRef.current) {
-        try {
-          await videoEncoderRef.current.flush()
-          if (audioEncoderRef.current && audioEncoderRef.current.state !== 'closed') {
-            await audioEncoderRef.current.flush()
-          }
-          muxerRef.current?.finalize()
-          const buf = muxerTargetRef.current?.buffer
-          if (buf) setVideoRecordedBlob(new Blob([buf], { type: 'video/mp4' }))
-        } catch (err) { console.error(err) }
-        setVideoState('done')
-        if(mEl) mEl.style.opacity='1'
-        try { cleanupRouteReveal(map) } catch {}
-        try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
-        if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
-        cont.style.width=''; cont.style.height=''; map.resize()
-        videoEncoderRef.current=null; audioEncoderRef.current=null
-        muxerRef.current=null; muxerTargetRef.current=null
+      const ve = videoEncoderRef.current
+      const ae = audioEncoderRef.current
+      const mx = muxerRef.current
+      const tgt = muxerTargetRef.current
+      // Null refs now so concurrent calls are no-ops
+      videoEncoderRef.current=null; audioEncoderRef.current=null
+      muxerRef.current=null; muxerTargetRef.current=null
+      if (!ve) return
+      // Each step wrapped independently so a failure in one doesn't skip the rest
+      try { await ve.flush() } catch (err) { console.error('video flush:', err) }
+      try { if (ae && ae.state !== 'closed') await ae.flush() } catch {}
+      try { mx?.finalize() } catch (err) { console.error('mux finalize:', err) }
+      const buf = tgt?.buffer
+      if (buf instanceof ArrayBuffer && buf.byteLength > 0) {
+        setVideoRecordedBlob(new Blob([buf], { type: 'video/mp4' }))
       }
+      setVideoState('done')
+      if(mEl) mEl.style.opacity='1'
+      try { cleanupRouteReveal(map) } catch {}
+      try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
+      if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
+      cont.style.width=''; cont.style.height=''; map.resize()
     }
 
     if (hasWebCodecs) {
@@ -1166,9 +1169,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       muxerRef.current = new Muxer(muxOpts)
       const ve = new VideoEncoder({
         output: (chunk: any, meta: any) => { try { muxerRef.current?.addVideoChunk(chunk, meta) } catch {} },
-        error: () => {}
+        error: (e: any) => console.error('VideoEncoder error:', e)
       })
-      ve.configure({ codec: 'avc1.640028', width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
+      // Pick highest-quality AVC profile the browser supports
+      const avcCandidates = ['avc1.640034','avc1.640028','avc1.4d4028','avc1.42003d','avc1.420028']
+      let chosenCodec = 'avc1.420028'
+      for (const c of avcCandidates) {
+        try {
+          const sup = await VideoEncoder.isConfigSupported({ codec: c, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps })
+          if (sup.supported) { chosenCodec = c; break }
+        } catch {}
+      }
+      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
       videoEncoderRef.current = ve
 
     } else {
