@@ -1386,6 +1386,21 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
+          // Photo pins: fade out over the first 30% of outro
+          if (outroP < 0.3) {
+            const photoPinAlpha = 1 - outroP / 0.3
+            const projectScale = outW / cont.offsetWidth
+            for (const s of sortedPhotos) {
+              const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
+              const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
+              const ppx = pmp.x * projectScale, ppy = pmp.y * projectScale
+              if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
+                ctx.globalAlpha = photoPinAlpha
+                drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
+                ctx.globalAlpha = 1
+              }
+            }
+          }
           // User pin visible at start of outro, fades out over first 20%
           if (outroP < 0.2) {
             ctx.globalAlpha = 1 - outroP / 0.2
@@ -1495,33 +1510,27 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // Map pin + photo pins: visible during follow, fade at intro end and outro start
+        // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
+        if (introP === undefined) {
+          const projectScale = outW / cont.offsetWidth
+          for (const s of sortedPhotos) {
+            const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
+            const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
+            const ppx = pmp.x * projectScale, ppy = pmp.y * projectScale
+            if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
+              drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
+            }
+          }
+        }
+        // User pin: canvas center = GPS position; fades in over last 30% of intro
         if (introP === undefined || introP > 0.7) {
-          // Follow: fade in first 3%, fade out last 3%; Intro end: fade in over last 30% of intro
           const pinAlpha = introP !== undefined
             ? (introP - 0.7) / 0.3
             : Math.min(1.0, p / 0.03) * Math.min(1.0, (1.0 - p) / 0.03)
           if (pinAlpha > 0) {
-            // Pin: always at canvas center — jumpTo centers the camera on [lon,lat],
-            // but map.project() drifts when 3D terrain elevation shifts the perspective
             ctx.globalAlpha = pinAlpha
             drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
             ctx.globalAlpha = 1
-          }
-          for(const s of sortedPhotos){
-            // Narrow window (±4%) so the pin is only visible when the camera is close
-            // to the photo's GPS location — reduces 3D-perspective drift dramatically
-            const pinDist = Math.abs(p - s.photo.progress)
-            if (pinDist > 0.04) continue
-            const pi=Math.min(Math.round(s.photo.progress*(N-1)),N-1)
-            const pmp=mapRef.current!.project([pts[pi].lon!,pts[pi].lat!] as [number,number])
-            const projectScale = outW / cont.offsetWidth
-            const ppx = pmp.x * projectScale, ppy = pmp.y * projectScale
-            if(ppx>=-50&&ppx<=outW+50&&ppy>=-60&&ppy<=outH+50){
-              ctx.globalAlpha = Math.max(0, 1 - pinDist / 0.04)
-              drawPhotoPin(ctx,ppx,ppy,outW/1080,s.img)
-              ctx.globalAlpha = 1
-            }
           }
         }
 
