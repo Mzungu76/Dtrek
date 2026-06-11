@@ -1077,7 +1077,21 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Setup progressive route reveal
     try { setupRouteReveal(map, pts) } catch {}
 
+    // Capture canvas AFTER setPixelRatio so srcW/srcH reflect the actual supersampled size
     const mapCanvas=map.getCanvas(), srcW=mapCanvas.width, srcH=mapCanvas.height
+    // projScale: maps MapLibre project() pixel coords → composite canvas pixels.
+    // project() returns coords in the MapLibre canvas pixel space (srcW×srcH).
+    // The composite canvas is outW×outH. Since we draw with coverRect (crop+scale),
+    // we need to account for both the scale factor and the crop offset.
+    // Formula: scale = outW / cr.sw  (cr is computed below, but we can compute it now)
+    const _cr0=coverRect(srcW,srcH,outW,outH)
+    // project() coords origin = top-left of MapLibre canvas.
+    // We draw mapCanvas cropped by cr: top-left of crop = (cr.sx, cr.sy) in mapCanvas coords.
+    // Scale of mapCanvas→composite = outW / cr.sw (same as outH / cr.sh).
+    const mapToCompositeScale = outW / _cr0.sw
+    // Center of composite in mapCanvas coords:
+    const compositeOriginX = _cr0.sx  // left edge of crop in mapCanvas px
+    const compositeOriginY = _cr0.sy  // top edge of crop in mapCanvas px
     const composite=document.createElement('canvas'); composite.width=outW; composite.height=outH
     compositeCanvasRef.current=composite
     const ctx=composite.getContext('2d')!
@@ -1246,7 +1260,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Prefer authoritative stored values over recomputed-from-GPS (which can differ due to downsampling)
     const totalKm=(distanceProp ?? totalDistRef.current) / 1000
     const elevGain = elevGainProp ?? elevStatsRef.current.gain
-    const cr=coverRect(srcW,srcH,outW,outH)
+    const cr=_cr0  // already computed above (after setPixelRatio, uses correct srcW/srcH)
 
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
@@ -1418,14 +1432,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // Photo pins: fade out over the first 30% of outro
           if (mapAvailableO && outroP < 0.3) {
             const photoPinAlpha = 1 - outroP / 0.3
-            const cc2 = mapRef.current!.getCenter()
-            const cc2Px = mapRef.current!.project([cc2.lng, cc2.lat] as [number, number])
-            const projScale2 = cc2Px.x > 1 ? (outW / 2) / cc2Px.x : dpr
             for (const s of sortedPhotos) {
               const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
               const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-              const ppx = outW/2 + (pmp.x - cc2Px.x) * projScale2
-              const ppy = outH/2 + (pmp.y - cc2Px.y) * projScale2
+              const ppx = (pmp.x - compositeOriginX) * mapToCompositeScale
+              const ppy = (pmp.y - compositeOriginY) * mapToCompositeScale
               if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
                 ctx.globalAlpha = photoPinAlpha
                 drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
@@ -1433,10 +1444,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               }
             }
           }
-          // User pin visible at start of outro, fades out over first 20%
+          // User pin: fades out over first 20% of outro
           if (outroP < 0.2) {
+            const pinPx2 = mapRef.current!.project([pts[N-1].lon!, pts[N-1].lat!] as [number, number])
+            const pinCx2 = (pinPx2.x - compositeOriginX) * mapToCompositeScale
+            const pinCy2 = (pinPx2.y - compositeOriginY) * mapToCompositeScale
             ctx.globalAlpha = 1 - outroP / 0.2
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            drawMapPin(ctx, pinCx2, pinCy2, outW/1080, faceImgRef.current)
             ctx.globalAlpha = 1
           }
           // End card fades in during outro
@@ -1546,41 +1560,35 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
         // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
         if (mapAvailableF && introP === undefined) {
-          // project() coordinate space varies by MapLibre version + setPixelRatio.
-          // Calibrate using camera center (by definition always at composite center).
-          // Express pin positions as offsets from center to cancel any origin translation.
-          const cc = mapRef.current!.getCenter()
-          const ccPx = mapRef.current!.project([cc.lng, cc.lat] as [number, number])
-          const projScale = ccPx.x > 1 ? (outW / 2) / ccPx.x : dpr
-          if (frameCountRef.current === INTRO_FRAMES + 1) {
-            const liveCanvasDiag = mapRef.current!.getCanvas()
-            console.log('[dtrek] pin proj calibration:', { ccPx_x: ccPx.x, ccPx_y: ccPx.y, projScale, outW_half: outW/2, dpr, srcW, srcH, liveW: liveCanvasDiag.width, liveH: liveCanvasDiag.height, canvasMatch: srcW === liveCanvasDiag.width && srcH === liveCanvasDiag.height })
-          }
-          const diagFrames = new Set([INTRO_FRAMES+1, INTRO_FRAMES+Math.round(ROUTE_FRAMES*0.25), INTRO_FRAMES+Math.round(ROUTE_FRAMES*0.5)])
-          if (diagFrames.has(frameCountRef.current) && sortedPhotos.length > 0) {
-            const s0 = sortedPhotos[0]
-            const pi0 = Math.min(Math.round(s0.photo.progress * (N-1)), N-1)
-            const pmp0 = mapRef.current!.project([pts[pi0].lon!, pts[pi0].lat!] as [number, number])
-            console.log(`[dtrek] pin-diag frame=${frameCountRef.current}:`, { progress: s0.photo.progress, lon: pts[pi0].lon, lat: pts[pi0].lat, ccPx_x: ccPx.x, pmp_x: pmp0.x, pmp_y: pmp0.y, delta_x: pmp0.x - ccPx.x, delta_y: pmp0.y - ccPx.y, projScale })
-          }
+          // project() returns pixel coords in MapLibre canvas space (srcW×srcH).
+          // Convert to composite canvas coords using the same crop+scale as drawImage:
+          //   compositeX = (project.x - compositeOriginX) * mapToCompositeScale
+          //   compositeY = (project.y - compositeOriginY) * mapToCompositeScale
           for (const s of sortedPhotos) {
             const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
             const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-            const ppx = outW/2 + (pmp.x - ccPx.x) * projScale
-            const ppy = outH/2 + (pmp.y - ccPx.y) * projScale
+            const ppx = (pmp.x - compositeOriginX) * mapToCompositeScale
+            const ppy = (pmp.y - compositeOriginY) * mapToCompositeScale
             if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
               drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
             }
           }
         }
-        // User pin: canvas center = GPS position; fades in over last 30% of intro
+        // User pin: drawn at the projected GPS position (not hardcoded canvas center).
+        // project() returns the correct screen position matching jumpTo({center:[lon,lat]}).
         if (introP === undefined || introP > 0.7) {
           const pinAlpha = introP !== undefined
             ? (introP - 0.7) / 0.3
             : Math.min(1.0, p / 0.03) * Math.min(1.0, (1.0 - p) / 0.03)
           if (pinAlpha > 0) {
+            // During follow: current GPS position; during intro fade-in: route start
+            const pinLon = introP !== undefined ? pts[0].lon! : lon
+            const pinLat = introP !== undefined ? pts[0].lat! : lat
+            const pinPx = mapRef.current!.project([pinLon, pinLat] as [number, number])
+            const pinCx = (pinPx.x - compositeOriginX) * mapToCompositeScale
+            const pinCy = (pinPx.y - compositeOriginY) * mapToCompositeScale
             ctx.globalAlpha = pinAlpha
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            drawMapPin(ctx, pinCx, pinCy, outW/1080, faceImgRef.current)
             ctx.globalAlpha = 1
           }
         }
@@ -1652,6 +1660,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
+    frameCountRef.current=0
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
     mediaRecorderRef.current=null; compositeCanvasRef.current=null
     try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
@@ -1670,10 +1679,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const handleVideoDownload=useCallback(()=>{
     if(!videoRecordedBlob) return
     const ext=videoRecordedBlob.type.includes('mp4')?'mp4':'webm'
-    const url=URL.createObjectURL(videoRecordedBlob)
     if(videoObjUrlRef.current) URL.revokeObjectURL(videoObjUrlRef.current)
+    const url=URL.createObjectURL(videoRecordedBlob)
     videoObjUrlRef.current=url
     const a=document.createElement('a');a.href=url;a.download=`dtrek-3d-${Date.now()}.${ext}`;a.click()
+    // Revoke after a short delay (enough for the browser to start the download)
+    setTimeout(()=>{ if(videoObjUrlRef.current===url){ URL.revokeObjectURL(url); videoObjUrlRef.current=null } }, 10000)
     setShareToast('Video salvato!');setTimeout(()=>setShareToast(''),2500)
   },[videoRecordedBlob])
 
