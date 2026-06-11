@@ -1098,6 +1098,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     ].find(t=>MediaRecorder.isTypeSupported(t))??''
     // ── Recording setup: WebCodecs (preferred) or MediaRecorder fallback ────────
     const hasWebCodecs = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined'
+    // Shared with VideoEncoder output callback and finishRecording (same closure)
+    const videoChunkBuffer: Array<{chunk: any, meta: any}> = []
 
     const finishRecording = async () => {
       const ve = videoEncoderRef.current
@@ -1109,7 +1111,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // Flush encoders BEFORE nulling muxer: output callbacks use muxerRef.current
       try { await ve.flush() } catch (err) { console.error('video flush:', err) }
       try { if (ae && ae.state !== 'closed') await ae.flush() } catch {}
-      console.log('[dtrek] frame counts:', { rendered: renderedFramesRef.current, encoded: encodedFramesRef.current, expected: TOTAL_FRAMES })
+      // Sort buffered video chunks by PTS (timestamp) so the muxer receives them in display order,
+      // correcting any decode-order reordering from the hardware H.264 encoder.
+      videoChunkBuffer.sort((a, b) => a.chunk.timestamp - b.chunk.timestamp)
+      for (const { chunk, meta } of videoChunkBuffer) {
+        try { mx?.addVideoChunk(chunk, meta) } catch {}
+      }
       // Finalize container, then null all refs
       try { mx?.finalize() } catch (err) { console.error('mux finalize:', err) }
       muxerRef.current=null; muxerTargetRef.current=null
@@ -1181,7 +1188,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
       muxerRef.current = new Muxer(muxOpts)
       const ve = new VideoEncoder({
-        output: (chunk: any, meta: any) => { try { muxerRef.current?.addVideoChunk(chunk, meta) } catch {} },
+        output: (chunk: any, meta: any) => { videoChunkBuffer.push({ chunk, meta }) },
         error: (e: any) => console.error('VideoEncoder error:', e)
       })
       // Pick highest-quality AVC profile the browser supports
