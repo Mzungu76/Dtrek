@@ -1077,10 +1077,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Setup progressive route reveal
     try { setupRouteReveal(map, pts) } catch {}
 
-    // Capture canvas AFTER setPixelRatio so srcW/srcH reflect the actual supersampled size
     const mapCanvas=map.getCanvas(), srcW=mapCanvas.width, srcH=mapCanvas.height
-    // _cr0: crop rect that maps mapCanvas → composite canvas (used for drawImage and pin math)
-    const _cr0=coverRect(srcW,srcH,outW,outH)
     const composite=document.createElement('canvas'); composite.width=outW; composite.height=outH
     compositeCanvasRef.current=composite
     const ctx=composite.getContext('2d')!
@@ -1249,7 +1246,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Prefer authoritative stored values over recomputed-from-GPS (which can differ due to downsampling)
     const totalKm=(distanceProp ?? totalDistRef.current) / 1000
     const elevGain = elevGainProp ?? elevStatsRef.current.gain
-    const cr=_cr0  // already computed above (after setPixelRatio, uses correct srcW/srcH)
+    const cr=coverRect(srcW,srcH,outW,outH)
 
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
@@ -1418,19 +1415,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (mapAvailableO) ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
-          // Photo pins: fade out over the first 30% of outro (camera centered on pts[N-1])
+          // Photo pins: fade out over the first 30% of outro
           if (mapAvailableO && outroP < 0.3) {
             const photoPinAlpha = 1 - outroP / 0.3
-            const outroCamZoom  = smoothZoomRef.current
-            const outroTileScale = Math.pow(2, outroCamZoom) * 256
-            const outroOutPxPerTilePx = outW / _cr0.sw
-            const mYo = (ll: number) => Math.log(Math.tan(Math.PI/4 + ll*Math.PI/360))
+            const cc2 = mapRef.current!.getCenter()
+            const cc2Px = mapRef.current!.project([cc2.lng, cc2.lat] as [number, number])
+            const projScale2 = cc2Px.x > 1 ? (outW / 2) / cc2Px.x : dpr
             for (const s of sortedPhotos) {
               const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
-              const dLon = pts[pi].lon! - pts[N-1].lon!
-              const dMercY = mYo(pts[pi].lat!) - mYo(pts[N-1].lat!)
-              const ppx = outW/2 + (dLon/360)*outroTileScale*outroOutPxPerTilePx
-              const ppy = outH/2 - (dMercY/(2*Math.PI))*outroTileScale*outroOutPxPerTilePx
+              const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
+              const ppx = outW/2 + (pmp.x - cc2Px.x) * projScale2
+              const ppy = outH/2 + (pmp.y - cc2Px.y) * projScale2
               if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
                 ctx.globalAlpha = photoPinAlpha
                 drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
@@ -1438,7 +1433,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               }
             }
           }
-          // User pin: camera centered on pts[N-1] → always outW/2, outH/2; fades out over first 20%
+          // User pin visible at start of outro, fades out over first 20%
           if (outroP < 0.2) {
             ctx.globalAlpha = 1 - outroP / 0.2
             drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
@@ -1549,54 +1544,45 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if (mapAvailableF) ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // ── Pin projection helper (Mercator, DPR-independent) ────────────────
-        // Camera is always centered on (lon,lat) via jumpTo. We use Web Mercator
-        // math to compute pixel offsets from that center, matching MapLibre exactly.
-        // pixelsPerLonDeg at zoom z = 256 * 2^z / 360
-        // pixelsPerLatRad at zoom z = 256 * 2^z / (2π)  (Mercator y is in radians)
-        // These are in MapLibre's internal tile-pixel space; scale to outW via
-        // tilePixelsPerOutputPixel = (srcW / outW) (same as mapToCompositeScale⁻¹ but cleaner)
-        const camZoom  = smoothZoomRef.current
-        const tileScale = Math.pow(2, camZoom) * 256  // tile pixels per full world
-        // Output pixels per tile pixel (accounts for supersampling + crop)
-        const outPxPerTilePx = outW / _cr0.sw  // = mapToCompositeScale  (reuse)
-        // Mercator projection of a lon/lat relative to camera center (lon, lat)
-        function mercatorOffset(pLon: number, pLat: number, cLon: number, cLat: number): [number, number] {
-          const dLon = pLon - cLon
-          const mY = (ll: number) => Math.log(Math.tan(Math.PI/4 + ll*Math.PI/360))
-          const dMercY = mY(pLat) - mY(cLat)
-          // tile pixels offset
-          const tpx = (dLon / 360) * tileScale
-          const tpy = -(dMercY / (2*Math.PI)) * tileScale
-          // composite canvas pixels offset from center
-          return [tpx * outPxPerTilePx, tpy * outPxPerTilePx]
-        }
-
-        // Photo pins: anchored to their GPS position
+        // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
         if (mapAvailableF && introP === undefined) {
+          // project() coordinate space varies by MapLibre version + setPixelRatio.
+          // Calibrate using camera center (by definition always at composite center).
+          // Express pin positions as offsets from center to cancel any origin translation.
+          const cc = mapRef.current!.getCenter()
+          const ccPx = mapRef.current!.project([cc.lng, cc.lat] as [number, number])
+          const projScale = ccPx.x > 1 ? (outW / 2) / ccPx.x : dpr
+          if (frameCountRef.current === INTRO_FRAMES + 1) {
+            const liveCanvasDiag = mapRef.current!.getCanvas()
+            console.log('[dtrek] pin proj calibration:', { ccPx_x: ccPx.x, ccPx_y: ccPx.y, projScale, outW_half: outW/2, dpr, srcW, srcH, liveW: liveCanvasDiag.width, liveH: liveCanvasDiag.height, canvasMatch: srcW === liveCanvasDiag.width && srcH === liveCanvasDiag.height })
+          }
+          const diagFrames = new Set([INTRO_FRAMES+1, INTRO_FRAMES+Math.round(ROUTE_FRAMES*0.25), INTRO_FRAMES+Math.round(ROUTE_FRAMES*0.5)])
+          if (diagFrames.has(frameCountRef.current) && sortedPhotos.length > 0) {
+            const s0 = sortedPhotos[0]
+            const pi0 = Math.min(Math.round(s0.photo.progress * (N-1)), N-1)
+            const pmp0 = mapRef.current!.project([pts[pi0].lon!, pts[pi0].lat!] as [number, number])
+            console.log(`[dtrek] pin-diag frame=${frameCountRef.current}:`, { progress: s0.photo.progress, lon: pts[pi0].lon, lat: pts[pi0].lat, ccPx_x: ccPx.x, pmp_x: pmp0.x, pmp_y: pmp0.y, delta_x: pmp0.x - ccPx.x, delta_y: pmp0.y - ccPx.y, projScale })
+          }
           for (const s of sortedPhotos) {
             const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
-            const [dx, dy] = mercatorOffset(pts[pi].lon!, pts[pi].lat!, lon, lat)
-            const ppx = outW/2 + dx
-            const ppy = outH/2 + dy
+            const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
+            const ppx = outW/2 + (pmp.x - ccPx.x) * projScale
+            const ppy = outH/2 + (pmp.y - ccPx.y) * projScale
             if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
               drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
             }
           }
         }
-
-        // User pin: camera is centered on current GPS → always outW/2, outH/2.
-        // Fades in from p=0 (always visible during follow, not tied to p<0.03).
-        if (introP === undefined) {
-          ctx.globalAlpha = 1
-          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
-          ctx.globalAlpha = 1
-        } else if (introP > 0.7) {
-          // Last 30% of intro: fade in pin at route start (camera converging to pts[0])
-          const pinAlpha = (introP - 0.7) / 0.3
-          ctx.globalAlpha = pinAlpha
-          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
-          ctx.globalAlpha = 1
+        // User pin: canvas center = GPS position; fades in over last 30% of intro
+        if (introP === undefined || introP > 0.7) {
+          const pinAlpha = introP !== undefined
+            ? (introP - 0.7) / 0.3
+            : Math.min(1.0, p / 0.03) * Math.min(1.0, (1.0 - p) / 0.03)
+          if (pinAlpha > 0) {
+            ctx.globalAlpha = pinAlpha
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            ctx.globalAlpha = 1
+          }
         }
 
         const sc2=Math.min(outW,outH)/1080
@@ -1666,7 +1652,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
-    frameCountRef.current=0
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
     mediaRecorderRef.current=null; compositeCanvasRef.current=null
     try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
@@ -1685,12 +1670,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const handleVideoDownload=useCallback(()=>{
     if(!videoRecordedBlob) return
     const ext=videoRecordedBlob.type.includes('mp4')?'mp4':'webm'
-    if(videoObjUrlRef.current) URL.revokeObjectURL(videoObjUrlRef.current)
     const url=URL.createObjectURL(videoRecordedBlob)
+    if(videoObjUrlRef.current) URL.revokeObjectURL(videoObjUrlRef.current)
     videoObjUrlRef.current=url
     const a=document.createElement('a');a.href=url;a.download=`dtrek-3d-${Date.now()}.${ext}`;a.click()
-    // Revoke after a short delay (enough for the browser to start the download)
-    setTimeout(()=>{ if(videoObjUrlRef.current===url){ URL.revokeObjectURL(url); videoObjUrlRef.current=null } }, 10000)
     setShareToast('Video salvato!');setTimeout(()=>setShareToast(''),2500)
   },[videoRecordedBlob])
 
