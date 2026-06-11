@@ -179,7 +179,7 @@ function drawPhotoPin(
   sc: number,
   img: HTMLImageElement,
 ) {
-  const W = 39*sc, H = 39*sc, R = 6*sc, tipH = 8*sc
+  const W = 45*sc, H = 45*sc, R = 7*sc, tipH = 9*sc
   const bx = cx - W/2, by = cy - H - tipH
   ctx.save()
   ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=8*sc; ctx.shadowOffsetY=3*sc
@@ -332,9 +332,9 @@ function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opts: HUDO
   const statSz=Math.round(32*sc), labelSz=Math.round(22*sc), brandSz=Math.round(22*sc)
   const graphH=Math.round(116*sc), graphGap=Math.round(16*sc)
   const hasBody=opts.showBody&&(opts.hrData||opts.speedData)
-  const gradTop=hasBody?h*0.58:h*0.72
+  const gradTop=hasBody?h*0.44:h*0.62
   const grad=ctx.createLinearGradient(0,gradTop,0,h)
-  grad.addColorStop(0,'rgba(0,0,0,0)'); grad.addColorStop(0.5,'rgba(0,0,0,0.55)'); grad.addColorStop(1,'rgba(0,0,0,0.88)')
+  grad.addColorStop(0,'rgba(0,0,0,0)'); grad.addColorStop(0.28,'rgba(0,0,0,0.45)'); grad.addColorStop(0.60,'rgba(0,0,0,0.80)'); grad.addColorStop(1,'rgba(0,0,0,0.93)')
   ctx.fillStyle=grad; ctx.fillRect(0,gradTop,w,h-gradTop)
   ctx.textAlign='left'; let yBase=h-pad
   if(opts.showProgress){
@@ -625,7 +625,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [renderTotal,       setRenderTotal]      = useState(0)
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
   const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
-  const [photoDurationSec,  setPhotoDurationSec] = useState(3.5)
+  const [photoDurationSec,  setPhotoDurationSec] = useState(3.0)
   const [zoomIntro,         setZoomIntro]        = useState(10.5)
   const [zoomFollow,        setZoomFollow]        = useState(13.8)
   const [zoomOutro,         setZoomOutro]         = useState(7.5)
@@ -1240,7 +1240,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return(distM(pts[prev].lat!,pts[prev].lon!,pts[idx].lat!,pts[idx].lon!)/((t1-t0)/1000))*3.6
     })
     const smoothSpeed=smoothArray(rawSpeed,4)
-    const hrMax=Math.max(...rawHr), hrMin=Math.min(...rawHr.filter(v=>v>0),hrMax)
+    const smoothHr=smoothArray(rawHr,4)
+    const hrMax=Math.max(...smoothHr), hrMin=Math.min(...smoothHr.filter(v=>v>0),hrMax)
     const spMax=Math.max(...smoothSpeed), hasHr=hrMax>0, hasSpeed=spMax>0
     // Prefer authoritative stored values over recomputed-from-GPS (which can differ due to downsampling)
     const totalKm=(distanceProp ?? totalDistRef.current) / 1000
@@ -1249,6 +1250,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
+    console.log('[dtrek] render config:', { TARGET_FPS, photoDurationSec, PHOTO_REVEAL_FRAMES, expectedPolaroidSec: PHOTO_REVEAL_FRAMES/TARGET_FPS })
     const sortedPhotos = [...routePhotos]
       .sort((a,b)=>a.progress-b.progress)
       .filter(ph => photoImgsRef.current.has(ph.id))
@@ -1338,7 +1340,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (renderAbortRef.current) return
           try {
           const t = reveal.revealFrame / PHOTO_REVEAL_FRAMES
-          const alpha = t<0.12 ? t/0.12 : t>0.88 ? (1-t)/0.12 : 1
+          const alpha = t<0.08 ? t/0.08 : t>0.92 ? (1-t)/0.08 : 1
           // Ken Burns: slow zoom + gentle drift per photo
           const img = reveal.img
           const photoIdx = sortedPhotos.findIndex(s => s.photo.id === reveal.photo.id)
@@ -1404,15 +1406,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         onNextRender(() => {
           if (!mapRef.current) return
           try {
+          ctx.clearRect(0, 0, outW, outH)
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
-          if (mapCanvas.width > 0 && mapCanvas.height > 0) ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
+          const mapAvailableO = mapCanvas.width > 0 && mapCanvas.height > 0
+          if (mapAvailableO) ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
           // Photo pins: fade out over the first 30% of outro
-          if (outroP < 0.3) {
+          if (mapAvailableO && outroP < 0.3) {
             const photoPinAlpha = 1 - outroP / 0.3
-            const projectScale = outW / cont.offsetWidth
+            const projectScale = dpr
             for (const s of sortedPhotos) {
               const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
               const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
@@ -1527,15 +1531,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if(!mapRef.current) return
         try {
 
+        ctx.clearRect(0, 0, outW, outH)
         // Color grading: applica il grading del preset corrente
         const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
         try { ctx.filter=grading } catch {}
-        if (mapCanvas.width > 0 && mapCanvas.height > 0) ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
+        const mapAvailableF = mapCanvas.width > 0 && mapCanvas.height > 0
+        if (mapAvailableF) ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
         // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
-        if (introP === undefined) {
-          const projectScale = outW / cont.offsetWidth
+        if (mapAvailableF && introP === undefined) {
+          const projectScale = window.devicePixelRatio || 1
           for (const s of sortedPhotos) {
             const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
             const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
@@ -1602,7 +1608,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const showHUD = !(videoShowTitle&&displayTitle&&frameIdx<TITLE_DUR&&frameIdx<Math.round(TARGET_FPS*1.5))
         if(showHUD){
           const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
-          const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:rawHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:rawHr[si]}:undefined
+          const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
           const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
           drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
         }
@@ -1620,7 +1626,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     setVideoState('rendering')
     renderNextFrame()
-  },[videoDuration,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
