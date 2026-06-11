@@ -1318,7 +1318,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     function onNextRender(cb: () => void) {
       let fired = false
       const fire = () => { if (!fired) { fired = true; cb() } }
-      map!.once('render' as any, fire)
+      try { map!.once('render' as any, fire) } catch {}
       setTimeout(fire, 200)
     }
 
@@ -1404,7 +1404,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         })
         try { map!.triggerRepaint() } catch {}
         onNextRender(() => {
-          if (!mapRef.current) return
+          if (!mapRef.current) { frameCountRef.current++; renderNextFrame(); return }
           try {
           ctx.clearRect(0, 0, outW, outH)
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
@@ -1422,7 +1422,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             for (const s of sortedPhotos) {
               const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
               const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-              const ppx = pmp.x * projScale2, ppy = pmp.y * projScale2
+              const ppx = outW/2 + (pmp.x - cc2Px.x) * projScale2
+              const ppy = outH/2 + (pmp.y - cc2Px.y) * projScale2
               if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
                 ctx.globalAlpha = photoPinAlpha
                 drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
@@ -1530,7 +1531,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
       try { map!.triggerRepaint() } catch {}
       onNextRender(()=>{
-        if(!mapRef.current) return
+        if(!mapRef.current) { frameCountRef.current++; renderNextFrame(); return }
         try {
 
         ctx.clearRect(0, 0, outW, outH)
@@ -1543,16 +1544,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
         // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
         if (mapAvailableF && introP === undefined) {
-          // Auto-calibrate: project() may return CSS or physical pixels depending on
-          // MapLibre version + setPixelRatio. Projecting the camera center (always at
-          // canvas center by definition) gives the correct scale regardless.
+          // project() coordinate space varies by MapLibre version + setPixelRatio.
+          // Calibrate using camera center (by definition always at composite center).
+          // Express pin positions as offsets from center to cancel any origin translation.
           const cc = mapRef.current!.getCenter()
           const ccPx = mapRef.current!.project([cc.lng, cc.lat] as [number, number])
-          const projScale = ccPx.x > 1 ? (outW / 2) / ccPx.x : (window.devicePixelRatio || 1)
+          const projScale = ccPx.x > 1 ? (outW / 2) / ccPx.x : dpr
+          if (frameCountRef.current === INTRO_FRAMES + 1) {
+            console.log('[dtrek] pin proj calibration:', { ccPx_x: ccPx.x, ccPx_y: ccPx.y, projScale, outW_half: outW/2, dpr, srcW, srcH })
+          }
           for (const s of sortedPhotos) {
             const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
             const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-            const ppx = pmp.x * projScale, ppy = pmp.y * projScale
+            const ppx = outW/2 + (pmp.x - ccPx.x) * projScale
+            const ppy = outH/2 + (pmp.y - ccPx.y) * projScale
             if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
               drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
             }
