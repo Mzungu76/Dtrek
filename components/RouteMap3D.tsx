@@ -1191,7 +1191,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (sup.supported) { chosenCodec = c; break }
         } catch {}
       }
-      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
+      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'realtime' })
       videoEncoderRef.current = ve
 
     } else {
