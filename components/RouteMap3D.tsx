@@ -1079,19 +1079,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     // Capture canvas AFTER setPixelRatio so srcW/srcH reflect the actual supersampled size
     const mapCanvas=map.getCanvas(), srcW=mapCanvas.width, srcH=mapCanvas.height
-    // projScale: maps MapLibre project() pixel coords → composite canvas pixels.
-    // project() returns coords in the MapLibre canvas pixel space (srcW×srcH).
-    // The composite canvas is outW×outH. Since we draw with coverRect (crop+scale),
-    // we need to account for both the scale factor and the crop offset.
-    // Formula: scale = outW / cr.sw  (cr is computed below, but we can compute it now)
+    // _cr0: crop rect that maps mapCanvas → composite canvas (used for drawImage and pin math)
     const _cr0=coverRect(srcW,srcH,outW,outH)
-    // project() coords origin = top-left of MapLibre canvas.
-    // We draw mapCanvas cropped by cr: top-left of crop = (cr.sx, cr.sy) in mapCanvas coords.
-    // Scale of mapCanvas→composite = outW / cr.sw (same as outH / cr.sh).
-    const mapToCompositeScale = outW / _cr0.sw
-    // Center of composite in mapCanvas coords:
-    const compositeOriginX = _cr0.sx  // left edge of crop in mapCanvas px
-    const compositeOriginY = _cr0.sy  // top edge of crop in mapCanvas px
     const composite=document.createElement('canvas'); composite.width=outW; composite.height=outH
     compositeCanvasRef.current=composite
     const ctx=composite.getContext('2d')!
@@ -1429,14 +1418,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (mapAvailableO) ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
-          // Photo pins: fade out over the first 30% of outro
+          // Photo pins: fade out over the first 30% of outro (camera centered on pts[N-1])
           if (mapAvailableO && outroP < 0.3) {
             const photoPinAlpha = 1 - outroP / 0.3
+            const outroCamZoom  = smoothZoomRef.current
+            const outroTileScale = Math.pow(2, outroCamZoom) * 256
+            const outroOutPxPerTilePx = outW / _cr0.sw
+            const mYo = (ll: number) => Math.log(Math.tan(Math.PI/4 + ll*Math.PI/360))
             for (const s of sortedPhotos) {
               const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
-              const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-              const ppx = (pmp.x - compositeOriginX) * mapToCompositeScale
-              const ppy = (pmp.y - compositeOriginY) * mapToCompositeScale
+              const dLon = pts[pi].lon! - pts[N-1].lon!
+              const dMercY = mYo(pts[pi].lat!) - mYo(pts[N-1].lat!)
+              const ppx = outW/2 + (dLon/360)*outroTileScale*outroOutPxPerTilePx
+              const ppy = outH/2 - (dMercY/(2*Math.PI))*outroTileScale*outroOutPxPerTilePx
               if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
                 ctx.globalAlpha = photoPinAlpha
                 drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
@@ -1444,13 +1438,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               }
             }
           }
-          // User pin: fades out over first 20% of outro
+          // User pin: camera centered on pts[N-1] → always outW/2, outH/2; fades out over first 20%
           if (outroP < 0.2) {
-            const pinPx2 = mapRef.current!.project([pts[N-1].lon!, pts[N-1].lat!] as [number, number])
-            const pinCx2 = (pinPx2.x - compositeOriginX) * mapToCompositeScale
-            const pinCy2 = (pinPx2.y - compositeOriginY) * mapToCompositeScale
             ctx.globalAlpha = 1 - outroP / 0.2
-            drawMapPin(ctx, pinCx2, pinCy2, outW/1080, faceImgRef.current)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
             ctx.globalAlpha = 1
           }
           // End card fades in during outro
@@ -1558,39 +1549,54 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if (mapAvailableF) ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
+        // ── Pin projection helper (Mercator, DPR-independent) ────────────────
+        // Camera is always centered on (lon,lat) via jumpTo. We use Web Mercator
+        // math to compute pixel offsets from that center, matching MapLibre exactly.
+        // pixelsPerLonDeg at zoom z = 256 * 2^z / 360
+        // pixelsPerLatRad at zoom z = 256 * 2^z / (2π)  (Mercator y is in radians)
+        // These are in MapLibre's internal tile-pixel space; scale to outW via
+        // tilePixelsPerOutputPixel = (srcW / outW) (same as mapToCompositeScale⁻¹ but cleaner)
+        const camZoom  = smoothZoomRef.current
+        const tileScale = Math.pow(2, camZoom) * 256  // tile pixels per full world
+        // Output pixels per tile pixel (accounts for supersampling + crop)
+        const outPxPerTilePx = outW / _cr0.sw  // = mapToCompositeScale  (reuse)
+        // Mercator projection of a lon/lat relative to camera center (lon, lat)
+        function mercatorOffset(pLon: number, pLat: number, cLon: number, cLat: number): [number, number] {
+          const dLon = pLon - cLon
+          const mY = (ll: number) => Math.log(Math.tan(Math.PI/4 + ll*Math.PI/360))
+          const dMercY = mY(pLat) - mY(cLat)
+          // tile pixels offset
+          const tpx = (dLon / 360) * tileScale
+          const tpy = -(dMercY / (2*Math.PI)) * tileScale
+          // composite canvas pixels offset from center
+          return [tpx * outPxPerTilePx, tpy * outPxPerTilePx]
+        }
+
+        // Photo pins: anchored to their GPS position
         if (mapAvailableF && introP === undefined) {
-          // project() returns pixel coords in MapLibre canvas space (srcW×srcH).
-          // Convert to composite canvas coords using the same crop+scale as drawImage:
-          //   compositeX = (project.x - compositeOriginX) * mapToCompositeScale
-          //   compositeY = (project.y - compositeOriginY) * mapToCompositeScale
           for (const s of sortedPhotos) {
             const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
-            const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-            const ppx = (pmp.x - compositeOriginX) * mapToCompositeScale
-            const ppy = (pmp.y - compositeOriginY) * mapToCompositeScale
+            const [dx, dy] = mercatorOffset(pts[pi].lon!, pts[pi].lat!, lon, lat)
+            const ppx = outW/2 + dx
+            const ppy = outH/2 + dy
             if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
               drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
             }
           }
         }
-        // User pin: drawn at the projected GPS position (not hardcoded canvas center).
-        // project() returns the correct screen position matching jumpTo({center:[lon,lat]}).
-        if (introP === undefined || introP > 0.7) {
-          const pinAlpha = introP !== undefined
-            ? (introP - 0.7) / 0.3
-            : Math.min(1.0, p / 0.03) * Math.min(1.0, (1.0 - p) / 0.03)
-          if (pinAlpha > 0) {
-            // During follow: current GPS position; during intro fade-in: route start
-            const pinLon = introP !== undefined ? pts[0].lon! : lon
-            const pinLat = introP !== undefined ? pts[0].lat! : lat
-            const pinPx = mapRef.current!.project([pinLon, pinLat] as [number, number])
-            const pinCx = (pinPx.x - compositeOriginX) * mapToCompositeScale
-            const pinCy = (pinPx.y - compositeOriginY) * mapToCompositeScale
-            ctx.globalAlpha = pinAlpha
-            drawMapPin(ctx, pinCx, pinCy, outW/1080, faceImgRef.current)
-            ctx.globalAlpha = 1
-          }
+
+        // User pin: camera is centered on current GPS → always outW/2, outH/2.
+        // Fades in from p=0 (always visible during follow, not tied to p<0.03).
+        if (introP === undefined) {
+          ctx.globalAlpha = 1
+          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+          ctx.globalAlpha = 1
+        } else if (introP > 0.7) {
+          // Last 30% of intro: fade in pin at route start (camera converging to pts[0])
+          const pinAlpha = (introP - 0.7) / 0.3
+          ctx.globalAlpha = pinAlpha
+          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+          ctx.globalAlpha = 1
         }
 
         const sc2=Math.min(outW,outH)/1080
