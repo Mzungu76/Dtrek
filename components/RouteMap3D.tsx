@@ -1416,11 +1416,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // Photo pins: fade out over the first 30% of outro
           if (mapAvailableO && outroP < 0.3) {
             const photoPinAlpha = 1 - outroP / 0.3
-            const projectScale = dpr
+            const cc2 = mapRef.current!.getCenter()
+            const cc2Px = mapRef.current!.project([cc2.lng, cc2.lat] as [number, number])
+            const projScale2 = cc2Px.x > 1 ? (outW / 2) / cc2Px.x : dpr
             for (const s of sortedPhotos) {
               const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
               const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-              const ppx = pmp.x * projectScale, ppy = pmp.y * projectScale
+              const ppx = pmp.x * projScale2, ppy = pmp.y * projScale2
               if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
                 ctx.globalAlpha = photoPinAlpha
                 drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
@@ -1541,11 +1543,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
         // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
         if (mapAvailableF && introP === undefined) {
-          const projectScale = window.devicePixelRatio || 1
+          // Auto-calibrate: project() may return CSS or physical pixels depending on
+          // MapLibre version + setPixelRatio. Projecting the camera center (always at
+          // canvas center by definition) gives the correct scale regardless.
+          const cc = mapRef.current!.getCenter()
+          const ccPx = mapRef.current!.project([cc.lng, cc.lat] as [number, number])
+          const projScale = ccPx.x > 1 ? (outW / 2) / ccPx.x : (window.devicePixelRatio || 1)
           for (const s of sortedPhotos) {
             const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
             const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-            const ppx = pmp.x * projectScale, ppy = pmp.y * projectScale
+            const ppx = pmp.x * projScale, ppy = pmp.y * projScale
             if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
               drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
             }
