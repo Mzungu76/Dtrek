@@ -580,6 +580,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const orbitBaseRef       = useRef(0)
   const frameCountRef      = useRef(0)
   const renderAbortRef     = useRef(false)
+  const renderedFramesRef  = useRef(0)
+  const encodedFramesRef   = useRef(0)
   // WebCodecs path refs
   const videoEncoderRef  = useRef<any>(null)
   const audioEncoderRef  = useRef<any>(null)
@@ -1250,7 +1252,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
-    console.log('[dtrek] render config:', { TARGET_FPS, photoDurationSec, PHOTO_REVEAL_FRAMES, expectedPolaroidSec: PHOTO_REVEAL_FRAMES/TARGET_FPS })
     const sortedPhotos = [...routePhotos]
       .sort((a,b)=>a.progress-b.progress)
       .filter(ph => photoImgsRef.current.has(ph.id))
@@ -1265,8 +1266,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Outro: separate phase after route completes (~17% of route duration, min 3s)
     const OUTRO_FRAMES = Math.round(TARGET_FPS * Math.max(3, videoDuration * 0.17))
     const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + sortedPhotos.length * PHOTO_REVEAL_FRAMES + OUTRO_FRAMES
-    const renderedFramesRef = { current: 0 }
-    const encodedFramesRef = { current: 0 }
+    renderedFramesRef.current = 0
+    encodedFramesRef.current  = 0
     const outroStartBearRef = { current: -1 as number }
 
     // Pre-compute peak position on route (for peak callout)
@@ -1418,17 +1419,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // Photo pins: fade out over the first 30% of outro
           if (mapAvailableO && outroP < 0.3) {
             const photoPinAlpha = 1 - outroP / 0.3
-            const cc2 = mapRef.current!.getCenter()
-            const cc2Px = mapRef.current!.project([cc2.lng, cc2.lat] as [number, number])
-            const projScale2 = cc2Px.x > 1 ? (outW / 2) / cc2Px.x : dpr
+            const camZoom2 = smoothZoomRef.current
+            const tileScale2 = Math.pow(2, camZoom2) * 256
+            const outPxPerTilePx2 = outW / cr.sw
+            const mY2 = (ll: number) => Math.log(Math.tan(Math.PI / 4 + ll * Math.PI / 360))
             for (const s of sortedPhotos) {
-              const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
-              const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-              const ppx = outW/2 + (pmp.x - cc2Px.x) * projScale2
-              const ppy = outH/2 + (pmp.y - cc2Px.y) * projScale2
-              if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
+              const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
+              const dLon = pts[pi].lon! - pts[N - 1].lon!
+              const dMercY = mY2(pts[pi].lat!) - mY2(pts[N - 1].lat!)
+              const ppx = outW / 2 + (dLon / 360) * tileScale2 * outPxPerTilePx2
+              const ppy = outH / 2 - (dMercY / (2 * Math.PI)) * tileScale2 * outPxPerTilePx2
+              if (ppx >= -50 && ppx <= outW + 50 && ppy >= -60 && ppy <= outH + 50) {
                 ctx.globalAlpha = photoPinAlpha
-                drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
+                drawPhotoPin(ctx, ppx, ppy, outW / 1080, s.img)
                 ctx.globalAlpha = 1
               }
             }
@@ -1546,43 +1549,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
         // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
         if (mapAvailableF && introP === undefined) {
-          // project() coordinate space varies by MapLibre version + setPixelRatio.
-          // Calibrate using camera center (by definition always at composite center).
-          // Express pin positions as offsets from center to cancel any origin translation.
-          const cc = mapRef.current!.getCenter()
-          const ccPx = mapRef.current!.project([cc.lng, cc.lat] as [number, number])
-          const projScale = ccPx.x > 1 ? (outW / 2) / ccPx.x : dpr
-          if (frameCountRef.current === INTRO_FRAMES + 1) {
-            const liveCanvasDiag = mapRef.current!.getCanvas()
-            console.log('[dtrek] pin proj calibration:', { ccPx_x: ccPx.x, ccPx_y: ccPx.y, projScale, outW_half: outW/2, dpr, srcW, srcH, liveW: liveCanvasDiag.width, liveH: liveCanvasDiag.height, canvasMatch: srcW === liveCanvasDiag.width && srcH === liveCanvasDiag.height })
-          }
-          const diagFrames = new Set([INTRO_FRAMES+1, INTRO_FRAMES+Math.round(ROUTE_FRAMES*0.25), INTRO_FRAMES+Math.round(ROUTE_FRAMES*0.5)])
-          if (diagFrames.has(frameCountRef.current) && sortedPhotos.length > 0) {
-            const s0 = sortedPhotos[0]
-            const pi0 = Math.min(Math.round(s0.photo.progress * (N-1)), N-1)
-            const pmp0 = mapRef.current!.project([pts[pi0].lon!, pts[pi0].lat!] as [number, number])
-            console.log(`[dtrek] pin-diag frame=${frameCountRef.current}:`, { progress: s0.photo.progress, lon: pts[pi0].lon, lat: pts[pi0].lat, ccPx_x: ccPx.x, pmp_x: pmp0.x, pmp_y: pmp0.y, delta_x: pmp0.x - ccPx.x, delta_y: pmp0.y - ccPx.y, projScale })
-          }
+          const camZoom = smoothZoomRef.current
+          const tileScale = Math.pow(2, camZoom) * 256
+          const outPxPerTilePx = outW / cr.sw
+          const mY = (ll: number) => Math.log(Math.tan(Math.PI / 4 + ll * Math.PI / 360))
           for (const s of sortedPhotos) {
-            const pi = Math.min(Math.round(s.photo.progress * (N-1)), N-1)
-            const pmp = mapRef.current!.project([pts[pi].lon!, pts[pi].lat!] as [number, number])
-            const ppx = outW/2 + (pmp.x - ccPx.x) * projScale
-            const ppy = outH/2 + (pmp.y - ccPx.y) * projScale
-            if (ppx >= -50 && ppx <= outW+50 && ppy >= -60 && ppy <= outH+50) {
-              drawPhotoPin(ctx, ppx, ppy, outW/1080, s.img)
+            const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
+            const dLon = pts[pi].lon! - lon
+            const dMercY = mY(pts[pi].lat!) - mY(lat)
+            const ppx = outW / 2 + (dLon / 360) * tileScale * outPxPerTilePx
+            const ppy = outH / 2 - (dMercY / (2 * Math.PI)) * tileScale * outPxPerTilePx
+            if (ppx >= -50 && ppx <= outW + 50 && ppy >= -60 && ppy <= outH + 50) {
+              drawPhotoPin(ctx, ppx, ppy, outW / 1080, s.img)
             }
           }
         }
-        // User pin: canvas center = GPS position; fades in over last 30% of intro
-        if (introP === undefined || introP > 0.7) {
-          const pinAlpha = introP !== undefined
-            ? (introP - 0.7) / 0.3
-            : Math.min(1.0, p / 0.03) * Math.min(1.0, (1.0 - p) / 0.03)
-          if (pinAlpha > 0) {
-            ctx.globalAlpha = pinAlpha
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
-            ctx.globalAlpha = 1
-          }
+        // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
+        if (introP === undefined) {
+          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+        } else if (introP > 0.7) {
+          ctx.globalAlpha = (introP - 0.7) / 0.3
+          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+          ctx.globalAlpha = 1
         }
 
         const sc2=Math.min(outW,outH)/1080
@@ -1652,6 +1640,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
+    frameCountRef.current=0
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
     mediaRecorderRef.current=null; compositeCanvasRef.current=null
     try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
@@ -1670,10 +1659,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const handleVideoDownload=useCallback(()=>{
     if(!videoRecordedBlob) return
     const ext=videoRecordedBlob.type.includes('mp4')?'mp4':'webm'
-    const url=URL.createObjectURL(videoRecordedBlob)
     if(videoObjUrlRef.current) URL.revokeObjectURL(videoObjUrlRef.current)
+    const url=URL.createObjectURL(videoRecordedBlob)
     videoObjUrlRef.current=url
     const a=document.createElement('a');a.href=url;a.download=`dtrek-3d-${Date.now()}.${ext}`;a.click()
+    setTimeout(()=>{ if(videoObjUrlRef.current===url){ URL.revokeObjectURL(url); videoObjUrlRef.current=null } },60_000)
     setShareToast('Video salvato!');setTimeout(()=>setShareToast(''),2500)
   },[videoRecordedBlob])
 
