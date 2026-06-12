@@ -1428,7 +1428,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             const photoPinAlpha = 1 - outroP / 0.3
             const camZoom2 = smoothZoomRef.current
             const tileScale2 = Math.pow(2, camZoom2) * 256
-            const outPxPerTilePx2 = outW / cr.sw
+            const outPxPerTilePx2 = dpr
             const mY2 = (ll: number) => Math.log(Math.tan(Math.PI / 4 + ll * Math.PI / 360))
             for (const s of sortedPhotos) {
               const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
@@ -1558,7 +1558,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if (mapAvailableF && introP === undefined) {
           const camZoom = smoothZoomRef.current
           const tileScale = Math.pow(2, camZoom) * 256
-          const outPxPerTilePx = outW / cr.sw
+          const outPxPerTilePx = dpr
           const mY = (ll: number) => Math.log(Math.tan(Math.PI / 4 + ll * Math.PI / 360))
           for (const s of sortedPhotos) {
             const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
