@@ -61,6 +61,8 @@ interface RoutePhoto {
   progress:        number       // 0-1 on route
   caption:         string       // mandatory — shown in polaroid
   hasExifGps:      boolean      // true = auto-placed, false = needs manual placement
+  lat?:            number       // GPS latitude fixed at placement time
+  lon?:            number       // GPS longitude fixed at placement time
 }
 
 // ── Geo helpers ────────────────────────────────────────────────────────────────
@@ -587,6 +589,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const audioEncoderRef  = useRef<any>(null)
   const muxerRef         = useRef<any>(null)
   const muxerTargetRef   = useRef<any>(null)
+  const photoPinCleanupRef = useRef<(() => void) | null>(null)
 
   // Smooth camera refs (exponential interpolation)
   const smoothBearRef  = useRef(0)
@@ -720,7 +723,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       let minD=Infinity, bestIdx=0
       for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,lat,lng);if(d<minD){minD=d;bestIdx=i}}
       const prog=bestIdx/(pts.length-1)
-      setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id?{...p,progress:prog}:p))
+      setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id
+        ?{...p,progress:prog,lat:pts[bestIdx].lat!,lon:pts[bestIdx].lon!}:p))
       setPlacingPhoto(null)
     }
     map.on('click',handler)
@@ -976,9 +980,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
       // EXIF GPS
       const gpsCoords=await readExifGps(file)
-      let progress=0.5, hasExifGps=false
+      let progress=0.5, hasExifGps=false, exifLat: number|undefined, exifLon: number|undefined
       if(gpsCoords&&pts.length>1){
         hasExifGps=true
+        exifLat=gpsCoords.lat; exifLon=gpsCoords.lon
         let minD=Infinity, bestIdx=0
         for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,gpsCoords.lat,gpsCoords.lon);if(d<minD){minD=d;bestIdx=i}}
         progress=bestIdx/(pts.length-1)
@@ -990,6 +995,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         id, dataUrl:cropped, progress,
         caption: file.name.replace(/\.[^.]+$/,'').replace(/[-_]/g,' ').slice(0,40),
         hasExifGps,
+        ...(exifLat !== undefined && exifLon !== undefined ? {lat:exifLat,lon:exifLon} : {}),
       }])
     }
     setPhotoBeingAdded(false)
@@ -1133,6 +1139,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
       if(mEl) mEl.style.opacity='1'
       try { cleanupRouteReveal(map) } catch {}
+      try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
       try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
       if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
       cont.style.width=''; cont.style.height=''; map.resize()
@@ -1263,6 +1270,58 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       .sort((a,b)=>a.progress-b.progress)
       .filter(ph => photoImgsRef.current.has(ph.id))
       .map(ph => ({photo:ph, img:photoImgsRef.current.get(ph.id)!}))
+
+    // Bake photo pins into MapLibre's WebGL render as a symbol layer.
+    // This ensures pins are geo-anchored and never wander relative to the map —
+    // they move exactly with map tiles, unlike a canvas overlay that composites
+    // after the render pass and drifts under pitched-camera perspective.
+    const photoPinLayerId  = 'dtrek-photo-pins-layer'
+    const photoPinSourceId = 'dtrek-photo-pins'
+    if (sortedPhotos.length > 0) {
+      const iconSc = 2  // render 2× for crispness; pixelRatio:2 → 45×54 CSS px
+      const photoPinImageIds: string[] = []
+      for (const s of sortedPhotos) {
+        const W = 45 * iconSc, H = 45 * iconSc, tipH = 9 * iconSc
+        const offC = document.createElement('canvas')
+        offC.width = W; offC.height = H + tipH
+        const offCtx = offC.getContext('2d')!
+        offCtx.imageSmoothingEnabled = true; offCtx.imageSmoothingQuality = 'high'
+        drawPhotoPin(offCtx, W / 2, H + tipH, iconSc, s.img)
+        const imgId = `dtrek-photo-pin-${s.photo.id}`
+        const imageData = offCtx.getImageData(0, 0, offC.width, offC.height)
+        try { map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
+        photoPinImageIds.push(imgId)
+      }
+      const pinFeatures = sortedPhotos.map(s => {
+        const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
+        return {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [s.photo.lon ?? pts[pi].lon!, s.photo.lat ?? pts[pi].lat!] },
+          properties: { pinId: `dtrek-photo-pin-${s.photo.id}` },
+        }
+      })
+      try {
+        map.addSource(photoPinSourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: pinFeatures } })
+        map.addLayer({
+          id: photoPinLayerId, type: 'symbol', source: photoPinSourceId,
+          layout: {
+            'icon-image': ['get', 'pinId'],
+            'icon-anchor': 'bottom',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+            'icon-size': (outW / 1080) / dpr,
+          },
+          paint: { 'icon-opacity': 0 },
+        } as any)
+        await new Promise<void>(r => map.once('idle', r as any))
+      } catch {}
+      photoPinCleanupRef.current = () => {
+        const m = mapRef.current; if (!m) return
+        try { m.removeLayer(photoPinLayerId) } catch {}
+        try { m.removeSource(photoPinSourceId) } catch {}
+        for (const id of photoPinImageIds) { try { m.removeImage(id) } catch {} }
+      }
+    }
 
     // Intro: fixed duration where p=0 (route frozen, camera swoops in)
     const INTRO_FRAMES = Math.round(TARGET_FPS * Math.max(2, videoDuration * 0.08))
@@ -1412,6 +1471,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           center: [pts[N-1].lon!, pts[N-1].lat!],
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
         })
+        // Photo pins: fade out over first 30% of outro via symbol layer opacity
+        try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', outroP < 0.3 ? (1 - outroP / 0.3) : 0) } catch {}
         try { map!.triggerRepaint() } catch {}
         onNextRender(() => {
           if (!mapRef.current) { frameCountRef.current++; renderedFramesRef.current++; renderNextFrame(); return }
@@ -1423,26 +1484,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (mapAvailableO) ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
-          // Photo pins: fade out over the first 30% of outro
-          if (mapAvailableO && outroP < 0.3) {
-            const photoPinAlpha = 1 - outroP / 0.3
-            const camZoom2 = smoothZoomRef.current
-            const tileScale2 = Math.pow(2, camZoom2) * 256
-            const outPxPerTilePx2 = outW / cr.sw
-            const mY2 = (ll: number) => Math.log(Math.tan(Math.PI / 4 + ll * Math.PI / 360))
-            for (const s of sortedPhotos) {
-              const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
-              const dLon = pts[pi].lon! - pts[N - 1].lon!
-              const dMercY = mY2(pts[pi].lat!) - mY2(pts[N - 1].lat!)
-              const ppx = outW / 2 + (dLon / 360) * tileScale2 * outPxPerTilePx2
-              const ppy = outH / 2 - (dMercY / (2 * Math.PI)) * tileScale2 * outPxPerTilePx2
-              if (ppx >= -50 && ppx <= outW + 50 && ppy >= -60 && ppy <= outH + 50) {
-                ctx.globalAlpha = photoPinAlpha
-                drawPhotoPin(ctx, ppx, ppy, outW / 1080, s.img)
-                ctx.globalAlpha = 1
-              }
-            }
-          }
           // User pin visible at start of outro, fades out over first 20%
           if (outroP < 0.2) {
             ctx.globalAlpha = 1 - outroP / 0.2
@@ -1540,6 +1581,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
       }
 
+      // Photo pins: hidden in intro, visible in follow (symbol layer driven by opacity)
+      try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', introP !== undefined ? 0 : 1) } catch {}
       // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
       try { map!.triggerRepaint() } catch {}
       onNextRender(()=>{
@@ -1554,23 +1597,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if (mapAvailableF) ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
-        // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
-        if (mapAvailableF && introP === undefined) {
-          const camZoom = smoothZoomRef.current
-          const tileScale = Math.pow(2, camZoom) * 256
-          const outPxPerTilePx = outW / cr.sw
-          const mY = (ll: number) => Math.log(Math.tan(Math.PI / 4 + ll * Math.PI / 360))
-          for (const s of sortedPhotos) {
-            const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
-            const dLon = pts[pi].lon! - lon
-            const dMercY = mY(pts[pi].lat!) - mY(lat)
-            const ppx = outW / 2 + (dLon / 360) * tileScale * outPxPerTilePx
-            const ppy = outH / 2 - (dMercY / (2 * Math.PI)) * tileScale * outPxPerTilePx
-            if (ppx >= -50 && ppx <= outW + 50 && ppy >= -60 && ppy <= outH + 50) {
-              drawPhotoPin(ctx, ppx, ppy, outW / 1080, s.img)
-            }
-          }
-        }
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
         if (introP === undefined) {
           drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
@@ -1656,6 +1682,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
     if(mapRef.current) try{cleanupRouteReveal(mapRef.current)}catch{}
+    try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
     // Restore container size and map DPR (set at render start, normally restored by finishRecording)
     const map=mapRef.current; const cont=map?.getContainer()
     if(cont){cont.style.width='';cont.style.height=''}
