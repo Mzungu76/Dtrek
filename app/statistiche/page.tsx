@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
 import { exportAllActivitiesToExcel } from '@/utils/exportExcel'
 import PdfExportButton from '@/components/PdfExportButton'
-import { Loader2, Mountain, FileSpreadsheet, Share2 } from 'lucide-react'
+import { Loader2, Mountain, FileSpreadsheet, Share2, BookOpen } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import TabPanoramica  from '@/components/stats/TabPanoramica'
 import TabGrafici     from '@/components/stats/TabGrafici'
@@ -13,8 +13,9 @@ import TabConfronto   from '@/components/stats/TabConfronto'
 import TabForma       from '@/components/stats/TabForma'
 import TabTraguardi   from '@/components/stats/TabTraguardi'
 import TabFisico      from '@/components/stats/TabFisico'
+import TabGuida       from '@/components/stats/TabGuida'
 
-type Tab = 'panoramica' | 'grafici' | 'confronta' | 'forma' | 'traguardi' | 'fisico'
+type Tab = 'panoramica' | 'grafici' | 'confronta' | 'forma' | 'traguardi' | 'fisico' | 'guida'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'panoramica', label: 'Panoramica' },
@@ -23,6 +24,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'forma',      label: 'Forma'      },
   { id: 'traguardi',  label: 'Traguardi'  },
   { id: 'fisico',     label: 'Fisico'     },
+  { id: 'guida',      label: '📖 Guida'   },
 ]
 
 export default function StatistichePage() {
@@ -30,6 +32,7 @@ export default function StatistichePage() {
   const [loading,    setLoading]    = useState(true)
   const [tab,        setTab]        = useState<Tab>('panoramica')
   const [shareStats, setShareStats] = useState(false)
+  const [guideAnchor, setGuideAnchor] = useState<string | null>(null)
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
@@ -38,6 +41,11 @@ export default function StatistichePage() {
   const stats   = useMemo(() => computeGlobalStats(activities),    [activities])
   const records = useMemo(() => getPersonalRecords(activities),    [activities])
   const streaks = useMemo(() => computeStreaks(activities),         [activities])
+
+  const goToGuide = useCallback((section: string) => {
+    setGuideAnchor(section)
+    setTab('guida')
+  }, [])
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
@@ -54,6 +62,10 @@ export default function StatistichePage() {
           </div>
           {!loading && activities.length > 0 && (
             <div className="flex gap-2 flex-wrap">
+              <button onClick={() => goToGuide('')}
+                className="flex items-center gap-1.5 px-3 py-2 bg-stone-200 text-stone-700 rounded-xl text-sm hover:bg-stone-300 transition-colors">
+                <BookOpen className="w-4 h-4" /> <span className="hidden sm:inline">Guida</span>
+              </button>
               <button onClick={() => setShareStats(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors">
                 <Share2 className="w-4 h-4" /> <span className="hidden sm:inline">Condividi</span>
@@ -84,8 +96,8 @@ export default function StatistichePage() {
             {/* Tab bar — scrollable on mobile */}
             <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-6 sm:mb-8 overflow-x-auto">
               {TABS.map(t => (
-                <button key={t.id} onClick={() => setTab(t.id)}
-                  className={`flex-none px-3 sm:px-5 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                <button key={t.id} onClick={() => { setTab(t.id); if (t.id !== 'guida') setGuideAnchor(null) }}
+                  className={`flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     tab === t.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-500 hover:text-stone-700'
                   }`}>
                   {t.label}
@@ -93,12 +105,13 @@ export default function StatistichePage() {
               ))}
             </div>
 
-            {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} />}
-            {tab === 'grafici'    && <TabGrafici     activities={activities} />}
-            {tab === 'confronta'  && <TabConfronto   activities={activities} />}
-            {tab === 'forma'      && <TabForma       activities={activities} />}
-            {tab === 'traguardi'  && <TabTraguardi   activities={activities} streaks={streaks} />}
-            {tab === 'fisico'     && <TabFisico      activities={activities} />}
+            {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} onGuideLink={goToGuide} />}
+            {tab === 'grafici'    && <TabGrafici     activities={activities} onGuideLink={goToGuide} />}
+            {tab === 'confronta'  && <TabConfronto   activities={activities} onGuideLink={goToGuide} />}
+            {tab === 'forma'      && <TabForma       activities={activities} onGuideLink={goToGuide} />}
+            {tab === 'traguardi'  && <TabTraguardi   activities={activities} streaks={streaks} onGuideLink={goToGuide} />}
+            {tab === 'fisico'     && <TabFisico      activities={activities} onGuideLink={goToGuide} />}
+            {tab === 'guida'      && <TabGuida       initialAnchor={guideAnchor} />}
           </>
         )}
       </main>
