@@ -1,6 +1,7 @@
 'use client'
 import StatCard from '@/components/StatCard'
 import RecordCard from './RecordCard'
+import InfoButton from './InfoButton'
 import { computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { formatPaceMinkm, difficultyIndex, caloriesPerHour, type PersonalRecords, type Streaks } from '@/lib/stats'
@@ -15,27 +16,35 @@ interface Props {
   activities: ActivityMeta[]
   records: PersonalRecords
   streaks: Streaks
+  onGuideLink: (section: string) => void
 }
 
-export default function TabPanoramica({ activities, records, streaks }: Props) {
+export default function TabPanoramica({ activities, records, streaks, onGuideLink }: Props) {
   const stats = computeGlobalStats(activities)
 
   return (
     <div className="space-y-8">
       {/* Global KPI */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Distanza totale"   value={`${stats.totalDistanceKm.toFixed(1)} km`}                         color="forest" icon={<Route className="w-3.5 h-3.5"/>} />
-        <StatCard label="Tempo totale"      value={formatDuration(stats.totalTimeSeconds)}                            color="terra"  icon={<Clock className="w-3.5 h-3.5"/>} />
-        <StatCard label="Calorie totali"    value={`${stats.totalCalories.toLocaleString('it')} kcal`}               color="red"    icon={<Flame className="w-3.5 h-3.5"/>} />
-        <StatCard label="Dislivello totale" value={`${Math.round(stats.totalElevationGain).toLocaleString('it')} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5"/>} />
-        <StatCard label="FC media storica"  value={`${stats.avgHeartRate} bpm`}                                      color="red"    icon={<Heart className="w-3.5 h-3.5"/>} />
-        <StatCard label="Quota max mai"     value={`${Math.round(stats.highestAlt)} m`}                              color="blue"   icon={<TrendingUp className="w-3.5 h-3.5"/>} />
+      <div>
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="text-xs text-stone-400 font-medium uppercase tracking-wide">Totali storici</span>
+          <InfoButton section="kpi" onGuideLink={onGuideLink} />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <StatCard label="Distanza totale"   value={`${stats.totalDistanceKm.toFixed(1)} km`}                         color="forest" icon={<Route className="w-3.5 h-3.5"/>} />
+          <StatCard label="Tempo totale"      value={formatDuration(stats.totalTimeSeconds)}                            color="terra"  icon={<Clock className="w-3.5 h-3.5"/>} />
+          <StatCard label="Calorie totali"    value={`${stats.totalCalories.toLocaleString('it')} kcal`}               color="red"    icon={<Flame className="w-3.5 h-3.5"/>} />
+          <StatCard label="Dislivello totale" value={`${Math.round(stats.totalElevationGain).toLocaleString('it')} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5"/>} />
+          <StatCard label="FC media storica"  value={`${stats.avgHeartRate} bpm`}                                      color="red"    icon={<Heart className="w-3.5 h-3.5"/>} />
+          <StatCard label="Quota max mai"     value={`${Math.round(stats.highestAlt)} m`}                              color="blue"   icon={<TrendingUp className="w-3.5 h-3.5"/>} />
+        </div>
       </div>
 
       {/* Streak */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2">
           <Activity className="w-4 h-4 text-forest-600" /> Continuità
+          <InfoButton section="streak" onGuideLink={onGuideLink} />
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
@@ -58,6 +67,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
       <div>
         <h3 className="font-medium text-stone-700 mb-3 flex items-center gap-2">
           <Trophy className="w-4 h-4 text-terra-500" /> Record personali
+          <InfoButton section="records" onGuideLink={onGuideLink} />
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {records.longestKm && (
@@ -146,8 +156,17 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wider">
               <tr>
-                {['Data','Titolo','Distanza','Durata','Passo','D+/km','FC media','Calorie','Cal/h'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                {[
+                  { label: 'Data' }, { label: 'Titolo' }, { label: 'Distanza' }, { label: 'Durata' },
+                  { label: 'Passo', section: 'passo' }, { label: 'D+/km', section: 'difficolta' },
+                  { label: 'FC media', section: 'zone-fc' }, { label: 'Calorie' }, { label: 'Cal/h' },
+                ].map(({ label, section }) => (
+                  <th key={label} className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                    <span className="flex items-center gap-1">
+                      {label}
+                      {section && <InfoButton section={section} onGuideLink={onGuideLink} />}
+                    </span>
+                  </th>
                 ))}
               </tr>
             </thead>

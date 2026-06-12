@@ -9,10 +9,11 @@ import {
   LineChart, Line, Legend, ReferenceLine,
 } from 'recharts'
 import { Brain, Activity } from 'lucide-react'
+import InfoButton from './InfoButton'
 
-interface Props { activities: ActivityMeta[] }
+interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void }
 
-export default function TabForma({ activities }: Props) {
+export default function TabForma({ activities, onGuideLink }: Props) {
   const weeklyVolumeData = useMemo(() => {
     const out: { week: string; km: number; gain: number }[] = []
     for (let i = 15; i >= 0; i--) {
@@ -76,6 +77,7 @@ export default function TabForma({ activities }: Props) {
           <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
             <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1 flex items-center gap-1.5">
               <Brain className="w-3.5 h-3.5" /> Stato forma attuale
+              <InfoButton section="training-load" onGuideLink={onGuideLink} />
             </p>
             <p className="text-2xl font-bold mt-1" style={{ color: latestForm.status.color }}>{latestForm.status.label}</p>
             <p className="text-xs text-stone-500 mt-1">{latestForm.status.description}</p>
@@ -97,6 +99,7 @@ export default function TabForma({ activities }: Props) {
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
           <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2">
             <Activity className="w-4 h-4 text-forest-600" /> Medie settimanali (ultime 16 settimane)
+            <InfoButton section="volume-settimanale" onGuideLink={onGuideLink} />
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
@@ -164,6 +167,7 @@ export default function TabForma({ activities }: Props) {
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
           <Brain className="w-4 h-4 text-forest-600" /> Training Load — ultimi 90 giorni
+          <InfoButton section="training-load" onGuideLink={onGuideLink} />
         </h3>
         <p className="text-xs text-stone-400 mb-4">
           CTL (fitness, verde) · ATL (fatica, arancio) · TSB (forma, blu — positivo = fresco, negativo = affaticato)
@@ -193,7 +197,9 @@ export default function TabForma({ activities }: Props) {
       </div>
 
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-4">Carico giornaliero (TSS stimato)</h3>
+        <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2">
+          Carico giornaliero (TSS stimato) <InfoButton section="tss" onGuideLink={onGuideLink} />
+        </h3>
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={trainingLoadData.filter(d => d.stress > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>

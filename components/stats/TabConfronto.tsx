@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import ShareModal from '@/components/ShareModal'
 import { Activity, Shuffle, Check, GitCommitHorizontal, Mountain, Loader2, Share2 } from 'lucide-react'
+import InfoButton from './InfoButton'
 
 type CompareMode = 'completate' | 'pianificate'
 
@@ -32,9 +33,9 @@ function buildElevProfile(activity: StoredActivity, samples = 60): { pct: number
   })
 }
 
-interface Props { activities: ActivityMeta[] }
+interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void }
 
-export default function TabConfronto({ activities }: Props) {
+export default function TabConfronto({ activities, onGuideLink }: Props) {
   const [compareMode,        setCompareMode]        = useState<CompareMode>('completate')
   const [selectedIds,        setSelectedIds]        = useState(new Set<string>())
   const [fullData,           setFullData]           = useState(new Map<string, StoredActivity>())
@@ -262,7 +263,10 @@ export default function TabConfronto({ activities }: Props) {
               {/* Elevation profiles + HR zones */}
               <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-medium text-stone-700">Profili altimetrici sovrapposti + Zone FC</h3>
+                  <h3 className="font-medium text-stone-700 flex items-center gap-1.5">
+                    Profili altimetrici sovrapposti + Zone FC
+                    <InfoButton section="zone-fc" onGuideLink={onGuideLink} />
+                  </h3>
                   {!allFullLoaded && (
                     <button onClick={loadFullData} disabled={loadingFull}
                       className="flex items-center gap-2 px-4 py-2 bg-forest-600 text-white rounded-lg text-sm hover:bg-forest-700 transition-colors disabled:opacity-60">

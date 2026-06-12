@@ -4,6 +4,7 @@ import { ActivityMeta } from '@/lib/blobStore'
 import { Streaks } from '@/lib/stats'
 import { computeBadges, BADGE_CATEGORY_LABELS, type BadgeCategory, type ComputedBadge } from '@/lib/badges'
 import { Trophy, Lock } from 'lucide-react'
+import InfoButton from './InfoButton'
 
 const LS_KEY = 'dtrek_badges_seen'
 
@@ -23,9 +24,10 @@ const CATEGORY_ORDER: BadgeCategory[] = ['distanza', 'dislivello', 'quota', 'fre
 interface Props {
   activities: ActivityMeta[]
   streaks: Streaks
+  onGuideLink: (section: string) => void
 }
 
-export default function TabTraguardi({ activities, streaks }: Props) {
+export default function TabTraguardi({ activities, streaks, onGuideLink }: Props) {
   const badges = useMemo(() => computeBadges(activities, streaks), [activities, streaks])
   const [newlyUnlocked, setNewlyUnlocked] = useState<Set<string>>(new Set())
 
@@ -57,7 +59,10 @@ export default function TabTraguardi({ activities, streaks }: Props) {
           </div>
           <div>
             <p className="text-2xl font-bold font-display text-stone-800">{unlocked} <span className="text-stone-400 font-normal text-lg">/ {total}</span></p>
-            <p className="text-sm text-stone-500">badge sbloccati</p>
+            <p className="text-sm text-stone-500 flex items-center gap-1.5">
+              badge sbloccati
+              <InfoButton section="badge" onGuideLink={onGuideLink} />
+            </p>
           </div>
           <div className="ml-auto hidden sm:block">
             <div className="h-3 w-48 bg-stone-100 rounded-full overflow-hidden">
