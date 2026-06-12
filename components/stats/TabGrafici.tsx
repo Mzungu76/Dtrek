@@ -214,7 +214,7 @@ export default function TabGrafici({ activities }: Props) {
                   <Line data={scoreEvolution.rating} type="monotone" dataKey="value" name="rating"
                     stroke="#2563eb" strokeWidth={2} dot={false} strokeDasharray="2 3" />
                 )}
-                <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => ({ trail: 'Trail Score', sodd: 'Soddisfazione', rating: 'Rating' }[v] ?? v)} />
+                <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v: string) => ({ trail: 'Trail Score', sodd: 'Soddisfazione', rating: 'Rating' }[v] ?? v)} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
