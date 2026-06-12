@@ -61,6 +61,8 @@ interface RoutePhoto {
   progress:        number       // 0-1 on route
   caption:         string       // mandatory — shown in polaroid
   hasExifGps:      boolean      // true = auto-placed, false = needs manual placement
+  lat?:            number       // GPS latitude fixed at placement time
+  lon?:            number       // GPS longitude fixed at placement time
 }
 
 // ── Geo helpers ────────────────────────────────────────────────────────────────
@@ -720,7 +722,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       let minD=Infinity, bestIdx=0
       for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,lat,lng);if(d<minD){minD=d;bestIdx=i}}
       const prog=bestIdx/(pts.length-1)
-      setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id?{...p,progress:prog}:p))
+      setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id
+        ?{...p,progress:prog,lat:pts[bestIdx].lat!,lon:pts[bestIdx].lon!}:p))
       setPlacingPhoto(null)
     }
     map.on('click',handler)
@@ -976,9 +979,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
       // EXIF GPS
       const gpsCoords=await readExifGps(file)
-      let progress=0.5, hasExifGps=false
+      let progress=0.5, hasExifGps=false, exifLat: number|undefined, exifLon: number|undefined
       if(gpsCoords&&pts.length>1){
         hasExifGps=true
+        exifLat=gpsCoords.lat; exifLon=gpsCoords.lon
         let minD=Infinity, bestIdx=0
         for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,gpsCoords.lat,gpsCoords.lon);if(d<minD){minD=d;bestIdx=i}}
         progress=bestIdx/(pts.length-1)
@@ -990,6 +994,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         id, dataUrl:cropped, progress,
         caption: file.name.replace(/\.[^.]+$/,'').replace(/[-_]/g,' ').slice(0,40),
         hasExifGps,
+        ...(exifLat !== undefined && exifLon !== undefined ? {lat:exifLat,lon:exifLon} : {}),
       }])
     }
     setPhotoBeingAdded(false)
@@ -1424,18 +1429,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
           // Photo pins: fade out over the first 30% of outro
-          if (mapAvailableO && outroP < 0.3) {
+          if (mapAvailableO && outroP < 0.3 && mapRef.current) {
             const photoPinAlpha = 1 - outroP / 0.3
-            const camZoom2 = smoothZoomRef.current
-            const tileScale2 = Math.pow(2, camZoom2) * 256
-            const outPxPerTilePx2 = dpr
-            const mY2 = (ll: number) => Math.log(Math.tan(Math.PI / 4 + ll * Math.PI / 360))
+            const cc2   = mapRef.current.getCenter()
+            const cc2Px = mapRef.current.project([cc2.lng, cc2.lat] as [number, number])
+            const scale2 = cc2Px.x > 1 ? (outW / 2) / cc2Px.x : dpr
             for (const s of sortedPhotos) {
-              const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
-              const dLon = pts[pi].lon! - pts[N - 1].lon!
-              const dMercY = mY2(pts[pi].lat!) - mY2(pts[N - 1].lat!)
-              const ppx = outW / 2 + (dLon / 360) * tileScale2 * outPxPerTilePx2
-              const ppy = outH / 2 - (dMercY / (2 * Math.PI)) * tileScale2 * outPxPerTilePx2
+              const pi   = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
+              const sLon = s.photo.lon ?? pts[pi].lon!
+              const sLat = s.photo.lat ?? pts[pi].lat!
+              const pmp  = mapRef.current.project([sLon, sLat] as [number, number])
+              const ppx  = outW / 2 + (pmp.x - cc2Px.x) * scale2
+              const ppy  = outH / 2 + (pmp.y - cc2Px.y) * scale2
               if (ppx >= -50 && ppx <= outW + 50 && ppy >= -60 && ppy <= outH + 50) {
                 ctx.globalAlpha = photoPinAlpha
                 drawPhotoPin(ctx, ppx, ppy, outW / 1080, s.img)
@@ -1555,17 +1560,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         try { ctx.filter='none' } catch {}
 
         // Photo pins: permanently anchored to GPS throughout follow; drawn before user pin
-        if (mapAvailableF && introP === undefined) {
-          const camZoom = smoothZoomRef.current
-          const tileScale = Math.pow(2, camZoom) * 256
-          const outPxPerTilePx = dpr
-          const mY = (ll: number) => Math.log(Math.tan(Math.PI / 4 + ll * Math.PI / 360))
+        if (mapAvailableF && introP === undefined && mapRef.current) {
+          const cc   = mapRef.current.getCenter()
+          const ccPx = mapRef.current.project([cc.lng, cc.lat] as [number, number])
+          const scale = ccPx.x > 1 ? (outW / 2) / ccPx.x : dpr
           for (const s of sortedPhotos) {
-            const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
-            const dLon = pts[pi].lon! - lon
-            const dMercY = mY(pts[pi].lat!) - mY(lat)
-            const ppx = outW / 2 + (dLon / 360) * tileScale * outPxPerTilePx
-            const ppy = outH / 2 - (dMercY / (2 * Math.PI)) * tileScale * outPxPerTilePx
+            const pi   = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
+            const sLon = s.photo.lon ?? pts[pi].lon!
+            const sLat = s.photo.lat ?? pts[pi].lat!
+            const pmp  = mapRef.current.project([sLon, sLat] as [number, number])
+            const ppx  = outW / 2 + (pmp.x - ccPx.x) * scale
+            const ppy  = outH / 2 + (pmp.y - ccPx.y) * scale
             if (ppx >= -50 && ppx <= outW + 50 && ppy >= -60 && ppy <= outH + 50) {
               drawPhotoPin(ctx, ppx, ppy, outW / 1080, s.img)
             }
