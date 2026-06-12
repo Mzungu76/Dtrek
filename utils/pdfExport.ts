@@ -775,6 +775,24 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
 
 // ── Guide PDF (Magazine Layout) ────────────────────────────────────────────────
 
+/** Fetch a Wikipedia thumbnail URL → canvas JPEG data-URL (browser context) */
+async function fetchWikiThumb(url: string): Promise<string | null> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    const timer = setTimeout(() => resolve(null), 5000)
+    img.onload = () => {
+      clearTimeout(timer)
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth; c.height = img.naturalHeight
+      c.getContext('2d')!.drawImage(img, 0, 0)
+      resolve(c.toDataURL('image/jpeg', 0.82))
+    }
+    img.onerror = () => { clearTimeout(timer); resolve(null) }
+    img.src = url
+  })
+}
+
 function createGradientOverlay(widthPx: number, heightPx: number): string {
   const c = document.createElement('canvas')
   c.width = widthPx; c.height = heightPx
@@ -804,6 +822,21 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
   const AMBER_SOFT: [number,number,number] = [254, 215, 170]
   const AMBER_BG:   [number,number,number] = [255, 237, 213]
 
+  // ── POI data — declared early to allow thumbnail pre-fetch ────────────────────
+  const wikiEntries = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+  const rawPois     = (hike.cachedPois   ?? []) as PoiItem[]
+
+  // Pre-fetch Wikipedia thumbnails concurrently (silent failures accepted)
+  const thumbs = new Map<number, string>()
+  await Promise.allSettled(
+    wikiEntries
+      .filter(e => e.wiki.thumbnail)
+      .map(async e => {
+        const img = await fetchWikiThumb(e.wiki.thumbnail!)
+        if (img) thumbs.set(e.wiki.pageid, img)
+      }),
+  )
+
   // ── Section color mapping ─────────────────────────────────────────────────────
   const GUIDE_COLORS: Record<string, [number,number,number]> = {
     'prima di partire': [217, 119,   6],
@@ -819,19 +852,44 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
     return STONE
   }
 
+  // ── POI type labels and badge colors ─────────────────────────────────────────
+  const POI_LABELS: Record<string, string> = {
+    peak: 'Cima', hut: 'Rifugio', bivouac: 'Bivacco', spring: 'Sorgente',
+    viewpoint: 'Belvedere', cross: 'Croce', pass: 'Valico', waterfall: 'Cascata',
+    cave: 'Grotta', shelter: 'Riparo', ruins: 'Rovine', archaeological: 'Sito arch.',
+    castle: 'Castello', fountain: 'Fontana', chapel: 'Cappella',
+    tower: 'Torre', monument: 'Monumento',
+  }
+  const POI_COLORS: Record<string, [number,number,number]> = {
+    peak:          [ 99,  74, 204],
+    hut:           [ 22, 101,  52],
+    bivouac:       [ 22, 101,  52],
+    castle:        [124,  58, 237],
+    archaeological:[120,  53,  15],
+    ruins:         [120,  53,  15],
+    waterfall:     [  3, 105, 161],
+    cave:          [ 68,  64,  60],
+    viewpoint:     [ 15, 118, 110],
+  }
+
   // ── Markdown parser ───────────────────────────────────────────────────────────
   type GEl =
     | { type: 'section-header'; title: string; color: [number,number,number] }
     | { type: 'subsection';     title: string }
     | { type: 'curiosita';      text:  string }
-    | { type: 'paragraph';      text:  string }
+    | { type: 'paragraph';      text:  string; isLead: boolean }
 
   function parseBodyInto(body: string, els: GEl[]) {
     const cRe = /\[curiosita\]([\s\S]*?)\[\/curiosita\]/g
     let last = 0, m: RegExpExecArray | null
+    let firstPara = true
     const flushText = (chunk: string) => {
       let buf: string[] = []
-      const flush = () => { const p = buf.join(' ').trim(); if (p) els.push({ type: 'paragraph', text: p }); buf = [] }
+      const flush = () => {
+        const p = buf.join(' ').trim()
+        if (p) { els.push({ type: 'paragraph', text: p, isLead: firstPara }); firstPara = false }
+        buf = []
+      }
       for (const l of chunk.split('\n')) {
         const t = l.trim()
         if (t.startsWith('### ')) { flush(); els.push({ type: 'subsection', title: t.slice(4).trim() }) }
@@ -843,6 +901,7 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
     while ((m = cRe.exec(body)) !== null) {
       flushText(body.slice(last, m.index))
       els.push({ type: 'curiosita', text: m[1].trim().replace(/\n/g, ' ') })
+      firstPara = false
       last = m.index + m[0].length
     }
     flushText(body.slice(last))
@@ -859,39 +918,49 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
   }
 
   // ── Magazine helpers ──────────────────────────────────────────────────────────
+
+  // Running header: amber top rule, DTrek left, guide title centered
   function addRunningHeader(title: string) {
-    doc.setFillColor(249, 247, 244); doc.rect(0, 0, 210, 11, 'F')
-    doc.setDrawColor(...STONE); doc.setLineWidth(0.25); doc.line(M, 11, 210 - M, 11)
-    txt(doc, safeText(title), M, 7.5, { size: 6, color: STONE })
-    txt(doc, 'DTrek', 210 - M, 7.5, { size: 6.5, bold: true, color: AMBER, align: 'right' })
+    doc.setFillColor(...AMBER);       doc.rect(0, 0, 210, 1.5, 'F')
+    doc.setFillColor(255, 255, 255);  doc.rect(0, 1.5, 210, 9.5, 'F')
+    doc.setDrawColor(...BORDER); doc.setLineWidth(0.25); doc.line(0, 11, 210, 11)
+    txt(doc, 'DTrek', M, 8, { size: 7, bold: true, color: AMBER })
+    let hTitle = safeText(title)
+    doc.setFontSize(6); doc.setFont('helvetica', 'normal')
+    while (hTitle.length > 8 && doc.getTextWidth(hTitle) > 126) hTitle = hTitle.slice(0, -3) + '...'
+    txt(doc, hTitle, 105, 8, { size: 6, color: STONE, align: 'center' })
     const divX = LEFT_X + COL_W + GAP / 2
     doc.setDrawColor(...BORDER); doc.setLineWidth(0.2)
     doc.line(divX, CONTENT_TOP + 1, divX, CONTENT_BOTTOM)
   }
 
+  // Full-width section band: dark accent left bar + colored band
   function magSectionHeader(title: string, color: [number,number,number], y: number): number {
-    const H = 11
-    const dk: [number,number,number] = [Math.max(0, color[0]-30), Math.max(0, color[1]-30), Math.max(0, color[2]-30)]
+    const H = 13
+    const dk: [number,number,number] = [Math.max(0,color[0]-30),Math.max(0,color[1]-30),Math.max(0,color[2]-30)]
     doc.setFillColor(...dk);    doc.rect(M,   y, 4,   H, 'F')
     doc.setFillColor(...color); doc.rect(M+4, y, W-4, H, 'F')
-    doc.setFontSize(10.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
-    doc.text(safeText(title).toUpperCase(), M + 10, y + 7.5)
+    doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
+    doc.text(safeText(title).toUpperCase(), M + 10, y + 9)
     return y + H + 4
   }
 
+  // "LO SAPEVI?" callout: colored bullet + label + italic body, amber background
   function magCuriositaBox(text: string, color: [number,number,number], y: number): number {
     doc.setFontSize(8.5)
-    const lines = doc.splitTextToSize(safeText(text), W - 14)
-    const H = lines.length * LINE_H + 12
-    doc.setFillColor(...AMBER_BG); doc.roundedRect(M, y, W, H, 2, 2, 'F')
+    const lines = doc.splitTextToSize(safeText(text), W - 16)
+    const H = lines.length * LINE_H + 15
+    doc.setFillColor(...AMBER_BG); doc.roundedRect(M, y, W, H, 2.5, 2.5, 'F')
     doc.setFillColor(...color);    doc.roundedRect(M, y, 3.5, H, 1.5, 1.5, 'F')
-    doc.setFontSize(6.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...color)
-    doc.text('LO SAPEVI?', M + 8, y + 5)
+    doc.setFillColor(...color);    doc.rect(M + 8, y + 4.5, 2.5, 2.5, 'F')  // bullet square
+    doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...color)
+    doc.text('LO SAPEVI?', M + 13, y + 7)
     doc.setFontSize(8.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(...INK)
-    doc.text(lines, M + 8, y + 9.5)
+    doc.text(lines, M + 8, y + 12)
     return y + H + 4
   }
 
+  // In-section POI sub-heading with accent rule
   function magSubsection(title: string, color: [number,number,number], y: number): number {
     doc.setFillColor(...color); doc.rect(M, y, W, 0.4, 'F')
     const lines = doc.splitTextToSize(safeText(title), W)
@@ -900,11 +969,66 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
     return y + 0.4 + 3.5 + lines.length * 4.8 + 4
   }
 
+  // POI card: photo left (optional) + text right; returns new Y after card
+  function renderMagPoiCard(entry: { poi: PoiItem; wiki: WikiPage }, thumb: string | null, y: number): number {
+    const PHOTO_W = 46, PHOTO_H = 34
+    const hasPhoto = !!thumb
+    const CARD_H   = hasPhoto ? PHOTO_H + 8 : 28
+    const TEXT_X   = M + (hasPhoto ? PHOTO_W + 5 : 5)
+    const TEXT_W   = W  - (hasPhoto ? PHOTO_W + 5 : 5)
+
+    doc.setFillColor(252, 252, 252);  doc.roundedRect(M, y, W, CARD_H, 2, 2, 'F')
+    doc.setDrawColor(...BORDER); doc.setLineWidth(0.25); doc.roundedRect(M, y, W, CARD_H, 2, 2, 'S')
+
+    if (hasPhoto) {
+      doc.addImage(thumb!, 'JPEG', M + 2, y + 2, PHOTO_W - 2, PHOTO_H - 2)
+    } else {
+      const ac = POI_COLORS[entry.poi.type] ?? AMBER
+      doc.setFillColor(...ac); doc.roundedRect(M, y, 3.5, CARD_H, 1.5, 1.5, 'F')
+    }
+
+    // Name
+    doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...INK)
+    const nameLines = doc.splitTextToSize(safeText(entry.wiki.title), TEXT_W - 2)
+    doc.text(nameLines.slice(0, 2), TEXT_X, y + 4.5)
+
+    // Type badge + distance
+    const typeLabel  = POI_LABELS[entry.poi.type] ?? entry.poi.type
+    const distStr    = entry.poi.distFromTrack < 1000
+      ? `${entry.poi.distFromTrack.toFixed(0)} m`
+      : `${(entry.poi.distFromTrack / 1000).toFixed(1)} km`
+    const badgeY = y + 4.5 + Math.min(nameLines.length, 2) * 4.3 + 0.5
+    const badgeC = POI_COLORS[entry.poi.type] ?? AMBER
+    doc.setFontSize(6.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
+    const pilW = doc.getTextWidth(typeLabel) + 6
+    doc.setFillColor(...badgeC); doc.roundedRect(TEXT_X, badgeY, pilW, 5, 1.5, 1.5, 'F')
+    doc.text(typeLabel, TEXT_X + 3, badgeY + 3.5)
+    txt(doc, `${distStr} dal percorso`, TEXT_X + pilW + 4, badgeY + 3.5, { size: 6.5, color: STONE })
+
+    // Excerpt (2 lines italic)
+    if (entry.wiki.extract) {
+      const exY    = badgeY + 7
+      const exText = safeText(entry.wiki.extract.slice(0, 180).replace(/\n+/g, ' '))
+      doc.setFontSize(7.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(...STONE)
+      doc.text(doc.splitTextToSize(exText, TEXT_W - 2).slice(0, 2), TEXT_X, exY)
+    }
+
+    // Wikipedia link
+    if (entry.wiki.url) {
+      const lkY = y + CARD_H - 4
+      doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(...AMBER)
+      doc.text('> Wikipedia', TEXT_X, lkY)
+      doc.link(TEXT_X, lkY - 3.5, 22, 4, { url: entry.wiki.url })
+    }
+
+    return y + CARD_H + 4
+  }
+
   // ── Two-column state ──────────────────────────────────────────────────────────
   let leftY = CONTENT_TOP, rightY = CONTENT_TOP, inLeft = true
   let sectionColor: [number,number,number] = AMBER
 
-  const syncCols = () => { const m = Math.max(leftY, rightY); leftY = rightY = m; inLeft = true }
+  const syncCols = () => { const mx = Math.max(leftY, rightY); leftY = rightY = mx; inLeft = true }
   const getX = () => inLeft ? LEFT_X : RIGHT_X
   const getY = () => inLeft ? leftY : rightY
   const setY = (v: number) => { if (inLeft) leftY = v; else rightY = v }
@@ -916,6 +1040,21 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
     }
   }
 
+  // Lead paragraph: bold-italic full-width for section intro
+  const renderLeadPara = (text: string) => {
+    const safe = safeText(text); if (!safe) return
+    syncCols()
+    const lines = doc.splitTextToSize(safe, W)
+    const h = lines.length * 5.4 + PARA_GAP
+    if (leftY + h > CONTENT_BOTTOM) {
+      doc.addPage(); addRunningHeader(hike.title); leftY = rightY = CONTENT_TOP; inLeft = true
+    }
+    doc.setFontSize(9.5); doc.setFont('helvetica', 'bolditalic'); doc.setTextColor(...INK)
+    doc.text(lines, M, leftY)
+    leftY = rightY = leftY + h; inLeft = true
+  }
+
+  // Body paragraph: 8.5pt normal, flows left→right column, then new page
   const renderPara = (text: string) => {
     const safe = safeText(text); if (!safe) return
     const go = (n: number) => {
@@ -939,7 +1078,6 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
   const pStep = Math.max(1, Math.ceil(pts.length / 300))
   const sampled = pts.length > 1 ? pts.filter((_, i) => i % pStep === 0) : (hike.routePolyline ?? []) as [number,number][]
 
-  // Full-bleed map
   if (sampled.length > 1) {
     const px = 2100
     const mapImg = await fetchSatMap(sampled, px, Math.round(px * COVER_MAP_H / 210), '#f59e0b')
@@ -949,16 +1087,20 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
     doc.setFillColor(200, 190, 175); doc.rect(0, 0, 210, COVER_MAP_H, 'F')
   }
 
-  // Gradient overlay (transparent PNG → dark at bottom)
-  const gradPx = 840
-  const gradImg = createGradientOverlay(gradPx, Math.round(gradPx * COVER_GRAD_H / 210))
+  const gradImg = createGradientOverlay(840, Math.round(840 * COVER_GRAD_H / 210))
   doc.addImage(gradImg, 'PNG', 0, COVER_MAP_H - COVER_GRAD_H, 210, COVER_GRAD_H)
 
-  // Branding tag + hike title (in dark gradient zone)
-  const TAG_Y   = COVER_MAP_H - 50
-  const TITLE_Y = COVER_MAP_H - 42
-  txt(doc, 'DTREK  ·  GUIDA ESCURSIONISTICA', M, TAG_Y, { size: 7, color: AMBER_SOFT })
+  // Category badge (from first tag or difficulty)
+  const catTag = (hike.tags?.[0] ? safeText(hike.tags[0]) : null)
+    ?? (hike.assessment?.difficulty ? safeText(hike.assessment.difficulty) : 'Escursione')
+  const TAG_Y = COVER_MAP_H - 60
+  doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+  const catBadgeW = doc.getTextWidth(catTag.toUpperCase()) + 16
+  doc.setFillColor(...AMBER); doc.roundedRect(M, TAG_Y, catBadgeW, 7, 2, 2, 'F')
+  doc.setTextColor(...WHITE); doc.text(catTag.toUpperCase(), M + 8, TAG_Y + 5)
 
+  // Title
+  const TITLE_Y = TAG_Y + 11
   let ttl = safeText(hike.title).toUpperCase()
   doc.setFont('helvetica', 'bold')
   let tSz = 24; doc.setFontSize(tSz)
@@ -969,11 +1111,10 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
 
   if (hike.plannedDate) {
     const dl = format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })
-    const afterT = TITLE_Y + tLines.length * Math.round(tSz * 0.42) + 5
-    txt(doc, safeText(dl), M, afterT, { size: 9, color: AMBER_SOFT })
+    txt(doc, safeText(dl), M, TITLE_Y + tLines.length * Math.round(tSz * 0.42) + 5, { size: 9, color: AMBER_SOFT })
   }
 
-  // Amber stats strip
+  // Stats strip
   const STRIP_H = 19
   doc.setFillColor(...AMBER); doc.rect(0, COVER_MAP_H, 210, STRIP_H, 'F')
   const STATS = [
@@ -985,21 +1126,17 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
   const slotW = 210 / STATS.length
   STATS.forEach((s, i) => {
     const cx = i * slotW + slotW / 2
-    txt(doc, s.value, cx, COVER_MAP_H + 10, { size: 11, bold: true, color: WHITE,     align: 'center' })
+    txt(doc, s.value, cx, COVER_MAP_H + 10, { size: 11, bold: true, color: WHITE,      align: 'center' })
     txt(doc, s.label, cx, COVER_MAP_H + 16, { size: 6.5,             color: AMBER_SOFT, align: 'center' })
   })
 
-  // White bottom strip
+  // White bottom section — guide intro
   const WHITE_Y = COVER_MAP_H + STRIP_H
   doc.setFillColor(255, 255, 255); doc.rect(0, WHITE_Y, 210, PAGE_H - WHITE_Y, 'F')
   txt(doc, 'Con Giulia', M, WHITE_Y + 14, { size: 12, bold: true, color: AMBER })
   txt(doc, 'Guida escursionistica con storia, natura e curiosita locali', M, WHITE_Y + 21, { size: 8, color: STONE })
-  if (hike.assessment?.difficulty) {
-    txt(doc, `Difficolta: ${safeText(hike.assessment.difficulty)}`, M, WHITE_Y + 31, { size: 8, color: INK })
-  }
-  if (hike.assessment?.suitabilityScore) {
-    txt(doc, `Adatta all\'${hike.assessment.suitabilityScore}% degli escursionisti`, M, WHITE_Y + 39, { size: 8, color: INK })
-  }
+  if (hike.assessment?.difficulty)       txt(doc, `Difficolta: ${safeText(hike.assessment.difficulty)}`,          M, WHITE_Y + 31, { size: 8, color: INK })
+  if (hike.assessment?.suitabilityScore) txt(doc, `Adatta all\'${hike.assessment.suitabilityScore}% degli escursionisti`, M, WHITE_Y + 39, { size: 8, color: INK })
   doc.setFillColor(...AMBER); doc.rect(M, PAGE_H - 14, W, 0.5, 'F')
   txt(doc, `Generata il ${format(new Date(), 'dd/MM/yyyy')}  ·  dtrek.app`, 105, PAGE_H - 8, { size: 7, color: STONE, align: 'center' })
 
@@ -1011,7 +1148,7 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
   for (const el of elements) {
     if (el.type === 'section-header') {
       sectionColor = el.color
-      needSpace(20)
+      needSpace(22)
       leftY = rightY = magSectionHeader(el.title, el.color, leftY)
       inLeft = true
 
@@ -1023,22 +1160,54 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
 
     } else if (el.type === 'curiosita') {
       doc.setFontSize(8.5)
-      const ls = doc.splitTextToSize(safeText(el.text), W - 14)
-      needSpace(ls.length * LINE_H + 16)
+      const ls = doc.splitTextToSize(safeText(el.text), W - 16)
+      needSpace(ls.length * LINE_H + 19)
       leftY = rightY = magCuriositaBox(el.text, sectionColor, leftY)
       inLeft = true
 
     } else {
-      renderPara(el.text)
+      if (el.isLead) renderLeadPara(el.text)
+      else           renderPara(el.text)
     }
   }
 
-  // ── POI reference list ────────────────────────────────────────────────────────
-  const wikiEntries = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
-  const rawPois     = (hike.cachedPois   ?? []) as PoiItem[]
+  // ── Magazine POI section ──────────────────────────────────────────────────────
   if (wikiEntries.length > 0 || rawPois.length > 0) {
-    needSpace(40)
-    leftY = rightY = renderPois(doc, wikiEntries, rawPois, M, W, leftY + 3, AMBER)
+    const rawOnly = rawPois.filter(p => !wikiEntries.some(e => e.poi.id === p.id) && p.name)
+    needSpace(22)
+    leftY = rightY = magSectionHeader(
+      `${wikiEntries.length + rawOnly.length} Luoghi nel Percorso e Dintorni`,
+      AMBER, leftY,
+    )
+    inLeft = true
+
+    // Wiki entries as magazine cards
+    for (const entry of wikiEntries) {
+      const thumb   = thumbs.get(entry.wiki.pageid) ?? null
+      const cardEst = thumb ? 46 : 32
+      needSpace(cardEst)
+      syncCols()
+      leftY = rightY = renderMagPoiCard(entry, thumb, leftY)
+      inLeft = true
+    }
+
+    // Raw POIs — compact 3-column pill grid
+    if (rawOnly.length > 0) {
+      needSpace(10); syncCols()
+      txt(doc, 'Altri punti di interesse:', M, leftY + 4, { size: 7.5, bold: true, color: STONE })
+      leftY = rightY = leftY + 8; inLeft = true
+      const colW3 = (W - 4) / 3
+      rawOnly.forEach((p, i) => {
+        if (leftY + 8 > CONTENT_BOTTOM) { doc.addPage(); addRunningHeader(hike.title); leftY = rightY = CONTENT_TOP }
+        const col = i % 3
+        const cx = M + col * (colW3 + 2), cy = leftY
+        doc.setFillColor(...STONE50); doc.roundedRect(cx, cy - 2, colW3, 6, 1.5, 1.5, 'F')
+        const n2 = safeText(p.name ?? POI_LABELS[p.type] ?? p.type).slice(0, 24)
+        txt(doc, n2, cx + 2, cy + 2.5, { size: 7.5 })
+        txt(doc, POI_LABELS[p.type] ?? p.type, cx + colW3, cy + 2.5, { size: 6.5, color: STONE, align: 'right' })
+        if (col === 2 || i === rawOnly.length - 1) { leftY = rightY = cy + 8; inLeft = true }
+      })
+    }
   }
 
   footer(doc, `Guida "${safeText(hike.title)}" · generata il ${format(new Date(), 'dd/MM/yyyy HH:mm')} · DTrek`)
