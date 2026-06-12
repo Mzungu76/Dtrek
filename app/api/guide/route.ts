@@ -5,7 +5,7 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
 
-export const maxDuration = 60  // allow up to 60s for streaming responses
+export const maxDuration = 120  // allow up to 120s for streaming responses
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration }  from '@/lib/tcxParser'
 import { format }          from 'date-fns'
@@ -44,11 +44,11 @@ const LENGTH_CONFIG: Record<GuideLength, { maxTokens: number; instruction: strin
     instruction: 'Scrivi in modo conciso: 2-3 paragrafi brevi per sezione, massimo 150 parole per sezione.',
   },
   media: {
-    maxTokens: 4000,
+    maxTokens: 6000,
     instruction: 'Scrivi con buon equilibrio di dettagli: 3-4 paragrafi per sezione, circa 300 parole per sezione.',
   },
   lunga: {
-    maxTokens: 6500,
+    maxTokens: 10000,
     instruction: 'Scrivi con grande ricchezza di dettagli: 5-6 paragrafi per sezione, circa 500-600 parole per sezione, con aneddoti, curiosità e descrizioni vivide.',
   },
 }
@@ -121,7 +121,9 @@ contatti utili (soccorso alpino, rifugi, app di navigazione).
 
 La guida deve essere ricca, coinvolgente, piena di vita. Scrivi come se raccontassi in persona, con calore ed entusiasmo genuino.
 
-LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}`
+LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}
+
+IMPORTANTE: Completa obbligatoriamente tutte e sei le sezioni. Non terminare prima dell'ultima sezione "## Consigli finali".`
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────

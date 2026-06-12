@@ -773,16 +773,38 @@ export async function exportPlannedPdf(hike: PlannedHike): Promise<void> {
   doc.save(`dtrek-pianificato-${hike.title.replace(/\s+/g,'-').replace(/[^a-z0-9-]/gi,'').slice(0,30)}.pdf`)
 }
 
-// ── Guide PDF ──────────────────────────────────────────────────────────────────
+// ── Guide PDF (Magazine Layout) ────────────────────────────────────────────────
+
+function createGradientOverlay(widthPx: number, heightPx: number): string {
+  const c = document.createElement('canvas')
+  c.width = widthPx; c.height = heightPx
+  const ctx = c.getContext('2d')!
+  const grad = ctx.createLinearGradient(0, 0, 0, heightPx)
+  grad.addColorStop(0,    'rgba(0,0,0,0)')
+  grad.addColorStop(0.35, 'rgba(0,0,0,0.55)')
+  grad.addColorStop(1,    'rgba(0,0,0,0.92)')
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, widthPx, heightPx)
+  return c.toDataURL('image/png')
+}
+
 export async function exportGuidePdf(hike: PlannedHike, guideText: string): Promise<void> {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const M = 14, W = 182
-  const AMBER:       [number,number,number] = [180,  83,  9]
-  const AMBER_SOFT:  [number,number,number] = [254, 215, 170]
-  let y = 0
 
-  // Section color mapping (mirrors frontend)
+  // ── Layout constants ──────────────────────────────────────────────────────────
+  const M = 14, W = 182, PAGE_H = 297
+  const GAP = 6, COL_W = (W - GAP) / 2
+  const LEFT_X = M, RIGHT_X = M + COL_W + GAP
+  const CONTENT_TOP = 13, CONTENT_BOTTOM = 284
+  const LINE_H = 4.8, PARA_GAP = 2.5
+  const COVER_MAP_H = 182, COVER_GRAD_H = 90
+
+  // ── Colors ────────────────────────────────────────────────────────────────────
+  const AMBER:      [number,number,number] = [180,  83,   9]
+  const AMBER_SOFT: [number,number,number] = [254, 215, 170]
+  const AMBER_BG:   [number,number,number] = [255, 237, 213]
+
+  // ── Section color mapping ─────────────────────────────────────────────────────
   const GUIDE_COLORS: Record<string, [number,number,number]> = {
     'prima di partire': [217, 119,   6],
     'il percorso':      [ 22, 163,  74],
@@ -791,82 +813,232 @@ export async function exportGuidePdf(hike: PlannedHike, guideText: string): Prom
     'sapori':           [180,  83,   9],
     'consigli':         [  3, 105, 161],
   }
-  function guideColor(title: string): [number,number,number] {
-    const key = title.toLowerCase()
-    for (const [k, v] of Object.entries(GUIDE_COLORS)) {
-      if (key.includes(k)) return v
-    }
+  function guideColor(t: string): [number,number,number] {
+    const k = t.toLowerCase()
+    for (const [kk, v] of Object.entries(GUIDE_COLORS)) if (k.includes(kk)) return v
     return STONE
   }
 
-  // ── Header ───────────────────────────────────────────────────────────────────
-  doc.setFillColor(...AMBER); doc.rect(0, 0, 210, 32, 'F')
-  txt(doc, 'DTrek', M, 9, { size: 12, bold: true, color: WHITE })
-  txt(doc, 'Guida Escursionistica — Giulia', M, 14, { size: 7.5, color: AMBER_SOFT })
-  let ttl = safeText(hike.title)
-  doc.setFontSize(17); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
-  while (doc.getTextWidth(ttl) > W - 5 && ttl.length > 4) ttl = ttl.slice(0, -4) + '…'
-  doc.text(ttl, M, 24)
-  y = 35
+  // ── Markdown parser ───────────────────────────────────────────────────────────
+  type GEl =
+    | { type: 'section-header'; title: string; color: [number,number,number] }
+    | { type: 'subsection';     title: string }
+    | { type: 'curiosita';      text:  string }
+    | { type: 'paragraph';      text:  string }
+
+  function parseBodyInto(body: string, els: GEl[]) {
+    const cRe = /\[curiosita\]([\s\S]*?)\[\/curiosita\]/g
+    let last = 0, m: RegExpExecArray | null
+    const flushText = (chunk: string) => {
+      let buf: string[] = []
+      const flush = () => { const p = buf.join(' ').trim(); if (p) els.push({ type: 'paragraph', text: p }); buf = [] }
+      for (const l of chunk.split('\n')) {
+        const t = l.trim()
+        if (t.startsWith('### ')) { flush(); els.push({ type: 'subsection', title: t.slice(4).trim() }) }
+        else if (!t) flush()
+        else buf.push(t)
+      }
+      flush()
+    }
+    while ((m = cRe.exec(body)) !== null) {
+      flushText(body.slice(last, m.index))
+      els.push({ type: 'curiosita', text: m[1].trim().replace(/\n/g, ' ') })
+      last = m.index + m[0].length
+    }
+    flushText(body.slice(last))
+  }
+
+  const elements: GEl[] = []
+  for (const part of guideText.split(/^## /m).filter(Boolean)) {
+    const nl = part.indexOf('\n')
+    const title = (nl === -1 ? part : part.slice(0, nl)).trim()
+    const body  = nl === -1 ? '' : part.slice(nl + 1)
+    if (!title) continue
+    elements.push({ type: 'section-header', title, color: guideColor(title) })
+    parseBodyInto(body, elements)
+  }
+
+  // ── Magazine helpers ──────────────────────────────────────────────────────────
+  function addRunningHeader(title: string) {
+    doc.setFillColor(249, 247, 244); doc.rect(0, 0, 210, 11, 'F')
+    doc.setDrawColor(...STONE); doc.setLineWidth(0.25); doc.line(M, 11, 210 - M, 11)
+    txt(doc, safeText(title), M, 7.5, { size: 6, color: STONE })
+    txt(doc, 'DTrek', 210 - M, 7.5, { size: 6.5, bold: true, color: AMBER, align: 'right' })
+    const divX = LEFT_X + COL_W + GAP / 2
+    doc.setDrawColor(...BORDER); doc.setLineWidth(0.2)
+    doc.line(divX, CONTENT_TOP + 1, divX, CONTENT_BOTTOM)
+  }
+
+  function magSectionHeader(title: string, color: [number,number,number], y: number): number {
+    const H = 11
+    const dk: [number,number,number] = [Math.max(0, color[0]-30), Math.max(0, color[1]-30), Math.max(0, color[2]-30)]
+    doc.setFillColor(...dk);    doc.rect(M,   y, 4,   H, 'F')
+    doc.setFillColor(...color); doc.rect(M+4, y, W-4, H, 'F')
+    doc.setFontSize(10.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
+    doc.text(safeText(title).toUpperCase(), M + 10, y + 7.5)
+    return y + H + 4
+  }
+
+  function magCuriositaBox(text: string, color: [number,number,number], y: number): number {
+    doc.setFontSize(8.5)
+    const lines = doc.splitTextToSize(safeText(text), W - 14)
+    const H = lines.length * LINE_H + 12
+    doc.setFillColor(...AMBER_BG); doc.roundedRect(M, y, W, H, 2, 2, 'F')
+    doc.setFillColor(...color);    doc.roundedRect(M, y, 3.5, H, 1.5, 1.5, 'F')
+    doc.setFontSize(6.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...color)
+    doc.text('LO SAPEVI?', M + 8, y + 5)
+    doc.setFontSize(8.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(...INK)
+    doc.text(lines, M + 8, y + 9.5)
+    return y + H + 4
+  }
+
+  function magSubsection(title: string, color: [number,number,number], y: number): number {
+    doc.setFillColor(...color); doc.rect(M, y, W, 0.4, 'F')
+    const lines = doc.splitTextToSize(safeText(title), W)
+    doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...color)
+    doc.text(lines, M, y + 3.5)
+    return y + 0.4 + 3.5 + lines.length * 4.8 + 4
+  }
+
+  // ── Two-column state ──────────────────────────────────────────────────────────
+  let leftY = CONTENT_TOP, rightY = CONTENT_TOP, inLeft = true
+  let sectionColor: [number,number,number] = AMBER
+
+  const syncCols = () => { const m = Math.max(leftY, rightY); leftY = rightY = m; inLeft = true }
+  const getX = () => inLeft ? LEFT_X : RIGHT_X
+  const getY = () => inLeft ? leftY : rightY
+  const setY = (v: number) => { if (inLeft) leftY = v; else rightY = v }
+
+  const needSpace = (h: number) => {
+    syncCols()
+    if (leftY + h > CONTENT_BOTTOM) {
+      doc.addPage(); addRunningHeader(hike.title); leftY = rightY = CONTENT_TOP; inLeft = true
+    }
+  }
+
+  const renderPara = (text: string) => {
+    const safe = safeText(text); if (!safe) return
+    const go = (n: number) => {
+      if (n > 2) return
+      const x = getX(), y = getY()
+      const lines = doc.splitTextToSize(safe, COL_W)
+      const h = lines.length * LINE_H + PARA_GAP
+      if (y + h > CONTENT_BOTTOM) {
+        if (inLeft) { inLeft = false; go(n + 1) }
+        else { doc.addPage(); addRunningHeader(hike.title); leftY = rightY = CONTENT_TOP; inLeft = true; go(n + 1) }
+        return
+      }
+      doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(...INK)
+      doc.text(lines, x, y); setY(y + h)
+    }
+    go(0)
+  }
+
+  // ══ COVER PAGE ════════════════════════════════════════════════════════════════
+  const pts = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number,number])
+  const pStep = Math.max(1, Math.ceil(pts.length / 300))
+  const sampled = pts.length > 1 ? pts.filter((_, i) => i % pStep === 0) : (hike.routePolyline ?? []) as [number,number][]
+
+  // Full-bleed map
+  if (sampled.length > 1) {
+    const px = 2100
+    const mapImg = await fetchSatMap(sampled, px, Math.round(px * COVER_MAP_H / 210), '#f59e0b')
+    if (mapImg) doc.addImage(mapImg, 'PNG', 0, 0, 210, COVER_MAP_H)
+    else { doc.setFillColor(200, 190, 175); doc.rect(0, 0, 210, COVER_MAP_H, 'F') }
+  } else {
+    doc.setFillColor(200, 190, 175); doc.rect(0, 0, 210, COVER_MAP_H, 'F')
+  }
+
+  // Gradient overlay (transparent PNG → dark at bottom)
+  const gradPx = 840
+  const gradImg = createGradientOverlay(gradPx, Math.round(gradPx * COVER_GRAD_H / 210))
+  doc.addImage(gradImg, 'PNG', 0, COVER_MAP_H - COVER_GRAD_H, 210, COVER_GRAD_H)
+
+  // Branding tag + hike title (in dark gradient zone)
+  const TAG_Y   = COVER_MAP_H - 50
+  const TITLE_Y = COVER_MAP_H - 42
+  txt(doc, 'DTREK  ·  GUIDA ESCURSIONISTICA', M, TAG_Y, { size: 7, color: AMBER_SOFT })
+
+  let ttl = safeText(hike.title).toUpperCase()
+  doc.setFont('helvetica', 'bold')
+  let tSz = 24; doc.setFontSize(tSz)
+  while (doc.getTextWidth(ttl) > W && tSz > 13) { tSz -= 0.5; doc.setFontSize(tSz) }
+  const tLines: string[] = doc.splitTextToSize(ttl, W)
+  doc.setTextColor(...WHITE)
+  tLines.forEach((l: string, i: number) => doc.text(l, M, TITLE_Y + i * Math.round(tSz * 0.42)))
 
   if (hike.plannedDate) {
     const dl = format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })
-    txt(doc, dl, M, y, { size: 8.5, color: STONE }); y += 6
+    const afterT = TITLE_Y + tLines.length * Math.round(tSz * 0.42) + 5
+    txt(doc, safeText(dl), M, afterT, { size: 9, color: AMBER_SOFT })
   }
 
-  // ── Stats boxes ──────────────────────────────────────────────────────────────
-  y = sectionBar(doc, 'Il Percorso', M, y + 1, W, AMBER)
-  const gStats = [
-    { label: 'Distanza',      value: `${(hike.distanceMeters/1000).toFixed(1)} km` },
-    { label: 'Dislivello +',  value: `${Math.round(hike.elevationGain)} m` },
-    { label: 'Quota massima', value: `${Math.round(hike.altitudeMax)} m slm` },
-    { label: 'Durata stimata',value: formatDuration(hike.estimatedTimeSeconds) },
+  // Amber stats strip
+  const STRIP_H = 19
+  doc.setFillColor(...AMBER); doc.rect(0, COVER_MAP_H, 210, STRIP_H, 'F')
+  const STATS = [
+    { label: 'Distanza',       value: `${(hike.distanceMeters / 1000).toFixed(1)} km` },
+    { label: 'Dislivello +',   value: `${Math.round(hike.elevationGain)} m` },
+    { label: 'Quota massima',  value: `${Math.round(hike.altitudeMax)} m slm` },
+    { label: 'Durata stimata', value: formatDuration(hike.estimatedTimeSeconds) },
   ]
-  const bw = (W - 3 * 2) / 4, bh = 14
-  gStats.forEach((s, i) => statBox(doc, s.label, s.value, undefined, M + i * (bw + 2), y, bw, bh))
-  y += bh + 4
+  const slotW = 210 / STATS.length
+  STATS.forEach((s, i) => {
+    const cx = i * slotW + slotW / 2
+    txt(doc, s.value, cx, COVER_MAP_H + 10, { size: 11, bold: true, color: WHITE,     align: 'center' })
+    txt(doc, s.label, cx, COVER_MAP_H + 16, { size: 6.5,             color: AMBER_SOFT, align: 'center' })
+  })
 
-  // ── Route map (OSM) ───────────────────────────────────────────────────────────
-  const pts = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number,number])
-  const step = Math.max(1, Math.ceil(pts.length / 300))
-  const sampled = pts.length > 1 ? pts.filter((_, i) => i % step === 0) : (hike.routePolyline ?? []) as [number,number][]
-
-  if (sampled.length > 1) {
-    const mapH = 58
-    const mapImg = await fetchSatMap(sampled, 1440, Math.round(1440 * mapH / W), '#f59e0b')
-    if (mapImg) { doc.addImage(mapImg, 'PNG', M, y, W, mapH); y += mapH + 4 }
+  // White bottom strip
+  const WHITE_Y = COVER_MAP_H + STRIP_H
+  doc.setFillColor(255, 255, 255); doc.rect(0, WHITE_Y, 210, PAGE_H - WHITE_Y, 'F')
+  txt(doc, 'Con Giulia', M, WHITE_Y + 14, { size: 12, bold: true, color: AMBER })
+  txt(doc, 'Guida escursionistica con storia, natura e curiosita locali', M, WHITE_Y + 21, { size: 8, color: STONE })
+  if (hike.assessment?.difficulty) {
+    txt(doc, `Difficolta: ${safeText(hike.assessment.difficulty)}`, M, WHITE_Y + 31, { size: 8, color: INK })
   }
+  if (hike.assessment?.suitabilityScore) {
+    txt(doc, `Adatta all\'${hike.assessment.suitabilityScore}% degli escursionisti`, M, WHITE_Y + 39, { size: 8, color: INK })
+  }
+  doc.setFillColor(...AMBER); doc.rect(M, PAGE_H - 14, W, 0.5, 'F')
+  txt(doc, `Generata il ${format(new Date(), 'dd/MM/yyyy')}  ·  dtrek.app`, 105, PAGE_H - 8, { size: 7, color: STONE, align: 'center' })
 
-  // ── Guide sections ────────────────────────────────────────────────────────────
-  const parts = guideText.split(/^## /m).filter(Boolean)
-  for (const part of parts) {
-    const nl = part.indexOf('\n')
-    const title = (nl === -1 ? part : part.slice(0, nl)).trim()
-    const body  = nl === -1 ? '' : part.slice(nl + 1).trim()
-    if (!title) continue
+  // ══ CONTENT PAGES ════════════════════════════════════════════════════════════
+  doc.addPage()
+  addRunningHeader(hike.title)
+  leftY = rightY = CONTENT_TOP; inLeft = true
 
-    const sc = guideColor(title)
-    if (y + 20 > 272) { doc.addPage(); y = 14 }
-    y = sectionBar(doc, safeText(title), M, y + 3, W, sc)
+  for (const el of elements) {
+    if (el.type === 'section-header') {
+      sectionColor = el.color
+      needSpace(20)
+      leftY = rightY = magSectionHeader(el.title, el.color, leftY)
+      inLeft = true
 
-    const paras = body.split(/\n+/).filter(Boolean)
-    for (const para of paras) {
-      const lines = doc.splitTextToSize(safeText(para), W - 2)
-      const needed = lines.length * 4.5 + 2
-      if (y + needed > 278) { doc.addPage(); y = 14 }
-      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(...INK)
-      doc.text(lines, M, y)
-      y += needed
+    } else if (el.type === 'subsection') {
+      syncCols()
+      needSpace(12)
+      leftY = rightY = magSubsection(el.title, sectionColor, leftY)
+      inLeft = true
+
+    } else if (el.type === 'curiosita') {
+      doc.setFontSize(8.5)
+      const ls = doc.splitTextToSize(safeText(el.text), W - 14)
+      needSpace(ls.length * LINE_H + 16)
+      leftY = rightY = magCuriositaBox(el.text, sectionColor, leftY)
+      inLeft = true
+
+    } else {
+      renderPara(el.text)
     }
-    y += 2
   }
 
   // ── POI reference list ────────────────────────────────────────────────────────
   const wikiEntries = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const rawPois     = (hike.cachedPois   ?? []) as PoiItem[]
   if (wikiEntries.length > 0 || rawPois.length > 0) {
-    if (y + 40 > 272) { doc.addPage(); y = 14 }
-    y = renderPois(doc, wikiEntries, rawPois, M, W, y + 3, AMBER)
+    needSpace(40)
+    leftY = rightY = renderPois(doc, wikiEntries, rawPois, M, W, leftY + 3, AMBER)
   }
 
   footer(doc, `Guida "${safeText(hike.title)}" · generata il ${format(new Date(), 'dd/MM/yyyy HH:mm')} · DTrek`)
