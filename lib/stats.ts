@@ -1,4 +1,5 @@
 import { ActivityMeta } from './blobStore'
+import { TrackPoint } from './tcxParser'
 import { format } from 'date-fns'
 
 export function formatPaceMinkm(distanceM: number, totalSec: number): string {
@@ -140,3 +141,94 @@ export function haversineM(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export const COMPARISON_COLORS = ['#378d44', '#c05a17', '#2563eb', '#9333ea']
+
+// ── HR Zones ──────────────────────────────────────────────────────────────────
+export const ZONE_NAMES  = ['Z1 Recupero', 'Z2 Aerobico', 'Z3 Soglia', 'Z4 Lattato', 'Z5 VO₂max']
+export const ZONE_COLORS = ['#93c5fd', '#6ee7b7', '#fde047', '#fb923c', '#f87171']
+
+export interface HRZone { name: string; pct: number; color: string }
+
+export function computeHRZones(trackPoints: TrackPoint[], maxHR: number): HRZone[] {
+  const pts = trackPoints.filter(p => p.heartRateBpm !== undefined)
+  if (pts.length === 0) return []
+  const counts = [0, 0, 0, 0, 0]
+  for (const p of pts) {
+    const ratio = p.heartRateBpm! / maxHR
+    counts[ratio < 0.6 ? 0 : ratio < 0.7 ? 1 : ratio < 0.8 ? 2 : ratio < 0.9 ? 3 : 4]++
+  }
+  const total = counts.reduce((a, b) => a + b, 0)
+  return ZONE_NAMES.map((name, i) => ({
+    name, color: ZONE_COLORS[i], pct: total > 0 ? Math.round(counts[i] / total * 100) : 0,
+  }))
+}
+
+// ── Seasonal analysis ─────────────────────────────────────────────────────────
+export type Season = 'primavera' | 'estate' | 'autunno' | 'inverno'
+
+export interface SeasonStats {
+  season: Season
+  label: string
+  color: string
+  count: number
+  avgKm: number
+  avgGain: number
+  avgHR: number
+  avgSatisfaction: number
+  avgAltMax: number
+}
+
+export function computeSeasonalStats(activities: ActivityMeta[]): SeasonStats[] {
+  const meta: Record<Season, { label: string; color: string }> = {
+    primavera: { label: 'Primavera', color: '#22c55e' },
+    estate:    { label: 'Estate',    color: '#f59e0b' },
+    autunno:   { label: 'Autunno',  color: '#f97316' },
+    inverno:   { label: 'Inverno',  color: '#60a5fa' },
+  }
+  function getSeason(d: Date): Season {
+    const m = d.getMonth()
+    if (m >= 2 && m <= 4) return 'primavera'
+    if (m >= 5 && m <= 7) return 'estate'
+    if (m >= 8 && m <= 10) return 'autunno'
+    return 'inverno'
+  }
+  return (['primavera', 'estate', 'autunno', 'inverno'] as Season[]).map(season => {
+    const acts = activities.filter(a => getSeason(new Date(a.startTime)) === season)
+    const n = acts.length
+    if (n === 0) return { season, ...meta[season], count: 0, avgKm: 0, avgGain: 0, avgHR: 0, avgSatisfaction: 0, avgAltMax: 0 }
+    const withHR   = acts.filter(a => a.avgHeartRate > 0)
+    const withSodd = acts.filter(a => (a.soddisfazione ?? 0) > 0)
+    return {
+      season, ...meta[season], count: n,
+      avgKm:           Math.round(acts.reduce((s, a) => s + a.distanceMeters / 1000, 0) / n * 10) / 10,
+      avgGain:         Math.round(acts.reduce((s, a) => s + a.elevationGain, 0) / n),
+      avgHR:           withHR.length   > 0 ? Math.round(withHR.reduce((s, a) => s + a.avgHeartRate, 0) / withHR.length) : 0,
+      avgSatisfaction: withSodd.length > 0 ? Math.round(withSodd.reduce((s, a) => s + (a.soddisfazione ?? 0), 0) / withSodd.length * 10) / 10 : 0,
+      avgAltMax:       Math.round(acts.reduce((s, a) => s + (a.altitudeMax ?? 0), 0) / n),
+    }
+  })
+}
+
+// ── Moving average & linear regression ───────────────────────────────────────
+export function movingAverage(
+  data: { date: string; value: number }[],
+  window = 5,
+): { date: string; value: number }[] {
+  const half = Math.floor(window / 2)
+  return data.map((d, i) => {
+    const slice = data.slice(Math.max(0, i - half), Math.min(data.length, i + half + 1)).filter(x => x.value > 0)
+    return { date: d.date, value: slice.length > 0 ? Math.round(slice.reduce((s, x) => s + x.value, 0) / slice.length * 10) / 10 : 0 }
+  })
+}
+
+export function linearRegression(points: { x: number; y: number }[]): { slope: number; intercept: number } {
+  const n = points.length
+  if (n < 2) return { slope: 0, intercept: n === 1 ? points[0].y : 0 }
+  const sx = points.reduce((s, p) => s + p.x, 0)
+  const sy = points.reduce((s, p) => s + p.y, 0)
+  const sxy = points.reduce((s, p) => s + p.x * p.y, 0)
+  const sx2 = points.reduce((s, p) => s + p.x ** 2, 0)
+  const denom = n * sx2 - sx ** 2
+  if (denom === 0) return { slope: 0, intercept: sy / n }
+  const slope = (n * sxy - sx * sy) / denom
+  return { slope, intercept: (sy - slope * sx) / n }
+}
