@@ -167,10 +167,13 @@ export default function ResocontoPage() {
       }
     }).finally(() => setLoading(false))
 
-    // Load photos from localStorage
+    // Load photos from localStorage, sorted start→end by progress
     try {
       const raw = localStorage.getItem(`dtrek_vp_${id}`)
-      if (raw) setPhotos(JSON.parse(raw) as RoutePhoto[])
+      if (raw) {
+        const parsed = JSON.parse(raw) as RoutePhoto[]
+        setPhotos([...parsed].sort((a, b) => a.progress - b.progress))
+      }
     } catch { /* ignore */ }
   }, [id, router])
 
