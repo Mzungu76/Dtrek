@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
@@ -88,6 +88,63 @@ function RenderBody({ text }: { text: string }) {
   )
 }
 
+// ── Mini route plan-view map with numbered photo pins ─────────────────────────
+
+function RouteMiniMap({ trackPoints, photos }: { trackPoints: TrackPoint[]; photos: RoutePhoto[] }) {
+  const pts = trackPoints.filter(p => p.lat && p.lon)
+  if (pts.length < 2) return null
+
+  const lats = pts.map(p => p.lat!), lons = pts.map(p => p.lon!)
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
+  const dLat = maxLat - minLat || 0.001
+  const dLon = maxLon - minLon || 0.001
+
+  const W = 200, H = 160, M = 10
+  const toX = (lon: number) => M + ((lon - minLon) / dLon) * (W - 2 * M)
+  const toY = (lat: number) => H - M - ((lat - minLat) / dLat) * (H - 2 * M)
+
+  const step    = Math.max(1, Math.ceil(pts.length / 150))
+  const sampled = pts.filter((_, i) => i % step === 0)
+  const pathD   = sampled.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'} ${toX(p.lon!).toFixed(1)} ${toY(p.lat!).toFixed(1)}`,
+  ).join(' ')
+
+  const sorted = [...photos].sort((a, b) => a.progress - b.progress)
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full">
+      <path d={pathD} fill="none" stroke="#40916c" strokeWidth="2.5"
+        strokeLinecap="round" strokeLinejoin="round" />
+      {/* Start */}
+      <circle cx={toX(sampled[0].lon!)} cy={toY(sampled[0].lat!)} r={4} fill="#40916c" />
+      {/* End */}
+      <circle cx={toX(sampled[sampled.length-1].lon!)} cy={toY(sampled[sampled.length-1].lat!)}
+        r={3} fill="#2d6a4f" opacity={0.5} />
+      {/* Numbered photo pins */}
+      {sorted.map((ph, i) => {
+        let x: number, y: number
+        if (ph.hasExifGps && ph.lat && ph.lon) {
+          x = toX(ph.lon); y = toY(ph.lat)
+        } else {
+          const idx = Math.round(ph.progress * (pts.length - 1))
+          const pt  = pts[Math.min(idx, pts.length - 1)]
+          x = toX(pt.lon!); y = toY(pt.lat!)
+        }
+        return (
+          <g key={ph.id}>
+            <circle cx={x} cy={y} r={8} fill="#c05a17" opacity={0.88} />
+            <text x={x} y={y + 3} textAnchor="middle" fontSize="7.5"
+              fill="white" fontWeight="bold" fontFamily="sans-serif">
+              {i + 1}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
 // ── Route timeline: elevation profile + photo markers ─────────────────────────
 
 function RouteTimeline({ trackPoints, photos }: { trackPoints: TrackPoint[]; photos: RoutePhoto[] }) {
@@ -144,16 +201,21 @@ function RouteTimeline({ trackPoints, photos }: { trackPoints: TrackPoint[]; pho
         })}
       </svg>
 
-      {/* Photo thumbnails below profile */}
+      {/* Photo thumbnails below profile — numbered */}
       {sorted.length > 0 && (
-        <div className="relative mt-1" style={{ height: 80 }}>
-          {sorted.map(ph => (
+        <div className="relative mt-1" style={{ height: 88 }}>
+          {sorted.map((ph, i) => (
             <div key={ph.id}
               className="absolute -translate-x-1/2 top-0 flex flex-col items-center"
               style={{ left: `${ph.progress * 100}%` }}>
-              <img src={ph.dataUrl} alt={ph.caption}
-                className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
-              <p className="text-[8.5px] text-stone-500 font-lora italic mt-0.5 max-w-[60px] text-center leading-tight truncate">
+              <div className="relative">
+                <img src={ph.dataUrl} alt={ph.caption}
+                  className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
+                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
+                  {i + 1}
+                </span>
+              </div>
+              <p className="text-[8px] text-stone-500 font-lora mt-0.5 max-w-[60px] text-center leading-tight">
                 {ph.caption}
               </p>
             </div>
@@ -178,10 +240,12 @@ function SectionCard({
   section,
   index,
   photo,
+  floatNode,
 }: {
   section: Section
   index: number
   photo?: RoutePhoto
+  floatNode?: ReactNode
 }) {
   const color = SECTION_COLORS[index % SECTION_COLORS.length]
   return (
@@ -195,7 +259,8 @@ function SectionCard({
         </h2>
       </div>
 
-      <div className={`p-6 ${photo ? 'md:columns-2 md:gap-8' : ''} print-columns-2`}>
+      <div className="p-6 print-columns-2">
+        {floatNode}
         {photo && (
           <div className="float-right ml-5 mb-3 w-44 print:w-40 print:ml-4 shrink-0 hidden md:block print:block">
             <img src={photo.dataUrl} alt={photo.caption}
@@ -233,7 +298,6 @@ export default function ResocontoPage() {
   const [lightbox,    setLightbox]    = useState<RoutePhoto | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [apiError,    setApiError]    = useState<string | null>(null)
-  const [mapImage,    setMapImage]    = useState<string>('')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load activity + report + photos
@@ -259,22 +323,6 @@ export default function ResocontoPage() {
       }
     } catch { /* ignore */ }
   }, [id, router])
-
-  // Generate satellite map image once activity loads
-  useEffect(() => {
-    if (!activity) return
-    const pts = activity.trackPoints
-      .filter(p => p.lat && p.lon)
-      .map(p => [p.lat!, p.lon!] as [number, number])
-    if (pts.length < 2) return
-    const step    = Math.max(1, Math.ceil(pts.length / 300))
-    const sampled = pts.filter((_, i) => i % step === 0)
-    import('@/utils/pdfExport').then(({ fetchSatMap }) =>
-      fetchSatMap(sampled, 1200, 500, '#40916c')
-        .then(url => setMapImage(url))
-        .catch(() => {})
-    )
-  }, [activity])
 
   // Auto-save debounce when editing
   useEffect(() => {
@@ -434,29 +482,6 @@ export default function ResocontoPage() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 print:max-w-full print:px-0">
 
-        {/* ── Route map + photo timeline ── */}
-        {(mapImage || (activity && activity.trackPoints.length > 4)) && (
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6 print:rounded-none print:shadow-none">
-            {/* Satellite map */}
-            {mapImage && (
-              <div className="relative">
-                <img src={mapImage} alt="Mappa del percorso"
-                  className="w-full object-cover" style={{ maxHeight: 280 }} />
-                <div className="absolute inset-0 bg-gradient-to-t from-white/30 to-transparent pointer-events-none" />
-              </div>
-            )}
-            {/* Elevation profile + photo timeline */}
-            {activity && activity.trackPoints.length > 4 && (
-              <div className="px-5 pt-3 pb-4">
-                <p className="font-barlow text-[10px] font-bold tracking-[2px] uppercase text-stone-400 mb-2">
-                  Profilo altimetrico
-                </p>
-                <RouteTimeline trackPoints={activity.trackPoints} photos={photos} />
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ── Controls ── */}
         <div className="mb-6 print:hidden">
           <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5">
@@ -575,14 +600,53 @@ export default function ResocontoPage() {
         )}
 
         {/* ── Rendered sections ── */}
-        {!isEditing && sections.map((section, i) => (
-          <SectionCard
-            key={i}
-            section={section}
-            index={i}
-            photo={photos[i + 1]}
-          />
-        ))}
+        {!isEditing && (() => {
+          const miniMapNode = activity.trackPoints.length > 4 ? (
+            <div className="float-right ml-5 mb-4 w-52 shrink-0 hidden md:block print:block">
+              <div className="bg-stone-50 rounded-xl border border-stone-200 overflow-hidden shadow-sm">
+                <div className="p-1.5 pb-0">
+                  <RouteMiniMap trackPoints={activity.trackPoints} photos={photos} />
+                </div>
+                {photos.length > 0 && (
+                  <div className="px-2 pt-1 pb-2 space-y-0.5">
+                    {photos.slice(0, 7).map((ph, i) => (
+                      <div key={ph.id} className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0 font-barlow">
+                          {i + 1}
+                        </span>
+                        <span className="font-lora text-[9px] text-stone-500 truncate">{ph.caption}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : undefined
+
+          return (
+            <>
+              {sections.map((section, i) => (
+                <SectionCard
+                  key={i}
+                  section={section}
+                  index={i}
+                  photo={i === 0 ? undefined : photos[i]}
+                  floatNode={i === 0 ? miniMapNode : undefined}
+                />
+              ))}
+
+              {/* ── Elevation profile with photo markers — end of report ── */}
+              {sections.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-5 print:rounded-none print:shadow-none print:border-0 print:border-t print:border-stone-200">
+                  <h3 className="font-barlow font-bold uppercase tracking-[2px] text-xs text-stone-400 mb-3">
+                    Profilo altimetrico
+                  </h3>
+                  <RouteTimeline trackPoints={activity.trackPoints} photos={photos} />
+                </div>
+              )}
+            </>
+          )
+        })()}
 
         {/* ── Raw streaming text (before first section parsed) ── */}
         {generating && !sections.length && content && (
