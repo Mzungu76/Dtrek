@@ -1,6 +1,7 @@
 'use client'
 
 import { createRoot } from 'react-dom/client'
+import { flushSync } from 'react-dom'
 import React from 'react'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { WikiPage }    from '@/lib/wikipedia'
@@ -8,6 +9,21 @@ import type { PoiItem }     from '@/lib/overpass'
 import { buildGuideContent } from './buildGuideContent'
 import { fetchRoutePhotos }  from './fetchRoutePhotos'
 import GuideTemplate         from '@/app/components/guide/GuideTemplate'
+
+async function toDataUrl(url: string): Promise<string> {
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
+  const blob = await res.blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function toDataUrlSafe(url: string): Promise<string | undefined> {
+  try { return await toDataUrl(url) } catch { return undefined }
+}
 
 /** Re-use the OSM tile stitcher already in utils/pdfExport.ts */
 async function buildMapImage(hike: PlannedHike): Promise<string> {
@@ -36,8 +52,9 @@ async function fetchCoverPhotos(hike: PlannedHike): Promise<string[]> {
     const mid = poly[midIdx]
     const [lat, lon] = Array.isArray(mid) ? mid : [mid.lat!, mid.lon!]
     if (!lat || !lon) return []
-    const photos = await fetchRoutePhotos(lat, lon, 15000, 6)
-    return photos.map(p => p.url)
+    const photos  = await fetchRoutePhotos(lat, lon, 15000, 6)
+    const dataUrls = await Promise.all(photos.map(p => toDataUrlSafe(p.url)))
+    return dataUrls.filter((u): u is string => !!u)
   } catch {
     return []
   }
@@ -51,11 +68,8 @@ async function prefetchThumbs(hike: PlannedHike): Promise<Map<number, string>> {
     wikiEntries
       .filter(e => e.wiki.thumbnail)
       .map(async e => {
-        try {
-          // Test the URL is reachable; use directly as src (html2canvas handles CORS)
-          const res = await fetch(e.wiki.thumbnail!, { signal: AbortSignal.timeout(5000) })
-          if (res.ok) thumbs.set(e.wiki.pageid, e.wiki.thumbnail!)
-        } catch { /* silent */ }
+        const dataUrl = await toDataUrlSafe(e.wiki.thumbnail!)
+        if (dataUrl) thumbs.set(e.wiki.pageid, dataUrl)
       }),
   )
   return thumbs
@@ -76,14 +90,19 @@ export async function exportGuidePdfHtml(hike: PlannedHike, guideText: string): 
   document.body.appendChild(container)
 
   const root = createRoot(container)
+  flushSync(() => root.render(
+    React.createElement(GuideTemplate, { data, forPrint: true }),
+  ))
 
-  await new Promise<void>(resolve => {
-    root.render(
-      React.createElement(GuideTemplate, { data, forPrint: true }),
-    )
-    // Give React one frame to flush the render
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-  })
+  // Safety net: wait for any <img> that isn't a data URL to finish loading
+  const imgs = Array.from(container.querySelectorAll<HTMLImageElement>('img'))
+  await Promise.all(imgs.map(img =>
+    new Promise<void>(resolve => {
+      if (img.complete) { resolve(); return }
+      img.onload  = () => resolve()
+      img.onerror = () => resolve()
+    }),
+  ))
 
   try {
     const html2pdf = (await import('html2pdf.js')).default
@@ -112,7 +131,7 @@ export async function exportGuidePdfHtml(hike: PlannedHike, guideText: string): 
           before: '.guide-page',
         },
       })
-      .from(container.firstElementChild as HTMLElement)
+      .from(container.querySelector('.guide-root') as HTMLElement)
       .save()
   } finally {
     root.unmount()
