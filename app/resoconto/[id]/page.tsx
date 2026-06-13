@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getActivityById, type StoredActivity } from '@/lib/blobStore'
-import { formatDuration } from '@/lib/tcxParser'
+import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -88,6 +88,88 @@ function RenderBody({ text }: { text: string }) {
   )
 }
 
+// ── Route timeline: elevation profile + photo markers ─────────────────────────
+
+function RouteTimeline({ trackPoints, photos }: { trackPoints: TrackPoint[]; photos: RoutePhoto[] }) {
+  const pts = trackPoints.filter(p => p.altitudeMeters !== undefined && p.lat && p.lon)
+  if (pts.length < 4) return null
+
+  const W = 1000, H = 100
+  const alts    = pts.map(p => p.altitudeMeters!)
+  const minAlt  = Math.min(...alts)
+  const maxAlt  = Math.max(...alts)
+  const range   = maxAlt - minAlt || 1
+
+  const toY = (alt: number) => H - 4 - ((alt - minAlt) / range) * (H - 12)
+
+  const pathD = pts.map((p, i) => {
+    const x = (i / (pts.length - 1)) * W
+    const y = toY(p.altitudeMeters!)
+    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
+  }).join(' ')
+
+  const sorted = [...photos].sort((a, b) => a.progress - b.progress)
+
+  return (
+    <div className="relative">
+      {/* SVG elevation profile */}
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+        className="w-full" style={{ height: 72 }}>
+        {/* Area fill */}
+        <defs>
+          <linearGradient id="altGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#40916c" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#40916c" stopOpacity="0.04" />
+          </linearGradient>
+        </defs>
+        <path
+          d={`${pathD} L ${W} ${H} L 0 ${H} Z`}
+          fill="url(#altGrad)" />
+        <path d={pathD} fill="none" stroke="#2d6a4f" strokeWidth="2.5" strokeLinejoin="round" />
+
+        {/* Photo markers on profile */}
+        {sorted.map(ph => {
+          const x  = ph.progress * W
+          const idx = Math.round(ph.progress * (pts.length - 1))
+          const pt  = pts[Math.min(idx, pts.length - 1)]
+          const y   = toY(pt.altitudeMeters!)
+          return (
+            <g key={ph.id}>
+              <line x1={x} y1={y - 2} x2={x} y2={H}
+                stroke="#b5a48a" strokeWidth="1" strokeDasharray="3 2" />
+              <circle cx={x} cy={y - 2} r={5}
+                fill="white" stroke="#2d6a4f" strokeWidth="2" />
+            </g>
+          )
+        })}
+      </svg>
+
+      {/* Photo thumbnails below profile */}
+      {sorted.length > 0 && (
+        <div className="relative mt-1" style={{ height: 80 }}>
+          {sorted.map(ph => (
+            <div key={ph.id}
+              className="absolute -translate-x-1/2 top-0 flex flex-col items-center"
+              style={{ left: `${ph.progress * 100}%` }}>
+              <img src={ph.dataUrl} alt={ph.caption}
+                className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
+              <p className="text-[8.5px] text-stone-500 font-lora italic mt-0.5 max-w-[60px] text-center leading-tight truncate">
+                {ph.caption}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Min/max altitude labels */}
+      <div className="flex justify-between mt-1 px-0.5">
+        <span className="text-[9px] text-stone-400 font-mono">↑ {Math.round(minAlt)} m</span>
+        <span className="text-[9px] text-stone-400 font-mono">{Math.round(maxAlt)} m ↑</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Section card ───────────────────────────────────────────────────────────────
 
 const SECTION_COLORS = ['#2d6a4f', '#40916c', '#74c69d', '#b7e4c7', '#d8f3dc']
@@ -151,6 +233,7 @@ export default function ResocontoPage() {
   const [lightbox,    setLightbox]    = useState<RoutePhoto | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [apiError,    setApiError]    = useState<string | null>(null)
+  const [mapImage,    setMapImage]    = useState<string>('')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load activity + report + photos
@@ -176,6 +259,22 @@ export default function ResocontoPage() {
       }
     } catch { /* ignore */ }
   }, [id, router])
+
+  // Generate satellite map image once activity loads
+  useEffect(() => {
+    if (!activity) return
+    const pts = activity.trackPoints
+      .filter(p => p.lat && p.lon)
+      .map(p => [p.lat!, p.lon!] as [number, number])
+    if (pts.length < 2) return
+    const step    = Math.max(1, Math.ceil(pts.length / 300))
+    const sampled = pts.filter((_, i) => i % step === 0)
+    import('@/utils/pdfExport').then(({ fetchSatMap }) =>
+      fetchSatMap(sampled, 1200, 500, '#40916c')
+        .then(url => setMapImage(url))
+        .catch(() => {})
+    )
+  }, [activity])
 
   // Auto-save debounce when editing
   useEffect(() => {
@@ -334,6 +433,29 @@ export default function ResocontoPage() {
       )}
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 print:max-w-full print:px-0">
+
+        {/* ── Route map + photo timeline ── */}
+        {(mapImage || (activity && activity.trackPoints.length > 4)) && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6 print:rounded-none print:shadow-none">
+            {/* Satellite map */}
+            {mapImage && (
+              <div className="relative">
+                <img src={mapImage} alt="Mappa del percorso"
+                  className="w-full object-cover" style={{ maxHeight: 280 }} />
+                <div className="absolute inset-0 bg-gradient-to-t from-white/30 to-transparent pointer-events-none" />
+              </div>
+            )}
+            {/* Elevation profile + photo timeline */}
+            {activity && activity.trackPoints.length > 4 && (
+              <div className="px-5 pt-3 pb-4">
+                <p className="font-barlow text-[10px] font-bold tracking-[2px] uppercase text-stone-400 mb-2">
+                  Profilo altimetrico
+                </p>
+                <RouteTimeline trackPoints={activity.trackPoints} photos={photos} />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Controls ── */}
         <div className="mb-6 print:hidden">
