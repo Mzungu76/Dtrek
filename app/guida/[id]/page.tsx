@@ -142,7 +142,7 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
           {lead.text}
         </p>
       )}
-      <div className="md:columns-2 md:gap-8">
+      <div className="md:columns-2 md:gap-8 print-columns-2">
         {sectionPhoto && (
           <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -297,7 +297,6 @@ export default function GuidaPage() {
   const [generating,   setGenerating]   = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [guideLength,  setGuideLength]  = useState<GuideLength>('media')
-  const [exporting,    setExporting]    = useState(false)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
 
@@ -514,15 +513,8 @@ export default function GuidaPage() {
 
   // ── PDF export ────────────────────────────────────────────────────────────
 
-  async function exportPdf() {
-    if (!hike || !guideText) return
-    setExporting(true)
-    try {
-      const { exportGuidePdf } = await import('@/utils/pdfExport')
-      await exportGuidePdf(hike, guideText)
-    } finally {
-      setExporting(false)
-    }
+  function exportPdf() {
+    window.print()
   }
 
   // ── Loading / not found ───────────────────────────────────────────────────
@@ -556,7 +548,7 @@ export default function GuidaPage() {
     <div className="min-h-screen" style={{ background: '#f5f3ef' }}>
 
       {/* ── Sticky nav bar ──────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b shadow-sm" style={{ borderColor: '#e5e1d8' }}>
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b shadow-sm print:hidden" style={{ borderColor: '#e5e1d8' }}>
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
           <button
             onClick={() => router.push(`/programma/${encodeURIComponent(hikeId)}`)}
@@ -603,7 +595,7 @@ export default function GuidaPage() {
       </div>
 
       {/* ── Hero ────────────────────────────────────────────────────────── */}
-      <div className="relative w-full overflow-hidden" style={{ height: 'clamp(280px, 42vw, 480px)' }}>
+      <div className="relative w-full overflow-hidden print:h-[220px]" style={{ height: 'clamp(280px, 42vw, 480px)' }}>
         {/* Background: photo or gradient */}
         {routePhotos[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -667,7 +659,7 @@ export default function GuidaPage() {
 
       {/* ── Photo mosaic strip ─────────────────────────────────────────── */}
       {routePhotos.length >= 2 && (
-        <div className="flex h-40 overflow-hidden">
+        <div className="flex h-40 overflow-hidden print:hidden">
           {routePhotos.slice(1, 5).map((url, i) => (
             <div key={i} className="flex-1 overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -678,11 +670,11 @@ export default function GuidaPage() {
       )}
 
       {/* ── Main content ────────────────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 print:max-w-full print:px-0">
 
         {/* ── No guide yet ────────────────────────────────────────────── */}
         {!hasGuide && !generating && (
-          <div className="flex flex-col items-center py-20 gap-8 text-center">
+          <div className="flex flex-col items-center py-20 gap-8 text-center print:hidden">
             <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center shadow-inner">
               <BookOpen className="w-9 h-9 text-amber-500" />
             </div>
@@ -733,7 +725,7 @@ export default function GuidaPage() {
 
         {/* ── Generating spinner ──────────────────────────────────────── */}
         {generating && sections.length === 0 && (
-          <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <div className="flex flex-col items-center gap-4 py-20 text-center print:hidden">
             <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center animate-pulse">
               <BookOpen className="w-7 h-7 text-amber-500" />
             </div>
@@ -746,7 +738,7 @@ export default function GuidaPage() {
 
         {/* ── Voice progress bar (when playing) ──────────────────────── */}
         {(isPlaying || isPaused) && hasGuide && (
-          <div className="mt-6 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3" style={{ borderColor: '#e5e1d8' }}>
+          <div className="mt-6 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3 print:hidden" style={{ borderColor: '#e5e1d8' }}>
             <Volume2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-[11px] font-medium text-stone-600 truncate">
@@ -767,7 +759,7 @@ export default function GuidaPage() {
 
         {/* ── Section tab navigation ──────────────────────────────────── */}
         {sections.length > 0 && (
-          <div className="sticky z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 bg-white/95 backdrop-blur-sm border-b overflow-x-auto"
+          <div className="sticky z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 bg-white/95 backdrop-blur-sm border-b overflow-x-auto print:hidden"
             style={{ top: '56px', borderColor: '#e5e1d8', scrollbarWidth: 'none' }}
           >
             <div className="flex gap-1.5 min-w-max">
@@ -798,7 +790,7 @@ export default function GuidaPage() {
                 <article
                   key={i}
                   ref={el => { sectionRefs.current[i] = el }}
-                  className={`scroll-mt-28 bg-white rounded-2xl mb-5 overflow-hidden shadow-sm transition-shadow ${
+                  className={`scroll-mt-28 bg-white rounded-2xl mb-5 overflow-hidden shadow-sm transition-shadow print:rounded-none print:shadow-none print:overflow-visible print:mb-0 print:border-b print:border-stone-200 ${
                     isVoiceActive ? 'ring-2 ring-amber-300 shadow-amber-100 shadow-md' : 'hover:shadow-md'
                   }`}
                 >
@@ -815,7 +807,7 @@ export default function GuidaPage() {
                     <div className="flex-1" />
                     <button
                       onClick={() => speakSection(i)}
-                      className="opacity-60 hover:opacity-100 transition-opacity"
+                      className="opacity-60 hover:opacity-100 transition-opacity print:hidden"
                       title="Ascolta questa sezione"
                     >
                       <Volume2 className="w-3.5 h-3.5 text-white" />
@@ -846,7 +838,7 @@ export default function GuidaPage() {
 
             {/* Generating more... */}
             {generating && (
-              <div className="flex items-center gap-2 px-6 py-4 bg-white rounded-2xl shadow-sm">
+              <div className="flex items-center gap-2 px-6 py-4 bg-white rounded-2xl shadow-sm print:hidden">
                 <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
                 <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
               </div>
@@ -855,14 +847,14 @@ export default function GuidaPage() {
         )}
 
         {error && hasGuide && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
+          <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600 print:hidden">
             {error}
           </div>
         )}
 
         {/* ── Bottom actions ──────────────────────────────────────────── */}
         {hasGuide && !generating && (
-          <div className="mt-10 mb-16 pt-6 flex flex-wrap items-center justify-between gap-4" style={{ borderTop: '1px solid #e5e1d8' }}>
+          <div className="mt-10 mb-16 pt-6 flex flex-wrap items-center justify-between gap-4 print:hidden" style={{ borderTop: '1px solid #e5e1d8' }}>
             <button
               onClick={() => router.push(`/programma/${encodeURIComponent(hikeId)}`)}
               className="flex items-center gap-1.5 text-stone-400 hover:text-stone-700 text-sm transition-colors"
@@ -898,14 +890,11 @@ export default function GuidaPage() {
                 </span>
               )}
 
-              <button onClick={exportPdf} disabled={exporting}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm disabled:opacity-60"
+              <button onClick={exportPdf}
+                className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
               >
-                {exporting
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <FileDown className="w-3.5 h-3.5" />
-                }
-                Esporta PDF
+                <FileDown className="w-3.5 h-3.5" />
+                Stampa PDF
               </button>
             </div>
           </div>

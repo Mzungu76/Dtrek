@@ -68,3 +68,11 @@ body {
 
 /* Chart tooltip */
 .recharts-tooltip-wrapper { font-family: 'DM Sans', sans-serif !important; font-size: 13px !important; }
+
+/* ── Print / PDF ── */
+@media print {
+  @page { size: A4; margin: 1.5cm; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  /* Force two-column body text (md: breakpoint won't fire at ~680px A4 width) */
+  .print-columns-2 { columns: 2; column-gap: 2rem; }
+}
