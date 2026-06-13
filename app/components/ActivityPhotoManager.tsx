@@ -6,7 +6,7 @@ import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff, Map } from 'lucide-react'
 
-const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
+const PhotoPlacementMap = dynamic(() => import('@/app/components/PhotoPlacementMap'), { ssr: false })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -104,9 +104,9 @@ export default function ActivityPhotoManager({
   const [uploading,  setUploading]  = useState(false)
   const [editingId,  setEditingId]  = useState<string | null>(null)
   const [editCaption,setEditCaption]= useState('')
-  const [dragging,   setDragging]   = useState(false)
-  const [show3D,     setShow3D]     = useState(false)
-  const fileRef  = useRef<HTMLInputElement>(null)
+  const [dragging,          setDragging]          = useState(false)
+  const [showPlacementMap,  setShowPlacementMap]  = useState(false)
+  const fileRef   = useRef<HTMLInputElement>(null)
   const saveReady = useRef(false)
 
   // Load from localStorage
@@ -196,9 +196,7 @@ export default function ActivityPhotoManager({
     setPhotos(prev => prev.filter(p => p.id !== id))
   }
 
-  function handleMapClose() {
-    setShow3D(false)
-    // Re-read updated positions from localStorage after RouteMap3D placement
+  function syncFromStorage() {
     try {
       const raw = localStorage.getItem(`dtrek_vp_${activityId}`)
       if (raw) {
@@ -269,8 +267,8 @@ export default function ActivityPhotoManager({
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {photos.map(photo => (
             <div key={photo.id} className="group rounded-xl overflow-hidden border border-stone-100 shadow-sm bg-white">
-              {/* Thumbnail — click to open 3D map for placement */}
-              <div className="relative cursor-pointer" onClick={() => setShow3D(true)}>
+              {/* Thumbnail — click to open placement map */}
+              <div className="relative cursor-pointer" onClick={() => setShowPlacementMap(true)}>
                 <img src={photo.dataUrl} alt={photo.caption}
                   className="w-full aspect-square object-cover group-hover:opacity-90 transition-opacity" />
                 {/* GPS / position badge */}
@@ -320,14 +318,13 @@ export default function ActivityPhotoManager({
         </div>
       )}
 
-      {show3D && (
-        <RouteMap3D
-          trackPoints={trackPoints}
-          title={activityTitle}
-          onClose={handleMapClose}
+      {showPlacementMap && (
+        <PhotoPlacementMap
           activityId={activityId}
-          distanceMeters={distanceMeters ?? 0}
-          elevationGain={elevationGain ?? 0}
+          trackPoints={trackPoints}
+          photos={photos}
+          onClose={() => { setShowPlacementMap(false); syncFromStorage() }}
+          onUpdate={syncFromStorage}
         />
       )}
     </section>

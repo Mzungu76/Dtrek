@@ -13,7 +13,8 @@ import {
   Images, X, BookOpen,
 } from 'lucide-react'
 
-const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
+const RouteMap3D    = dynamic(() => import('@/components/RouteMap3D'),    { ssr: false })
+const RoutePhotoMap = dynamic(() => import('@/app/components/RoutePhotoMap'), { ssr: false })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -85,63 +86,6 @@ function RenderBody({ text }: { text: string }) {
           : null
       })}
     </div>
-  )
-}
-
-// ── Mini route plan-view map with numbered photo pins ─────────────────────────
-
-function RouteMiniMap({ trackPoints, photos }: { trackPoints: TrackPoint[]; photos: RoutePhoto[] }) {
-  const pts = trackPoints.filter(p => p.lat && p.lon)
-  if (pts.length < 2) return null
-
-  const lats = pts.map(p => p.lat!), lons = pts.map(p => p.lon!)
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-  const dLat = maxLat - minLat || 0.001
-  const dLon = maxLon - minLon || 0.001
-
-  const W = 200, H = 160, M = 10
-  const toX = (lon: number) => M + ((lon - minLon) / dLon) * (W - 2 * M)
-  const toY = (lat: number) => H - M - ((lat - minLat) / dLat) * (H - 2 * M)
-
-  const step    = Math.max(1, Math.ceil(pts.length / 150))
-  const sampled = pts.filter((_, i) => i % step === 0)
-  const pathD   = sampled.map((p, i) =>
-    `${i === 0 ? 'M' : 'L'} ${toX(p.lon!).toFixed(1)} ${toY(p.lat!).toFixed(1)}`,
-  ).join(' ')
-
-  const sorted = [...photos].sort((a, b) => a.progress - b.progress)
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full">
-      <path d={pathD} fill="none" stroke="#40916c" strokeWidth="2.5"
-        strokeLinecap="round" strokeLinejoin="round" />
-      {/* Start */}
-      <circle cx={toX(sampled[0].lon!)} cy={toY(sampled[0].lat!)} r={4} fill="#40916c" />
-      {/* End */}
-      <circle cx={toX(sampled[sampled.length-1].lon!)} cy={toY(sampled[sampled.length-1].lat!)}
-        r={3} fill="#2d6a4f" opacity={0.5} />
-      {/* Numbered photo pins */}
-      {sorted.map((ph, i) => {
-        let x: number, y: number
-        if (ph.hasExifGps && ph.lat && ph.lon) {
-          x = toX(ph.lon); y = toY(ph.lat)
-        } else {
-          const idx = Math.round(ph.progress * (pts.length - 1))
-          const pt  = pts[Math.min(idx, pts.length - 1)]
-          x = toX(pt.lon!); y = toY(pt.lat!)
-        }
-        return (
-          <g key={ph.id}>
-            <circle cx={x} cy={y} r={8} fill="#c05a17" opacity={0.88} />
-            <text x={x} y={y + 3} textAnchor="middle" fontSize="7.5"
-              fill="white" fontWeight="bold" fontFamily="sans-serif">
-              {i + 1}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
   )
 }
 
@@ -240,11 +184,13 @@ function SectionCard({
   section,
   index,
   photo,
+  photoIndex,
   floatNode,
 }: {
   section: Section
   index: number
   photo?: RoutePhoto
+  photoIndex?: number
   floatNode?: ReactNode
 }) {
   const color = SECTION_COLORS[index % SECTION_COLORS.length]
@@ -263,11 +209,18 @@ function SectionCard({
         {floatNode}
         {photo && (
           <div className="float-right ml-5 mb-3 w-44 print:w-40 print:ml-4 shrink-0 hidden md:block print:block">
-            <img src={photo.dataUrl} alt={photo.caption}
-              className="w-full aspect-[4/3] object-cover rounded-xl shadow-md print:rounded-lg" />
+            <div className="relative">
+              {photoIndex !== undefined && (
+                <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-barlow z-10">
+                  {photoIndex}
+                </span>
+              )}
+              <img src={photo.dataUrl} alt={photo.caption}
+                className="w-full aspect-[4/3] object-cover rounded-xl shadow-md print:rounded-lg" />
+            </div>
             {photo.caption && (
               <p className="font-lora text-[10px] italic text-stone-400 mt-1 text-center leading-snug">
-                {photo.caption}
+                {photoIndex !== undefined ? `${photoIndex}. ` : ''}{photo.caption}
               </p>
             )}
           </div>
@@ -604,9 +557,11 @@ export default function ResocontoPage() {
           const miniMapNode = activity.trackPoints.length > 4 ? (
             <div className="float-right ml-5 mb-4 w-52 shrink-0 hidden md:block print:block">
               <div className="bg-stone-50 rounded-xl border border-stone-200 overflow-hidden shadow-sm">
-                <div className="p-1.5 pb-0">
-                  <RouteMiniMap trackPoints={activity.trackPoints} photos={photos} />
-                </div>
+                <RoutePhotoMap
+                  trackPoints={activity.trackPoints}
+                  photos={photos}
+                  height="170px"
+                />
                 {photos.length > 0 && (
                   <div className="px-2 pt-1 pb-2 space-y-0.5">
                     {photos.slice(0, 7).map((ph, i) => (
@@ -631,6 +586,7 @@ export default function ResocontoPage() {
                   section={section}
                   index={i}
                   photo={i === 0 ? undefined : photos[i]}
+                  photoIndex={i === 0 ? undefined : i + 1}
                   floatNode={i === 0 ? miniMapNode : undefined}
                 />
               ))}
@@ -662,14 +618,19 @@ export default function ResocontoPage() {
               Le tue foto
             </h3>
             <div className="flex gap-3 overflow-x-auto pb-3">
-              {photos.map(ph => (
+              {photos.map((ph, i) => (
                 <button key={ph.id} onClick={() => setLightbox(ph)}
                   className="shrink-0 w-36 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-                  <img src={ph.dataUrl} alt={ph.caption}
-                    className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
+                  <div className="relative">
+                    <img src={ph.dataUrl} alt={ph.caption}
+                      className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-barlow">
+                      {i + 1}
+                    </span>
+                  </div>
                   {ph.caption && (
                     <p className="px-2 py-1.5 font-lora text-[10px] italic text-stone-500 leading-snug bg-white">
-                      {ph.caption}
+                      {i + 1}. {ph.caption}
                     </p>
                   )}
                 </button>
