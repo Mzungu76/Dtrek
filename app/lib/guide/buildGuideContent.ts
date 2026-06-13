@@ -72,6 +72,7 @@ export function buildGuideContent(
   guideText: string,
   mapImage: string,
   thumbs: Map<number, string>,
+  coverPhotos: string[] = [],
 ): GuideData {
   const sections = parseSections(guideText)
 
@@ -107,10 +108,17 @@ export function buildGuideContent(
     .slice(0, 30)
     .toUpperCase()
 
+  // First wiki thumbnail as fallback section photo
+  const firstWikiThumb = wikiEntries.find(e => thumbs.has(e.wiki.pageid))
+  const wikiThumbUrl = firstWikiThumb ? thumbs.get(firstWikiThumb.wiki.pageid) : undefined
+
+  const p = coverPhotos  // shorthand: p[0]=cover, p[1..]=sections
+
   return {
     title:       hike.title,
     date:        dateStr,
     categoryTag,
+    coverPhoto:  p[0],
     mapImage,
     stats: {
       km:         parseFloat((hike.distanceMeters / 1000).toFixed(1)),
@@ -120,16 +128,16 @@ export function buildGuideContent(
       maxEle:     Math.round(hike.altitudeMax),
     },
     sections: {
-      primadiPartire: { text: findSection(sections, 'prima di partire') },
-      ilPercorso:     { text: findSection(sections, 'il percorso') },
+      primadiPartire: { text: findSection(sections, 'prima di partire'), photo: p[1] },
+      ilPercorso:     { text: findSection(sections, 'il percorso'),       photo: p[2] },
       iLuoghi:        findSection(sections, 'i luoghi')
-        ? { text: findSection(sections, 'i luoghi') }
+        ? { text: findSection(sections, 'i luoghi'), photo: p[3] ?? wikiThumbUrl }
         : undefined,
       laNatura:       findSection(sections, 'la natura')
-        ? { text: findSection(sections, 'la natura') }
+        ? { text: findSection(sections, 'la natura'), photo: p[4] }
         : undefined,
       sapori:         findSection(sections, 'sapori')
-        ? { text: findSection(sections, 'sapori') }
+        ? { text: findSection(sections, 'sapori'), photo: p[5] }
         : undefined,
       consigliFinali: { text: findSection(sections, 'consigli') },
     },

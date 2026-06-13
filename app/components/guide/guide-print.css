@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap');
+
 /* ============================================
    DTREK GUIDE — Magazine Layout CSS
    Used both for in-app preview and PDF export
@@ -5,8 +7,8 @@
 
 /* ROOT */
 .guide-root {
-  font-family: 'Georgia', serif;
-  color: #2D2D2D;
+  font-family: 'DM Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: #1C1C1C;
   background: white;
 }
 
@@ -14,7 +16,7 @@
 .guide-page {
   width: 794px;
   min-height: 1123px;
-  padding: 48px 52px;
+  padding: 52px 52px 64px;
   box-sizing: border-box;
   position: relative;
   background: white;
@@ -23,17 +25,19 @@
 
 /* Page separator in preview */
 .guide-page + .guide-page {
-  border-top: 3px solid #E07B39;
-  margin-top: 24px;
+  border-top: 3px solid #d97706;
+  margin-top: 32px;
 }
 
-/* ---- COVER ---- */
+/* ============================================================
+   COVER PAGE
+   ============================================================ */
 .guide-cover {
   width: 794px;
   height: 1123px;
   position: relative;
   overflow: hidden;
-  background: #1C1C1C;
+  background: #111;
 }
 
 .guide-cover-bg {
@@ -45,66 +49,69 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  object-position: center 30%;
 }
 
+/* Two-layer gradient: subtle vignette top + heavy dark bottom */
 .guide-cover-gradient {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(10,10,10,0.92) 0%,
-    rgba(10,10,10,0.60) 35%,
-    rgba(10,10,10,0.10) 65%,
-    transparent 100%
-  );
+  background:
+    linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, transparent 35%),
+    linear-gradient(to top, rgba(5,5,5,0.95) 0%, rgba(5,5,5,0.65) 35%, transparent 65%);
 }
 
 .guide-cover-content {
   position: absolute;
-  bottom: 140px;
-  left: 48px;
-  right: 48px;
+  bottom: 152px;
+  left: 52px;
+  right: 52px;
 }
 
 .guide-cover-badge {
-  display: inline-block;
-  background: #E07B39;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #d97706;
   color: white;
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  padding: 4px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  padding: 5px 12px;
   border-radius: 2px;
-  margin-bottom: 12px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
 }
 
 .guide-cover-title {
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 42px;
-  font-weight: 900;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 48px;
+  font-weight: 700;
   color: white;
-  line-height: 1.1;
-  margin: 0 0 12px 0;
+  line-height: 1.05;
+  margin: 0 0 14px 0;
   letter-spacing: -0.5px;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.4);
 }
 
 .guide-cover-date {
-  font-family: 'Helvetica Neue', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: 13px;
-  color: #CCCCCC;
+  font-style: italic;
+  color: rgba(255,255,255,0.75);
   margin: 0;
+  letter-spacing: 0.3px;
 }
 
-/* Stats bar cover */
+/* ── Stats bar ── */
 .guide-cover-stats {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 72px;
-  background: #E07B39;
+  height: 80px;
+  background: #d97706;
   display: flex;
   align-items: center;
 }
@@ -115,39 +122,39 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid rgba(255,255,255,0.2);
+  border-right: 1px solid rgba(255,255,255,0.18);
 }
 
-.guide-cover-stat:last-child {
-  border-right: none;
-}
+.guide-cover-stat:last-child { border-right: none; }
 
 .guide-cover-stat-value {
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 18px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 20px;
   font-weight: 700;
   color: white;
+  line-height: 1;
+  margin-bottom: 4px;
 }
 
 .guide-cover-stat-label {
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 9px;
-  color: rgba(255,255,255,0.75);
-  letter-spacing: 1px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 8px;
+  color: rgba(255,255,255,0.72);
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  margin-top: 2px;
 }
 
-/* Minimap cover */
+/* ── Mini-map inset (top-right) ── */
 .guide-cover-minimap {
   position: absolute;
-  top: 40px;
-  right: 48px;
-  width: 110px;
-  height: 85px;
-  border: 2px solid white;
+  top: 44px;
+  right: 52px;
+  width: 120px;
+  height: 92px;
+  border: 2px solid rgba(255,255,255,0.85);
   overflow: hidden;
   border-radius: 2px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
 
 .guide-cover-minimap img {
@@ -156,98 +163,158 @@
   object-fit: cover;
 }
 
-/* Logo cover */
+/* ── DTrek logo ── */
 .guide-cover-logo {
   position: absolute;
-  top: 40px;
-  left: 48px;
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 11px;
+  top: 44px;
+  left: 52px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
   font-weight: 700;
   color: white;
-  letter-spacing: 3px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  opacity: 0.9;
 }
 
-/* ---- RUNNING HEADER (content pages) ---- */
+/* ============================================================
+   RUNNING HEADER — content pages
+   ============================================================ */
 .guide-page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 8px;
-  border-bottom: 1.5px solid #E07B39;
-  margin-bottom: 28px;
-  font-family: 'Helvetica Neue', sans-serif;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #d97706;
+  margin-bottom: 32px;
+  font-family: 'DM Sans', sans-serif;
 }
 
 .guide-page-header-brand {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
-  color: #E07B39;
-  letter-spacing: 2px;
+  color: #d97706;
+  letter-spacing: 3px;
+  text-transform: uppercase;
 }
 
 .guide-page-header-title {
-  font-size: 8px;
-  color: #888;
-  letter-spacing: 1px;
+  font-size: 7.5px;
+  color: #999;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
 }
 
 .guide-page-header-num {
-  font-size: 9px;
-  color: #888;
+  font-size: 8.5px;
+  color: #999;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---- FOOTER (content pages) ---- */
+/* ============================================================
+   FOOTER — content pages
+   ============================================================ */
 .guide-page-footer {
   position: absolute;
-  bottom: 24px;
+  bottom: 28px;
   left: 52px;
   right: 52px;
   display: flex;
   justify-content: space-between;
-  border-top: 0.5px solid #E07B39;
-  padding-top: 6px;
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 7.5px;
-  color: #888;
+  border-top: 0.5px solid #e5e0d8;
+  padding-top: 7px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 7px;
+  color: #aaa;
+  letter-spacing: 0.3px;
 }
 
-/* ---- NARRATIVE SECTIONS ---- */
+/* ============================================================
+   SECTION HEADERS — full-width colored bands
+   ============================================================ */
 .guide-section {
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
 
+/* Full-bleed band (extends to page edges via negative margin) */
 .guide-section-header {
-  border-left: 4px solid #E07B39;
-  padding-left: 10px;
-  margin-bottom: 14px;
+  margin: 0 -52px 20px;
+  padding: 11px 52px 11px 56px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #d97706; /* overridden via inline style */
+}
+
+/* Left accent bar inside the header */
+.guide-section-header::before {
+  content: '';
+  position: absolute;
+  left: 52px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: rgba(255,255,255,0.3);
 }
 
 .guide-section-title {
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 17px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10.5px;
   font-weight: 700;
-  color: #E07B39;
-  margin: 0 0 4px 0;
-  letter-spacing: 1px;
-}
-
-.guide-section-rule {
-  height: 1.5px;
-  background: #E07B39;
-  width: 48px;
-}
-
-/* Full-width layout */
-.guide-section-body-full p {
-  font-size: 10px;
-  line-height: 1.65;
-  text-align: justify;
+  color: white;
   margin: 0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
-/* 2-column layout (photo + text) */
+/* Decorative bullet before title */
+.guide-section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.55);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* ============================================================
+   BODY TEXT
+   ============================================================ */
+
+/* Lead paragraph — Playfair Display italic, slightly larger */
+.guide-section-lead {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #111;
+  margin: 0 0 14px 0;
+}
+
+/* Standard paragraph */
+.guide-section-body-full p,
+.guide-section-text-col p {
+  font-size: 10.5px;
+  line-height: 1.7;
+  text-align: justify;
+  color: #2D2D2D;
+  margin: 0 0 9px 0;
+}
+
+/* Subsection heading inside body */
+.guide-section-body-full h3,
+.guide-section-text-col h3 {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin: 14px 0 6px;
+  color: inherit; /* inherits section color from inline style */
+}
+
+/* ── 2-column photo layout ── */
 .guide-section-body-2col {
   display: grid;
   grid-template-columns: 42% 55%;
@@ -265,32 +332,30 @@
   height: auto;
   border-radius: 3px;
   display: block;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 
 .guide-section-photo-credit {
-  font-size: 7px;
-  color: #aaa;
+  font-size: 6.5px;
+  color: #bbb;
   font-style: italic;
-  margin-top: 3px;
+  margin-top: 4px;
 }
 
-.guide-section-text-col p {
-  font-size: 10px;
-  line-height: 1.65;
-  text-align: justify;
-  margin: 0;
-  column-count: 2;
-  column-gap: 16px;
+.guide-section-text-col {
+  display: flex;
+  flex-direction: column;
 }
 
-/* Photo-top + 3 columns layout */
+/* ── Photo-top + 3 columns ── */
 .guide-section-photo-top {
   width: 100%;
-  height: 220px;
+  height: 200px;
   object-fit: cover;
   border-radius: 3px;
   margin-bottom: 16px;
   display: block;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 
 .guide-section-text-3col {
@@ -299,148 +364,161 @@
 }
 
 .guide-section-text-3col p {
-  font-size: 10px;
-  line-height: 1.65;
+  font-size: 10.5px;
+  line-height: 1.7;
   text-align: justify;
-  margin: 0;
+  color: #2D2D2D;
+  margin: 0 0 9px 0;
 }
 
-/* ---- CURIOSITÀ (inline in sections) ---- */
+/* ============================================================
+   CURIOSITÀ callout
+   ============================================================ */
 .guide-curiosita-inline {
   display: flex;
-  margin: 14px 0;
-  border-radius: 2px;
+  margin: 16px 0;
+  border-radius: 3px;
   overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  break-inside: avoid;
 }
 
 .guide-curiosita-inline-accent {
   width: 4px;
-  background: #E07B39;
+  background: #d97706;
   flex-shrink: 0;
 }
 
 .guide-curiosita-inline-inner {
-  background: #FDF0E6;
-  padding: 10px 12px;
+  background: #fef3e2;
+  padding: 10px 14px;
   flex: 1;
 }
 
 .guide-curiosita-inline-label {
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 7.5px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 7px;
   font-weight: 700;
-  color: #E07B39;
-  letter-spacing: 1.5px;
-  margin: 0 0 4px 0;
+  color: #d97706;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin: 0 0 5px 0;
 }
 
 .guide-curiosita-inline-text {
-  font-size: 9px;
-  line-height: 1.55;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 9.5px;
+  line-height: 1.6;
   font-style: italic;
   color: #3D3D3D;
   margin: 0;
 }
 
-/* ---- POI CARD ---- */
+/* ============================================================
+   POI CARD
+   ============================================================ */
 .guide-poi-card {
   display: grid;
-  grid-template-columns: 38% 59%;
+  grid-template-columns: 36% 61%;
   gap: 3%;
   align-items: start;
-  margin-bottom: 24px;
-  padding-bottom: 24px;
-  border-bottom: 0.5px solid #DDDDDD;
+  margin-bottom: 28px;
+  padding-bottom: 28px;
+  border-bottom: 0.5px solid #e8e4de;
+  break-inside: avoid;
 }
 
-.guide-poi-card:last-child {
-  border-bottom: none;
-}
+.guide-poi-card:last-child { border-bottom: none; }
 
 .guide-poi-card-left {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 5px;
 }
 
 .guide-poi-card-photo {
   width: 100%;
-  height: 140px;
+  height: 130px;
   object-fit: cover;
   border-radius: 3px;
   display: block;
-  margin-bottom: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.14);
 }
 
 .guide-poi-card-photo-placeholder {
   width: 100%;
-  height: 140px;
-  background: #EEEEEE;
+  height: 130px;
+  background: linear-gradient(135deg, #f0ede7, #e8e4de);
   border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 28px;
-  margin-bottom: 6px;
 }
 
 .guide-poi-card-badge {
   display: inline-block;
   color: white;
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 7.5px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 7px;
   font-weight: 700;
-  letter-spacing: 1px;
-  padding: 3px 8px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 3px 9px;
   border-radius: 2px;
-  margin-bottom: 4px;
 }
 
 .guide-poi-card-distance {
-  font-size: 8px;
-  color: #888;
+  font-size: 7.5px;
+  color: #aaa;
   font-style: italic;
 }
 
+.guide-poi-card-right { display: flex; flex-direction: column; }
+
 .guide-poi-card-name-bar {
-  border-left: 3px solid #E07B39;
-  padding-left: 8px;
-  margin-bottom: 8px;
+  border-left: 3px solid #d97706;
+  padding-left: 9px;
+  margin-bottom: 10px;
 }
 
 .guide-poi-card-name {
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 13px;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 14px;
   font-weight: 700;
   color: #1C1C1C;
   margin: 0;
+  line-height: 1.2;
 }
 
 .guide-poi-card-desc {
   font-size: 9.5px;
-  line-height: 1.6;
+  line-height: 1.65;
   text-align: justify;
-  color: #2D2D2D;
+  color: #3D3D3D;
   margin: 0;
 }
 
-/* ---- KNOW BOX ---- */
+/* ============================================================
+   KNOW BOX
+   ============================================================ */
 .guide-knowbox {
   display: flex;
   margin-top: 12px;
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .guide-knowbox-accent {
   width: 4px;
-  background: #E07B39;
+  background: #d97706;
   flex-shrink: 0;
 }
 
 .guide-knowbox-inner {
-  background: #FDF0E6;
-  padding: 10px 12px;
+  background: #fef3e2;
+  padding: 10px 14px;
   flex: 1;
 }
 
@@ -451,98 +529,102 @@
   margin: 0 0 6px 0;
 }
 
-.guide-knowbox-icon {
-  color: #E07B39;
-  font-size: 12px;
-}
+.guide-knowbox-icon { color: #d97706; font-size: 11px; }
 
 .guide-knowbox-label {
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 7px;
   font-weight: 700;
-  color: #E07B39;
-  letter-spacing: 1.5px;
+  color: #d97706;
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
 .guide-knowbox-title {
-  font-family: 'Helvetica Neue', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: 8.5px;
   font-weight: 700;
   color: #1C1C1C;
-  letter-spacing: 0.5px;
 }
 
 .guide-knowbox-text {
+  font-family: 'Playfair Display', Georgia, serif;
   font-size: 9px;
-  line-height: 1.55;
+  line-height: 1.6;
   font-style: italic;
   color: #3D3D3D;
   margin: 0;
 }
 
-/* ---- FINAL POI GRID ---- */
+/* ============================================================
+   POI INDEX PAGE (final)
+   ============================================================ */
 .guide-poi-index-title {
-  font-family: 'Helvetica Neue', sans-serif;
-  font-size: 17px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10.5px;
   font-weight: 700;
   color: white;
-  background: #E07B39;
-  padding: 12px 16px;
-  margin: 0 0 20px 0;
-  letter-spacing: 1px;
+  background: #d97706;
+  padding: 13px 16px;
+  margin: 0 -52px 24px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
 .guide-poi-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 14px;
 }
 
 .guide-poi-grid-card {
-  background: #FAFAFA;
-  border: 0.5px solid #DDDDDD;
+  background: #fafaf8;
+  border: 0.5px solid #e8e4de;
   border-radius: 3px;
-  padding: 12px 10px;
+  padding: 14px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 6px;
+  break-inside: avoid;
 }
 
-.guide-poi-grid-icon {
-  font-size: 22px;
-}
+.guide-poi-grid-icon { font-size: 22px; }
 
 .guide-poi-grid-name {
-  font-family: 'Helvetica Neue', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   color: #1C1C1C;
 }
 
 .guide-poi-grid-badge {
   display: inline-block;
   color: white;
-  font-size: 7px;
+  font-size: 6.5px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 2px;
   letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .guide-poi-grid-dist {
-  font-size: 7.5px;
-  color: #888;
+  font-size: 7px;
+  color: #aaa;
   font-style: italic;
 }
 
-/* ============================================
+/* ============================================================
    PRINT / PDF rules
-   ============================================ */
+   ============================================================ */
 @media print {
+  @page { size: A4; margin: 0; }
+
   .guide-page {
     page-break-after: always;
+    break-after: page;
     margin: 0;
   }
 
@@ -551,7 +633,11 @@
     margin-top: 0;
   }
 
-  .guide-root {
-    width: 794px;
-  }
+  .guide-root { width: 794px; }
+
+  /* Prevent orphaned headings/curiosità */
+  .guide-section-header,
+  .guide-curiosita-inline,
+  .guide-poi-card,
+  .guide-poi-grid-card { break-inside: avoid; }
 }
