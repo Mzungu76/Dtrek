@@ -188,7 +188,8 @@ CREATE POLICY IF NOT EXISTS "planned_hikes_owner"
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY IF NOT EXISTS "hike_reports_owner"
+DROP POLICY IF EXISTS "hike_reports_owner" ON hike_reports;
+CREATE POLICY "hike_reports_owner"
   ON hike_reports FOR ALL
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);

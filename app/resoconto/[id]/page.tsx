@@ -209,10 +209,11 @@ export default function ResocontoPage() {
     setContent('')
     setApiError(null)
     const photoMeta = photos.map(p => ({
-      caption:  p.caption,
-      lat:      p.lat,
-      lon:      p.lon,
-      progress: p.progress,
+      caption:    p.caption,
+      lat:        p.lat,
+      lon:        p.lon,
+      progress:   p.progress,
+      hasExifGps: p.hasExifGps,
     }))
 
     try {

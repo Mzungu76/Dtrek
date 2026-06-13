@@ -43,6 +43,7 @@ interface PhotoMeta {
   lat?: number
   lon?: number
   progress: number
+  hasExifGps?: boolean
 }
 
 function buildPrompt(
@@ -69,10 +70,18 @@ function buildPrompt(
 
   // Photos sorted start→end (progress 0.0 → 1.0)
   const sortedPhotos = [...photos].sort((a, b) => a.progress - b.progress)
+  function progressLabel(p: number): string {
+    if (p < 0.15) return 'alla partenza'
+    if (p < 0.4)  return 'nel primo tratto del percorso'
+    if (p < 0.65) return 'a metà percorso'
+    if (p < 0.85) return 'nel tratto finale'
+    return 'quasi all\'arrivo'
+  }
+
   const photoBlock = sortedPhotos.length > 0
     ? sortedPhotos
         .map((p, i) =>
-          `• Scatto ${i + 1} (${(p.progress * 100).toFixed(0)}% del percorso)${p.lat && p.lon ? ` — coord. ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}` : ''}: "${p.caption}"`,
+          `• Scatto ${i + 1}: "${p.caption}" — ${progressLabel(p.progress)}${p.hasExifGps && p.lat && p.lon ? ` (GPS verificato: ${p.lat.toFixed(4)}°N, ${p.lon.toFixed(4)}°E)` : ''}`,
         )
         .join('\n')
     : '(nessun materiale fotografico)'
@@ -261,23 +270,25 @@ export async function POST(req: NextRequest) {
             controller.enqueue(new TextEncoder().encode(text))
           }
         }
-        controller.close()
+        // Upsert BEFORE closing so the async work completes within stream lifetime
+        try {
+          const reportId  = `report-${activityId}`
+          const photoMeta = photos.map(({ caption, lat, lon, progress }) => ({ caption, lat, lon, progress }))
+          await supabase.from('hike_reports').upsert(
+            {
+              id:          reportId,
+              user_id:     user.id,
+              activity_id: activityId,
+              title:       (activity.title as string) ?? 'Escursione',
+              content:     fullText,
+              photos:      photoMeta,
+              updated_at:  new Date().toISOString(),
+            },
+            { onConflict: 'id' },
+          )
+        } catch { /* save errors are non-fatal — content was already streamed */ }
 
-        // Upsert report after stream ends
-        const reportId  = `report-${activityId}`
-        const photoMeta = photos.map(({ caption, lat, lon, progress }) => ({ caption, lat, lon, progress }))
-        await supabase.from('hike_reports').upsert(
-          {
-            id:          reportId,
-            user_id:     user.id,
-            activity_id: activityId,
-            title:       (activity.title as string) ?? 'Escursione',
-            content:     fullText,
-            photos:      photoMeta,
-            updated_at:  new Date().toISOString(),
-          },
-          { onConflict: 'id' },
-        )
+        controller.close()
       } catch (e) {
         controller.error(e)
       }
