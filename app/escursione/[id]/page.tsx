@@ -35,6 +35,7 @@ import {
   Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
+import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -581,6 +582,9 @@ export default function EscursionePage() {
             )}
           </section>
         )}
+
+        {/* Photos */}
+        <ActivityPhotoManager activityId={id} trackPoints={activity.trackPoints} />
 
         {/* Wikipedia */}
         {hasGps && (
