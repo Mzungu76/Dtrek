@@ -189,7 +189,7 @@ function loadTileImage(url: string): Promise<HTMLImageElement> {
  * Fetch OpenStreetMap tiles, stitch them, draw the route polyline on top.
  * Falls back to plain vector route on any error.
  */
-async function fetchSatMap(
+export async function fetchSatMap(
   pts: [number, number][],  // [lat, lon]
   outW: number,
   outH: number,
@@ -806,6 +806,12 @@ function createGradientOverlay(widthPx: number, heightPx: number): string {
 }
 
 export async function exportGuidePdf(hike: PlannedHike, guideText: string): Promise<void> {
+  const { exportGuidePdfHtml } = await import('@/app/lib/guide/usePDFExport')
+  return exportGuidePdfHtml(hike, guideText)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _exportGuidePdfLegacy(hike: PlannedHike, guideText: string): Promise<void> {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 

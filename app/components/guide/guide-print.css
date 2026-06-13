@@ -1,0 +1,557 @@
+/* ============================================
+   DTREK GUIDE — Magazine Layout CSS
+   Used both for in-app preview and PDF export
+   ============================================ */
+
+/* ROOT */
+.guide-root {
+  font-family: 'Georgia', serif;
+  color: #2D2D2D;
+  background: white;
+}
+
+/* PAGE */
+.guide-page {
+  width: 794px;
+  min-height: 1123px;
+  padding: 48px 52px;
+  box-sizing: border-box;
+  position: relative;
+  background: white;
+  overflow: hidden;
+}
+
+/* Page separator in preview */
+.guide-page + .guide-page {
+  border-top: 3px solid #E07B39;
+  margin-top: 24px;
+}
+
+/* ---- COVER ---- */
+.guide-cover {
+  width: 794px;
+  height: 1123px;
+  position: relative;
+  overflow: hidden;
+  background: #1C1C1C;
+}
+
+.guide-cover-bg {
+  position: absolute;
+  inset: 0;
+}
+
+.guide-cover-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.guide-cover-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(10,10,10,0.92) 0%,
+    rgba(10,10,10,0.60) 35%,
+    rgba(10,10,10,0.10) 65%,
+    transparent 100%
+  );
+}
+
+.guide-cover-content {
+  position: absolute;
+  bottom: 140px;
+  left: 48px;
+  right: 48px;
+}
+
+.guide-cover-badge {
+  display: inline-block;
+  background: #E07B39;
+  color: white;
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 4px 10px;
+  border-radius: 2px;
+  margin-bottom: 12px;
+}
+
+.guide-cover-title {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 42px;
+  font-weight: 900;
+  color: white;
+  line-height: 1.1;
+  margin: 0 0 12px 0;
+  letter-spacing: -0.5px;
+}
+
+.guide-cover-date {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  color: #CCCCCC;
+  margin: 0;
+}
+
+/* Stats bar cover */
+.guide-cover-stats {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 72px;
+  background: #E07B39;
+  display: flex;
+  align-items: center;
+}
+
+.guide-cover-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid rgba(255,255,255,0.2);
+}
+
+.guide-cover-stat:last-child {
+  border-right: none;
+}
+
+.guide-cover-stat-value {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+}
+
+.guide-cover-stat-label {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 9px;
+  color: rgba(255,255,255,0.75);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* Minimap cover */
+.guide-cover-minimap {
+  position: absolute;
+  top: 40px;
+  right: 48px;
+  width: 110px;
+  height: 85px;
+  border: 2px solid white;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.guide-cover-minimap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Logo cover */
+.guide-cover-logo {
+  position: absolute;
+  top: 40px;
+  left: 48px;
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 3px;
+}
+
+/* ---- RUNNING HEADER (content pages) ---- */
+.guide-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid #E07B39;
+  margin-bottom: 28px;
+  font-family: 'Helvetica Neue', sans-serif;
+}
+
+.guide-page-header-brand {
+  font-size: 9px;
+  font-weight: 700;
+  color: #E07B39;
+  letter-spacing: 2px;
+}
+
+.guide-page-header-title {
+  font-size: 8px;
+  color: #888;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.guide-page-header-num {
+  font-size: 9px;
+  color: #888;
+}
+
+/* ---- FOOTER (content pages) ---- */
+.guide-page-footer {
+  position: absolute;
+  bottom: 24px;
+  left: 52px;
+  right: 52px;
+  display: flex;
+  justify-content: space-between;
+  border-top: 0.5px solid #E07B39;
+  padding-top: 6px;
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 7.5px;
+  color: #888;
+}
+
+/* ---- NARRATIVE SECTIONS ---- */
+.guide-section {
+  margin-bottom: 32px;
+}
+
+.guide-section-header {
+  border-left: 4px solid #E07B39;
+  padding-left: 10px;
+  margin-bottom: 14px;
+}
+
+.guide-section-title {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: #E07B39;
+  margin: 0 0 4px 0;
+  letter-spacing: 1px;
+}
+
+.guide-section-rule {
+  height: 1.5px;
+  background: #E07B39;
+  width: 48px;
+}
+
+/* Full-width layout */
+.guide-section-body-full p {
+  font-size: 10px;
+  line-height: 1.65;
+  text-align: justify;
+  margin: 0;
+}
+
+/* 2-column layout (photo + text) */
+.guide-section-body-2col {
+  display: grid;
+  grid-template-columns: 42% 55%;
+  gap: 3%;
+  align-items: start;
+}
+
+.guide-section-photo-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.guide-section-photo {
+  width: 100%;
+  height: auto;
+  border-radius: 3px;
+  display: block;
+}
+
+.guide-section-photo-credit {
+  font-size: 7px;
+  color: #aaa;
+  font-style: italic;
+  margin-top: 3px;
+}
+
+.guide-section-text-col p {
+  font-size: 10px;
+  line-height: 1.65;
+  text-align: justify;
+  margin: 0;
+  column-count: 2;
+  column-gap: 16px;
+}
+
+/* Photo-top + 3 columns layout */
+.guide-section-photo-top {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  border-radius: 3px;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.guide-section-text-3col {
+  column-count: 3;
+  column-gap: 20px;
+}
+
+.guide-section-text-3col p {
+  font-size: 10px;
+  line-height: 1.65;
+  text-align: justify;
+  margin: 0;
+}
+
+/* ---- CURIOSITÀ (inline in sections) ---- */
+.guide-curiosita-inline {
+  display: flex;
+  margin: 14px 0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.guide-curiosita-inline-accent {
+  width: 4px;
+  background: #E07B39;
+  flex-shrink: 0;
+}
+
+.guide-curiosita-inline-inner {
+  background: #FDF0E6;
+  padding: 10px 12px;
+  flex: 1;
+}
+
+.guide-curiosita-inline-label {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 7.5px;
+  font-weight: 700;
+  color: #E07B39;
+  letter-spacing: 1.5px;
+  margin: 0 0 4px 0;
+}
+
+.guide-curiosita-inline-text {
+  font-size: 9px;
+  line-height: 1.55;
+  font-style: italic;
+  color: #3D3D3D;
+  margin: 0;
+}
+
+/* ---- POI CARD ---- */
+.guide-poi-card {
+  display: grid;
+  grid-template-columns: 38% 59%;
+  gap: 3%;
+  align-items: start;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 0.5px solid #DDDDDD;
+}
+
+.guide-poi-card:last-child {
+  border-bottom: none;
+}
+
+.guide-poi-card-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.guide-poi-card-photo {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.guide-poi-card-photo-placeholder {
+  width: 100%;
+  height: 140px;
+  background: #EEEEEE;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin-bottom: 6px;
+}
+
+.guide-poi-card-badge {
+  display: inline-block;
+  color: white;
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  margin-bottom: 4px;
+}
+
+.guide-poi-card-distance {
+  font-size: 8px;
+  color: #888;
+  font-style: italic;
+}
+
+.guide-poi-card-name-bar {
+  border-left: 3px solid #E07B39;
+  padding-left: 8px;
+  margin-bottom: 8px;
+}
+
+.guide-poi-card-name {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1C1C1C;
+  margin: 0;
+}
+
+.guide-poi-card-desc {
+  font-size: 9.5px;
+  line-height: 1.6;
+  text-align: justify;
+  color: #2D2D2D;
+  margin: 0;
+}
+
+/* ---- KNOW BOX ---- */
+.guide-knowbox {
+  display: flex;
+  margin-top: 12px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.guide-knowbox-accent {
+  width: 4px;
+  background: #E07B39;
+  flex-shrink: 0;
+}
+
+.guide-knowbox-inner {
+  background: #FDF0E6;
+  padding: 10px 12px;
+  flex: 1;
+}
+
+.guide-knowbox-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px 0;
+}
+
+.guide-knowbox-icon {
+  color: #E07B39;
+  font-size: 12px;
+}
+
+.guide-knowbox-label {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+  color: #E07B39;
+  letter-spacing: 1.5px;
+}
+
+.guide-knowbox-title {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #1C1C1C;
+  letter-spacing: 0.5px;
+}
+
+.guide-knowbox-text {
+  font-size: 9px;
+  line-height: 1.55;
+  font-style: italic;
+  color: #3D3D3D;
+  margin: 0;
+}
+
+/* ---- FINAL POI GRID ---- */
+.guide-poi-index-title {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: white;
+  background: #E07B39;
+  padding: 12px 16px;
+  margin: 0 0 20px 0;
+  letter-spacing: 1px;
+}
+
+.guide-poi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.guide-poi-grid-card {
+  background: #FAFAFA;
+  border: 0.5px solid #DDDDDD;
+  border-radius: 3px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+}
+
+.guide-poi-grid-icon {
+  font-size: 22px;
+}
+
+.guide-poi-grid-name {
+  font-family: 'Helvetica Neue', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  color: #1C1C1C;
+}
+
+.guide-poi-grid-badge {
+  display: inline-block;
+  color: white;
+  font-size: 7px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+}
+
+.guide-poi-grid-dist {
+  font-size: 7.5px;
+  color: #888;
+  font-style: italic;
+}
+
+/* ============================================
+   PRINT / PDF rules
+   ============================================ */
+@media print {
+  .guide-page {
+    page-break-after: always;
+    margin: 0;
+  }
+
+  .guide-page + .guide-page {
+    border-top: none;
+    margin-top: 0;
+  }
+
+  .guide-root {
+    width: 794px;
+  }
+}
