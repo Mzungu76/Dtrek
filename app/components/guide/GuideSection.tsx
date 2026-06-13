@@ -7,7 +7,6 @@ interface Props {
   accentColor?: string
 }
 
-/** Splits raw text into paragraphs and [curiosita] blocks */
 function parseTextBlocks(raw: string): { type: 'paragraph' | 'curiosita' | 'subsection'; text: string }[] {
   const blocks: { type: 'paragraph' | 'curiosita' | 'subsection'; text: string }[] = []
   const cRe = /\[curiosita\]([\s\S]*?)\[\/curiosita\]/g
@@ -43,11 +42,12 @@ export default function GuideSection({
   text,
   photo,
   layout = 'full-width',
-  accentColor = '#E07B39',
+  accentColor = '#d97706',
 }: Props) {
   const effectiveLayout = photo ? layout : 'full-width'
   const blocks = parseTextBlocks(text)
 
+  let paraIndex = 0
   const bodyContent = (
     <>
       {blocks.map((b, i) => {
@@ -68,31 +68,28 @@ export default function GuideSection({
           return (
             <h3
               key={i}
-              style={{
-                fontFamily: "'Helvetica Neue', sans-serif",
-                fontSize: 11,
-                fontWeight: 700,
-                color: accentColor,
-                margin: '10px 0 4px',
-                letterSpacing: '0.5px',
-              }}
+              style={{ color: accentColor }}
             >
               {b.text}
             </h3>
           )
         }
-        return <p key={i} style={{ margin: '0 0 8px 0' }}>{b.text}</p>
+        const isLead = paraIndex++ === 0
+        return (
+          <p key={i} className={isLead ? 'guide-section-lead' : ''}>
+            {b.text}
+          </p>
+        )
       })}
     </>
   )
 
   return (
     <div className="guide-section">
-      <div className="guide-section-header" style={{ borderColor: accentColor }}>
-        <h2 className="guide-section-title" style={{ color: accentColor }}>
-          {title}
-        </h2>
-        <div className="guide-section-rule" style={{ background: accentColor }} />
+      {/* Full-bleed section header band */}
+      <div className="guide-section-header" style={{ background: accentColor }}>
+        <span className="guide-section-dot" />
+        <h2 className="guide-section-title">{title}</h2>
       </div>
 
       {effectiveLayout === 'full-width' && (
@@ -103,7 +100,7 @@ export default function GuideSection({
         <div className="guide-section-body-2col">
           <div className="guide-section-photo-col">
             <img src={photo} alt={title} className="guide-section-photo" crossOrigin="anonymous" />
-            <span className="guide-section-photo-credit">© Wikipedia</span>
+            <span className="guide-section-photo-credit">© Wikimedia Commons</span>
           </div>
           <div className="guide-section-text-col">{bodyContent}</div>
         </div>
@@ -114,7 +111,7 @@ export default function GuideSection({
           <div className="guide-section-text-col">{bodyContent}</div>
           <div className="guide-section-photo-col">
             <img src={photo} alt={title} className="guide-section-photo" crossOrigin="anonymous" />
-            <span className="guide-section-photo-credit">© Wikipedia</span>
+            <span className="guide-section-photo-credit">© Wikimedia Commons</span>
           </div>
         </div>
       )}

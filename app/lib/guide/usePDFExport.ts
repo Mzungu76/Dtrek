@@ -6,6 +6,7 @@ import type { PlannedHike } from '@/lib/plannedStore'
 import type { WikiPage }    from '@/lib/wikipedia'
 import type { PoiItem }     from '@/lib/overpass'
 import { buildGuideContent } from './buildGuideContent'
+import { fetchRoutePhotos }  from './fetchRoutePhotos'
 import GuideTemplate         from '@/app/components/guide/GuideTemplate'
 
 /** Re-use the OSM tile stitcher already in utils/pdfExport.ts */
@@ -21,7 +22,25 @@ async function buildMapImage(hike: PlannedHike): Promise<string> {
   if (sampled.length < 2) return ''
 
   const { fetchSatMap } = await import('@/utils/pdfExport')
-  return fetchSatMap(sampled, 1400, 1000, '#f59e0b')
+  // 794×630: matches cover CSS (794px wide, 630≈56% of A4 height) at 2× for quality
+  return fetchSatMap(sampled, 794 * 2, 630 * 2, '#f59e0b')
+}
+
+/** Fetch Wikimedia Commons landscape photos near the route midpoint */
+async function fetchCoverPhotos(hike: PlannedHike): Promise<string[]> {
+  try {
+    const pts = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
+    const poly = (pts.length > 0 ? pts : hike.routePolyline ?? []) as { lat?: number; lon?: number }[] | [number, number][]
+    if (!poly.length) return []
+    const midIdx = Math.floor(poly.length / 2)
+    const mid = poly[midIdx]
+    const [lat, lon] = Array.isArray(mid) ? mid : [mid.lat!, mid.lon!]
+    if (!lat || !lon) return []
+    const photos = await fetchRoutePhotos(lat, lon, 15000, 6)
+    return photos.map(p => p.url)
+  } catch {
+    return []
+  }
 }
 
 /** Fetch Wikipedia thumbnails for all wiki POIs */
@@ -43,12 +62,13 @@ async function prefetchThumbs(hike: PlannedHike): Promise<Map<number, string>> {
 }
 
 export async function exportGuidePdfHtml(hike: PlannedHike, guideText: string): Promise<void> {
-  const [mapImage, thumbs] = await Promise.all([
+  const [mapImage, thumbs, coverPhotos] = await Promise.all([
     buildMapImage(hike),
     prefetchThumbs(hike),
+    fetchCoverPhotos(hike),
   ])
 
-  const data = buildGuideContent(hike, guideText, mapImage, thumbs)
+  const data = buildGuideContent(hike, guideText, mapImage, thumbs, coverPhotos)
 
   // Create a hidden off-screen container
   const container = document.createElement('div')

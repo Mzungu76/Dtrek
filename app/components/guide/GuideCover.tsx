@@ -10,6 +10,7 @@ export default function GuideCover({ data }: { data: GuideData }) {
           alt={data.title}
           className="guide-cover-bg-img"
           crossOrigin="anonymous"
+          style={{ objectPosition: 'center 30%' }}
         />
         <div className="guide-cover-gradient" />
       </div>
