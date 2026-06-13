@@ -153,6 +153,21 @@ WHERE trail_score IS NOT NULL
   AND (linked_beauty_score IS NULL OR linked_beauty_score->'categories' IS NULL);
 
 
+-- ── Resoconti escursioni ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS hike_reports (
+  id            TEXT PRIMARY KEY,
+  user_id       UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  activity_id   TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  content       TEXT NOT NULL DEFAULT '',
+  photos        JSONB DEFAULT '[]',
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hike_reports_user_id     ON hike_reports (user_id);
+CREATE INDEX IF NOT EXISTS idx_hike_reports_activity_id ON hike_reports (activity_id);
+
 -- ═══════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY  (doppio strato di sicurezza)
 -- ═══════════════════════════════════════════════════════════
@@ -160,6 +175,7 @@ WHERE trail_score IS NOT NULL
 -- Abilita RLS sulle tabelle
 ALTER TABLE activities    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE planned_hikes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hike_reports  ENABLE ROW LEVEL SECURITY;
 
 -- Ogni utente vede e modifica solo i propri dati
 CREATE POLICY IF NOT EXISTS "activities_owner"
@@ -169,6 +185,11 @@ CREATE POLICY IF NOT EXISTS "activities_owner"
 
 CREATE POLICY IF NOT EXISTS "planned_hikes_owner"
   ON planned_hikes FOR ALL
+  USING     (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "hike_reports_owner"
+  ON hike_reports FOR ALL
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 

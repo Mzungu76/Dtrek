@@ -32,7 +32,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 
@@ -285,6 +285,12 @@ export default function EscursionePage() {
                   {icon}
                 </button>
               ))}
+              <button
+                title="Crea Resoconto"
+                onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}`)}
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                <BookOpen className="w-3.5 h-3.5" /> Resoconto
+              </button>
               <PdfExportButton variant="activity" data={activity} iconOnly
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors" />
               <button title="Elimina" onClick={handleDelete} disabled={saving}
