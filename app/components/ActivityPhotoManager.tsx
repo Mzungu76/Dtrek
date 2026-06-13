@@ -1,9 +1,12 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff } from 'lucide-react'
+import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff, Map } from 'lucide-react'
+
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -89,14 +92,20 @@ function progressLabel(p: number): string {
 interface Props {
   activityId: string
   trackPoints: TrackPoint[]
+  activityTitle?: string
+  distanceMeters?: number
+  elevationGain?: number
 }
 
-export default function ActivityPhotoManager({ activityId, trackPoints }: Props) {
+export default function ActivityPhotoManager({
+  activityId, trackPoints, activityTitle, distanceMeters, elevationGain,
+}: Props) {
   const [photos,     setPhotos]     = useState<RoutePhoto[]>([])
   const [uploading,  setUploading]  = useState(false)
   const [editingId,  setEditingId]  = useState<string | null>(null)
   const [editCaption,setEditCaption]= useState('')
   const [dragging,   setDragging]   = useState(false)
+  const [show3D,     setShow3D]     = useState(false)
   const fileRef  = useRef<HTMLInputElement>(null)
   const saveReady = useRef(false)
 
@@ -187,11 +196,16 @@ export default function ActivityPhotoManager({ activityId, trackPoints }: Props)
     setPhotos(prev => prev.filter(p => p.id !== id))
   }
 
-  function updateProgress(id: string, value: number) {
-    setPhotos(prev =>
-      [...prev.map(p => p.id === id ? { ...p, progress: value } : p)]
-        .sort((a, b) => a.progress - b.progress),
-    )
+  function handleMapClose() {
+    setShow3D(false)
+    // Re-read updated positions from localStorage after RouteMap3D placement
+    try {
+      const raw = localStorage.getItem(`dtrek_vp_${activityId}`)
+      if (raw) {
+        const parsed: RoutePhoto[] = JSON.parse(raw)
+        setPhotos([...parsed].sort((a, b) => a.progress - b.progress))
+      }
+    } catch { /* ignore */ }
   }
 
   function startEdit(photo: RoutePhoto) {
@@ -214,8 +228,8 @@ export default function ActivityPhotoManager({ activityId, trackPoints }: Props)
         )}
       </div>
       <p className="text-xs text-stone-400 italic mb-5 leading-snug">
-        Le foto vengono posizionate sul percorso tramite GPS e usate sia nel resoconto che nella mappa 3D.
-        Modifica il nome per arricchire il racconto.
+        Le foto vengono usate nel resoconto e nella mappa 3D. Con GPS automatico vengono posizionate sul percorso;
+        altrimenti clicca su una foto per aprire la mappa 3D e posizionarla manualmente.
       </p>
 
       {/* Upload zone */}
@@ -254,27 +268,32 @@ export default function ActivityPhotoManager({ activityId, trackPoints }: Props)
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {photos.map(photo => (
-            <div key={photo.id} className="group relative rounded-xl overflow-hidden border border-stone-100 shadow-sm bg-white">
-              {/* Thumbnail */}
-              <div className="relative">
+            <div key={photo.id} className="group rounded-xl overflow-hidden border border-stone-100 shadow-sm bg-white">
+              {/* Thumbnail — click to open 3D map for placement */}
+              <div className="relative cursor-pointer" onClick={() => setShow3D(true)}>
                 <img src={photo.dataUrl} alt={photo.caption}
-                  className="w-full aspect-square object-cover" />
-                {/* GPS badge */}
-                {photo.hasExifGps && (
-                  <div className="absolute bottom-1 left-1 flex items-center gap-0.5 bg-forest-600/85 text-white text-[9px] font-mono rounded-full px-1.5 py-0.5">
-                    <MapPin className="w-2.5 h-2.5" /> GPS
-                  </div>
-                )}
+                  className="w-full aspect-square object-cover group-hover:opacity-90 transition-opacity" />
+                {/* GPS / position badge */}
+                {photo.hasExifGps
+                  ? <div className="absolute bottom-1 left-1 flex items-center gap-0.5 bg-forest-600/85 text-white text-[9px] font-mono rounded-full px-1.5 py-0.5">
+                      <MapPin className="w-2.5 h-2.5" /> GPS
+                    </div>
+                  : <div className="absolute inset-0 flex items-end justify-center pb-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="flex items-center gap-1 bg-black/60 text-white text-[9px] rounded-full px-2 py-0.5">
+                        <Map className="w-2.5 h-2.5" /> Posiziona
+                      </span>
+                    </div>
+                }
                 {/* Delete */}
                 <button
-                  onClick={() => removePhoto(photo.id)}
+                  onClick={e => { e.stopPropagation(); removePhoto(photo.id) }}
                   className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 w-5 h-5 bg-red-500/90 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-opacity">
                   <X className="w-3 h-3" />
                 </button>
               </div>
 
               {/* Caption */}
-              <div className="px-2 pt-1.5 pb-0.5">
+              <div className="px-2 py-1.5">
                 {editingId === photo.id ? (
                   <div className="flex items-center gap-1">
                     <input
@@ -296,23 +315,20 @@ export default function ActivityPhotoManager({ activityId, trackPoints }: Props)
                   </button>
                 )}
               </div>
-
-              {/* Position slider */}
-              <div className="px-2 pb-2">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[9px] text-stone-400 font-mono">Pos. percorso</span>
-                  <span className="text-[9px] text-stone-500 font-mono">{progressLabel(photo.progress)}</span>
-                </div>
-                <input
-                  type="range" min={0} max={100} step={1}
-                  value={Math.round(photo.progress * 100)}
-                  onChange={e => updateProgress(photo.id, parseInt(e.target.value) / 100)}
-                  className="w-full h-1 accent-forest-600 cursor-pointer"
-                />
-              </div>
             </div>
           ))}
         </div>
+      )}
+
+      {show3D && (
+        <RouteMap3D
+          trackPoints={trackPoints}
+          title={activityTitle}
+          onClose={handleMapClose}
+          activityId={activityId}
+          distanceMeters={distanceMeters ?? 0}
+          elevationGain={elevationGain ?? 0}
+        />
       )}
     </section>
   )

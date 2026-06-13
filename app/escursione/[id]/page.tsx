@@ -584,7 +584,13 @@ export default function EscursionePage() {
         )}
 
         {/* Photos */}
-        <ActivityPhotoManager activityId={id} trackPoints={activity.trackPoints} />
+        <ActivityPhotoManager
+          activityId={id}
+          trackPoints={activity.trackPoints}
+          activityTitle={activity.title ?? activity.notes ?? undefined}
+          distanceMeters={activity.distanceMeters}
+          elevationGain={activity.elevationGain}
+        />
 
         {/* Wikipedia */}
         {hasGps && (

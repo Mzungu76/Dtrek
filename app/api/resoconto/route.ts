@@ -78,12 +78,25 @@ function buildPrompt(
     return 'quasi all\'arrivo'
   }
 
+  // Distinguish positioned photos (GPS or manually placed) from unpositioned ones
+  const positionedPhotos = sortedPhotos.filter(p => p.hasExifGps || p.progress !== 0.5)
+  const genericPhotos    = sortedPhotos.filter(p => !p.hasExifGps && p.progress === 0.5)
+
+  const positionedBlock = positionedPhotos.length > 0
+    ? positionedPhotos.map((p, i) =>
+        `• Foto ${i + 1}: "${p.caption}" — ${progressLabel(p.progress)}${p.hasExifGps && p.lat && p.lon ? ` (GPS: ${p.lat.toFixed(4)}°N, ${p.lon.toFixed(4)}°E)` : ''}`,
+      ).join('\n')
+    : ''
+
+  const genericBlock = genericPhotos.length > 0
+    ? genericPhotos.map(p => `• "${p.caption}" (galleria generica, posizione non definita)`).join('\n')
+    : ''
+
   const photoBlock = sortedPhotos.length > 0
-    ? sortedPhotos
-        .map((p, i) =>
-          `• Scatto ${i + 1}: "${p.caption}" — ${progressLabel(p.progress)}${p.hasExifGps && p.lat && p.lon ? ` (GPS verificato: ${p.lat.toFixed(4)}°N, ${p.lon.toFixed(4)}°E)` : ''}`,
-        )
-        .join('\n')
+    ? [
+        positionedBlock && `Foto georeferenziate sul percorso:\n${positionedBlock}`,
+        genericBlock    && `Foto senza posizione (galleria generica):\n${genericBlock}`,
+      ].filter(Boolean).join('\n\n')
     : '(nessun materiale fotografico)'
 
   const guideBlock = guideText
@@ -129,7 +142,7 @@ che arricchisca la conoscenza del territorio.
 Valutazione complessiva: difficoltà effettiva, qualità del contesto, periodo ideale,
 consigli pratici. Una o due frasi conclusive che catturino l'essenza dell'esperienza.
 
-${photos.length > 0 ? 'Le fotografie sono in ordine cronologico: la prima è vicino alla partenza, l\'ultima vicino all\'arrivo.' : ''}
+${positionedPhotos.length > 0 ? `Quando fai riferimento a una foto geolocalizzata, usa il suo numero (es. "nella foto 1", "lo scatto 3 mostra"). Le foto della galleria generica possono essere citate per nome senza posizione nel percorso.` : ''}
 Scrivi in italiano preciso, diretto, senza aggettivi inflazionati o toni epici.
 
 LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}
