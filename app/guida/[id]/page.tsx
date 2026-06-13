@@ -93,7 +93,7 @@ function RouteSvg({ hike }: { hike: PlannedHike }) {
 
 // ── Magazine section body renderer ────────────────────────────────────────────
 
-function MagazineBody({ body, color }: { body: string; color: string }) {
+function MagazineBody({ body, color, sectionPhoto }: { body: string; color: string; sectionPhoto?: string }) {
   interface Block { type: 'lead' | 'para' | 'curiosita' | 'subsection'; text: string }
 
   const blocks = useMemo<Block[]>(() => {
@@ -138,11 +138,18 @@ function MagazineBody({ body, color }: { body: string; color: string }) {
   return (
     <div>
       {lead && (
-        <p className="font-display text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-800 mb-6">
+        <p className="font-lora text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-700 mb-6">
           {lead.text}
         </p>
       )}
       <div className="md:columns-2 md:gap-8">
+        {sectionPhoto && (
+          <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={sectionPhoto} className="w-full h-40 object-cover rounded-sm shadow-sm" alt="" />
+            <p className="text-[9px] italic text-stone-400 mt-1">© Wikimedia Commons</p>
+          </div>
+        )}
         {rest.map((b, i) => {
           if (b.type === 'curiosita') {
             return (
@@ -157,7 +164,7 @@ function MagazineBody({ body, color }: { body: string; color: string }) {
                     <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5" style={{ color }}>
                       ◆ Lo sapevi?
                     </p>
-                    <p className="font-display italic text-[14px] leading-relaxed text-stone-700">
+                    <p className="font-lora italic text-[14px] leading-relaxed text-stone-700">
                       {b.text}
                     </p>
                   </div>
@@ -169,7 +176,7 @@ function MagazineBody({ body, color }: { body: string; color: string }) {
             return (
               <h3
                 key={i}
-                className="font-sans text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2"
+                className="font-barlow text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2"
                 style={{ color, breakAfter: 'avoid' }}
               >
                 {b.text}
@@ -177,7 +184,7 @@ function MagazineBody({ body, color }: { body: string; color: string }) {
             )
           }
           return (
-            <p key={i} className="text-[15px] leading-7 text-stone-600 font-light mb-4">
+            <p key={i} className="font-lora text-[15px] leading-7 text-stone-600 mb-4">
               {b.text}
             </p>
           )
@@ -213,7 +220,7 @@ function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
         />
       </div>
       <div className="p-3">
-        <p className="font-display font-semibold text-stone-800 text-[14px] leading-tight line-clamp-1">
+        <p className="font-barlow font-semibold text-stone-800 text-[16px] leading-tight line-clamp-1 tracking-wide">
           {photo.title}
         </p>
         {photo.description && (
@@ -291,7 +298,7 @@ export default function GuidaPage() {
   const [error,        setError]        = useState<string | null>(null)
   const [guideLength,  setGuideLength]  = useState<GuideLength>('media')
   const [exporting,    setExporting]    = useState(false)
-  const [heroPhoto,    setHeroPhoto]    = useState<string | null>(null)
+  const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
 
   const poiPhotos = useMemo(() => {
@@ -331,7 +338,7 @@ export default function GuidaPage() {
     }).catch(() => setLoading(false))
   }, [hikeId])
 
-  // Lazy-load hero photo from Wikimedia Commons
+  // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
   useEffect(() => {
     if (!hike) return
     const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
@@ -339,9 +346,9 @@ export default function GuidaPage() {
     if (!poly.length) return
     const mid = poly[Math.floor(poly.length / 2)]
     import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
-      fetchRoutePhotos(mid.lat, mid.lon, 15000, 1)
+      fetchRoutePhotos(mid.lat, mid.lon, 15000, 6)
     ).then(photos => {
-      if (photos.length > 0) setHeroPhoto(photos[0].url)
+      setRoutePhotos(photos.map(p => p.url))
     }).catch(() => {})
   }, [hike])
 
@@ -598,10 +605,10 @@ export default function GuidaPage() {
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <div className="relative w-full overflow-hidden" style={{ height: 'clamp(280px, 42vw, 480px)' }}>
         {/* Background: photo or gradient */}
-        {heroPhoto ? (
+        {routePhotos[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={heroPhoto}
+            src={routePhotos[0]}
             alt={hikeTitle}
             className="absolute inset-0 w-full h-full object-cover"
             style={{ objectPosition: 'center 35%' }}
@@ -625,13 +632,13 @@ export default function GuidaPage() {
           <span className="inline-block bg-amber-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-3 uppercase">
             {categoryBadge}
           </span>
-          <h1 className="font-display text-2xl sm:text-4xl font-bold text-white leading-tight mb-1.5 max-w-2xl"
+          <h1 className="font-barlow text-2xl sm:text-4xl font-black text-white leading-tight mb-1.5 max-w-2xl uppercase tracking-tight"
             style={{ textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}
           >
             {hikeTitle}
           </h1>
           {hike.plannedDate && (
-            <p className="text-[13px] italic text-white/70">
+            <p className="font-lora text-[13px] italic text-white/70">
               {format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })}
             </p>
           )}
@@ -653,10 +660,22 @@ export default function GuidaPage() {
               <span className="text-amber-500 hidden sm:block">{icon}</span>
               {value}
             </span>
-            <span className="text-[8px] font-semibold tracking-[1.8px] uppercase text-amber-500/80">{label}</span>
+            <span className="font-barlow text-[8px] font-semibold tracking-[1.8px] uppercase text-amber-500/80">{label}</span>
           </div>
         ))}
       </div>
+
+      {/* ── Photo mosaic strip ─────────────────────────────────────────── */}
+      {routePhotos.length >= 2 && (
+        <div className="flex h-40 overflow-hidden">
+          {routePhotos.slice(1, 5).map((url, i) => (
+            <div key={i} className="flex-1 overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} className="w-full h-full object-cover" style={{ objectPosition: 'center 40%' }} alt="" />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Main content ────────────────────────────────────────────────── */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
@@ -791,7 +810,7 @@ export default function GuidaPage() {
                     <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
                     <div className="flex items-center gap-2 text-white">
                       <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
-                      <h2 className="text-[11px] font-bold tracking-[2px] uppercase">{s.title}</h2>
+                      <h2 className="font-barlow text-[13px] font-bold tracking-[2px] uppercase">{s.title}</h2>
                     </div>
                     <div className="flex-1" />
                     <button
@@ -805,7 +824,7 @@ export default function GuidaPage() {
 
                   {/* Section body */}
                   <div className="px-6 py-6 sm:px-8">
-                    <MagazineBody body={s.body} color={s.color} />
+                    <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
 
                     {/* POI photo grid — only in "I luoghi" section */}
                     {isLuoghi && poiPhotos.length > 0 && (

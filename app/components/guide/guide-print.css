@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
 
 /* ============================================
    DTREK GUIDE — Magazine Layout CSS
@@ -7,7 +7,7 @@
 
 /* ROOT */
 .guide-root {
-  font-family: 'DM Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: 'Lora', Georgia, serif;
   color: #1C1C1C;
   background: white;
 }
@@ -74,10 +74,11 @@
   gap: 6px;
   background: #d97706;
   color: white;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 8.5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 2.5px;
+  letter-spacing: 4px;
+  line-height: 1.2;
   padding: 5px 12px;
   border-radius: 2px;
   text-transform: uppercase;
@@ -85,23 +86,25 @@
 }
 
 .guide-cover-title {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-size: 48px;
-  font-weight: 700;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 56px;
+  font-weight: 900;
   color: white;
   line-height: 1.05;
   margin: 0 0 14px 0;
-  letter-spacing: -0.5px;
+  letter-spacing: -1px;
+  text-transform: uppercase;
   text-shadow: 0 2px 16px rgba(0,0,0,0.4);
 }
 
 .guide-cover-date {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Lora', serif;
   font-size: 13px;
-  font-style: italic;
-  color: rgba(255,255,255,0.75);
+  font-weight: 400;
+  font-style: normal;
+  color: #ccc;
   margin: 0;
-  letter-spacing: 0.3px;
+  line-height: 1.4;
 }
 
 /* ── Stats bar ── */
@@ -128,19 +131,21 @@
 .guide-cover-stat:last-child { border-right: none; }
 
 .guide-cover-stat-value {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   font-size: 20px;
   font-weight: 700;
   color: white;
-  line-height: 1;
+  line-height: 1.0;
   margin-bottom: 4px;
 }
 
 .guide-cover-stat-label {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 8px;
-  color: rgba(255,255,255,0.72);
-  letter-spacing: 1.5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.75);
+  letter-spacing: 2px;
+  line-height: 1.0;
   text-transform: uppercase;
 }
 
@@ -168,7 +173,7 @@
   position: absolute;
   top: 44px;
   left: 52px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   font-size: 10px;
   font-weight: 700;
   color: white;
@@ -187,27 +192,35 @@
   padding-bottom: 10px;
   border-bottom: 2px solid #d97706;
   margin-bottom: 32px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
 }
 
 .guide-page-header-brand {
-  font-size: 8.5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 9px;
   font-weight: 700;
-  color: #d97706;
-  letter-spacing: 3px;
+  color: #E07B39;
+  letter-spacing: 2px;
+  line-height: 1.0;
   text-transform: uppercase;
 }
 
 .guide-page-header-title {
-  font-size: 7.5px;
-  color: #999;
-  letter-spacing: 0.8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 8px;
+  font-weight: 400;
+  color: #888;
+  letter-spacing: 1px;
+  line-height: 1.0;
   text-transform: uppercase;
 }
 
 .guide-page-header-num {
-  font-size: 8.5px;
-  color: #999;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 8px;
+  font-weight: 600;
+  color: #888;
+  line-height: 1.0;
   font-variant-numeric: tabular-nums;
 }
 
@@ -223,10 +236,12 @@
   justify-content: space-between;
   border-top: 0.5px solid #e5e0d8;
   padding-top: 7px;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 7px;
-  color: #aaa;
-  letter-spacing: 0.3px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 7.5px;
+  font-weight: 400;
+  color: #888;
+  letter-spacing: 1px;
+  line-height: 1.0;
 }
 
 /* ============================================================
@@ -259,12 +274,13 @@
 }
 
 .guide-section-title {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 10.5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px;
   font-weight: 700;
   color: white;
   margin: 0;
   letter-spacing: 2px;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
@@ -282,21 +298,25 @@
    BODY TEXT
    ============================================================ */
 
-/* Lead paragraph — Playfair Display italic, slightly larger */
+/* Lead paragraph — Lora italic */
 .guide-section-lead {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Lora', serif;
   font-style: italic;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 400;
   line-height: 1.75;
-  color: #111;
+  color: #3D3D3D;
   margin: 0 0 14px 0;
+  text-align: justify;
 }
 
 /* Standard paragraph */
 .guide-section-body-full p,
 .guide-section-text-col p {
+  font-family: 'Lora', serif;
   font-size: 10.5px;
-  line-height: 1.7;
+  font-weight: 400;
+  line-height: 1.70;
   text-align: justify;
   color: #2D2D2D;
   margin: 0 0 9px 0;
@@ -305,7 +325,7 @@
 /* Subsection heading inside body */
 .guide-section-body-full h3,
 .guide-section-text-col h3 {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -336,9 +356,12 @@
 }
 
 .guide-section-photo-credit {
-  font-size: 6.5px;
-  color: #bbb;
+  font-family: 'Lora', serif;
+  font-size: 8px;
+  font-weight: 400;
   font-style: italic;
+  color: #AAA;
+  line-height: 1.3;
   margin-top: 4px;
 }
 
@@ -364,8 +387,10 @@
 }
 
 .guide-section-text-3col p {
+  font-family: 'Lora', serif;
   font-size: 10.5px;
-  line-height: 1.7;
+  font-weight: 400;
+  line-height: 1.70;
   text-align: justify;
   color: #2D2D2D;
   margin: 0 0 9px 0;
@@ -396,18 +421,20 @@
 }
 
 .guide-curiosita-inline-label {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 7px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 8px;
   font-weight: 700;
-  color: #d97706;
-  letter-spacing: 2px;
+  color: #E07B39;
+  letter-spacing: 1.5px;
+  line-height: 1.0;
   text-transform: uppercase;
   margin: 0 0 5px 0;
 }
 
 .guide-curiosita-inline-text {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Lora', serif;
   font-size: 9.5px;
+  font-weight: 400;
   line-height: 1.6;
   font-style: italic;
   color: #3D3D3D;
@@ -460,19 +487,23 @@
 .guide-poi-card-badge {
   display: inline-block;
   color: white;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 7px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 1.2px;
+  letter-spacing: 2px;
+  line-height: 1.0;
   text-transform: uppercase;
   padding: 3px 9px;
   border-radius: 2px;
 }
 
 .guide-poi-card-distance {
-  font-size: 7.5px;
-  color: #aaa;
+  font-family: 'Lora', serif;
+  font-size: 8px;
+  font-weight: 400;
   font-style: italic;
+  color: #888;
+  line-height: 1.0;
 }
 
 .guide-poi-card-right { display: flex; flex-direction: column; }
@@ -484,16 +515,19 @@
 }
 
 .guide-poi-card-name {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-size: 14px;
-  font-weight: 700;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
   color: #1C1C1C;
   margin: 0;
   line-height: 1.2;
 }
 
 .guide-poi-card-desc {
+  font-family: 'Lora', serif;
   font-size: 9.5px;
+  font-weight: 400;
   line-height: 1.65;
   text-align: justify;
   color: #3D3D3D;
@@ -532,7 +566,7 @@
 .guide-knowbox-icon { color: #d97706; font-size: 11px; }
 
 .guide-knowbox-label {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   font-size: 7px;
   font-weight: 700;
   color: #d97706;
@@ -541,15 +575,19 @@
 }
 
 .guide-knowbox-title {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 8.5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 9px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.0;
   color: #1C1C1C;
 }
 
 .guide-knowbox-text {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Lora', serif;
   font-size: 9px;
+  font-weight: 400;
   line-height: 1.6;
   font-style: italic;
   color: #3D3D3D;
@@ -560,8 +598,8 @@
    POI INDEX PAGE (final)
    ============================================================ */
 .guide-poi-index-title {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 10.5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px;
   font-weight: 700;
   color: white;
   background: #d97706;
@@ -593,27 +631,33 @@
 .guide-poi-grid-icon { font-size: 22px; }
 
 .guide-poi-grid-name {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 700;
   color: #1C1C1C;
+  line-height: 1.2;
 }
 
 .guide-poi-grid-badge {
   display: inline-block;
   color: white;
-  font-size: 6.5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 7px;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 2px;
   letter-spacing: 0.5px;
+  line-height: 1.0;
   text-transform: uppercase;
 }
 
 .guide-poi-grid-dist {
-  font-size: 7px;
-  color: #aaa;
+  font-family: 'Lora', serif;
+  font-size: 7.5px;
+  font-weight: 400;
   font-style: italic;
+  color: #888;
+  line-height: 1.0;
 }
 
 /* ============================================================
