@@ -26,15 +26,17 @@ const LENGTH_CONFIG: Record<ResocontoLength, { maxTokens: number; instruction: s
   },
 }
 
-const SYSTEM = `Sei Giulia, una guida escursionistica italiana con vent'anni di esperienza sul campo.
-Stai aiutando un escursionista a scrivere il resoconto della sua escursione appena completata.
-Il tuo stile è caldo, personale e immersivo: scrivi in prima persona (come se fossi l'escursionista),
-con vivacità descrittiva e attenzione ai dettagli sensoriali. Racconta l'esperienza come un capitolo di un libro di viaggio.
+const SYSTEM = `Sei un giornalista outdoor di punta, specializzato in reportage escursionistici per riviste come Meridiani Montagne e National Geographic Traveller Italia.
+Hai una solida formazione in geografia, storia naturale e medicina dello sport, che usi per arricchire ogni articolo con dati precisi e contesto culturale profondo.
 
-Usa la prima persona singolare (io/mi/mio). Scrivi in italiano vivace e letterario.
+Il tuo stile è autorevole ma accessibile: come un corrispondente dal campo, descrivi l'escursione in terza persona con tono oggettivo ma evocativo.
+Usa i dati biometrici (frequenza cardiaca, calorie, passo) come elementi narrativi che raccontano lo sforzo fisico.
+Integra i dati di percorso con riferimenti storici, geologici e naturalistici tratti dalla guida disponibile.
+Descrivi le fotografie scattate lungo il percorso come dispacci visivi: cosa immortalano, a che punto del cammino, cosa rivelano del territorio.
+
 Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio). Non usare asterischi per il grassetto.
-Non usare bullet point: preferisci frasi di narrazione fluida.
-Per riflessioni o momenti particolarmente significativi, racchiudili in: [curiosita] testo [/curiosita]`
+Non usare bullet point: preferisci narrazione fluida e densa di dettagli.
+Per curiosità, fatti insoliti o dati sorprendenti, racchiudili in: [curiosita] testo [/curiosita]`
 
 interface PhotoMeta {
   caption: string
@@ -53,55 +55,81 @@ function buildPrompt(
     ? format(new Date(activity.start_time as string), "EEEE d MMMM yyyy", { locale: it })
     : null
 
-  const photoBlock = photos.length > 0
-    ? photos
+  // Biometric data
+  const avgHR  = activity.avg_heart_rate  as number | undefined
+  const maxHR  = activity.max_heart_rate  as number | undefined
+  const avgSpd = activity.avg_speed_ms    as number | undefined
+  const cal    = activity.calories        as number | undefined
+  const biometricBlock = [
+    avgHR  && avgHR  > 0 ? `FC MEDIA: ${Math.round(avgHR)} bpm` : '',
+    maxHR  && maxHR  > 0 ? `FC MASSIMA: ${Math.round(maxHR)} bpm` : '',
+    avgSpd && avgSpd > 0 ? `VELOCITÀ MEDIA: ${(avgSpd * 3.6).toFixed(1)} km/h` : '',
+    cal    && cal    > 0 ? `CALORIE BRUCIATE: ${cal} kcal` : '',
+  ].filter(Boolean).join('\n')
+
+  // Photos sorted start→end (progress 0.0 → 1.0)
+  const sortedPhotos = [...photos].sort((a, b) => a.progress - b.progress)
+  const photoBlock = sortedPhotos.length > 0
+    ? sortedPhotos
         .map((p, i) =>
-          `• Foto ${i + 1}: "${p.caption}"${p.lat && p.lon ? ` (GPS: ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)})` : ''} — al ${(p.progress * 100).toFixed(0)}% del percorso`,
+          `• Scatto ${i + 1} (${(p.progress * 100).toFixed(0)}% del percorso)${p.lat && p.lon ? ` — coord. ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}` : ''}: "${p.caption}"`,
         )
         .join('\n')
-    : '(nessuna foto)'
+    : '(nessun materiale fotografico)'
 
   const guideBlock = guideText
-    ? `\nGUIDA DEL PERCORSO (usa come riferimento per luoghi e storia):\n${guideText.slice(0, 2000)}\n`
+    ? `\nCONTESTO STORICO-NATURALISTICO (estratto dalla guida del percorso — usalo come fonte per approfondimenti):\n${guideText.slice(0, 2500)}\n`
     : ''
 
-  return `Scrivi il resoconto personale di questa escursione appena completata:
+  return `Scrivi un reportage giornalistico di questa escursione per una rivista outdoor italiana di qualità:
 
-TITOLO: ${activity.title ?? 'Escursione'}
+TITOLO ESCURSIONE: ${activity.title ?? 'Escursione'}
 ${dateStr ? `DATA: ${dateStr}` : ''}
+
+DATI DEL PERCORSO:
 DISTANZA: ${((activity.distance_meters as number) / 1000).toFixed(1)} km
 DISLIVELLO POSITIVO: ${Math.round(activity.elevation_gain as number)} m
-DURATA: ${formatDuration(activity.total_time_seconds as number)}
-${(activity.altitude_max as number) > 0 ? `QUOTA MASSIMA: ${Math.round(activity.altitude_max as number)} m slm` : ''}
-${(activity.calories as number) > 0 ? `CALORIE: ${activity.calories} kcal` : ''}
-${activity.user_notes ? `NOTE PERSONALI:\n${activity.user_notes}` : ''}
+DISLIVELLO NEGATIVO: ${Math.round((activity.elevation_loss as number) ?? 0)} m
+DURATA EFFETTIVA: ${formatDuration(activity.total_time_seconds as number)}
+${(activity.altitude_max as number) > 0 ? `QUOTA MASSIMA RAGGIUNTA: ${Math.round(activity.altitude_max as number)} m slm` : ''}
+
+${biometricBlock ? `DATI BIOMETRICI:\n${biometricBlock}` : ''}
+${activity.user_notes ? `\nNOTE DELL'ESCURSIONISTA:\n${activity.user_notes}` : ''}
 ${guideBlock}
-FOTO SCATTATE DURANTE L'ESCURSIONE:
+DOCUMENTAZIONE FOTOGRAFICA (in ordine cronologico dal punto di partenza):
 ${photoBlock}
 
-Scrivi il resoconto strutturato in queste cinque sezioni (usa ## per ogni titolo):
+Scrivi il reportage strutturato in queste cinque sezioni (usa ## per ogni titolo):
 
-## La partenza
-Come è iniziata la giornata, l'atmosfera del mattino, le prime impressioni, il punto di partenza.
+## Il teatro dell'impresa
+Contestualizza il percorso: dove si trova, che tipo di territorio attraversa, il paesaggio dominante,
+la stagione, l'atmosfera. Usa i dati geografici per ancorare il lettore nello spazio.
 
-## La salita
-Il percorso verso il punto più alto: il terreno, il paesaggio che cambiava, le fatiche, gli incontri.
+## Cronaca del cammino
+Narra il percorso in ordine cronologico, dall'uscita al rientro. Integra le fotografie scattate
+come dispacci dal campo: cosa mostrano, a che punto del tracciato sono state catturate,
+cosa rivelano del territorio attraversato.
 
-## Il punto culminante
-Il momento più significativo dell'escursione: la vetta, il panorama, le emozioni, le riflessioni.
+## L'impegno fisico
+Analizza la performance sportiva usando i dati biometrici: come si è comportato l'organismo,
+i momenti di picco cardiaco, il rapporto tra sforzo e distanza percorsa, le calorie bruciate.
+Contestualizza i numeri per dare al lettore la misura dell'impresa.
 
-## La discesa
-Il ritorno: il corpo stanco ma soddisfatto, le ultime visioni del paesaggio, i pensieri.
+## Storia, natura e curiosità
+Approfondisci i luoghi attraversati: geologia, flora e fauna osservabili, siti storici o
+archeologici nelle vicinanze, tradizioni locali. Includi almeno un fatto sorprendente o
+poco noto che trasformi il percorso in un'esperienza culturale oltre che sportiva.
 
-## Riflessioni finali
-Cosa porterò con me di questa giornata. Il valore dell'esperienza. Cosa tornare a esplorare.
+## Il bilancio del campo
+Valutazione complessiva del percorso: difficoltà effettiva, bellezza del contesto,
+accessibilità, periodo ideale, consigli pratici per chi volesse ripeterlo.
+Chiudi con una nota che catturi l'essenza dell'esperienza.
 
-Scrivi in prima persona, come se stessi raccontando l'escursione a un amico caro. Evoca i sensi: profumi, suoni, sensazioni fisiche.
-${photos.length > 0 ? 'Integra naturalmente i riferimenti alle foto scattate nel racconto.' : ''}
+${photos.length > 0 ? 'Le fotografie sono già ordinate cronologicamente: la foto 1 è la prima scattata (vicino alla partenza), l\'ultima è prossima all\'arrivo.' : ''}
 
 LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}
 
-IMPORTANTE: Completa obbligatoriamente tutte e cinque le sezioni.`
+IMPORTANTE: Scrivi in terza persona con tono giornalistico autorevole. Completa obbligatoriamente tutte e cinque le sezioni.`
 }
 
 // ── GET — fetch existing report ────────────────────────────────────────────────
