@@ -101,45 +101,43 @@ DISLIVELLO POSITIVO: ${Math.round(activity.elevation_gain as number)} m
 DISLIVELLO NEGATIVO: ${Math.round((activity.elevation_loss as number) ?? 0)} m
 DURATA EFFETTIVA: ${formatDuration(activity.total_time_seconds as number)}
 ${(activity.altitude_max as number) > 0 ? `QUOTA MASSIMA RAGGIUNTA: ${Math.round(activity.altitude_max as number)} m slm` : ''}
-
-${biometricBlock ? `DATI BIOMETRICI:\n${biometricBlock}` : ''}
+${biometricBlock ? `\nDATI DI RIFERIMENTO (usa solo se rilevanti, non come sezione separata):\n${biometricBlock}` : ''}
 ${activity.user_notes ? `\nNOTE DELL'ESCURSIONISTA:\n${activity.user_notes}` : ''}
 ${guideBlock}
 DOCUMENTAZIONE FOTOGRAFICA (in ordine cronologico dal punto di partenza):
 ${photoBlock}
 
-Scrivi il reportage strutturato in queste cinque sezioni (usa ## per ogni titolo):
+Scrivi il reportage strutturato in queste quattro sezioni (usa ## per ogni titolo):
 
-## Il teatro dell'impresa
-Contestualizza il percorso: dove si trova, che tipo di territorio attraversa, il paesaggio dominante,
-la stagione, l'atmosfera. Usa i dati geografici per ancorare il lettore nello spazio.
+## Il percorso
+Descrivi il tracciato e il territorio attraversato: paesaggio, morfologia del terreno,
+punti panoramici, cambi di vegetazione. Contestualizza geograficamente il percorso
+senza usare toni enfatici. Usa i dati di distanza, dislivello e quota come ancoraggio.
 
-## Cronaca del cammino
-Narra il percorso in ordine cronologico, dall'uscita al rientro. Integra le fotografie scattate
-come dispacci dal campo: cosa mostrano, a che punto del tracciato sono state catturate,
-cosa rivelano del territorio attraversato.
+## Cronaca
+Racconta la progressione dell'escursione dall'inizio alla fine in ordine cronologico.
+Integra le fotografie scattate come elementi della narrazione: cosa mostrano,
+in quale tratto del percorso, cosa aggiungono alla comprensione dei luoghi.
+Eventuali dati biometrici possono essere citati qui se aiutano a descrivere il ritmo o la fatica.
 
-## L'impegno fisico
-Analizza la performance sportiva usando i dati biometrici: come si è comportato l'organismo,
-i momenti di picco cardiaco, il rapporto tra sforzo e distanza percorsa, le calorie bruciate.
-Contestualizza i numeri per dare al lettore la misura dell'impresa.
+## Natura e storia
+Approfondisci i luoghi attraversati: geologia, flora, fauna, siti storici o
+archeologici nelle vicinanze, tradizioni locali. Includi almeno un fatto poco noto
+che arricchisca la conoscenza del territorio.
 
-## Storia, natura e curiosità
-Approfondisci i luoghi attraversati: geologia, flora e fauna osservabili, siti storici o
-archeologici nelle vicinanze, tradizioni locali. Includi almeno un fatto sorprendente o
-poco noto che trasformi il percorso in un'esperienza culturale oltre che sportiva.
+## In sintesi
+Valutazione complessiva: difficoltà effettiva, qualità del contesto, periodo ideale,
+consigli pratici. Una o due frasi conclusive che catturino l'essenza dell'esperienza.
 
-## Il bilancio del campo
-Valutazione complessiva del percorso: difficoltà effettiva, bellezza del contesto,
-accessibilità, periodo ideale, consigli pratici per chi volesse ripeterlo.
-Chiudi con una nota che catturi l'essenza dell'esperienza.
-
-${photos.length > 0 ? 'Le fotografie sono già ordinate cronologicamente: la foto 1 è la prima scattata (vicino alla partenza), l\'ultima è prossima all\'arrivo.' : ''}
+${photos.length > 0 ? 'Le fotografie sono in ordine cronologico: la prima è vicino alla partenza, l\'ultima vicino all\'arrivo.' : ''}
+Scrivi in italiano preciso, diretto, senza aggettivi inflazionati o toni epici.
 
 LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}
 
-IMPORTANTE: Scrivi in terza persona con tono giornalistico autorevole. Completa obbligatoriamente tutte e cinque le sezioni.`
+IMPORTANTE: Completa obbligatoriamente tutte e quattro le sezioni.`
+
 }
+
 
 // ── GET — fetch existing report ────────────────────────────────────────────────
 

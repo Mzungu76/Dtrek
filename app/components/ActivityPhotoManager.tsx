@@ -187,6 +187,13 @@ export default function ActivityPhotoManager({ activityId, trackPoints }: Props)
     setPhotos(prev => prev.filter(p => p.id !== id))
   }
 
+  function updateProgress(id: string, value: number) {
+    setPhotos(prev =>
+      [...prev.map(p => p.id === id ? { ...p, progress: value } : p)]
+        .sort((a, b) => a.progress - b.progress),
+    )
+  }
+
   function startEdit(photo: RoutePhoto) {
     setEditingId(photo.id)
     setEditCaption(photo.caption)
@@ -247,31 +254,27 @@ export default function ActivityPhotoManager({ activityId, trackPoints }: Props)
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {photos.map(photo => (
-            <div key={photo.id} className="group relative rounded-xl overflow-hidden border border-stone-100 shadow-sm">
-              <img src={photo.dataUrl} alt={photo.caption}
-                className="w-full aspect-square object-cover" />
-
-              {/* GPS badge */}
-              {photo.hasExifGps && (
-                <div className="absolute top-1.5 left-1.5 flex items-center gap-0.5 bg-forest-600/85 text-white text-[9px] font-mono rounded-full px-1.5 py-0.5">
-                  <MapPin className="w-2.5 h-2.5" /> GPS
-                </div>
-              )}
-
-              {/* Progress label */}
-              <div className="absolute top-1.5 right-1.5 bg-black/50 text-white text-[9px] font-mono rounded-full px-1.5 py-0.5">
-                {progressLabel(photo.progress)}
+            <div key={photo.id} className="group relative rounded-xl overflow-hidden border border-stone-100 shadow-sm bg-white">
+              {/* Thumbnail */}
+              <div className="relative">
+                <img src={photo.dataUrl} alt={photo.caption}
+                  className="w-full aspect-square object-cover" />
+                {/* GPS badge */}
+                {photo.hasExifGps && (
+                  <div className="absolute bottom-1 left-1 flex items-center gap-0.5 bg-forest-600/85 text-white text-[9px] font-mono rounded-full px-1.5 py-0.5">
+                    <MapPin className="w-2.5 h-2.5" /> GPS
+                  </div>
+                )}
+                {/* Delete */}
+                <button
+                  onClick={() => removePhoto(photo.id)}
+                  className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 w-5 h-5 bg-red-500/90 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-opacity">
+                  <X className="w-3 h-3" />
+                </button>
               </div>
 
-              {/* Delete */}
-              <button
-                onClick={() => removePhoto(photo.id)}
-                className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-opacity">
-                <X className="w-3 h-3" />
-              </button>
-
               {/* Caption */}
-              <div className="bg-white px-2 py-1.5">
+              <div className="px-2 pt-1.5 pb-0.5">
                 {editingId === photo.id ? (
                   <div className="flex items-center gap-1">
                     <input
@@ -292,6 +295,20 @@ export default function ActivityPhotoManager({ activityId, trackPoints }: Props)
                     <Pencil className="w-2.5 h-2.5 text-stone-300 group-hover/cap:text-forest-500 shrink-0" />
                   </button>
                 )}
+              </div>
+
+              {/* Position slider */}
+              <div className="px-2 pb-2">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[9px] text-stone-400 font-mono">Pos. percorso</span>
+                  <span className="text-[9px] text-stone-500 font-mono">{progressLabel(photo.progress)}</span>
+                </div>
+                <input
+                  type="range" min={0} max={100} step={1}
+                  value={Math.round(photo.progress * 100)}
+                  onChange={e => updateProgress(photo.id, parseInt(e.target.value) / 100)}
+                  className="w-full h-1 accent-forest-600 cursor-pointer"
+                />
               </div>
             </div>
           ))}
