@@ -1,0 +1,526 @@
+'use client'
+
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
+import Navbar from '@/components/Navbar'
+import { getActivityById, type StoredActivity } from '@/lib/blobStore'
+import { formatDuration } from '@/lib/tcxParser'
+import { format } from 'date-fns'
+import { it } from 'date-fns/locale'
+import {
+  ArrowLeft, FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
+  Images, X, BookOpen,
+} from 'lucide-react'
+
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface RoutePhoto {
+  id: string
+  dataUrl: string
+  progress: number
+  caption: string
+  hasExifGps: boolean
+  lat?: number
+  lon?: number
+}
+
+interface HikeReport {
+  id: string
+  activity_id: string
+  title: string
+  content: string
+  photos: { caption: string; lat?: number; lon?: number; progress: number }[]
+  created_at: string
+  updated_at: string
+}
+
+type ResocontoLength = 'breve' | 'media' | 'lunga'
+
+// ── Markdown section parser ────────────────────────────────────────────────────
+
+interface Section {
+  title: string
+  body: string
+}
+
+function parseSections(md: string): Section[] {
+  const parts = md.split(/\n(?=## )/)
+  return parts
+    .map(part => {
+      const nl = part.indexOf('\n')
+      if (!part.startsWith('## ') || nl === -1) return null
+      return {
+        title: part.slice(3, nl).trim(),
+        body:  part.slice(nl + 1).trim(),
+      }
+    })
+    .filter((s): s is Section => s !== null)
+}
+
+// ── Render body text — paragraphs + [curiosita] blocks ─────────────────────────
+
+function RenderBody({ text }: { text: string }) {
+  const parts = text.split(/(\[curiosita\][\s\S]*?\[\/curiosita\])/g)
+  return (
+    <div className="space-y-3">
+      {parts.map((part, i) => {
+        const m = part.match(/^\[curiosita\]([\s\S]*?)\[\/curiosita\]$/)
+        if (m) {
+          return (
+            <blockquote key={i}
+              className="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 rounded-r-xl font-lora text-sm italic text-stone-700 leading-relaxed">
+              {m[1].trim()}
+            </blockquote>
+          )
+        }
+        return part.trim()
+          ? <div key={i} className="space-y-2.5">
+              {part.trim().split(/\n\n+/).map((p, j) => (
+                <p key={j} className="font-lora text-[15px] leading-[1.8] text-stone-700">{p.trim()}</p>
+              ))}
+            </div>
+          : null
+      })}
+    </div>
+  )
+}
+
+// ── Section card ───────────────────────────────────────────────────────────────
+
+const SECTION_COLORS = ['#2d6a4f', '#40916c', '#74c69d', '#b7e4c7', '#d8f3dc']
+
+function SectionCard({
+  section,
+  index,
+  photo,
+}: {
+  section: Section
+  index: number
+  photo?: RoutePhoto
+}) {
+  const color = SECTION_COLORS[index % SECTION_COLORS.length]
+  return (
+    <article className="bg-white rounded-2xl shadow-sm overflow-hidden mb-5 print:rounded-none print:shadow-none print:mb-0 print:border-b print:border-stone-200">
+      <div className="px-6 py-3 flex items-center gap-3" style={{ backgroundColor: color }}>
+        <span className="font-barlow text-[11px] font-bold tracking-[2px] uppercase text-white/70">
+          {String(index + 1).padStart(2, '0')}
+        </span>
+        <h2 className="font-barlow text-lg font-bold tracking-wide uppercase text-white leading-tight">
+          {section.title}
+        </h2>
+      </div>
+
+      <div className={`p-6 ${photo ? 'md:columns-2 md:gap-8' : ''} print-columns-2`}>
+        {photo && (
+          <div className="float-right ml-5 mb-3 w-44 print:w-40 print:ml-4 shrink-0 hidden md:block print:block">
+            <img src={photo.dataUrl} alt={photo.caption}
+              className="w-full aspect-[4/3] object-cover rounded-xl shadow-md print:rounded-lg" />
+            {photo.caption && (
+              <p className="font-lora text-[10px] italic text-stone-400 mt-1 text-center leading-snug">
+                {photo.caption}
+              </p>
+            )}
+          </div>
+        )}
+        <RenderBody text={section.body} />
+      </div>
+    </article>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
+export default function ResocontoPage() {
+  const params = useParams()
+  const router = useRouter()
+  const id = decodeURIComponent(params.id as string)
+
+  const [activity,    setActivity]    = useState<StoredActivity | null>(null)
+  const [report,      setReport]      = useState<HikeReport | null>(null)
+  const [photos,      setPhotos]      = useState<RoutePhoto[]>([])
+  const [content,     setContent]     = useState('')
+  const [generating,  setGenerating]  = useState(false)
+  const [isEditing,   setIsEditing]   = useState(false)
+  const [saving,      setSaving]      = useState(false)
+  const [saveOk,      setSaveOk]      = useState(false)
+  const [length,      setLength]      = useState<ResocontoLength>('media')
+  const [show3D,      setShow3D]      = useState(false)
+  const [lightbox,    setLightbox]    = useState<RoutePhoto | null>(null)
+  const [loading,     setLoading]     = useState(true)
+  const [apiError,    setApiError]    = useState<string | null>(null)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Load activity + report + photos
+  useEffect(() => {
+    Promise.all([
+      getActivityById(id),
+      fetch(`/api/resoconto?activityId=${encodeURIComponent(id)}`).then(r => r.json()).catch(() => null),
+    ]).then(([act, rep]) => {
+      if (!act) { router.push('/'); return }
+      setActivity(act)
+      if (rep) {
+        setReport(rep)
+        setContent(rep.content ?? '')
+      }
+    }).finally(() => setLoading(false))
+
+    // Load photos from localStorage
+    try {
+      const raw = localStorage.getItem(`dtrek_vp_${id}`)
+      if (raw) setPhotos(JSON.parse(raw) as RoutePhoto[])
+    } catch { /* ignore */ }
+  }, [id, router])
+
+  // Auto-save debounce when editing
+  useEffect(() => {
+    if (!isEditing || !content || generating) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      saveContent(content)
+    }, 1500)
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
+  }, [content, isEditing, generating]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveContent = useCallback(async (text: string) => {
+    if (!text.trim()) return
+    setSaving(true)
+    try {
+      await fetch('/api/resoconto', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ activityId: id, content: text }),
+      })
+      setSaveOk(true)
+      setTimeout(() => setSaveOk(false), 2000)
+    } finally {
+      setSaving(false)
+    }
+  }, [id])
+
+  const generateReport = useCallback(async () => {
+    if (!activity) return
+    setGenerating(true)
+    setContent('')
+    setApiError(null)
+    const photoMeta = photos.map(p => ({
+      caption:  p.caption,
+      lat:      p.lat,
+      lon:      p.lon,
+      progress: p.progress,
+    }))
+
+    try {
+      const res = await fetch('/api/resoconto', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ activityId: id, length, photos: photoMeta }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        if (res.status === 402) {
+          setApiError('Aggiungi la tua chiave API Claude nelle impostazioni per usare questa funzione.')
+        } else {
+          setApiError(err.message ?? 'Errore durante la generazione.')
+        }
+        return
+      }
+
+      const reader  = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let full = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        full += decoder.decode(value, { stream: true })
+        setContent(full)
+      }
+    } catch {
+      setApiError('Errore di rete. Riprova.')
+    } finally {
+      setGenerating(false)
+    }
+  }, [activity, id, length, photos])
+
+  if (loading) return (
+    <div className="min-h-screen bg-stone-50">
+      <Navbar />
+      <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
+        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento resoconto…</span>
+      </div>
+    </div>
+  )
+  if (!activity) return null
+
+  const sections  = parseSections(content)
+  const heroPhoto = photos[0]
+  const dateStr   = activity.startTime
+    ? format(new Date(activity.startTime), "d MMMM yyyy", { locale: it })
+    : ''
+
+  return (
+    <div className="min-h-screen bg-stone-50">
+
+      {/* ── Nav ── */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-stone-200 print:hidden">
+        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+          <button onClick={() => router.push(`/escursione/${encodeURIComponent(id)}`)}
+            className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+            <span>Escursione</span>
+          </button>
+          <div className="flex items-center gap-2 min-w-0">
+            <BookOpen className="w-4 h-4 text-forest-600 shrink-0" />
+            <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
+              Resoconto
+            </span>
+          </div>
+          <button onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm font-medium transition-colors">
+            <FileDown className="w-4 h-4" /> Stampa PDF
+          </button>
+        </div>
+      </div>
+
+      {/* ── Hero ── */}
+      <div className="relative w-full overflow-hidden print:h-[220px]"
+        style={{ height: 'clamp(220px, 38vw, 420px)' }}>
+        {heroPhoto
+          ? <img src={heroPhoto.dataUrl} alt=""
+              className="absolute inset-0 w-full h-full object-cover" />
+          : <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />
+        }
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-6 max-w-5xl mx-auto">
+          <h1 className="font-barlow text-3xl sm:text-5xl font-black text-white leading-tight uppercase tracking-tight drop-shadow-lg mb-2">
+            {activity.title ?? activity.notes ?? 'Escursione'}
+          </h1>
+          {dateStr && (
+            <p className="font-lora text-sm italic text-white/80">{dateStr}</p>
+          )}
+          <div className="flex flex-wrap gap-2 mt-3">
+            {[
+              { icon: <Route className="w-3 h-3" />, v: `${(activity.distanceMeters / 1000).toFixed(1)} km` },
+              { icon: <Mountain className="w-3 h-3" />, v: `${activity.elevationGain.toFixed(0)} m D+` },
+              { icon: <Clock className="w-3 h-3" />, v: formatDuration(activity.totalTimeSeconds) },
+              ...(activity.calories > 0 ? [{ icon: <Flame className="w-3 h-3" />, v: `${activity.calories} kcal` }] : []),
+            ].map(({ icon, v }) => (
+              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white font-barlow tracking-wide">
+                {icon} {v}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Photo mosaic ── */}
+      {photos.length >= 2 && (
+        <div className="flex h-32 overflow-hidden print:hidden">
+          {photos.slice(1, 5).map((ph, i) => (
+            <button key={ph.id} onClick={() => setLightbox(ph)}
+              className="flex-1 overflow-hidden hover:scale-[1.02] transition-transform">
+              <img src={ph.dataUrl} alt={ph.caption}
+                className="w-full h-full object-cover" style={{ objectPosition: 'center 40%' }} />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 print:max-w-full print:px-0">
+
+        {/* ── Controls ── */}
+        <div className="mb-6 print:hidden">
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <p className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm mb-1">
+                  {content ? 'Genera nuovo resoconto' : 'Genera il tuo resoconto'}
+                </p>
+                <p className="text-xs text-stone-400 font-lora italic">
+                  {photos.length > 0
+                    ? `${photos.length} foto disponibili · L'AI userà le tue immagini`
+                    : 'Aggiungi foto dalla mappa 3D per un resoconto più ricco'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Length selector */}
+                <div className="flex rounded-xl overflow-hidden border border-stone-200">
+                  {(['breve', 'media', 'lunga'] as const).map(l => (
+                    <button key={l} onClick={() => setLength(l)}
+                      className={`px-3 py-1.5 text-xs font-barlow font-bold uppercase tracking-wide transition-colors
+                        ${length === l
+                          ? 'bg-forest-600 text-white'
+                          : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 3D map button */}
+                <button onClick={() => setShow3D(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                  <Images className="w-3.5 h-3.5" /> Mappa 3D
+                </button>
+
+                {/* Generate button */}
+                <button onClick={generateReport} disabled={generating}
+                  className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                  {generating
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</>
+                    : <><BookOpen className="w-4 h-4" /> Genera</>
+                  }
+                </button>
+              </div>
+            </div>
+
+            {apiError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                {apiError}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Empty state ── */}
+        {!content && !generating && (
+          <div className="flex flex-col items-center py-20 text-stone-400 print:hidden">
+            <BookOpen className="w-12 h-12 mb-4 opacity-30" />
+            <p className="font-barlow uppercase tracking-wide text-sm">Nessun resoconto ancora</p>
+            <p className="font-lora text-sm italic mt-1">Clicca "Genera" per creare il tuo racconto</p>
+          </div>
+        )}
+
+        {/* ── Streaming indicator ── */}
+        {generating && !sections.length && (
+          <div className="flex items-center gap-3 py-8 text-stone-500 print:hidden">
+            <Loader2 className="w-5 h-5 animate-spin text-forest-500" />
+            <span className="font-lora italic text-sm">Giulia sta scrivendo il tuo resoconto…</span>
+          </div>
+        )}
+
+        {/* ── Edit / view toggle ── */}
+        {content && (
+          <div className="flex items-center justify-between mb-5 print:hidden">
+            <div className="flex items-center gap-2">
+              {report?.updated_at && (
+                <span className="font-lora text-xs italic text-stone-400">
+                  Salvato {format(new Date(report.updated_at), "d MMM · HH:mm", { locale: it })}
+                </span>
+              )}
+              {saving && (
+                <span className="flex items-center gap-1 font-lora text-xs italic text-stone-400">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Salvataggio…
+                </span>
+              )}
+              {saveOk && (
+                <span className="flex items-center gap-1 font-lora text-xs text-forest-600">
+                  <Check className="w-3 h-3" /> Salvato
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                if (isEditing) { saveContent(content); setIsEditing(false) }
+                else setIsEditing(true)
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+              {isEditing
+                ? <><Check className="w-3.5 h-3.5" /> Fatto</>
+                : <><Pencil className="w-3.5 h-3.5" /> Modifica</>
+              }
+            </button>
+          </div>
+        )}
+
+        {/* ── Edit textarea ── */}
+        {isEditing && (
+          <div className="mb-6 print:hidden">
+            <textarea
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              rows={30}
+              className="w-full bg-white border border-stone-200 rounded-2xl p-5 font-mono text-sm text-stone-700 leading-relaxed outline-none focus:border-forest-400 resize-y shadow-sm"
+              placeholder="Scrivi il resoconto in Markdown…"
+            />
+          </div>
+        )}
+
+        {/* ── Rendered sections ── */}
+        {!isEditing && sections.map((section, i) => (
+          <SectionCard
+            key={i}
+            section={section}
+            index={i}
+            photo={photos[i + 1]}
+          />
+        ))}
+
+        {/* ── Raw streaming text (before first section parsed) ── */}
+        {generating && !sections.length && content && (
+          <div className="bg-white rounded-2xl shadow-sm p-6 print:hidden">
+            <p className="font-lora text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{content}</p>
+          </div>
+        )}
+
+        {/* ── Photo gallery ── */}
+        {photos.length > 0 && content && (
+          <section className="mt-8 print:hidden">
+            <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
+              Le tue foto
+            </h3>
+            <div className="flex gap-3 overflow-x-auto pb-3">
+              {photos.map(ph => (
+                <button key={ph.id} onClick={() => setLightbox(ph)}
+                  className="shrink-0 w-36 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+                  <img src={ph.dataUrl} alt={ph.caption}
+                    className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
+                  {ph.caption && (
+                    <p className="px-2 py-1.5 font-lora text-[10px] italic text-stone-500 leading-snug bg-white">
+                      {ph.caption}
+                    </p>
+                  )}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+      </main>
+
+      {/* ── 3D Map overlay ── */}
+      {show3D && (
+        <RouteMap3D
+          trackPoints={activity.trackPoints}
+          title={activity.title ?? activity.notes}
+          onClose={() => setShow3D(false)}
+          activityId={activity.id}
+          distanceMeters={activity.distanceMeters}
+          elevationGain={activity.elevationGain}
+        />
+      )}
+
+      {/* ── Lightbox ── */}
+      {lightbox && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 print:hidden"
+          onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white">
+            <X className="w-6 h-6" />
+          </button>
+          <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+            <img src={lightbox.dataUrl} alt={lightbox.caption}
+              className="w-full rounded-2xl shadow-2xl" />
+            {lightbox.caption && (
+              <p className="font-lora text-sm italic text-white/70 text-center mt-3">
+                {lightbox.caption}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
