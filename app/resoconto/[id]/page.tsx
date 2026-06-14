@@ -482,6 +482,7 @@ export default function ResocontoPage() {
                           image: { type: 'jpeg', quality: 0.92 },
                           html2canvas: { scale: 2, useCORS: false, allowTaint: true, logging: false },
                           jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
+                          pagebreak: { mode: 'avoid-all' },
                         }).from(captureEl).output('blob')
                       } finally {
                         document.body.removeChild(captureEl)
@@ -877,7 +878,7 @@ export default function ResocontoPage() {
                     <div style={{ float: 'right', marginLeft: 12, marginBottom: 8, width: 120 }}>
                       <div style={{ position: 'relative' }}>
                         <img src={photos[i].dataUrl} alt={photos[i].caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 'bold' }}>{i+1}</span>
+                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', textAlign: 'center', lineHeight: '16px' }}>{i+1}</span>
                       </div>
                       <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{photos[i].caption}</p>
                     </div>
@@ -897,7 +898,7 @@ export default function ResocontoPage() {
                     <div key={ph.id}>
                       <div style={{ position: 'relative' }}>
                         <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 'bold', border: '1px solid white' }}>{i+1}</span>
+                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', textAlign: 'center', lineHeight: '16px', border: '1px solid white' }}>{i+1}</span>
                       </div>
                       {ph.caption && <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i+1}. {ph.caption}</p>}
                     </div>
