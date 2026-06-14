@@ -168,13 +168,36 @@ CREATE TABLE IF NOT EXISTS hike_reports (
 CREATE INDEX IF NOT EXISTS idx_hike_reports_user_id     ON hike_reports (user_id);
 CREATE INDEX IF NOT EXISTS idx_hike_reports_activity_id ON hike_reports (activity_id);
 
--- Condivisione pubblica dei resoconti
-ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE;
-CREATE INDEX IF NOT EXISTS idx_hike_reports_share_token ON hike_reports (share_token);
+-- Condivisione pubblica dei resoconti tramite PDF (Supabase Storage)
+ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS share_pdf_url TEXT;
 
--- Token diario pubblico per utente
-ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_token UUID UNIQUE;
-CREATE INDEX IF NOT EXISTS idx_user_settings_diary_token ON user_settings (diary_token);
+-- Diario pubblico tramite PDF
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_pdf_url TEXT;
+
+-- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
+-- Esegui nel SQL Editor di Supabase:
+--
+-- INSERT INTO storage.buckets (id, name, public)
+--   VALUES ('dtrek-reports', 'dtrek-reports', true)
+--   ON CONFLICT (id) DO NOTHING;
+--
+-- DROP POLICY IF EXISTS "users_write_own_reports" ON storage.objects;
+-- CREATE POLICY "users_write_own_reports" ON storage.objects
+--   FOR INSERT WITH CHECK (
+--     auth.uid()::text = (storage.foldername(name))[1]
+--     AND bucket_id = 'dtrek-reports'
+--   );
+--
+-- DROP POLICY IF EXISTS "users_update_own_reports" ON storage.objects;
+-- CREATE POLICY "users_update_own_reports" ON storage.objects
+--   FOR UPDATE USING (
+--     auth.uid()::text = (storage.foldername(name))[1]
+--     AND bucket_id = 'dtrek-reports'
+--   );
+--
+-- DROP POLICY IF EXISTS "public_read_reports" ON storage.objects;
+-- CREATE POLICY "public_read_reports" ON storage.objects
+--   FOR SELECT USING (bucket_id = 'dtrek-reports');
 
 -- ═══════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY  (doppio strato di sicurezza)

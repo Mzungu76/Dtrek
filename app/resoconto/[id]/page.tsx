@@ -10,7 +10,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
-  Images, X, BookOpen, Share2, Copy, Link2Off,
+  Images, X, BookOpen, Share2, Copy, Link2Off, ExternalLink,
 } from 'lucide-react'
 
 const RouteMap3D    = dynamic(() => import('@/components/RouteMap3D'),    { ssr: false })
@@ -251,10 +251,12 @@ export default function ResocontoPage() {
   const [lightbox,    setLightbox]    = useState<RoutePhoto | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [apiError,    setApiError]    = useState<string | null>(null)
-  const [coverPhotoId,setCoverPhotoId]= useState<string | null>(null)
-  const [shareToken,  setShareToken]  = useState<string | null>(null)
-  const [showShare,   setShowShare]   = useState(false)
-  const [copyOk,      setCopyOk]      = useState(false)
+  const [coverPhotoId,  setCoverPhotoId]  = useState<string | null>(null)
+  const [sharePdfUrl,   setSharePdfUrl]   = useState<string | null>(null)
+  const [showShare,     setShowShare]     = useState(false)
+  const [copyOk,        setCopyOk]        = useState(false)
+  const [publishing,    setPublishing]    = useState(false)
+  const [publishError,  setPublishError]  = useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load activity + report + photos
@@ -284,10 +286,10 @@ export default function ResocontoPage() {
     const savedCover = localStorage.getItem(`dtrek_cover_${id}`)
     if (savedCover) setCoverPhotoId(savedCover)
 
-    // Load share token
+    // Load existing PDF URL
     fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`)
       .then(r => r.json())
-      .then(d => { if (d.share_token) setShareToken(d.share_token) })
+      .then(d => { if (d.share_pdf_url) setSharePdfUrl(d.share_pdf_url) })
       .catch(() => null)
   }, [id, router])
 
@@ -399,7 +401,7 @@ export default function ResocontoPage() {
           <div className="flex items-center gap-2">
             <button onClick={() => setShowShare(s => !s)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showShare ? 'bg-forest-100 text-forest-700' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'}`}>
-              <Share2 className="w-4 h-4" /> Condividi
+              <Share2 className="w-4 h-4" /> Pubblica PDF
             </button>
             <button onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm font-medium transition-colors">
@@ -413,14 +415,18 @@ export default function ResocontoPage() {
       {showShare && (
         <div className="bg-white border-b border-stone-100 print:hidden">
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
-            {shareToken ? (
+            {sharePdfUrl ? (
               <>
                 <code className="text-xs bg-stone-100 px-2.5 py-1.5 rounded-lg font-mono text-stone-600 truncate max-w-[260px]">
-                  {typeof window !== 'undefined' ? `${window.location.origin}/r/${shareToken}` : `/r/${shareToken}`}
+                  {sharePdfUrl}
                 </code>
+                <a href={sharePdfUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                  <ExternalLink className="w-3.5 h-3.5" /> Apri PDF
+                </a>
                 <button
                   onClick={async () => {
-                    await navigator.clipboard.writeText(`${window.location.origin}/r/${shareToken}`)
+                    await navigator.clipboard.writeText(sharePdfUrl)
                     setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
@@ -429,7 +435,7 @@ export default function ResocontoPage() {
                 <button
                   onClick={async () => {
                     await fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`, { method: 'DELETE' })
-                    setShareToken(null)
+                    setSharePdfUrl(null)
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-red-50 transition-colors">
                   <Link2Off className="w-3.5 h-3.5" /> Disattiva
@@ -437,19 +443,56 @@ export default function ResocontoPage() {
               </>
             ) : (
               <>
-                <p className="text-xs text-stone-500 font-lora italic">Il resoconto non è ancora condiviso pubblicamente.</p>
+                <p className="text-xs text-stone-500 font-lora italic">
+                  Genera un PDF con le foto e pubblicalo online.
+                </p>
+                {publishError && (
+                  <p className="text-xs text-red-500">{publishError}</p>
+                )}
                 <button
+                  disabled={publishing || !content}
                   onClick={async () => {
-                    const r = await fetch('/api/share-report', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ activityId: id }),
-                    })
-                    const d = await r.json()
-                    if (d.share_token) setShareToken(d.share_token)
+                    if (!activity) return
+                    setPublishing(true); setPublishError(null)
+                    try {
+                      const { getBrowserSupabase } = await import('@/lib/supabaseBrowser')
+                      const sb = getBrowserSupabase()
+                      const { data: { user } } = await sb.auth.getUser()
+                      if (!user) throw new Error('Non autenticato')
+
+                      const html2pdf = (await import('html2pdf.js')).default
+                      const el = document.getElementById('resoconto-print-root')
+                      if (!el) throw new Error('Layout non trovato')
+
+                      const blob: Blob = await new Promise((res, rej) =>
+                        html2pdf().set({
+                          margin: 0,
+                          image: { type: 'jpeg', quality: 0.92 },
+                          html2canvas: { scale: 2, useCORS: true, logging: false },
+                          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
+                        }).from(el).output('blob').then(res).catch(rej)
+                      )
+
+                      const { uploadReportPdf } = await import('@/lib/pdfUpload')
+                      const url = await uploadReportPdf(user.id, id, blob)
+
+                      await fetch('/api/share-report', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ activityId: id, sharePdfUrl: url }),
+                      })
+                      setSharePdfUrl(url)
+                    } catch (e) {
+                      setPublishError(String(e))
+                    } finally {
+                      setPublishing(false)
+                    }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
-                  <Share2 className="w-3.5 h-3.5" /> Crea link pubblico
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
+                  {publishing
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione PDF…</>
+                    : <><Share2 className="w-3.5 h-3.5" /> Genera e pubblica</>
+                  }
                 </button>
               </>
             )}
@@ -778,6 +821,78 @@ export default function ResocontoPage() {
           distanceMeters={activity.distanceMeters}
           elevationGain={activity.elevationGain}
         />
+      )}
+
+      {/* ── Hidden PDF root (for html2pdf capture) ── */}
+      {content && (
+        <div id="resoconto-print-root"
+          style={{ position: 'fixed', left: '-9999px', top: 0, width: 794, background: 'white', fontFamily: 'Georgia, serif' }}>
+          {/* Hero */}
+          <div style={{ position: 'relative', width: '100%', height: 220, overflow: 'hidden', marginBottom: 0 }}>
+            {heroPhoto
+              ? <img src={heroPhoto.dataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#1b4332,#40916c)' }} />
+            }
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%)' }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '20px 32px' }}>
+              <h1 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 28, fontWeight: 900, color: 'white', margin: 0, textTransform: 'uppercase', letterSpacing: 1 }}>
+                {activity.title ?? activity.notes ?? 'Escursione'}
+              </h1>
+              {dateStr && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', fontStyle: 'italic' }}>{dateStr}</p>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                {[
+                  `${(activity.distanceMeters / 1000).toFixed(1)} km`,
+                  `${activity.elevationGain.toFixed(0)} m D+`,
+                  formatDuration(activity.totalTimeSeconds),
+                ].map(v => (
+                  <span key={v} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontFamily: 'Arial, sans-serif' }}>{v}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          {/* Sections */}
+          <div style={{ padding: '32px 32px 0' }}>
+            {sections.map((section, i) => (
+              <div key={i} style={{ marginBottom: 24 }}>
+                <div style={{ background: ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc'][i % 5], padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i+1).padStart(2,'0')}</span>
+                  <span style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>{section.title}</span>
+                </div>
+                <div style={{ padding: '12px 16px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
+                  {photos[i] && i > 0 && (
+                    <div style={{ float: 'right', marginLeft: 12, marginBottom: 8, width: 120 }}>
+                      <div style={{ position: 'relative' }}>
+                        <img src={photos[i].dataUrl} alt={photos[i].caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 'bold' }}>{i+1}</span>
+                      </div>
+                      <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{photos[i].caption}</p>
+                    </div>
+                  )}
+                  {section.body.split(/\n\n+/).map((p, j) => (
+                    <p key={j} style={{ fontSize: 11, lineHeight: 1.7, color: '#374151', margin: '0 0 8px' }}>{p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()}</p>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {/* Photo grid */}
+            {photos.length > 0 && (
+              <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, marginTop: 8 }}>
+                <h3 style={{ fontFamily: 'Arial, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: '#9ca3af', marginBottom: 12 }}>Documentazione fotografica</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  {photos.map((ph, i) => (
+                    <div key={ph.id}>
+                      <div style={{ position: 'relative' }}>
+                        <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 'bold', border: '1px solid white' }}>{i+1}</span>
+                      </div>
+                      {ph.caption && <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i+1}. {ph.caption}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ── Lightbox ── */}

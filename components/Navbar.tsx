@@ -3,15 +3,15 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Upload, BarChart2, BookOpen, Map, CalendarClock, Compass, User, ArrowDownToLine, LogOut, Settings, ScrollText } from 'lucide-react'
+import { Upload, BarChart2, CalendarDays, Map, CalendarClock, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked } from 'lucide-react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 const NAV_LINKS = [
-  { href: '/',            label: 'Diario',      icon: BookOpen      },
-  { href: '/resoconti',   label: 'Resoconti',   icon: ScrollText    },
+  { href: '/',            label: 'Calendario',  icon: CalendarDays  },
+  { href: '/diario',      label: 'Diario',      icon: BookMarked    },
   { href: '/statistiche', label: 'Statistiche', icon: BarChart2     },
   { href: '/mappa',       label: 'Mappa',       icon: Map           },
   { href: '/programma',   label: 'Programma',   icon: CalendarClock },
