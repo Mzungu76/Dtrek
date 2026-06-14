@@ -468,7 +468,7 @@ export default function ResocontoPage() {
                       // Capturing the original (hidden off-screen) element directly fails
                       // because html2canvas treats opacity:0 / off-viewport as blank.
                       const captureEl = document.createElement('div')
-                      captureEl.style.cssText = 'position:fixed;top:9999px;left:0;width:794px;background:white'
+                      captureEl.style.cssText = 'width:794px;background:white'
                       const clone = printRoot.cloneNode(true) as HTMLElement
                       clone.style.cssText = 'width:794px;background:white;font-family:Georgia,serif'
                       captureEl.appendChild(clone)

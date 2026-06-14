@@ -525,7 +525,7 @@ export default function DiarioPage() {
       // Capturing #diario-book directly brings in its gray bg-stone-200 background
       // which html2pdf promotes to full blank pages between every section.
       const captureEl = document.createElement('div')
-      captureEl.style.cssText = 'position:fixed;top:9999px;left:0;width:794px;background:white'
+      captureEl.style.cssText = 'width:794px;background:white'
 
       const pages = document.querySelectorAll<HTMLElement>('#diario-book .diario-page')
       pages.forEach(p => {
