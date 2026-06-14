@@ -10,7 +10,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
-  Images, X, BookOpen,
+  Images, X, BookOpen, Share2, Copy, Link2Off,
 } from 'lucide-react'
 
 const RouteMap3D    = dynamic(() => import('@/components/RouteMap3D'),    { ssr: false })
@@ -251,6 +251,10 @@ export default function ResocontoPage() {
   const [lightbox,    setLightbox]    = useState<RoutePhoto | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [apiError,    setApiError]    = useState<string | null>(null)
+  const [coverPhotoId,setCoverPhotoId]= useState<string | null>(null)
+  const [shareToken,  setShareToken]  = useState<string | null>(null)
+  const [showShare,   setShowShare]   = useState(false)
+  const [copyOk,      setCopyOk]      = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load activity + report + photos
@@ -275,6 +279,16 @@ export default function ResocontoPage() {
         setPhotos([...parsed].sort((a, b) => a.progress - b.progress))
       }
     } catch { /* ignore */ }
+
+    // Load cover photo preference
+    const savedCover = localStorage.getItem(`dtrek_cover_${id}`)
+    if (savedCover) setCoverPhotoId(savedCover)
+
+    // Load share token
+    fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`)
+      .then(r => r.json())
+      .then(d => { if (d.share_token) setShareToken(d.share_token) })
+      .catch(() => null)
   }, [id, router])
 
   // Auto-save debounce when editing
@@ -360,7 +374,7 @@ export default function ResocontoPage() {
   if (!activity) return null
 
   const sections  = parseSections(content)
-  const heroPhoto = photos[0]
+  const heroPhoto = photos.find(p => p.id === coverPhotoId) ?? photos[0] ?? null
   const dateStr   = activity.startTime
     ? format(new Date(activity.startTime), "d MMMM yyyy", { locale: it })
     : ''
@@ -382,12 +396,66 @@ export default function ResocontoPage() {
               Resoconto
             </span>
           </div>
-          <button onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm font-medium transition-colors">
-            <FileDown className="w-4 h-4" /> Stampa PDF
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowShare(s => !s)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showShare ? 'bg-forest-100 text-forest-700' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'}`}>
+              <Share2 className="w-4 h-4" /> Condividi
+            </button>
+            <button onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm font-medium transition-colors">
+              <FileDown className="w-4 h-4" /> Stampa PDF
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* ── Share panel ── */}
+      {showShare && (
+        <div className="bg-white border-b border-stone-100 print:hidden">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
+            {shareToken ? (
+              <>
+                <code className="text-xs bg-stone-100 px-2.5 py-1.5 rounded-lg font-mono text-stone-600 truncate max-w-[260px]">
+                  {typeof window !== 'undefined' ? `${window.location.origin}/r/${shareToken}` : `/r/${shareToken}`}
+                </code>
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(`${window.location.origin}/r/${shareToken}`)
+                    setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
+                  <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
+                </button>
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`, { method: 'DELETE' })
+                    setShareToken(null)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-red-50 transition-colors">
+                  <Link2Off className="w-3.5 h-3.5" /> Disattiva
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-stone-500 font-lora italic">Il resoconto non è ancora condiviso pubblicamente.</p>
+                <button
+                  onClick={async () => {
+                    const r = await fetch('/api/share-report', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ activityId: id }),
+                    })
+                    const d = await r.json()
+                    if (d.share_token) setShareToken(d.share_token)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
+                  <Share2 className="w-3.5 h-3.5" /> Crea link pubblico
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Hero ── */}
       <div className="relative w-full overflow-hidden print:h-[220px]"
@@ -483,6 +551,31 @@ export default function ResocontoPage() {
             {apiError && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                 {apiError}
+              </div>
+            )}
+
+            {/* Cover photo picker */}
+            {photos.length > 0 && (
+              <div className="border-t border-stone-100 pt-4 mt-4">
+                <p className="font-barlow text-xs font-bold uppercase tracking-wide text-stone-500 mb-2">
+                  Immagine di copertina
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {photos.map(ph => (
+                    <button key={ph.id}
+                      onClick={() => {
+                        setCoverPhotoId(ph.id)
+                        localStorage.setItem(`dtrek_cover_${id}`, ph.id)
+                      }}
+                      className={`shrink-0 rounded-lg overflow-hidden border-2 transition-colors ${
+                        (coverPhotoId ?? photos[0]?.id) === ph.id
+                          ? 'border-amber-400 shadow-md'
+                          : 'border-transparent hover:border-stone-300'
+                      }`}>
+                      <img src={ph.dataUrl} alt={ph.caption} className="w-16 h-16 object-cover" />
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -611,7 +704,7 @@ export default function ResocontoPage() {
           </div>
         )}
 
-        {/* ── Photo gallery ── */}
+        {/* ── Photo gallery (screen only) ── */}
         {photos.length > 0 && content && (
           <section className="mt-8 print:hidden">
             <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
@@ -634,6 +727,40 @@ export default function ResocontoPage() {
                     </p>
                   )}
                 </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Print-only photo grid ── */}
+        {photos.length > 0 && content && (
+          <section className="hidden print:block mt-6 pt-4 border-t border-stone-200">
+            <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
+              Documentazione fotografica
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+              {photos.map((ph, i) => (
+                <div key={ph.id} style={{ breakInside: 'avoid' }}>
+                  <div style={{ position: 'relative' }}>
+                    <img src={ph.dataUrl} alt={ph.caption}
+                      style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8 }} />
+                    <span style={{
+                      position: 'absolute', top: 6, left: 6,
+                      width: 18, height: 18, background: '#f59e0b', color: 'white',
+                      borderRadius: '50%', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', fontSize: 8, fontWeight: 'bold',
+                      border: '2px solid white',
+                    }}>
+                      {i + 1}
+                    </span>
+                  </div>
+                  {ph.caption && (
+                    <p style={{ fontSize: 9, color: '#78716c', fontStyle: 'italic',
+                      marginTop: 4, textAlign: 'center', lineHeight: 1.4 }}>
+                      {i + 1}. {ph.caption}
+                    </p>
+                  )}
+                </div>
               ))}
             </div>
           </section>

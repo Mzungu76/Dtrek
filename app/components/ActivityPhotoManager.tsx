@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff, Map } from 'lucide-react'
+import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff, Map, HardDriveDownload } from 'lucide-react'
 
 const PhotoPlacementMap = dynamic(() => import('@/app/components/PhotoPlacementMap'), { ssr: false })
 
@@ -225,10 +225,17 @@ export default function ActivityPhotoManager({
           <span className="text-xs font-mono text-stone-400 mt-1">{photos.length} foto</span>
         )}
       </div>
-      <p className="text-xs text-stone-400 italic mb-5 leading-snug">
-        Le foto vengono usate nel resoconto e nella mappa 3D. Con GPS automatico vengono posizionate sul percorso;
-        altrimenti clicca su una foto per aprire la mappa 3D e posizionarla manualmente.
+      <p className="text-xs text-stone-400 italic mb-3 leading-snug">
+        Le foto vengono usate nel resoconto e nella mappa. Con GPS automatico vengono posizionate sul percorso;
+        altrimenti clicca su una foto per posizionarla manualmente.
       </p>
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-5">
+        <HardDriveDownload className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-amber-700 leading-snug font-lora italic">
+          Le foto sono salvate <span className="font-semibold not-italic">solo in questo browser</span>.
+          Cambiando dispositivo o svuotando la cache non saranno più visibili nell&apos;app.
+        </p>
+      </div>
 
       {/* Upload zone */}
       <div

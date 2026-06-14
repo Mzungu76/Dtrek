@@ -162,6 +162,28 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  // ?all=true → return all reports for the user with joined activity stats
+  if (req.nextUrl.searchParams.get('all') === 'true') {
+    const { data: reports, error } = await supabase
+      .from('hike_reports')
+      .select('id, activity_id, title, content, created_at, updated_at, share_token')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+
+    const activityIds = (reports ?? []).map((r: Record<string, unknown>) => r.activity_id as string).filter(Boolean)
+    const { data: activities } = activityIds.length
+      ? await supabase.from('activities').select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain').in('id', activityIds)
+      : { data: [] }
+
+    const actMap = new Map((activities ?? []).map((a: Record<string, unknown>) => [a.id, a]))
+    const enriched = (reports ?? []).map((r: Record<string, unknown>) => ({
+      ...r,
+      activity: actMap.get(r.activity_id as string) ?? null,
+    }))
+    return new Response(JSON.stringify(enriched), { headers: { 'Content-Type': 'application/json' } })
+  }
+
   const activityId = req.nextUrl.searchParams.get('activityId')
   if (!activityId) {
     return new Response('{"error":"activityId mancante"}', {
