@@ -464,14 +464,23 @@ export default function ResocontoPage() {
                       const el = document.getElementById('resoconto-print-root')
                       if (!el) throw new Error('Layout non trovato')
 
-                      const blob: Blob = await new Promise((res, rej) =>
-                        html2pdf().set({
-                          margin: 0,
-                          image: { type: 'jpeg', quality: 0.92 },
-                          html2canvas: { scale: 2, useCORS: true, logging: false },
-                          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
-                        }).from(el).output('blob').then(res).catch(rej)
-                      )
+                      // Bring element into the document flow so html2canvas can capture it
+                      const origCssText = el.style.cssText
+                      el.style.cssText = 'position:absolute;top:0;left:0;opacity:0;pointer-events:none;z-index:-9999;width:794px;background:white;font-family:Georgia,serif'
+
+                      let blob: Blob
+                      try {
+                        blob = await new Promise((res, rej) =>
+                          html2pdf().set({
+                            margin: 0,
+                            image: { type: 'jpeg', quality: 0.92 },
+                            html2canvas: { scale: 2, useCORS: false, allowTaint: true, logging: false },
+                            jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
+                          }).from(el).output('blob').then(res).catch(rej)
+                        )
+                      } finally {
+                        el.style.cssText = origCssText
+                      }
 
                       const { uploadReportPdf } = await import('@/lib/pdfUpload')
                       const url = await uploadReportPdf(user.id, id, blob)

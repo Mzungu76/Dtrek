@@ -395,7 +395,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
         {/* Photo row */}
         {photos.length > 0 && (
           <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-            {photos.slice(0, 3).map((ph, i) => (
+            {photos.map((ph, i) => (
               <div key={ph.id} style={{ position: 'relative' }}>
                 <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
                 <span style={{ position: 'absolute', top: 4, left: 4, width: 15, height: 15, background: '#f59e0b', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 'bold', border: '1px solid white' }}>{i+1}</span>
@@ -529,19 +529,39 @@ export default function DiarioPage() {
       leafletEls.forEach(e => e.style.display = 'none')
       canvasEls.forEach(e => e.style.display = 'block')
 
-      const blob: Blob = await new Promise((res, rej) =>
-        (html2pdf() as any).set({
-          margin: 0,
-          image: { type: 'jpeg', quality: 0.88 },
-          html2canvas: { scale: 1.5, useCORS: true, logging: false },
-          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
-          pagebreak: { mode: 'css', before: '.diario-page' },
-        }).from(el).output('blob').then(res).catch(rej)
-      )
+      // Zero out margins/padding so pages sit flush — otherwise html2pdf
+      // interprets the gaps as extra content and creates blank pages between each A4 page.
+      const origBookPaddingTop    = el.style.paddingTop
+      const origBookPaddingBottom = el.style.paddingBottom
+      const origBookMinHeight     = el.style.minHeight
+      el.style.paddingTop    = '0'
+      el.style.paddingBottom = '0'
+      el.style.minHeight     = '0'
+      const pages = el.querySelectorAll<HTMLElement>('.diario-page')
+      const origPageMargins = Array.from(pages).map(p => p.style.margin)
+      pages.forEach(p => p.style.margin = '0')
 
-      // Restore
-      leafletEls.forEach(e => e.style.display = '')
-      canvasEls.forEach(e => e.style.display = 'none')
+      let blob: Blob
+      try {
+        blob = await new Promise((res, rej) =>
+          (html2pdf() as any).set({
+            margin: 0,
+            image: { type: 'jpeg', quality: 0.88 },
+            html2canvas: { scale: 1.5, useCORS: false, allowTaint: true, logging: false },
+            jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
+            pagebreak: { mode: ['css', 'legacy'], before: '.diario-page' },
+          }).from(el).output('blob').then(res).catch(rej)
+        )
+      } finally {
+        // Restore Leaflet/canvas visibility
+        leafletEls.forEach(e => e.style.display = '')
+        canvasEls.forEach(e => e.style.display = 'none')
+        // Restore margins
+        el.style.paddingTop    = origBookPaddingTop
+        el.style.paddingBottom = origBookPaddingBottom
+        el.style.minHeight     = origBookMinHeight
+        pages.forEach((p, i) => { p.style.margin = origPageMargins[i] })
+      }
 
       if (download) {
         const url = URL.createObjectURL(blob)
