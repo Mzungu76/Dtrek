@@ -532,6 +532,16 @@ export default function DiarioPage() {
         const clone = p.cloneNode(true) as HTMLElement
         clone.style.margin = '0'
         clone.style.boxShadow = 'none'
+        // Remove tainted Leaflet canvases (OSM tiles are cross-origin → SecurityError in toDataURL)
+        clone.querySelectorAll('canvas').forEach(c => c.remove())
+        // Hide the now-empty Leaflet wrapper
+        clone.querySelectorAll<HTMLElement>('.leaflet-container').forEach(lc => {
+          const wrapper = lc.parentElement
+          if (wrapper) wrapper.style.display = 'none'
+        })
+        // Show the pre-rendered static route map (hidden inline on screen)
+        const mapImg = clone.querySelector<HTMLElement>('img[alt="Mappa percorsi"]')
+        if (mapImg) mapImg.style.cssText = 'width:100%;border-radius:12px;display:block'
         captureEl.appendChild(clone)
       })
 
