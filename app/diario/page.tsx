@@ -9,7 +9,7 @@ import { it } from 'date-fns/locale'
 import { formatDuration } from '@/lib/tcxParser'
 import {
   BookMarked, FileDown, Share2, Copy, Link2Off, ExternalLink,
-  Loader2, Image as ImageIcon, BarChart2, ChevronDown, X,
+  Loader2, Image as ImageIcon, BarChart2, ChevronDown, X, Pencil,
 } from 'lucide-react'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
@@ -92,64 +92,70 @@ function StatCard({ value, label, sub }: { value: string; label: string; sub?: s
 // ── Diario pages (A4) ─────────────────────────────────────────────────────────
 
 function DiarioCover({
-  reports, activities, coverUrl, ownerName,
+  coverUrl, diaryTitle, diarySubtitle, diaryAuthor,
 }: {
-  reports: DiaryReport[]; activities: ActivityMeta[]; coverUrl: string | null; ownerName: string
+  coverUrl: string | null; diaryTitle: string; diarySubtitle: string; diaryAuthor: string
 }) {
-  const gs = computeGlobalStats(activities)
-  const years = activities.map(a => new Date(a.startTime).getFullYear()).filter(Boolean)
-  const yearRange = years.length
-    ? years.length === 1 ? `${years[0]}` : `${Math.min(...years)}–${Math.max(...years)}`
-    : ''
-
   return (
     <div className="diario-page" style={{
-      width: 794, minHeight: 1123, background: 'white',
+      width: 794, height: 1123,
       position: 'relative', overflow: 'hidden', margin: '24px auto',
-      boxShadow: '0 4px 32px rgba(0,0,0,0.14)', display: 'flex', flexDirection: 'column',
+      boxShadow: '0 4px 32px rgba(0,0,0,0.14)',
     }}>
-      {/* Hero image — top 60% */}
-      <div style={{ height: 674, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
-        {coverUrl
-          ? <img src={coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#1b4332 0%,#40916c 50%,#74c69d 100%)' }} />
-        }
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, rgba(0,0,0,0.55) 100%)' }} />
-      </div>
+      {/* Full-bleed background */}
+      <img
+        src={coverUrl || '/diary-cover-default.png'}
+        alt=""
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+      />
 
-      {/* Bottom half */}
-      <div style={{ flex: 1, padding: '40px 64px 56px', background: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-        <div>
-          <p style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', margin: '0 0 8px' }}>
-            Diario escursionistico
-          </p>
-          <h1 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 52, fontWeight: 900, color: '#111827', margin: 0, textTransform: 'uppercase', letterSpacing: -1, lineHeight: 1 }}>
-            {ownerName || 'Il mio Diario'}
-          </h1>
-          {yearRange && (
-            <p style={{ fontSize: 13, color: '#6b7280', fontFamily: 'Georgia, serif', fontStyle: 'italic', margin: '8px 0 0' }}>{yearRange}</p>
-          )}
-        </div>
+      {/* Dark overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(8,24,14,0.68) 0%, rgba(8,24,14,0.48) 60%, rgba(8,24,14,0.55) 100%)' }} />
 
-        {/* Stats strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 32 }}>
-          {[
-            { v: String(gs.totalActivities), l: 'Escursioni' },
-            { v: `${gs.totalDistanceKm.toFixed(0)} km`, l: 'Percorsi' },
-            { v: `${gs.totalElevationGain.toFixed(0)} m`, l: 'Dislivello D+' },
-            { v: formatDuration(gs.totalTimeSeconds), l: 'In cammino' },
-          ].map(({ v, l }) => (
-            <div key={l} style={{ textAlign: 'center', borderTop: '2px solid #40916c', paddingTop: 12 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, color: '#1b4332', fontFamily: 'Arial Black, sans-serif' }}>{v}</div>
-              <div style={{ fontSize: 9, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 2, fontFamily: 'Arial, sans-serif', marginTop: 2 }}>{l}</div>
-            </div>
-          ))}
-        </div>
-
-        <p style={{ fontSize: 9, color: '#d1d5db', fontFamily: 'Arial, sans-serif', textAlign: 'right', margin: '16px 0 0' }}>
-          Generato con DTrek
+      {/* Title block — ~1/3 from top, left */}
+      <div style={{ position: 'absolute', top: 340, left: 64, right: 120 }}>
+        <h1 style={{
+          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontSize: 54,
+          fontWeight: 700,
+          color: 'white',
+          margin: '0 0 18px',
+          letterSpacing: 4,
+          lineHeight: 1.2,
+          textTransform: 'uppercase',
+        }}>
+          {diaryTitle}
+        </h1>
+        {/* Thin decorative rule */}
+        <div style={{ width: 72, height: 1, background: 'rgba(255,255,255,0.45)', margin: '0 0 18px' }} />
+        {/* Subtitle */}
+        <p style={{
+          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontSize: 14,
+          fontStyle: 'italic',
+          color: 'rgba(255,255,255,0.7)',
+          margin: 0,
+          letterSpacing: 1.5,
+        }}>
+          {diarySubtitle}
         </p>
       </div>
+
+      {/* Author — bottom center */}
+      {diaryAuthor && (
+        <div style={{ position: 'absolute', bottom: 60, left: 0, right: 0, textAlign: 'center' }}>
+          <p style={{
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 10,
+            color: 'rgba(255,255,255,0.55)',
+            letterSpacing: 5,
+            textTransform: 'uppercase',
+            margin: 0,
+          }}>
+            {diaryAuthor}
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -419,9 +425,19 @@ export default function DiarioPage() {
   const [publishError, setPublishError] = useState<string | null>(null)
   const [copyOk,       setCopyOk]       = useState(false)
   const [showStatsMenu, setShowStatsMenu] = useState(false)
+  const [showTextMenu,  setShowTextMenu]  = useState(false)
   const [statsToggles, setStatsToggles] = useState<StatsToggles>(() => {
     try { return JSON.parse(localStorage.getItem('dtrek_diary_stats') ?? '') }
     catch { return { totali: true, record: true, medie: true, andamento: true } }
+  })
+  const [diaryTitle,    setDiaryTitle]    = useState<string>(() => {
+    try { return localStorage.getItem('dtrek_diary_title')    ?? 'DIARIO di VIAGGIO' } catch { return 'DIARIO di VIAGGIO' }
+  })
+  const [diarySubtitle, setDiarySubtitle] = useState<string>(() => {
+    try { return localStorage.getItem('dtrek_diary_subtitle') ?? 'I miei percorsi'   } catch { return 'I miei percorsi'   }
+  })
+  const [diaryAuthor,   setDiaryAuthor]   = useState<string>(() => {
+    try { return localStorage.getItem('dtrek_diary_author')   ?? ''                  } catch { return ''                  }
   })
   const coverInputRef = useRef<HTMLInputElement>(null)
 
@@ -448,7 +464,13 @@ export default function DiarioPage() {
 
       // Owner name
       const usData = us as { display_name?: string; name?: string }
-      setOwnerName(usData.display_name ?? usData.name ?? '')
+      const name = usData.display_name ?? usData.name ?? ''
+      setOwnerName(name)
+
+      // Default author from profile if user hasn't set one
+      try {
+        if (!localStorage.getItem('dtrek_diary_author') && name) setDiaryAuthor(name)
+      } catch { /* ignore */ }
 
       // Load cover photo from localStorage
       const cover = localStorage.getItem('dtrek_diary_cover')
@@ -566,10 +588,49 @@ export default function DiarioPage() {
           {/* Cover upload */}
           <button onClick={() => coverInputRef.current?.click()}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
-            <ImageIcon className="w-3.5 h-3.5" /> Copertina
+            <ImageIcon className="w-3.5 h-3.5" /> Foto
           </button>
           <input ref={coverInputRef} type="file" accept="image/*" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) { handleCoverUpload(f); e.target.value = '' } }} />
+
+          {/* Cover text editor */}
+          <div className="relative">
+            <button onClick={() => setShowTextMenu(s => !s)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+              <Pencil className="w-3.5 h-3.5" /> Testi <ChevronDown className="w-3 h-3" />
+            </button>
+            {showTextMenu && (
+              <div className="absolute left-0 top-9 w-72 bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Testi copertina</p>
+                  <button onClick={() => setShowTextMenu(false)} className="text-stone-400 hover:text-stone-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Titolo</label>
+                <input
+                  value={diaryTitle}
+                  onChange={e => { setDiaryTitle(e.target.value); try { localStorage.setItem('dtrek_diary_title', e.target.value) } catch {} }}
+                  className="w-full text-xs border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2 focus:outline-none focus:ring-1 focus:ring-forest-400"
+                  placeholder="DIARIO di VIAGGIO"
+                />
+                <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Sottotitolo</label>
+                <input
+                  value={diarySubtitle}
+                  onChange={e => { setDiarySubtitle(e.target.value); try { localStorage.setItem('dtrek_diary_subtitle', e.target.value) } catch {} }}
+                  className="w-full text-xs border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2 focus:outline-none focus:ring-1 focus:ring-forest-400"
+                  placeholder="I miei percorsi"
+                />
+                <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Autore</label>
+                <input
+                  value={diaryAuthor}
+                  onChange={e => { setDiaryAuthor(e.target.value); try { localStorage.setItem('dtrek_diary_author', e.target.value) } catch {} }}
+                  className="w-full text-xs border border-stone-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-forest-400"
+                  placeholder="Nome Cognome"
+                />
+              </div>
+            )}
+          </div>
 
           {/* Stats toggle */}
           <div className="relative">
@@ -647,7 +708,7 @@ export default function DiarioPage() {
       {/* Book */}
       {!loading && (
         <div id="diario-book" className="bg-stone-200 py-6 min-h-screen">
-          <DiarioCover reports={reports} activities={activities} coverUrl={coverUrl} ownerName={ownerName} />
+          <DiarioCover coverUrl={coverUrl} diaryTitle={diaryTitle} diarySubtitle={diarySubtitle} diaryAuthor={diaryAuthor} />
           {reports.length > 0 && <DiarioIndice reports={reports} />}
           {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} />}
           {activities.length > 0 && showStats && (
