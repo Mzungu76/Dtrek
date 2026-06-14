@@ -303,7 +303,7 @@ export async function fetchSatMap(
 }
 
 /** All routes combined (stats map page) */
-function chartAllRoutes(activities: ActivityMeta[], w: number, h: number): string {
+export function chartAllRoutes(activities: ActivityMeta[], w: number, h: number): string {
   const polylines = activities.filter(a => (a.routePolyline?.length ?? 0) > 1).map(a => a.routePolyline!)
   if (!polylines.length) return ''
   const { c, ctx } = mkCanvas(w, h, 3)
