@@ -460,32 +460,25 @@ export default function ResocontoPage() {
                       const { data: { user } } = await sb.auth.getUser()
                       if (!user) throw new Error('Non autenticato')
 
-                      const html2pdf = (await import('html2pdf.js')).default
+                      const { paginateToPdf, nextLayout } = await import('@/lib/pdfPaginate')
                       const printRoot = document.getElementById('resoconto-print-root')
                       if (!printRoot) throw new Error('Layout non trovato')
 
-                      // Clone into a fresh visible container so html2canvas can render it.
-                      // Capturing the original (hidden off-screen) element directly fails
-                      // because html2canvas treats opacity:0 / off-viewport as blank.
-                      const captureEl = document.createElement('div')
-                      captureEl.style.cssText = 'width:794px;background:white'
+                      // Clone into an off-screen white host so the paginator can
+                      // measure layout and break at safe section boundaries.
+                      const host = document.createElement('div')
+                      host.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
                       const clone = printRoot.cloneNode(true) as HTMLElement
-                      clone.style.cssText = 'width:794px;background:white;font-family:Georgia,serif'
-                      captureEl.appendChild(clone)
-                      document.body.appendChild(captureEl)
-                      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+                      clone.style.cssText = 'width:794px;background:#fff;font-family:Georgia,serif'
+                      host.appendChild(clone)
+                      document.body.appendChild(host)
+                      await nextLayout()
 
                       let blob: Blob
                       try {
-                        blob = await (html2pdf() as any).set({
-                          margin: 0,
-                          image: { type: 'jpeg', quality: 0.92 },
-                          html2canvas: { scale: 2, useCORS: false, allowTaint: true, logging: false },
-                          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
-                          pagebreak: { mode: 'avoid-all' },
-                        }).from(captureEl).output('blob')
+                        blob = await paginateToPdf([clone])
                       } finally {
-                        document.body.removeChild(captureEl)
+                        document.body.removeChild(host)
                       }
 
                       const { uploadReportPdf } = await import('@/lib/pdfUpload')
@@ -843,7 +836,7 @@ export default function ResocontoPage() {
         <div id="resoconto-print-root"
           style={{ position: 'fixed', left: '-9999px', top: 0, width: 794, background: 'white', fontFamily: 'Georgia, serif' }}>
           {/* Hero */}
-          <div style={{ position: 'relative', width: '100%', height: 220, overflow: 'hidden', marginBottom: 0 }}>
+          <div className="pdf-block" style={{ position: 'relative', width: '100%', height: 220, overflow: 'hidden', marginBottom: 0 }}>
             {heroPhoto
               ? <img src={heroPhoto.dataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#1b4332,#40916c)' }} />
@@ -868,7 +861,7 @@ export default function ResocontoPage() {
           {/* Sections */}
           <div style={{ padding: '32px 32px 0' }}>
             {sections.map((section, i) => (
-              <div key={i} style={{ marginBottom: 24 }}>
+              <div key={i} className="pdf-block" style={{ marginBottom: 24 }}>
                 <div style={{ background: ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc'][i % 5], padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i+1).padStart(2,'0')}</span>
                   <span style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>{section.title}</span>
@@ -891,11 +884,11 @@ export default function ResocontoPage() {
             ))}
             {/* Photo grid */}
             {photos.length > 0 && (
-              <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, marginTop: 8 }}>
+              <div className="pdf-block" style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, marginTop: 8 }}>
                 <h3 style={{ fontFamily: 'Arial, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: '#9ca3af', marginBottom: 12 }}>Documentazione fotografica</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                   {photos.map((ph, i) => (
-                    <div key={ph.id}>
+                    <div key={ph.id} className="pdf-block">
                       <div style={{ position: 'relative' }}>
                         <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
                         <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', textAlign: 'center', lineHeight: '16px', border: '1px solid white' }}>{i+1}</span>

@@ -179,7 +179,7 @@ function DiarioIndice({ reports }: { reports: DiaryReport[] }) {
             ? format(new Date(act.start_time), 'd MMMM yyyy', { locale: it })
             : rep.created_at ? format(new Date(rep.created_at), 'd MMMM yyyy', { locale: it }) : ''
           return (
-            <div key={rep.id} style={{
+            <div key={rep.id} className="pdf-block" style={{
               display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
               padding: '14px 0', borderBottom: '1px solid #f3f4f6',
             }}>
@@ -282,7 +282,7 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
       </h2>
 
       {toggles.totali && (
-        <div style={{ marginBottom: 32 }}>
+        <div className="pdf-block" style={{ marginBottom: 32 }}>
           <h3 style={{ fontSize: 10, color: '#40916c', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 12px' }}>Totali</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             <StatCard value={`${gs.totalDistanceKm.toFixed(0)} km`} label="Percorsi" />
@@ -294,7 +294,7 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
       )}
 
       {toggles.record && (
-        <div style={{ marginBottom: 32 }}>
+        <div className="pdf-block" style={{ marginBottom: 32 }}>
           <h3 style={{ fontSize: 10, color: '#40916c', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 12px' }}>Record personali</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             <StatCard value={`${gs.longestKm.toFixed(1)} km`} label="Escursione più lunga" sub={longestAct?.title} />
@@ -305,7 +305,7 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
       )}
 
       {toggles.medie && activities.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
+        <div className="pdf-block" style={{ marginBottom: 32 }}>
           <h3 style={{ fontSize: 10, color: '#40916c', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 12px' }}>Medie per uscita</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             <StatCard value={`${(gs.totalDistanceKm / activities.length).toFixed(1)} km`} label="Distanza media" />
@@ -316,7 +316,7 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
       )}
 
       {toggles.andamento && (
-        <div>
+        <div className="pdf-block">
           <h3 style={{ fontSize: 10, color: '#40916c', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 12px' }}>Andamento mensile</h3>
           <div style={{ background: '#f9fafb', borderRadius: 10, padding: '16px 20px', border: '1px solid #e5e7eb' }}>
             <MonthBarChart activities={activities} />
@@ -367,7 +367,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
       {/* Sections */}
       <div style={{ padding: '24px 32px' }}>
         {sections.map((section, i) => (
-          <div key={i} style={{ marginBottom: 20 }}>
+          <div key={i} className="pdf-block" style={{ marginBottom: 20 }}>
             <div style={{ background: SECTION_COLORS[i % SECTION_COLORS.length], padding: '5px 14px', borderRadius: '5px 5px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i+1).padStart(2,'0')}</span>
               <span style={{ fontSize: 12, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: 'white', textTransform: 'uppercase', letterSpacing: 0.5 }}>{section.title}</span>
@@ -378,7 +378,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
                   <div style={{ position: 'relative' }}>
                     <img src={photos[i + 1].dataUrl} alt={photos[i + 1].caption}
                       style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 5 }} />
-                    <span style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#f59e0b', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 'bold' }}>{i+2}</span>
+                    <span style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '14px', fontSize: 7, fontWeight: 'bold' }}>{i+2}</span>
                   </div>
                   {photos[i + 1].caption && <p style={{ fontSize: 7, color: '#78716c', textAlign: 'center', marginTop: 2, fontStyle: 'italic' }}>{photos[i + 1].caption}</p>}
                 </div>
@@ -394,11 +394,11 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
 
         {/* Photo row */}
         {photos.length > 0 && (
-          <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <div className="pdf-block" style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {photos.map((ph, i) => (
               <div key={ph.id} style={{ position: 'relative' }}>
                 <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                <span style={{ position: 'absolute', top: 4, left: 4, width: 15, height: 15, background: '#f59e0b', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 'bold', border: '1px solid white' }}>{i+1}</span>
+                <span style={{ position: 'absolute', top: 4, left: 4, width: 15, height: 15, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '15px', fontSize: 7, fontWeight: 'bold', border: '1px solid white' }}>{i+1}</span>
                 {ph.caption && <p style={{ fontSize: 7, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{ph.caption}</p>}
               </div>
             ))}
@@ -519,47 +519,41 @@ export default function DiarioPage() {
     const key = download ? setDownloading : setPublishing
     key(true); setPublishError(null)
     try {
-      const html2pdf = (await import('html2pdf.js')).default
+      const { paginateToPdf, nextLayout } = await import('@/lib/pdfPaginate')
 
-      // Build a clean, white capture container with pages stacked flush.
-      // Capturing #diario-book directly brings in its gray bg-stone-200 background
-      // which html2pdf promotes to full blank pages between every section.
-      const captureEl = document.createElement('div')
-      captureEl.style.cssText = 'width:794px;background:white'
+      // Render each A4 .diario-page individually into an off-screen white host,
+      // then assemble the PDF page-by-page. This keeps every section on its own
+      // page (no gray-background slots, no blank pages) and lets overlong report
+      // pages flow to a second page at clean section boundaries.
+      const host = document.createElement('div')
+      host.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
 
-      const pages = document.querySelectorAll<HTMLElement>('#diario-book .diario-page')
-      pages.forEach(p => {
+      const clones: HTMLElement[] = []
+      document.querySelectorAll<HTMLElement>('#diario-book .diario-page').forEach(p => {
         const clone = p.cloneNode(true) as HTMLElement
         clone.style.margin = '0'
         clone.style.boxShadow = 'none'
-        // Remove tainted Leaflet canvases (OSM tiles are cross-origin → SecurityError in toDataURL)
+        // Drop tainted Leaflet tile canvases (OSM tiles are cross-origin) and
+        // its now-empty container; show the pre-rendered static route map instead.
         clone.querySelectorAll('canvas').forEach(c => c.remove())
-        // Hide the now-empty Leaflet wrapper
         clone.querySelectorAll<HTMLElement>('.leaflet-container').forEach(lc => {
           const wrapper = lc.parentElement
           if (wrapper) wrapper.style.display = 'none'
         })
-        // Show the pre-rendered static route map (hidden inline on screen)
         const mapImg = clone.querySelector<HTMLElement>('img[alt="Mappa percorsi"]')
         if (mapImg) mapImg.style.cssText = 'width:100%;border-radius:12px;display:block'
-        captureEl.appendChild(clone)
+        host.appendChild(clone)
+        clones.push(clone)
       })
 
-      document.body.appendChild(captureEl)
-      // Two animation frames ensure layout is fully computed before capture
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+      document.body.appendChild(host)
+      await nextLayout()
 
       let blob: Blob
       try {
-        blob = await (html2pdf() as any).set({
-          margin: 0,
-          image: { type: 'jpeg', quality: 0.88 },
-          html2canvas: { scale: 1.5, useCORS: false, allowTaint: true, logging: false },
-          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
-          pagebreak: { mode: 'avoid-all' },
-        }).from(captureEl).output('blob')
+        blob = await paginateToPdf(clones)
       } finally {
-        document.body.removeChild(captureEl)
+        document.body.removeChild(host)
       }
 
       if (download) {
