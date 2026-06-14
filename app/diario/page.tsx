@@ -520,47 +520,36 @@ export default function DiarioPage() {
     key(true); setPublishError(null)
     try {
       const html2pdf = (await import('html2pdf.js')).default
-      const el = document.getElementById('diario-book')
-      if (!el) throw new Error('Diario non trovato')
 
-      // For PDF: show canvas map, hide Leaflet map temporarily
-      const leafletEls = el.querySelectorAll<HTMLElement>('.print\\:hidden')
-      const canvasEls  = el.querySelectorAll<HTMLElement>('.hidden.print\\:block,[style*="display: none"]')
-      leafletEls.forEach(e => e.style.display = 'none')
-      canvasEls.forEach(e => e.style.display = 'block')
+      // Build a clean, white capture container with pages stacked flush.
+      // Capturing #diario-book directly brings in its gray bg-stone-200 background
+      // which html2pdf promotes to full blank pages between every section.
+      const captureEl = document.createElement('div')
+      captureEl.style.cssText = 'position:fixed;top:9999px;left:0;width:794px;background:white'
 
-      // Zero out margins/padding so pages sit flush — otherwise html2pdf
-      // interprets the gaps as extra content and creates blank pages between each A4 page.
-      const origBookPaddingTop    = el.style.paddingTop
-      const origBookPaddingBottom = el.style.paddingBottom
-      const origBookMinHeight     = el.style.minHeight
-      el.style.paddingTop    = '0'
-      el.style.paddingBottom = '0'
-      el.style.minHeight     = '0'
-      const pages = el.querySelectorAll<HTMLElement>('.diario-page')
-      const origPageMargins = Array.from(pages).map(p => p.style.margin)
-      pages.forEach(p => p.style.margin = '0')
+      const pages = document.querySelectorAll<HTMLElement>('#diario-book .diario-page')
+      pages.forEach(p => {
+        const clone = p.cloneNode(true) as HTMLElement
+        clone.style.margin = '0'
+        clone.style.boxShadow = 'none'
+        captureEl.appendChild(clone)
+      })
+
+      document.body.appendChild(captureEl)
+      // Two animation frames ensure layout is fully computed before capture
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
       let blob: Blob
       try {
-        blob = await new Promise((res, rej) =>
-          (html2pdf() as any).set({
-            margin: 0,
-            image: { type: 'jpeg', quality: 0.88 },
-            html2canvas: { scale: 1.5, useCORS: false, allowTaint: true, logging: false },
-            jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
-            pagebreak: { mode: ['css', 'legacy'], before: '.diario-page' },
-          }).from(el).output('blob').then(res).catch(rej)
-        )
+        blob = await (html2pdf() as any).set({
+          margin: 0,
+          image: { type: 'jpeg', quality: 0.88 },
+          html2canvas: { scale: 1.5, useCORS: false, allowTaint: true, logging: false },
+          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
+          pagebreak: { mode: 'avoid-all' },
+        }).from(captureEl).output('blob')
       } finally {
-        // Restore Leaflet/canvas visibility
-        leafletEls.forEach(e => e.style.display = '')
-        canvasEls.forEach(e => e.style.display = 'none')
-        // Restore margins
-        el.style.paddingTop    = origBookPaddingTop
-        el.style.paddingBottom = origBookPaddingBottom
-        el.style.minHeight     = origBookMinHeight
-        pages.forEach((p, i) => { p.style.margin = origPageMargins[i] })
+        document.body.removeChild(captureEl)
       }
 
       if (download) {

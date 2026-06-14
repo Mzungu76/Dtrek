@@ -461,25 +461,30 @@ export default function ResocontoPage() {
                       if (!user) throw new Error('Non autenticato')
 
                       const html2pdf = (await import('html2pdf.js')).default
-                      const el = document.getElementById('resoconto-print-root')
-                      if (!el) throw new Error('Layout non trovato')
+                      const printRoot = document.getElementById('resoconto-print-root')
+                      if (!printRoot) throw new Error('Layout non trovato')
 
-                      // Bring element into the document flow so html2canvas can capture it
-                      const origCssText = el.style.cssText
-                      el.style.cssText = 'position:absolute;top:0;left:0;opacity:0;pointer-events:none;z-index:-9999;width:794px;background:white;font-family:Georgia,serif'
+                      // Clone into a fresh visible container so html2canvas can render it.
+                      // Capturing the original (hidden off-screen) element directly fails
+                      // because html2canvas treats opacity:0 / off-viewport as blank.
+                      const captureEl = document.createElement('div')
+                      captureEl.style.cssText = 'position:fixed;top:9999px;left:0;width:794px;background:white'
+                      const clone = printRoot.cloneNode(true) as HTMLElement
+                      clone.style.cssText = 'width:794px;background:white;font-family:Georgia,serif'
+                      captureEl.appendChild(clone)
+                      document.body.appendChild(captureEl)
+                      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
                       let blob: Blob
                       try {
-                        blob = await new Promise((res, rej) =>
-                          html2pdf().set({
-                            margin: 0,
-                            image: { type: 'jpeg', quality: 0.92 },
-                            html2canvas: { scale: 2, useCORS: false, allowTaint: true, logging: false },
-                            jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
-                          }).from(el).output('blob').then(res).catch(rej)
-                        )
+                        blob = await html2pdf().set({
+                          margin: 0,
+                          image: { type: 'jpeg', quality: 0.92 },
+                          html2canvas: { scale: 2, useCORS: false, allowTaint: true, logging: false },
+                          jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' },
+                        }).from(captureEl).output('blob')
                       } finally {
-                        el.style.cssText = origCssText
+                        document.body.removeChild(captureEl)
                       }
 
                       const { uploadReportPdf } = await import('@/lib/pdfUpload')
