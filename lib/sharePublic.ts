@@ -65,6 +65,137 @@ export async function fetchPublicActivity(token: string): Promise<PublicActivity
   }
 }
 
+// ── Public report (hike_reports share_token) ──────────────────────────────────
+
+export interface PublicReport {
+  title:            string
+  content:          string
+  createdAt:        string
+  ownerName?:       string
+  activity: {
+    startTime:        string
+    distanceMeters:   number
+    totalTimeSeconds: number
+    elevationGain:    number
+    trackPoints:      { lat?: number; lon?: number; altitudeMeters?: number }[]
+  }
+}
+
+export async function fetchPublicReport(token: string): Promise<PublicReport | null> {
+  if (!UUID_RE.test(token)) return null
+
+  const { data, error } = await supabase
+    .from('hike_reports')
+    .select('title, content, created_at, user_id, activity_id')
+    .eq('share_token', token)
+    .single()
+
+  if (error || !data) return null
+
+  // Owner display name
+  let ownerName: string | undefined
+  if (data.user_id) {
+    const { data: s } = await supabase
+      .from('user_settings').select('display_name').eq('user_id', data.user_id).single()
+    ownerName = (s?.display_name as string) || undefined
+  }
+
+  // Activity stats
+  const { data: act } = await supabase
+    .from('activities')
+    .select('start_time, distance_meters, total_time_seconds, elevation_gain, track_points')
+    .eq('id', data.activity_id as string)
+    .single()
+
+  return {
+    title:     (data.title as string) || 'Escursione',
+    content:   (data.content as string) || '',
+    createdAt: data.created_at as string,
+    ownerName,
+    activity: {
+      startTime:        (act?.start_time as string) || '',
+      distanceMeters:   (act?.distance_meters as number) ?? 0,
+      totalTimeSeconds: (act?.total_time_seconds as number) ?? 0,
+      elevationGain:    (act?.elevation_gain as number) ?? 0,
+      trackPoints:      (act?.track_points as { lat?: number; lon?: number; altitudeMeters?: number }[]) ?? [],
+    },
+  }
+}
+
+// ── Public diary (user_settings diary_token) ──────────────────────────────────
+
+export interface PublicDiaryReport {
+  id:               string
+  title:            string
+  content:          string
+  createdAt:        string
+  activity: {
+    startTime:        string
+    distanceMeters:   number
+    totalTimeSeconds: number
+    elevationGain:    number
+    trackPoints:      { lat?: number; lon?: number; altitudeMeters?: number }[]
+  }
+}
+
+export interface PublicDiary {
+  ownerName: string
+  reports:   PublicDiaryReport[]
+}
+
+export async function fetchPublicDiary(token: string): Promise<PublicDiary | null> {
+  if (!UUID_RE.test(token)) return null
+
+  const { data: settings, error: sErr } = await supabase
+    .from('user_settings')
+    .select('user_id, display_name')
+    .eq('diary_token', token)
+    .single()
+
+  if (sErr || !settings) return null
+
+  const { data: reports, error: rErr } = await supabase
+    .from('hike_reports')
+    .select('id, activity_id, title, content, created_at')
+    .eq('user_id', settings.user_id as string)
+    .order('created_at', { ascending: false })
+
+  if (rErr || !reports) return null
+
+  // Fetch activity stats for each report
+  const activityIds = reports.map(r => r.activity_id as string).filter(Boolean)
+  const { data: activities } = activityIds.length
+    ? await supabase
+        .from('activities')
+        .select('id, start_time, distance_meters, total_time_seconds, elevation_gain, track_points')
+        .in('id', activityIds)
+    : { data: [] }
+
+  const actMap = new Map((activities ?? []).map((a: Record<string, unknown>) => [a.id, a]))
+
+  const enriched: PublicDiaryReport[] = reports.map(r => {
+    const act = actMap.get(r.activity_id as string) as Record<string, unknown> | undefined
+    return {
+      id:        r.id as string,
+      title:     (r.title as string) || 'Escursione',
+      content:   (r.content as string) || '',
+      createdAt: r.created_at as string,
+      activity: {
+        startTime:        (act?.start_time as string) || '',
+        distanceMeters:   (act?.distance_meters as number) ?? 0,
+        totalTimeSeconds: (act?.total_time_seconds as number) ?? 0,
+        elevationGain:    (act?.elevation_gain as number) ?? 0,
+        trackPoints:      (act?.track_points as { lat?: number; lon?: number; altitudeMeters?: number }[]) ?? [],
+      },
+    }
+  })
+
+  return {
+    ownerName: (settings.display_name as string) || 'Escursionista',
+    reports:   enriched,
+  }
+}
+
 // SVG path string for a route polyline, fitted into a viewBox of `size`×`size`
 // (preserving aspect ratio). Shared by the public page and the OG image.
 export function routeToSvgPath(polyline: [number, number][], size = 100, pad = 8): string {
