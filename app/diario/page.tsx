@@ -378,7 +378,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
                   <div style={{ position: 'relative' }}>
                     <img src={photos[i + 1].dataUrl} alt={photos[i + 1].caption}
                       style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 5 }} />
-                    <span style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '14px', fontSize: 7, fontWeight: 'bold' }}>{i+2}</span>
+                    <span style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '14px', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box' }}>{i+2}</span>
                   </div>
                   {photos[i + 1].caption && <p style={{ fontSize: 7, color: '#78716c', textAlign: 'center', marginTop: 2, fontStyle: 'italic' }}>{photos[i + 1].caption}</p>}
                 </div>
@@ -398,7 +398,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
             {photos.map((ph, i) => (
               <div key={ph.id} style={{ position: 'relative' }}>
                 <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                <span style={{ position: 'absolute', top: 4, left: 4, width: 15, height: 15, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '15px', fontSize: 7, fontWeight: 'bold', border: '1px solid white' }}>{i+1}</span>
+                <span style={{ position: 'absolute', top: 4, left: 4, width: 15, height: 15, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '15px', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
                 {ph.caption && <p style={{ fontSize: 7, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{ph.caption}</p>}
               </div>
             ))}
@@ -420,6 +420,7 @@ export default function DiarioPage() {
   const [ownerName,    setOwnerName]    = useState('')
   const [loading,      setLoading]      = useState(true)
   const [diaryPdfUrl,  setDiaryPdfUrl]  = useState<string | null>(null)
+  const [diaryToken,   setDiaryToken]   = useState<string | null>(null)
   const [downloading,  setDownloading]  = useState(false)
   const [publishing,   setPublishing]   = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
@@ -458,9 +459,10 @@ export default function DiarioPage() {
       ) : []
       setReports(sortedReps)
 
-      // Load diary PDF url
-      const dtData = dt as { diary_pdf_url?: string | null }
+      // Load diary PDF url and viewer token
+      const dtData = dt as { diary_pdf_url?: string | null; diary_token?: string | null }
       if (dtData.diary_pdf_url) setDiaryPdfUrl(dtData.diary_pdf_url)
+      if (dtData.diary_token)   setDiaryToken(dtData.diary_token)
 
       // Owner name
       const usData = us as { display_name?: string; name?: string }
@@ -567,12 +569,14 @@ export default function DiarioPage() {
         if (!user) throw new Error('Non autenticato')
         const { uploadDiaryPdf } = await import('@/lib/pdfUpload')
         const pdfUrl = await uploadDiaryPdf(user.id, blob)
-        await fetch('/api/diary-token', {
+        const patchRes = await fetch('/api/diary-token', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ diaryPdfUrl: pdfUrl }),
         })
+        const patchData = await patchRes.json() as { diary_token?: string }
         setDiaryPdfUrl(pdfUrl)
+        if (patchData.diary_token) setDiaryToken(patchData.diary_token)
       }
     } catch (e) {
       if (!download) setPublishError(String(e))
@@ -685,15 +689,23 @@ export default function DiarioPage() {
           {/* Publish */}
           {diaryPdfUrl ? (
             <div className="flex items-center gap-1.5">
-              <a href={diaryPdfUrl} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
-                <ExternalLink className="w-3.5 h-3.5" /> PDF online
-              </a>
-              <button onClick={async () => { await navigator.clipboard.writeText(diaryPdfUrl); setCopyOk(true); setTimeout(() => setCopyOk(false), 2000) }}
+              {diaryToken && (
+                <a href={`/leggi/d/${diaryToken}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                  <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
+                </a>
+              )}
+              <button onClick={async () => {
+                const url = diaryToken
+                  ? `${window.location.origin}/leggi/d/${diaryToken}`
+                  : diaryPdfUrl
+                await navigator.clipboard.writeText(url)
+                setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
+              }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
-                <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia'}
+                <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
               </button>
-              <button onClick={async () => { await fetch('/api/diary-token', { method: 'DELETE' }); setDiaryPdfUrl(null) }}
+              <button onClick={async () => { await fetch('/api/diary-token', { method: 'DELETE' }); setDiaryPdfUrl(null); setDiaryToken(null) }}
                 className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-red-200 text-red-400 text-xs hover:bg-red-50 transition-colors">
                 <Link2Off className="w-3.5 h-3.5" />
               </button>
