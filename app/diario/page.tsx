@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { ReactNode, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -10,6 +10,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import {
   BookMarked, FileDown, Share2, Copy, Link2Off, ExternalLink,
   Loader2, Image as ImageIcon, BarChart2, ChevronDown, X, Pencil,
+  Route, Mountain, Clock, Flame, Trophy, TrendingUp,
 } from 'lucide-react'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
@@ -50,7 +51,25 @@ function parseSections(md: string): Section[] {
     .filter((s): s is Section => s !== null)
 }
 
-// ── SVG Charts ─────────────────────────────────────────────────────────────────
+// ── SVG Charts & Stats ─────────────────────────────────────────────────────────
+
+type AccentTheme = { bg: string; border: string; text: string; iconBg: string; iconColor: string }
+
+const GREEN:  AccentTheme = { bg: '#f0fdf4', border: '#bbf7d0', text: '#166534', iconBg: '#dcfce7', iconColor: '#16a34a' }
+const AMBER:  AccentTheme = { bg: '#fffbeb', border: '#fde68a', text: '#78350f', iconBg: '#fef3c7', iconColor: '#d97706' }
+const BLUE:   AccentTheme = { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af', iconBg: '#dbeafe', iconColor: '#2563eb' }
+const VIOLET: AccentTheme = { bg: '#f5f3ff', border: '#ddd6fe', text: '#4c1d95', iconBg: '#ede9fe', iconColor: '#7c3aed' }
+
+function PillHeader({ label, accent }: { label: string; accent: AccentTheme }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+      <span style={{ background: accent.iconBg, color: accent.text, padding: '3px 10px', borderRadius: 20, fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', fontFamily: 'Arial, sans-serif' }}>
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, background: '#f3f4f6' }} />
+    </div>
+  )
+}
 
 function MonthBarChart({ activities }: { activities: ActivityMeta[] }) {
   const counts = Array(12).fill(0)
@@ -59,16 +78,26 @@ function MonthBarChart({ activities }: { activities: ActivityMeta[] }) {
   })
   const max = Math.max(...counts, 1)
   const months = ['G','F','M','A','M','G','L','A','S','O','N','D']
+  const bw = 17
+  function barColor(c: number): string {
+    if (c === 0) return '#f3f4f6'
+    if (c === 1) return '#bbf7d0'
+    if (c <= 3) return '#4ade80'
+    return '#16a34a'
+  }
   return (
-    <svg viewBox="0 0 240 80" className="w-full" style={{ height: 80 }}>
+    <svg viewBox="0 0 260 90" className="w-full" style={{ height: 90 }}>
       {counts.map((c, i) => {
-        const barH = max > 0 ? (c / max) * 56 : 0
-        const x = i * 20 + 2
+        const barH = c > 0 ? Math.max((c / max) * 56, 4) : 2
+        const x = i * (260 / 12) + 1.5
+        const by = 68 - barH
         return (
           <g key={i}>
-            <rect x={x} y={60 - barH} width={16} height={barH}
-              fill={c > 0 ? '#40916c' : '#e5e7eb'} rx={2} />
-            <text x={x + 8} y={76} textAnchor="middle" fontSize={7} fill="#9ca3af" fontFamily="Arial">{months[i]}</text>
+            <rect x={x} y={by} width={bw} height={barH} fill={barColor(c)} rx={2} />
+            {c > 0 && (
+              <text x={x + bw / 2} y={by - 2} textAnchor="middle" fontSize={6} fill="#6b7280" fontFamily="Arial">{c}</text>
+            )}
+            <text x={x + bw / 2} y={82} textAnchor="middle" fontSize={7} fill="#9ca3af" fontFamily="Arial">{months[i]}</text>
           </g>
         )
       })}
@@ -76,15 +105,19 @@ function MonthBarChart({ activities }: { activities: ActivityMeta[] }) {
   )
 }
 
-function StatCard({ value, label, sub }: { value: string; label: string; sub?: string }) {
+function StatCard({ value, label, sub, icon, accent }: {
+  value: string; label: string; sub?: string; icon?: ReactNode; accent: AccentTheme
+}) {
   return (
-    <div style={{
-      background: '#f0fdf4', borderRadius: 10, padding: '14px 16px',
-      border: '1px solid #bbf7d0', textAlign: 'center',
-    }}>
-      <div style={{ fontSize: 26, fontWeight: 900, color: '#166534', fontFamily: 'Arial Black, sans-serif', lineHeight: 1.1 }}>{value}</div>
-      <div style={{ fontSize: 9, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 2, fontFamily: 'Arial, sans-serif', marginTop: 3 }}>{label}</div>
-      {sub && <div style={{ fontSize: 9, color: '#9ca3af', fontStyle: 'italic', marginTop: 2 }}>{sub}</div>}
+    <div style={{ background: accent.bg, border: `1px solid ${accent.border}`, borderRadius: 10, padding: '14px 12px' }}>
+      {icon && (
+        <div style={{ width: 26, height: 26, borderRadius: 6, background: accent.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+          {icon}
+        </div>
+      )}
+      <div style={{ fontSize: 22, fontWeight: 900, color: accent.text, fontFamily: 'Arial Black, sans-serif', lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 8, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 2, fontFamily: 'Arial, sans-serif', marginTop: 4 }}>{label}</div>
+      {sub && <div style={{ fontSize: 8, color: '#9ca3af', fontStyle: 'italic', marginTop: 2 }}>{sub}</div>}
     </div>
   )
 }
@@ -283,42 +316,42 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
 
       {toggles.totali && (
         <div className="pdf-block" style={{ marginBottom: 32 }}>
-          <h3 style={{ fontSize: 10, color: '#40916c', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 12px' }}>Totali</h3>
+          <PillHeader label="Totali" accent={GREEN} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            <StatCard value={`${gs.totalDistanceKm.toFixed(0)} km`} label="Percorsi" />
-            <StatCard value={`${gs.totalElevationGain.toFixed(0)} m`} label="Dislivello D+" />
-            <StatCard value={formatDuration(gs.totalTimeSeconds)} label="In cammino" />
-            <StatCard value={`${gs.totalCalories.toFixed(0)}`} label="Calorie (kcal)" />
+            <StatCard value={`${gs.totalDistanceKm.toFixed(0)} km`} label="Percorsi" icon={<Route style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
+            <StatCard value={`${gs.totalElevationGain.toFixed(0)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
+            <StatCard value={formatDuration(gs.totalTimeSeconds)} label="In cammino" icon={<Clock style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
+            <StatCard value={`${gs.totalCalories.toFixed(0)}`} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
           </div>
         </div>
       )}
 
       {toggles.record && (
         <div className="pdf-block" style={{ marginBottom: 32 }}>
-          <h3 style={{ fontSize: 10, color: '#40916c', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 12px' }}>Record personali</h3>
+          <PillHeader label="Record personali" accent={AMBER} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            <StatCard value={`${gs.longestKm.toFixed(1)} km`} label="Escursione più lunga" sub={longestAct?.title} />
-            <StatCard value={`${gs.highestAlt} m`} label="Quota massima" sub={highestAct?.title} />
-            <StatCard value={`${maxD.toFixed(0)} m D+`} label="Dislivello max in un'uscita" />
+            <StatCard value={`${gs.longestKm.toFixed(1)} km`} label="Escursione più lunga" sub={longestAct?.title} icon={<Trophy style={{ color: AMBER.iconColor, width: 13, height: 13 }} />} accent={AMBER} />
+            <StatCard value={`${gs.highestAlt} m`} label="Quota massima" sub={highestAct?.title} icon={<Mountain style={{ color: AMBER.iconColor, width: 13, height: 13 }} />} accent={AMBER} />
+            <StatCard value={`${maxD.toFixed(0)} m D+`} label="Dislivello max" icon={<TrendingUp style={{ color: AMBER.iconColor, width: 13, height: 13 }} />} accent={AMBER} />
           </div>
         </div>
       )}
 
       {toggles.medie && activities.length > 0 && (
         <div className="pdf-block" style={{ marginBottom: 32 }}>
-          <h3 style={{ fontSize: 10, color: '#40916c', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 12px' }}>Medie per uscita</h3>
+          <PillHeader label="Medie per uscita" accent={BLUE} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            <StatCard value={`${(gs.totalDistanceKm / activities.length).toFixed(1)} km`} label="Distanza media" />
-            <StatCard value={`${(gs.totalElevationGain / activities.length).toFixed(0)} m`} label="Dislivello medio" />
-            <StatCard value={formatDuration(gs.totalTimeSeconds / activities.length)} label="Durata media" />
+            <StatCard value={`${(gs.totalDistanceKm / activities.length).toFixed(1)} km`} label="Distanza media" icon={<Route style={{ color: BLUE.iconColor, width: 13, height: 13 }} />} accent={BLUE} />
+            <StatCard value={`${(gs.totalElevationGain / activities.length).toFixed(0)} m`} label="Dislivello medio" icon={<Mountain style={{ color: BLUE.iconColor, width: 13, height: 13 }} />} accent={BLUE} />
+            <StatCard value={formatDuration(gs.totalTimeSeconds / activities.length)} label="Durata media" icon={<Clock style={{ color: BLUE.iconColor, width: 13, height: 13 }} />} accent={BLUE} />
           </div>
         </div>
       )}
 
       {toggles.andamento && (
         <div className="pdf-block">
-          <h3 style={{ fontSize: 10, color: '#40916c', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 12px' }}>Andamento mensile</h3>
-          <div style={{ background: '#f9fafb', borderRadius: 10, padding: '16px 20px', border: '1px solid #e5e7eb' }}>
+          <PillHeader label="Andamento mensile" accent={VIOLET} />
+          <div style={{ background: VIOLET.bg, borderRadius: 10, padding: '16px 20px', border: `1px solid ${VIOLET.border}` }}>
             <MonthBarChart activities={activities} />
           </div>
         </div>
@@ -522,11 +555,9 @@ export default function DiarioPage() {
     key(true); setPublishError(null)
     try {
       const { paginateToPdf, nextLayout } = await import('@/lib/pdfPaginate')
+      const { chartAllRoutes } = await import('@/utils/pdfExport')
+      const mapForPdf = mapImgUrl || chartAllRoutes(activities, 660, 400) || null
 
-      // Render each A4 .diario-page individually into an off-screen white host,
-      // then assemble the PDF page-by-page. This keeps every section on its own
-      // page (no gray-background slots, no blank pages) and lets overlong report
-      // pages flow to a second page at clean section boundaries.
       const host = document.createElement('div')
       host.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
 
@@ -535,15 +566,24 @@ export default function DiarioPage() {
         const clone = p.cloneNode(true) as HTMLElement
         clone.style.margin = '0'
         clone.style.boxShadow = 'none'
-        // Drop tainted Leaflet tile canvases (OSM tiles are cross-origin) and
-        // its now-empty container; show the pre-rendered static route map instead.
+        // Remove OSM tile canvases (cross-origin tainted); replace Leaflet container
+        // with a fresh <img> element so no Tailwind 'hidden' class can interfere.
         clone.querySelectorAll('canvas').forEach(c => c.remove())
-        clone.querySelectorAll<HTMLElement>('.leaflet-container').forEach(lc => {
-          const wrapper = lc.parentElement
-          if (wrapper) wrapper.style.display = 'none'
+        const leafletEl = clone.querySelector<HTMLElement>('.leaflet-container')
+        if (leafletEl) {
+          const wrapper = leafletEl.parentElement as HTMLElement
+          wrapper.innerHTML = ''
+          wrapper.style.height = 'auto'
+          if (mapForPdf) {
+            const img = document.createElement('img')
+            img.src = mapForPdf
+            img.style.cssText = 'width:100%;border-radius:12px;display:block'
+            wrapper.appendChild(img)
+          }
+        }
+        clone.querySelectorAll<HTMLElement>('img[alt="Mappa percorsi"]').forEach(i => {
+          i.style.display = 'none'
         })
-        const mapImg = clone.querySelector<HTMLElement>('img[alt="Mappa percorsi"]')
-        if (mapImg) mapImg.style.cssText = 'width:100%;border-radius:12px;display:block'
         host.appendChild(clone)
         clones.push(clone)
       })
