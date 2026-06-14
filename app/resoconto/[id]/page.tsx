@@ -477,7 +477,7 @@ export default function ResocontoPage() {
 
                       let blob: Blob
                       try {
-                        blob = await html2pdf().set({
+                        blob = await (html2pdf() as any).set({
                           margin: 0,
                           image: { type: 'jpeg', quality: 0.92 },
                           html2canvas: { scale: 2, useCORS: false, allowTaint: true, logging: false },
