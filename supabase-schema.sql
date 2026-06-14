@@ -171,8 +171,10 @@ CREATE INDEX IF NOT EXISTS idx_hike_reports_activity_id ON hike_reports (activit
 -- Condivisione pubblica dei resoconti tramite PDF (Supabase Storage)
 ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS share_pdf_url TEXT;
 
--- Diario pubblico tramite PDF
+-- Diario pubblico tramite PDF + token opaco per il link del viewer
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_pdf_url TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_token   UUID UNIQUE;
+CREATE INDEX IF NOT EXISTS idx_user_settings_diary_token ON user_settings (diary_token);
 
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:

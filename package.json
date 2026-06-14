@@ -24,6 +24,7 @@
     "maplibre-gl": "^5.24.0",
     "mp4-muxer": "^5.2.2",
     "next": "14.2.3",
+    "pdfjs-dist": "^6.0.227",
     "react": "^18",
     "react-dom": "^18",
     "recharts": "^2.12.7",

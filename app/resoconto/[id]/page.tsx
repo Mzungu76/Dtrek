@@ -417,21 +417,23 @@ export default function ResocontoPage() {
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
             {sharePdfUrl ? (
               <>
-                <code className="text-xs bg-stone-100 px-2.5 py-1.5 rounded-lg font-mono text-stone-600 truncate max-w-[260px]">
-                  {sharePdfUrl}
-                </code>
-                <a href={sharePdfUrl} target="_blank" rel="noopener noreferrer"
+                <a href={`/leggi/r/${encodeURIComponent(id)}`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
-                  <ExternalLink className="w-3.5 h-3.5" /> Apri PDF
+                  <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
                 </a>
                 <button
                   onClick={async () => {
-                    await navigator.clipboard.writeText(sharePdfUrl)
+                    const viewerUrl = `${window.location.origin}/leggi/r/${encodeURIComponent(id)}`
+                    await navigator.clipboard.writeText(viewerUrl)
                     setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
                   <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
                 </button>
+                <a href={sharePdfUrl} target="_blank" rel="noopener noreferrer" download
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
+                  <ExternalLink className="w-3.5 h-3.5" /> PDF diretto
+                </a>
                 <button
                   onClick={async () => {
                     await fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`, { method: 'DELETE' })
@@ -871,7 +873,7 @@ export default function ResocontoPage() {
                     <div style={{ float: 'right', marginLeft: 12, marginBottom: 8, width: 120 }}>
                       <div style={{ position: 'relative' }}>
                         <img src={photos[i].dataUrl} alt={photos[i].caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', textAlign: 'center', lineHeight: '16px' }}>{i+1}</span>
+                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{i+1}</span>
                       </div>
                       <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{photos[i].caption}</p>
                     </div>
@@ -891,7 +893,7 @@ export default function ResocontoPage() {
                     <div key={ph.id} className="pdf-block">
                       <div style={{ position: 'relative' }}>
                         <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', textAlign: 'center', lineHeight: '16px', border: '1px solid white' }}>{i+1}</span>
+                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
                       </div>
                       {ph.caption && <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i+1}. {ph.caption}</p>}
                     </div>
