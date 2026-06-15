@@ -10,6 +10,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { BookOpen, FileDown, Loader2, Mountain, Route, Clock } from 'lucide-react'
+import { ctsLabel } from '@/lib/trailScore'
 
 interface Report {
   id: string
@@ -46,12 +47,12 @@ function FeedCard({ activity, report }: FeedCardProps) {
 
   useEffect(() => {
     try {
-      const coverId = localStorage.getItem(`dtrek_cover_${activity.id}`)
-      if (!coverId) return
       const raw = localStorage.getItem(`dtrek_vp_${activity.id}`)
       if (!raw) return
       const photos = JSON.parse(raw) as { id: string; dataUrl: string }[]
-      const photo = photos.find(p => p.id === coverId) ?? photos[0] ?? null
+      if (!photos.length) return
+      const coverId = localStorage.getItem(`dtrek_cover_${activity.id}`)
+      const photo = (coverId ? photos.find(p => p.id === coverId) : null) ?? photos[0] ?? null
       if (photo?.dataUrl) setCoverDataUrl(photo.dataUrl)
     } catch { /* localStorage non disponibile */ }
   }, [activity.id])
@@ -89,11 +90,15 @@ function FeedCard({ activity, report }: FeedCardProps) {
           </div>
         )}
         {/* CTS chip */}
-        {trailScore != null && (
-          <div className="absolute bottom-2 left-3 bg-white/20 rounded px-1.5 py-0.5">
-            <span className="text-[8px] text-white font-bold">CTS {Math.round(trailScore)}</span>
-          </div>
-        )}
+        {trailScore != null && (() => {
+          const cts = Math.round(trailScore)
+          const { color } = ctsLabel(cts)
+          return (
+            <div className="absolute bottom-2 left-3 rounded px-1.5 py-0.5" style={{ backgroundColor: color }}>
+              <span className="text-[8px] text-white font-bold">CTS {cts}</span>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Content */}
@@ -212,7 +217,7 @@ export default function DiarioPage() {
       <div className="max-w-2xl mx-auto px-3 pt-3 pb-6">
         <div className="flex items-center justify-between mb-2 px-1">
           <span className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Le mie escursioni</span>
-          <Link href="/" className="text-[10px] text-forest-600 font-semibold">Calendario →</Link>
+          <Link href="/calendario" className="text-[10px] text-forest-600 font-semibold">Calendario →</Link>
         </div>
 
         {loading ? (
