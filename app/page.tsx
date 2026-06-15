@@ -132,7 +132,7 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
           {hasReport !== undefined && (
             <span className={`absolute bottom-2 left-2 text-[8px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap
               ${hasReport ? 'bg-forest-800 text-white' : 'bg-amber-400/90 text-amber-900'}`}>
-              {hasReport ? '✓ Racconto' : '✎ da scrivere'}
+              {hasReport ? '✓ Resoconto' : '✎ da scrivere'}
             </span>
           )}
           {/* Navigation dots */}

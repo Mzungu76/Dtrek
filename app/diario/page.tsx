@@ -19,7 +19,7 @@ interface Report {
   created_at: string
 }
 
-function getExcerpt(content: string, maxLen = 220): string {
+function getExcerpt(content: string, maxLen = 500): string {
   const clean = content
     .replace(/^## .+$/gm, '')
     .replace(/\[curiosita\][\s\S]*?\[\/curiosita\]/g, '')
@@ -42,6 +42,19 @@ function FeedCard({ activity, report }: FeedCardProps) {
   const dateLabel = format(date, 'EEE · d MMM yyyy', { locale: it })
   const polyline = (activity.routePolyline ?? []) as [number, number][]
   const trailScore = (activity as ActivityMeta & { trailScore?: number }).trailScore
+  const [coverDataUrl, setCoverDataUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const coverId = localStorage.getItem(`dtrek_cover_${activity.id}`)
+      if (!coverId) return
+      const raw = localStorage.getItem(`dtrek_vp_${activity.id}`)
+      if (!raw) return
+      const photos = JSON.parse(raw) as { id: string; dataUrl: string }[]
+      const photo = photos.find(p => p.id === coverId) ?? photos[0] ?? null
+      if (photo?.dataUrl) setCoverDataUrl(photo.dataUrl)
+    } catch { /* localStorage non disponibile */ }
+  }, [activity.id])
 
   return (
     <Link
@@ -49,12 +62,15 @@ function FeedCard({ activity, report }: FeedCardProps) {
       className="block bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-md hover:border-forest-300 transition-all overflow-hidden"
     >
       {/* Thumbnail area */}
-      <div className="relative h-24 bg-gradient-to-br from-forest-800 to-forest-600 overflow-hidden">
-        {polyline.length > 1 && (
+      <div className="relative h-44 bg-gradient-to-br from-forest-800 to-forest-600 overflow-hidden">
+        {coverDataUrl ? (
+          <img src={coverDataUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : polyline.length > 1 ? (
           <div className="absolute inset-0">
             <RouteThumb polyline={polyline} color="rgba(255,255,255,0.35)" strokeWidth={2.5} />
           </div>
-        )}
+        ) : null}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none" />
         {/* Date badge */}
         <div className="absolute top-2 left-3 bg-black/30 rounded-md px-2 py-0.5">
           <span className="text-[9px] text-white/90 font-semibold capitalize">{dateLabel}</span>
@@ -65,7 +81,7 @@ function FeedCard({ activity, report }: FeedCardProps) {
             <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5">
               <polyline points="20 6 9 17 4 12" />
             </svg>
-            <span className="text-[8px] text-white font-bold">Racconto scritto</span>
+            <span className="text-[8px] text-white font-bold">Resoconto scritto</span>
           </div>
         ) : (
           <div className="absolute top-2 right-3 bg-black/25 border border-white/20 rounded-md px-2 py-0.5">
@@ -75,7 +91,7 @@ function FeedCard({ activity, report }: FeedCardProps) {
         {/* CTS chip */}
         {trailScore != null && (
           <div className="absolute bottom-2 left-3 bg-white/20 rounded px-1.5 py-0.5">
-            <span className="text-[8px] text-white font-bold">CTS {trailScore}</span>
+            <span className="text-[8px] text-white font-bold">CTS {Math.round(trailScore)}</span>
           </div>
         )}
       </div>
@@ -87,7 +103,7 @@ function FeedCard({ activity, report }: FeedCardProps) {
         </h3>
 
         {report ? (
-          <p className="text-[11px] italic text-stone-500 leading-snug font-lora line-clamp-2 mb-2">
+          <p className="text-[11px] italic text-stone-500 leading-snug font-lora line-clamp-4 mb-2">
             "{getExcerpt(report.content)}"
           </p>
         ) : (
@@ -165,7 +181,7 @@ export default function DiarioPage() {
 
           <h1 className="font-lora text-2xl font-bold text-white mb-0.5">Il mio Diario</h1>
           <p className="text-[10px] text-white/45 mb-3">
-            {activities.length} escursion{activities.length === 1 ? 'e' : 'i'} · {writtenCount} raccont{writtenCount === 1 ? 'o' : 'i'} scritt{writtenCount === 1 ? 'o' : 'i'}
+            {activities.length} escursion{activities.length === 1 ? 'e' : 'i'} · {writtenCount} resocont{writtenCount === 1 ? 'o' : 'i'} scritt{writtenCount === 1 ? 'o' : 'i'}
           </p>
 
           {/* Stats strip */}
