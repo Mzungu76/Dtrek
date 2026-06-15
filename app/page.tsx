@@ -28,6 +28,7 @@ interface CardProps {
   extra?: number
   showFullDate?: boolean
   compact?: boolean   // true in the 7-col calendar → shows dot on mobile
+  hasReport?: boolean
   // multi-hike navigation
   dotCount?: number
   dotActive?: number
@@ -49,7 +50,7 @@ function ratingLabel(n: number): string {
   return 'Mediocre'
 }
 
-function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, dotCount, dotActive, onDotClick }: CardProps) {
+function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, hasReport, dotCount, dotActive, onDotClick }: CardProps) {
   const isToday   = isSameDay(date, new Date())
   const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
   const showDots  = dotCount && dotCount > 1
@@ -127,6 +128,13 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             ${isToday ? 'bg-terra-500 text-white' : 'bg-white/90 text-stone-600'}`}>
             {dateLabel}
           </span>
+          {/* Racconto badge */}
+          {hasReport !== undefined && (
+            <span className={`absolute bottom-2 left-2 text-[8px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap
+              ${hasReport ? 'bg-forest-800 text-white' : 'bg-amber-400/90 text-amber-900'}`}>
+              {hasReport ? '✓ Racconto' : '✎ da scrivere'}
+            </span>
+          )}
           {/* Navigation dots */}
           {showDots && (
             <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1">
@@ -268,6 +276,7 @@ export default function HomePage() {
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
   const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating' | 'cts'>('date')
   const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus'>('date')
+  const [reportIds,  setReportIds]  = useState<Set<string>>(new Set())
   const monthBarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -277,6 +286,17 @@ export default function HomePage() {
     ])
       .then(([acts, plan]) => { setActivities(acts); setPlanned(plan) })
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/resoconto?all=true')
+      .then(r => r.json())
+      .then((reps: { activity_id: string }[]) => {
+        if (Array.isArray(reps)) {
+          setReportIds(new Set(reps.map(r => r.activity_id).filter(Boolean)))
+        }
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -601,6 +621,7 @@ export default function HomePage() {
                     activity={act}
                     date={date}
                     compact
+                    hasReport={reportIds.has(act.id)}
                     dotCount={acts.length}
                     dotActive={curIdx}
                     onDotClick={idx => setDayIdx(prev => ({ ...prev, [key]: idx }))}
@@ -657,6 +678,7 @@ export default function HomePage() {
                       activity={activity}
                       date={new Date(activity.startTime)}
                       showFullDate
+                      hasReport={reportIds.has(activity.id)}
                     />
                   ))}
                 </div>

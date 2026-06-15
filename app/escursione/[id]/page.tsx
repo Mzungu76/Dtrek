@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import StatCard from '@/components/StatCard'
@@ -32,7 +33,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, ChevronDown,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -40,6 +41,17 @@ import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
+
+function getExcerpt(content: string, maxLen = 280): string {
+  const clean = content
+    .replace(/^## .+$/gm, '')
+    .replace(/\[curiosita\][\s\S]*?\[\/curiosita\]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  const paras = clean.split('\n\n').filter(p => p.trim().length > 0)
+  const first = (paras[0] ?? '').trim()
+  return first.length > maxLen ? first.slice(0, maxLen) + '…' : first
+}
 
 function ratingColor(n: number) {
   return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
@@ -80,6 +92,10 @@ export default function EscursionePage() {
   const [prefsLoaded,     setPrefsLoaded]     = useState(false)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefDurata,      setPrefDurata]      = useState(270)
+  const [hasReport,       setHasReport]       = useState(false)
+  const [reportContent,   setReportContent]   = useState('')
+  const [reportTitle,     setReportTitle]     = useState('')
+  const [techExpanded,    setTechExpanded]    = useState(false)
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat && p.lon)
@@ -127,6 +143,21 @@ export default function EscursionePage() {
       .catch(() => {})
       .finally(() => setPrefsLoaded(true))
   }, [])
+
+  // Fetch existing resoconto/report for this activity
+  useEffect(() => {
+    if (!id) return
+    fetch(`/api/resoconto?activityId=${encodeURIComponent(id)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && !data.error) {
+          setHasReport(true)
+          setReportContent(data.content ?? '')
+          setReportTitle(data.title ?? '')
+        }
+      })
+      .catch(() => {})
+  }, [id])
 
   // Compute CTS for breakdown display — NEVER saves
   useEffect(() => {
@@ -452,30 +483,59 @@ export default function EscursionePage() {
 
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
 
-        {/* Stats */}
-        {(() => {
-          const hasHR  = (activity.avgHeartRate ?? 0) > 0
-          const hasCal = (activity.calories ?? 0) > 0
-          const cols   = 4 + (hasHR ? 1 : 0) + (hasCal ? 1 : 0)
-          const gridCls = cols === 6
-            ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3'
-            : cols === 5
-            ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3'
-            : 'grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3'
-          return (
-            <div className={gridCls}>
-              <StatCard label="Distanza"     value={`${(activity.distanceMeters/1000).toFixed(2)} km`} color="forest" icon={<Route className="w-3.5 h-3.5" />} />
-              <StatCard label="Durata"       value={formatDuration(activity.totalTimeSeconds)} color="terra" icon={<Clock className="w-3.5 h-3.5" />} />
-              {hasHR && <StatCard label="FC Media"   value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
-              <StatCard label="Vel. Media"   value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
-              <StatCard label="Dislivello ↑" value={`${activity.elevationGain.toFixed(0)} m`} sub={`↓ ${activity.elevationLoss.toFixed(0)} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5" />} />
-              {hasCal && <StatCard label="Calorie"    value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
+        {/* ══ RACCONTO / CTA ══ */}
+        {hasReport ? (
+          <section className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-forest-50 rounded-md flex items-center justify-center">
+                  <BookOpen className="w-3.5 h-3.5 text-forest-600" />
+                </div>
+                <span className="text-xs font-bold uppercase tracking-widest text-forest-600">Il Racconto</span>
+              </div>
+              <button
+                onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}`)}
+                className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 transition-colors"
+              >
+                <Pencil className="w-4 h-4" /> Modifica
+              </button>
             </div>
-          )
-        })()}
+            {reportTitle && (
+              <h3 className="font-display text-lg font-semibold text-stone-800 mb-2">{reportTitle}</h3>
+            )}
+            <p className="font-lora text-sm text-stone-600 leading-relaxed italic mb-3 line-clamp-4">
+              {getExcerpt(reportContent)}
+            </p>
+            <button
+              onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}`)}
+              className="text-xs font-semibold text-forest-600 hover:text-forest-700 transition-colors"
+            >
+              Leggi il racconto completo →
+            </button>
+          </section>
+        ) : (
+          <Link
+            href={`/resoconto/${encodeURIComponent(id)}`}
+            className="flex items-center gap-4 p-4 bg-amber-50 border-2 border-dashed border-amber-400 rounded-2xl hover:bg-amber-100 transition-colors"
+          >
+            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0 text-xl">
+              ✍
+            </div>
+            <div>
+              <p className="text-sm font-bold text-amber-900">Scrivi la storia di questa escursione</p>
+              <p className="text-xs text-amber-700 mt-0.5">Aggiungi il tuo racconto al Diario →</p>
+            </div>
+          </Link>
+        )}
 
-        {/* Weather */}
-        {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
+        {/* Photos */}
+        <ActivityPhotoManager
+          activityId={id}
+          trackPoints={activity.trackPoints}
+          activityTitle={activity.title ?? activity.notes ?? undefined}
+          distanceMeters={activity.distanceMeters}
+          elevationGain={activity.elevationGain}
+        />
 
         {/* Map */}
         <section>
@@ -508,53 +568,6 @@ export default function EscursionePage() {
           {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
         </section>
 
-        {/* Charts */}
-        {(() => {
-          const hasHRData = activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0)
-          return (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
-              {hasHRData && (
-                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-                  <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
-                    <Heart className="w-4 h-4 text-red-400" /> Frequenza Cardiaca
-                  </h3>
-                  <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
-                </div>
-              )}
-              <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
-                  <Mountain className="w-4 h-4 text-forest-500" /> Profilo Altimetrico
-                </h3>
-                <AltimetryChart trackPoints={activity.trackPoints} />
-              </div>
-              <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-terra-400" /> Velocità
-                </h3>
-                <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
-              </div>
-              <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-stone-600 mb-4">Dati tecnici</h3>
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                  {[
-                    ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
-                    ['Quota partenza', `${activity.trackPoints[0]?.altitudeMeters?.toFixed(1) ?? '--'} m`],
-                    ['Quota minima', `${activity.altitudeMin.toFixed(1)} m`],
-                    ['Quota massima', `${activity.altitudeMax.toFixed(1)} m`],
-                    ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
-                    ['Sport', activity.sport],
-                  ].map(([k, v]) => (
-                    <div key={k} className="flex justify-between border-b border-stone-100 py-1">
-                      <dt className="text-stone-400 text-xs">{k}</dt>
-                      <dd className="font-mono text-stone-700 text-xs font-medium">{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
-          )
-        })()}
-
         {/* Comfort TrailScore */}
         {hasGps && (
           <section className="space-y-2">
@@ -583,14 +596,127 @@ export default function EscursionePage() {
           </section>
         )}
 
-        {/* Photos */}
-        <ActivityPhotoManager
-          activityId={id}
-          trackPoints={activity.trackPoints}
-          activityTitle={activity.title ?? activity.notes ?? undefined}
-          distanceMeters={activity.distanceMeters}
-          elevationGain={activity.elevationGain}
-        />
+        {/* ══ DATI TECNICI (accordion) ══ */}
+        <section className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <button
+            onClick={() => setTechExpanded(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-stone-50 transition-colors"
+          >
+            <span className="font-display text-lg font-semibold text-stone-700">Dati tecnici</span>
+            <ChevronDown className={`w-5 h-5 text-stone-400 transition-transform duration-200 ${techExpanded ? 'rotate-180' : ''}`} />
+          </button>
+
+          {techExpanded && (
+            <div className="border-t border-stone-100 px-5 pb-5 pt-4 space-y-6">
+
+              {/* Stats cards */}
+              {(() => {
+                const hasHR  = (activity.avgHeartRate ?? 0) > 0
+                const hasCal = (activity.calories ?? 0) > 0
+                const cols   = 4 + (hasHR ? 1 : 0) + (hasCal ? 1 : 0)
+                const gridCls = cols === 6
+                  ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3'
+                  : cols === 5
+                  ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3'
+                  : 'grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3'
+                return (
+                  <div className={gridCls}>
+                    <StatCard label="Distanza"     value={`${(activity.distanceMeters/1000).toFixed(2)} km`} color="forest" icon={<Route className="w-3.5 h-3.5" />} />
+                    <StatCard label="Durata"       value={formatDuration(activity.totalTimeSeconds)} color="terra" icon={<Clock className="w-3.5 h-3.5" />} />
+                    {hasHR && <StatCard label="FC Media"   value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
+                    <StatCard label="Vel. Media"   value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
+                    <StatCard label="Dislivello ↑" value={`${activity.elevationGain.toFixed(0)} m`} sub={`↓ ${activity.elevationLoss.toFixed(0)} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5" />} />
+                    {hasCal && <StatCard label="Calorie"    value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
+                  </div>
+                )
+              })()}
+
+              {/* Weather */}
+              {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
+
+              {/* Charts */}
+              {(() => {
+                const hasHRData = activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0)
+                return (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+                    {hasHRData && (
+                      <div className="bg-stone-50 rounded-2xl border border-stone-200 p-5">
+                        <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                          <Heart className="w-4 h-4 text-red-400" /> Frequenza Cardiaca
+                        </h3>
+                        <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
+                      </div>
+                    )}
+                    <div className="bg-stone-50 rounded-2xl border border-stone-200 p-5">
+                      <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                        <Mountain className="w-4 h-4 text-forest-500" /> Profilo Altimetrico
+                      </h3>
+                      <AltimetryChart trackPoints={activity.trackPoints} />
+                    </div>
+                    <div className="bg-stone-50 rounded-2xl border border-stone-200 p-5">
+                      <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-terra-400" /> Velocità
+                      </h3>
+                      <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
+                    </div>
+                    <div className="bg-stone-50 rounded-2xl border border-stone-200 p-5">
+                      <h3 className="text-sm font-semibold text-stone-600 mb-4">Misure</h3>
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        {[
+                          ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
+                          ['Quota partenza', `${activity.trackPoints[0]?.altitudeMeters?.toFixed(1) ?? '--'} m`],
+                          ['Quota minima', `${activity.altitudeMin.toFixed(1)} m`],
+                          ['Quota massima', `${activity.altitudeMax.toFixed(1)} m`],
+                          ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
+                          ['Sport', activity.sport],
+                        ].map(([k, v]) => (
+                          <div key={k} className="flex justify-between border-b border-stone-200 py-1">
+                            <dt className="text-stone-400 text-xs">{k}</dt>
+                            <dd className="font-mono text-stone-700 text-xs font-medium">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Note personali */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-stone-600">Note personali</h3>
+                  {!editNotes && (
+                    <button onClick={() => setEditNotes(true)} className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-700 transition-colors">
+                      <Pencil className="w-3.5 h-3.5" /> Modifica
+                    </button>
+                  )}
+                </div>
+                {editNotes ? (
+                  <div>
+                    <textarea value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={4}
+                      placeholder="Descrivi l'escursione, i luoghi visitati, le sensazioni…"
+                      className="w-full border border-stone-200 rounded-xl p-3 text-stone-700 text-sm outline-none focus:border-forest-400 resize-none bg-white" autoFocus />
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={saveNotes} disabled={saving}
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-forest-600 text-white rounded-lg text-sm hover:bg-forest-700 transition-colors disabled:opacity-60">
+                        {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salva
+                      </button>
+                      <button onClick={() => setEditNotes(false)}
+                        className="px-4 py-1.5 border border-stone-200 text-stone-500 rounded-lg text-sm hover:bg-stone-50 transition-colors">
+                        Annulla
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className={`text-sm leading-relaxed ${activity.userNotes ? 'text-stone-600' : 'text-stone-400 italic'}`}>
+                    {activity.userNotes || 'Nessuna nota. Clicca "Modifica" per aggiungere appunti.'}
+                  </p>
+                )}
+              </div>
+
+            </div>
+          )}
+        </section>
 
         {/* Wikipedia */}
         {hasGps && (
@@ -600,38 +726,6 @@ export default function EscursionePage() {
           </section>
         )}
 
-        {/* Notes */}
-        <section className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-xl font-semibold text-stone-700">Note personali</h2>
-            {!editNotes && (
-              <button onClick={() => setEditNotes(true)} className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 transition-colors">
-                <Pencil className="w-4 h-4" /> Modifica
-              </button>
-            )}
-          </div>
-          {editNotes ? (
-            <div>
-              <textarea value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={5}
-                placeholder="Descrivi l'escursione, i luoghi visitati, le sensazioni…"
-                className="w-full border border-stone-200 rounded-xl p-3 text-stone-700 text-sm outline-none focus:border-forest-400 resize-none" autoFocus />
-              <div className="flex gap-2 mt-2">
-                <button onClick={saveNotes} disabled={saving}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-forest-600 text-white rounded-lg text-sm hover:bg-forest-700 transition-colors disabled:opacity-60">
-                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salva
-                </button>
-                <button onClick={() => setEditNotes(false)}
-                  className="px-4 py-1.5 border border-stone-200 text-stone-500 rounded-lg text-sm hover:bg-stone-50 transition-colors">
-                  Annulla
-                </button>
-              </div>
-            </div>
-          ) : (
-            <p className={`text-sm leading-relaxed ${activity.userNotes ? 'text-stone-600' : 'text-stone-400 italic'}`}>
-              {activity.userNotes || 'Nessuna nota. Clicca "Modifica" per aggiungere appunti.'}
-            </p>
-          )}
-        </section>
       </main>
 
       {show3D && (
