@@ -138,7 +138,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
       </div>
 
       {/* Peak bagging shortcut */}
-      <a href="/vette"
+      <a href="/statistiche"
         className="flex items-center gap-4 bg-gradient-to-r from-forest-700 to-forest-800 text-white rounded-2xl p-5 hover:from-forest-600 hover:to-forest-700 transition-all">
         <Mountain className="w-8 h-8 text-forest-300 shrink-0" />
         <div>

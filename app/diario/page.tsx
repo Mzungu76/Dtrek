@@ -103,12 +103,12 @@ function FeedCard({ activity, report }: FeedCardProps) {
 
       {/* Content */}
       <div className="px-3 pb-3 pt-2.5">
-        <h3 className="font-lora text-[13px] font-bold text-stone-900 mb-1 leading-snug">
+        <h3 className="font-display text-[13px] font-bold text-stone-900 mb-1 leading-snug">
           {activity.title ?? 'Escursione'}
         </h3>
 
         {report ? (
-          <p className="text-[11px] italic text-stone-500 leading-snug font-lora line-clamp-4 mb-2">
+          <p className="text-[11px] italic text-stone-500 leading-snug font-display line-clamp-4 mb-2">
             "{getExcerpt(report.content)}"
           </p>
         ) : (
@@ -184,7 +184,7 @@ export default function DiarioPage() {
             </div>
           </div>
 
-          <h1 className="font-lora text-2xl font-bold text-white mb-0.5">Il mio Diario</h1>
+          <h1 className="font-display text-2xl font-bold text-white mb-0.5">Il mio Diario</h1>
           <p className="text-[10px] text-white/45 mb-3">
             {activities.length} escursion{activities.length === 1 ? 'e' : 'i'} · {writtenCount} resocont{writtenCount === 1 ? 'o' : 'i'} scritt{writtenCount === 1 ? 'o' : 'i'}
           </p>
