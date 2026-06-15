@@ -3,19 +3,17 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Upload, BarChart2, CalendarDays, Map, CalendarClock, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked } from 'lucide-react'
+import { Upload, BarChart2, CalendarDays, Compass, User, ArrowDownToLine, LogOut, Settings, BookOpen, Plus } from 'lucide-react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 const NAV_LINKS = [
+  { href: '/diario',      label: 'Diario',      icon: BookOpen      },
   { href: '/',            label: 'Calendario',  icon: CalendarDays  },
-  { href: '/diario',      label: 'Diario',      icon: BookMarked    },
-  { href: '/statistiche', label: 'Statistiche', icon: BarChart2     },
-  { href: '/mappa',       label: 'Mappa',       icon: Map           },
-  { href: '/programma',   label: 'Programma',   icon: CalendarClock },
   { href: '/esplora',     label: 'Esplora',     icon: Compass       },
+  { href: '/statistiche', label: 'Statistiche', icon: BarChart2     },
 ]
 
 function isActive(href: string, path: string) {
@@ -220,6 +218,16 @@ export default function Navbar() {
               )
             })}
             <div className="w-px h-5 bg-stone-200 mx-1" />
+            <Link
+              href="/upload"
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                path === '/upload' ? 'bg-forest-700 text-white' : 'bg-forest-600 hover:bg-forest-700 text-white shadow-sm'
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Carica</span>
+            </Link>
+            <div className="w-px h-5 bg-stone-200 mx-1" />
             <InstallButton />
             {user ? (
               <UserMenu user={user} />
@@ -228,18 +236,9 @@ export default function Navbar() {
                 <User className="w-4 h-4 text-stone-400" />
               </Link>
             )}
-            <Link
-              href="/upload"
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ml-1 ${
-                path === '/upload' ? 'bg-terra-600 text-white' : 'bg-terra-500 hover:bg-terra-400 text-white shadow-sm'
-              }`}
-            >
-              <Upload className="w-4 h-4" />
-              <span>Carica</span>
-            </Link>
           </div>
 
-          {/* Mobile: install + user + upload */}
+          {/* Mobile: install + user */}
           <div className="md:hidden flex items-center gap-1.5">
             <InstallButton compact />
             {user
@@ -248,15 +247,6 @@ export default function Navbar() {
                   <User className="w-4 h-4 text-stone-400" />
                 </Link>
             }
-            <Link
-              href="/upload"
-              className={`flex items-center justify-center w-9 h-9 rounded-xl text-sm font-semibold transition-all ${
-                path === '/upload' ? 'bg-terra-600 text-white' : 'bg-terra-500 text-white shadow-sm'
-              }`}
-              aria-label="Carica file"
-            >
-              <Upload className="w-4 h-4" />
-            </Link>
           </div>
         </div>
       </nav>
@@ -267,7 +257,44 @@ export default function Navbar() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="flex items-stretch h-16">
-          {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+          {/* Prima 2 tab */}
+          {NAV_LINKS.slice(0, 2).map(({ href, label, icon: Icon }) => {
+            const active = isActive(href, path)
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-w-0 px-1
+                  ${active ? 'text-forest-600' : 'text-stone-400'}`}
+              >
+                <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-forest-600' : 'text-stone-400'}`} />
+                <span className="text-[9px] font-medium leading-none truncate w-full text-center">
+                  {label}
+                </span>
+                {active && (
+                  <span className="absolute top-0 w-6 h-0.5 bg-forest-500 rounded-full -translate-y-px" />
+                )}
+              </Link>
+            )
+          })}
+
+          {/* FAB Upload centrale */}
+          <div className="flex-1 flex items-center justify-center">
+            <Link
+              href="/upload"
+              className={`w-12 h-12 rounded-full flex items-center justify-center -mt-3 shadow-lg transition-colors ${
+                path === '/upload'
+                  ? 'bg-forest-800 shadow-forest-900/40'
+                  : 'bg-forest-600 hover:bg-forest-700 shadow-forest-900/30'
+              }`}
+              aria-label="Carica nuova escursione"
+            >
+              <Plus className="w-6 h-6 text-white" />
+            </Link>
+          </div>
+
+          {/* Ultime 2 tab */}
+          {NAV_LINKS.slice(2).map(({ href, label, icon: Icon }) => {
             const active = isActive(href, path)
             return (
               <Link
