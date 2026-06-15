@@ -637,15 +637,15 @@ export default function DiarioPage() {
           <div className="flex items-center gap-2 mr-auto">
             <a href="/diario" className="text-xs text-stone-400 hover:text-stone-600 mr-1">← Diario</a>
             <BookMarked className="w-4 h-4 text-forest-600" />
-            <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm">Esporta PDF</span>
+            <span className="font-body font-bold text-stone-700 uppercase tracking-wide text-sm">Esporta PDF</span>
             {!loading && (
-              <span className="text-xs text-stone-400 font-lora italic">{reports.length} resoconti</span>
+              <span className="text-xs text-stone-400 font-display italic">{reports.length} resoconti</span>
             )}
           </div>
 
           {/* Cover upload */}
           <button onClick={() => coverInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-body font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
             <ImageIcon className="w-3.5 h-3.5" /> Foto
           </button>
           <input ref={coverInputRef} type="file" accept="image/*" className="hidden"
@@ -654,32 +654,32 @@ export default function DiarioPage() {
           {/* Cover text editor */}
           <div className="relative">
             <button onClick={() => setShowTextMenu(s => !s)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-body font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
               <Pencil className="w-3.5 h-3.5" /> Testi <ChevronDown className="w-3 h-3" />
             </button>
             {showTextMenu && (
               <div className="absolute left-0 top-9 w-72 bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Testi copertina</p>
+                  <p className="text-[10px] font-body font-bold uppercase tracking-widest text-stone-400">Testi copertina</p>
                   <button onClick={() => setShowTextMenu(false)} className="text-stone-400 hover:text-stone-600">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Titolo</label>
+                <label className="block text-[10px] font-body font-bold uppercase tracking-widest text-stone-400 mb-0.5">Titolo</label>
                 <input
                   value={diaryTitle}
                   onChange={e => { setDiaryTitle(e.target.value); try { localStorage.setItem('dtrek_diary_title', e.target.value) } catch {} }}
                   className="w-full text-xs border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2 focus:outline-none focus:ring-1 focus:ring-forest-400"
                   placeholder="DIARIO di VIAGGIO"
                 />
-                <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Sottotitolo</label>
+                <label className="block text-[10px] font-body font-bold uppercase tracking-widest text-stone-400 mb-0.5">Sottotitolo</label>
                 <input
                   value={diarySubtitle}
                   onChange={e => { setDiarySubtitle(e.target.value); try { localStorage.setItem('dtrek_diary_subtitle', e.target.value) } catch {} }}
                   className="w-full text-xs border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2 focus:outline-none focus:ring-1 focus:ring-forest-400"
                   placeholder="I miei percorsi"
                 />
-                <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Autore</label>
+                <label className="block text-[10px] font-body font-bold uppercase tracking-widest text-stone-400 mb-0.5">Autore</label>
                 <input
                   value={diaryAuthor}
                   onChange={e => { setDiaryAuthor(e.target.value); try { localStorage.setItem('dtrek_diary_author', e.target.value) } catch {} }}
@@ -693,7 +693,7 @@ export default function DiarioPage() {
           {/* Stats toggle */}
           <div className="relative">
             <button onClick={() => setShowStatsMenu(s => !s)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-body font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
               <BarChart2 className="w-3.5 h-3.5" /> Statistiche <ChevronDown className="w-3 h-3" />
             </button>
             {showStatsMenu && (
@@ -701,7 +701,7 @@ export default function DiarioPage() {
                 <button className="absolute top-2 right-2 text-stone-400 hover:text-stone-600" onClick={() => setShowStatsMenu(false)}>
                   <X className="w-3.5 h-3.5" />
                 </button>
-                <p className="px-3 pt-2 pb-1 text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Sezioni</p>
+                <p className="px-3 pt-2 pb-1 text-[10px] font-body font-bold uppercase tracking-widest text-stone-400">Sezioni</p>
                 {([
                   ['totali', 'Totali'],
                   ['record', 'Record personali'],
@@ -722,7 +722,7 @@ export default function DiarioPage() {
 
           {/* Download PDF */}
           <button onClick={() => generateAndUploadPdf(true)} disabled={downloading || loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 disabled:opacity-50 transition-colors">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-body font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 disabled:opacity-50 transition-colors">
             {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
             Scarica PDF
           </button>
@@ -732,7 +732,7 @@ export default function DiarioPage() {
             <div className="flex items-center gap-1.5">
               {diaryToken && (
                 <a href={`/leggi/d/${diaryToken}`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-body font-bold uppercase tracking-wide transition-colors">
                   <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
                 </a>
               )}
@@ -743,7 +743,7 @@ export default function DiarioPage() {
                 await navigator.clipboard.writeText(url)
                 setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
               }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-body font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
                 <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
               </button>
               <button onClick={async () => { await fetch('/api/diary-token', { method: 'DELETE' }); setDiaryPdfUrl(null); setDiaryToken(null) }}
@@ -755,7 +755,7 @@ export default function DiarioPage() {
             <>
               {publishError && <span className="text-xs text-red-500">{publishError}</span>}
               <button onClick={() => generateAndUploadPdf(false)} disabled={publishing || loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-body font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
                 {publishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Pubblicazione…</> : <><Share2 className="w-3.5 h-3.5" /> Pubblica online</>}
               </button>
             </>
@@ -767,7 +767,7 @@ export default function DiarioPage() {
       {loading && (
         <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
           <Loader2 className="w-6 h-6 animate-spin" />
-          <span className="font-lora italic">Caricamento diario…</span>
+          <span className="font-display italic">Caricamento diario…</span>
         </div>
       )}
 

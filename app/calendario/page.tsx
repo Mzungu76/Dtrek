@@ -703,7 +703,7 @@ export default function HomePage() {
                       </button>
                     ))}
                   </div>
-                  <Link href="/programma" className="flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium ml-1">
+                  <Link href="/esplora" className="flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium ml-1">
                     <CalendarClock className="w-3.5 h-3.5" /> Tutte
                   </Link>
                 </div>

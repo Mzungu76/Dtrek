@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
 import { exportAllActivitiesToExcel } from '@/utils/exportExcel'
 import PdfExportButton from '@/components/PdfExportButton'
-import { Loader2, Mountain, FileSpreadsheet, Share2, BookOpen } from 'lucide-react'
+import { Loader2, Mountain, FileSpreadsheet, Share2 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import TabPanoramica  from '@/components/stats/TabPanoramica'
 import TabGrafici     from '@/components/stats/TabGrafici'
@@ -13,39 +13,32 @@ import TabConfronto   from '@/components/stats/TabConfronto'
 import TabForma       from '@/components/stats/TabForma'
 import TabTraguardi   from '@/components/stats/TabTraguardi'
 import TabFisico      from '@/components/stats/TabFisico'
-import TabGuida       from '@/components/stats/TabGuida'
+import TabTerritorio  from '@/components/stats/TabTerritorio'
 
-type Tab = 'panoramica' | 'grafici' | 'confronta' | 'forma' | 'traguardi' | 'fisico' | 'guida'
+type Tab = 'riepilogo' | 'andamento' | 'forma' | 'territorio'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'panoramica', label: 'Panoramica' },
-  { id: 'grafici',    label: 'Grafici'    },
-  { id: 'confronta',  label: 'Confronto'  },
+  { id: 'riepilogo',  label: 'Riepilogo'  },
+  { id: 'andamento',  label: 'Andamento'  },
   { id: 'forma',      label: 'Forma'      },
-  { id: 'traguardi',  label: 'Traguardi'  },
-  { id: 'fisico',     label: 'Fisico'     },
-  { id: 'guida',      label: '📖 Guida'   },
+  { id: 'territorio', label: 'Territorio' },
 ]
+
+const noop = () => {}
 
 export default function StatistichePage() {
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [loading,    setLoading]    = useState(true)
-  const [tab,        setTab]        = useState<Tab>('panoramica')
+  const [tab,        setTab]        = useState<Tab>('riepilogo')
   const [shareStats, setShareStats] = useState(false)
-  const [guideAnchor, setGuideAnchor] = useState<string | null>(null)
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
   }, [])
 
-  const stats   = useMemo(() => computeGlobalStats(activities),    [activities])
-  const records = useMemo(() => getPersonalRecords(activities),    [activities])
-  const streaks = useMemo(() => computeStreaks(activities),         [activities])
-
-  const goToGuide = useCallback((section: string) => {
-    setGuideAnchor(section)
-    setTab('guida')
-  }, [])
+  const stats   = useMemo(() => computeGlobalStats(activities),  [activities])
+  const records = useMemo(() => getPersonalRecords(activities),  [activities])
+  const streaks = useMemo(() => computeStreaks(activities),       [activities])
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
@@ -62,10 +55,6 @@ export default function StatistichePage() {
           </div>
           {!loading && activities.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              <button onClick={() => goToGuide('')}
-                className="flex items-center gap-1.5 px-3 py-2 bg-stone-200 text-stone-700 rounded-xl text-sm hover:bg-stone-300 transition-colors">
-                <BookOpen className="w-4 h-4" /> <span className="hidden sm:inline">Guida</span>
-              </button>
               <button onClick={() => setShareStats(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors">
                 <Share2 className="w-4 h-4" /> <span className="hidden sm:inline">Condividi</span>
@@ -75,8 +64,6 @@ export default function StatistichePage() {
                 <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Excel</span>
               </button>
               <PdfExportButton variant="stats" data={activities as any} label="PDF"
-                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors" />
-              <PdfExportButton variant="map" data={activities as any} label="PDF Mappa"
                 className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors" />
             </div>
           )}
@@ -93,11 +80,11 @@ export default function StatistichePage() {
           </div>
         ) : (
           <>
-            {/* Tab bar — scrollable on mobile */}
-            <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-6 sm:mb-8 overflow-x-auto">
+            {/* Tab bar */}
+            <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-6 sm:mb-8">
               {TABS.map(t => (
-                <button key={t.id} onClick={() => { setTab(t.id); if (t.id !== 'guida') setGuideAnchor(null) }}
-                  className={`flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`flex-1 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     tab === t.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-500 hover:text-stone-700'
                   }`}>
                   {t.label}
@@ -105,13 +92,37 @@ export default function StatistichePage() {
               ))}
             </div>
 
-            {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} onGuideLink={goToGuide} />}
-            {tab === 'grafici'    && <TabGrafici     activities={activities} onGuideLink={goToGuide} />}
-            {tab === 'confronta'  && <TabConfronto   activities={activities} onGuideLink={goToGuide} />}
-            {tab === 'forma'      && <TabForma       activities={activities} onGuideLink={goToGuide} />}
-            {tab === 'traguardi'  && <TabTraguardi   activities={activities} streaks={streaks} onGuideLink={goToGuide} />}
-            {tab === 'fisico'     && <TabFisico      activities={activities} onGuideLink={goToGuide} />}
-            {tab === 'guida'      && <TabGuida       initialAnchor={guideAnchor} />}
+            {tab === 'riepilogo' && (
+              <div className="space-y-12">
+                <TabPanoramica activities={activities} records={records} streaks={streaks} onGuideLink={noop} />
+                <div className="border-t border-stone-200 pt-8">
+                  <h2 className="font-display text-xl font-semibold text-stone-800 mb-6">Traguardi</h2>
+                  <TabTraguardi activities={activities} streaks={streaks} onGuideLink={noop} />
+                </div>
+              </div>
+            )}
+
+            {tab === 'andamento' && (
+              <div className="space-y-12">
+                <TabGrafici activities={activities} onGuideLink={noop} />
+                <div className="border-t border-stone-200 pt-8">
+                  <h2 className="font-display text-xl font-semibold text-stone-800 mb-6">Confronto</h2>
+                  <TabConfronto activities={activities} onGuideLink={noop} />
+                </div>
+              </div>
+            )}
+
+            {tab === 'forma' && (
+              <div className="space-y-12">
+                <TabForma activities={activities} onGuideLink={noop} />
+                <div className="border-t border-stone-200 pt-8">
+                  <h2 className="font-display text-xl font-semibold text-stone-800 mb-6">Fisico</h2>
+                  <TabFisico activities={activities} onGuideLink={noop} />
+                </div>
+              </div>
+            )}
+
+            {tab === 'territorio' && <TabTerritorio activities={activities} />}
           </>
         )}
       </main>

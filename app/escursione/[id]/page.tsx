@@ -95,7 +95,7 @@ function RenderBody({ text }: { text: string }) {
         if (m) {
           return (
             <blockquote key={i}
-              className="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 rounded-r-xl font-lora text-sm italic text-stone-700 leading-relaxed">
+              className="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 rounded-r-xl font-display text-sm italic text-stone-700 leading-relaxed">
               {m[1].trim()}
             </blockquote>
           )
@@ -103,7 +103,7 @@ function RenderBody({ text }: { text: string }) {
         return part.trim()
           ? <div key={i} className="space-y-2.5">
               {part.trim().split(/\n\n+/).map((p, j) => (
-                <p key={j} className="font-lora text-[15px] leading-[1.8] text-stone-700">{p.trim()}</p>
+                <p key={j} className="font-display text-[15px] leading-[1.8] text-stone-700">{p.trim()}</p>
               ))}
             </div>
           : null
@@ -163,11 +163,11 @@ function RouteTimeline({ trackPoints, photos }: { trackPoints: TrackPoint[]; pho
               <div className="relative">
                 <img src={ph.dataUrl} alt={ph.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
-                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
+                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-body">
                   {i + 1}
                 </span>
               </div>
-              <p className="text-[8px] text-stone-500 font-lora mt-0.5 max-w-[60px] text-center leading-tight">{ph.caption}</p>
+              <p className="text-[8px] text-stone-500 font-display mt-0.5 max-w-[60px] text-center leading-tight">{ph.caption}</p>
             </div>
           ))}
         </div>
@@ -197,10 +197,10 @@ function SectionCard({
   return (
     <article className="bg-white rounded-2xl shadow-sm overflow-hidden mb-5 print:rounded-none print:shadow-none print:mb-0 print:border-b print:border-stone-200">
       <div className="px-6 py-3 flex items-center gap-3" style={{ backgroundColor: color }}>
-        <span className="font-barlow text-[11px] font-bold tracking-[2px] uppercase text-white/70">
+        <span className="font-body text-[11px] font-bold tracking-[2px] uppercase text-white/70">
           {String(index + 1).padStart(2, '0')}
         </span>
-        <h2 className="font-barlow text-lg font-bold tracking-wide uppercase text-white leading-tight">
+        <h2 className="font-body text-lg font-bold tracking-wide uppercase text-white leading-tight">
           {section.title}
         </h2>
       </div>
@@ -210,7 +210,7 @@ function SectionCard({
           <div className="float-right ml-5 mb-3 w-44 print:w-40 print:ml-4 shrink-0 hidden md:block print:block">
             <div className="relative">
               {photoIndex !== undefined && (
-                <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-barlow z-10">
+                <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-body z-10">
                   {photoIndex}
                 </span>
               )}
@@ -218,7 +218,7 @@ function SectionCard({
                 className="w-full aspect-[4/3] object-cover rounded-xl shadow-md print:rounded-lg" />
             </div>
             {photo.caption && (
-              <p className="font-lora text-[10px] italic text-stone-400 mt-1 text-center leading-snug">
+              <p className="font-display text-[10px] italic text-stone-400 mt-1 text-center leading-snug">
                 {photoIndex !== undefined ? `${photoIndex}. ` : ''}{photo.caption}
               </p>
             )}
@@ -624,7 +624,7 @@ export default function EscursionePage() {
               { icon: <Clock className="w-3 h-3" />, v: formatDuration(activity.totalTimeSeconds) },
               ...(activity.calories > 0 ? [{ icon: <Flame className="w-3 h-3" />, v: `${activity.calories} kcal` }] : []),
             ].map(({ icon, v }) => (
-              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white font-barlow tracking-wide">
+              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white font-body tracking-wide">
                 {icon} {v}
               </span>
             ))}
@@ -713,7 +713,7 @@ export default function EscursionePage() {
             {sharePdfUrl ? (
               <>
                 <a href={`/leggi/r/${encodeURIComponent(id)}`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-body font-bold uppercase tracking-wide transition-colors">
                   <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
                 </a>
                 <button
@@ -722,11 +722,11 @@ export default function EscursionePage() {
                     await navigator.clipboard.writeText(viewerUrl)
                     setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-body font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
                   <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
                 </button>
                 <a href={sharePdfUrl} target="_blank" rel="noopener noreferrer" download
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-body font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
                   <ExternalLink className="w-3.5 h-3.5" /> PDF diretto
                 </a>
                 <button
@@ -734,13 +734,13 @@ export default function EscursionePage() {
                     await fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`, { method: 'DELETE' })
                     setSharePdfUrl(null)
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-red-50 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-body font-bold uppercase tracking-wide hover:bg-red-50 transition-colors">
                   <Link2Off className="w-3.5 h-3.5" /> Disattiva
                 </button>
               </>
             ) : (
               <>
-                <p className="text-xs text-stone-500 font-lora italic">Genera un PDF con le foto e pubblicalo online.</p>
+                <p className="text-xs text-stone-500 font-display italic">Genera un PDF con le foto e pubblicalo online.</p>
                 {publishError && <p className="text-xs text-red-500">{publishError}</p>}
                 <button
                   disabled={publishing || !content}
@@ -782,7 +782,7 @@ export default function EscursionePage() {
                       setPublishing(false)
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-body font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
                   {publishing
                     ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione PDF…</>
                     : <><Share2 className="w-3.5 h-3.5" /> Genera e pubblica</>
@@ -847,10 +847,10 @@ export default function EscursionePage() {
             <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5">
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                  <p className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm mb-1">
+                  <p className="font-body font-bold text-stone-700 uppercase tracking-wide text-sm mb-1">
                     {content ? 'Genera nuovo resoconto' : 'Genera il tuo resoconto'}
                   </p>
-                  <p className="text-xs text-stone-400 font-lora italic">
+                  <p className="text-xs text-stone-400 font-display italic">
                     {photos.length > 0
                       ? `${photos.length} foto disponibili · L'AI userà le tue immagini`
                       : 'Aggiungi foto dalla mappa 3D per un resoconto più ricco'}
@@ -860,18 +860,18 @@ export default function EscursionePage() {
                   <div className="flex rounded-xl overflow-hidden border border-stone-200">
                     {(['breve', 'media', 'lunga'] as const).map(l => (
                       <button key={l} onClick={() => setLength(l)}
-                        className={`px-3 py-1.5 text-xs font-barlow font-bold uppercase tracking-wide transition-colors
+                        className={`px-3 py-1.5 text-xs font-body font-bold uppercase tracking-wide transition-colors
                           ${length === l ? 'bg-forest-600 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
                         {l}
                       </button>
                     ))}
                   </div>
                   <button onClick={() => setShow3D(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-body font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
                     <Images className="w-3.5 h-3.5" /> Mappa 3D
                   </button>
                   <button onClick={generateReport} disabled={generating}
-                    className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                    className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-body font-bold uppercase tracking-wide transition-colors">
                     {generating
                       ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</>
                       : <><BookOpen className="w-4 h-4" /> Genera</>
@@ -885,7 +885,7 @@ export default function EscursionePage() {
               {/* Cover photo picker */}
               {photos.length > 0 && (
                 <div className="border-t border-stone-100 pt-4 mt-4">
-                  <p className="font-barlow text-xs font-bold uppercase tracking-wide text-stone-500 mb-2">
+                  <p className="font-body text-xs font-bold uppercase tracking-wide text-stone-500 mb-2">
                     Immagine di copertina
                   </p>
                   <div className="flex gap-2 overflow-x-auto pb-1">
@@ -913,8 +913,8 @@ export default function EscursionePage() {
           {!content && !generating && (
             <div className="flex flex-col items-center py-20 text-stone-400 print:hidden">
               <BookOpen className="w-12 h-12 mb-4 opacity-30" />
-              <p className="font-barlow uppercase tracking-wide text-sm">Nessun resoconto ancora</p>
-              <p className="font-lora text-sm italic mt-1">Clicca "Genera" per creare il tuo racconto</p>
+              <p className="font-body uppercase tracking-wide text-sm">Nessun resoconto ancora</p>
+              <p className="font-display text-sm italic mt-1">Clicca "Genera" per creare il tuo racconto</p>
             </div>
           )}
 
@@ -922,7 +922,7 @@ export default function EscursionePage() {
           {generating && !sections.length && (
             <div className="flex items-center gap-3 py-8 text-stone-500 print:hidden">
               <Loader2 className="w-5 h-5 animate-spin text-forest-500" />
-              <span className="font-lora italic text-sm">Giulia sta scrivendo il tuo resoconto…</span>
+              <span className="font-display italic text-sm">Giulia sta scrivendo il tuo resoconto…</span>
             </div>
           )}
 
@@ -931,17 +931,17 @@ export default function EscursionePage() {
             <div className="flex items-center justify-between mb-5 print:hidden">
               <div className="flex items-center gap-2">
                 {report?.updated_at && (
-                  <span className="font-lora text-xs italic text-stone-400">
+                  <span className="font-display text-xs italic text-stone-400">
                     Salvato {format(new Date(report.updated_at), "d MMM · HH:mm", { locale: it })}
                   </span>
                 )}
                 {savingReport && (
-                  <span className="flex items-center gap-1 font-lora text-xs italic text-stone-400">
+                  <span className="flex items-center gap-1 font-display text-xs italic text-stone-400">
                     <Loader2 className="w-3 h-3 animate-spin" /> Salvataggio…
                   </span>
                 )}
                 {saveOk && (
-                  <span className="flex items-center gap-1 font-lora text-xs text-forest-600">
+                  <span className="flex items-center gap-1 font-display text-xs text-forest-600">
                     <Check className="w-3 h-3" /> Salvato
                   </span>
                 )}
@@ -951,7 +951,7 @@ export default function EscursionePage() {
                   if (isEditing) { saveContent(content); setIsEditing(false) }
                   else setIsEditing(true)
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-body font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
                 {isEditing
                   ? <><Check className="w-3.5 h-3.5" /> Fatto</>
                   : <><Pencil className="w-3.5 h-3.5" /> Modifica</>
@@ -983,10 +983,10 @@ export default function EscursionePage() {
                     <div className="px-2 pt-1 pb-2 space-y-0.5">
                       {photos.slice(0, 7).map((ph, i) => (
                         <div key={ph.id} className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0 font-barlow">
+                          <span className="w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0 font-body">
                             {i + 1}
                           </span>
-                          <span className="font-lora text-[9px] text-stone-500 truncate">{ph.caption}</span>
+                          <span className="font-display text-[9px] text-stone-500 truncate">{ph.caption}</span>
                         </div>
                       ))}
                     </div>
@@ -1009,7 +1009,7 @@ export default function EscursionePage() {
                 ))}
                 {sections.length > 0 && (
                   <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-5 print:rounded-none print:shadow-none print:border-0 print:border-t print:border-stone-200">
-                    <h3 className="font-barlow font-bold uppercase tracking-[2px] text-xs text-stone-400 mb-3">
+                    <h3 className="font-body font-bold uppercase tracking-[2px] text-xs text-stone-400 mb-3">
                       Profilo altimetrico
                     </h3>
                     <RouteTimeline trackPoints={activity.trackPoints} photos={photos} />
@@ -1022,14 +1022,14 @@ export default function EscursionePage() {
           {/* Streaming raw text */}
           {generating && !sections.length && content && (
             <div className="bg-white rounded-2xl shadow-sm p-6 print:hidden">
-              <p className="font-lora text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{content}</p>
+              <p className="font-display text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{content}</p>
             </div>
           )}
 
           {/* Photo gallery */}
           {photos.length > 0 && content && (
             <section className="mt-8 print:hidden">
-              <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">Le tue foto</h3>
+              <h3 className="font-body font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">Le tue foto</h3>
               <div className="flex gap-3 overflow-x-auto pb-3">
                 {photos.map((ph, i) => (
                   <button key={ph.id} onClick={() => setLightbox(ph)}
@@ -1037,12 +1037,12 @@ export default function EscursionePage() {
                     <div className="relative">
                       <img src={ph.dataUrl} alt={ph.caption}
                         className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
-                      <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-barlow">
+                      <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-body">
                         {i + 1}
                       </span>
                     </div>
                     {ph.caption && (
-                      <p className="px-2 py-1.5 font-lora text-[10px] italic text-stone-500 leading-snug bg-white">
+                      <p className="px-2 py-1.5 font-display text-[10px] italic text-stone-500 leading-snug bg-white">
                         {i + 1}. {ph.caption}
                       </p>
                     )}
@@ -1055,7 +1055,7 @@ export default function EscursionePage() {
           {/* Print-only photo grid */}
           {photos.length > 0 && content && (
             <section className="hidden print:block mt-6 pt-4 border-t border-stone-200">
-              <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">Documentazione fotografica</h3>
+              <h3 className="font-body font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">Documentazione fotografica</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
                 {photos.map((ph, i) => (
                   <div key={ph.id} style={{ breakInside: 'avoid' }}>
@@ -1317,7 +1317,7 @@ export default function EscursionePage() {
           <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
             <img src={lightbox.dataUrl} alt={lightbox.caption} className="w-full rounded-2xl shadow-2xl" />
             {lightbox.caption && (
-              <p className="font-lora text-sm italic text-white/70 text-center mt-3">{lightbox.caption}</p>
+              <p className="font-display text-sm italic text-white/70 text-center mt-3">{lightbox.caption}</p>
             )}
           </div>
         </div>
