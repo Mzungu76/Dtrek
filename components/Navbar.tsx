@@ -12,7 +12,7 @@ import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/s
 const NAV_LINKS = [
   { href: '/diario',      label: 'Diario',      icon: BookOpen      },
   { href: '/calendario',  label: 'Calendario',  icon: CalendarDays  },
-  { href: '/esplora',     label: 'Esplora',     icon: Compass       },
+  { href: '/esplora',     label: 'Pianifica',   icon: Compass       },
   { href: '/statistiche', label: 'Statistiche', icon: BarChart2     },
 ]
 
