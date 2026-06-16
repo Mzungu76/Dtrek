@@ -9,11 +9,33 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        display: ['Playfair Display', 'serif'],
+        display: ['Lora', 'Playfair Display', 'serif'],
         body: ['DM Sans', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        mono: ['DM Mono', 'JetBrains Mono', 'monospace'],
       },
       colors: {
+        // ── Pianificazione palette (blu) ──
+        plan: {
+          dark:  '#0D3B5E',
+          mid:   '#1C5F8A',
+          light: '#2983C1',
+          pale:  '#AED4EC',
+          bg:    '#EAF4FB',
+        },
+        // ── Diario palette (verde) ──
+        diary: {
+          dark:  '#1a3320',
+          mid:   '#2d5c38',
+          light: '#4a9e5c',
+          pale:  '#7fd491',
+          bg:    '#F0F7F1',
+        },
+        // ── CTS Score ──
+        cts: {
+          excellent: '#166534',
+          good:      '#4a9e5c',
+          medium:    '#2983C1',
+        },
         terra: {
           50:  '#fdf6ee',
           100: '#f9e8d0',
