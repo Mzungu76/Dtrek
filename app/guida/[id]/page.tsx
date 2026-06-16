@@ -1,8 +1,11 @@
 'use client'
-import {
+import React, {
   useEffect, useState, useRef, useCallback, useMemo,
 } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
+import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { getPlannedById, updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
@@ -12,11 +15,23 @@ import {
   ArrowLeft, Volume2, VolumeX, Play, Pause, Square,
   RefreshCw, Loader2, Mountain, Clock, Route,
   Leaf, Utensils, ShieldCheck, Compass, MapPin,
-  FileDown, ExternalLink, BookOpen,
+  FileDown, ExternalLink, BookOpen, CheckSquare, Square as SquareIcon,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 
+const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
+
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+type TabId = 'testo' | 'scheda' | 'mappa' | 'poi' | 'meteo' | 'zaino'
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'testo',  label: 'Testo'  },
+  { id: 'scheda', label: 'Scheda' },
+  { id: 'mappa',  label: 'Mappa'  },
+  { id: 'poi',    label: 'POI'    },
+  { id: 'meteo',  label: 'Meteo'  },
+  { id: 'zaino',  label: '🎒 Zaino' },
+]
 
 interface Section {
   title: string
@@ -25,7 +40,7 @@ interface Section {
   color: string
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Section metadata ──────────────────────────────────────────────────────────
 
 const SECTION_META: Record<string, { icon: React.ReactNode; color: string }> = {
   'prima di partire': { icon: <Compass    className="w-4 h-4" />, color: '#d97706' },
@@ -53,47 +68,9 @@ function parseGuide(text: string): Section[] {
   })
 }
 
-// ── Route SVG (instant hero background fallback) ───────────────────────────────
+// ── Magazine body ─────────────────────────────────────────────────────────────
 
-function RouteSvg({ hike }: { hike: PlannedHike }) {
-  const pts = useMemo(() => {
-    const raw = ((hike.trackPoints ?? []).filter(p => p.lat && p.lon) as { lat: number; lon: number }[])
-      .map(p => [p.lat, p.lon] as [number, number])
-    return raw.length > 1 ? raw : (hike.routePolyline ?? []) as [number, number][]
-  }, [hike])
-
-  if (pts.length < 2) return null
-
-  const lats = pts.map(p => p[0]), lons = pts.map(p => p[1])
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-  const W = 1200, H = 420
-  const pad = 40
-  const scLat = (H - 2 * pad) / (maxLat - minLat || 0.001)
-  const scLon = (W - 2 * pad) / (maxLon - minLon || 0.001)
-  const sc = Math.min(scLat, scLon)
-  const offX = pad + ((W - 2 * pad) - (maxLon - minLon) * sc) / 2
-  const offY = pad + ((H - 2 * pad) - (maxLat - minLat) * sc) / 2
-  const px = (lon: number) => offX + (lon - minLon) * sc
-  const py = (lat: number) => offY + (maxLat - lat) * sc
-  const d = pts.map(([lat, lon], i) => `${i === 0 ? 'M' : 'L'} ${px(lon).toFixed(1)} ${py(lat).toFixed(1)}`).join(' ')
-
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="absolute inset-0 w-full h-full opacity-20"
-      preserveAspectRatio="xMidYMid slice"
-    >
-      <path d={d} fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={px(pts[0][1]).toFixed(1)} cy={py(pts[0][0]).toFixed(1)} r="6" fill="#4ade80" />
-      <circle cx={px(pts[pts.length-1][1]).toFixed(1)} cy={py(pts[pts.length-1][0]).toFixed(1)} r="6" fill="#f87171" />
-    </svg>
-  )
-}
-
-// ── Magazine section body renderer ────────────────────────────────────────────
-
-function MagazineBody({ body, color, sectionPhoto }: { body: string; color: string; sectionPhoto?: string }) {
+function MagazineBody({ body, color }: { body: string; color: string }) {
   interface Block { type: 'lead' | 'para' | 'curiosita' | 'subsection'; text: string }
 
   const blocks = useMemo<Block[]>(() => {
@@ -131,60 +108,36 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
     return out
   }, [body])
 
-  // First paragraph (lead) stands alone full-width; rest flow in columns
   const lead = blocks.find(b => b.type === 'lead')
   const rest  = blocks.filter(b => b !== lead)
 
   return (
     <div>
       {lead && (
-        <p className="font-display text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-700 mb-6">
+        <p className="text-[15px] leading-[1.8] italic text-stone-600 mb-5" style={{ fontFamily: "'Lora', serif" }}>
           {lead.text}
         </p>
       )}
-      <div className="md:columns-2 md:gap-8 print-columns-2">
-        {sectionPhoto && (
-          <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={sectionPhoto} className="w-full h-40 object-cover rounded-sm shadow-sm" alt="" />
-            <p className="text-[9px] italic text-stone-400 mt-1">© Wikimedia Commons</p>
-          </div>
-        )}
+      <div>
         {rest.map((b, i) => {
           if (b.type === 'curiosita') {
             return (
-              <div
-                key={i}
-                className="my-5 rounded-sm overflow-hidden shadow-sm"
-                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
-              >
+              <div key={i} className="my-4 rounded-xl overflow-hidden">
                 <div className="flex">
                   <div className="w-1 flex-shrink-0" style={{ background: color }} />
                   <div className="flex-1 px-4 py-3" style={{ background: color + '12' }}>
-                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5" style={{ color }}>
-                      ◆ Lo sapevi?
-                    </p>
-                    <p className="font-display italic text-[14px] leading-relaxed text-stone-700">
-                      {b.text}
-                    </p>
+                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1" style={{ color }}>◆ Lo sapevi?</p>
+                    <p className="italic text-[13px] leading-relaxed text-stone-600" style={{ fontFamily: "'Lora', serif" }}>{b.text}</p>
                   </div>
                 </div>
               </div>
             )
           }
           if (b.type === 'subsection') {
-            return (
-              <h3
-                key={i}
-                className="font-body text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2"
-                style={{ color, breakAfter: 'avoid' }}
-              >
-                {b.text}
-              </h3>
-            )
+            return <h3 key={i} className="text-[10px] font-bold tracking-[1.5px] uppercase mt-5 mb-2" style={{ color }}>{b.text}</h3>
           }
           return (
-            <p key={i} className="font-display text-[15px] leading-7 text-stone-600 mb-4">
+            <p key={i} className="text-[14px] leading-7 text-stone-600 mb-3" style={{ fontFamily: "'Lora', serif" }}>
               {b.text}
             </p>
           )
@@ -194,39 +147,25 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
   )
 }
 
-// ── POI card ──────────────────────────────────────────────────────────────────
+// ── POI Card ──────────────────────────────────────────────────────────────────
 
-interface PoiPhoto {
-  title: string
-  thumbnail: string
-  url: string
-  description?: string
-}
+interface PoiPhoto { title: string; thumbnail: string; url: string; description?: string }
 
-function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
+function PoiCard({ photo }: { photo: PoiPhoto }) {
   return (
-    <a
-      href={photo.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex flex-col rounded-xl overflow-hidden border border-stone-100 hover:border-stone-200 shadow-sm hover:shadow-md transition-all bg-white"
+    <a href={photo.url} target="_blank" rel="noopener noreferrer"
+      className="flex gap-3 bg-white rounded-[12px] overflow-hidden p-3 items-start"
+      style={{ boxShadow: '0 1px 6px rgba(0,0,0,.06)' }}
     >
-      <div className="h-40 overflow-hidden bg-stone-100">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.thumbnail}
-          alt={photo.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-        />
-      </div>
-      <div className="p-3">
-        <p className="font-body font-semibold text-stone-800 text-[16px] leading-tight line-clamp-1 tracking-wide">
+      <img src={photo.thumbnail} alt={photo.title} className="w-14 h-14 object-cover rounded-lg flex-shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold text-stone-800 leading-tight line-clamp-1" style={{ fontFamily: "'Lora', serif" }}>
           {photo.title}
         </p>
         {photo.description && (
-          <p className="text-[11px] text-stone-400 mt-0.5 line-clamp-1">{photo.description}</p>
+          <p className="text-[11px] text-stone-400 mt-0.5 line-clamp-2">{photo.description}</p>
         )}
-        <span className="flex items-center gap-0.5 text-[10px] mt-1.5" style={{ color }}>
+        <span className="flex items-center gap-1 text-[10px] mt-1" style={{ color: '#1C5F8A' }}>
           <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
         </span>
       </div>
@@ -234,7 +173,56 @@ function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
   )
 }
 
-// ── Chunk-based TTS ───────────────────────────────────────────────────────────
+// ── Zaino checklist ───────────────────────────────────────────────────────────
+
+const ZAINO_ITEMS = {
+  'Indispensabili': ['Carta 1:25000', 'Bussola', 'Lampada frontale', 'Kit pronto soccorso', 'Fischietto', 'Telefono carico'],
+  'Abbigliamento':  ['Giacca impermeabile', 'Cambio secco', 'Calze ricambio', 'Guanti', 'Cappellino/berretto', 'Bastoncini'],
+  'Cibo e acqua':   ['Acqua ≥1,5 L', 'Barrette energia', 'Pasto principale', 'Snack emergenza', 'Thermos'],
+}
+
+function TabZaino() {
+  const [checked, setChecked] = useState<Record<string, boolean>>({})
+
+  function toggle(item: string) {
+    setChecked(prev => ({ ...prev, [item]: !prev[item] }))
+  }
+
+  return (
+    <div className="space-y-4">
+      {Object.entries(ZAINO_ITEMS).map(([cat, items]) => (
+        <div key={cat} className="rounded-[12px] overflow-hidden" style={{ background: '#F8FBFE' }}>
+          <div className="px-4 py-2.5" style={{ background: '#EAF4FB', borderBottom: '1px solid #d4e8f5' }}>
+            <p className="text-[10px] font-bold uppercase tracking-[1.5px]" style={{ color: '#1C5F8A' }}>{cat}</p>
+          </div>
+          <div className="divide-y" style={{ borderColor: '#eef4f9' }}>
+            {items.map(item => (
+              <button
+                key={item}
+                onClick={() => toggle(item)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left"
+                style={{ background: checked[item] ? '#EAF4FB' : 'transparent' }}
+              >
+                {checked[item]
+                  ? <CheckSquare className="w-4 h-4 shrink-0" style={{ color: '#1C5F8A' }} />
+                  : <SquareIcon  className="w-4 h-4 shrink-0" style={{ color: '#c4c4c4' }} />
+                }
+                <span
+                  className="text-[13px]"
+                  style={{ color: checked[item] ? '#8a7f6e' : '#3c3530', textDecoration: checked[item] ? 'line-through' : 'none' }}
+                >
+                  {item}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── TTS helpers ───────────────────────────────────────────────────────────────
 
 interface ChunkEntry { text: string; sectionIdx: number }
 
@@ -276,7 +264,6 @@ function getItalianVoice(): SpeechSynthesisVoice | null {
 const RATES = [0.8, 1, 1.2, 1.5]
 
 type GuideLength = 'breve' | 'media' | 'lunga'
-
 const LENGTH_OPTS: { key: GuideLength; label: string; desc: string }[] = [
   { key: 'breve', label: 'Breve',  desc: '~5 min' },
   { key: 'media', label: 'Media',  desc: '~15 min' },
@@ -289,16 +276,29 @@ export default function GuidaPage() {
   const { id }  = useParams() as { id: string }
   const hikeId  = decodeURIComponent(id)
   const router  = useRouter()
+  const searchParams = useSearchParams()
+  const initialTab = (searchParams?.get('tab') as TabId | null) ?? 'testo'
 
-  const [hike,         setHike]         = useState<PlannedHike | null>(null)
-  const [guideText,    setGuideText]    = useState<string>('')
-  const [sections,     setSections]     = useState<Section[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [generating,   setGenerating]   = useState(false)
-  const [error,        setError]        = useState<string | null>(null)
-  const [guideLength,  setGuideLength]  = useState<GuideLength>('media')
-  const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
-  const [visibleSec,   setVisibleSec]   = useState(0)
+  const [hike,       setHike]       = useState<PlannedHike | null>(null)
+  const [guideText,  setGuideText]  = useState<string>('')
+  const [sections,   setSections]   = useState<Section[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [error,      setError]      = useState<string | null>(null)
+  const [guideLength, setGuideLength] = useState<GuideLength>('media')
+  const [tab, setTab] = useState<TabId>(initialTab)
+
+  // TTS state
+  const [isPlaying,    setIsPlaying]    = useState(false)
+  const [isPaused,     setIsPaused]     = useState(false)
+  const [rateIdx,      setRateIdx]      = useState(1)
+  const [activeSection, setActiveSection] = useState<number | null>(null)
+  const [playProgress, setPlayProgress] = useState(0)
+
+  const rateRef     = useRef(RATES[1])
+  const chunksRef   = useRef<ChunkEntry[]>([])
+  const chunkIdxRef = useRef(0)
+  const iosTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const poiPhotos = useMemo(() => {
     if (!hike?.cachedPoiWiki) return []
@@ -312,20 +312,6 @@ export default function GuidaPage() {
       }))
   }, [hike?.cachedPoiWiki])
 
-  // Voice state
-  const [isPlaying,     setIsPlaying]     = useState(false)
-  const [isPaused,      setIsPaused]      = useState(false)
-  const [rateIdx,       setRateIdx]       = useState(1)
-  const [activeSection, setActiveSection] = useState<number | null>(null)
-  const [playProgress,  setPlayProgress]  = useState(0)
-
-  const rateRef     = useRef(RATES[1])
-  const chunksRef   = useRef<ChunkEntry[]>([])
-  const chunkIdxRef = useRef(0)
-  const iosTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const sectionRefs = useRef<(HTMLElement | null)[]>([])
-
-  // Load hike + guide
   useEffect(() => {
     getPlannedById(hikeId).then(h => {
       setHike(h)
@@ -337,44 +323,14 @@ export default function GuidaPage() {
     }).catch(() => setLoading(false))
   }, [hikeId])
 
-  // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
-  useEffect(() => {
-    if (!hike) return
-    const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
-    const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map((p: [number, number]) => ({ lat: p[0], lon: p[1] }))
-    if (!poly.length) return
-    const mid = poly[Math.floor(poly.length / 2)]
-    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
-      fetchRoutePhotos(mid.lat, mid.lon, 15000, 6)
-    ).then(photos => {
-      setRoutePhotos(photos.map(p => p.url))
-    }).catch(() => {})
-  }, [hike])
-
-  // IntersectionObserver: track which section is in view for tab highlighting
-  useEffect(() => {
-    if (!sections.length) return
-    const obs = new IntersectionObserver(
-      entries => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            const idx = sectionRefs.current.indexOf(e.target as HTMLElement)
-            if (idx >= 0) setVisibleSec(idx)
-          }
-        }
-      },
-      { threshold: 0.3, rootMargin: '-56px 0px -40% 0px' },
-    )
-    sectionRefs.current.forEach(el => el && obs.observe(el))
-    return () => obs.disconnect()
-  }, [sections])
-
-  // Rebuild chunks on section change
   useEffect(() => {
     chunksRef.current = buildChunks(sections)
   }, [sections])
 
-  // ── Generate ──────────────────────────────────────────────────────────────
+  useEffect(() => () => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+    if (iosTimerRef.current) clearInterval(iosTimerRef.current)
+  }, [])
 
   const generate = useCallback(async (length: GuideLength) => {
     setGenerating(true)
@@ -392,16 +348,13 @@ export default function GuidaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hikeId, length }),
       })
-
       if (!res.ok) {
         const j = await res.json().catch(() => ({ error: 'Errore sconosciuto' }))
         throw new Error(j.error ?? `HTTP ${res.status}`)
       }
-
       const reader  = res.body!.getReader()
       const decoder = new TextDecoder()
       let acc = ''
-
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -409,7 +362,6 @@ export default function GuidaPage() {
         setGuideText(acc)
         setSections(parseGuide(acc))
       }
-
       updatePlannedMeta(hikeId, { cachedGuide: acc }).catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore durante la generazione')
@@ -417,8 +369,6 @@ export default function GuidaPage() {
       setGenerating(false)
     }
   }, [hikeId])
-
-  // ── Voice ─────────────────────────────────────────────────────────────────
 
   function clearIosTimer() {
     if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
@@ -453,11 +403,9 @@ export default function GuidaPage() {
       const { text, sectionIdx } = chunks[idx]
       setActiveSection(sectionIdx)
       setPlayProgress(idx / Math.max(chunks.length - 1, 1))
-
       const utt   = new SpeechSynthesisUtterance(text)
       utt.lang    = 'it-IT'
       utt.rate    = rateRef.current
-      utt.pitch   = 1.0
       const voice = getItalianVoice()
       if (voice) utt.voice = voice
       utt.onend = () => { chunkIdxRef.current++; playNext() }
@@ -496,409 +444,345 @@ export default function GuidaPage() {
     }
   }
 
-  function speakSection(idx: number) {
-    const startChunk = chunksRef.current.findIndex(c => c.sectionIdx === idx)
-    if (startChunk >= 0) startFrom(startChunk)
-  }
-
-  function scrollToSection(idx: number) {
-    sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  useEffect(() => () => {
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-    clearIosTimer()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // ── PDF export ────────────────────────────────────────────────────────────
-
-  function exportPdf() {
-    window.print()
-  }
-
-  // ── Loading / not found ───────────────────────────────────────────────────
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f5f3ef' }}>
-        <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#EAF4FB' }}>
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#1C5F8A' }} />
       </div>
     )
   }
 
   if (!hike) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#f5f3ef' }}>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#EAF4FB' }}>
         <p className="text-stone-500 text-lg">Percorso non trovato</p>
-        <button onClick={() => router.push('/programma')} className="text-amber-600 hover:underline">
-          ← Torna alle pianificate
+        <button onClick={() => router.push('/pianificazione')} style={{ color: '#1C5F8A' }} className="hover:underline">
+          ← Torna a Pianificazione
         </button>
       </div>
     )
   }
 
-  const hasGuide   = guideText.trim().length > 50
-  const hikeTitle  = hike.title
-  const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const hasGuide  = guideText.trim().length > 50
+  const hikeTitle = hike.title
+  const diff      = hike.assessment?.difficulty ?? hike.tags?.[0]
+  const poly      = (hike.routePolyline ?? []) as [number, number][]
+  const center    = poly.length > 0
+    ? poly[Math.floor(poly.length / 2)]
+    : null
 
   return (
-    <div className="min-h-screen" style={{ background: '#f5f3ef' }}>
+    <div className="min-h-screen pb-20 md:pb-0" style={{ background: '#EAF4FB' }}>
 
-      {/* ── Sticky nav bar ──────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b shadow-sm print:hidden" style={{ borderColor: '#e5e1d8' }}>
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+      {/* ── Fixed header ────────────────────────────────────────────── */}
+      <div
+        className="sticky top-0 z-40"
+        style={{ background: 'linear-gradient(160deg, #0B3252 0%, #1C5F8A 100%)' }}
+      >
+        {/* Back + badge row */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <button
-            onClick={() => router.push(`/programma/${encodeURIComponent(hikeId)}`)}
-            className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition-colors shrink-0"
+            onClick={() => router.push('/pianificazione')}
+            className="flex items-center gap-1.5 text-sm font-medium"
+            style={{ color: '#AED4EC' }}
           >
             <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline font-medium">Percorso</span>
+            Pianificazione
           </button>
-
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[9px] font-bold tracking-[3px] text-amber-600 uppercase hidden sm:block">DTrek</span>
-            <span className="text-stone-300 hidden sm:block">·</span>
-            <span className="text-sm font-semibold text-stone-700 truncate font-display">{hikeTitle}</span>
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            {hasGuide && RATES.map((r, i) => (
-              <button key={r} onClick={() => changeRate(i)}
-                className={`text-xs px-1.5 py-0.5 rounded font-mono transition-colors ${
-                  rateIdx === i ? 'bg-amber-500 text-white' : 'text-stone-400 hover:text-stone-600'
-                }`}
-              >{r}×</button>
-            ))}
-            {hasGuide && (
-              <>
-                <button onClick={togglePlayPause}
-                  className={`ml-1 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                    isPlaying || isPaused
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                  }`}
-                >
-                  {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
-                </button>
-                {(isPlaying || isPaused) && (
-                  <button onClick={stopVoice}
-                    className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors"
-                  ><Square className="w-3 h-3" /></button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Hero ────────────────────────────────────────────────────────── */}
-      <div className="relative w-full overflow-hidden print:h-[220px]" style={{ height: 'clamp(280px, 42vw, 480px)' }}>
-        {/* Background: photo or gradient */}
-        {routePhotos[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={routePhotos[0]}
-            alt={hikeTitle}
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ objectPosition: 'center 35%' }}
-          />
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{ background: 'linear-gradient(135deg, #78350f 0%, #1c4532 50%, #0c1a0f 100%)' }}
+          <span
+            className="text-[9px] font-bold tracking-[2px] uppercase px-2 py-0.5 rounded-md"
+            style={{ background: 'rgba(255,255,255,.12)', color: '#AED4EC' }}
           >
-            <RouteSvg hike={hike} />
-          </div>
-        )}
-
-        {/* Gradient overlay */}
-        <div className="absolute inset-0" style={{
-          background: 'linear-gradient(to top, rgba(5,5,5,0.9) 0%, rgba(5,5,5,0.5) 40%, rgba(0,0,0,0.15) 80%, transparent 100%)',
-        }} />
-
-        {/* Content */}
-        <div className="absolute bottom-0 left-0 right-0 px-6 sm:px-10 pb-7">
-          <span className="inline-block bg-amber-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-3 uppercase">
-            {categoryBadge}
+            Guida Turistica
           </span>
-          <h1 className="font-body text-2xl sm:text-4xl font-black text-white leading-tight mb-1.5 max-w-2xl uppercase tracking-tight"
-            style={{ textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}
+        </div>
+
+        {/* Title + subtitle */}
+        <div className="px-4 pb-2">
+          <h1
+            className="text-[17px] font-bold leading-tight text-white mb-0.5"
+            style={{ fontFamily: "'Lora', serif" }}
           >
             {hikeTitle}
           </h1>
-          {hike.plannedDate && (
-            <p className="font-display text-[13px] italic text-white/70">
-              {format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Stats strip ─────────────────────────────────────────────────── */}
-      <div className="flex" style={{ background: '#1a1a1a' }}>
-        {[
-          { icon: <Route    className="w-3.5 h-3.5" />, value: `${(hike.distanceMeters/1000).toFixed(1)} km`,         label: 'Distanza' },
-          { icon: <Mountain className="w-3.5 h-3.5" />, value: `+${Math.round(hike.elevationGain)} m`,               label: 'Dislivello' },
-          { icon: <Mountain className="w-3.5 h-3.5" />, value: `${Math.round(hike.altitudeMax)} m`,                  label: 'Quota max' },
-          { icon: <Clock    className="w-3.5 h-3.5" />, value: formatDuration(hike.estimatedTimeSeconds),            label: 'Durata' },
-        ].map(({ icon, value, label }, i, arr) => (
-          <div key={label} className="flex-1 flex flex-col items-center justify-center py-4 gap-1"
-            style={{ borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}
-          >
-            <span className="flex items-center gap-1.5 text-[17px] font-bold text-white leading-none">
-              <span className="text-amber-500 hidden sm:block">{icon}</span>
-              {value}
-            </span>
-            <span className="font-body text-[8px] font-semibold tracking-[1.8px] uppercase text-amber-500/80">{label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Photo mosaic strip ─────────────────────────────────────────── */}
-      {routePhotos.length >= 2 && (
-        <div className="flex h-40 overflow-hidden print:hidden">
-          {routePhotos.slice(1, 5).map((url, i) => (
-            <div key={i} className="flex-1 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} className="w-full h-full object-cover" style={{ objectPosition: 'center 40%' }} alt="" />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Main content ────────────────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 print:max-w-full print:px-0">
-
-        {/* ── No guide yet ────────────────────────────────────────────── */}
-        {!hasGuide && !generating && (
-          <div className="flex flex-col items-center py-20 gap-8 text-center print:hidden">
-            <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center shadow-inner">
-              <BookOpen className="w-9 h-9 text-amber-500" />
-            </div>
-            <div className="max-w-sm">
-              <h2 className="font-display text-2xl font-bold text-stone-800 mb-3">
-                Nessuna guida ancora generata
-              </h2>
-              <p className="text-stone-500 text-[15px] leading-relaxed">
-                Giulia elaborerà una guida personalizzata raccontando storia, natura,
-                curiosità e consigli pratici per questo percorso.
-              </p>
-            </div>
-
-            <div className="w-full max-w-xs">
-              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-[2px] mb-3">
-                Lunghezza della guida
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {LENGTH_OPTS.map(opt => (
-                  <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                    className={`flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 transition-all ${
-                      guideLength === opt.key
-                        ? 'border-amber-500 bg-amber-50 text-amber-800'
-                        : 'border-stone-200 bg-white text-stone-500 hover:border-amber-200'
-                    }`}
-                  >
-                    <span className="font-bold text-sm">{opt.label}</span>
-                    <span className="text-xs opacity-60">{opt.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {error && (
-              <p className="text-red-600 text-sm bg-red-50 border border-red-100 rounded-lg px-4 py-2 max-w-sm">
-                {error}
-              </p>
+          <div className="flex items-center gap-2 text-[10px]" style={{ color: '#AED4EC' }}>
+            {diff && <span>{diff.toUpperCase()}</span>}
+            {diff && hike.plannedDate && <span>·</span>}
+            {hike.plannedDate && (
+              <span>{format(new Date(hike.plannedDate + 'T12:00'), 'd MMM yyyy', { locale: it })}</span>
             )}
-
-            <button onClick={() => generate(guideLength)}
-              className="flex items-center gap-2 px-7 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
-            >
-              <BookOpen className="w-4 h-4" />
-              Genera la guida con Giulia
-            </button>
           </div>
-        )}
+        </div>
 
-        {/* ── Generating spinner ──────────────────────────────────────── */}
-        {generating && sections.length === 0 && (
-          <div className="flex flex-col items-center gap-4 py-20 text-center print:hidden">
-            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center animate-pulse">
-              <BookOpen className="w-7 h-7 text-amber-500" />
-            </div>
-            <div>
-              <p className="font-display font-semibold text-stone-700 text-lg">Giulia sta scrivendo…</p>
-              <p className="text-stone-400 text-sm mt-1">ci vorranno circa 20–30 secondi</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── Voice progress bar (when playing) ──────────────────────── */}
-        {(isPlaying || isPaused) && hasGuide && (
-          <div className="mt-6 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3 print:hidden" style={{ borderColor: '#e5e1d8' }}>
-            <Volume2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-medium text-stone-600 truncate">
-                {isPlaying && activeSection !== null
-                  ? `▶ ${sections[activeSection]?.title ?? '…'}`
-                  : '⏸ In pausa'}
-              </p>
-              <div className="mt-1 h-0.5 bg-amber-100 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-400 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round(playProgress * 100)}%` }} />
-              </div>
-            </div>
-            <button onClick={stopVoice}
-              className="text-stone-400 hover:text-stone-700 transition-colors"
-            ><Square className="w-3.5 h-3.5" /></button>
-          </div>
-        )}
-
-        {/* ── Section tab navigation ──────────────────────────────────── */}
-        {sections.length > 0 && (
-          <div className="sticky z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 bg-white/95 backdrop-blur-sm border-b overflow-x-auto print:hidden"
-            style={{ top: '56px', borderColor: '#e5e1d8', scrollbarWidth: 'none' }}
+        {/* CTA "Segna come fatta" */}
+        <div className="px-4 pb-3 flex items-center justify-between">
+          <Link
+            href={`/transizione/${encodeURIComponent(hikeId)}`}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-semibold text-white"
+            style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.25)' }}
           >
-            <div className="flex gap-1.5 min-w-max">
-              {sections.map((s, i) => (
-                <button key={i} onClick={() => scrollToSection(i)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap"
-                  style={visibleSec === i
-                    ? { background: s.color, color: 'white' }
-                    : { background: '#f5f3ef', color: '#78716c' }
-                  }
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Segna come fatta
+          </Link>
+
+          {/* TTS controls */}
+          {hasGuide && tab === 'testo' && (
+            <div className="flex items-center gap-1">
+              {RATES.map((r, i) => (
+                <button key={r} onClick={() => changeRate(i)}
+                  className="text-[10px] px-1 py-0.5 rounded font-mono"
+                  style={rateIdx === i ? { background: 'rgba(255,255,255,.25)', color: 'white' } : { color: 'rgba(255,255,255,.4)' }}
                 >
-                  <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
-                  <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
+                  {r}×
                 </button>
               ))}
+              <button onClick={togglePlayPause}
+                className="w-7 h-7 rounded-full flex items-center justify-center ml-1"
+                style={{ background: 'rgba(255,255,255,.15)' }}
+              >
+                {isPlaying ? <Pause className="w-3 h-3 text-white" /> : <Play className="w-3 h-3 text-white ml-0.5" />}
+              </button>
+              {(isPlaying || isPaused) && (
+                <button onClick={stopVoice} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,.1)' }}>
+                  <Square className="w-2.5 h-2.5 text-white" />
+                </button>
+              )}
             </div>
+          )}
+        </div>
+
+        {/* Tab bar */}
+        <div className="flex overflow-x-auto border-t" style={{ borderColor: 'rgba(255,255,255,.10)', scrollbarWidth: 'none' }}>
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className="flex-shrink-0 px-4 py-2.5 text-[12px] font-medium transition-colors"
+              style={
+                tab === t.id
+                  ? { fontWeight: 700, color: 'white', borderBottom: '2px solid #1C5F8A', background: 'rgba(255,255,255,.06)' }
+                  : { color: 'rgba(174,212,236,.60)', borderBottom: '2px solid transparent' }
+              }
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tab content ─────────────────────────────────────────────── */}
+      <div className="px-4 py-4">
+
+        {/* ── TESTO ─────────────────────────────────────────────────── */}
+        {tab === 'testo' && (
+          <>
+            {/* Voice progress */}
+            {(isPlaying || isPaused) && hasGuide && (
+              <div className="mb-4 bg-white rounded-xl border px-3 py-2 flex items-center gap-3" style={{ borderColor: '#d4e8f5' }}>
+                <Volume2 className="w-3.5 h-3.5 shrink-0" style={{ color: '#1C5F8A' }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-medium text-stone-600 truncate">
+                    {isPlaying && activeSection !== null ? `▶ ${sections[activeSection]?.title ?? '…'}` : '⏸ In pausa'}
+                  </p>
+                  <div className="mt-1 h-0.5 bg-stone-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-300" style={{ width: `${Math.round(playProgress * 100)}%`, background: '#1C5F8A' }} />
+                  </div>
+                </div>
+                <button onClick={stopVoice} style={{ color: '#8a7f6e' }}><Square className="w-3.5 h-3.5" /></button>
+              </div>
+            )}
+
+            {!hasGuide && !generating && (
+              <div className="flex flex-col items-center py-16 gap-6 text-center">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: '#EAF4FB' }}>
+                  <BookOpen className="w-7 h-7" style={{ color: '#1C5F8A' }} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold mb-2" style={{ fontFamily: "'Lora', serif", color: '#0D3B5E' }}>
+                    Genera la guida
+                  </h2>
+                  <p className="text-sm text-stone-500 max-w-xs">
+                    Giulia elaborerà storia, natura, curiosità e consigli pratici per questo percorso.
+                  </p>
+                </div>
+                <div className="w-full max-w-xs">
+                  <p className="text-[10px] font-bold uppercase tracking-[2px] mb-3" style={{ color: '#1C5F8A' }}>Lunghezza</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {LENGTH_OPTS.map(opt => (
+                      <button key={opt.key} onClick={() => setGuideLength(opt.key)}
+                        className="flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 transition-all"
+                        style={guideLength === opt.key
+                          ? { borderColor: '#1C5F8A', background: '#EAF4FB', color: '#0D3B5E' }
+                          : { borderColor: '#d4e8f5', background: 'white', color: '#8a7f6e' }}
+                      >
+                        <span className="font-bold text-sm">{opt.label}</span>
+                        <span className="text-xs opacity-60">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {error && (
+                  <p className="text-red-600 text-sm bg-red-50 border border-red-100 rounded-lg px-4 py-2 max-w-sm">{error}</p>
+                )}
+                <button onClick={() => generate(guideLength)}
+                  className="flex items-center gap-2 px-7 py-3.5 text-white font-semibold rounded-full shadow-lg text-sm"
+                  style={{ background: '#1C5F8A' }}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Genera con Giulia
+                </button>
+              </div>
+            )}
+
+            {generating && sections.length === 0 && (
+              <div className="flex flex-col items-center gap-4 py-16 text-center">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center animate-pulse" style={{ background: '#EAF4FB' }}>
+                  <BookOpen className="w-6 h-6" style={{ color: '#1C5F8A' }} />
+                </div>
+                <p className="font-display font-semibold text-stone-700">Giulia sta scrivendo…</p>
+                <p className="text-stone-400 text-sm">ci vorranno circa 20–30 secondi</p>
+              </div>
+            )}
+
+            {sections.length > 0 && (
+              <div className="space-y-4">
+                {sections.map((s, i) => (
+                  <div
+                    key={i}
+                    className="bg-white rounded-[14px] overflow-hidden"
+                    style={{
+                      boxShadow: activeSection === i && (isPlaying || isPaused)
+                        ? '0 0 0 2px #1C5F8A, 0 2px 12px rgba(28,95,138,.15)'
+                        : '0 2px 10px rgba(0,0,0,.06)',
+                    }}
+                  >
+                    <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: s.color }}>
+                      <span className="[&>svg]:w-4 [&>svg]:h-4 text-white opacity-80">{s.icon}</span>
+                      <h2 className="text-[12px] font-bold tracking-[1.5px] uppercase text-white">{s.title}</h2>
+                    </div>
+                    <div className="px-4 py-4">
+                      <MagazineBody body={s.body} color={s.color} />
+                    </div>
+                  </div>
+                ))}
+                {generating && (
+                  <div className="flex items-center gap-2 px-4 py-3 bg-white rounded-[14px]">
+                    <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#1C5F8A' }} />
+                    <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
+                  </div>
+                )}
+                {!generating && hasGuide && (
+                  <div className="flex items-center justify-between pt-2 pb-4">
+                    <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#d4e8f5' }}>
+                      {LENGTH_OPTS.map(opt => (
+                        <button key={opt.key} onClick={() => setGuideLength(opt.key)}
+                          className="text-xs px-2.5 py-1 rounded-lg transition-colors font-medium"
+                          style={guideLength === opt.key ? { background: '#1C5F8A', color: 'white' } : { color: '#8a7f6e' }}
+                        >{opt.label}</button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => generate(guideLength)} disabled={generating}
+                        className="flex items-center gap-1.5 text-xs" style={{ color: '#8a7f6e' }}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Rigenera
+                      </button>
+                      <button onClick={() => window.print()}
+                        className="flex items-center gap-1.5 px-4 py-2 text-white rounded-full text-sm font-semibold"
+                        style={{ background: '#1C5F8A' }}
+                      >
+                        <FileDown className="w-3.5 h-3.5" /> PDF
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── SCHEDA ────────────────────────────────────────────────── */}
+        {tab === 'scheda' && (
+          <div className="bg-white rounded-[14px] overflow-hidden" style={{ boxShadow: '0 2px 12px rgba(0,0,0,.07)' }}>
+            {[
+              ['Distanza',      `${(hike.distanceMeters / 1000).toFixed(1)} km`],
+              ['Dislivello D+', `${Math.round(hike.elevationGain)} m`],
+              ['Dislivello D−', `${Math.round(hike.elevationLoss)} m`],
+              ['Tempo stimato', formatDuration(hike.estimatedTimeSeconds)],
+              ['Difficoltà',    diff?.toUpperCase() ?? '–'],
+              ['Quota max',     `${Math.round(hike.altitudeMax)} m`],
+              ['Quota min',     `${Math.round(hike.altitudeMin)} m`],
+              hike.cachedTrailScore != null ? ['CTS stimato', String(Math.round(hike.cachedTrailScore))] : null,
+            ].filter(Boolean).map((row, i, arr) => {
+              const [label, value] = row as [string, string]
+              return (
+                <div
+                  key={label}
+                  className="flex items-center justify-between px-4 py-3"
+                  style={{ borderBottom: i < arr.length - 1 ? '1px solid #f0f5f9' : 'none' }}
+                >
+                  <span className="text-[11px] uppercase tracking-[1px] font-semibold" style={{ color: '#8a7f6e' }}>{label}</span>
+                  <span className="text-[15px] font-bold" style={{ color: '#0D3B5E', fontFamily: "'DM Mono', monospace" }}>{value}</span>
+                </div>
+              )
+            })}
           </div>
         )}
 
-        {/* ── Guide sections ──────────────────────────────────────────── */}
-        {sections.length > 0 && (
-          <div className="mt-6 space-y-0">
-            {sections.map((s, i) => {
-              const isLuoghi = s.title.toLowerCase().includes('luoghi')
-              const isVoiceActive = activeSection === i && (isPlaying || isPaused)
-
-              return (
-                <article
-                  key={i}
-                  ref={el => { sectionRefs.current[i] = el }}
-                  className={`scroll-mt-28 bg-white rounded-2xl mb-5 overflow-hidden shadow-sm transition-shadow print:rounded-none print:shadow-none print:overflow-visible print:mb-0 print:border-b print:border-stone-200 ${
-                    isVoiceActive ? 'ring-2 ring-amber-300 shadow-amber-100 shadow-md' : 'hover:shadow-md'
-                  }`}
-                >
-                  {/* Section header band */}
-                  <div
-                    className="flex items-center gap-3 px-6 py-3.5"
-                    style={{ background: s.color }}
-                  >
-                    <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
-                    <div className="flex items-center gap-2 text-white">
-                      <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
-                      <h2 className="font-body text-[13px] font-bold tracking-[2px] uppercase">{s.title}</h2>
-                    </div>
-                    <div className="flex-1" />
-                    <button
-                      onClick={() => speakSection(i)}
-                      className="opacity-60 hover:opacity-100 transition-opacity print:hidden"
-                      title="Ascolta questa sezione"
-                    >
-                      <Volume2 className="w-3.5 h-3.5 text-white" />
-                    </button>
-                  </div>
-
-                  {/* Section body */}
-                  <div className="px-6 py-6 sm:px-8">
-                    <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
-
-                    {/* POI photo grid — only in "I luoghi" section */}
-                    {isLuoghi && poiPhotos.length > 0 && (
-                      <div className="mt-8 pt-6 border-t" style={{ borderColor: '#e5e1d8' }}>
-                        <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-4">
-                          Luoghi e siti del percorso
-                        </p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {poiPhotos.map((photo, pi) => (
-                            <PoiCard key={pi} photo={photo} color={s.color} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </article>
-              )
-            })}
-
-            {/* Generating more... */}
-            {generating && (
-              <div className="flex items-center gap-2 px-6 py-4 bg-white rounded-2xl shadow-sm print:hidden">
-                <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
-                <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
+        {/* ── MAPPA ─────────────────────────────────────────────────── */}
+        {tab === 'mappa' && (
+          <div className="rounded-[14px] overflow-hidden" style={{ height: '60vh', minHeight: '320px' }}>
+            {(hike.trackPoints?.length ?? 0) > 1 ? (
+              <MapView
+                trackPoints={hike.trackPoints ?? []}
+                height="60vh"
+                planned
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center bg-stone-100">
+                <p className="text-stone-400 text-sm">Nessuna traccia disponibile</p>
               </div>
             )}
           </div>
         )}
 
-        {error && hasGuide && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600 print:hidden">
-            {error}
+        {/* ── POI ───────────────────────────────────────────────────── */}
+        {tab === 'poi' && (
+          <div className="space-y-2">
+            {poiPhotos.length > 0 ? (
+              poiPhotos.map((p, i) => <PoiCard key={i} photo={p} />)
+            ) : (
+              <div className="text-center py-12" style={{ color: '#a9a18e' }}>
+                <MapPin className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Nessun POI disponibile</p>
+                <p className="text-xs mt-1">I punti di interesse vengono caricati automaticamente</p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── Bottom actions ──────────────────────────────────────────── */}
-        {hasGuide && !generating && (
-          <div className="mt-10 mb-16 pt-6 flex flex-wrap items-center justify-between gap-4 print:hidden" style={{ borderTop: '1px solid #e5e1d8' }}>
-            <button
-              onClick={() => router.push(`/programma/${encodeURIComponent(hikeId)}`)}
-              className="flex items-center gap-1.5 text-stone-400 hover:text-stone-700 text-sm transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Torna al percorso
-            </button>
-
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Regenerate controls */}
-              <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#e5e1d8' }}>
-                {LENGTH_OPTS.map(opt => (
-                  <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                    className={`text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
-                      guideLength === opt.key
-                        ? 'bg-amber-500 text-white'
-                        : 'text-stone-400 hover:text-stone-700'
-                    }`}
-                  >{opt.label}</button>
-                ))}
-              </div>
-
-              <button onClick={() => generate(guideLength)} disabled={generating}
-                className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-amber-600 transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Rigenera
-              </button>
-
-              {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
-                <span className="flex items-center gap-1 text-xs text-stone-400">
-                  <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
-                </span>
-              )}
-
-              <button onClick={exportPdf}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
-              >
-                <FileDown className="w-3.5 h-3.5" />
-                Stampa PDF
-              </button>
+        {/* ── METEO ─────────────────────────────────────────────────── */}
+        {tab === 'meteo' && (
+          <div className="flex flex-col items-center py-12 gap-4 text-center" style={{ color: '#a9a18e' }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="opacity-30">
+              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium">Previsioni meteo</p>
+              <p className="text-xs mt-1">
+                {hike.plannedDate
+                  ? `Previsioni per ${format(new Date(hike.plannedDate + 'T12:00'), 'd MMM yyyy', { locale: it })}`
+                  : 'Seleziona una data per le previsioni'}
+              </p>
             </div>
           </div>
         )}
+
+        {/* ── ZAINO ─────────────────────────────────────────────────── */}
+        {tab === 'zaino' && <TabZaino />}
+
       </div>
     </div>
   )

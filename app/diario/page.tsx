@@ -1,5 +1,4 @@
 'use client'
-
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -9,7 +8,7 @@ import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/b
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { BookOpen, FileDown, Loader2, Mountain, Route, Clock } from 'lucide-react'
+import { BookOpen, FileDown, Loader2, Mountain, Route, Clock, PenLine, UploadCloud } from 'lucide-react'
 import { ctsLabel } from '@/lib/trailScore'
 
 interface Report {
@@ -20,7 +19,7 @@ interface Report {
   created_at: string
 }
 
-function getExcerpt(content: string, maxLen = 500): string {
+function getExcerpt(content: string, maxLen = 160): string {
   const clean = content
     .replace(/^## .+$/gm, '')
     .replace(/\[curiosita\][\s\S]*?\[\/curiosita\]/g, '')
@@ -31,17 +30,72 @@ function getExcerpt(content: string, maxLen = 500): string {
   return first.length > maxLen ? first.slice(0, maxLen) + '…' : first
 }
 
-// ── Card singola escursione nel feed ──────────────────────────────────────────
+// ── Stats FAB ─────────────────────────────────────────────────────────────────
 
-interface FeedCardProps {
+function StatsFab() {
+  const router = useRouter()
+  return (
+    <button
+      onClick={() => router.push('/diario/statistiche')}
+      title="Statistiche personali"
+      style={{
+        position: 'absolute',
+        bottom: '-23px',
+        right: '14px',
+        width: '46px',
+        height: '46px',
+        borderRadius: '50%',
+        background: 'white',
+        border: '2px solid rgba(26,51,32,.10)',
+        boxShadow: '0 4px 18px rgba(0,0,0,.22)',
+        zIndex: 10,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a3320" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+      </svg>
+    </button>
+  )
+}
+
+// ── Route SVG decorativa ───────────────────────────────────────────────────────
+
+function RouteSvgMini({ poly }: { poly: [number, number][] }) {
+  if (poly.length < 2) return null
+  const lats = poly.map(p => p[0]), lons = poly.map(p => p[1])
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
+  const W = 400, H = 70, pad = 8
+  const scLat = (H - 2 * pad) / (maxLat - minLat || 0.001)
+  const scLon = (W - 2 * pad) / (maxLon - minLon || 0.001)
+  const sc = Math.min(scLat, scLon)
+  const offX = pad + ((W - 2 * pad) - (maxLon - minLon) * sc) / 2
+  const offY = pad + ((H - 2 * pad) - (maxLat - minLat) * sc) / 2
+  const px = (lon: number) => offX + (lon - minLon) * sc
+  const py = (lat: number) => offY + (maxLat - lat) * sc
+  const d = poly.map(([lat, lon], i) => `${i === 0 ? 'M' : 'L'} ${px(lon).toFixed(1)} ${py(lat).toFixed(1)}`).join(' ')
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 w-full h-full opacity-25" preserveAspectRatio="xMidYMid slice">
+      <path d={d} fill="none" stroke="#4a9e5c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// ── ResocontoCard ─────────────────────────────────────────────────────────────
+
+interface ResocontoCardProps {
   activity: ActivityMeta
   report: Report | null
 }
 
-function FeedCard({ activity, report }: FeedCardProps) {
-  const date = new Date(activity.startTime)
-  const dateLabel = format(date, 'EEE · d MMM yyyy', { locale: it })
-  const polyline = (activity.routePolyline ?? []) as [number, number][]
+function ResocontoCard({ activity, report }: ResocontoCardProps) {
+  const date       = new Date(activity.startTime)
+  const dateLabel  = format(date, 'd MMM yyyy', { locale: it })
+  const poly       = (activity.routePolyline ?? []) as [number, number][]
   const trailScore = (activity as ActivityMeta & { trailScore?: number }).trailScore
   const [coverDataUrl, setCoverDataUrl] = useState<string | null>(null)
 
@@ -57,83 +111,109 @@ function FeedCard({ activity, report }: FeedCardProps) {
     } catch { /* localStorage non disponibile */ }
   }, [activity.id])
 
+  const hasCts   = trailScore != null
+  const cts      = hasCts ? Math.round(trailScore!) : null
+  const ctsInfo  = cts != null ? ctsLabel(cts) : null
+  const excerpt  = report ? getExcerpt(report.content) : null
+
   return (
     <Link
-      href={`/escursione/${encodeURIComponent(activity.id)}`}
-      className="block bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-md hover:border-forest-300 transition-all overflow-hidden"
+      href={`/resoconto/${encodeURIComponent(activity.id)}`}
+      className="block rounded-[14px] overflow-hidden bg-white"
+      style={{ boxShadow: '0 2px 12px rgba(0,0,0,.07)' }}
     >
-      {/* Thumbnail area */}
-      <div className="relative h-44 bg-gradient-to-br from-forest-800 to-forest-600 overflow-hidden">
+      {/* Header card 70px */}
+      <div
+        className="relative overflow-hidden"
+        style={{
+          height: '70px',
+          background: 'linear-gradient(160deg, #1a3320 0%, #2d5c38 75%, #4a9e5c 100%)',
+        }}
+      >
         {coverDataUrl ? (
-          <img src={coverDataUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        ) : polyline.length > 1 ? (
-          <div className="absolute inset-0">
-            <RouteThumb polyline={polyline} color="rgba(255,255,255,0.35)" strokeWidth={2.5} />
-          </div>
-        ) : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none" />
-        {/* Date badge */}
-        <div className="absolute top-2 left-3 bg-black/30 rounded-md px-2 py-0.5">
-          <span className="text-[9px] text-white/90 font-semibold capitalize">{dateLabel}</span>
-        </div>
-        {/* Racconto badge */}
-        {report ? (
-          <div className="absolute top-2 right-3 bg-forest-800 rounded-md px-2 py-0.5 flex items-center gap-1">
-            <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            <span className="text-[8px] text-white font-bold">Resoconto scritto</span>
-          </div>
+          <img src={coverDataUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
         ) : (
-          <div className="absolute top-2 right-3 bg-black/25 border border-white/20 rounded-md px-2 py-0.5">
-            <span className="text-[8px] text-white/60 font-semibold">✎ da scrivere</span>
+          <RouteSvgMini poly={poly} />
+        )}
+        <div className="absolute inset-0 flex items-start justify-between px-3 pt-2.5">
+          {/* Data badge */}
+          <span
+            className="text-[9px] font-semibold px-2 py-0.5 rounded-md"
+            style={{ background: 'rgba(255,255,255,.15)', color: '#7fd491' }}
+          >
+            {dateLabel}
+          </span>
+          {/* Stato racconto badge */}
+          {report ? (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold"
+              style={{ background: 'rgba(255,255,255,.15)', color: 'white' }}
+            >
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Resoconto scritto
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold"
+              style={{ background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.65)', border: '1px dashed rgba(127,212,145,.40)' }}
+            >
+              <PenLine className="w-2.5 h-2.5" />
+              da scrivere
+            </span>
+          )}
+        </div>
+        {/* CTS badge */}
+        {cts != null && (
+          <div
+            className="absolute bottom-2 left-3 px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
+            style={{ background: ctsInfo?.color ?? '#4a9e5c', fontFamily: "'DM Mono', monospace" }}
+          >
+            CTS {cts}
           </div>
         )}
-        {/* CTS chip */}
-        {trailScore != null && (() => {
-          const cts = Math.round(trailScore)
-          const { color } = ctsLabel(cts)
-          return (
-            <div className="absolute bottom-2 left-3 rounded px-1.5 py-0.5" style={{ backgroundColor: color }}>
-              <span className="text-[8px] text-white font-bold">CTS {cts}</span>
-            </div>
-          )
-        })()}
       </div>
 
-      {/* Content */}
-      <div className="px-3 pb-3 pt-2.5">
-        <h3 className="font-display text-[13px] font-bold text-stone-900 mb-1 leading-snug">
+      {/* Body */}
+      <div className="px-3 py-2.5">
+        <p
+          className="font-display font-bold text-[13px] leading-tight mb-1 truncate"
+          style={{ color: '#1a3320', fontFamily: "'Lora', serif" }}
+        >
           {activity.title ?? 'Escursione'}
-        </h3>
+        </p>
 
-        {report ? (
-          <p className="text-[11px] italic text-stone-500 leading-snug font-display line-clamp-4 mb-2">
-            "{getExcerpt(report.content)}"
+        {/* Excerpt narrativo o CTA */}
+        {excerpt ? (
+          <p
+            className="text-[11px] leading-snug mb-2 line-clamp-2"
+            style={{ fontFamily: "'Lora', serif", fontStyle: 'italic', color: '#5e564c' }}
+          >
+            &ldquo;{excerpt}&rdquo;
           </p>
         ) : (
-          <div className="bg-amber-50 border border-dashed border-amber-400 rounded-xl p-2.5 flex items-center gap-2.5 mb-2">
-            <span className="text-base leading-none flex-shrink-0">✍</span>
-            <div>
-              <p className="text-[11px] font-bold text-amber-900 leading-none mb-0.5">Scrivi la storia</p>
-              <p className="text-[10px] text-amber-700">Questa escursione non ha ancora un racconto</p>
-            </div>
+          <div
+            className="rounded-[10px] p-2 mb-2 flex items-center gap-2"
+            style={{ background: '#F0F7F1', border: '1px dashed #4a9e5c' }}
+          >
+            <PenLine className="w-3.5 h-3.5 shrink-0" style={{ color: '#4a9e5c' }} />
+            <p className="text-[10px] font-medium" style={{ color: '#2d5c38' }}>Racconto da scrivere</p>
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            <span className="text-[9px] text-stone-300 flex items-center gap-1">
-              <Route className="w-2.5 h-2.5" />{(activity.distanceMeters / 1000).toFixed(1)} km
-            </span>
-            <span className="text-[9px] text-stone-300 flex items-center gap-1">
-              <Mountain className="w-2.5 h-2.5" />{activity.elevationGain.toFixed(0)} m D+
-            </span>
-            <span className="text-[9px] text-stone-300 flex items-center gap-1">
-              <Clock className="w-2.5 h-2.5" />{formatDuration(activity.totalTimeSeconds)}
-            </span>
-          </div>
-          <span className="text-[10px] text-forest-600 font-semibold">
+        {/* Dati tecnici */}
+        <div className="flex items-center gap-3 text-[10px]" style={{ color: '#8a7f6e' }}>
+          <span className="flex items-center gap-0.5">
+            <Route className="w-3 h-3" /> {(activity.distanceMeters / 1000).toFixed(1)} km
+          </span>
+          <span className="flex items-center gap-0.5">
+            <Mountain className="w-3 h-3" /> D+ {activity.elevationGain.toFixed(0)} m
+          </span>
+          <span className="flex items-center gap-0.5">
+            <Clock className="w-3 h-3" /> {formatDuration(activity.totalTimeSeconds)}
+          </span>
+          <span className="ml-auto text-[10px] font-semibold" style={{ color: '#4a9e5c' }}>
             {report ? 'Leggi →' : 'Apri →'}
           </span>
         </div>
@@ -142,13 +222,40 @@ function FeedCard({ activity, report }: FeedCardProps) {
   )
 }
 
-// ── Pagina principale ─────────────────────────────────────────────────────────
+// ── Empty state ────────────────────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center py-20 gap-4 text-center px-6">
+      <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: '#F0F7F1' }}>
+        <BookOpen className="w-9 h-9" style={{ color: '#2d5c38' }} />
+      </div>
+      <div>
+        <p className="font-display font-bold text-lg" style={{ color: '#1a3320', fontFamily: "'Lora', serif" }}>
+          Il tuo diario è vuoto
+        </p>
+        <p className="text-sm mt-1" style={{ color: '#8a7f6e' }}>
+          Carica la tua prima escursione per iniziare il racconto.
+        </p>
+      </div>
+      <Link
+        href="/upload"
+        className="flex items-center gap-2 px-6 py-3 rounded-[14px] text-white font-semibold text-sm"
+        style={{ background: '#2d5c38' }}
+      >
+        <UploadCloud className="w-4 h-4" />
+        Carica escursione
+      </Link>
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DiarioPage() {
-  const router = useRouter()
   const [activities, setActivities] = useState<ActivityMeta[]>([])
-  const [reports, setReports] = useState<Report[]>([])
-  const [loading, setLoading] = useState(true)
+  const [reports,    setReports]    = useState<Report[]>([])
+  const [loading,    setLoading]    = useState(true)
 
   useEffect(() => {
     Promise.all([
@@ -163,100 +270,106 @@ export default function DiarioPage() {
     }).finally(() => setLoading(false))
   }, [])
 
-  const reportMap = new Map<string, Report>(reports.map(r => [r.activity_id, r]))
-  const stats = computeGlobalStats(activities)
+  const reportMap    = new Map<string, Report>(reports.map(r => [r.activity_id, r]))
+  const stats        = computeGlobalStats(activities)
   const writtenCount = activities.filter(a => reportMap.has(a.id)).length
   const missingCount = activities.length - writtenCount
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
+    <div className="min-h-screen pb-20 md:pb-0" style={{ background: '#F0F7F1' }}>
       <Navbar />
 
-      {/* Header verde scuro */}
-      <div className="bg-gradient-to-br from-forest-800 to-forest-900 text-white px-4 pt-5 pb-4">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[9px] text-white/40 uppercase tracking-widest font-mono">
-              {format(new Date(), 'EEEE · d MMMM yyyy', { locale: it })}
+      {/* ── Header gradient ──────────────────────────────────────────── */}
+      <div
+        className="relative"
+        style={{
+          background: 'linear-gradient(160deg, #1a3320 0%, #2d5c38 75%, #4a9e5c 100%)',
+          padding: '14px 16px 20px',
+          overflow: 'visible',
+        }}
+      >
+        {/* Title row */}
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[10px] font-semibold tracking-[2px] uppercase mb-0.5" style={{ color: '#7fd491' }}>
+              Le mie escursioni
             </p>
-            <div className="w-7 h-7 bg-forest-500 rounded-full flex items-center justify-center">
-              <BookOpen className="w-3.5 h-3.5 text-white" />
-            </div>
+            <h1 style={{ fontFamily: "'Lora', serif", fontSize: '22px', fontWeight: 700, color: 'white', margin: 0 }}>
+              passate
+            </h1>
           </div>
-
-          <h1 className="font-display text-2xl font-bold text-white mb-0.5">Il mio Diario</h1>
-          <p className="text-[10px] text-white/45 mb-3">
-            {activities.length} escursion{activities.length === 1 ? 'e' : 'i'} · {writtenCount} resocont{writtenCount === 1 ? 'o' : 'i'} scritt{writtenCount === 1 ? 'o' : 'i'}
-          </p>
-
-          {/* Stats strip */}
-          <div className="grid grid-cols-3 gap-1.5">
-            <div className="bg-white/10 rounded-lg py-2 px-2.5 text-center">
-              <div className="text-sm font-bold text-white leading-none">{(stats.totalDistanceKm).toFixed(0)} km</div>
-              <div className="text-[7px] text-white/40 mt-1 tracking-wide">percorsi</div>
-            </div>
-            <div className="bg-white/10 rounded-lg py-2 px-2.5 text-center">
-              <div className="text-sm font-bold text-white leading-none">{stats.totalElevationGain.toFixed(0)} m</div>
-              <div className="text-[7px] text-white/40 mt-1 tracking-wide">dislivello</div>
-            </div>
-            {/* Racconti pill — evidenziato, con badge se mancano storie */}
-            <div className="relative bg-forest-700/50 border border-forest-500/50 rounded-lg py-2 px-2.5 text-center">
-              <div className="text-sm font-bold text-forest-300 leading-none">{writtenCount} / {activities.length}</div>
-              <div className="text-[7px] text-white/40 mt-1 tracking-wide">racconti</div>
-              {missingCount > 0 && (
-                <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center border-2 border-forest-900">
-                  <span className="text-[8px] font-bold text-white">{missingCount}</span>
-                </div>
-              )}
-            </div>
+          {/* Racconti badge */}
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+            style={{ background: 'rgba(255,255,255,.12)' }}
+          >
+            <BookOpen className="w-3.5 h-3.5" style={{ color: '#7fd491' }} />
+            <span className="text-white font-bold text-[13px]" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {writtenCount}/{activities.length}
+            </span>
+            {missingCount > 0 && (
+              <span
+                className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
+                style={{ background: '#f97316' }}
+              >
+                {missingCount}
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Stats chips */}
+        <div className="flex items-center gap-2 mt-3">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,.12)' }}>
+            <Route className="w-3.5 h-3.5" style={{ color: '#7fd491' }} />
+            <span className="text-white font-bold text-[13px]" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {stats.totalDistanceKm.toFixed(0)}
+            </span>
+            <span className="text-[10px] font-medium" style={{ color: '#7fd491' }}>km</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,.12)' }}>
+            <Mountain className="w-3.5 h-3.5" style={{ color: '#7fd491' }} />
+            <span className="text-white font-bold text-[13px]" style={{ fontFamily: "'DM Mono', monospace" }}>
+              {stats.totalElevationGain.toFixed(0)}
+            </span>
+            <span className="text-[10px] font-medium" style={{ color: '#7fd491' }}>m D+</span>
+          </div>
+        </div>
+
+        {/* Stats FAB */}
+        <StatsFab />
       </div>
 
-      {/* Feed */}
-      <div className="max-w-2xl mx-auto px-3 pt-3 pb-6">
-        <div className="flex items-center justify-between mb-2 px-1">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Le mie escursioni</span>
-          <Link href="/calendario" className="text-[10px] text-forest-600 font-semibold">Calendario →</Link>
-        </div>
-
+      {/* ── Content area ────────────────────────────────────────────── */}
+      <div className="px-4" style={{ paddingTop: '36px' }}>
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-stone-400 gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Caricamento diario…</span>
+          <div className="flex items-center justify-center py-24 gap-3" style={{ color: '#2d5c38' }}>
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span className="text-sm">Caricamento…</span>
           </div>
         ) : activities.length === 0 ? (
-          <div className="text-center py-16">
-            <BookOpen className="w-10 h-10 text-stone-200 mx-auto mb-3" />
-            <p className="text-stone-400 text-sm font-medium">Il tuo diario è ancora vuoto</p>
-            <p className="text-stone-300 text-xs mt-1 mb-4">Carica la tua prima escursione per iniziare</p>
-            <Link href="/upload"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-forest-600 text-white rounded-xl text-sm font-semibold hover:bg-forest-700 transition-colors">
-              Carica escursione
-            </Link>
-          </div>
+          <EmptyState />
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="space-y-3 pb-4">
             {activities.map(activity => (
-              <FeedCard
+              <ResocontoCard
                 key={activity.id}
                 activity={activity}
                 report={reportMap.get(activity.id) ?? null}
               />
             ))}
-          </div>
-        )}
-
-        {/* Link al PDF export */}
-        {activities.length > 0 && (
-          <div className="mt-6 pt-5 border-t border-stone-200 flex items-center justify-center">
-            <Link
-              href="/diario/export"
-              className="flex items-center gap-2 text-sm text-stone-400 hover:text-stone-600 transition-colors"
-            >
-              <FileDown className="w-4 h-4" />
-              Esporta il Diario in PDF
-            </Link>
+            {activities.length > 0 && (
+              <div className="pt-3 pb-2 flex justify-center">
+                <Link
+                  href="/diario/export"
+                  className="flex items-center gap-2 text-sm transition-colors"
+                  style={{ color: '#8a7f6e' }}
+                >
+                  <FileDown className="w-4 h-4" />
+                  Esporta Diario in PDF
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -3,22 +3,21 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Upload, BarChart2, CalendarDays, Compass, User, ArrowDownToLine, LogOut, Settings, BookOpen, Plus } from 'lucide-react'
+import { CalendarDays, BookOpen, ArrowDownToLine, LogOut, Settings, User, UploadCloud } from 'lucide-react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-const NAV_LINKS = [
-  { href: '/diario',      label: 'Diario',      icon: BookOpen      },
-  { href: '/calendario',  label: 'Calendario',  icon: CalendarDays  },
-  { href: '/esplora',     label: 'Pianifica',   icon: Compass       },
-  { href: '/statistiche', label: 'Statistiche', icon: BarChart2     },
-]
+// ── Context detection ─────────────────────────────────────────────────────────
 
-function isActive(href: string, path: string) {
-  if (href === '/') return path === '/'
-  return path === href || path.startsWith(href + '/')
+function useNavContext(path: string): 'plan' | 'diary' {
+  if (
+    path.startsWith('/pianificazione') ||
+    path.startsWith('/guida/') ||
+    path.startsWith('/transizione/')
+  ) return 'plan'
+  return 'diary'
 }
 
 // ── Install button ─────────────────────────────────────────────────────────────
@@ -45,12 +44,12 @@ function InstallButton({ compact = false }: { compact?: boolean }) {
 
     const handler = (e: Event) => { e.preventDefault(); setPrompt(e as BeforeInstallPromptEvent) }
     window.addEventListener('beforeinstallprompt', handler)
-    window.addEventListener('appinstalled', () => { setInstalled(true); setPrompt(null) })
+    window.addEventListener('appinstalled', () => { setInstalled(true); setPrompt(null as BeforeInstallPromptEvent | null) })
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
   const handleClick = async () => {
-    if (isIOS) { setShowIOSHint(v => !v); return }
+    if (isIOS) { setShowIOSHint((v: boolean) => !v); return }
     if (!prompt) return
     await prompt.prompt()
     const { outcome } = await prompt.userChoice
@@ -78,7 +77,7 @@ function InstallButton({ compact = false }: { compact?: boolean }) {
         <div className="absolute right-0 top-12 w-64 bg-stone-900 text-white text-xs rounded-xl p-3 shadow-2xl z-50">
           <p className="font-semibold mb-1">Aggiungi alla Home Screen</p>
           <p className="text-stone-300 leading-snug">
-            Tocca <strong>Condividi ⬆️</strong> in Safari, poi seleziona <strong>"Aggiungi a Home"</strong>.
+            Tocca <strong>Condividi ⬆️</strong> in Safari, poi seleziona <strong>&quot;Aggiungi a Home&quot;</strong>.
           </p>
           <div className="absolute -top-1.5 right-4 w-3 h-3 bg-stone-900 rotate-45" />
         </div>
@@ -87,19 +86,17 @@ function InstallButton({ compact = false }: { compact?: boolean }) {
   )
 }
 
-// ── User menu dropdown ─────────────────────────────────────────────────────────
+// ── User menu ──────────────────────────────────────────────────────────────────
 
 function UserMenu({ user }: { user: SupabaseUser }) {
-  const router      = useRouter()
-  const [open, setOpen]     = useState(false)
+  const router  = useRouter()
+  const [open, setOpen]       = useState(false)
   const [faceUrl, setFaceUrl] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // Fast local read
     const local = getProfile().hikerFaceDataUrl
     if (local) setFaceUrl(local)
-    // Cross-device sync from Supabase
     fetch('/api/user-settings')
       .then(r => r.json())
       .then(d => {
@@ -111,7 +108,6 @@ function UserMenu({ user }: { user: SupabaseUser }) {
       .catch(() => {})
   }, [])
 
-  // Close on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -146,7 +142,6 @@ function UserMenu({ user }: { user: SupabaseUser }) {
 
       {open && (
         <div className="absolute right-0 top-10 w-52 bg-white rounded-xl border border-stone-200 shadow-lg z-50 py-1 overflow-hidden">
-          {/* User info header */}
           <div className="px-3 py-2.5 border-b border-stone-100">
             <p className="text-xs font-semibold text-stone-800 truncate">{displayName ?? 'Utente'}</p>
             <p className="text-xs text-stone-400 truncate mt-0.5">{user.email}</p>
@@ -176,6 +171,7 @@ function UserMenu({ user }: { user: SupabaseUser }) {
 
 export default function Navbar() {
   const path = usePathname()
+  const ctx  = useNavContext(path)
   const [user, setUser] = useState<SupabaseUser | null>(null)
 
   useEffect(() => {
@@ -187,46 +183,57 @@ export default function Navbar() {
     return () => subscription.unsubscribe()
   }, [])
 
+  const isPlanifica = path === '/pianificazione' || path.startsWith('/pianificazione/')
+  const isDiario    = path === '/diario' || path.startsWith('/diario/')
+
+  const fabColor = ctx === 'plan' ? '#1C5F8A' : '#2d5c38'
+  const fabHover = ctx === 'plan' ? '#0D3B5E' : '#1a3320'
+
   return (
     <>
-      {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
+      {/* ── Desktop top bar ──────────────────────────────────────────── */}
+      <nav className="hidden md:block sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
         <div className="max-w-[1400px] mx-auto px-4 flex items-center justify-between h-14">
-
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group shrink-0">
+          <Link href="/pianificazione" className="flex items-center gap-2 group shrink-0">
             <Image src="/icon-192.png" alt="DTrek" width={28} height={28} className="rounded-md" />
             <span className="font-display font-semibold text-lg text-stone-800 tracking-tight">
-              Diario Trekking
+              DTrek
             </span>
           </Link>
 
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-1">
-            {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-              const active = isActive(href, path)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    active ? 'bg-forest-50 text-forest-700' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{label}</span>
-                </Link>
-              )
-            })}
+          <div className="flex items-center gap-1">
+            <Link
+              href="/pianificazione"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                isPlanifica
+                  ? 'text-white'
+                  : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+              }`}
+              style={isPlanifica ? { background: '#1C5F8A' } : {}}
+            >
+              <CalendarDays className="w-4 h-4" />
+              <span>Pianifica</span>
+            </Link>
+            <Link
+              href="/diario"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                isDiario
+                  ? 'text-white'
+                  : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+              }`}
+              style={isDiario ? { background: '#2d5c38' } : {}}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Diario</span>
+            </Link>
             <div className="w-px h-5 bg-stone-200 mx-1" />
             <Link
               href="/upload"
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                path === '/upload' ? 'bg-forest-700 text-white' : 'bg-forest-600 hover:bg-forest-700 text-white shadow-sm'
-              }`}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold text-white shadow-sm transition-all"
+              style={{ background: fabColor }}
             >
-              <Plus className="w-4 h-4" />
-              <span>Carica</span>
+              <UploadCloud className="w-4 h-4" />
+              <span>Carica GPS</span>
             </Link>
             <div className="w-px h-5 bg-stone-200 mx-1" />
             <InstallButton />
@@ -238,82 +245,66 @@ export default function Navbar() {
               </Link>
             )}
           </div>
-
-          {/* Mobile: install + user */}
-          <div className="md:hidden flex items-center gap-1.5">
-            <InstallButton compact />
-            {user
-              ? <UserMenu user={user} />
-              : <Link href="/profilo" className="flex items-center justify-center w-9 h-9 rounded-full border-2 border-stone-200 hover:border-amber-300 transition-all">
-                  <User className="w-4 h-4 text-stone-400" />
-                </Link>
-            }
-          </div>
         </div>
       </nav>
 
-      {/* ── Mobile bottom tab bar ─────────────────────────────────────── */}
+      {/* ── Mobile bottom tab bar (3 items + FAB) ───────────────────── */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-t border-stone-200 shadow-[0_-1px_4px_rgba(0,0,0,0.06)]"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-t border-stone-200 shadow-[0_-1px_8px_rgba(0,0,0,0.08)]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="flex items-stretch h-16">
-          {/* Prima 2 tab */}
-          {NAV_LINKS.slice(0, 2).map(({ href, label, icon: Icon }) => {
-            const active = isActive(href, path)
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-w-0 px-1
-                  ${active ? 'text-forest-600' : 'text-stone-400'}`}
-              >
-                <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-forest-600' : 'text-stone-400'}`} />
-                <span className="text-[9px] font-medium leading-none truncate w-full text-center">
-                  {label}
-                </span>
-                {active && (
-                  <span className="absolute top-0 w-6 h-0.5 bg-forest-500 rounded-full -translate-y-px" />
-                )}
-              </Link>
-            )
-          })}
+        <div className="flex items-stretch h-[60px]">
 
-          {/* FAB Upload centrale */}
+          {/* Pianifica */}
+          <Link
+            href="/pianificazione"
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors"
+            style={{ color: isPlanifica ? '#1C5F8A' : '#a9a18e' }}
+          >
+            {isPlanifica && (
+              <span
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-8 rounded-b-full"
+                style={{ height: '3px', background: '#1C5F8A' }}
+              />
+            )}
+            <CalendarDays className="w-5 h-5 shrink-0" />
+            <span className="text-[9px] font-medium leading-none">Pianifica</span>
+          </Link>
+
+          {/* FAB centrale */}
           <div className="flex-1 flex items-center justify-center">
             <Link
               href="/upload"
-              className={`w-12 h-12 rounded-full flex items-center justify-center -mt-3 shadow-lg transition-colors ${
-                path === '/upload'
-                  ? 'bg-forest-800 shadow-forest-900/40'
-                  : 'bg-forest-600 hover:bg-forest-700 shadow-forest-900/30'
-              }`}
-              aria-label="Carica nuova escursione"
+              className="w-[46px] h-[46px] rounded-full flex items-center justify-center transition-colors"
+              style={{
+                background: fabColor,
+                marginTop: '-18px',
+                boxShadow: '0 4px 18px rgba(0,0,0,0.30)',
+              }}
+              aria-label="Carica traccia GPS"
+              onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = fabHover }}
+              onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = fabColor }}
             >
-              <Plus className="w-6 h-6 text-white" />
+              <UploadCloud className="w-5 h-5 text-white" />
             </Link>
           </div>
 
-          {/* Ultime 2 tab */}
-          {NAV_LINKS.slice(2).map(({ href, label, icon: Icon }) => {
-            const active = isActive(href, path)
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-w-0 px-1
-                  ${active ? 'text-forest-600' : 'text-stone-400'}`}
-              >
-                <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-forest-600' : 'text-stone-400'}`} />
-                <span className="text-[9px] font-medium leading-none truncate w-full text-center">
-                  {label}
-                </span>
-                {active && (
-                  <span className="absolute top-0 w-6 h-0.5 bg-forest-500 rounded-full -translate-y-px" />
-                )}
-              </Link>
-            )
-          })}
+          {/* Diario */}
+          <Link
+            href="/diario"
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors"
+            style={{ color: isDiario ? '#2d5c38' : '#a9a18e' }}
+          >
+            {isDiario && (
+              <span
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-8 rounded-b-full"
+                style={{ height: '3px', background: '#4a9e5c' }}
+              />
+            )}
+            <BookOpen className="w-5 h-5 shrink-0" />
+            <span className="text-[9px] font-medium leading-none">Diario</span>
+          </Link>
+
         </div>
       </nav>
     </>
