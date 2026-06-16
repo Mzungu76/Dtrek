@@ -1,6 +1,6 @@
 'use client'
 import React, {
-  useEffect, useState, useRef, useCallback, useMemo,
+  Suspense, useEffect, useState, useRef, useCallback, useMemo,
 } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { usePathname } from 'next/navigation'
@@ -272,7 +272,7 @@ const LENGTH_OPTS: { key: GuideLength; label: string; desc: string }[] = [
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function GuidaPage() {
+function GuidaInner() {
   const { id }  = useParams() as { id: string }
   const hikeId  = decodeURIComponent(id)
   const router  = useRouter()
@@ -785,5 +785,13 @@ export default function GuidaPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function GuidaPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" style={{ background: '#EAF4FB' }} />}>
+      <GuidaInner />
+    </Suspense>
   )
 }

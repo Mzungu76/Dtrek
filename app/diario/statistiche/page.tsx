@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -331,7 +331,7 @@ function TabRecord({ activities }: { activities: ActivityMeta[] }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function StatistichePage() {
+function StatisticheInner() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const [activities, setActivities] = useState<ActivityMeta[]>([])
@@ -432,5 +432,13 @@ export default function StatistichePage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function StatistichePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" style={{ background: '#F0F7F1' }} />}>
+      <StatisticheInner />
+    </Suspense>
   )
 }
