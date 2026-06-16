@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { getActivityById, type StoredActivity, type ActivityMeta } from '@/lib/blobStore'
@@ -99,7 +99,7 @@ function ReportText({ content }: { content: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function ResocontoPage() {
+function ResocontoInner() {
   const { id }       = useParams() as { id: string }
   const actId        = decodeURIComponent(id)
   const router       = useRouter()
@@ -414,5 +414,13 @@ export default function ResocontoPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function ResocontoPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" style={{ background: '#F0F7F1' }} />}>
+      <ResocontoInner />
+    </Suspense>
   )
 }
