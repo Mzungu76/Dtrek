@@ -1,16 +1,17 @@
 'use client'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import maplibregl, { Map as MLMap, Marker } from 'maplibre-gl'
+import maplibregl, { Map as MLMap, Marker, Popup } from 'maplibre-gl'
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
   Download, Share2, ChevronLeft, ChevronRight, ImagePlus,
-  Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy,
+  Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy, MapPin,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
 import { getProfile } from '@/lib/userProfile'
+import { type PoiItem, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 
 const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
 
@@ -193,6 +194,26 @@ function drawPhotoPin(
   rrect(ctx,bx+2*sc,by+2*sc,W-4*sc,H-4*sc,R-1*sc); ctx.clip()
   ctx.drawImage(img,bx+2*sc,by+2*sc,W-4*sc,H-4*sc)
   ctx.restore()
+  ctx.restore()
+}
+
+function drawPoiPin(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  sc: number,
+  emoji: string,
+) {
+  const R = 16 * sc
+  ctx.save()
+  ctx.shadowColor='rgba(0,0,0,0.45)'; ctx.shadowBlur=6*sc; ctx.shadowOffsetY=2*sc
+  ctx.fillStyle='white'
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.fill()
+  ctx.shadowColor='transparent'
+  ctx.lineWidth=2*sc; ctx.strokeStyle='rgba(0,0,0,0.12)'
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.stroke()
+  ctx.textAlign='center'; ctx.textBaseline='middle'
+  ctx.font=`${Math.round(18*sc)}px -apple-system,sans-serif`
+  ctx.fillText(emoji, cx, cy+1*sc)
   ctx.restore()
 }
 
@@ -558,9 +579,10 @@ interface Props {
   activityId?: string
   distanceMeters?: number
   elevationGain?: number
+  pois?: PoiItem[]
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -590,6 +612,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const muxerRef         = useRef<any>(null)
   const muxerTargetRef   = useRef<any>(null)
   const photoPinCleanupRef = useRef<(() => void) | null>(null)
+  const poiPinCleanupRef   = useRef<(() => void) | null>(null)
 
   // Smooth camera refs (exponential interpolation)
   const smoothBearRef  = useRef(0)
@@ -600,6 +623,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const faceImgRef   = useRef<HTMLImageElement | null>(null)
   const photoImgsRef = useRef<Map<string, HTMLImageElement>>(new Map())
   const photoMarkersRef = useRef<Map<string, import('maplibre-gl').Marker>>(new Map())
+
+  // POI markers/popups (interactive view) + proximity auto-popup bookkeeping
+  const poiMarkersRef     = useRef<Map<number, Marker>>(new Map())
+  const poiPopupsRef      = useRef<Map<number, Popup>>(new Map())
+  const poiTriggeredRef   = useRef<Set<number>>(new Set())
+  const poiOpenTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const poiOpenIdRef      = useRef<number | null>(null)
 
   const [mapReady,       setMapReady]      = useState(false)
   const [isPlaying,      setIsPlaying]     = useState(false)
@@ -612,6 +642,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [shareToast,     setShareToast]    = useState('')
   const [showStreetView,     setShowStreetView]    = useState(false)
   const [showPlannedRoute,   setShowPlannedRoute]  = useState(false)
+  const [showPois,           setShowPois]          = useState(true)
   const [streetViewPos,  setStreetViewPos] = useState<[number,number]|null>(null)
 
   // Video config
@@ -624,6 +655,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoShowStats,    setVideoShowStats]   = useState(true)
   const [videoShowProgress, setVideoShowProgress]= useState(true)
   const [videoShowBody,     setVideoShowBody]    = useState(true)
+  const [videoShowPois,     setVideoShowPois]    = useState(false)
   const [videoRecordedBlob, setVideoRecordedBlob]= useState<Blob | null>(null)
   const [renderProgress,    setRenderProgress]   = useState(0)
   const [renderFrame,       setRenderFrame]      = useState(0)
@@ -760,6 +792,41 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       photoMarkersRef.current.clear()
     }
   }, [routePhotos, mapReady]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── POI markers + popups on map ────────────────────────────────────────────────
+  // DOM markers are independent of MapLibre's style/layer tree, so they survive
+  // setStyle() / setupLayers() calls (style switcher) without extra handling.
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    poiMarkersRef.current.forEach(m => m.remove())
+    poiMarkersRef.current.clear()
+    poiPopupsRef.current.clear()
+    ;(pois ?? []).forEach(poi => {
+      const meta = POI_META[poi.type]
+      const el = document.createElement('div')
+      el.style.cssText = 'font-size:22px;line-height:1;cursor:pointer;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))'
+      el.textContent = meta.emoji
+      el.style.display = showPois ? '' : 'none'
+      const popup = new maplibregl.Popup({ maxWidth: '250px', offset: 14 }).setHTML(buildPoiPopupHtml(poi))
+      const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([poi.lon, poi.lat]).setPopup(popup).addTo(map)
+      poiMarkersRef.current.set(poi.id, marker)
+      poiPopupsRef.current.set(poi.id, popup)
+    })
+    return () => {
+      poiMarkersRef.current.forEach(m => m.remove())
+      poiMarkersRef.current.clear()
+      poiPopupsRef.current.clear()
+    }
+  }, [pois, mapReady]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── POI layer visibility toggle ────────────────────────────────────────────────
+
+  useEffect(() => {
+    poiMarkersRef.current.forEach(m => { m.getElement().style.display = showPois ? '' : 'none' })
+  }, [showPois])
 
   // ── Layer setup ───────────────────────────────────────────────────────────────
 
@@ -912,14 +979,46 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const li=Math.min(i0+Math.max(3,Math.round(N*0.015)),N-1)
       const bear=bearingDeg(lat,lon,pts[li].lat!,pts[li].lon!)
       mapRef.current?.easeTo({center:[lon,lat],bearing:bear,pitch:68,zoom:14.5,duration:180})
+      // Proximity auto-popup: open the popup of a nearby POI for ~1.5s, only one at a time
+      if(showPois&&pois?.length){
+        const PROXIMITY_M=40
+        for(const poi of pois){
+          const d=distM(lat,lon,poi.lat,poi.lon)
+          if(d<=PROXIMITY_M){
+            if(!poiTriggeredRef.current.has(poi.id)){
+              poiTriggeredRef.current.add(poi.id)
+              if(poiOpenIdRef.current!==null&&poiOpenIdRef.current!==poi.id){
+                poiPopupsRef.current.get(poiOpenIdRef.current)?.remove()
+              }
+              if(poiOpenTimeoutRef.current){clearTimeout(poiOpenTimeoutRef.current)}
+              const popup=poiPopupsRef.current.get(poi.id), marker=poiMarkersRef.current.get(poi.id)
+              if(popup&&marker&&mapRef.current){
+                popup.setLngLat(marker.getLngLat()).addTo(mapRef.current)
+                poiOpenIdRef.current=poi.id
+                poiOpenTimeoutRef.current=setTimeout(()=>{
+                  popup.remove(); poiOpenIdRef.current=null; poiOpenTimeoutRef.current=null
+                },1500)
+              }
+            }
+          } else {
+            poiTriggeredRef.current.delete(poi.id)
+          }
+        }
+      }
       if(progressRef.current<1){animRef.current=requestAnimationFrame(tick)}else{setIsPlaying(false)}
     }
     animRef.current=requestAnimationFrame(tick)
-    return()=>cancelAnimationFrame(animRef.current)
-  },[isPlaying,speedIdx])
+    return()=>{
+      cancelAnimationFrame(animRef.current)
+      if(poiOpenTimeoutRef.current){clearTimeout(poiOpenTimeoutRef.current);poiOpenTimeoutRef.current=null}
+    }
+  },[isPlaying,speedIdx,showPois,pois])
 
   const reset=useCallback(()=>{
     cancelAnimationFrame(animRef.current); isPlayingRef.current=false; progressRef.current=0
+    poiTriggeredRef.current.clear()
+    if(poiOpenTimeoutRef.current){clearTimeout(poiOpenTimeoutRef.current);poiOpenTimeoutRef.current=null}
+    if(poiOpenIdRef.current!==null){poiPopupsRef.current.get(poiOpenIdRef.current)?.remove();poiOpenIdRef.current=null}
     setProgress(0);setIsPlaying(false)
     const pts=gpsRef.current; if(!pts.length) return
     markerRef.current?.setLngLat([pts[0].lon!,pts[0].lat!])
@@ -1140,6 +1239,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       if(mEl) mEl.style.opacity='1'
       try { cleanupRouteReveal(map) } catch {}
       try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
+      try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current = null } catch {}
       try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
       if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
       cont.style.width=''; cont.style.height=''; map.resize()
@@ -1323,6 +1423,52 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
     }
 
+    // Bake POI badges into MapLibre's WebGL render as a symbol layer (same rationale as photo pins).
+    const poiPinLayerId  = 'dtrek-poi-pins-layer'
+    const poiPinSourceId = 'dtrek-poi-pins'
+    if (videoShowPois && pois && pois.length > 0) {
+      const iconSc = 2
+      const poiPinImageIds: string[] = []
+      for (const poi of pois) {
+        const D = 32 * iconSc
+        const offC = document.createElement('canvas')
+        offC.width = D; offC.height = D
+        const offCtx = offC.getContext('2d')!
+        offCtx.imageSmoothingEnabled = true; offCtx.imageSmoothingQuality = 'high'
+        drawPoiPin(offCtx, D / 2, D / 2, iconSc, POI_META[poi.type].emoji)
+        const imgId = `dtrek-poi-pin-${poi.id}`
+        const imageData = offCtx.getImageData(0, 0, D, D)
+        try { map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
+        poiPinImageIds.push(imgId)
+      }
+      const poiPinFeatures = pois.map(poi => ({
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [poi.lon, poi.lat] },
+        properties: { pinId: `dtrek-poi-pin-${poi.id}` },
+      }))
+      try {
+        map.addSource(poiPinSourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: poiPinFeatures } })
+        map.addLayer({
+          id: poiPinLayerId, type: 'symbol', source: poiPinSourceId,
+          layout: {
+            'icon-image': ['get', 'pinId'],
+            'icon-anchor': 'center',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+            'icon-size': (outW / 1080) / dpr,
+          },
+          paint: { 'icon-opacity': 0 },
+        } as any)
+        await new Promise<void>(r => map.once('idle', r as any))
+      } catch {}
+      poiPinCleanupRef.current = () => {
+        const m = mapRef.current; if (!m) return
+        try { m.removeLayer(poiPinLayerId) } catch {}
+        try { m.removeSource(poiPinSourceId) } catch {}
+        for (const id of poiPinImageIds) { try { m.removeImage(id) } catch {} }
+      }
+    }
+
     // Intro: fixed duration where p=0 (route frozen, camera swoops in)
     const INTRO_FRAMES = Math.round(TARGET_FPS * Math.max(2, videoDuration * 0.08))
     // Route frames: full traversal 0→1 starts AFTER intro
@@ -1473,6 +1619,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         })
         // Photo pins: fade out over first 30% of outro via symbol layer opacity
         try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', outroP < 0.3 ? (1 - outroP / 0.3) : 0) } catch {}
+        // POI pins: same fade-out as photo pins
+        try { map!.setPaintProperty(poiPinLayerId, 'icon-opacity', outroP < 0.3 ? (1 - outroP / 0.3) : 0) } catch {}
         try { map!.triggerRepaint() } catch {}
         onNextRender(() => {
           if (!mapRef.current) { frameCountRef.current++; renderedFramesRef.current++; renderNextFrame(); return }
@@ -1583,6 +1731,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
       // Photo pins: hidden in intro, visible in follow (symbol layer driven by opacity)
       try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', introP !== undefined ? 0 : 1) } catch {}
+      // POI pins: hidden in intro, visible in follow (same choreography as photo pins)
+      try { map!.setPaintProperty(poiPinLayerId, 'icon-opacity', introP !== undefined ? 0 : 1) } catch {}
       // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
       try { map!.triggerRepaint() } catch {}
       onNextRender(()=>{
@@ -1669,7 +1819,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     setVideoState('rendering')
     renderNextFrame()
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -1683,6 +1833,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
     if(mapRef.current) try{cleanupRouteReveal(mapRef.current)}catch{}
     try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
+    try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current = null } catch {}
     // Restore container size and map DPR (set at render start, normally restored by finishRecording)
     const map=mapRef.current; const cont=map?.getContainer()
     if(cont){cont.style.width='';cont.style.height=''}
@@ -1809,6 +1960,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   showPlannedRoute ? 'bg-violet-500/80 hover:bg-violet-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
                 }`}>
                 <Layers style={{width:'1.1rem',height:'1.1rem'}}/>
+              </button>
+            )}
+            {pois && pois.length > 0 && (
+              <button onClick={()=>setShowPois(v=>!v)} title="Punti di interesse"
+                className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
+                  showPois ? 'bg-violet-500/80 hover:bg-violet-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
+                }`}>
+                <MapPin style={{width:'1.1rem',height:'1.1rem'}}/>
               </button>
             )}
             <button onClick={onClose}
@@ -2035,6 +2194,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   {l:'Statistiche',v:videoShowStats,s:setVideoShowStats,ok:true},
                   {l:'Progresso',v:videoShowProgress,s:setVideoShowProgress,ok:true},
                   {l:'Dati corporei',v:videoShowBody,s:setVideoShowBody,ok:hasBodyData},
+                  {l:'POI',v:videoShowPois,s:setVideoShowPois,ok:(pois?.length??0)>0},
                 ].map(item=>(
                   <button key={item.l} onClick={()=>item.ok&&item.s(v=>!v)} disabled={!item.ok}
                     className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${!item.ok?'opacity-30 cursor-not-allowed bg-white/5 text-white/40':item.v?'bg-white text-stone-900':'bg-white/10 text-white/60 hover:bg-white/20'}`}>
