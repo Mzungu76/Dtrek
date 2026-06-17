@@ -224,8 +224,8 @@ export default function EsploraPage() {
 
         {/* Back + header */}
         <div className="mb-6">
-          <Link href="/programma" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition mb-4">
-            <ChevronLeft className="w-4 h-4" /> Programma
+          <Link href="/" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition mb-4">
+            <ChevronLeft className="w-4 h-4" /> Calendario
           </Link>
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-sky-100">
