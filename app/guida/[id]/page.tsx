@@ -1,37 +1,31 @@
 'use client'
-import React, {
-  Suspense, useEffect, useState, useRef, useCallback, useMemo,
+import {
+  useEffect, useState, useRef, useCallback, useMemo, type ReactNode,
 } from 'react'
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { usePathname } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import Navbar from '@/components/Navbar'
+import PianificazioneSidebar from '@/components/PianificazioneSidebar'
+import WeatherWidget from '@/components/WeatherWidget'
+import RouteThumb from '@/components/RouteThumb'
 import { getPlannedById, updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
-  ArrowLeft, Volume2, VolumeX, Play, Pause, Square,
+  ArrowLeft, Volume2, Play, Pause, Square,
   RefreshCw, Loader2, Mountain, Clock, Route,
   Leaf, Utensils, ShieldCheck, Compass, MapPin,
   FileDown, ExternalLink, BookOpen, CheckSquare, Square as SquareIcon,
+  Check,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-type TabId = 'testo' | 'scheda' | 'mappa' | 'poi' | 'meteo' | 'zaino'
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'testo',  label: 'Testo'  },
-  { id: 'scheda', label: 'Scheda' },
-  { id: 'mappa',  label: 'Mappa'  },
-  { id: 'poi',    label: 'POI'    },
-  { id: 'meteo',  label: 'Meteo'  },
-  { id: 'zaino',  label: '🎒 Zaino' },
-]
 
 interface Section {
   title: string
@@ -154,8 +148,8 @@ interface PoiPhoto { title: string; thumbnail: string; url: string; description?
 function PoiCard({ photo }: { photo: PoiPhoto }) {
   return (
     <a href={photo.url} target="_blank" rel="noopener noreferrer"
-      className="flex gap-3 bg-white rounded-[12px] overflow-hidden p-3 items-start"
-      style={{ boxShadow: '0 1px 6px rgba(0,0,0,.06)' }}
+      className="flex gap-3 rounded-[12px] overflow-hidden p-3 items-start"
+      style={{ background: '#F8FBFE', border: '1px solid #d4e8f5' }}
     >
       <img src={photo.thumbnail} alt={photo.title} className="w-14 h-14 object-cover rounded-lg flex-shrink-0" />
       <div className="min-w-0">
@@ -181,7 +175,7 @@ const ZAINO_ITEMS = {
   'Cibo e acqua':   ['Acqua ≥1,5 L', 'Barrette energia', 'Pasto principale', 'Snack emergenza', 'Thermos'],
 }
 
-function TabZaino() {
+function ZainoChecklist() {
   const [checked, setChecked] = useState<Record<string, boolean>>({})
 
   function toggle(item: string) {
@@ -270,23 +264,39 @@ const LENGTH_OPTS: { key: GuideLength; label: string; desc: string }[] = [
   { key: 'lunga', label: 'Lunga',  desc: '~30 min' },
 ]
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Card wrapper helper ───────────────────────────────────────────────────────
 
-function GuidaInner() {
-  const { id }  = useParams() as { id: string }
-  const hikeId  = decodeURIComponent(id)
+function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`bg-white rounded-[14px] p-4 mb-3 shadow-[0_2px_12px_rgba(0,0,0,.07)] ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-[10px] font-bold uppercase tracking-[1.5px] mb-3" style={{ color: '#2983C1' }}>
+      {children}
+    </p>
+  )
+}
+
+// ── Pagina principale ─────────────────────────────────────────────────────────
+
+export default function GuidaPage() {
+  const params  = useParams()
   const router  = useRouter()
-  const searchParams = useSearchParams()
-  const initialTab = (searchParams?.get('tab') as TabId | null) ?? 'testo'
+  const hikeId  = decodeURIComponent(params.id as string)
 
-  const [hike,       setHike]       = useState<PlannedHike | null>(null)
-  const [guideText,  setGuideText]  = useState<string>('')
-  const [sections,   setSections]   = useState<Section[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [error,      setError]      = useState<string | null>(null)
+  const [hike,        setHike]       = useState<PlannedHike | null>(null)
+  const [guideText,   setGuideText]  = useState<string>('')
+  const [sections,    setSections]   = useState<Section[]>([])
+  const [loading,     setLoading]    = useState(true)
+  const [generating,  setGenerating] = useState(false)
+  const [error,       setError]      = useState<string | null>(null)
   const [guideLength, setGuideLength] = useState<GuideLength>('media')
-  const [tab, setTab] = useState<TabId>(initialTab)
+  const [showFullText, setShowFullText] = useState(false)
 
   // TTS state
   const [isPlaying,    setIsPlaying]    = useState(false)
@@ -311,6 +321,15 @@ function GuidaInner() {
         description: w.wiki.description,
       }))
   }, [hike?.cachedPoiWiki])
+
+  const heroPolyline = useMemo((): [number, number][] => {
+    const pts = (hike?.trackPoints ?? []).filter(p => p.lat && p.lon)
+    if (pts.length > 1) {
+      const step = Math.max(1, Math.ceil(pts.length / 100))
+      return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
+    }
+    return (hike?.routePolyline ?? []) as [number, number][]
+  }, [hike])
 
   useEffect(() => {
     getPlannedById(hikeId).then(h => {
@@ -463,121 +482,315 @@ function GuidaInner() {
     )
   }
 
-  const hasGuide  = guideText.trim().length > 50
-  const hikeTitle = hike.title
-  const diff      = hike.assessment?.difficulty ?? hike.tags?.[0]
-  const poly      = (hike.routePolyline ?? []) as [number, number][]
-  const center    = poly.length > 0
-    ? poly[Math.floor(poly.length / 2)]
-    : null
+  const hasGuide   = guideText.trim().length > 50
+  const diff       = hike.assessment?.difficulty ?? hike.tags?.[0]
+  const hasTrack   = (hike.trackPoints?.length ?? 0) > 1
+  const centerPt   = heroPolyline.length > 0 ? heroPolyline[Math.floor(heroPolyline.length / 2)] : null
+  const previewText = guideText
+    .replace(/^## .+$/gm, '')
+    .replace(/^### .+$/gm, '')
+    .replace(/\[curiosita\][\s\S]*?\[\/curiosita\]/g, '')
+    .trim()
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0" style={{ background: '#EAF4FB' }}>
+    <div className="min-h-screen" style={{ background: '#EAF4FB' }}>
+      <Navbar />
 
-      {/* ── Fixed header ────────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-40"
-        style={{ background: 'linear-gradient(160deg, #0B3252 0%, #1C5F8A 100%)' }}
-      >
-        {/* Back + badge row */}
-        <div className="flex items-center justify-between px-4 pt-3 pb-2">
-          <button
-            onClick={() => router.push('/pianificazione')}
-            className="flex items-center gap-1.5 text-sm font-medium"
-            style={{ color: '#AED4EC' }}
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Pianificazione
-          </button>
-          <span
-            className="text-[9px] font-bold tracking-[2px] uppercase px-2 py-0.5 rounded-md"
-            style={{ background: 'rgba(255,255,255,.12)', color: '#AED4EC' }}
-          >
-            Guida Turistica
-          </span>
-        </div>
+      <div className="md:flex md:h-[calc(100vh-56px)]">
+        <PianificazioneSidebar selected={hikeId} />
 
-        {/* Title + subtitle */}
-        <div className="px-4 pb-2">
-          <h1
-            className="text-[17px] font-bold leading-tight text-white mb-0.5"
-            style={{ fontFamily: "'Lora', serif" }}
-          >
-            {hikeTitle}
-          </h1>
-          <div className="flex items-center gap-2 text-[10px]" style={{ color: '#AED4EC' }}>
-            {diff && <span>{diff.toUpperCase()}</span>}
-            {diff && hike.plannedDate && <span>·</span>}
-            {hike.plannedDate && (
-              <span>{format(new Date(hike.plannedDate + 'T12:00'), 'd MMM yyyy', { locale: it })}</span>
+        <main className="flex-1 min-w-0 md:overflow-y-auto pb-20 md:pb-0">
+
+          {/* ══ HERO ══ */}
+          <div className="relative overflow-hidden h-[180px] md:h-[220px]" style={{ background: 'linear-gradient(160deg, #0B3252 0%, #1C5F8A 100%)' }}>
+            {heroPolyline.length > 1 && (
+              <div className="absolute inset-0 pointer-events-none opacity-20">
+                <RouteThumb polyline={heroPolyline} color="rgba(255,255,255,0.7)" strokeWidth={6} />
+              </div>
             )}
-          </div>
-        </div>
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,.62) 0%, rgba(0,0,0,.15) 55%, transparent 100%)' }} />
 
-        {/* CTA "Segna come fatta" */}
-        <div className="px-4 pb-3 flex items-center justify-between">
-          <Link
-            href={`/transizione/${encodeURIComponent(hikeId)}`}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-semibold text-white"
-            style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.25)' }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            Segna come fatta
-          </Link>
-
-          {/* TTS controls */}
-          {hasGuide && tab === 'testo' && (
-            <div className="flex items-center gap-1">
-              {RATES.map((r, i) => (
-                <button key={r} onClick={() => changeRate(i)}
-                  className="text-[10px] px-1 py-0.5 rounded font-mono"
-                  style={rateIdx === i ? { background: 'rgba(255,255,255,.25)', color: 'white' } : { color: 'rgba(255,255,255,.4)' }}
-                >
-                  {r}×
-                </button>
-              ))}
-              <button onClick={togglePlayPause}
-                className="w-7 h-7 rounded-full flex items-center justify-center ml-1"
-                style={{ background: 'rgba(255,255,255,.15)' }}
+            {/* Top-left: back button */}
+            <div className="absolute top-3 left-4">
+              <button
+                onClick={() => router.push('/pianificazione')}
+                className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-black/40"
+                style={{ background: 'rgba(0,0,0,.30)', color: 'white' }}
               >
-                {isPlaying ? <Pause className="w-3 h-3 text-white" /> : <Play className="w-3 h-3 text-white ml-0.5" />}
+                <ArrowLeft className="w-4 h-4" />
+                Pianificazione
               </button>
-              {(isPlaying || isPaused) && (
-                <button onClick={stopVoice} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,.1)' }}>
-                  <Square className="w-2.5 h-2.5 text-white" />
-                </button>
-              )}
             </div>
-          )}
-        </div>
 
-        {/* Tab bar */}
-        <div className="flex overflow-x-auto border-t" style={{ borderColor: 'rgba(255,255,255,.10)', scrollbarWidth: 'none' }}>
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className="flex-shrink-0 px-4 py-2.5 text-[12px] font-medium transition-colors"
-              style={
-                tab === t.id
-                  ? { fontWeight: 700, color: 'white', borderBottom: '2px solid #1C5F8A', background: 'rgba(255,255,255,.06)' }
-                  : { color: 'rgba(174,212,236,.60)', borderBottom: '2px solid transparent' }
-              }
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+            {/* Top-right: badge + segna come fatta */}
+            <div className="absolute top-3 right-4 flex items-center gap-1.5">
+              <span
+                className="text-[9px] font-bold tracking-[2px] uppercase px-2 py-0.5 rounded-md"
+                style={{ background: 'rgba(255,255,255,.15)', color: '#AED4EC' }}
+              >
+                Guida Turistica
+              </span>
+              <Link
+                href={`/transizione/${encodeURIComponent(hikeId)}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-white transition-colors hover:bg-white/10"
+                style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.25)' }}
+              >
+                <Check className="w-3 h-3" />
+                Segna come fatta
+              </Link>
+            </div>
+
+            {/* Bottom: title + chips */}
+            <div className="absolute inset-x-0 bottom-0 px-4 pb-4">
+              <h1 className="text-[20px] font-bold leading-tight text-white mb-1" style={{ fontFamily: "'Lora', serif" }}>
+                {hike.title}
+              </h1>
+              <div className="flex flex-wrap gap-1.5">
+                {diff && (
+                  <span className="flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full text-white uppercase"
+                    style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
+                    {diff}
+                  </span>
+                )}
+                {hike.plannedDate && (
+                  <span className="flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
+                    style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
+                    {format(new Date(hike.plannedDate + 'T12:00'), 'd MMM yyyy', { locale: it })}
+                  </span>
+                )}
+                <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
+                  style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
+                  <Route className="w-3 h-3" /> {(hike.distanceMeters / 1000).toFixed(1)} km
+                </span>
+                <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
+                  style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
+                  <Mountain className="w-3 h-3" /> {Math.round(hike.elevationGain)} m D+
+                </span>
+                <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
+                  style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
+                  <Clock className="w-3 h-3" /> {formatDuration(hike.estimatedTimeSeconds)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* ══ CONTENT ══ */}
+          <div className="px-3 sm:px-4 pt-4">
+
+            {/* ── SECTION: GUIDA ──────────────────────────────────────── */}
+            <Card>
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <SectionLabel>Guida</SectionLabel>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex rounded-xl overflow-hidden border border-stone-200">
+                    {LENGTH_OPTS.map(opt => (
+                      <button key={opt.key} onClick={() => setGuideLength(opt.key)}
+                        className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${guideLength === opt.key ? 'text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}
+                        style={guideLength === opt.key ? { background: '#1C5F8A' } : {}}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => generate(guideLength)}
+                    disabled={generating}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wide text-white transition-colors disabled:opacity-50"
+                    style={{ background: '#1C5F8A' }}>
+                    {generating
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione…</>
+                      : <><BookOpen className="w-3.5 h-3.5" /> {hasGuide ? 'Rigenera' : 'Genera con Giulia'}</>
+                    }
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="mb-3 p-3 rounded-xl text-sm text-red-700" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+                  {error}
+                </div>
+              )}
+
+              {/* Generating: show streaming text */}
+              {generating && (
+                <div>
+                  {!guideText ? (
+                    <div className="flex items-center gap-3 py-6 text-stone-500">
+                      <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#1C5F8A' }} />
+                      <span className="italic text-sm" style={{ fontFamily: "'Lora', serif" }}>Giulia sta scrivendo la guida…</span>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl p-4" style={{ background: '#EAF4FB' }}>
+                      <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-wrap" style={{ fontFamily: "'Lora', serif" }}>{guideText}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* No guide yet, not generating */}
+              {!hasGuide && !generating && (
+                <div className="rounded-[14px] p-5 flex flex-col items-center gap-3 text-center"
+                  style={{ background: '#EAF4FB', border: '2px dashed #1C5F8A' }}>
+                  <BookOpen className="w-8 h-8" style={{ color: '#1C5F8A' }} />
+                  <div>
+                    <p className="font-bold text-sm" style={{ color: '#0D3B5E', fontFamily: "'Lora', serif" }}>
+                      Guida da generare
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: '#8a7f6e' }}>
+                      Giulia elaborerà storia, natura, curiosità e consigli pratici per questo percorso.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Guide exists: truncated preview + read more */}
+              {hasGuide && !generating && (
+                <div>
+                  <div className="relative">
+                    <p className="text-[14px] leading-7 text-stone-600 line-clamp-4"
+                      style={{ fontFamily: "'Lora', serif", fontStyle: 'italic' }}>
+                      {previewText.slice(0, 350)}{previewText.length > 350 ? '…' : ''}
+                    </p>
+                    <div className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
+                      style={{ background: 'linear-gradient(to top, white, transparent)' }} />
+                  </div>
+                  <button
+                    onClick={() => setShowFullText(true)}
+                    className="mt-3 text-[12px] font-bold flex items-center gap-1 transition-colors hover:underline"
+                    style={{ color: '#1C5F8A' }}>
+                    Leggi tutta la guida →
+                  </button>
+                </div>
+              )}
+            </Card>
+
+            {/* ── SECTION: MAPPA ──────────────────────────────────────── */}
+            <Card>
+              <SectionLabel>Mappa</SectionLabel>
+              <div className="rounded-[12px] overflow-hidden h-[260px] md:h-[380px]">
+                {hasTrack ? (
+                  <MapView trackPoints={hike.trackPoints ?? []} height="100%" planned />
+                ) : (
+                  <div className="h-full flex items-center justify-center" style={{ background: '#f5f5f5' }}>
+                    <p className="text-stone-400 text-sm">Nessuna traccia disponibile</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* ── SECTION: SCHEDA TECNICA ─────────────────────────────── */}
+            <Card>
+              <SectionLabel>Scheda Tecnica</SectionLabel>
+              <div className="rounded-[12px] overflow-hidden" style={{ border: '1px solid #d4e8f5' }}>
+                {[
+                  ['Distanza',      `${(hike.distanceMeters / 1000).toFixed(1)} km`],
+                  ['Dislivello D+', `${Math.round(hike.elevationGain)} m`],
+                  ['Dislivello D−', `${Math.round(hike.elevationLoss)} m`],
+                  ['Tempo stimato', formatDuration(hike.estimatedTimeSeconds)],
+                  ['Difficoltà',    diff?.toUpperCase() ?? '–'],
+                  ['Quota max',     `${Math.round(hike.altitudeMax)} m`],
+                  ['Quota min',     `${Math.round(hike.altitudeMin)} m`],
+                  hike.cachedTrailScore != null ? ['CTS stimato', String(Math.round(hike.cachedTrailScore))] : null,
+                ].filter(Boolean).map((row, i, arr) => {
+                  const [label, value] = row as [string, string]
+                  return (
+                    <div
+                      key={label}
+                      className="flex items-center justify-between px-4 py-2.5"
+                      style={{ borderBottom: i < arr.length - 1 ? '1px solid #f0f5f9' : 'none' }}
+                    >
+                      <span className="text-[11px] uppercase tracking-[1px] font-semibold" style={{ color: '#8a7f6e' }}>{label}</span>
+                      <span className="text-[14px] font-bold" style={{ color: '#0D3B5E', fontFamily: "'DM Mono', monospace" }}>{value}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+
+            {/* ── SECTION: PUNTI DI INTERESSE ─────────────────────────── */}
+            <Card>
+              <SectionLabel>Punti di Interesse</SectionLabel>
+              {poiPhotos.length > 0 ? (
+                <div className="space-y-2">
+                  {poiPhotos.map((p, i) => <PoiCard key={i} photo={p} />)}
+                </div>
+              ) : (
+                <div className="text-center py-10" style={{ color: '#a9a18e' }}>
+                  <MapPin className="w-9 h-9 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Nessun POI disponibile</p>
+                  <p className="text-xs mt-1">I punti di interesse vengono caricati automaticamente</p>
+                </div>
+              )}
+            </Card>
+
+            {/* ── SECTION: METEO ───────────────────────────────────────── */}
+            <Card>
+              <SectionLabel>Meteo</SectionLabel>
+              {centerPt ? (
+                <WeatherWidget
+                  mode="planned"
+                  lat={centerPt[0]}
+                  lon={centerPt[1]}
+                  date={hike.plannedDate}
+                  altitudeMax={hike.altitudeMax}
+                  elevationGain={hike.elevationGain}
+                />
+              ) : (
+                <div className="flex flex-col items-center py-10 gap-2 text-center" style={{ color: '#a9a18e' }}>
+                  <p className="text-sm">Nessuna traccia disponibile per le previsioni</p>
+                </div>
+              )}
+            </Card>
+
+            {/* ── SECTION: ZAINO ───────────────────────────────────────── */}
+            <Card>
+              <SectionLabel>🎒 Zaino</SectionLabel>
+              <ZainoChecklist />
+            </Card>
+
+          </div>
+        </main>
       </div>
 
-      {/* ── Tab content ─────────────────────────────────────────────── */}
-      <div className="px-4 py-4">
+      {/* ── Full-text drawer: "Leggi tutta la guida" ────────────────── */}
+      {showFullText && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          {/* Sticky header */}
+          <div className="sticky top-0 z-10 bg-white border-b border-stone-100 px-4 py-3 flex items-center gap-3 flex-wrap">
+            <button onClick={() => setShowFullText(false)}
+              className="flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors">
+              <ArrowLeft className="w-4 h-4" /> Chiudi
+            </button>
+            <h2 className="flex-1 text-sm font-semibold text-stone-700 truncate" style={{ fontFamily: "'Lora', serif" }}>
+              {hike.title}
+            </h2>
 
-        {/* ── TESTO ─────────────────────────────────────────────────── */}
-        {tab === 'testo' && (
-          <>
+            {/* TTS controls */}
+            {hasGuide && (
+              <div className="flex items-center gap-1">
+                {RATES.map((r, i) => (
+                  <button key={r} onClick={() => changeRate(i)}
+                    className="text-[10px] px-1.5 py-1 rounded font-mono"
+                    style={rateIdx === i ? { background: '#EAF4FB', color: '#1C5F8A', fontWeight: 700 } : { color: '#a9a18e' }}
+                  >
+                    {r}×
+                  </button>
+                ))}
+                <button onClick={togglePlayPause}
+                  className="w-8 h-8 rounded-full flex items-center justify-center ml-1"
+                  style={{ background: '#EAF4FB' }}
+                >
+                  {isPlaying ? <Pause className="w-3.5 h-3.5" style={{ color: '#1C5F8A' }} /> : <Play className="w-3.5 h-3.5 ml-0.5" style={{ color: '#1C5F8A' }} />}
+                </button>
+                {(isPlaying || isPaused) && (
+                  <button onClick={stopVoice} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#f5f5f5' }}>
+                    <Square className="w-3 h-3" style={{ color: '#8a7f6e' }} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="max-w-3xl mx-auto px-4 py-6">
             {/* Voice progress */}
             {(isPlaying || isPaused) && hasGuide && (
               <div className="mb-4 bg-white rounded-xl border px-3 py-2 flex items-center gap-3" style={{ borderColor: '#d4e8f5' }}>
@@ -594,204 +807,52 @@ function GuidaInner() {
               </div>
             )}
 
-            {!hasGuide && !generating && (
-              <div className="flex flex-col items-center py-16 gap-6 text-center">
-                <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: '#EAF4FB' }}>
-                  <BookOpen className="w-7 h-7" style={{ color: '#1C5F8A' }} />
+            {/* Sections */}
+            {sections.map((s, i) => (
+              <div
+                key={i}
+                className="bg-white rounded-[14px] overflow-hidden mb-4"
+                style={{
+                  boxShadow: activeSection === i && (isPlaying || isPaused)
+                    ? '0 0 0 2px #1C5F8A, 0 2px 12px rgba(28,95,138,.15)'
+                    : '0 2px 10px rgba(0,0,0,.06)',
+                }}
+              >
+                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: s.color }}>
+                  <span className="[&>svg]:w-4 [&>svg]:h-4 text-white opacity-80">{s.icon}</span>
+                  <h2 className="text-[12px] font-bold tracking-[1.5px] uppercase text-white">{s.title}</h2>
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold mb-2" style={{ fontFamily: "'Lora', serif", color: '#0D3B5E' }}>
-                    Genera la guida
-                  </h2>
-                  <p className="text-sm text-stone-500 max-w-xs">
-                    Giulia elaborerà storia, natura, curiosità e consigli pratici per questo percorso.
-                  </p>
+                <div className="px-4 py-4">
+                  <MagazineBody body={s.body} color={s.color} />
                 </div>
-                <div className="w-full max-w-xs">
-                  <p className="text-[10px] font-bold uppercase tracking-[2px] mb-3" style={{ color: '#1C5F8A' }}>Lunghezza</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {LENGTH_OPTS.map(opt => (
-                      <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                        className="flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 transition-all"
-                        style={guideLength === opt.key
-                          ? { borderColor: '#1C5F8A', background: '#EAF4FB', color: '#0D3B5E' }
-                          : { borderColor: '#d4e8f5', background: 'white', color: '#8a7f6e' }}
-                      >
-                        <span className="font-bold text-sm">{opt.label}</span>
-                        <span className="text-xs opacity-60">{opt.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {error && (
-                  <p className="text-red-600 text-sm bg-red-50 border border-red-100 rounded-lg px-4 py-2 max-w-sm">{error}</p>
-                )}
-                <button onClick={() => generate(guideLength)}
-                  className="flex items-center gap-2 px-7 py-3.5 text-white font-semibold rounded-full shadow-lg text-sm"
+              </div>
+            ))}
+
+            {generating && (
+              <div className="flex items-center gap-2 px-4 py-3 bg-white rounded-[14px]">
+                <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#1C5F8A' }} />
+                <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
+              </div>
+            )}
+
+            {!generating && hasGuide && (
+              <div className="flex items-center justify-between flex-wrap gap-2 pt-2">
+                <button onClick={() => generate(guideLength)} disabled={generating}
+                  className="flex items-center gap-1.5 text-xs" style={{ color: '#8a7f6e' }}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Rigenera
+                </button>
+                <button onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-4 py-2 text-white rounded-full text-sm font-semibold"
                   style={{ background: '#1C5F8A' }}
                 >
-                  <BookOpen className="w-4 h-4" />
-                  Genera con Giulia
+                  <FileDown className="w-3.5 h-3.5" /> PDF
                 </button>
               </div>
             )}
-
-            {generating && sections.length === 0 && (
-              <div className="flex flex-col items-center gap-4 py-16 text-center">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center animate-pulse" style={{ background: '#EAF4FB' }}>
-                  <BookOpen className="w-6 h-6" style={{ color: '#1C5F8A' }} />
-                </div>
-                <p className="font-display font-semibold text-stone-700">Giulia sta scrivendo…</p>
-                <p className="text-stone-400 text-sm">ci vorranno circa 20–30 secondi</p>
-              </div>
-            )}
-
-            {sections.length > 0 && (
-              <div className="space-y-4">
-                {sections.map((s, i) => (
-                  <div
-                    key={i}
-                    className="bg-white rounded-[14px] overflow-hidden"
-                    style={{
-                      boxShadow: activeSection === i && (isPlaying || isPaused)
-                        ? '0 0 0 2px #1C5F8A, 0 2px 12px rgba(28,95,138,.15)'
-                        : '0 2px 10px rgba(0,0,0,.06)',
-                    }}
-                  >
-                    <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: s.color }}>
-                      <span className="[&>svg]:w-4 [&>svg]:h-4 text-white opacity-80">{s.icon}</span>
-                      <h2 className="text-[12px] font-bold tracking-[1.5px] uppercase text-white">{s.title}</h2>
-                    </div>
-                    <div className="px-4 py-4">
-                      <MagazineBody body={s.body} color={s.color} />
-                    </div>
-                  </div>
-                ))}
-                {generating && (
-                  <div className="flex items-center gap-2 px-4 py-3 bg-white rounded-[14px]">
-                    <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#1C5F8A' }} />
-                    <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
-                  </div>
-                )}
-                {!generating && hasGuide && (
-                  <div className="flex items-center justify-between pt-2 pb-4">
-                    <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#d4e8f5' }}>
-                      {LENGTH_OPTS.map(opt => (
-                        <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                          className="text-xs px-2.5 py-1 rounded-lg transition-colors font-medium"
-                          style={guideLength === opt.key ? { background: '#1C5F8A', color: 'white' } : { color: '#8a7f6e' }}
-                        >{opt.label}</button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => generate(guideLength)} disabled={generating}
-                        className="flex items-center gap-1.5 text-xs" style={{ color: '#8a7f6e' }}
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" /> Rigenera
-                      </button>
-                      <button onClick={() => window.print()}
-                        className="flex items-center gap-1.5 px-4 py-2 text-white rounded-full text-sm font-semibold"
-                        style={{ background: '#1C5F8A' }}
-                      >
-                        <FileDown className="w-3.5 h-3.5" /> PDF
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── SCHEDA ────────────────────────────────────────────────── */}
-        {tab === 'scheda' && (
-          <div className="bg-white rounded-[14px] overflow-hidden" style={{ boxShadow: '0 2px 12px rgba(0,0,0,.07)' }}>
-            {[
-              ['Distanza',      `${(hike.distanceMeters / 1000).toFixed(1)} km`],
-              ['Dislivello D+', `${Math.round(hike.elevationGain)} m`],
-              ['Dislivello D−', `${Math.round(hike.elevationLoss)} m`],
-              ['Tempo stimato', formatDuration(hike.estimatedTimeSeconds)],
-              ['Difficoltà',    diff?.toUpperCase() ?? '–'],
-              ['Quota max',     `${Math.round(hike.altitudeMax)} m`],
-              ['Quota min',     `${Math.round(hike.altitudeMin)} m`],
-              hike.cachedTrailScore != null ? ['CTS stimato', String(Math.round(hike.cachedTrailScore))] : null,
-            ].filter(Boolean).map((row, i, arr) => {
-              const [label, value] = row as [string, string]
-              return (
-                <div
-                  key={label}
-                  className="flex items-center justify-between px-4 py-3"
-                  style={{ borderBottom: i < arr.length - 1 ? '1px solid #f0f5f9' : 'none' }}
-                >
-                  <span className="text-[11px] uppercase tracking-[1px] font-semibold" style={{ color: '#8a7f6e' }}>{label}</span>
-                  <span className="text-[15px] font-bold" style={{ color: '#0D3B5E', fontFamily: "'DM Mono', monospace" }}>{value}</span>
-                </div>
-              )
-            })}
           </div>
-        )}
-
-        {/* ── MAPPA ─────────────────────────────────────────────────── */}
-        {tab === 'mappa' && (
-          <div className="rounded-[14px] overflow-hidden" style={{ height: '60vh', minHeight: '320px' }}>
-            {(hike.trackPoints?.length ?? 0) > 1 ? (
-              <MapView
-                trackPoints={hike.trackPoints ?? []}
-                height="60vh"
-                planned
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center bg-stone-100">
-                <p className="text-stone-400 text-sm">Nessuna traccia disponibile</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── POI ───────────────────────────────────────────────────── */}
-        {tab === 'poi' && (
-          <div className="space-y-2">
-            {poiPhotos.length > 0 ? (
-              poiPhotos.map((p, i) => <PoiCard key={i} photo={p} />)
-            ) : (
-              <div className="text-center py-12" style={{ color: '#a9a18e' }}>
-                <MapPin className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Nessun POI disponibile</p>
-                <p className="text-xs mt-1">I punti di interesse vengono caricati automaticamente</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── METEO ─────────────────────────────────────────────────── */}
-        {tab === 'meteo' && (
-          <div className="flex flex-col items-center py-12 gap-4 text-center" style={{ color: '#a9a18e' }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="opacity-30">
-              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
-            </svg>
-            <div>
-              <p className="text-sm font-medium">Previsioni meteo</p>
-              <p className="text-xs mt-1">
-                {hike.plannedDate
-                  ? `Previsioni per ${format(new Date(hike.plannedDate + 'T12:00'), 'd MMM yyyy', { locale: it })}`
-                  : 'Seleziona una data per le previsioni'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ── ZAINO ─────────────────────────────────────────────────── */}
-        {tab === 'zaino' && <TabZaino />}
-
-      </div>
+        </div>
+      )}
     </div>
-  )
-}
-
-export default function GuidaPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen" style={{ background: '#EAF4FB' }} />}>
-      <GuidaInner />
-    </Suspense>
   )
 }
