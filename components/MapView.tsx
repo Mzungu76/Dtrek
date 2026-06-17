@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
-import { POI_META } from '@/lib/overpass'
+import { POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 
 interface Props {
@@ -161,28 +161,7 @@ export default function MapView({
           iconAnchor: [14, 14],
           className: '',
         })
-        const wikiTag   = poi.tags?.['wikipedia'] ?? ''
-        const wikiLang  = wikiTag.includes(':') ? wikiTag.split(':')[0] : 'it'
-        const wikiSlug  = wikiTag.includes(':') ? wikiTag.split(':').slice(1).join(':') : ''
-        const wikiUrl   = wikiSlug ? `https://${wikiLang}.wikipedia.org/wiki/${encodeURIComponent(wikiSlug)}` : ''
-        const desc      = poi.tags?.['description'] ?? poi.tags?.['description:it'] ?? ''
-        const website   = poi.tags?.['website'] ?? poi.tags?.['url'] ?? ''
-
-        const popup = `
-  <div style="font-family:system-ui,sans-serif;min-width:160px;max-width:230px;font-size:12px;line-height:1.5">
-    <div style="display:flex;align-items:flex-start;gap:8px;padding-bottom:8px;border-bottom:1px solid #f3f4f6;margin-bottom:8px">
-      <span style="font-size:22px;line-height:1.2;flex-shrink:0">${meta.emoji}</span>
-      <div>
-        <div style="font-weight:700;font-size:13px;color:#111827;line-height:1.3">${poi.name ?? meta.label}</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:1px">${meta.label}</div>
-      </div>
-    </div>
-    ${poi.ele ? `<div style="color:#374151;margin-bottom:5px">🏔 <b>${poi.ele} m</b> s.l.m.</div>` : ''}
-    ${desc ? `<div style="color:#4b5563;font-style:italic;margin-bottom:5px;font-size:11px">${desc}</div>` : ''}
-    <div style="color:#9ca3af;font-size:11px">📍 ${poi.distFromTrack} m dal tracciato</div>
-    ${wikiUrl ? `<a href="${wikiUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;margin-top:7px;text-decoration:none">📖 Wikipedia →</a>` : ''}
-    ${website && !wikiUrl ? `<a href="${website}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;margin-top:7px;text-decoration:none">🌐 Sito web →</a>` : ''}
-  </div>`
+        const popup = buildPoiPopupHtml(poi)
 
         const m = L.marker([poi.lat, poi.lon], { icon }).addTo(mapInstance.current).bindPopup(popup, { maxWidth: 250 })
         poiLayer.current.push(m)

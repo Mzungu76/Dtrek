@@ -50,6 +50,33 @@ export const POI_META: Record<PoiType, { label: string; emoji: string; color: st
   monument:       { label: 'Monumento',          emoji: '🗿', color: '#6b7280' },
 }
 
+// Markup HTML del popup di un POI — condiviso tra mappa 2D (Leaflet) e 3D (MapLibre)
+export function buildPoiPopupHtml(poi: PoiItem): string {
+  const meta     = POI_META[poi.type]
+  const wikiTag  = poi.tags?.['wikipedia'] ?? ''
+  const wikiLang = wikiTag.includes(':') ? wikiTag.split(':')[0] : 'it'
+  const wikiSlug = wikiTag.includes(':') ? wikiTag.split(':').slice(1).join(':') : ''
+  const wikiUrl  = wikiSlug ? `https://${wikiLang}.wikipedia.org/wiki/${encodeURIComponent(wikiSlug)}` : ''
+  const desc     = poi.tags?.['description'] ?? poi.tags?.['description:it'] ?? ''
+  const website  = poi.tags?.['website'] ?? poi.tags?.['url'] ?? ''
+
+  return `
+  <div style="font-family:system-ui,sans-serif;min-width:160px;max-width:230px;font-size:12px;line-height:1.5">
+    <div style="display:flex;align-items:flex-start;gap:8px;padding-bottom:8px;border-bottom:1px solid #f3f4f6;margin-bottom:8px">
+      <span style="font-size:22px;line-height:1.2;flex-shrink:0">${meta.emoji}</span>
+      <div>
+        <div style="font-weight:700;font-size:13px;color:#111827;line-height:1.3">${poi.name ?? meta.label}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:1px">${meta.label}</div>
+      </div>
+    </div>
+    ${poi.ele ? `<div style="color:#374151;margin-bottom:5px">🏔 <b>${poi.ele} m</b> s.l.m.</div>` : ''}
+    ${desc ? `<div style="color:#4b5563;font-style:italic;margin-bottom:5px;font-size:11px">${desc}</div>` : ''}
+    <div style="color:#9ca3af;font-size:11px">📍 ${poi.distFromTrack} m dal tracciato</div>
+    ${wikiUrl ? `<a href="${wikiUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;margin-top:7px;text-decoration:none">📖 Wikipedia →</a>` : ''}
+    ${website && !wikiUrl ? `<a href="${website}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;margin-top:7px;text-decoration:none">🌐 Sito web →</a>` : ''}
+  </div>`
+}
+
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
   const f1 = lat1 * Math.PI / 180, f2 = lat2 * Math.PI / 180
