@@ -231,7 +231,7 @@ export default function ActivityPhotoManager({
       </p>
       <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-5">
         <HardDriveDownload className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-        <p className="text-[11px] text-amber-700 leading-snug font-display italic">
+        <p className="text-[11px] text-amber-700 leading-snug font-lora italic">
           Le foto sono salvate <span className="font-semibold not-italic">solo in questo browser</span>.
           Cambiando dispositivo o svuotando la cache non saranno più visibili nell&apos;app.
         </p>

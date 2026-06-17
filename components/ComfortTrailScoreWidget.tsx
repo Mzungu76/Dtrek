@@ -165,12 +165,11 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
 // ── Main widget ───────────────────────────────────────────────────────────────
 
 export function ComfortTrailScoreWidget({
-  result, cached, beautyScore, compareWith,
+  result, cached, beautyScore,
 }: {
   result: TrailScoreResult | null
   cached?: number
   beautyScore?: BeautyScore
-  compareWith?: number
 }) {
   const [open, setOpen] = useState(false)
   const ts = result?.ts ?? cached
@@ -178,7 +177,6 @@ export function ComfortTrailScoreWidget({
   const { label, color } = result ?? ctsLabel(ts)
   const bd = result?.breakdown
   const hasDetail = !!bd
-  const delta = compareWith != null ? Math.round(ts) - compareWith : null
 
   return (
     <div className="rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
@@ -191,14 +189,7 @@ export function ComfortTrailScoreWidget({
             <span className="text-sm font-semibold" style={{ color }}>{label}</span>
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          {delta != null && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-lg" style={{ background: delta >= 0 ? '#dcfce7' : '#fef9c3', color: delta >= 0 ? '#166534' : '#92400e' }}>
-              {delta >= 0 ? `+${delta}` : delta} vs stimato
-            </span>
-          )}
-          <div className="text-xs font-bold px-2 py-1 rounded-lg text-white" style={{ backgroundColor: color }}>CTS</div>
-        </div>
+        <div className="ml-auto text-xs font-bold px-2 py-1 rounded-lg text-white" style={{ backgroundColor: color }}>CTS</div>
       </div>
 
       {/* Summary bars */}

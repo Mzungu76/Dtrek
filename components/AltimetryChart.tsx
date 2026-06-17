@@ -6,16 +6,9 @@ import {
 import type { TrackPoint } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 
-interface Props {
-  trackPoints: TrackPoint[]
-  mode?: 'predicted' | 'actual'
-}
+interface Props { trackPoints: TrackPoint[] }
 
-export default function AltimetryChart({ trackPoints, mode = 'actual' }: Props) {
-  const isPredicted = mode === 'predicted'
-  const strokeColor = isPredicted ? '#1C5F8A' : '#4a9e5c'
-  const gradId      = isPredicted ? 'altGradBlue' : 'altGradGreen'
-
+export default function AltimetryChart({ trackPoints }: Props) {
   const step = Math.max(1, Math.floor(trackPoints.length / 300))
   const data = trackPoints
     .filter((_, i) => i % step === 0)
@@ -38,9 +31,9 @@ export default function AltimetryChart({ trackPoints, mode = 'actual' }: Props) 
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
           <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor={strokeColor} stopOpacity={0.3} />
-              <stop offset="95%" stopColor={strokeColor} stopOpacity={0.03} />
+            <linearGradient id="altGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor="#378d44" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#378d44" stopOpacity={0.03} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -61,10 +54,9 @@ export default function AltimetryChart({ trackPoints, mode = 'actual' }: Props) 
           <Area
             type="monotone"
             dataKey="alt"
-            stroke={strokeColor}
-            strokeWidth={isPredicted ? 1.5 : 2}
-            strokeDasharray={isPredicted ? '6 4' : undefined}
-            fill={`url(#${gradId})`}
+            stroke="#378d44"
+            strokeWidth={2}
+            fill="url(#altGrad)"
             dot={false}
             activeDot={{ r: 4 }}
           />

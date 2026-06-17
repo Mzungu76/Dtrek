@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=DM+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400&family=JetBrains+Mono:wght@400;500&family=Barlow+Condensed:wght@400;600;700;900&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,18 +9,6 @@
   --terra-600: #c05a17;
   --forest-500: #378d44;
   --forest-700: #20592b;
-  /* Pianificazione */
-  --plan-dark:  #0D3B5E;
-  --plan-mid:   #1C5F8A;
-  --plan-light: #2983C1;
-  --plan-pale:  #AED4EC;
-  --plan-bg:    #EAF4FB;
-  /* Diario */
-  --diary-dark:  #1a3320;
-  --diary-mid:   #2d5c38;
-  --diary-light: #4a9e5c;
-  --diary-pale:  #7fd491;
-  --diary-bg:    #F0F7F1;
 }
 
 * { box-sizing: border-box; }
@@ -32,8 +20,10 @@ body {
   min-height: 100vh;
 }
 
-.font-display { font-family: 'Lora', 'Playfair Display', serif; }
-.font-mono    { font-family: 'DM Mono', 'JetBrains Mono', monospace; }
+.font-display { font-family: 'Playfair Display', serif; }
+.font-mono    { font-family: 'JetBrains Mono', monospace; }
+.font-barlow  { font-family: 'Barlow Condensed', sans-serif; }
+.font-lora    { font-family: 'Lora', serif; }
 
 /* Card hover lift */
 .card-lift {
