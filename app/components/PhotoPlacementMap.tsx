@@ -165,10 +165,10 @@ export default function PhotoPlacementMap({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100 shrink-0">
           <div>
-            <h3 className="font-body font-bold text-stone-700 uppercase tracking-wide text-sm">
+            <h3 className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm">
               Posiziona le foto sul percorso
             </h3>
-            <p className="font-display text-xs italic text-stone-400 mt-0.5">
+            <p className="font-lora text-xs italic text-stone-400 mt-0.5">
               {selectedPhoto
                 ? `"${selectedPhoto.caption}" — clicca sulla mappa per posizionarla`
                 : 'Seleziona una foto qui sotto, poi clicca sulla mappa'}
@@ -203,7 +203,7 @@ export default function PhotoPlacementMap({
                     <div className="relative">
                       <img src={ph.dataUrl} alt={ph.caption}
                         className="w-16 h-16 object-cover rounded-lg" />
-                      <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-body">
+                      <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
                         {i + 1}
                       </span>
                       {positioned && (
@@ -212,7 +212,7 @@ export default function PhotoPlacementMap({
                         </span>
                       )}
                     </div>
-                    <p className="text-[9px] text-stone-500 font-display max-w-[68px] text-center truncate leading-tight">
+                    <p className="text-[9px] text-stone-500 font-lora max-w-[68px] text-center truncate leading-tight">
                       {ph.caption}
                     </p>
                   </button>

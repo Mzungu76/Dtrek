@@ -1,29 +1,20 @@
 'use client'
 import {
-  useEffect, useState, useRef, useCallback, useMemo, type ReactNode,
+  useEffect, useState, useRef, useCallback, useMemo,
 } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import dynamic from 'next/dynamic'
-import Link from 'next/link'
-import Navbar from '@/components/Navbar'
-import PianificazioneSidebar from '@/components/PianificazioneSidebar'
-import WeatherWidget from '@/components/WeatherWidget'
-import RouteThumb from '@/components/RouteThumb'
 import { getPlannedById, updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
-  ArrowLeft, Volume2, Play, Pause, Square,
+  ArrowLeft, Volume2, VolumeX, Play, Pause, Square,
   RefreshCw, Loader2, Mountain, Clock, Route,
   Leaf, Utensils, ShieldCheck, Compass, MapPin,
-  FileDown, ExternalLink, BookOpen, CheckSquare, Square as SquareIcon,
-  Check,
+  FileDown, ExternalLink, BookOpen,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
-
-const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,7 +25,7 @@ interface Section {
   color: string
 }
 
-// ── Section metadata ──────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const SECTION_META: Record<string, { icon: React.ReactNode; color: string }> = {
   'prima di partire': { icon: <Compass    className="w-4 h-4" />, color: '#d97706' },
@@ -62,9 +53,47 @@ function parseGuide(text: string): Section[] {
   })
 }
 
-// ── Magazine body ─────────────────────────────────────────────────────────────
+// ── Route SVG (instant hero background fallback) ───────────────────────────────
 
-function MagazineBody({ body, color }: { body: string; color: string }) {
+function RouteSvg({ hike }: { hike: PlannedHike }) {
+  const pts = useMemo(() => {
+    const raw = ((hike.trackPoints ?? []).filter(p => p.lat && p.lon) as { lat: number; lon: number }[])
+      .map(p => [p.lat, p.lon] as [number, number])
+    return raw.length > 1 ? raw : (hike.routePolyline ?? []) as [number, number][]
+  }, [hike])
+
+  if (pts.length < 2) return null
+
+  const lats = pts.map(p => p[0]), lons = pts.map(p => p[1])
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
+  const W = 1200, H = 420
+  const pad = 40
+  const scLat = (H - 2 * pad) / (maxLat - minLat || 0.001)
+  const scLon = (W - 2 * pad) / (maxLon - minLon || 0.001)
+  const sc = Math.min(scLat, scLon)
+  const offX = pad + ((W - 2 * pad) - (maxLon - minLon) * sc) / 2
+  const offY = pad + ((H - 2 * pad) - (maxLat - minLat) * sc) / 2
+  const px = (lon: number) => offX + (lon - minLon) * sc
+  const py = (lat: number) => offY + (maxLat - lat) * sc
+  const d = pts.map(([lat, lon], i) => `${i === 0 ? 'M' : 'L'} ${px(lon).toFixed(1)} ${py(lat).toFixed(1)}`).join(' ')
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="absolute inset-0 w-full h-full opacity-20"
+      preserveAspectRatio="xMidYMid slice"
+    >
+      <path d={d} fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={px(pts[0][1]).toFixed(1)} cy={py(pts[0][0]).toFixed(1)} r="6" fill="#4ade80" />
+      <circle cx={px(pts[pts.length-1][1]).toFixed(1)} cy={py(pts[pts.length-1][0]).toFixed(1)} r="6" fill="#f87171" />
+    </svg>
+  )
+}
+
+// ── Magazine section body renderer ────────────────────────────────────────────
+
+function MagazineBody({ body, color, sectionPhoto }: { body: string; color: string; sectionPhoto?: string }) {
   interface Block { type: 'lead' | 'para' | 'curiosita' | 'subsection'; text: string }
 
   const blocks = useMemo<Block[]>(() => {
@@ -102,36 +131,60 @@ function MagazineBody({ body, color }: { body: string; color: string }) {
     return out
   }, [body])
 
+  // First paragraph (lead) stands alone full-width; rest flow in columns
   const lead = blocks.find(b => b.type === 'lead')
   const rest  = blocks.filter(b => b !== lead)
 
   return (
     <div>
       {lead && (
-        <p className="text-[15px] leading-[1.8] italic text-stone-600 mb-5" style={{ fontFamily: "'Lora', serif" }}>
+        <p className="font-lora text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-700 mb-6">
           {lead.text}
         </p>
       )}
-      <div>
+      <div className="md:columns-2 md:gap-8 print-columns-2">
+        {sectionPhoto && (
+          <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={sectionPhoto} className="w-full h-40 object-cover rounded-sm shadow-sm" alt="" />
+            <p className="text-[9px] italic text-stone-400 mt-1">© Wikimedia Commons</p>
+          </div>
+        )}
         {rest.map((b, i) => {
           if (b.type === 'curiosita') {
             return (
-              <div key={i} className="my-4 rounded-xl overflow-hidden">
+              <div
+                key={i}
+                className="my-5 rounded-sm overflow-hidden shadow-sm"
+                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
+              >
                 <div className="flex">
                   <div className="w-1 flex-shrink-0" style={{ background: color }} />
                   <div className="flex-1 px-4 py-3" style={{ background: color + '12' }}>
-                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1" style={{ color }}>◆ Lo sapevi?</p>
-                    <p className="italic text-[13px] leading-relaxed text-stone-600" style={{ fontFamily: "'Lora', serif" }}>{b.text}</p>
+                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5" style={{ color }}>
+                      ◆ Lo sapevi?
+                    </p>
+                    <p className="font-lora italic text-[14px] leading-relaxed text-stone-700">
+                      {b.text}
+                    </p>
                   </div>
                 </div>
               </div>
             )
           }
           if (b.type === 'subsection') {
-            return <h3 key={i} className="text-[10px] font-bold tracking-[1.5px] uppercase mt-5 mb-2" style={{ color }}>{b.text}</h3>
+            return (
+              <h3
+                key={i}
+                className="font-barlow text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2"
+                style={{ color, breakAfter: 'avoid' }}
+              >
+                {b.text}
+              </h3>
+            )
           }
           return (
-            <p key={i} className="text-[14px] leading-7 text-stone-600 mb-3" style={{ fontFamily: "'Lora', serif" }}>
+            <p key={i} className="font-lora text-[15px] leading-7 text-stone-600 mb-4">
               {b.text}
             </p>
           )
@@ -141,25 +194,39 @@ function MagazineBody({ body, color }: { body: string; color: string }) {
   )
 }
 
-// ── POI Card ──────────────────────────────────────────────────────────────────
+// ── POI card ──────────────────────────────────────────────────────────────────
 
-interface PoiPhoto { title: string; thumbnail: string; url: string; description?: string }
+interface PoiPhoto {
+  title: string
+  thumbnail: string
+  url: string
+  description?: string
+}
 
-function PoiCard({ photo }: { photo: PoiPhoto }) {
+function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
   return (
-    <a href={photo.url} target="_blank" rel="noopener noreferrer"
-      className="flex gap-3 rounded-[12px] overflow-hidden p-3 items-start"
-      style={{ background: '#F8FBFE', border: '1px solid #d4e8f5' }}
+    <a
+      href={photo.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex flex-col rounded-xl overflow-hidden border border-stone-100 hover:border-stone-200 shadow-sm hover:shadow-md transition-all bg-white"
     >
-      <img src={photo.thumbnail} alt={photo.title} className="w-14 h-14 object-cover rounded-lg flex-shrink-0" />
-      <div className="min-w-0">
-        <p className="text-[13px] font-semibold text-stone-800 leading-tight line-clamp-1" style={{ fontFamily: "'Lora', serif" }}>
+      <div className="h-40 overflow-hidden bg-stone-100">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photo.thumbnail}
+          alt={photo.title}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        />
+      </div>
+      <div className="p-3">
+        <p className="font-barlow font-semibold text-stone-800 text-[16px] leading-tight line-clamp-1 tracking-wide">
           {photo.title}
         </p>
         {photo.description && (
-          <p className="text-[11px] text-stone-400 mt-0.5 line-clamp-2">{photo.description}</p>
+          <p className="text-[11px] text-stone-400 mt-0.5 line-clamp-1">{photo.description}</p>
         )}
-        <span className="flex items-center gap-1 text-[10px] mt-1" style={{ color: '#1C5F8A' }}>
+        <span className="flex items-center gap-0.5 text-[10px] mt-1.5" style={{ color }}>
           <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
         </span>
       </div>
@@ -167,56 +234,7 @@ function PoiCard({ photo }: { photo: PoiPhoto }) {
   )
 }
 
-// ── Zaino checklist ───────────────────────────────────────────────────────────
-
-const ZAINO_ITEMS = {
-  'Indispensabili': ['Carta 1:25000', 'Bussola', 'Lampada frontale', 'Kit pronto soccorso', 'Fischietto', 'Telefono carico'],
-  'Abbigliamento':  ['Giacca impermeabile', 'Cambio secco', 'Calze ricambio', 'Guanti', 'Cappellino/berretto', 'Bastoncini'],
-  'Cibo e acqua':   ['Acqua ≥1,5 L', 'Barrette energia', 'Pasto principale', 'Snack emergenza', 'Thermos'],
-}
-
-function ZainoChecklist() {
-  const [checked, setChecked] = useState<Record<string, boolean>>({})
-
-  function toggle(item: string) {
-    setChecked(prev => ({ ...prev, [item]: !prev[item] }))
-  }
-
-  return (
-    <div className="space-y-4">
-      {Object.entries(ZAINO_ITEMS).map(([cat, items]) => (
-        <div key={cat} className="rounded-[12px] overflow-hidden" style={{ background: '#F8FBFE' }}>
-          <div className="px-4 py-2.5" style={{ background: '#EAF4FB', borderBottom: '1px solid #d4e8f5' }}>
-            <p className="text-[10px] font-bold uppercase tracking-[1.5px]" style={{ color: '#1C5F8A' }}>{cat}</p>
-          </div>
-          <div className="divide-y" style={{ borderColor: '#eef4f9' }}>
-            {items.map(item => (
-              <button
-                key={item}
-                onClick={() => toggle(item)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left"
-                style={{ background: checked[item] ? '#EAF4FB' : 'transparent' }}
-              >
-                {checked[item]
-                  ? <CheckSquare className="w-4 h-4 shrink-0" style={{ color: '#1C5F8A' }} />
-                  : <SquareIcon  className="w-4 h-4 shrink-0" style={{ color: '#c4c4c4' }} />
-                }
-                <span
-                  className="text-[13px]"
-                  style={{ color: checked[item] ? '#8a7f6e' : '#3c3530', textDecoration: checked[item] ? 'line-through' : 'none' }}
-                >
-                  {item}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── TTS helpers ───────────────────────────────────────────────────────────────
+// ── Chunk-based TTS ───────────────────────────────────────────────────────────
 
 interface ChunkEntry { text: string; sectionIdx: number }
 
@@ -258,57 +276,29 @@ function getItalianVoice(): SpeechSynthesisVoice | null {
 const RATES = [0.8, 1, 1.2, 1.5]
 
 type GuideLength = 'breve' | 'media' | 'lunga'
+
 const LENGTH_OPTS: { key: GuideLength; label: string; desc: string }[] = [
   { key: 'breve', label: 'Breve',  desc: '~5 min' },
   { key: 'media', label: 'Media',  desc: '~15 min' },
   { key: 'lunga', label: 'Lunga',  desc: '~30 min' },
 ]
 
-// ── Card wrapper helper ───────────────────────────────────────────────────────
-
-function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`bg-white rounded-[14px] p-4 mb-3 shadow-[0_2px_12px_rgba(0,0,0,.07)] ${className}`}>
-      {children}
-    </div>
-  )
-}
-
-function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-[10px] font-bold uppercase tracking-[1.5px] mb-3" style={{ color: '#2983C1' }}>
-      {children}
-    </p>
-  )
-}
-
-// ── Pagina principale ─────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function GuidaPage() {
-  const params  = useParams()
+  const { id }  = useParams() as { id: string }
+  const hikeId  = decodeURIComponent(id)
   const router  = useRouter()
-  const hikeId  = decodeURIComponent(params.id as string)
 
-  const [hike,        setHike]       = useState<PlannedHike | null>(null)
-  const [guideText,   setGuideText]  = useState<string>('')
-  const [sections,    setSections]   = useState<Section[]>([])
-  const [loading,     setLoading]    = useState(true)
-  const [generating,  setGenerating] = useState(false)
-  const [error,       setError]      = useState<string | null>(null)
-  const [guideLength, setGuideLength] = useState<GuideLength>('media')
-  const [showFullText, setShowFullText] = useState(false)
-
-  // TTS state
-  const [isPlaying,    setIsPlaying]    = useState(false)
-  const [isPaused,     setIsPaused]     = useState(false)
-  const [rateIdx,      setRateIdx]      = useState(1)
-  const [activeSection, setActiveSection] = useState<number | null>(null)
-  const [playProgress, setPlayProgress] = useState(0)
-
-  const rateRef     = useRef(RATES[1])
-  const chunksRef   = useRef<ChunkEntry[]>([])
-  const chunkIdxRef = useRef(0)
-  const iosTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [hike,         setHike]         = useState<PlannedHike | null>(null)
+  const [guideText,    setGuideText]    = useState<string>('')
+  const [sections,     setSections]     = useState<Section[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [generating,   setGenerating]   = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
+  const [guideLength,  setGuideLength]  = useState<GuideLength>('media')
+  const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
+  const [visibleSec,   setVisibleSec]   = useState(0)
 
   const poiPhotos = useMemo(() => {
     if (!hike?.cachedPoiWiki) return []
@@ -322,15 +312,20 @@ export default function GuidaPage() {
       }))
   }, [hike?.cachedPoiWiki])
 
-  const heroPolyline = useMemo((): [number, number][] => {
-    const pts = (hike?.trackPoints ?? []).filter(p => p.lat && p.lon)
-    if (pts.length > 1) {
-      const step = Math.max(1, Math.ceil(pts.length / 100))
-      return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
-    }
-    return (hike?.routePolyline ?? []) as [number, number][]
-  }, [hike])
+  // Voice state
+  const [isPlaying,     setIsPlaying]     = useState(false)
+  const [isPaused,      setIsPaused]      = useState(false)
+  const [rateIdx,       setRateIdx]       = useState(1)
+  const [activeSection, setActiveSection] = useState<number | null>(null)
+  const [playProgress,  setPlayProgress]  = useState(0)
 
+  const rateRef     = useRef(RATES[1])
+  const chunksRef   = useRef<ChunkEntry[]>([])
+  const chunkIdxRef = useRef(0)
+  const iosTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const sectionRefs = useRef<(HTMLElement | null)[]>([])
+
+  // Load hike + guide
   useEffect(() => {
     getPlannedById(hikeId).then(h => {
       setHike(h)
@@ -342,14 +337,44 @@ export default function GuidaPage() {
     }).catch(() => setLoading(false))
   }, [hikeId])
 
+  // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
+  useEffect(() => {
+    if (!hike) return
+    const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
+    const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map((p: [number, number]) => ({ lat: p[0], lon: p[1] }))
+    if (!poly.length) return
+    const mid = poly[Math.floor(poly.length / 2)]
+    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
+      fetchRoutePhotos(mid.lat, mid.lon, 15000, 6)
+    ).then(photos => {
+      setRoutePhotos(photos.map(p => p.url))
+    }).catch(() => {})
+  }, [hike])
+
+  // IntersectionObserver: track which section is in view for tab highlighting
+  useEffect(() => {
+    if (!sections.length) return
+    const obs = new IntersectionObserver(
+      entries => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            const idx = sectionRefs.current.indexOf(e.target as HTMLElement)
+            if (idx >= 0) setVisibleSec(idx)
+          }
+        }
+      },
+      { threshold: 0.3, rootMargin: '-56px 0px -40% 0px' },
+    )
+    sectionRefs.current.forEach(el => el && obs.observe(el))
+    return () => obs.disconnect()
+  }, [sections])
+
+  // Rebuild chunks on section change
   useEffect(() => {
     chunksRef.current = buildChunks(sections)
   }, [sections])
 
-  useEffect(() => () => {
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-    if (iosTimerRef.current) clearInterval(iosTimerRef.current)
-  }, [])
+  // ── Generate ──────────────────────────────────────────────────────────────
 
   const generate = useCallback(async (length: GuideLength) => {
     setGenerating(true)
@@ -367,13 +392,16 @@ export default function GuidaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hikeId, length }),
       })
+
       if (!res.ok) {
         const j = await res.json().catch(() => ({ error: 'Errore sconosciuto' }))
         throw new Error(j.error ?? `HTTP ${res.status}`)
       }
+
       const reader  = res.body!.getReader()
       const decoder = new TextDecoder()
       let acc = ''
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -381,6 +409,7 @@ export default function GuidaPage() {
         setGuideText(acc)
         setSections(parseGuide(acc))
       }
+
       updatePlannedMeta(hikeId, { cachedGuide: acc }).catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore durante la generazione')
@@ -388,6 +417,8 @@ export default function GuidaPage() {
       setGenerating(false)
     }
   }, [hikeId])
+
+  // ── Voice ─────────────────────────────────────────────────────────────────
 
   function clearIosTimer() {
     if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
@@ -422,9 +453,11 @@ export default function GuidaPage() {
       const { text, sectionIdx } = chunks[idx]
       setActiveSection(sectionIdx)
       setPlayProgress(idx / Math.max(chunks.length - 1, 1))
+
       const utt   = new SpeechSynthesisUtterance(text)
       utt.lang    = 'it-IT'
       utt.rate    = rateRef.current
+      utt.pitch   = 1.0
       const voice = getItalianVoice()
       if (voice) utt.voice = voice
       utt.onend = () => { chunkIdxRef.current++; playNext() }
@@ -463,396 +496,410 @@ export default function GuidaPage() {
     }
   }
 
+  function speakSection(idx: number) {
+    const startChunk = chunksRef.current.findIndex(c => c.sectionIdx === idx)
+    if (startChunk >= 0) startFrom(startChunk)
+  }
+
+  function scrollToSection(idx: number) {
+    sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  useEffect(() => () => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+    clearIosTimer()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── PDF export ────────────────────────────────────────────────────────────
+
+  function exportPdf() {
+    window.print()
+  }
+
+  // ── Loading / not found ───────────────────────────────────────────────────
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#EAF4FB' }}>
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#1C5F8A' }} />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f5f3ef' }}>
+        <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
       </div>
     )
   }
 
   if (!hike) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#EAF4FB' }}>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#f5f3ef' }}>
         <p className="text-stone-500 text-lg">Percorso non trovato</p>
-        <button onClick={() => router.push('/pianificazione')} style={{ color: '#1C5F8A' }} className="hover:underline">
-          ← Torna a Pianificazione
+        <button onClick={() => router.push('/programma')} className="text-amber-600 hover:underline">
+          ← Torna alle pianificate
         </button>
       </div>
     )
   }
 
   const hasGuide   = guideText.trim().length > 50
-  const diff       = hike.assessment?.difficulty ?? hike.tags?.[0]
-  const hasTrack   = (hike.trackPoints?.length ?? 0) > 1
-  const centerPt   = heroPolyline.length > 0 ? heroPolyline[Math.floor(heroPolyline.length / 2)] : null
-  const previewText = guideText
-    .replace(/^## .+$/gm, '')
-    .replace(/^### .+$/gm, '')
-    .replace(/\[curiosita\][\s\S]*?\[\/curiosita\]/g, '')
-    .trim()
+  const hikeTitle  = hike.title
+  const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen" style={{ background: '#EAF4FB' }}>
-      <Navbar />
+    <div className="min-h-screen" style={{ background: '#f5f3ef' }}>
 
-      <div className="md:flex md:h-[calc(100vh-56px)]">
-        <PianificazioneSidebar selected={hikeId} />
+      {/* ── Sticky nav bar ──────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b shadow-sm print:hidden" style={{ borderColor: '#e5e1d8' }}>
+        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <button
+            onClick={() => router.push(`/programma/${encodeURIComponent(hikeId)}`)}
+            className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition-colors shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline font-medium">Percorso</span>
+          </button>
 
-        <main className="flex-1 min-w-0 md:overflow-y-auto pb-20 md:pb-0">
-
-          {/* ══ HERO ══ */}
-          <div className="relative overflow-hidden h-[180px] md:h-[220px]" style={{ background: 'linear-gradient(160deg, #0B3252 0%, #1C5F8A 100%)' }}>
-            {heroPolyline.length > 1 && (
-              <div className="absolute inset-0 pointer-events-none opacity-20">
-                <RouteThumb polyline={heroPolyline} color="rgba(255,255,255,0.7)" strokeWidth={6} />
-              </div>
-            )}
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,.62) 0%, rgba(0,0,0,.15) 55%, transparent 100%)' }} />
-
-            {/* Top-left: back button */}
-            <div className="absolute top-3 left-4">
-              <button
-                onClick={() => router.push('/pianificazione')}
-                className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-black/40"
-                style={{ background: 'rgba(0,0,0,.30)', color: 'white' }}
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Pianificazione
-              </button>
-            </div>
-
-            {/* Top-right: badge + segna come fatta */}
-            <div className="absolute top-3 right-4 flex items-center gap-1.5">
-              <span
-                className="text-[9px] font-bold tracking-[2px] uppercase px-2 py-0.5 rounded-md"
-                style={{ background: 'rgba(255,255,255,.15)', color: '#AED4EC' }}
-              >
-                Guida Turistica
-              </span>
-              <Link
-                href={`/transizione/${encodeURIComponent(hikeId)}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-white transition-colors hover:bg-white/10"
-                style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.25)' }}
-              >
-                <Check className="w-3 h-3" />
-                Segna come fatta
-              </Link>
-            </div>
-
-            {/* Bottom: title + chips */}
-            <div className="absolute inset-x-0 bottom-0 px-4 pb-4">
-              <h1 className="text-[20px] font-bold leading-tight text-white mb-1" style={{ fontFamily: "'Lora', serif" }}>
-                {hike.title}
-              </h1>
-              <div className="flex flex-wrap gap-1.5">
-                {diff && (
-                  <span className="flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full text-white uppercase"
-                    style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
-                    {diff}
-                  </span>
-                )}
-                {hike.plannedDate && (
-                  <span className="flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
-                    style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
-                    {format(new Date(hike.plannedDate + 'T12:00'), 'd MMM yyyy', { locale: it })}
-                  </span>
-                )}
-                <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
-                  style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
-                  <Route className="w-3 h-3" /> {(hike.distanceMeters / 1000).toFixed(1)} km
-                </span>
-                <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
-                  style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
-                  <Mountain className="w-3 h-3" /> {Math.round(hike.elevationGain)} m D+
-                </span>
-                <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full text-white"
-                  style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.20)' }}>
-                  <Clock className="w-3 h-3" /> {formatDuration(hike.estimatedTimeSeconds)}
-                </span>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[9px] font-bold tracking-[3px] text-amber-600 uppercase hidden sm:block">DTrek</span>
+            <span className="text-stone-300 hidden sm:block">·</span>
+            <span className="text-sm font-semibold text-stone-700 truncate font-display">{hikeTitle}</span>
           </div>
 
-          {/* ══ CONTENT ══ */}
-          <div className="px-3 sm:px-4 pt-4">
-
-            {/* ── SECTION: GUIDA ──────────────────────────────────────── */}
-            <Card>
-              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <SectionLabel>Guida</SectionLabel>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex rounded-xl overflow-hidden border border-stone-200">
-                    {LENGTH_OPTS.map(opt => (
-                      <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                        className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${guideLength === opt.key ? 'text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}
-                        style={guideLength === opt.key ? { background: '#1C5F8A' } : {}}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => generate(guideLength)}
-                    disabled={generating}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wide text-white transition-colors disabled:opacity-50"
-                    style={{ background: '#1C5F8A' }}>
-                    {generating
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione…</>
-                      : <><BookOpen className="w-3.5 h-3.5" /> {hasGuide ? 'Rigenera' : 'Genera con Giulia'}</>
-                    }
-                  </button>
-                </div>
-              </div>
-
-              {error && (
-                <div className="mb-3 p-3 rounded-xl text-sm text-red-700" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
-                  {error}
-                </div>
-              )}
-
-              {/* Generating: show streaming text */}
-              {generating && (
-                <div>
-                  {!guideText ? (
-                    <div className="flex items-center gap-3 py-6 text-stone-500">
-                      <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#1C5F8A' }} />
-                      <span className="italic text-sm" style={{ fontFamily: "'Lora', serif" }}>Giulia sta scrivendo la guida…</span>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl p-4" style={{ background: '#EAF4FB' }}>
-                      <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-wrap" style={{ fontFamily: "'Lora', serif" }}>{guideText}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* No guide yet, not generating */}
-              {!hasGuide && !generating && (
-                <div className="rounded-[14px] p-5 flex flex-col items-center gap-3 text-center"
-                  style={{ background: '#EAF4FB', border: '2px dashed #1C5F8A' }}>
-                  <BookOpen className="w-8 h-8" style={{ color: '#1C5F8A' }} />
-                  <div>
-                    <p className="font-bold text-sm" style={{ color: '#0D3B5E', fontFamily: "'Lora', serif" }}>
-                      Guida da generare
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: '#8a7f6e' }}>
-                      Giulia elaborerà storia, natura, curiosità e consigli pratici per questo percorso.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Guide exists: truncated preview + read more */}
-              {hasGuide && !generating && (
-                <div>
-                  <div className="relative">
-                    <p className="text-[14px] leading-7 text-stone-600 line-clamp-4"
-                      style={{ fontFamily: "'Lora', serif", fontStyle: 'italic' }}>
-                      {previewText.slice(0, 350)}{previewText.length > 350 ? '…' : ''}
-                    </p>
-                    <div className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
-                      style={{ background: 'linear-gradient(to top, white, transparent)' }} />
-                  </div>
-                  <button
-                    onClick={() => setShowFullText(true)}
-                    className="mt-3 text-[12px] font-bold flex items-center gap-1 transition-colors hover:underline"
-                    style={{ color: '#1C5F8A' }}>
-                    Leggi tutta la guida →
-                  </button>
-                </div>
-              )}
-            </Card>
-
-            {/* ── SECTION: MAPPA ──────────────────────────────────────── */}
-            <Card>
-              <SectionLabel>Mappa</SectionLabel>
-              <div className="rounded-[12px] overflow-hidden h-[260px] md:h-[380px]">
-                {hasTrack ? (
-                  <MapView trackPoints={hike.trackPoints ?? []} height="100%" planned />
-                ) : (
-                  <div className="h-full flex items-center justify-center" style={{ background: '#f5f5f5' }}>
-                    <p className="text-stone-400 text-sm">Nessuna traccia disponibile</p>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            {/* ── SECTION: SCHEDA TECNICA ─────────────────────────────── */}
-            <Card>
-              <SectionLabel>Scheda Tecnica</SectionLabel>
-              <div className="rounded-[12px] overflow-hidden" style={{ border: '1px solid #d4e8f5' }}>
-                {[
-                  ['Distanza',      `${(hike.distanceMeters / 1000).toFixed(1)} km`],
-                  ['Dislivello D+', `${Math.round(hike.elevationGain)} m`],
-                  ['Dislivello D−', `${Math.round(hike.elevationLoss)} m`],
-                  ['Tempo stimato', formatDuration(hike.estimatedTimeSeconds)],
-                  ['Difficoltà',    diff?.toUpperCase() ?? '–'],
-                  ['Quota max',     `${Math.round(hike.altitudeMax)} m`],
-                  ['Quota min',     `${Math.round(hike.altitudeMin)} m`],
-                  hike.cachedTrailScore != null ? ['CTS stimato', String(Math.round(hike.cachedTrailScore))] : null,
-                ].filter(Boolean).map((row, i, arr) => {
-                  const [label, value] = row as [string, string]
-                  return (
-                    <div
-                      key={label}
-                      className="flex items-center justify-between px-4 py-2.5"
-                      style={{ borderBottom: i < arr.length - 1 ? '1px solid #f0f5f9' : 'none' }}
-                    >
-                      <span className="text-[11px] uppercase tracking-[1px] font-semibold" style={{ color: '#8a7f6e' }}>{label}</span>
-                      <span className="text-[14px] font-bold" style={{ color: '#0D3B5E', fontFamily: "'DM Mono', monospace" }}>{value}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </Card>
-
-            {/* ── SECTION: PUNTI DI INTERESSE ─────────────────────────── */}
-            <Card>
-              <SectionLabel>Punti di Interesse</SectionLabel>
-              {poiPhotos.length > 0 ? (
-                <div className="space-y-2">
-                  {poiPhotos.map((p, i) => <PoiCard key={i} photo={p} />)}
-                </div>
-              ) : (
-                <div className="text-center py-10" style={{ color: '#a9a18e' }}>
-                  <MapPin className="w-9 h-9 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">Nessun POI disponibile</p>
-                  <p className="text-xs mt-1">I punti di interesse vengono caricati automaticamente</p>
-                </div>
-              )}
-            </Card>
-
-            {/* ── SECTION: METEO ───────────────────────────────────────── */}
-            <Card>
-              <SectionLabel>Meteo</SectionLabel>
-              {centerPt ? (
-                <WeatherWidget
-                  mode="planned"
-                  lat={centerPt[0]}
-                  lon={centerPt[1]}
-                  date={hike.plannedDate}
-                  altitudeMax={hike.altitudeMax}
-                  elevationGain={hike.elevationGain}
-                />
-              ) : (
-                <div className="flex flex-col items-center py-10 gap-2 text-center" style={{ color: '#a9a18e' }}>
-                  <p className="text-sm">Nessuna traccia disponibile per le previsioni</p>
-                </div>
-              )}
-            </Card>
-
-            {/* ── SECTION: ZAINO ───────────────────────────────────────── */}
-            <Card>
-              <SectionLabel>🎒 Zaino</SectionLabel>
-              <ZainoChecklist />
-            </Card>
-
-          </div>
-        </main>
-      </div>
-
-      {/* ── Full-text drawer: "Leggi tutta la guida" ────────────────── */}
-      {showFullText && (
-        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
-          {/* Sticky header */}
-          <div className="sticky top-0 z-10 bg-white border-b border-stone-100 px-4 py-3 flex items-center gap-3 flex-wrap">
-            <button onClick={() => setShowFullText(false)}
-              className="flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Chiudi
-            </button>
-            <h2 className="flex-1 text-sm font-semibold text-stone-700 truncate" style={{ fontFamily: "'Lora', serif" }}>
-              {hike.title}
-            </h2>
-
-            {/* TTS controls */}
+          <div className="flex items-center gap-1 shrink-0">
+            {hasGuide && RATES.map((r, i) => (
+              <button key={r} onClick={() => changeRate(i)}
+                className={`text-xs px-1.5 py-0.5 rounded font-mono transition-colors ${
+                  rateIdx === i ? 'bg-amber-500 text-white' : 'text-stone-400 hover:text-stone-600'
+                }`}
+              >{r}×</button>
+            ))}
             {hasGuide && (
-              <div className="flex items-center gap-1">
-                {RATES.map((r, i) => (
-                  <button key={r} onClick={() => changeRate(i)}
-                    className="text-[10px] px-1.5 py-1 rounded font-mono"
-                    style={rateIdx === i ? { background: '#EAF4FB', color: '#1C5F8A', fontWeight: 700 } : { color: '#a9a18e' }}
-                  >
-                    {r}×
-                  </button>
-                ))}
+              <>
                 <button onClick={togglePlayPause}
-                  className="w-8 h-8 rounded-full flex items-center justify-center ml-1"
-                  style={{ background: '#EAF4FB' }}
+                  className={`ml-1 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                    isPlaying || isPaused
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                  }`}
                 >
-                  {isPlaying ? <Pause className="w-3.5 h-3.5" style={{ color: '#1C5F8A' }} /> : <Play className="w-3.5 h-3.5 ml-0.5" style={{ color: '#1C5F8A' }} />}
+                  {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
                 </button>
                 {(isPlaying || isPaused) && (
-                  <button onClick={stopVoice} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#f5f5f5' }}>
-                    <Square className="w-3 h-3" style={{ color: '#8a7f6e' }} />
-                  </button>
+                  <button onClick={stopVoice}
+                    className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors"
+                  ><Square className="w-3 h-3" /></button>
                 )}
-              </div>
-            )}
-          </div>
-
-          <div className="max-w-3xl mx-auto px-4 py-6">
-            {/* Voice progress */}
-            {(isPlaying || isPaused) && hasGuide && (
-              <div className="mb-4 bg-white rounded-xl border px-3 py-2 flex items-center gap-3" style={{ borderColor: '#d4e8f5' }}>
-                <Volume2 className="w-3.5 h-3.5 shrink-0" style={{ color: '#1C5F8A' }} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-medium text-stone-600 truncate">
-                    {isPlaying && activeSection !== null ? `▶ ${sections[activeSection]?.title ?? '…'}` : '⏸ In pausa'}
-                  </p>
-                  <div className="mt-1 h-0.5 bg-stone-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-300" style={{ width: `${Math.round(playProgress * 100)}%`, background: '#1C5F8A' }} />
-                  </div>
-                </div>
-                <button onClick={stopVoice} style={{ color: '#8a7f6e' }}><Square className="w-3.5 h-3.5" /></button>
-              </div>
-            )}
-
-            {/* Sections */}
-            {sections.map((s, i) => (
-              <div
-                key={i}
-                className="bg-white rounded-[14px] overflow-hidden mb-4"
-                style={{
-                  boxShadow: activeSection === i && (isPlaying || isPaused)
-                    ? '0 0 0 2px #1C5F8A, 0 2px 12px rgba(28,95,138,.15)'
-                    : '0 2px 10px rgba(0,0,0,.06)',
-                }}
-              >
-                <div className="flex items-center gap-2.5 px-4 py-3" style={{ background: s.color }}>
-                  <span className="[&>svg]:w-4 [&>svg]:h-4 text-white opacity-80">{s.icon}</span>
-                  <h2 className="text-[12px] font-bold tracking-[1.5px] uppercase text-white">{s.title}</h2>
-                </div>
-                <div className="px-4 py-4">
-                  <MagazineBody body={s.body} color={s.color} />
-                </div>
-              </div>
-            ))}
-
-            {generating && (
-              <div className="flex items-center gap-2 px-4 py-3 bg-white rounded-[14px]">
-                <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#1C5F8A' }} />
-                <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
-              </div>
-            )}
-
-            {!generating && hasGuide && (
-              <div className="flex items-center justify-between flex-wrap gap-2 pt-2">
-                <button onClick={() => generate(guideLength)} disabled={generating}
-                  className="flex items-center gap-1.5 text-xs" style={{ color: '#8a7f6e' }}
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Rigenera
-                </button>
-                <button onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-4 py-2 text-white rounded-full text-sm font-semibold"
-                  style={{ background: '#1C5F8A' }}
-                >
-                  <FileDown className="w-3.5 h-3.5" /> PDF
-                </button>
-              </div>
+              </>
             )}
           </div>
         </div>
+      </div>
+
+      {/* ── Hero ────────────────────────────────────────────────────────── */}
+      <div className="relative w-full overflow-hidden print:h-[220px]" style={{ height: 'clamp(280px, 42vw, 480px)' }}>
+        {/* Background: photo or gradient */}
+        {routePhotos[0] ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={routePhotos[0]}
+            alt={hikeTitle}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ objectPosition: 'center 35%' }}
+          />
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={{ background: 'linear-gradient(135deg, #78350f 0%, #1c4532 50%, #0c1a0f 100%)' }}
+          >
+            <RouteSvg hike={hike} />
+          </div>
+        )}
+
+        {/* Gradient overlay */}
+        <div className="absolute inset-0" style={{
+          background: 'linear-gradient(to top, rgba(5,5,5,0.9) 0%, rgba(5,5,5,0.5) 40%, rgba(0,0,0,0.15) 80%, transparent 100%)',
+        }} />
+
+        {/* Content */}
+        <div className="absolute bottom-0 left-0 right-0 px-6 sm:px-10 pb-7">
+          <span className="inline-block bg-amber-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-3 uppercase">
+            {categoryBadge}
+          </span>
+          <h1 className="font-barlow text-2xl sm:text-4xl font-black text-white leading-tight mb-1.5 max-w-2xl uppercase tracking-tight"
+            style={{ textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}
+          >
+            {hikeTitle}
+          </h1>
+          {hike.plannedDate && (
+            <p className="font-lora text-[13px] italic text-white/70">
+              {format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* ── Stats strip ─────────────────────────────────────────────────── */}
+      <div className="flex" style={{ background: '#1a1a1a' }}>
+        {[
+          { icon: <Route    className="w-3.5 h-3.5" />, value: `${(hike.distanceMeters/1000).toFixed(1)} km`,         label: 'Distanza' },
+          { icon: <Mountain className="w-3.5 h-3.5" />, value: `+${Math.round(hike.elevationGain)} m`,               label: 'Dislivello' },
+          { icon: <Mountain className="w-3.5 h-3.5" />, value: `${Math.round(hike.altitudeMax)} m`,                  label: 'Quota max' },
+          { icon: <Clock    className="w-3.5 h-3.5" />, value: formatDuration(hike.estimatedTimeSeconds),            label: 'Durata' },
+        ].map(({ icon, value, label }, i, arr) => (
+          <div key={label} className="flex-1 flex flex-col items-center justify-center py-4 gap-1"
+            style={{ borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}
+          >
+            <span className="flex items-center gap-1.5 text-[17px] font-bold text-white leading-none">
+              <span className="text-amber-500 hidden sm:block">{icon}</span>
+              {value}
+            </span>
+            <span className="font-barlow text-[8px] font-semibold tracking-[1.8px] uppercase text-amber-500/80">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Photo mosaic strip ─────────────────────────────────────────── */}
+      {routePhotos.length >= 2 && (
+        <div className="flex h-40 overflow-hidden print:hidden">
+          {routePhotos.slice(1, 5).map((url, i) => (
+            <div key={i} className="flex-1 overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} className="w-full h-full object-cover" style={{ objectPosition: 'center 40%' }} alt="" />
+            </div>
+          ))}
+        </div>
       )}
+
+      {/* ── Main content ────────────────────────────────────────────────── */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 print:max-w-full print:px-0">
+
+        {/* ── No guide yet ────────────────────────────────────────────── */}
+        {!hasGuide && !generating && (
+          <div className="flex flex-col items-center py-20 gap-8 text-center print:hidden">
+            <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center shadow-inner">
+              <BookOpen className="w-9 h-9 text-amber-500" />
+            </div>
+            <div className="max-w-sm">
+              <h2 className="font-display text-2xl font-bold text-stone-800 mb-3">
+                Nessuna guida ancora generata
+              </h2>
+              <p className="text-stone-500 text-[15px] leading-relaxed">
+                Giulia elaborerà una guida personalizzata raccontando storia, natura,
+                curiosità e consigli pratici per questo percorso.
+              </p>
+            </div>
+
+            <div className="w-full max-w-xs">
+              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-[2px] mb-3">
+                Lunghezza della guida
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {LENGTH_OPTS.map(opt => (
+                  <button key={opt.key} onClick={() => setGuideLength(opt.key)}
+                    className={`flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 transition-all ${
+                      guideLength === opt.key
+                        ? 'border-amber-500 bg-amber-50 text-amber-800'
+                        : 'border-stone-200 bg-white text-stone-500 hover:border-amber-200'
+                    }`}
+                  >
+                    <span className="font-bold text-sm">{opt.label}</span>
+                    <span className="text-xs opacity-60">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-red-600 text-sm bg-red-50 border border-red-100 rounded-lg px-4 py-2 max-w-sm">
+                {error}
+              </p>
+            )}
+
+            <button onClick={() => generate(guideLength)}
+              className="flex items-center gap-2 px-7 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
+            >
+              <BookOpen className="w-4 h-4" />
+              Genera la guida con Giulia
+            </button>
+          </div>
+        )}
+
+        {/* ── Generating spinner ──────────────────────────────────────── */}
+        {generating && sections.length === 0 && (
+          <div className="flex flex-col items-center gap-4 py-20 text-center print:hidden">
+            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center animate-pulse">
+              <BookOpen className="w-7 h-7 text-amber-500" />
+            </div>
+            <div>
+              <p className="font-display font-semibold text-stone-700 text-lg">Giulia sta scrivendo…</p>
+              <p className="text-stone-400 text-sm mt-1">ci vorranno circa 20–30 secondi</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Voice progress bar (when playing) ──────────────────────── */}
+        {(isPlaying || isPaused) && hasGuide && (
+          <div className="mt-6 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3 print:hidden" style={{ borderColor: '#e5e1d8' }}>
+            <Volume2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-medium text-stone-600 truncate">
+                {isPlaying && activeSection !== null
+                  ? `▶ ${sections[activeSection]?.title ?? '…'}`
+                  : '⏸ In pausa'}
+              </p>
+              <div className="mt-1 h-0.5 bg-amber-100 rounded-full overflow-hidden">
+                <div className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round(playProgress * 100)}%` }} />
+              </div>
+            </div>
+            <button onClick={stopVoice}
+              className="text-stone-400 hover:text-stone-700 transition-colors"
+            ><Square className="w-3.5 h-3.5" /></button>
+          </div>
+        )}
+
+        {/* ── Section tab navigation ──────────────────────────────────── */}
+        {sections.length > 0 && (
+          <div className="sticky z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 bg-white/95 backdrop-blur-sm border-b overflow-x-auto print:hidden"
+            style={{ top: '56px', borderColor: '#e5e1d8', scrollbarWidth: 'none' }}
+          >
+            <div className="flex gap-1.5 min-w-max">
+              {sections.map((s, i) => (
+                <button key={i} onClick={() => scrollToSection(i)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap"
+                  style={visibleSec === i
+                    ? { background: s.color, color: 'white' }
+                    : { background: '#f5f3ef', color: '#78716c' }
+                  }
+                >
+                  <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
+                  <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Guide sections ──────────────────────────────────────────── */}
+        {sections.length > 0 && (
+          <div className="mt-6 space-y-0">
+            {sections.map((s, i) => {
+              const isLuoghi = s.title.toLowerCase().includes('luoghi')
+              const isVoiceActive = activeSection === i && (isPlaying || isPaused)
+
+              return (
+                <article
+                  key={i}
+                  ref={el => { sectionRefs.current[i] = el }}
+                  className={`scroll-mt-28 bg-white rounded-2xl mb-5 overflow-hidden shadow-sm transition-shadow print:rounded-none print:shadow-none print:overflow-visible print:mb-0 print:border-b print:border-stone-200 ${
+                    isVoiceActive ? 'ring-2 ring-amber-300 shadow-amber-100 shadow-md' : 'hover:shadow-md'
+                  }`}
+                >
+                  {/* Section header band */}
+                  <div
+                    className="flex items-center gap-3 px-6 py-3.5"
+                    style={{ background: s.color }}
+                  >
+                    <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
+                    <div className="flex items-center gap-2 text-white">
+                      <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
+                      <h2 className="font-barlow text-[13px] font-bold tracking-[2px] uppercase">{s.title}</h2>
+                    </div>
+                    <div className="flex-1" />
+                    <button
+                      onClick={() => speakSection(i)}
+                      className="opacity-60 hover:opacity-100 transition-opacity print:hidden"
+                      title="Ascolta questa sezione"
+                    >
+                      <Volume2 className="w-3.5 h-3.5 text-white" />
+                    </button>
+                  </div>
+
+                  {/* Section body */}
+                  <div className="px-6 py-6 sm:px-8">
+                    <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
+
+                    {/* POI photo grid — only in "I luoghi" section */}
+                    {isLuoghi && poiPhotos.length > 0 && (
+                      <div className="mt-8 pt-6 border-t" style={{ borderColor: '#e5e1d8' }}>
+                        <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-4">
+                          Luoghi e siti del percorso
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {poiPhotos.map((photo, pi) => (
+                            <PoiCard key={pi} photo={photo} color={s.color} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
+
+            {/* Generating more... */}
+            {generating && (
+              <div className="flex items-center gap-2 px-6 py-4 bg-white rounded-2xl shadow-sm print:hidden">
+                <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {error && hasGuide && (
+          <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600 print:hidden">
+            {error}
+          </div>
+        )}
+
+        {/* ── Bottom actions ──────────────────────────────────────────── */}
+        {hasGuide && !generating && (
+          <div className="mt-10 mb-16 pt-6 flex flex-wrap items-center justify-between gap-4 print:hidden" style={{ borderTop: '1px solid #e5e1d8' }}>
+            <button
+              onClick={() => router.push(`/programma/${encodeURIComponent(hikeId)}`)}
+              className="flex items-center gap-1.5 text-stone-400 hover:text-stone-700 text-sm transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Torna al percorso
+            </button>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Regenerate controls */}
+              <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#e5e1d8' }}>
+                {LENGTH_OPTS.map(opt => (
+                  <button key={opt.key} onClick={() => setGuideLength(opt.key)}
+                    className={`text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
+                      guideLength === opt.key
+                        ? 'bg-amber-500 text-white'
+                        : 'text-stone-400 hover:text-stone-700'
+                    }`}
+                  >{opt.label}</button>
+                ))}
+              </div>
+
+              <button onClick={() => generate(guideLength)} disabled={generating}
+                className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-amber-600 transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Rigenera
+              </button>
+
+              {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
+                <span className="flex items-center gap-1 text-xs text-stone-400">
+                  <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
+                </span>
+              )}
+
+              <button onClick={exportPdf}
+                className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                Stampa PDF
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
