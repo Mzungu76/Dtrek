@@ -10,6 +10,7 @@ import SpeedChart from '@/components/SpeedChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import RouteThumb from '@/components/RouteThumb'
+import PhotoMosaic from '@/components/PhotoMosaic'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import {
   getActivityById, updateActivityMeta, deleteActivity,
@@ -32,7 +33,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -41,11 +42,34 @@ const MapView         = dynamic(() => import('@/components/MapView'),         { 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 
+interface RoutePhoto {
+  id: string
+  dataUrl: string
+  progress: number
+  caption: string
+  hasExifGps: boolean
+  lat?: number
+  lon?: number
+}
+
 function ratingColor(n: number) {
   return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
 }
 function ratingLabel(n: number) {
   return n >= 9 ? 'Eccellente' : n >= 7 ? 'Buono' : n >= 5 ? 'Sufficiente' : 'Insufficiente'
+}
+
+function stripReportMarkdown(md: string): string {
+  return md
+    .replace(/^##\s+/gm, '')
+    .replace(/\[curiosita\]|\[\/curiosita\]/g, '')
+    .replace(/\n{2,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)} [...]` : text
 }
 
 // ── Pagina principale ─────────────────────────────────────────────────────────
@@ -72,7 +96,12 @@ export default function EscursionePage() {
   const [savingRating,    setSavingRating]   = useState(false)
   const [showRatingPanel, setShowRatingPanel] = useState(false)
   const [show3D,          setShow3D]          = useState(false)
+  const [openVideoWizard, setOpenVideoWizard] = useState(false)
   const [showStreetView,  setShowStreetView]  = useState(false)
+  const [photos,          setPhotos]          = useState<RoutePhoto[]>([])
+  const [coverPhotoId,    setCoverPhotoId]    = useState<string | null>(null)
+  const [lightbox,        setLightbox]        = useState<RoutePhoto | null>(null)
+  const [report,          setReport]          = useState<{ content: string } | null>(null)
   const [poiWikiEntries,  setPoiWikiEntries]  = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
   const [ctsResult,       setCtsResult]       = useState<TrailScoreResult | null>(null)
@@ -115,6 +144,25 @@ export default function EscursionePage() {
       }
     }).finally(() => setLoading(false))
   }, [id, router])
+
+  // Load gallery photos + cover preference + existing report (for hero photo / excerpt)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`dtrek_vp_${id}`)
+      if (raw) {
+        const parsed = JSON.parse(raw) as RoutePhoto[]
+        setPhotos([...parsed].sort((a, b) => a.progress - b.progress))
+      }
+    } catch { /* ignore */ }
+
+    const savedCover = localStorage.getItem(`dtrek_cover_${id}`)
+    if (savedCover) setCoverPhotoId(savedCover)
+
+    fetch(`/api/resoconto?activityId=${encodeURIComponent(id)}`)
+      .then(r => r.json())
+      .then(d => { if (d?.content) setReport(d) })
+      .catch(() => null)
+  }, [id])
 
   // Load user prefs for CTS display
   useEffect(() => {
@@ -254,14 +302,24 @@ export default function EscursionePage() {
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
   const rated     = (activity.userRating ?? 0) > 0
+  const heroPhoto = photos.find(p => p.id === coverPhotoId) ?? photos[0] ?? null
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
       <Navbar />
 
       {/* ══ HERO ══ */}
-      <div className="relative bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700 text-white overflow-hidden">
-        {heroPolyline.length > 1 && (
+      <div className="relative text-white overflow-hidden">
+        {heroPhoto ? (
+          <>
+            <img src={heroPhoto.dataUrl} alt=""
+              className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/70 to-black/20" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />
+        )}
+        {!heroPhoto && heroPolyline.length > 1 && (
           <div className="absolute inset-0 pointer-events-none">
             <RouteThumb polyline={heroPolyline} color="rgba(255,255,255,0.10)" strokeWidth={7} />
           </div>
@@ -386,6 +444,43 @@ export default function EscursionePage() {
         </div>
       </div>
 
+      {/* ══ PHOTO MOSAIC ══ */}
+      {photos.length >= 2 && (
+        <PhotoMosaic
+          photos={photos.slice(1, 5).map(ph => ({ id: ph.id, url: ph.dataUrl, alt: ph.caption }))}
+          onPhotoClick={photoId => {
+            const ph = photos.find(p => p.id === photoId)
+            if (ph) setLightbox(ph)
+          }}
+        />
+      )}
+
+      {/* ══ RESOCONTO EXCERPT ══ */}
+      <div className="bg-white border-b border-stone-200">
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          {report?.content ? (
+            <>
+              <h2 className="font-display text-lg font-semibold text-stone-700 mb-2">Resoconto</h2>
+              <p className="text-sm text-stone-600 leading-relaxed font-lora">
+                {truncate(stripReportMarkdown(report.content), 300)}
+              </p>
+              <button onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}`)}
+                className="flex items-center gap-1.5 mt-3 text-sm font-medium text-forest-600 hover:text-forest-700 transition-colors">
+                <BookOpen className="w-3.5 h-3.5" /> Leggi tutto
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-sm text-stone-500">Non hai ancora un resoconto per questa escursione.</p>
+              <button onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}`)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium transition-colors">
+                <BookOpen className="w-3.5 h-3.5" /> Genera resoconto
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ══ RATING PANEL ══ */}
       {showRatingPanel && (
         <div className="bg-forest-900 border-b border-forest-800 text-white">
@@ -498,6 +593,12 @@ export default function EscursionePage() {
                 <button onClick={() => setShow3D(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors">
                   <Box className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Vista 3D</span>
+                </button>
+              )}
+              {hasGps && (
+                <button onClick={() => { setOpenVideoWizard(true); setShow3D(true) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-forest-600 text-white hover:bg-forest-700 transition-colors">
+                  <Film className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Crea video</span>
                 </button>
               )}
             </div>
@@ -636,13 +737,31 @@ export default function EscursionePage() {
 
       {show3D && (
         <RouteMap3D trackPoints={activity.trackPoints} title={activity.title ?? activity.notes}
-          onClose={() => setShow3D(false)} plannedTrackPoints={activity.linkedPlannedTrackPoints}
-          activityId={activity.id}
+          onClose={() => { setShow3D(false); setOpenVideoWizard(false) }} plannedTrackPoints={activity.linkedPlannedTrackPoints}
+          activityId={activity.id} initialVideoState={openVideoWizard ? 'config' : 'idle'}
           distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain} pois={pois} />
       )}
       {showStreetView && centerPt?.lat && centerPt?.lon && (
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity.title ?? undefined}
           onClose={() => setShowStreetView(false)} />
+      )}
+
+      {lightbox && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white">
+            <X className="w-6 h-6" />
+          </button>
+          <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+            <img src={lightbox.dataUrl} alt={lightbox.caption}
+              className="w-full rounded-2xl shadow-2xl" />
+            {lightbox.caption && (
+              <p className="font-lora text-sm italic text-white/70 text-center mt-3">
+                {lightbox.caption}
+              </p>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
