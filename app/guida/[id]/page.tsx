@@ -531,7 +531,7 @@ export default function GuidaPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#f5f3ef' }}>
         <p className="text-stone-500 text-lg">Percorso non trovato</p>
-        <button onClick={() => router.push('/programma')} className="text-amber-600 hover:underline">
+        <button onClick={() => router.push('/')} className="text-amber-600 hover:underline">
           ← Torna alle pianificate
         </button>
       </div>
