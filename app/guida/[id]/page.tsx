@@ -15,6 +15,7 @@ import {
   FileDown, ExternalLink, BookOpen,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
+import PhotoMosaic from '@/components/PhotoMosaic'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -658,16 +659,10 @@ export default function GuidaPage() {
       </div>
 
       {/* ── Photo mosaic strip ─────────────────────────────────────────── */}
-      {routePhotos.length >= 2 && (
-        <div className="flex h-40 overflow-hidden print:hidden">
-          {routePhotos.slice(1, 5).map((url, i) => (
-            <div key={i} className="flex-1 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} className="w-full h-full object-cover" style={{ objectPosition: 'center 40%' }} alt="" />
-            </div>
-          ))}
-        </div>
-      )}
+      <PhotoMosaic
+        photos={routePhotos.slice(1, 5).map((url, i) => ({ id: String(i), url }))}
+        heightClass="h-40"
+      />
 
       {/* ── Main content ────────────────────────────────────────────────── */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 print:max-w-full print:px-0">

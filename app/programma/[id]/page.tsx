@@ -7,6 +7,7 @@ import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import RouteThumb from '@/components/RouteThumb'
+import PhotoMosaic from '@/components/PhotoMosaic'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
 import {
@@ -507,21 +508,10 @@ export default function PlannedHikePage() {
       </div>
 
       {/* ══ Photo mosaic ══ */}
-      {routePhotos.length >= 2 && (
-        <div className="flex h-32 sm:h-40 overflow-hidden">
-          {routePhotos.slice(1, 5).map((url, i) => (
-            <div key={i} className="flex-1 overflow-hidden group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                style={{ objectPosition: 'center 40%' }}
-                alt=""
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      <PhotoMosaic
+        photos={routePhotos.slice(1, 5).map((url, i) => ({ id: String(i), url }))}
+        heightClass="h-32 sm:h-40"
+      />
 
       <main className="max-w-[1200px] mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
 
