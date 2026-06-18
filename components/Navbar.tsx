@@ -3,19 +3,17 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Upload, BarChart2, CalendarDays, Map, CalendarClock, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked } from 'lucide-react'
+import { Upload, BarChart2, CalendarDays, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked } from 'lucide-react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 const NAV_LINKS = [
-  { href: '/',            label: 'Calendario',  icon: CalendarDays  },
-  { href: '/diario',      label: 'Diario',      icon: BookMarked    },
-  { href: '/statistiche', label: 'Statistiche', icon: BarChart2     },
-  { href: '/mappa',       label: 'Mappa',       icon: Map           },
-  { href: '/programma',   label: 'Programma',   icon: CalendarClock },
-  { href: '/esplora',     label: 'Esplora',     icon: Compass       },
+  { href: '/',            label: 'Calendario',  icon: CalendarDays },
+  { href: '/statistiche', label: 'Statistiche', icon: BarChart2    },
+  { href: '/esplora',     label: 'Esplora',     icon: Compass      },
+  { href: '/diario',      label: 'Diario',      icon: BookMarked   },
 ]
 
 function isActive(href: string, path: string) {

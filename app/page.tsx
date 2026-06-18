@@ -11,7 +11,7 @@ import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
-  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown,
+  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, History,
 } from 'lucide-react'
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -267,7 +267,9 @@ export default function HomePage() {
   const [view,       setView]       = useState<'calendar' | 'list'>('list')
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
   const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating' | 'cts'>('date')
-  const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus'>('date')
+  const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'suitability' | 'cts'>('date')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'done' | 'planned'>('all')
+  const [showAllHistory, setShowAllHistory] = useState(false)
   const monthBarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -357,8 +359,28 @@ export default function HomePage() {
     return map
   }, [planned])
 
+  const safeIdx = monthIdx < 0 ? months.length - 1 : monthIdx
+  const { year, month } = months[safeIdx] ?? { year: new Date().getFullYear(), month: new Date().getMonth() }
+
+  const monthActivities = useMemo(() => {
+    if (showAllHistory) return activities
+    return activities.filter(a => {
+      const d = new Date(a.startTime)
+      return d.getFullYear() === year && d.getMonth() === month
+    })
+  }, [activities, year, month, showAllHistory])
+
+  const monthPlanned = useMemo(() => {
+    if (showAllHistory) return planned
+    return planned.filter(h => {
+      if (!h.plannedDate) return false
+      const d = new Date(h.plannedDate)
+      return d.getFullYear() === year && d.getMonth() === month
+    })
+  }, [planned, year, month, showAllHistory])
+
   const sortedActivities = useMemo(() => {
-    const arr = [...activities]
+    const arr = [...monthActivities]
     switch (sortBy) {
       case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
       case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
@@ -366,23 +388,22 @@ export default function HomePage() {
       case 'cts':    return arr.sort((a, b) => ((b as ActivityMeta & { trailScore?: number }).trailScore ?? -1) - ((a as ActivityMeta & { trailScore?: number }).trailScore ?? -1))
       default:       return arr.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
     }
-  }, [activities, sortBy])
+  }, [monthActivities, sortBy])
 
   const sortedPlanned = useMemo(() => {
-    const arr = [...planned]
+    const arr = [...monthPlanned]
     switch (planSortBy) {
-      case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
-      case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
-      default:       return arr.sort((a, b) => {
+      case 'km':          return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
+      case 'dplus':       return arr.sort((a, b) => b.elevationGain - a.elevationGain)
+      case 'suitability': return arr.sort((a, b) => (b.assessment?.suitabilityScore ?? 0) - (a.assessment?.suitabilityScore ?? 0))
+      case 'cts':         return arr.sort((a, b) => ((b as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore ?? -1) - ((a as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore ?? -1))
+      default:            return arr.sort((a, b) => {
         const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
         const db = b.plannedDate ? new Date(b.plannedDate).getTime() : 0
         return db - da
       })
     }
-  }, [planned, planSortBy])
-
-  const safeIdx = monthIdx < 0 ? months.length - 1 : monthIdx
-  const { year, month } = months[safeIdx] ?? { year: new Date().getFullYear(), month: new Date().getMonth() }
+  }, [monthPlanned, planSortBy])
 
   const cells: (number | null)[] = useMemo(() => {
     const daysInMonth = getDaysInMonth(new Date(year, month))
@@ -422,23 +443,60 @@ export default function HomePage() {
             </div>
 
             {!loading && totalItems > 0 && (
-              <div className="flex items-center bg-forest-700/50 rounded-xl p-1 gap-0.5">
-                <button
-                  onClick={() => setView('calendar')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                    ${view === 'calendar' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
-                >
-                  <CalendarDays className="w-4 h-4" />
-                  <span className="hidden sm:inline">Calendario</span>
-                </button>
-                <button
-                  onClick={() => setView('list')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                    ${view === 'list' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                  <span className="hidden sm:inline">Lista</span>
-                </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center bg-forest-700/50 rounded-xl p-1 gap-0.5">
+                  <button
+                    onClick={() => setTypeFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                      ${typeFilter === 'all' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
+                  >
+                    Tutte
+                  </button>
+                  <button
+                    onClick={() => setTypeFilter('done')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                      ${typeFilter === 'done' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
+                  >
+                    Fatte
+                  </button>
+                  <button
+                    onClick={() => setTypeFilter('planned')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                      ${typeFilter === 'planned' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
+                  >
+                    Programmate
+                  </button>
+                </div>
+
+                <div className="flex items-center bg-forest-700/50 rounded-xl p-1 gap-0.5">
+                  <button
+                    onClick={() => setView('calendar')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                      ${view === 'calendar' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
+                  >
+                    <CalendarDays className="w-4 h-4" />
+                    <span className="hidden sm:inline">Calendario</span>
+                  </button>
+                  <button
+                    onClick={() => setView('list')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                      ${view === 'list' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    <span className="hidden sm:inline">Lista</span>
+                  </button>
+                  {view === 'list' && (
+                    <button
+                      onClick={() => setShowAllHistory(v => !v)}
+                      title="Vedi tutte"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                        ${showAllHistory ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
+                    >
+                      <History className="w-4 h-4" />
+                      <span className="hidden sm:inline">Vedi tutte</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -588,10 +646,10 @@ export default function HomePage() {
                 if (dayNum === null) return <div key={`e-${i}`} className="aspect-square" />
                 const date      = new Date(year, month, dayNum)
                 const key       = format(date, 'yyyy-MM-dd')
-                const acts      = actsByDate.get(key) ?? []
+                const acts      = typeFilter === 'planned' ? [] : actsByDate.get(key) ?? []
                 const curIdx    = Math.min(dayIdx[key] ?? 0, acts.length - 1)
                 const act       = acts[curIdx]
-                const planItems = plannedByDate.get(key) ?? []
+                const planItems = typeFilter === 'done' ? [] : plannedByDate.get(key) ?? []
                 const planHike  = planItems[0]
                 const isToday   = isSameDay(date, new Date())
 
@@ -629,7 +687,7 @@ export default function HomePage() {
         ) : (
           /* ────────── LIST VIEW ────────── */
           <div className="fade-up space-y-6">
-            {sortedActivities.length > 0 && (
+            {typeFilter !== 'planned' && sortedActivities.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider flex-1">Registrate</p>
@@ -663,16 +721,18 @@ export default function HomePage() {
               </div>
             )}
 
-            {planned.length > 0 && (
+            {typeFilter !== 'done' && sortedPlanned.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider flex-1">Pianificate</p>
                   <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5">
                     <ArrowUpDown className="w-3 h-3 text-stone-400 ml-1" />
                     {([
-                      { id: 'date',  label: 'Data' },
-                      { id: 'km',   label: 'Km' },
-                      { id: 'dplus', label: 'D+' },
+                      { id: 'date',        label: 'Data' },
+                      { id: 'km',          label: 'Km' },
+                      { id: 'dplus',       label: 'D+' },
+                      { id: 'suitability', label: 'Adatta' },
+                      { id: 'cts',         label: 'CTS' },
                     ] as const).map(s => (
                       <button key={s.id} onClick={() => setPlanSortBy(s.id)}
                         className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
@@ -681,9 +741,12 @@ export default function HomePage() {
                       </button>
                     ))}
                   </div>
-                  <Link href="/programma" className="flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium ml-1">
+                  <button
+                    onClick={() => { setShowAllHistory(true); setTypeFilter('planned') }}
+                    className="flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium ml-1"
+                  >
                     <CalendarClock className="w-3.5 h-3.5" /> Tutte
-                  </Link>
+                  </button>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                   {sortedPlanned.map(hike => (

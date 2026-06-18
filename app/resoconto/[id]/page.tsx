@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
+import PhotoMosaic from '@/components/PhotoMosaic'
 import { getActivityById, type StoredActivity } from '@/lib/blobStore'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format } from 'date-fns'
@@ -543,15 +544,13 @@ export default function ResocontoPage() {
 
       {/* ── Photo mosaic ── */}
       {photos.length >= 2 && (
-        <div className="flex h-32 overflow-hidden print:hidden">
-          {photos.slice(1, 5).map((ph, i) => (
-            <button key={ph.id} onClick={() => setLightbox(ph)}
-              className="flex-1 overflow-hidden hover:scale-[1.02] transition-transform">
-              <img src={ph.dataUrl} alt={ph.caption}
-                className="w-full h-full object-cover" style={{ objectPosition: 'center 40%' }} />
-            </button>
-          ))}
-        </div>
+        <PhotoMosaic
+          photos={photos.slice(1, 5).map(ph => ({ id: ph.id, url: ph.dataUrl, alt: ph.caption }))}
+          onPhotoClick={photoId => {
+            const ph = photos.find(p => p.id === photoId)
+            if (ph) setLightbox(ph)
+          }}
+        />
       )}
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 print:max-w-full print:px-0">

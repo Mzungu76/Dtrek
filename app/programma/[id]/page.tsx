@@ -7,6 +7,7 @@ import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import RouteThumb from '@/components/RouteThumb'
+import PhotoMosaic from '@/components/PhotoMosaic'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
 import {
@@ -49,6 +50,15 @@ const SUIT_LABEL = (s: number) =>
   s >= 30 ? 'Al limite delle capacità' : 'Molto sfidante'
 const SUIT_COLOR = (s: number) =>
   s >= 75 ? 'bg-emerald-500' : s >= 50 ? 'bg-amber-500' : s >= 30 ? 'bg-orange-500' : 'bg-red-500'
+
+function guideExcerpt(markdown: string, maxLen = 300): string {
+  const plain = markdown
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\[\/?curiosita\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return plain.length > maxLen ? `${plain.slice(0, maxLen).trim()} [...]` : plain
+}
 
 function RiskItem({ type, text }: { type: 'danger' | 'warning' | 'info'; text: string }) {
   const colors = {
@@ -163,6 +173,7 @@ export default function PlannedHikePage() {
   const [prefSforzo,     setPrefSforzo]    = useState(50)
   const [prefDurata,     setPrefDurata]    = useState(270)
   const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
+  const [routePhotos,    setRoutePhotos]   = useState<string[]>([])
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -175,7 +186,7 @@ export default function PlannedHikePage() {
 
   useEffect(() => {
     getPlannedById(id).then(h => {
-      if (!h) { router.push('/programma'); return }
+      if (!h) { router.push('/'); return }
       setHike(h)
       setTitleVal(h.title)
       setNotesVal(h.userNotes ?? '')
@@ -263,6 +274,20 @@ export default function PlannedHikePage() {
     updatePlannedMeta(hike.id, { cachedSafetyScore: safety }).catch(() => {})
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load route photos from Wikimedia Commons for hero + mosaic
+  useEffect(() => {
+    if (!hike) return
+    const pts = (hike.trackPoints ?? []).filter(p => p.lat && p.lon) as { lat: number; lon: number }[]
+    const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map(p => ({ lat: p[0], lon: p[1] }))
+    if (!poly.length) return
+    const mid = poly[Math.floor(poly.length / 2)]
+    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
+      fetchRoutePhotos(mid.lat, mid.lon, 15000, 6)
+    ).then(photos => {
+      setRoutePhotos(photos.map(p => p.url))
+    }).catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
@@ -289,7 +314,7 @@ export default function PlannedHikePage() {
   const handleDelete = async () => {
     if (!confirm('Eliminare questa escursione pianificata?')) return
     setSaving(true)
-    try { await deletePlanned(id); router.push('/programma') }
+    try { await deletePlanned(id); router.push('/') }
     finally { setSaving(false) }
   }
 
@@ -366,18 +391,30 @@ export default function PlannedHikePage() {
       <Navbar />
 
       {/* ══ HERO ══ */}
-      <div className="relative bg-gradient-to-br from-sky-900 via-sky-800 to-sky-700 text-white overflow-hidden">
-        {heroPolyline.length > 1 && (
-          <div className="absolute inset-0 pointer-events-none">
-            <RouteThumb polyline={heroPolyline} color="rgba(255,255,255,0.10)" strokeWidth={7} />
-          </div>
+      <div className="relative text-white overflow-hidden" style={!routePhotos[0] ? { background: 'linear-gradient(to bottom right, #0c4a6e, #075985, #0369a1)' } : undefined}>
+        {routePhotos[0] ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={routePhotos[0]}
+            alt={hike.title}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ objectPosition: 'center 35%' }}
+          />
+        ) : (
+          heroPolyline.length > 1 && (
+            <div className="absolute inset-0 pointer-events-none">
+              <RouteThumb polyline={heroPolyline} color="rgba(255,255,255,0.10)" strokeWidth={7} />
+            </div>
+          )
         )}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-sky-900/60 to-transparent pointer-events-none" />
+        <div className={`absolute inset-0 pointer-events-none ${routePhotos[0] ? '' : 'bg-gradient-to-t from-sky-900/60 to-transparent'}`}
+          style={routePhotos[0] ? { background: 'linear-gradient(to top, rgba(8,18,32,0.92) 0%, rgba(8,30,48,0.75) 45%, rgba(8,40,60,0.35) 80%, transparent 100%)' } : undefined}
+        />
 
         <div className="relative max-w-[1200px] mx-auto px-4">
           {/* Top nav */}
           <div className="flex items-center justify-between pt-4 pb-3 border-b border-white/10">
-            <button onClick={() => router.push('/programma')}
+            <button onClick={() => router.push('/')}
               className="flex items-center gap-1.5 text-sky-300 hover:text-white text-sm transition-colors">
               <ArrowLeft className="w-4 h-4" /> Tutte le pianificate
             </button>
@@ -470,7 +507,37 @@ export default function PlannedHikePage() {
         </div>
       </div>
 
+      {/* ══ Photo mosaic ══ */}
+      <PhotoMosaic
+        photos={routePhotos.slice(1, 5).map((url, i) => ({ id: String(i), url }))}
+        heightClass="h-32 sm:h-40"
+      />
+
       <main className="max-w-[1200px] mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
+
+        {/* Guida turistica — estratto */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display text-xl font-semibold text-stone-700 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-amber-500" /> Guida turistica
+            </h2>
+            <button
+              onClick={() => router.push(`/guida/${encodeURIComponent(id)}`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors shrink-0"
+            >
+              {hike.cachedGuide ? 'Leggi tutto' : 'Genera guida'}
+            </button>
+          </div>
+          {hike.cachedGuide ? (
+            <p className="text-sm text-stone-600 leading-relaxed">
+              {guideExcerpt(hike.cachedGuide)}
+            </p>
+          ) : (
+            <p className="text-sm text-stone-400 italic">
+              Nessuna guida ancora generata per questo percorso. Giulia può raccontarti storia, natura e curiosità lungo il tracciato.
+            </p>
+          )}
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

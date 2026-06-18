@@ -1,16 +1,21 @@
 'use client'
+import { useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import StatCard from '@/components/StatCard'
 import RecordCard from './RecordCard'
 import InfoButton from './InfoButton'
+import ShareModal from '@/components/ShareModal'
 import { computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { formatPaceMinkm, difficultyIndex, caloriesPerHour, type PersonalRecords, type Streaks } from '@/lib/stats'
 import { format } from 'date-fns'
 import {
   Route, Clock, Flame, Mountain, Heart, TrendingUp, Activity, Trophy,
-  Zap, Target, ChevronUp, GitCommitHorizontal,
+  Zap, Target, ChevronUp, GitCommitHorizontal, Map, Info, Share2,
 } from 'lucide-react'
 import { msToKmh } from '@/lib/tcxParser'
+
+const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
 
 interface Props {
   activities: ActivityMeta[]
@@ -21,8 +26,26 @@ interface Props {
 
 export default function TabPanoramica({ activities, records, streaks, onGuideLink }: Props) {
   const stats = computeGlobalStats(activities)
+  const [showShareMap, setShowShareMap] = useState(false)
+
+  const routesWithPolyline = useMemo(
+    () => activities.filter(a => a.routePolyline && a.routePolyline.length > 1),
+    [activities],
+  )
+  const routesWithoutPolyline = activities.length - routesWithPolyline.length
+
+  const mapRoutes = useMemo(
+    () => routesWithPolyline.map(a => ({
+      id: a.id,
+      title: a.title ?? 'Escursione',
+      startTime: a.startTime,
+      polyline: a.routePolyline as [number, number][],
+    })),
+    [routesWithPolyline],
+  )
 
   return (
+    <>
     <div className="space-y-8">
       {/* Global KPI */}
       <div>
@@ -38,6 +61,44 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
           <StatCard label="FC media storica"  value={`${stats.avgHeartRate} bpm`}                                      color="red"    icon={<Heart className="w-3.5 h-3.5"/>} />
           <StatCard label="Quota max mai"     value={`${Math.round(stats.highestAlt)} m`}                              color="blue"   icon={<TrendingUp className="w-3.5 h-3.5"/>} />
         </div>
+      </div>
+
+      {/* Mappa generale */}
+      <div>
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+          <h3 className="font-medium text-stone-700 flex items-center gap-2">
+            <Map className="w-4 h-4 text-forest-600" /> Mappa generale
+          </h3>
+          {routesWithPolyline.length > 0 && (
+            <button
+              onClick={() => setShowShareMap(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-xs font-medium transition-colors"
+            >
+              <Share2 className="w-3.5 h-3.5" /> Condividi mappa
+            </button>
+          )}
+        </div>
+        {routesWithPolyline.length > 0 ? (
+          <AllRoutesMap routes={mapRoutes} height="380px" />
+        ) : (
+          <div
+            className="flex items-center justify-center rounded-xl bg-stone-100 border border-stone-200 text-stone-400"
+            style={{ height: '380px' }}
+          >
+            Nessun percorso GPS disponibile
+          </div>
+        )}
+        {routesWithoutPolyline > 0 && (
+          <div className="mt-3 flex items-start gap-2 text-sm text-stone-500 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+            <span>
+              {routesWithoutPolyline === 1
+                ? '1 escursione non ha'
+                : `${routesWithoutPolyline} escursioni non hanno`}{' '}
+              il percorso GPS salvato — probabilmente caricate prima dell&apos;aggiornamento che supporta le polyline.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Streak */}
@@ -190,5 +251,10 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
         </div>
       </div>
     </div>
+
+    {showShareMap && (
+      <ShareModal kind="map" activities={activities} onClose={() => setShowShareMap(false)} />
+    )}
+    </>
   )
 }

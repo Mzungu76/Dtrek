@@ -580,9 +580,10 @@ interface Props {
   distanceMeters?: number
   elevationGain?: number
   pois?: PoiItem[]
+  initialVideoState?: 'idle' | 'config'
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -646,7 +647,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [streetViewPos,  setStreetViewPos] = useState<[number,number]|null>(null)
 
   // Video config
-  const [videoState,        setVideoState]       = useState<VideoState>('idle')
+  const [videoState,        setVideoState]       = useState<VideoState>(initialVideoState ?? 'idle')
   const [videoDuration,     setVideoDuration]    = useState(30)
   const [videoOrientation,  setVideoOrientation] = useState<'9:16'|'4:5'|'1:1'|'1.91:1'|'16:9'>('9:16')
   const [videoFps,          setVideoFps]         = useState<30|60>(30)
