@@ -10,22 +10,26 @@ const OVERPASS_ENDPOINTS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
 
+// Races all mirrors and returns the first successful response — avoids waiting out
+// a slow/down primary's full timeout before trying the others (sequential fallback
+// made trail lookups feel very slow when overpass-api.de was congested).
 export async function fetchOverpass<T = unknown>(query: string, timeoutMs = 20_000): Promise<T> {
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(timeoutMs),
-      })
-      if (!res.ok) continue
-      return await res.json() as T
-    } catch {
-      continue
-    }
+  const attempts = OVERPASS_ENDPOINTS.map(async endpoint => {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!res.ok) throw new Error(`status ${res.status}`)
+    return res.json() as Promise<T>
+  })
+
+  try {
+    return await Promise.any(attempts)
+  } catch {
+    throw new Error('Overpass non disponibile')
   }
-  throw new Error('Overpass non disponibile')
 }
 
 export function parseOsmDistance(s?: string): number | null {

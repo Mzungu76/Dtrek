@@ -148,15 +148,11 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
     setDetailLoading(true)
     setQueryError(null)
     try {
-      const [detRes, geoRes] = await Promise.all([
-        fetch(`/api/waymarked-trails/details?id=${id}`),
-        fetch(`/api/waymarked-trails/geometry?id=${id}`),
-      ])
+      const detRes = await fetch(`/api/waymarked-trails/details?id=${id}`)
       const det = await detRes.json()
-      const geo = await geoRes.json()
       if (!detRes.ok) throw new Error(det.error ?? 'Errore dettagli')
 
-      const polyline: [number, number][] = geo.polyline ?? []
+      const polyline: [number, number][] = det.polyline ?? []
       drawHighlight(polyline)
 
       onTrailSelected({
