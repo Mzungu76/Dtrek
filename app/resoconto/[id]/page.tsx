@@ -63,6 +63,20 @@ function parseSections(md: string): Section[] {
     .filter((s): s is Section => s !== null)
 }
 
+// Photo slot is keyed by section title (not array position) so that omitting
+// "Cronaca" (no questionnaire answered) doesn't shift the photos bound to the
+// sections that follow it.
+const SECTION_PHOTO_SLOT: Record<string, number> = {
+  'Il percorso':     0,
+  'Cronaca':         1,
+  'Natura e storia': 2,
+  'In sintesi':      3,
+}
+
+function slotFor(title: string, fallbackIndex: number): number {
+  return SECTION_PHOTO_SLOT[title] ?? fallbackIndex
+}
+
 // ── Render body text — paragraphs + [curiosita] blocks ─────────────────────────
 
 function RenderBody({ text }: { text: string }) {
@@ -649,16 +663,19 @@ export default function ResocontoPage() {
 
           return (
             <>
-              {sections.map((section, i) => (
-                <SectionCard
-                  key={i}
-                  section={section}
-                  index={i}
-                  photo={i === 0 ? undefined : photos[i]}
-                  photoIndex={i === 0 ? undefined : i + 1}
-                  floatNode={i === 0 ? miniMapNode : undefined}
-                />
-              ))}
+              {sections.map((section, i) => {
+                const slot = slotFor(section.title, i)
+                return (
+                  <SectionCard
+                    key={i}
+                    section={section}
+                    index={i}
+                    photo={slot === 0 ? undefined : photos[slot]}
+                    photoIndex={slot === 0 ? undefined : slot + 1}
+                    floatNode={slot === 0 ? miniMapNode : undefined}
+                  />
+                )
+              })}
 
               {/* ── Elevation profile with photo markers — end of report ── */}
               {sections.length > 0 && (
@@ -785,28 +802,32 @@ export default function ResocontoPage() {
           </div>
           {/* Sections */}
           <div style={{ padding: '32px 32px 0' }}>
-            {sections.map((section, i) => (
-              <div key={i} className="pdf-block" style={{ marginBottom: 24 }}>
-                <div style={{ background: ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc'][i % 5], padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i+1).padStart(2,'0')}</span>
-                  <span style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>{section.title}</span>
-                </div>
-                <div style={{ padding: '12px 16px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
-                  {photos[i] && i > 0 && (
-                    <div style={{ float: 'right', marginLeft: 12, marginBottom: 8, width: 120 }}>
-                      <div style={{ position: 'relative' }}>
-                        <img src={photos[i].dataUrl} alt={photos[i].caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{i+1}</span>
+            {sections.map((section, i) => {
+              const slot = slotFor(section.title, i)
+              const sectionPhoto = photos[slot]
+              return (
+                <div key={i} className="pdf-block" style={{ marginBottom: 24 }}>
+                  <div style={{ background: ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc'][i % 5], padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i+1).padStart(2,'0')}</span>
+                    <span style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>{section.title}</span>
+                  </div>
+                  <div style={{ padding: '12px 16px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
+                    {sectionPhoto && slot > 0 && (
+                      <div style={{ float: 'right', marginLeft: 12, marginBottom: 8, width: 120 }}>
+                        <div style={{ position: 'relative' }}>
+                          <img src={sectionPhoto.dataUrl} alt={sectionPhoto.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                          <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{slot+1}</span>
+                        </div>
+                        <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{sectionPhoto.caption}</p>
                       </div>
-                      <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{photos[i].caption}</p>
-                    </div>
-                  )}
-                  {section.body.split(/\n\n+/).map((p, j) => (
-                    <p key={j} style={{ fontSize: 11, lineHeight: 1.7, color: '#374151', margin: '0 0 8px' }}>{p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()}</p>
-                  ))}
+                    )}
+                    {section.body.split(/\n\n+/).map((p, j) => (
+                      <p key={j} style={{ fontSize: 11, lineHeight: 1.7, color: '#374151', margin: '0 0 8px' }}>{p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()}</p>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
             {/* Photo grid */}
             {photos.length > 0 && (
               <div className="pdf-block" style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, marginTop: 8 }}>

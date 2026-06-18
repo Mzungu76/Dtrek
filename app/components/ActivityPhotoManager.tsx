@@ -190,6 +190,13 @@ export default function ActivityPhotoManager({
 
     setPhotos(prev => [...prev, ...added].sort((a, b) => a.progress - b.progress))
     setUploading(false)
+
+    // Single upload → open its caption editor right away so the user writes
+    // their own caption instead of keeping the filename-derived default.
+    if (added.length === 1) {
+      setEditingId(added[0].id)
+      setEditCaption(added[0].caption)
+    }
   }
 
   function removePhoto(id: string) {
@@ -303,6 +310,7 @@ export default function ActivityPhotoManager({
                   <div className="flex items-center gap-1">
                     <input
                       autoFocus
+                      onFocus={e => e.target.select()}
                       value={editCaption}
                       onChange={e => setEditCaption(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') saveCaption(); if (e.key === 'Escape') setEditingId(null) }}

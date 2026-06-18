@@ -10,6 +10,36 @@ export interface RouteTimelinePhoto {
   lon?: number
 }
 
+const ROW_HEIGHT = 88
+// Minimum progress separation within a single row, expressed as a fraction of
+// the container width — approximates the thumbnail+caption footprint so two
+// photos placed in the same row never overlap.
+const MIN_GAP = 0.15
+
+interface PlacedPhoto {
+  photo:  RouteTimelinePhoto
+  number: number
+  lane:   'top' | 'bottom'
+  row:    number
+}
+
+// Greedy two-lane layout: alternate top/bottom, then within the chosen lane
+// place the photo in the first row whose last occupant is far enough away in
+// progress; open a new row otherwise. Guarantees every thumbnail stays visible
+// — crowding adds rows instead of hiding or overlapping photos.
+function assignLanes(sorted: RouteTimelinePhoto[]): { placed: PlacedPhoto[]; topRows: number; bottomRows: number } {
+  const lastInRow: { top: number[]; bottom: number[] } = { top: [], bottom: [] }
+  const placed: PlacedPhoto[] = sorted.map((photo, i) => {
+    const lane = (i % 2 === 0 ? 'top' : 'bottom') as 'top' | 'bottom'
+    const rows = lastInRow[lane]
+    let row = rows.findIndex(last => photo.progress - last >= MIN_GAP)
+    if (row === -1) { row = rows.length; rows.push(photo.progress) }
+    else rows[row] = photo.progress
+    return { photo, number: i + 1, lane, row }
+  })
+  return { placed, topRows: lastInRow.top.length, bottomRows: lastInRow.bottom.length }
+}
+
 /**
  * Elevation profile + photo markers along the route.
  * `highlightProgress` (0–1) draws an extra marker at the given point — used by
@@ -42,6 +72,9 @@ export default function RouteTimeline({
   }).join(' ')
 
   const sorted = [...photos].sort((a, b) => a.progress - b.progress)
+  const { placed, topRows, bottomRows } = assignLanes(sorted)
+  const topPlaced    = placed.filter(p => p.lane === 'top')
+  const bottomPlaced = placed.filter(p => p.lane === 'bottom')
 
   const highlight = highlightProgress !== undefined
     ? (() => {
@@ -54,6 +87,31 @@ export default function RouteTimeline({
 
   return (
     <div className="relative">
+      {/* Photo thumbnails above the profile — farther rows sit higher up */}
+      {topRows > 0 && (
+        <div className="relative" style={{ height: topRows * ROW_HEIGHT }}>
+          {topPlaced.map(({ photo, number, row }) => (
+            <div key={photo.id}
+              className="absolute -translate-x-1/2 flex flex-col items-center"
+              style={{ left: `${photo.progress * 100}%`, bottom: 0 }}>
+              <div className="relative">
+                <img src={photo.dataUrl} alt={photo.caption}
+                  className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
+                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
+                  {number}
+                </span>
+              </div>
+              <p className="text-[8px] text-stone-500 font-lora mt-0.5 max-w-[60px] text-center leading-tight">
+                {photo.caption}
+              </p>
+              {row > 0 && (
+                <div style={{ height: row * ROW_HEIGHT, width: 0, borderLeft: '1px dashed #b5a48a' }} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* SVG elevation profile */}
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
         className="w-full" style={{ height: 72 }}>
@@ -69,15 +127,15 @@ export default function RouteTimeline({
           fill="url(#altGrad)" />
         <path d={pathD} fill="none" stroke="#2d6a4f" strokeWidth="2.5" strokeLinejoin="round" />
 
-        {/* Photo markers on profile */}
-        {sorted.map(ph => {
-          const x  = ph.progress * W
-          const idx = Math.round(ph.progress * (pts.length - 1))
+        {/* Photo markers on profile — connector points toward the lane the thumbnail was placed in */}
+        {placed.map(({ photo, lane }) => {
+          const x  = photo.progress * W
+          const idx = Math.round(photo.progress * (pts.length - 1))
           const pt  = pts[Math.min(idx, pts.length - 1)]
           const y   = toY(pt.altitudeMeters!)
           return (
-            <g key={ph.id}>
-              <line x1={x} y1={y - 2} x2={x} y2={H}
+            <g key={photo.id}>
+              <line x1={x} y1={lane === 'top' ? 0 : y - 2} x2={x} y2={lane === 'top' ? y - 2 : H}
                 stroke="#b5a48a" strokeWidth="1" strokeDasharray="3 2" />
               <circle cx={x} cy={y - 2} r={5}
                 fill="white" stroke="#2d6a4f" strokeWidth="2" />
@@ -96,22 +154,25 @@ export default function RouteTimeline({
         )}
       </svg>
 
-      {/* Photo thumbnails below profile — numbered */}
-      {sorted.length > 0 && (
-        <div className="relative mt-1" style={{ height: 88 }}>
-          {sorted.map((ph, i) => (
-            <div key={ph.id}
-              className="absolute -translate-x-1/2 top-0 flex flex-col items-center"
-              style={{ left: `${ph.progress * 100}%` }}>
+      {/* Photo thumbnails below the profile — farther rows sit lower down */}
+      {bottomRows > 0 && (
+        <div className="relative mt-1" style={{ height: bottomRows * ROW_HEIGHT }}>
+          {bottomPlaced.map(({ photo, number, row }) => (
+            <div key={photo.id}
+              className="absolute -translate-x-1/2 flex flex-col items-center"
+              style={{ left: `${photo.progress * 100}%`, top: 0 }}>
+              {row > 0 && (
+                <div style={{ height: row * ROW_HEIGHT, width: 0, borderLeft: '1px dashed #b5a48a' }} />
+              )}
               <div className="relative">
-                <img src={ph.dataUrl} alt={ph.caption}
+                <img src={photo.dataUrl} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
                 <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
-                  {i + 1}
+                  {number}
                 </span>
               </div>
               <p className="text-[8px] text-stone-500 font-lora mt-0.5 max-w-[60px] text-center leading-tight">
-                {ph.caption}
+                {photo.caption}
               </p>
             </div>
           ))}
