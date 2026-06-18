@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
 
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "user_settings_owner"
+DROP POLICY IF EXISTS "user_settings_owner" ON user_settings;
+CREATE POLICY "user_settings_owner"
   ON user_settings FOR ALL
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
@@ -211,12 +212,14 @@ ALTER TABLE planned_hikes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hike_reports  ENABLE ROW LEVEL SECURITY;
 
 -- Ogni utente vede e modifica solo i propri dati
-CREATE POLICY IF NOT EXISTS "activities_owner"
+DROP POLICY IF EXISTS "activities_owner" ON activities;
+CREATE POLICY "activities_owner"
   ON activities FOR ALL
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY IF NOT EXISTS "planned_hikes_owner"
+DROP POLICY IF EXISTS "planned_hikes_owner" ON planned_hikes;
+CREATE POLICY "planned_hikes_owner"
   ON planned_hikes FOR ALL
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
