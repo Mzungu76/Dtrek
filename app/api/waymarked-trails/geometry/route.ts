@@ -1,64 +1,38 @@
 export const runtime = 'edge'
 import { NextRequest, NextResponse } from 'next/server'
-import { WMT_BASE, USER_AGENT, epsg3857ToWgs84 } from '@/lib/waymarkedTrails'
+import { fetchOverpass, stitchWays, type OsmRelation, type OsmWay } from '@/lib/overpassTrails'
 
-interface GeoJsonGeometry {
-  type: string
-  coordinates: unknown
-}
-interface GeoJsonFeature {
-  type: 'Feature'
-  geometry: GeoJsonGeometry
-}
-
-function flattenLineStrings(geom: GeoJsonGeometry | undefined, out: [number, number][]) {
-  if (!geom) return
-  if (geom.type === 'LineString') {
-    for (const [x, y] of geom.coordinates as [number, number][]) {
-      const [lon, lat] = epsg3857ToWgs84(x, y)
-      out.push([lat, lon])
-    }
-  } else if (geom.type === 'MultiLineString') {
-    for (const line of geom.coordinates as [number, number][][]) {
-      for (const [x, y] of line) {
-        const [lon, lat] = epsg3857ToWgs84(x, y)
-        out.push([lat, lon])
-      }
-    }
-  }
-}
-
-// GET ?id= — already-"stitched" relation geometry (EPSG:3857), reprojected to WGS84 [lat, lon] pairs.
+// GET ?id= — stitched relation geometry as WGS84 [lat, lon] pairs.
+// Backed by Overpass, not the Waymarked Trails REST API (which 403s server-side requests).
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id')
   if (!id || !/^\d+$/.test(id)) {
     return NextResponse.json({ error: 'id numerico richiesto', polyline: [] }, { status: 400 })
   }
 
+  // Fetch relation members (ordered) + way geometries in one query
+  const query = `[out:json][timeout:15];
+relation(${id})->.rel;
+.rel out body;
+way(r.rel);
+out geom;`
+
   try {
-    const res = await fetch(`${WMT_BASE}/details/relation/${id}/geometry`, {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(10_000),
-    })
-    if (!res.ok) throw new Error(`status ${res.status}`)
-    const json = await res.json() as {
-      type: string
-      features?: GeoJsonFeature[]
-      geometry?: GeoJsonGeometry
-      coordinates?: unknown
-    }
+    const json = await fetchOverpass<{ elements: (OsmRelation | OsmWay)[] }>(query)
+    const elements = json.elements ?? []
 
-    const polyline: [number, number][] = []
-    if (json.type === 'FeatureCollection' && Array.isArray(json.features)) {
-      for (const f of json.features) flattenLineStrings(f.geometry, polyline)
-    } else if (json.type === 'Feature') {
-      flattenLineStrings(json.geometry, polyline)
-    } else if (json.type === 'LineString' || json.type === 'MultiLineString') {
-      flattenLineStrings(json as unknown as GeoJsonGeometry, polyline)
-    }
+    const relation = elements.find((e): e is OsmRelation => e.type === 'relation')
+    const wayMap   = new Map(
+      elements
+        .filter((e): e is OsmWay => e.type === 'way')
+        .map(w => [w.id, w]),
+    )
 
+    if (!relation?.members) return NextResponse.json({ polyline: [] })
+
+    const polyline = stitchWays(relation.members, wayMap)
     return NextResponse.json({ polyline })
   } catch {
-    return NextResponse.json({ error: 'Waymarked Trails non disponibile', polyline: [] }, { status: 502 })
+    return NextResponse.json({ error: 'Overpass non disponibile', polyline: [] }, { status: 502 })
   }
 }
