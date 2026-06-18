@@ -36,7 +36,9 @@ Descrivi le fotografie scattate lungo il percorso come dispacci visivi: cosa imm
 
 Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio). Non usare asterischi per il grassetto.
 Non usare bullet point: preferisci narrazione fluida e densa di dettagli.
-Per curiosità, fatti insoliti o dati sorprendenti, racchiudili in: [curiosita] testo [/curiosita]`
+Per curiosità, fatti insoliti o dati sorprendenti, racchiudili in: [curiosita] testo [/curiosita]
+
+Se nel materiale fornito trovi risposte dell'escursionista a un questionario guidato, NON riportarle mai come citazioni testuali né tra virgolette: assorbine il contenuto e il tono emotivo e fondili nella narrazione in terza persona, come se fossero osservazioni del cronista stesso, mantenendo l'ordine cronologico dei punti del percorso a cui si riferiscono.`
 
 interface PhotoMeta {
   caption: string
@@ -46,11 +48,44 @@ interface PhotoMeta {
   hasExifGps?: boolean
 }
 
+interface QaItem {
+  question:    string
+  anchorLabel: string
+  answer:      string
+  isFreeWrite: boolean
+}
+
+interface QuestionnaireQuestionRow {
+  id: string
+  question: string
+  label: string
+  progress: number
+  isFreeWrite?: boolean
+}
+
+interface QuestionnaireAnswerRow {
+  text: string
+  skipped: boolean
+}
+
+function buildQa(questions: QuestionnaireQuestionRow[], answers: Record<string, QuestionnaireAnswerRow>): QaItem[] {
+  return questions
+    .filter(q => answers[q.id] && !answers[q.id].skipped && answers[q.id].text?.trim())
+    .sort((a, b) => a.progress - b.progress)
+    .map(q => ({
+      question:    q.question,
+      anchorLabel: q.label,
+      answer:      answers[q.id].text,
+      isFreeWrite: !!q.isFreeWrite,
+    }))
+}
+
 function buildPrompt(
   activity: Record<string, unknown>,
   length: ResocontoLength,
   photos: PhotoMeta[],
   guideText?: string,
+  qa?: QaItem[],
 ): string {
   const dateStr = activity.start_time
     ? format(new Date(activity.start_time as string), "EEEE d MMMM yyyy", { locale: it })
@@ -103,6 +138,14 @@ function buildPrompt(
     ? `\nCONTESTO STORICO-NATURALISTICO (estratto dalla guida del percorso — usalo come fonte per approfondimenti):\n${guideText.slice(0, 2500)}\n`
     : ''
 
+  const qaBlock = qa && qa.length > 0
+    ? `\nRISPOSTE DELL'ESCURSIONISTA AL QUESTIONARIO GUIDATO (in ordine cronologico lungo il percorso — usa solo per assorbirne contenuto e tono, non riportarle alla lettera né tra virgolette):\n${
+        qa.map(item =>
+          `• [${item.anchorLabel}]${item.isFreeWrite ? ' (racconto libero dell\'escursionista)' : ''} — alla domanda "${item.question}" ha risposto: ${item.answer}`,
+        ).join('\n')
+      }\n`
+    : ''
+
   return `Scrivi un reportage giornalistico di questa escursione per una rivista outdoor italiana di qualità:
 
 TITOLO ESCURSIONE: ${activity.title ?? 'Escursione'}
@@ -117,6 +160,7 @@ ${(activity.altitude_max as number) > 0 ? `QUOTA MASSIMA RAGGIUNTA: ${Math.round
 ${biometricBlock ? `\nDATI DI RIFERIMENTO (usa solo se rilevanti, non come sezione separata):\n${biometricBlock}` : ''}
 ${activity.user_notes ? `\nNOTE DELL'ESCURSIONISTA:\n${activity.user_notes}` : ''}
 ${guideBlock}
+${qaBlock}
 DOCUMENTAZIONE FOTOGRAFICA (in ordine cronologico dal punto di partenza):
 ${photoBlock}
 
@@ -132,6 +176,7 @@ Racconta la progressione dell'escursione dall'inizio alla fine in ordine cronolo
 Integra le fotografie scattate come elementi della narrazione: cosa mostrano,
 in quale tratto del percorso, cosa aggiungono alla comprensione dei luoghi.
 Eventuali dati biometrici possono essere citati qui se aiutano a descrivere il ritmo o la fatica.
+${qa && qa.length > 0 ? 'Integra anche le risposte dell\'escursionista al questionario guidato, seguendo l\'ordine cronologico dei punti del percorso a cui si riferiscono, fondendole nella narrazione senza mai citarle alla lettera.' : ''}
 
 ## Natura e storia
 Approfondisci i luoghi attraversati: geologia, flora, fauna, siti storici o
@@ -280,8 +325,22 @@ export async function POST(req: NextRequest) {
     if (hike?.cached_guide) guideText = hike.cached_guide
   }
 
+  let qa: QaItem[] | undefined
+  const { data: questionnaire } = await supabase
+    .from('hike_questionnaires')
+    .select('questions, answers')
+    .eq('activity_id', activityId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (questionnaire) {
+    const questions = (questionnaire.questions as QuestionnaireQuestionRow[]) ?? []
+    const answers   = (questionnaire.answers   as Record<string, QuestionnaireAnswerRow>) ?? {}
+    const built = buildQa(questions, answers)
+    if (built.length > 0) qa = built
+  }
+
   const client  = new Anthropic({ apiKey })
-  const prompt  = buildPrompt(activity, length, photos, guideText)
+  const prompt  = buildPrompt(activity, length, photos, guideText, qa)
   const { maxTokens } = LENGTH_CONFIG[length]
 
   let fullText = ''
