@@ -1,8 +1,9 @@
 export const runtime = 'edge'
 import { NextRequest, NextResponse } from 'next/server'
-import { WMT_BASE, USER_AGENT, extractResults, normalizeListItem } from '@/lib/waymarkedTrails'
+import { fetchOverpass, type OsmRelation } from '@/lib/overpassTrails'
 
 // GET ?bbox=minlon,minlat,maxlon,maxlat&limit= — trails within a bbox (click-to-query on the map).
+// Backed by Overpass, not the Waymarked Trails REST API (which 403s server-side requests).
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const bbox  = searchParams.get('bbox')
@@ -20,18 +21,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'area troppo ampia' }, { status: 400 })
   }
 
+  const query = `[out:json][timeout:20][maxsize:5242880];
+relation["type"="route"]["route"="hiking"]["name"](${minLat},${minLon},${maxLat},${maxLon});
+out tags ${limit};`
+
   try {
-    const res = await fetch(`${WMT_BASE}/list?bbox=${bbox}&limit=${limit}`, {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok) throw new Error(`status ${res.status}`)
-    const json = await res.json()
-    const results = extractResults(json)
-      .map(normalizeListItem)
-      .filter((x): x is NonNullable<typeof x> => x !== null)
+    const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
+    const results = (json.elements ?? [])
+      .filter(e => e.type === 'relation' && e.tags?.name)
+      .map(e => ({
+        id: e.id,
+        name: e.tags!.name,
+        ref: e.tags!.ref,
+        network: e.tags!.network,
+      }))
     return NextResponse.json({ results })
   } catch {
-    return NextResponse.json({ error: 'Waymarked Trails non disponibile', results: [] }, { status: 502 })
+    return NextResponse.json({ error: 'Overpass non disponibile', results: [] }, { status: 502 })
   }
 }
