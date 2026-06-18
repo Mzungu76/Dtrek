@@ -373,7 +373,7 @@ export default function HomePage() {
   const monthPlanned = useMemo(() => {
     if (showAllHistory) return planned
     return planned.filter(h => {
-      if (!h.plannedDate) return false
+      if (!h.plannedDate) return true
       const d = new Date(h.plannedDate)
       return d.getFullYear() === year && d.getMonth() === month
     })
