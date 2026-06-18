@@ -228,6 +228,31 @@ CREATE POLICY "hike_reports_owner"
   WITH CHECK (auth.uid() = user_id);
 
 
+-- ── Questionari guidati per i resoconti (racconto co-scritto) ────────────────
+CREATE TABLE IF NOT EXISTS hike_questionnaires (
+  id             TEXT PRIMARY KEY,            -- 'questionnaire-{activityId}'
+  user_id        UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  activity_id    TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'in_progress',  -- 'in_progress' | 'completed' | 'skipped'
+  questions      JSONB NOT NULL DEFAULT '[]',
+  answers        JSONB NOT NULL DEFAULT '{}',
+  current_index  INTEGER NOT NULL DEFAULT 0,
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hike_questionnaires_activity_id ON hike_questionnaires (activity_id);
+CREATE INDEX IF NOT EXISTS idx_hike_questionnaires_user_id     ON hike_questionnaires (user_id);
+
+ALTER TABLE hike_questionnaires ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "hike_questionnaires_owner" ON hike_questionnaires;
+CREATE POLICY "hike_questionnaires_owner"
+  ON hike_questionnaires FOR ALL
+  USING     (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+
 -- ═══════════════════════════════════════════════════════════
 -- MIGRAZIONE DATI ESISTENTI
 -- Esegui DOPO aver creato il tuo account su DTrek.
