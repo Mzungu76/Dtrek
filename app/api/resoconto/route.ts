@@ -38,7 +38,8 @@ Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio). Non usare
 Non usare bullet point: preferisci narrazione fluida e densa di dettagli.
 Per curiosità, fatti insoliti o dati sorprendenti, racchiudili in: [curiosita] testo [/curiosita]
 
-Se nel materiale fornito trovi risposte dell'escursionista a un questionario guidato, NON riportarle mai come citazioni testuali né tra virgolette: assorbine il contenuto e il tono emotivo e fondili nella narrazione in terza persona, come se fossero osservazioni del cronista stesso, mantenendo l'ordine cronologico dei punti del percorso a cui si riferiscono.`
+Se nel materiale fornito trovi risposte dell'escursionista a un questionario guidato, la sezione "## Cronaca" va scritta in PRIMA PERSONA (io/ho raggiunto/mi sono fermato), come se fosse l'escursionista stesso a raccontare: assorbi il contenuto e il tono emotivo delle risposte e fondili nella narrazione, mantenendo l'ordine cronologico dei punti del percorso a cui si riferiscono. NON riportarle mai come citazioni testuali né tra virgolette. Le altre sezioni restano in terza persona oggettiva come il resto del reportage — è uno stile volutamente misto: cronaca personale dentro un reportage giornalistico.
+Se invece non trovi risposte a un questionario, NON scrivere affatto la sezione "## Cronaca": il reportage in quel caso ha solo tre sezioni.`
 
 interface PhotoMeta {
   caption: string
@@ -146,6 +147,19 @@ function buildPrompt(
       }\n`
     : ''
 
+  const hasQa = !!(qa && qa.length > 0)
+  const cronacaBlock = hasQa
+    ? `
+## Cronaca
+Racconta in PRIMA PERSONA la progressione dell'escursione dall'inizio alla fine in ordine cronologico,
+come se fosse l'escursionista stesso a raccontare. Integra le fotografie scattate come elementi della
+narrazione: cosa mostrano, in quale tratto del percorso, cosa aggiungono alla comprensione dei luoghi.
+Eventuali dati biometrici possono essere citati qui se aiutano a descrivere il ritmo o la fatica.
+Integra le risposte dell'escursionista al questionario guidato, seguendo l'ordine cronologico dei punti
+del percorso a cui si riferiscono, fondendole nella narrazione senza mai citarle alla lettera.
+`
+    : ''
+
   return `Scrivi un reportage giornalistico di questa escursione per una rivista outdoor italiana di qualità:
 
 TITOLO ESCURSIONE: ${activity.title ?? 'Escursione'}
@@ -164,20 +178,13 @@ ${qaBlock}
 DOCUMENTAZIONE FOTOGRAFICA (in ordine cronologico dal punto di partenza):
 ${photoBlock}
 
-Scrivi il reportage strutturato in queste quattro sezioni (usa ## per ogni titolo):
+Scrivi il reportage strutturato in queste ${hasQa ? 'quattro' : 'tre'} sezioni (usa ## per ogni titolo):
 
 ## Il percorso
 Descrivi il tracciato e il territorio attraversato: paesaggio, morfologia del terreno,
 punti panoramici, cambi di vegetazione. Contestualizza geograficamente il percorso
 senza usare toni enfatici. Usa i dati di distanza, dislivello e quota come ancoraggio.
-
-## Cronaca
-Racconta la progressione dell'escursione dall'inizio alla fine in ordine cronologico.
-Integra le fotografie scattate come elementi della narrazione: cosa mostrano,
-in quale tratto del percorso, cosa aggiungono alla comprensione dei luoghi.
-Eventuali dati biometrici possono essere citati qui se aiutano a descrivere il ritmo o la fatica.
-${qa && qa.length > 0 ? 'Integra anche le risposte dell\'escursionista al questionario guidato, seguendo l\'ordine cronologico dei punti del percorso a cui si riferiscono, fondendole nella narrazione senza mai citarle alla lettera.' : ''}
-
+${cronacaBlock}
 ## Natura e storia
 Approfondisci i luoghi attraversati: geologia, flora, fauna, siti storici o
 archeologici nelle vicinanze, tradizioni locali. Includi almeno un fatto poco noto
@@ -192,7 +199,7 @@ Scrivi in italiano preciso, diretto, senza aggettivi inflazionati o toni epici.
 
 LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}
 
-IMPORTANTE: Completa obbligatoriamente tutte e quattro le sezioni.`
+IMPORTANTE: Completa obbligatoriamente tutte e ${hasQa ? 'quattro le sezioni' : 'tre le sezioni'}${hasQa ? '' : ' (NON scrivere "## Cronaca")'}.`
 
 }
 
