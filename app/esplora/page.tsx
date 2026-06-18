@@ -3,6 +3,7 @@ import { useState, useRef } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import ExploreMap, { type TrailResult } from '@/components/ExploreMap'
+import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import {
   Compass, MapPin, Route, TrendingUp, Clock,
   Plus, Loader2, X, ArrowUpRight, ChevronLeft, Mountain, Info,
@@ -100,9 +101,10 @@ export default function EsploraPage() {
         NETWORK_LABEL[t.network ?? ''],
       ].filter((x): x is string => !!x)
 
-      const body = {
+      const hike: PlannedHike = {
         id: t.id,
         title: t.name,
+        createdAt: new Date().toISOString(),
         distanceMeters: (t.distanceKm ?? 0) * 1000,
         elevationGain:  t.elevationGain ?? 0,
         elevationLoss:  t.elevationLoss ?? 0,
@@ -115,12 +117,7 @@ export default function EsploraPage() {
         tags,
       }
 
-      const res = await fetch('/api/planned', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error()
+      await savePlanned(hike)
       setAdded(prev => new Set(prev).add(t.id))
     } catch {
       alert('Errore nel salvataggio. Riprova.')
