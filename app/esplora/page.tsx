@@ -3,6 +3,7 @@ import { useState, useRef } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import ExploreMap, { type TrailResult } from '@/components/ExploreMap'
+import TrailMiniMap from '@/components/TrailMiniMap'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import {
   Compass, MapPin, Route, TrendingUp, Clock,
@@ -126,65 +127,65 @@ export default function EsploraPage() {
     }
   }
 
+  // Floating search bar rendered on top of the map by ExploreMap — keeps the
+  // map itself as the page's focal point instead of stacking chrome above it.
+  const searchBar = (
+    <div className="relative">
+      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+      <input
+        type="text"
+        placeholder="Vai a una città, area o regione..."
+        value={query}
+        onChange={e => handleQueryChange(e.target.value)}
+        className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-stone-200 bg-white/95 backdrop-blur shadow-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+      />
+      {geoLoading && (
+        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 animate-spin" />
+      )}
+
+      {geoResults.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-stone-200 shadow-lg overflow-hidden">
+          {geoResults.map((g, i) => (
+            <button key={i} onClick={() => selectGeo(g)}
+              className="w-full text-left px-3 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-start gap-2">
+              <MapPin className="w-3.5 h-3.5 text-stone-400 mt-0.5 shrink-0" />
+              <span className="text-stone-700 line-clamp-1">{g.display_name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   // ── Render ──
   return (
     <div className="min-h-screen bg-stone-50 pb-24 md:pb-8">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-5xl mx-auto px-4 py-4">
 
-        {/* Back + header */}
-        <div className="mb-6">
-          <Link href="/" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition mb-4">
-            <ChevronLeft className="w-4 h-4" /> Calendario
-          </Link>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-sky-100">
-              <Compass className="w-6 h-6 text-sky-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-stone-800">Esplora Trail</h1>
-              <p className="text-sm text-stone-500">Esplora la mappa dei sentieri e aggiungili al programma</p>
-            </div>
+        {/* Back + compact header */}
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Link href="/" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition">
+              <ChevronLeft className="w-4 h-4" /> Calendario
+            </Link>
+          </div>
+          <div className="flex items-center gap-2 text-stone-700">
+            <Compass className="w-5 h-5 text-sky-600" />
+            <h1 className="text-base font-bold">Esplora Trail</h1>
+            <span title="I sentieri mostrati arrivano da Waymarked Trails, la rete escursionistica di OpenStreetMap. Clicca su una linea colorata per vederne i dettagli.">
+              <Info className="w-3.5 h-3.5 text-stone-400" />
+            </span>
           </div>
         </div>
 
-        {/* Info banner */}
-        <div className="flex items-start gap-2.5 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 mb-6 text-xs text-sky-700">
-          <Info className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>I sentieri mostrati arrivano da <strong>Waymarked Trails</strong>, la rete escursionistica di OpenStreetMap. Clicca su una linea colorata per vederne i dettagli — distanza e dislivello potrebbero essere assenti su tratti poco documentati.</span>
-        </div>
-
-        {/* Location search — centers the map */}
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 mb-6">
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-            <input
-              type="text"
-              placeholder="Vai a una città, area o regione..."
-              value={query}
-              onChange={e => handleQueryChange(e.target.value)}
-              className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-            />
-            {geoLoading && (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 animate-spin" />
-            )}
-
-            {geoResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-stone-200 shadow-lg z-20 overflow-hidden">
-                {geoResults.map((g, i) => (
-                  <button key={i} onClick={() => selectGeo(g)}
-                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-start gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-stone-400 mt-0.5 shrink-0" />
-                    <span className="text-stone-700 line-clamp-1">{g.display_name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Map + results below it */}
-        <ExploreMap center={mapCenter} onTrailSelected={setPreview} height="500px" />
+        {/* Map (focal point of the page) + results below it */}
+        <ExploreMap
+          center={mapCenter}
+          onTrailSelected={setPreview}
+          height="clamp(440px, 72vh, 760px)"
+          searchSlot={searchBar}
+        />
       </div>
 
       {/* ── Preview modal ── */}
@@ -224,6 +225,13 @@ export default function EsploraPage() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+
+              {/* Mini map — shows the route shape so it's instantly recognizable */}
+              {t.geometryPolyline && t.geometryPolyline.length >= 2 && (
+                <div className="px-5 pt-4">
+                  <TrailMiniMap polyline={t.geometryPolyline} height="160px" />
+                </div>
+              )}
 
               {/* Stats */}
               <div className="px-5 py-5 grid grid-cols-3 gap-3 border-b border-stone-100">
@@ -302,11 +310,13 @@ export default function EsploraPage() {
                 )}
               </div>
 
-              {/* Add to programma */}
+              {/* Add to programma — disabled while elevation/duration are still
+                  being computed, otherwise the saved hike would get a 0 dislivello
+                  and its score would be calculated on incomplete data. */}
               <div className="px-5 pb-6">
                 <button
                   onClick={() => addToPlanned(t)}
-                  disabled={isAdded || isAdding}
+                  disabled={isAdded || isAdding || t.statsPending}
                   className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition disabled:opacity-60 ${
                     isAdded
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -317,7 +327,9 @@ export default function EsploraPage() {
                     ? <><Loader2 className="w-4 h-4 animate-spin" />Salvataggio…</>
                     : isAdded
                       ? '✓ Aggiunto al programma'
-                      : <><Plus className="w-4 h-4" /> Aggiungi al programma</>
+                      : t.statsPending
+                        ? <><Loader2 className="w-4 h-4 animate-spin" />Calcolo dislivello…</>
+                        : <><Plus className="w-4 h-4" /> Aggiungi al programma</>
                   }
                 </button>
               </div>
