@@ -55,6 +55,70 @@ export function boundingBox(points: [number, number][]): Bbox {
   return { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) }
 }
 
+export interface ElevationProfilePoint { lat: number; lon: number; ele: number }
+
+// Builds a plausible-looking elevation profile when no real samples are available:
+// a drift term carries the net gain/loss across the route, an oscillation on top
+// gives computeVtopo's slope-variance scoring a "varied terrain" signal instead of
+// a flat line or an unrealistic single smooth hill.
+export function buildSyntheticProfile(
+  sampled: [number, number][],
+  totalGainM: number,
+  totalLossM: number,
+): ElevationProfilePoint[] {
+  if (sampled.length === 0) return []
+  if (sampled.length === 1) return [{ lat: sampled[0][0], lon: sampled[0][1], ele: 0 }]
+
+  const totalDistKm = totalDistanceKm(sampled)
+  if (totalDistKm === 0) return sampled.map(([lat, lon]) => ({ lat, lon, ele: 0 }))
+
+  const numOsc = Math.min(6, Math.max(2, Math.round(sampled.length / 6)))
+  const netDrift = totalGainM - totalLossM
+  const amplitude = (totalGainM + totalLossM) / 2 / numOsc
+
+  const profile: ElevationProfilePoint[] = [{ lat: sampled[0][0], lon: sampled[0][1], ele: 0 }]
+  let cumDistKm = 0
+  for (let i = 1; i < sampled.length; i++) {
+    cumDistKm += haversineKm(sampled[i - 1], sampled[i])
+    const frac = cumDistKm / totalDistKm
+    const ele = netDrift * frac + amplitude * Math.sin(2 * Math.PI * numOsc * frac)
+    profile.push({ lat: sampled[i][0], lon: sampled[i][1], ele: Math.round(ele) })
+  }
+  return profile
+}
+
+// Walks the dense route geometry (used for map drawing) and the sparser profile
+// samples (~200m apart) in lockstep by cumulative distance, linearly interpolating
+// an elevation for every dense point — both arrays follow the same path, just at
+// different resolutions.
+export function interpolateElevations(
+  densePoints: [number, number][],
+  profile: ElevationProfilePoint[],
+): number[] {
+  if (profile.length === 0) return densePoints.map(() => 0)
+  if (profile.length === 1 || densePoints.length === 0) return densePoints.map(() => profile[0].ele)
+
+  const profDist: number[] = [0]
+  for (let i = 1; i < profile.length; i++) {
+    profDist.push(profDist[i - 1] + haversineKm([profile[i - 1].lat, profile[i - 1].lon], [profile[i].lat, profile[i].lon]))
+  }
+
+  const result: number[] = []
+  let segIdx = 0
+  let cumDist = 0
+  for (let i = 0; i < densePoints.length; i++) {
+    if (i > 0) cumDist += haversineKm(densePoints[i - 1], densePoints[i])
+    while (segIdx < profDist.length - 2 && profDist[segIdx + 1] < cumDist) segIdx++
+    const d0 = profDist[segIdx]
+    const d1 = profDist[segIdx + 1] ?? d0
+    const t  = d1 > d0 ? Math.min(1, Math.max(0, (cumDist - d0) / (d1 - d0))) : 0
+    const e0 = profile[segIdx].ele
+    const e1 = profile[Math.min(segIdx + 1, profile.length - 1)].ele
+    result.push(Math.round(e0 + (e1 - e0) * t))
+  }
+  return result
+}
+
 // Samples the track every ~200m against OpenTopoData (SRTM 90m), more
 // datacenter-friendly than open-elevation.com. Falls back to a bbox-based
 // estimate on any failure or timeout — never throws, never leaves the
@@ -64,12 +128,14 @@ export async function getElevationProfile(points: [number, number][]): Promise<{
   elevationLoss: number
   altitudeMax: number | null
   altitudeMin: number | null
+  profile: ElevationProfilePoint[]
   source: 'opentopodata' | 'estimated'
 }> {
-  if (points.length < 2) return { elevationGain: 0, elevationLoss: 0, altitudeMax: null, altitudeMin: null, source: 'estimated' }
+  if (points.length < 2) return { elevationGain: 0, elevationLoss: 0, altitudeMax: null, altitudeMin: null, profile: [], source: 'estimated' }
+
+  const sampled = sampleEveryNMeters(points, 200)
 
   try {
-    const sampled = sampleEveryNMeters(points, 200)
     const locations = sampled.map(([lat, lon]) => `${lat},${lon}`).join('|')
     const res = await fetch('https://api.opentopodata.org/v1/srtm90m', {
       method: 'POST',
@@ -93,13 +159,23 @@ export async function getElevationProfile(points: [number, number][]): Promise<{
       elevationLoss: Math.round(loss),
       altitudeMax: Math.round(Math.max(...elevations)),
       altitudeMin: Math.round(Math.min(...elevations)),
+      profile: sampled.slice(0, elevations.length).map(([lat, lon], i) => ({ lat, lon, ele: Math.round(elevations[i]) })),
       source: 'opentopodata',
     }
   } catch {
     const estimate = estimateStats(boundingBox(points))
     // No real samples here, just a bbox-distance guess — altitude min/max would
-    // be pure fiction, so leave them null rather than fabricate a number.
-    return { elevationGain: estimate.elevationGain, elevationLoss: estimate.elevationGain, altitudeMax: null, altitudeMin: null, source: 'estimated' }
+    // be pure fiction, so leave them null rather than fabricate a number. The
+    // profile shape, on the other hand, is still useful for the elevation chart
+    // and for computeTEI's slope-variance scoring, so synthesize a plausible one.
+    return {
+      elevationGain: estimate.elevationGain,
+      elevationLoss: estimate.elevationGain,
+      altitudeMax: null,
+      altitudeMin: null,
+      profile: buildSyntheticProfile(sampled, estimate.elevationGain, estimate.elevationGain),
+      source: 'estimated',
+    }
   }
 }
 

@@ -22,6 +22,10 @@ export interface TrailResult {
   estimatedTimeMin?: number | null
   dataQuality?: 'osm_tags' | 'calculated' | 'estimated' | null
   routeType?: 'loop' | 'out_and_back' | 'point_to_point'
+  // Sparse (~200m) lat/lon/elevation samples along the route — real SRTM data when
+  // available, otherwise a synthesized plausible profile. Used to give the saved
+  // hike's trackPoints a real altitudeMeters per point instead of none at all.
+  elevationProfile?: { lat: number; lon: number; ele: number }[]
   // true while elevation/duration are still being computed server-side (cache
   // miss + incomplete OSM tags) — distance is always resolved by this point.
   statsPending?: boolean
@@ -232,6 +236,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
         dataQuality: det.dataQuality ?? null,
         routeType: det.routeType,
         statsPending: !!det.statsPending,
+        elevationProfile: det.elevationProfile,
       }
       onTrailSelected(trail)
 
@@ -289,6 +294,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
         estimatedTimeMin: stats.estimatedTimeMin,
         dataQuality: stats.dataQuality,
         statsPending: false,
+        elevationProfile: stats.profile,
       })
     } catch {
       // Phase-1 data stays on screen; stats simply remain pending.
