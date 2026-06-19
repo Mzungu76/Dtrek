@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Loader2, X, MapPin } from 'lucide-react'
 
 export interface TrailResult {
@@ -54,6 +54,9 @@ interface Props {
   center?: { lat: number; lon: number } | null
   onTrailSelected: (trail: TrailResult) => void
   height?: string
+  // Rendered as a floating overlay anchored to the top of the map (search bar) —
+  // keeps the map itself as the visual focus instead of stacking chrome above it.
+  searchSlot?: ReactNode
 }
 
 const NETWORK_LABEL: Record<string, string> = {
@@ -64,7 +67,7 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
 }
 
-export default function ExploreMap({ center, onTrailSelected, height = '480px' }: Props) {
+export default function ExploreMap({ center, onTrailSelected, height = '480px', searchSlot }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstance      = useRef<any>(null)
@@ -305,15 +308,21 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
       <div className="relative">
         <div ref={mapRef} style={{ height }} className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm" />
 
+        {searchSlot && (
+          <div className="absolute top-3 left-3 right-3 z-[1000]">
+            {searchSlot}
+          </div>
+        )}
+
         {(queryLoading || detailLoading) && (
-          <div className="absolute top-3 left-3 bg-white/95 rounded-xl shadow-md px-3 py-2 flex items-center gap-2 text-xs text-stone-600 z-[1000]">
+          <div className="absolute bottom-3 left-3 bg-white/95 rounded-xl shadow-md px-3 py-2 flex items-center gap-2 text-xs text-stone-600 z-[1000]">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
             {detailLoading ? 'Caricamento sentiero…' : 'Ricerca sentieri…'}
           </div>
         )}
 
         {queryError && (
-          <div className="absolute top-3 left-3 right-3 bg-white rounded-xl shadow-md px-3 py-2.5 flex items-start gap-2 text-xs text-stone-600 z-[1000]">
+          <div className="absolute bottom-3 left-3 right-3 bg-white rounded-xl shadow-md px-3 py-2.5 flex items-start gap-2 text-xs text-stone-600 z-[1000]">
             <span className="flex-1">{queryError}</span>
             <button onClick={() => setQueryError(null)} className="text-stone-400 hover:text-stone-600 shrink-0">
               <X className="w-3.5 h-3.5" />
