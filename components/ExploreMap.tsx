@@ -282,6 +282,10 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
         ...trail,
         elevationGain: stats.elevationGain,
         elevationLoss: stats.elevationLoss,
+        // OSM relation tags (rare but authoritative when present) win over the
+        // SRTM-derived estimate computed here.
+        altitudeMax: trail.altitudeMax ?? stats.altitudeMax,
+        altitudeMin: trail.altitudeMin ?? stats.altitudeMin,
         estimatedTimeMin: stats.estimatedTimeMin,
         dataQuality: stats.dataQuality,
         statsPending: false,

@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'osmId e geometrySimplified richiesti' }, { status: 400 })
   }
 
-  const { elevationGain, elevationLoss, source } = await getElevationProfile(body.geometrySimplified)
+  const { elevationGain, elevationLoss, altitudeMax, altitudeMin, source } = await getElevationProfile(body.geometrySimplified)
   const dataQuality = source === 'opentopodata' ? 'calculated' : 'estimated'
   const estimatedTimeMin = estimateTimeMinutes(body.distanceKm, elevationGain)
 
@@ -61,5 +61,5 @@ export async function POST(req: NextRequest) {
   }
   await upsertTrailCache(row)
 
-  return NextResponse.json({ elevationGain, elevationLoss, estimatedTimeMin, dataQuality })
+  return NextResponse.json({ elevationGain, elevationLoss, altitudeMax, altitudeMin, estimatedTimeMin, dataQuality })
 }
