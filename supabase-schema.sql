@@ -92,15 +92,6 @@ CREATE POLICY "user_settings_owner"
 -- ═══════════════════════════════════════════════════════════
 -- AGGIORNAMENTI SCHEMA (se le tabelle esistono già)
 -- ═══════════════════════════════════════════════════════════
-ALTER TABLE activities    ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE activities    ADD COLUMN IF NOT EXISTS linked_planned_track_points JSONB;
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_pois     JSONB;
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_poi_wiki JSONB;
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide    TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities    (user_id);
-CREATE INDEX IF NOT EXISTS idx_planned_user_id    ON planned_hikes (user_id);
 
 -- ── MeritaScore (deprecated columns kept for data compatibility) ─────────────
 ALTER TABLE activities    ADD COLUMN IF NOT EXISTS rpe          INTEGER;
@@ -254,6 +245,40 @@ CREATE POLICY "hike_questionnaires_owner"
   ON hike_questionnaires FOR ALL
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+
+-- ── Cache statistiche sentieri (Esplora) ──────────────────────────────────────
+-- Dato di riferimento condiviso (non per-utente, niente user_id/RLS): le relazioni
+-- OSM spesso non hanno i tag distance/ascent/descent popolati, quindi le statistiche
+-- vengono calcolate con un fallback a cascata (tag OSM → Haversine + OpenTopoData →
+-- stima da bbox) e cachate qui per evitare di richiamare Overpass/OpenTopoData ad
+-- ogni apertura dello stesso sentiero. Letture/scritture solo via client service-role.
+CREATE TABLE IF NOT EXISTS trails (
+  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  osm_relation_id       bigint UNIQUE NOT NULL,
+  name                  text,
+  distance_km           float,
+  elevation_gain        int,
+  elevation_loss        int,
+  estimated_time_min    int,
+  difficulty            text,             -- scala SAC (T1-T6)
+  route_type            text,             -- 'loop' | 'out_and_back' | 'point_to_point'
+  operator              text,
+  network               text,
+  bbox                  jsonb,
+  geometry_simplified   jsonb,            -- [lat,lon][] campionati ogni ~200m
+  data_quality          text NOT NULL,    -- 'osm_tags' | 'calculated' | 'estimated'
+  description           text,
+  from_label            text,
+  to_label              text,
+  ref                   text,
+  cai_scale             text,
+  source                text DEFAULT 'osm',
+  created_at            timestamptz DEFAULT now(),
+  updated_at            timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_trails_osm_relation_id ON trails (osm_relation_id);
 
 
 -- ═══════════════════════════════════════════════════════════

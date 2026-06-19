@@ -19,6 +19,12 @@ export interface TrailResult {
   description?: string
   network?: string
   geometryPolyline?: [number, number][]
+  estimatedTimeMin?: number | null
+  dataQuality?: 'osm_tags' | 'calculated' | 'estimated' | null
+  routeType?: 'loop' | 'out_and_back' | 'point_to_point'
+  // true while elevation/duration are still being computed server-side (cache
+  // miss + incomplete OSM tags) — distance is always resolved by this point.
+  statsPending?: boolean
 }
 
 interface WmtCandidate {
@@ -55,6 +61,9 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
   const [queryLoading, setQueryLoading]   = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [queryError, setQueryError]       = useState<string | null>(null)
+  // Tracks the most recently selected trail so a slow phase-2 stats response
+  // can't clobber the panel if the user picks a different trail in the meantime.
+  const currentTrailId = useRef<number | null>(null)
 
   // Init map once
   useEffect(() => {
@@ -147,6 +156,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
     setCandidates([])
     setDetailLoading(true)
     setQueryError(null)
+    currentTrailId.current = id
     try {
       const detRes = await fetch(`/api/waymarked-trails/details?id=${id}`)
       const det = await detRes.json()
@@ -155,15 +165,15 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
       const polyline: [number, number][] = det.polyline ?? []
       drawHighlight(polyline)
 
-      onTrailSelected({
+      const trail: TrailResult = {
         id: `wmt-${id}`,
         osmId: id,
         name: det.name ?? `Percorso ${id}`,
         from: det.from,
         to: det.to,
         distanceKm: det.distanceKm,
-        elevationGain: det.elevationGain,
-        elevationLoss: det.elevationLoss,
+        elevationGain: det.elevationGain ?? null,
+        elevationLoss: det.elevationLoss ?? null,
         altitudeMax: det.altitudeMax,
         altitudeMin: det.altitudeMin,
         sacScale: det.sacScale,
@@ -172,11 +182,66 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
         description: det.description,
         network: det.network,
         geometryPolyline: polyline,
-      })
+        estimatedTimeMin: det.estimatedTimeMin ?? null,
+        dataQuality: det.dataQuality ?? null,
+        routeType: det.routeType,
+        statsPending: !!det.statsPending,
+      }
+      onTrailSelected(trail)
+
+      // Cache miss + incomplete OSM tags: distance is already final, but elevation
+      // needs the slower OpenTopoData round trip — finish it in the background so
+      // the panel can open right away instead of blocking on it.
+      if (det.statsPending) {
+        finishTrailStats(trail, det.geometrySimplified ?? [], det.bbox, det.operator)
+      }
     } catch {
       setQueryError('Errore nel caricamento del sentiero selezionato.')
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  async function finishTrailStats(
+    trail: TrailResult,
+    geometrySimplified: [number, number][],
+    bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number },
+    operator?: string,
+  ) {
+    try {
+      const res = await fetch('/api/waymarked-trails/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          osmId: trail.osmId,
+          name: trail.name,
+          ref: trail.ref,
+          network: trail.network,
+          sacScale: trail.sacScale,
+          caiScale: trail.caiScale,
+          description: trail.description,
+          from: trail.from,
+          to: trail.to,
+          operator,
+          distanceKm: trail.distanceKm,
+          routeType: trail.routeType,
+          bbox,
+          geometrySimplified,
+        }),
+      })
+      const stats = await res.json()
+      if (!res.ok || currentTrailId.current !== trail.osmId) return
+
+      onTrailSelected({
+        ...trail,
+        elevationGain: stats.elevationGain,
+        elevationLoss: stats.elevationLoss,
+        estimatedTimeMin: stats.estimatedTimeMin,
+        dataQuality: stats.dataQuality,
+        statsPending: false,
+      })
+    } catch {
+      // Phase-1 data stays on screen; stats simply remain pending.
     }
   }
 
