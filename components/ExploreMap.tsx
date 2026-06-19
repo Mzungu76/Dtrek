@@ -34,6 +34,22 @@ interface WmtCandidate {
   network?: string
 }
 
+interface CandidateBrief {
+  distanceKm: number | null
+  elevationGain: number | null
+  estimatedTimeMin: number | null
+  loading: boolean
+}
+
+function formatDur(secs: number): string {
+  if (secs <= 0) return ''
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h${String(m).padStart(2, '0')}`
+}
+
 interface Props {
   center?: { lat: number; lon: number } | null
   onTrailSelected: (trail: TrailResult) => void
@@ -58,6 +74,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
   const leafletRef        = useRef<any>(null)
   const [mapReady, setMapReady]           = useState(false)
   const [candidates, setCandidates]       = useState<WmtCandidate[]>([])
+  const [briefs, setBriefs]               = useState<Record<number, CandidateBrief>>({})
   const [queryLoading, setQueryLoading]   = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [queryError, setQueryError]       = useState<string | null>(null)
@@ -144,6 +161,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
         await selectTrail(results[0].id)
       } else {
         setCandidates(results)
+        loadBriefs(results)
       }
     } catch {
       setQueryError('Errore nella ricerca dei sentieri.')
@@ -152,8 +170,33 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
     }
   }
 
+  // Fetches a quick distance/elevation/duration snapshot for each candidate so the
+  // list below the map shows real numbers right away instead of just names.
+  function loadBriefs(results: WmtCandidate[]) {
+    setBriefs(Object.fromEntries(results.map(c => [c.id, { distanceKm: null, elevationGain: null, estimatedTimeMin: null, loading: true }])))
+    for (const c of results) {
+      fetch(`/api/waymarked-trails/details?id=${c.id}`)
+        .then(res => res.json())
+        .then(det => {
+          setBriefs(prev => ({
+            ...prev,
+            [c.id]: {
+              distanceKm: det.distanceKm ?? null,
+              elevationGain: det.elevationGain ?? null,
+              estimatedTimeMin: det.estimatedTimeMin ?? null,
+              loading: false,
+            },
+          }))
+        })
+        .catch(() => {
+          setBriefs(prev => ({ ...prev, [c.id]: { distanceKm: null, elevationGain: null, estimatedTimeMin: null, loading: false } }))
+        })
+    }
+  }
+
   async function selectTrail(id: number) {
     setCandidates([])
+    setBriefs({})
     setDetailLoading(true)
     setQueryError(null)
     currentTrailId.current = id
@@ -258,43 +301,66 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px' }
   }
 
   return (
-    <div className="relative">
-      <div ref={mapRef} style={{ height }} className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm" />
+    <div>
+      <div className="relative">
+        <div ref={mapRef} style={{ height }} className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm" />
 
-      {(queryLoading || detailLoading) && (
-        <div className="absolute top-3 left-3 bg-white/95 rounded-xl shadow-md px-3 py-2 flex items-center gap-2 text-xs text-stone-600 z-[1000]">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
-          {detailLoading ? 'Caricamento sentiero…' : 'Ricerca sentieri…'}
-        </div>
-      )}
+        {(queryLoading || detailLoading) && (
+          <div className="absolute top-3 left-3 bg-white/95 rounded-xl shadow-md px-3 py-2 flex items-center gap-2 text-xs text-stone-600 z-[1000]">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
+            {detailLoading ? 'Caricamento sentiero…' : 'Ricerca sentieri…'}
+          </div>
+        )}
 
-      {queryError && (
-        <div className="absolute top-3 left-3 right-3 bg-white rounded-xl shadow-md px-3 py-2.5 flex items-start gap-2 text-xs text-stone-600 z-[1000]">
-          <span className="flex-1">{queryError}</span>
-          <button onClick={() => setQueryError(null)} className="text-stone-400 hover:text-stone-600 shrink-0">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
+        {queryError && (
+          <div className="absolute top-3 left-3 right-3 bg-white rounded-xl shadow-md px-3 py-2.5 flex items-start gap-2 text-xs text-stone-600 z-[1000]">
+            <span className="flex-1">{queryError}</span>
+            <button onClick={() => setQueryError(null)} className="text-stone-400 hover:text-stone-600 shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
 
       {candidates.length > 0 && (
-        <div className="absolute bottom-3 left-3 right-3 bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden z-[1000] max-h-48 overflow-y-auto">
-          <div className="px-3 py-2 text-[11px] font-medium text-stone-400 uppercase tracking-wide border-b border-stone-100">
+        <div className="mt-3 bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 text-[11px] font-medium text-stone-400 uppercase tracking-wide border-b border-stone-100">
             {candidates.length} sentieri qui — scegli
           </div>
-          {candidates.map(c => (
-            <button
-              key={c.id}
-              onClick={() => selectTrail(c.id)}
-              className="w-full text-left px-3 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-center gap-2"
-            >
-              <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-              <span className="flex-1 text-stone-700 truncate">{c.name}</span>
-              {c.network && NETWORK_LABEL[c.network] && (
-                <span className="text-[10px] text-stone-400 shrink-0">{NETWORK_LABEL[c.network]}</span>
-              )}
-            </button>
-          ))}
+          {candidates.map(c => {
+            const b = briefs[c.id]
+            const dur = b?.estimatedTimeMin != null ? b.estimatedTimeMin * 60 : 0
+            return (
+              <button
+                key={c.id}
+                onClick={() => selectTrail(c.id)}
+                className="w-full text-left px-4 py-3 hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-center gap-3"
+              >
+                <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-stone-800 font-medium truncate">{c.name}</span>
+                    {c.network && NETWORK_LABEL[c.network] && (
+                      <span className="text-[10px] text-stone-400 shrink-0">{NETWORK_LABEL[c.network]}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-stone-500">
+                    {b?.loading ? (
+                      <span className="flex items-center gap-1 text-stone-400">
+                        <Loader2 className="w-3 h-3 animate-spin" /> calcolo dati…
+                      </span>
+                    ) : (
+                      <>
+                        <span>{b?.distanceKm != null ? `${b.distanceKm.toFixed(1)} km` : 'N/D'}</span>
+                        <span>{b?.elevationGain != null ? `+${b.elevationGain} m` : 'N/D'}</span>
+                        <span>{dur > 0 ? formatDur(dur) : 'N/D'}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
