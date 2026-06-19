@@ -92,15 +92,6 @@ CREATE POLICY "user_settings_owner"
 -- ═══════════════════════════════════════════════════════════
 -- AGGIORNAMENTI SCHEMA (se le tabelle esistono già)
 -- ═══════════════════════════════════════════════════════════
-ALTER TABLE activities    ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE activities    ADD COLUMN IF NOT EXISTS linked_planned_track_points JSONB;
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_pois     JSONB;
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_poi_wiki JSONB;
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide    TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities    (user_id);
-CREATE INDEX IF NOT EXISTS idx_planned_user_id    ON planned_hikes (user_id);
 
 -- ── MeritaScore (deprecated columns kept for data compatibility) ─────────────
 ALTER TABLE activities    ADD COLUMN IF NOT EXISTS rpe          INTEGER;
