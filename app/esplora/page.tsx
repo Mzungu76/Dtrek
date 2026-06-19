@@ -219,9 +219,10 @@ export default function EsploraPage() {
       {/* ── Preview modal ── */}
       {preview && (() => {
         const t   = preview
-        const dur = naisimithSecs(t.distanceKm, t.elevationGain)
-        const isAdded  = added.has(t.id)
-        const isAdding = adding === t.id
+        const dur = t.estimatedTimeMin != null ? t.estimatedTimeMin * 60 : naisimithSecs(t.distanceKm, t.elevationGain)
+        const isAdded     = added.has(t.id)
+        const isAdding    = adding === t.id
+        const isEstimated = t.dataQuality === 'estimated'
         return (
           <div
             className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -234,7 +235,14 @@ export default function EsploraPage() {
               {/* Header */}
               <div className="sticky top-0 bg-white border-b border-stone-100 px-5 py-4 flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <h2 className="font-bold text-stone-800 text-base leading-tight">{t.name}</h2>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-bold text-stone-800 text-base leading-tight">{t.name}</h2>
+                    {isEstimated && (
+                      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded shrink-0">
+                        dati stimati
+                      </span>
+                    )}
+                  </div>
                   {(t.from || t.to) && (
                     <p className="text-xs text-stone-400 mt-0.5">
                       {[t.from, t.to].filter(Boolean).join(' → ')}
@@ -248,17 +256,48 @@ export default function EsploraPage() {
 
               {/* Stats */}
               <div className="px-5 py-5 grid grid-cols-3 gap-3 border-b border-stone-100">
-                {[
-                  { icon: Route,      label: 'Distanza',  value: t.distanceKm  != null ? `${t.distanceKm.toFixed(1)} km` : 'N/D' },
-                  { icon: TrendingUp, label: 'Dislivello', value: t.elevationGain != null ? `${t.elevationGain} m` : 'N/D' },
-                  { icon: Clock,      label: 'Durata',    value: dur > 0 ? formatDur(dur) : 'N/D' },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="text-center">
-                    <Icon className="w-4 h-4 text-stone-400 mx-auto mb-1" />
-                    <div className="text-sm font-bold text-stone-800">{value}</div>
-                    <div className="text-[10px] text-stone-400">{label}</div>
+                {/* Distanza — sempre risolta in fase 1, mai "in calcolo" */}
+                <div className="text-center">
+                  <Route className="w-4 h-4 text-stone-400 mx-auto mb-1" />
+                  <div className="text-sm font-bold text-stone-800">
+                    {t.distanceKm != null
+                      ? isEstimated
+                        ? <span title="Stima basata sulla geometria del percorso">~ {t.distanceKm.toFixed(1)} km</span>
+                        : `${t.distanceKm.toFixed(1)} km`
+                      : 'N/D'}
                   </div>
-                ))}
+                  <div className="text-[10px] text-stone-400">Distanza</div>
+                </div>
+
+                {/* Dislivello — può restare "in calcolo" finché OpenTopoData non risponde */}
+                <div className="text-center">
+                  <TrendingUp className="w-4 h-4 text-stone-400 mx-auto mb-1" />
+                  <div className="text-sm font-bold text-stone-800">
+                    {t.statsPending ? (
+                      <span className="flex items-center justify-center gap-1 text-xs font-normal text-gray-400">
+                        <Loader2 className="w-3 h-3 animate-spin" /> calcolo…
+                      </span>
+                    ) : t.elevationGain != null ? (
+                      isEstimated
+                        ? <span title="Stima basata sulla geometria del percorso">~ {t.elevationGain} m</span>
+                        : `${t.elevationGain} m`
+                    ) : 'N/D'}
+                  </div>
+                  <div className="text-[10px] text-stone-400">Dislivello</div>
+                </div>
+
+                {/* Durata — dipende dal dislivello, stessa logica di attesa */}
+                <div className="text-center">
+                  <Clock className="w-4 h-4 text-stone-400 mx-auto mb-1" />
+                  <div className="text-sm font-bold text-stone-800">
+                    {t.statsPending ? (
+                      <span className="flex items-center justify-center gap-1 text-xs font-normal text-gray-400">
+                        <Loader2 className="w-3 h-3 animate-spin" /> calcolo…
+                      </span>
+                    ) : dur > 0 ? formatDur(dur) : 'N/D'}
+                  </div>
+                  <div className="text-[10px] text-stone-400">Durata</div>
+                </div>
               </div>
 
               {/* Details */}
