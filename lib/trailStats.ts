@@ -62,9 +62,11 @@ export function boundingBox(points: [number, number][]): Bbox {
 export async function getElevationProfile(points: [number, number][]): Promise<{
   elevationGain: number
   elevationLoss: number
+  altitudeMax: number | null
+  altitudeMin: number | null
   source: 'opentopodata' | 'estimated'
 }> {
-  if (points.length < 2) return { elevationGain: 0, elevationLoss: 0, source: 'estimated' }
+  if (points.length < 2) return { elevationGain: 0, elevationLoss: 0, altitudeMax: null, altitudeMin: null, source: 'estimated' }
 
   try {
     const sampled = sampleEveryNMeters(points, 200)
@@ -86,10 +88,18 @@ export async function getElevationProfile(points: [number, number][]): Promise<{
       if (d > 0) gain += d
       else loss += Math.abs(d)
     }
-    return { elevationGain: Math.round(gain), elevationLoss: Math.round(loss), source: 'opentopodata' }
+    return {
+      elevationGain: Math.round(gain),
+      elevationLoss: Math.round(loss),
+      altitudeMax: Math.round(Math.max(...elevations)),
+      altitudeMin: Math.round(Math.min(...elevations)),
+      source: 'opentopodata',
+    }
   } catch {
     const estimate = estimateStats(boundingBox(points))
-    return { elevationGain: estimate.elevationGain, elevationLoss: estimate.elevationGain, source: 'estimated' }
+    // No real samples here, just a bbox-distance guess — altitude min/max would
+    // be pure fiction, so leave them null rather than fabricate a number.
+    return { elevationGain: estimate.elevationGain, elevationLoss: estimate.elevationGain, altitudeMax: null, altitudeMin: null, source: 'estimated' }
   }
 }
 
