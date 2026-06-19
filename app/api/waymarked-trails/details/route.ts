@@ -1,7 +1,7 @@
 export const runtime = 'edge'
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchOverpass, parseOsmDistance, stitchWays, type OsmRelation, type OsmWay } from '@/lib/overpassTrails'
-import { totalDistanceKm, sampleEveryNMeters, boundingBox, estimateStats, estimateTimeMinutes, detectRouteType } from '@/lib/trailStats'
+import { totalDistanceKm, sampleEveryNMeters, boundingBox, estimateStats, estimateTimeMinutes, detectRouteType, buildSyntheticProfile } from '@/lib/trailStats'
 import { getCachedTrail, upsertTrailCache, type TrailCacheRow } from '@/lib/trailsCache'
 
 // GET ?id= — metadata (parsed from OSM tags) + stitched geometry for a single trail relation.
@@ -103,10 +103,16 @@ out geom;`
       }
       await upsertTrailCache(row)
 
+      // OSM tags give us correct totals but never a real per-point sample — synthesize
+      // a plausible profile so the elevation chart and computeTEI's slope-variance
+      // scoring don't end up flat instead of triggering a whole extra OpenTopoData round trip.
+      const elevationProfile = buildSyntheticProfile(geometrySimplified, osmAscent, osmDescent)
+
       return NextResponse.json({
         name, ...descriptive, altitudeMax, altitudeMin,
         distanceKm: osmDistance, elevationGain: osmAscent, elevationLoss: osmDescent,
         estimatedTimeMin, routeType, dataQuality: 'osm_tags', statsPending: false, polyline: points,
+        elevationProfile,
       })
     }
 

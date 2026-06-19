@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar'
 import ExploreMap, { type TrailResult } from '@/components/ExploreMap'
 import TrailMiniMap from '@/components/TrailMiniMap'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
+import { interpolateElevations } from '@/lib/trailStats'
 import {
   Compass, MapPin, Route, TrendingUp, Clock,
   Plus, Loader2, X, ChevronLeft, Info,
@@ -86,7 +87,16 @@ export default function EsploraPage() {
     setAdding(t.id)
     try {
       const routePolyline = t.geometryPolyline ?? []
-      const trackPoints = routePolyline.map(([lat, lon]) => ({ time: '', lat, lon }))
+      // Interpolate the sparse (~200m) elevation samples onto the dense route geometry
+      // so the saved hike's trackPoints carry real altitudeMeters — without this the
+      // elevation chart and the CTS slope-variance scoring both see a flat profile.
+      const altitudes = t.elevationProfile?.length
+        ? interpolateElevations(routePolyline, t.elevationProfile)
+        : null
+      const trackPoints = routePolyline.map(([lat, lon], i) => ({
+        time: '', lat, lon,
+        altitudeMeters: altitudes ? altitudes[i] : undefined,
+      }))
 
       const notes = [
         t.description,
