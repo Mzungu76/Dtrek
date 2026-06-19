@@ -6,7 +6,7 @@ import ExploreMap, { type TrailResult } from '@/components/ExploreMap'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import {
   Compass, MapPin, Route, TrendingUp, Clock,
-  Plus, Loader2, X, ArrowUpRight, ChevronLeft, Mountain, Info,
+  Plus, Loader2, X, ChevronLeft, Info,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -183,37 +183,8 @@ export default function EsploraPage() {
           </div>
         </div>
 
-        {/* Map */}
-        <div className="mb-6">
-          <ExploreMap center={mapCenter} onTrailSelected={setPreview} height="500px" />
-        </div>
-
-        {/* Idee di ricerca */}
-        <div className="space-y-3">
-          <p className="text-xs text-stone-400 font-medium uppercase tracking-wider px-1">Idee di ricerca</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {[
-              { label: 'Dolomiti', area: 'Belluno, Veneto' },
-              { label: 'Appennino Toscano', area: 'Firenze, Toscana' },
-              { label: 'Gran Sasso', area: "L'Aquila, Abruzzo" },
-              { label: 'Cinque Terre', area: 'La Spezia, Liguria' },
-              { label: 'Etna', area: 'Catania, Sicilia' },
-              { label: 'Valle d\'Aosta', area: 'Aosta, Valle d\'Aosta' },
-            ].map(({ label, area }) => (
-              <button
-                key={label}
-                onClick={() => { setQuery(label); handleQueryChange(label) }}
-                className="flex items-center gap-2.5 bg-white rounded-xl border border-stone-200 px-3 py-3 hover:border-sky-300 hover:shadow-sm transition text-left"
-              >
-                <Mountain className="w-4 h-4 text-stone-400 shrink-0" />
-                <div>
-                  <div className="text-xs font-semibold text-stone-700">{label}</div>
-                  <div className="text-[10px] text-stone-400">{area}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Map + results below it */}
+        <ExploreMap center={mapCenter} onTrailSelected={setPreview} height="500px" />
       </div>
 
       {/* ── Preview modal ── */}
@@ -329,19 +300,6 @@ export default function EsploraPage() {
                 {t.description && (
                   <p className="text-xs text-stone-600 leading-relaxed pt-1">{t.description}</p>
                 )}
-              </div>
-
-              {/* OSM link */}
-              <div className="px-5 pb-3">
-                <a
-                  href={`https://www.openstreetmap.org/relation/${t.osmId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-stone-200 hover:border-sky-300 hover:bg-sky-50 text-sm text-stone-700 hover:text-sky-700 font-medium transition"
-                >
-                  <ArrowUpRight className="w-4 h-4" />
-                  Visualizza percorso su OpenStreetMap
-                </a>
               </div>
 
               {/* Add to programma */}
