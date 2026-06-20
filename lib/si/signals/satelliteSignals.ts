@@ -110,10 +110,16 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
     available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0, floodPenalty: 0, landslidePenalty: 0,
   }
 
+  let token: string | null
   try {
-    const token = await getCdseToken()
-    if (!token) return neutral
+    token = await getCdseToken()
+  } catch (err) {
+    console.error('[si] CDSE auth failed', err)
+    return { ...neutral, reason: 'auth_failed' }
+  }
+  if (!token) return { ...neutral, reason: 'missing_credentials' }
 
+  try {
     const now = new Date()
     const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000)
     const priorEnd = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -136,8 +142,9 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
       floodPenalty: floodPenaltyFor(current.ndwi),
       landslidePenalty: landslidePenaltyFor(current.bsi),
     }
-  } catch {
-    return neutral
+  } catch (err) {
+    console.error('[si] CDSE statistics failed', err)
+    return { ...neutral, reason: 'api_error' }
   }
 }
 
