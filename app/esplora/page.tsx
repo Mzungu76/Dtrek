@@ -4,6 +4,9 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import ExploreMap, { type TrailResult } from '@/components/ExploreMap'
 import TrailMiniMap from '@/components/TrailMiniMap'
+import { SIBadge } from '@/components/SIBadge'
+import { Sentinel2Panel } from '@/components/Sentinel2Panel'
+import { useSI, useSentinel2 } from '@/lib/si/useSI'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { interpolateElevations } from '@/lib/trailStats'
 import {
@@ -56,6 +59,8 @@ export default function EsploraPage() {
   const [added, setAdded]             = useState<Set<string>>(new Set())
   const [preview, setPreview]         = useState<TrailResult | null>(null)
   const geoTimer                      = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const si                            = useSI({ osmId: preview?.osmId })
+  const s2                            = useSentinel2({ osmId: preview?.osmId })
 
   // ── Geocoding ──
   function handleQueryChange(v: string) {
@@ -224,6 +229,7 @@ export default function EsploraPage() {
                         dati stimati
                       </span>
                     )}
+                    <SIBadge si={si.result?.si} label={si.result?.label} isGhostTrail={si.result?.isGhostTrail} loading={si.loading} compact />
                   </div>
                   {(t.from || t.to) && (
                     <p className="text-xs text-stone-400 mt-0.5">
@@ -318,6 +324,20 @@ export default function EsploraPage() {
                 {t.description && (
                   <p className="text-xs text-stone-600 leading-relaxed pt-1">{t.description}</p>
                 )}
+              </div>
+
+              {/* Sicurezza e dati satellitari */}
+              <div className="px-5 pb-2 space-y-3">
+                <SIBadge
+                  si={si.result?.si}
+                  label={si.result?.label}
+                  signals={si.result?.signals}
+                  isGhostTrail={si.result?.isGhostTrail}
+                  partial={si.result?.partial}
+                  loading={si.loading}
+                  expanded
+                />
+                <Sentinel2Panel data={s2.data} loading={s2.loading} />
               </div>
 
               {/* Add to programma — disabled while elevation/duration are still
