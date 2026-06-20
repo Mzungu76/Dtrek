@@ -97,11 +97,20 @@ export async function findMatchingActivity(
   return candidates[0]
 }
 
+const TRAILS_SCAN_PAGE = 1000
+const TRAILS_SCAN_MAX_PAGES = 20 // ~20k rows — generous ceiling against a runaway loop, not a real expected size
+
 /**
  * Reverse direction: given a planned hike's polyline (no OSM linkage at
  * all), finds the best-matching cached trail and returns its osm_relation_id.
  * Used only by the `?polyline=` slow path — never imported client-side,
  * since it goes through the service-role client.
+ *
+ * Two passes against `trails`: first a cheap (id, bbox)-only scan across the
+ * *whole* table, paginated past PostgREST's default page cap, since an
+ * unordered `.limit()` would otherwise silently drop the real match once the
+ * table grows past that cap (no ORDER BY means Postgres row order isn't
+ * stable). Only bbox survivors then pay for the heavier geometry fetch.
  */
 export async function findTrailForPolyline(polyline: [number, number][]): Promise<number | null> {
   if (polyline.length < 2) return null
@@ -110,19 +119,36 @@ export async function findTrailForPolyline(polyline: [number, number][]): Promis
   const queryBbox: Bbox = { minLat: Number(minLatS), minLon: Number(minLonS), maxLat: Number(maxLatS), maxLon: Number(maxLonS) }
   const sample = sampleEvery(polyline, 12)
 
-  const { data } = await supabase
-    .from('trails')
-    .select('osm_relation_id, geometry_simplified, bbox')
-    .limit(CANDIDATE_LIMIT)
+  const candidateIds: number[] = []
+  for (let page = 0; page < TRAILS_SCAN_MAX_PAGES; page++) {
+    const offset = page * TRAILS_SCAN_PAGE
+    const { data, error } = await supabase
+      .from('trails')
+      .select('osm_relation_id, bbox')
+      .range(offset, offset + TRAILS_SCAN_PAGE - 1)
+    if (error || !data || data.length === 0) break
 
-  if (!data) return null
+    for (const row of data) {
+      const rowBbox = row.bbox as Bbox | null
+      if (!rowBbox || bboxesOverlap(rowBbox, queryBbox, BBOX_PREFILTER_PAD)) {
+        candidateIds.push(row.osm_relation_id)
+      }
+    }
+    if (data.length < TRAILS_SCAN_PAGE) break
+  }
+  if (candidateIds.length === 0) return null
+
+  const { data: geomRows } = await supabase
+    .from('trails')
+    .select('osm_relation_id, geometry_simplified')
+    .in('osm_relation_id', candidateIds)
+
+  if (!geomRows) return null
 
   let best: { id: number; fraction: number } | null = null
-  for (const row of data) {
+  for (const row of geomRows) {
     const track = (row.geometry_simplified ?? []) as [number, number][]
     if (track.length < 2) continue
-    const rowBbox = row.bbox as Bbox | null
-    if (rowBbox && !bboxesOverlap(rowBbox, queryBbox, BBOX_PREFILTER_PAD)) continue
 
     const fraction = matchFraction(sample, track)
     if (fraction >= MATCH_FRACTION_MIN && (!best || fraction > best.fraction)) {
