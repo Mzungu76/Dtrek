@@ -200,7 +200,7 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
     token = await getCdseToken()
   } catch (err) {
     console.error('[sentinel2] CDSE auth failed', err)
-    return { ...UNAVAILABLE, osmRelationId, reason: 'auth_failed' }
+    return { ...UNAVAILABLE, osmRelationId, reason: 'auth_failed', debugInfo: err instanceof Error ? err.message : String(err) }
   }
   if (!token) return { ...UNAVAILABLE, osmRelationId, reason: 'missing_credentials' }
   if (trailPoints.length < 2) return { ...UNAVAILABLE, osmRelationId, reason: 'no_geometry' }
@@ -301,7 +301,7 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
     return toSentinel2Data(osmRelationId, result)
   } catch (err) {
     console.error('[sentinel2] CDSE statistics failed', err)
-    return { ...UNAVAILABLE, osmRelationId, reason: 'api_error' }
+    return { ...UNAVAILABLE, osmRelationId, reason: 'api_error', debugInfo: err instanceof Error ? err.message : String(err) }
   }
 }
 

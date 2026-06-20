@@ -94,6 +94,7 @@ export interface Sentinel2Data {
   computedAt: string | null
   stale?: boolean
   reason?: UnavailableReason
+  debugInfo?: string   // raw upstream error message (status code only, no secrets) — temporary aid until Vercel log access works
 }
 
 // Discriminated responses for the `?polyline=` slow-path API mode, where the

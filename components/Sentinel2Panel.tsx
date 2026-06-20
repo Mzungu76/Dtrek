@@ -202,6 +202,9 @@ export function Sentinel2Panel({ data, loading }: Props) {
     return (
       <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4">
         <p className="text-sm text-stone-500">{message}</p>
+        {data?.debugInfo && (
+          <p className="text-xs text-stone-400 font-mono mt-1.5">{data.debugInfo}</p>
+        )}
       </div>
     )
   }
