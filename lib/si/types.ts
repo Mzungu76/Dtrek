@@ -31,6 +31,9 @@ export interface ClimateSignal {
   seasonBonus: number     // +5 (Apr/May, Oct/Nov) | 0
 }
 
+// Why available:false happened — diagnostic only, never affects scoring.
+export type UnavailableReason = 'missing_credentials' | 'auth_failed' | 'api_error' | 'no_geometry'
+
 export interface SatelliteSignal {
   available: boolean
   ndviDeltaPenalty: number    // 0 | -10 | -20 | -35
@@ -38,6 +41,7 @@ export interface SatelliteSignal {
   firePenalty: number         // 0 | -25 | -50  (from NBR)
   floodPenalty: number        // 0 | -15 | -30  (from NDWI)
   landslidePenalty: number    // 0 | -10 | -25  (from BSI)
+  reason?: UnavailableReason
 }
 
 export interface ActivitySignal {
@@ -89,6 +93,7 @@ export interface Sentinel2Data {
   phenologyPeakMonth: number | null    // 1-12
   computedAt: string | null
   stale?: boolean
+  reason?: UnavailableReason
 }
 
 // Discriminated responses for the `?polyline=` slow-path API mode, where the

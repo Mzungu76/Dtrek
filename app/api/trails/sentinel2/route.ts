@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
         osmRelationId, available: false, ndviMonthly: null, ndviDelta: null, ndwiCurrent: null,
         nbrCurrent: null, eviCurrent: null, bsiCurrent: null, fireDetected: false, floodDetected: false,
         landslideRisk: false, shadeScore: null, landscapeVariety: null, waterSources: [],
-        phenologyPeakMonth: null, computedAt: null,
+        phenologyPeakMonth: null, computedAt: null, reason: 'no_geometry',
       } satisfies Sentinel2ApiResponse)
     }
 

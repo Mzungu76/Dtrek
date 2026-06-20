@@ -186,11 +186,22 @@ export function Sentinel2Panel({ data, loading }: Props) {
   }
 
   if (!data || !data.available) {
+    const message = (() => {
+      switch (data?.reason) {
+        case 'auth_failed':
+          return "Autenticazione Copernicus fallita — verifica che le credenziali in Vercel siano corrette per l'ambiente Production e che sia stato eseguito un deploy dopo averle impostate."
+        case 'api_error':
+          return 'Servizio satellitare Copernicus temporaneamente non disponibile — riprova più tardi.'
+        case 'no_geometry':
+          return 'Dati satellitari non disponibili per questo percorso.'
+        default:
+          return "Dati satellitari non disponibili — configura le credenziali Copernicus nelle variabili d'ambiente."
+      }
+    })()
+
     return (
       <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4">
-        <p className="text-sm text-stone-500">
-          Dati satellitari non disponibili — configura le credenziali Copernicus nelle variabili d&apos;ambiente.
-        </p>
+        <p className="text-sm text-stone-500">{message}</p>
       </div>
     )
   }

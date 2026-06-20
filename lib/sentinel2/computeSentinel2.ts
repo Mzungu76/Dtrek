@@ -195,11 +195,17 @@ const UNAVAILABLE: Sentinel2Data = {
 }
 
 export async function computeSentinel2(osmRelationId: number, trailPoints: [number, number][]): Promise<Sentinel2Data> {
+  let token: string | null
   try {
-    const token = await getCdseToken()
-    if (!token) return { ...UNAVAILABLE, osmRelationId }
-    if (trailPoints.length < 2) return { ...UNAVAILABLE, osmRelationId }
+    token = await getCdseToken()
+  } catch (err) {
+    console.error('[sentinel2] CDSE auth failed', err)
+    return { ...UNAVAILABLE, osmRelationId, reason: 'auth_failed' }
+  }
+  if (!token) return { ...UNAVAILABLE, osmRelationId, reason: 'missing_credentials' }
+  if (trailPoints.length < 2) return { ...UNAVAILABLE, osmRelationId, reason: 'no_geometry' }
 
+  try {
     const cache = await fetchS2Cache(osmRelationId)
     const now = Date.now()
     const snapshotExpired = !cache?.computedAt || now - new Date(cache.computedAt).getTime() > SNAPSHOT_TTL_MS
@@ -293,8 +299,9 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
     }).eq('osm_relation_id', osmRelationId)
 
     return toSentinel2Data(osmRelationId, result)
-  } catch {
-    return { ...UNAVAILABLE, osmRelationId }
+  } catch (err) {
+    console.error('[sentinel2] CDSE statistics failed', err)
+    return { ...UNAVAILABLE, osmRelationId, reason: 'api_error' }
   }
 }
 
