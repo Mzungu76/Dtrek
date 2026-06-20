@@ -10,6 +10,8 @@ import RouteThumb from '@/components/RouteThumb'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
+import { SIBadge } from '@/components/SIBadge'
+import { useSI } from '@/lib/si/useSI'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
@@ -183,6 +185,7 @@ export default function PlannedHikePage() {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [hike])
 
+  const si = useSI({ polyline: hike?.routePolyline })
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -570,6 +573,17 @@ export default function PlannedHikePage() {
             elevationGain={hike.elevationGain}
             days={7}
           />
+        )}
+
+        {/* Condizioni attuali — segnali esterni in tempo reale (non il rischio
+            intrinseco del tracciato, già coperto da Valutazione Sicurezza più sotto) */}
+        {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
+          <div className="space-y-2">
+            <h2 className="font-display text-xl font-semibold text-stone-700">Condizioni attuali</h2>
+            {si.notMatched
+              ? <p className="text-sm text-stone-400">Sentiero non identificato — impossibile calcolare l&apos;indice di sicurezza.</p>
+              : <SIBadge si={si.result?.si} label={si.result?.label} signals={si.result?.signals} partial={si.result?.partial} loading={si.loading} expanded />}
+          </div>
         )}
 
         {/* Map + Elevation */}
