@@ -84,8 +84,8 @@ async function runStatistics(
       timeRange: { from: from.toISOString(), to: to.toISOString() },
       aggregationInterval: { of: 'P370D' }, // wider than any range used here → single bucket
       evalscript,
-      resx: 10,
-      resy: 10,
+      resx: 60,
+      resy: 60,
     },
     calculations: Object.fromEntries(outputIds.map(id => [id, { statistics: { default: {} } }])),
   }
