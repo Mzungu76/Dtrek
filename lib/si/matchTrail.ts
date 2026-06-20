@@ -1,0 +1,133 @@
+// Best-effort spatial matching between a trail's geometry and DTrek's own
+// activities/planned_hikes/trails rows — there is no real foreign key (no
+// trail_id column anywhere), so this approximates "is this the same trail"
+// by sampling the trail polyline every ~12 points and checking what fraction
+// of those samples lie within 90m of a candidate track.
+import { supabase } from '@/lib/supabase'
+import { minDistToTrack, computeBbox } from '@/lib/geoUtils'
+import type { SignalContext } from '@/lib/si/types'
+
+type Bbox = SignalContext['bbox']
+
+const MATCH_THRESHOLD_M = 90
+const MATCH_FRACTION_MIN = 0.8
+const BBOX_PREFILTER_PAD = 0.02 // ~2km — cheap reject before the per-point haversine scan
+const THREE_YEARS_MS = 3 * 365 * 24 * 60 * 60 * 1000
+const CANDIDATE_LIMIT = 500
+
+export interface MatchedActivity {
+  id: string
+  recencyDate: string
+  source: 'activity' | 'planned'
+}
+
+function sampleEvery<T>(arr: T[], step: number): T[] {
+  return arr.filter((_, i) => i % step === 0)
+}
+
+function matchFraction(trailSample: [number, number][], candidateTrack: [number, number][]): number {
+  if (candidateTrack.length < 2 || trailSample.length === 0) return 0
+  let within = 0
+  for (const [lat, lon] of trailSample) {
+    if (minDistToTrack(lat, lon, candidateTrack) <= MATCH_THRESHOLD_M) within++
+  }
+  return within / trailSample.length
+}
+
+function trackTouchesBbox(track: [number, number][], bbox: Bbox, pad: number): boolean {
+  return track.some(([lat, lon]) =>
+    lat >= bbox.minLat - pad && lat <= bbox.maxLat + pad &&
+    lon >= bbox.minLon - pad && lon <= bbox.maxLon + pad
+  )
+}
+
+function bboxesOverlap(a: Bbox, b: Bbox, pad: number): boolean {
+  return a.minLat - pad <= b.maxLat && a.maxLat + pad >= b.minLat &&
+         a.minLon - pad <= b.maxLon && a.maxLon + pad >= b.minLon
+}
+
+/**
+ * Finds the most recent DTrek activity/planned-hike whose tracked route
+ * overlaps the given trail. Bounded to the last 3 years / 500 rows per
+ * table — acceptable at current volume with no PostGIS spatial index;
+ * revisit with a real spatial index if either table grows 10-100x and this
+ * JS bbox+haversine scan becomes a bottleneck.
+ */
+export async function findMatchingActivity(
+  trailGeometry: [number, number][],
+  trailBbox: Bbox,
+): Promise<MatchedActivity | null> {
+  if (trailGeometry.length < 2) return null
+
+  const sinceIso = new Date(Date.now() - THREE_YEARS_MS).toISOString()
+  const trailSample = sampleEvery(trailGeometry, 12)
+
+  const [actRes, planRes] = await Promise.all([
+    supabase.from('activities')
+      .select('id, route_polyline, start_time')
+      .gte('start_time', sinceIso)
+      .order('start_time', { ascending: false })
+      .limit(CANDIDATE_LIMIT),
+    supabase.from('planned_hikes')
+      .select('id, route_polyline, created_at')
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(CANDIDATE_LIMIT),
+  ])
+
+  const candidates: MatchedActivity[] = []
+
+  for (const row of actRes.data ?? []) {
+    const track = (row.route_polyline ?? []) as [number, number][]
+    if (track.length < 2 || !trackTouchesBbox(track, trailBbox, BBOX_PREFILTER_PAD)) continue
+    if (matchFraction(trailSample, track) >= MATCH_FRACTION_MIN) {
+      candidates.push({ id: row.id, recencyDate: row.start_time, source: 'activity' })
+    }
+  }
+  for (const row of planRes.data ?? []) {
+    const track = (row.route_polyline ?? []) as [number, number][]
+    if (track.length < 2 || !trackTouchesBbox(track, trailBbox, BBOX_PREFILTER_PAD)) continue
+    if (matchFraction(trailSample, track) >= MATCH_FRACTION_MIN) {
+      candidates.push({ id: row.id, recencyDate: row.created_at, source: 'planned' })
+    }
+  }
+
+  if (candidates.length === 0) return null
+  candidates.sort((a, b) => new Date(b.recencyDate).getTime() - new Date(a.recencyDate).getTime())
+  return candidates[0]
+}
+
+/**
+ * Reverse direction: given a planned hike's polyline (no OSM linkage at
+ * all), finds the best-matching cached trail and returns its osm_relation_id.
+ * Used only by the `?polyline=` slow path — never imported client-side,
+ * since it goes through the service-role client.
+ */
+export async function findTrailForPolyline(polyline: [number, number][]): Promise<number | null> {
+  if (polyline.length < 2) return null
+
+  const [minLatS, minLonS, maxLatS, maxLonS] = computeBbox(polyline, BBOX_PREFILTER_PAD).split(',')
+  const queryBbox: Bbox = { minLat: Number(minLatS), minLon: Number(minLonS), maxLat: Number(maxLatS), maxLon: Number(maxLonS) }
+  const sample = sampleEvery(polyline, 12)
+
+  const { data } = await supabase
+    .from('trails')
+    .select('osm_relation_id, geometry_simplified, bbox')
+    .limit(CANDIDATE_LIMIT)
+
+  if (!data) return null
+
+  let best: { id: number; fraction: number } | null = null
+  for (const row of data) {
+    const track = (row.geometry_simplified ?? []) as [number, number][]
+    if (track.length < 2) continue
+    const rowBbox = row.bbox as Bbox | null
+    if (rowBbox && !bboxesOverlap(rowBbox, queryBbox, BBOX_PREFILTER_PAD)) continue
+
+    const fraction = matchFraction(sample, track)
+    if (fraction >= MATCH_FRACTION_MIN && (!best || fraction > best.fraction)) {
+      best = { id: row.osm_relation_id, fraction }
+    }
+  }
+  return best?.id ?? null
+}
