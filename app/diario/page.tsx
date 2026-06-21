@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
+import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { formatDuration } from '@/lib/tcxParser'
@@ -16,8 +17,6 @@ import {
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-interface RoutePhoto { id: string; dataUrl: string; progress: number; caption: string; hasExifGps: boolean }
 
 interface DiaryReport {
   id: string
@@ -378,7 +377,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
       {/* Report header */}
       <div style={{ position: 'relative', height: 180, overflow: 'hidden' }}>
         {heroPhoto
-          ? <img src={heroPhoto.dataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={heroPhoto.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#1b4332,#40916c)' }} />
         }
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 60%)' }} />
@@ -409,7 +408,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
               {photos[i + 1] && (
                 <div style={{ float: 'right', marginLeft: 10, marginBottom: 6, width: 100 }}>
                   <div style={{ position: 'relative' }}>
-                    <img src={photos[i + 1].dataUrl} alt={photos[i + 1].caption}
+                    <img src={photos[i + 1].url} alt={photos[i + 1].caption}
                       style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 5 }} />
                     <span style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '14px', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box' }}>{i+2}</span>
                   </div>
@@ -430,7 +429,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
           <div className="pdf-block" style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {photos.map((ph, i) => (
               <div key={ph.id} style={{ position: 'relative' }}>
-                <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
                 <span style={{ position: 'absolute', top: 4, left: 4, width: 15, height: 15, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '15px', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
                 {ph.caption && <p style={{ fontSize: 7, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{ph.caption}</p>}
               </div>
@@ -481,7 +480,7 @@ export default function DiarioPage() {
       fetch('/api/resoconto?all=true').then(r => r.ok ? r.json() : []),
       fetch('/api/diary-token').then(r => r.ok ? r.json() : {}),
       fetch('/api/user-settings').then(r => r.ok ? r.json() : {}),
-    ]).then(([acts, reps, dt, us]) => {
+    ]).then(async ([acts, reps, dt, us]) => {
       const sortedActs = (acts as ActivityMeta[]).sort((a, b) =>
         new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
       setActivities(sortedActs)
@@ -511,17 +510,16 @@ export default function DiarioPage() {
       const cover = localStorage.getItem('dtrek_diary_cover')
       if (cover) setCoverUrl(cover)
 
-      // Load photos from localStorage for each activity
-      const byAct: Record<string, RoutePhoto[]> = {}
-      sortedReps.forEach((rep: DiaryReport) => {
+      // Load photos for each activity from the server (migra automaticamente da localStorage se serve)
+      const photoEntries = await Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, RoutePhoto[]]> => {
         try {
-          const raw = localStorage.getItem(`dtrek_vp_${rep.activity_id}`)
-          if (raw) {
-            const parsed = JSON.parse(raw) as RoutePhoto[]
-            byAct[rep.activity_id] = [...parsed].sort((a, b) => a.progress - b.progress)
-          }
-        } catch { /* ignore */ }
-      })
+          return [rep.activity_id, await fetchActivityPhotos(rep.activity_id)]
+        } catch {
+          return [rep.activity_id, []]
+        }
+      }))
+      const byAct: Record<string, RoutePhoto[]> = {}
+      photoEntries.forEach(([activityId, photos]) => { if (photos.length) byAct[activityId] = photos })
       setPhotosByAct(byAct)
 
       // Pre-generate canvas map for PDF

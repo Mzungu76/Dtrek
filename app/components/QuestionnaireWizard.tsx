@@ -63,7 +63,7 @@ export default function QuestionnaireWizard({
         </span>
 
         {photoAnchor && (
-          <img src={photoAnchor.dataUrl} alt={photoAnchor.caption}
+          <img src={photoAnchor.url} alt={photoAnchor.caption}
             className="w-full max-h-56 object-cover rounded-xl shadow mb-4" />
         )}
 

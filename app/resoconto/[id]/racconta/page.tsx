@@ -5,22 +5,13 @@ import { useParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import QuestionnaireWizard from '@/app/components/QuestionnaireWizard'
 import type { RouteTimelinePhoto } from '@/app/components/RouteTimeline'
+import { fetchActivityPhotos } from '@/lib/activityPhotos'
 import { getActivityById, type StoredActivity } from '@/lib/blobStore'
 import {
   getQuestionnaire, generateQuestionnaire, saveAnswer, setQuestionnaireStatus,
   type Questionnaire, type QuestionnairePhotoMeta, type QuestionnaireError,
 } from '@/lib/questionnaireStore'
 import { ArrowLeft, Loader2 } from 'lucide-react'
-
-function readPhotos(id: string): RouteTimelinePhoto[] {
-  try {
-    const raw = localStorage.getItem(`dtrek_vp_${id}`)
-    if (!raw) return []
-    return (JSON.parse(raw) as RouteTimelinePhoto[]).slice().sort((a, b) => a.progress - b.progress)
-  } catch {
-    return []
-  }
-}
 
 function toPhotoMeta(photos: RouteTimelinePhoto[]): QuestionnairePhotoMeta[] {
   return photos.map(p => ({ caption: p.caption, lat: p.lat, lon: p.lon, progress: p.progress, hasExifGps: p.hasExifGps }))
@@ -62,9 +53,9 @@ export default function RacconaPage() {
       setActivity(act)
     })
 
-    const ph = readPhotos(id)
-    setPhotos(ph)
-    loadQuestionnaire(ph)
+    fetchActivityPhotos(id)
+      .then(ph => { setPhotos(ph); loadQuestionnaire(ph) })
+      .catch(() => { setPhotos([]); loadQuestionnaire([]) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
