@@ -12,6 +12,7 @@ import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
 import { getProfile } from '@/lib/userProfile'
 import { type PoiItem, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
+import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 
 const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
 
@@ -54,16 +55,6 @@ interface ShotSegment {
   id: string; label: string; startP: number; endP: number
   pitch: [number, number]; zoom: [number, number]
   bearingMode: BearingMode; orbitDeg?: number
-}
-
-interface RoutePhoto {
-  id:              string
-  dataUrl:         string
-  progress:        number       // 0-1 on route
-  caption:         string       // mandatory — shown in polaroid
-  hasExifGps:      boolean      // true = auto-placed, false = needs manual placement
-  lat?:            number       // GPS latitude fixed at placement time
-  lon?:            number       // GPS longitude fixed at placement time
 }
 
 // ── Geo helpers ────────────────────────────────────────────────────────────────
@@ -679,39 +670,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const placingPhotoRef = useRef<{id:string;step:PlacingStep}|null>(null)
   useEffect(()=>{ placingPhotoRef.current=placingPhoto },[placingPhoto])
   const [photoBeingAdded, setPhotoBeingAdded]= useState(false)
-  const photosSaveReady = useRef(false)   // true after first mount effect runs
 
-  // Load persisted photos from localStorage on mount
+  // Load persisted photos from the server on mount (migra automaticamente da localStorage se serve)
   useEffect(() => {
-    if (activityId) {
-      const saved = localStorage.getItem(`dtrek_vp_${activityId}`)
-      if (saved) {
-        try {
-          const photos: RoutePhoto[] = JSON.parse(saved)
-          if (photos.length > 0) {
-            photos.forEach(photo => {
-              const img = new Image()
-              img.onload = () => { photoImgsRef.current.set(photo.id, img) }
-              img.src = photo.dataUrl
-            })
-            setRoutePhotos(photos)
-          }
-        } catch {}
-      }
-    }
-    photosSaveReady.current = true
+    if (!activityId) return
+    fetchActivityPhotos(activityId).then(photos => {
+      photos.forEach(photo => {
+        const img = new Image()
+        img.crossOrigin = 'anonymous' // required so canvas drawImage/toBlob don't taint on the remote Storage URL
+        img.onload = () => { photoImgsRef.current.set(photo.id, img) }
+        img.src = photo.url
+      })
+      setRoutePhotos(photos)
+    }).catch(() => {
+      setShareToast('Errore: impossibile caricare le foto del percorso')
+      setTimeout(() => setShareToast(''), 3000)
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Persist photos whenever they change (skip initial mount render)
-  useEffect(() => {
-    if (!photosSaveReady.current || !activityId) return
-    const key = `dtrek_vp_${activityId}`
-    if (routePhotos.length === 0) {
-      localStorage.removeItem(key)
-    } else {
-      try { localStorage.setItem(key, JSON.stringify(routePhotos)) } catch {}
-    }
-  }, [routePhotos, activityId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const gps = useRef(trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined))
 
@@ -756,9 +731,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       let minD=Infinity, bestIdx=0
       for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,lat,lng);if(d<minD){minD=d;bestIdx=i}}
       const prog=bestIdx/(pts.length-1)
-      setRoutePhotos(prev=>prev.map(p=>p.id===placingPhoto.id
-        ?{...p,progress:prog,lat:pts[bestIdx].lat!,lon:pts[bestIdx].lon!}:p))
+      const photoId=placingPhoto.id, nearLat=pts[bestIdx].lat!, nearLon=pts[bestIdx].lon!
+      setRoutePhotos(prev=>prev.map(p=>p.id===photoId
+        ?{...p,progress:prog,lat:nearLat,lon:nearLon}:p))
       setPlacingPhoto(null)
+      updateActivityPhoto(photoId,{progress:prog,lat:nearLat,lon:nearLon}).catch(()=>{
+        setShareToast('Errore: posizionamento foto non salvato'); setTimeout(()=>setShareToast(''),3000)
+      })
     }
     map.on('click',handler)
     return ()=>{map.off('click',handler)}
@@ -781,7 +760,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       el.style.cssText = 'cursor:pointer'
       el.innerHTML = `<div style="position:relative;display:inline-block">
         <div style="width:36px;height:36px;background:white;border-radius:6px;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.45);overflow:hidden">
-          <img src="${photo.dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block"/>
+          <img src="${photo.url}" style="width:100%;height:100%;object-fit:cover;display:block"/>
         </div>
         <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid white;margin:0 auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35))"></div>
       </div>`
@@ -1065,7 +1044,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // ── Photo upload ──────────────────────────────────────────────────────────────
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files=Array.from(e.target.files??[]); e.target.value=''; if(!files.length) return
+    const files=Array.from(e.target.files??[]); e.target.value=''; if(!files.length||!activityId) return
     setPhotoBeingAdded(true)
     const pts=gpsRef.current
 
@@ -1090,13 +1069,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
 
       const id=`photo-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const caption=file.name.replace(/\.[^.]+$/,'').replace(/[-_]/g,' ').slice(0,40)
       photoImgsRef.current.set(id,ci)
-      setRoutePhotos(prev=>[...prev,{
-        id, dataUrl:cropped, progress,
-        caption: file.name.replace(/\.[^.]+$/,'').replace(/[-_]/g,' ').slice(0,40),
-        hasExifGps,
-        ...(exifLat !== undefined && exifLon !== undefined ? {lat:exifLat,lon:exifLon} : {}),
-      }])
+
+      try {
+        const saved=await addActivityPhoto(activityId,{
+          id, dataUrl:cropped, progress, caption, hasExifGps,
+          ...(exifLat !== undefined && exifLon !== undefined ? {lat:exifLat,lon:exifLon} : {}),
+        })
+        setRoutePhotos(prev=>[...prev,saved])
+      } catch {
+        photoImgsRef.current.delete(id)
+        setShareToast('Errore: caricamento foto non riuscito'); setTimeout(()=>setShareToast(''),3000)
+      }
     }
     setPhotoBeingAdded(false)
   }
@@ -2263,7 +2248,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           {routePhotos.find(p=>p.id===placingPhoto.id)&&(
             <div className="absolute top-20 right-3 pointer-events-none">
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-1.5 shadow-xl border border-white/20">
-                <img src={routePhotos.find(p=>p.id===placingPhoto.id)!.dataUrl} alt="" className="w-16 h-16 rounded-lg object-cover"/>
+                <img src={routePhotos.find(p=>p.id===placingPhoto.id)!.url} alt="" className="w-16 h-16 rounded-lg object-cover"/>
               </div>
             </div>
           )}
@@ -2344,7 +2329,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     <div key={photo.id} className="bg-white/7 rounded-xl p-2.5">
                       <div className="flex items-start gap-3">
                         <div className="relative shrink-0">
-                          <img src={photo.dataUrl} alt="" className="w-14 h-14 rounded-lg object-cover"/>
+                          <img src={photo.url} alt="" className="w-14 h-14 rounded-lg object-cover"/>
                           {photo.hasExifGps&&(
                             <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center" title="GPS automatico">
                               <Check className="w-2.5 h-2.5 text-white"/>
@@ -2356,6 +2341,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                           <input
                             value={photo.caption}
                             onChange={e=>setRoutePhotos(prev=>prev.map(p=>p.id===photo.id?{...p,caption:e.target.value}:p))}
+                            onBlur={e=>{
+                              const caption=e.target.value
+                              updateActivityPhoto(photo.id,{caption}).catch(()=>{
+                                setShareToast('Errore: didascalia non salvata'); setTimeout(()=>setShareToast(''),3000)
+                              })
+                            }}
                             placeholder="Testo della polaroid…"
                             className="w-full bg-transparent text-white text-xs font-medium placeholder:text-white/28 focus:outline-none border-b border-white/12 focus:border-white/35 pb-0.5 mb-2"
                           />
@@ -2373,7 +2364,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                               <span className="text-[10px] text-green-400 font-medium">📍 {Math.round(photo.progress*100)}%</span>
                             )}
                             {/* Remove */}
-                            <button onClick={()=>{setRoutePhotos(prev=>prev.filter(p=>p.id!==photo.id));photoImgsRef.current.delete(photo.id)}}
+                            <button onClick={()=>{
+                              const id=photo.id
+                              setRoutePhotos(prev=>prev.filter(p=>p.id!==id));photoImgsRef.current.delete(id)
+                              removeActivityPhoto(id).catch(()=>{
+                                setShareToast('Errore: eliminazione foto non riuscita'); setTimeout(()=>setShareToast(''),3000)
+                              })
+                            }}
                               className="ml-auto text-white/25 hover:text-red-400 transition-colors">
                               <X className="w-3.5 h-3.5"/>
                             </button>
@@ -2459,7 +2456,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   {routePhotos.map(photo=>(
                     <button key={photo.id} onClick={()=>setCoverPhotoId(prev=>prev===photo.id?null:photo.id)}
                       className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${coverPhotoId===photo.id?'border-blue-400 scale-105 shadow-lg shadow-blue-500/30':'border-white/10 opacity-55 hover:opacity-90'}`}>
-                      <img src={photo.dataUrl} className="w-full h-full object-cover" alt=""/>
+                      <img src={photo.url} className="w-full h-full object-cover" alt=""/>
                     </button>
                   ))}
                 </div>

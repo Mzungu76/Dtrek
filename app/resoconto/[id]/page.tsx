@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import RouteTimeline from '@/app/components/RouteTimeline'
 import { getActivityById, type StoredActivity } from '@/lib/blobStore'
+import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -19,16 +20,6 @@ const RouteMap3D    = dynamic(() => import('@/components/RouteMap3D'),    { ssr:
 const RoutePhotoMap = dynamic(() => import('@/app/components/RoutePhotoMap'), { ssr: false })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-interface RoutePhoto {
-  id: string
-  dataUrl: string
-  progress: number
-  caption: string
-  hasExifGps: boolean
-  lat?: number
-  lon?: number
-}
 
 interface HikeReport {
   id: string
@@ -144,7 +135,7 @@ function SectionCard({
                   {photoIndex}
                 </span>
               )}
-              <img src={photo.dataUrl} alt={photo.caption}
+              <img src={photo.url} alt={photo.caption}
                 className="w-full aspect-[4/3] object-cover rounded-xl shadow-md print:rounded-lg" />
             </div>
             {photo.caption && (
@@ -180,6 +171,7 @@ export default function ResocontoPage() {
   const [lightbox,    setLightbox]    = useState<RoutePhoto | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [apiError,    setApiError]    = useState<string | null>(null)
+  const [photosError, setPhotosError] = useState<string | null>(null)
   const [coverPhotoId,  setCoverPhotoId]  = useState<string | null>(null)
   const [sharePdfUrl,   setSharePdfUrl]   = useState<string | null>(null)
   const [showShare,     setShowShare]     = useState(false)
@@ -205,14 +197,10 @@ export default function ResocontoPage() {
       setQuestionnaireStatus(questionnaire?.status ?? 'none')
     }).finally(() => setLoading(false))
 
-    // Load photos from localStorage, sorted start→end by progress
-    try {
-      const raw = localStorage.getItem(`dtrek_vp_${id}`)
-      if (raw) {
-        const parsed = JSON.parse(raw) as RoutePhoto[]
-        setPhotos([...parsed].sort((a, b) => a.progress - b.progress))
-      }
-    } catch { /* ignore */ }
+    // Load photos (server, sorted start→end by progress; migra automaticamente da localStorage)
+    fetchActivityPhotos(id)
+      .then(setPhotos)
+      .catch(() => setPhotosError('Impossibile caricare le foto di questa escursione.'))
 
     // Load cover photo preference
     const savedCover = localStorage.getItem(`dtrek_cover_${id}`)
@@ -446,7 +434,7 @@ export default function ResocontoPage() {
       <div className="relative w-full overflow-hidden print:h-[220px]"
         style={{ height: 'clamp(220px, 38vw, 420px)' }}>
         {heroPhoto
-          ? <img src={heroPhoto.dataUrl} alt=""
+          ? <img src={heroPhoto.url} alt=""
               className="absolute inset-0 w-full h-full object-cover" />
           : <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />
         }
@@ -473,10 +461,16 @@ export default function ResocontoPage() {
         </div>
       </div>
 
+      {photosError && (
+        <div className="max-w-5xl mx-auto px-4 pt-4 print:hidden">
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{photosError}</p>
+        </div>
+      )}
+
       {/* ── Photo mosaic ── */}
       {photos.length >= 2 && (
         <PhotoMosaic
-          photos={photos.slice(1, 5).map(ph => ({ id: ph.id, url: ph.dataUrl, alt: ph.caption }))}
+          photos={photos.slice(1, 5).map(ph => ({ id: ph.id, url: ph.url, alt: ph.caption }))}
           onPhotoClick={photoId => {
             const ph = photos.find(p => p.id === photoId)
             if (ph) setLightbox(ph)
@@ -562,7 +556,7 @@ export default function ResocontoPage() {
                           ? 'border-amber-400 shadow-md'
                           : 'border-transparent hover:border-stone-300'
                       }`}>
-                      <img src={ph.dataUrl} alt={ph.caption} className="w-16 h-16 object-cover" />
+                      <img src={ph.url} alt={ph.caption} className="w-16 h-16 object-cover" />
                     </button>
                   ))}
                 </div>
@@ -708,7 +702,7 @@ export default function ResocontoPage() {
                 <button key={ph.id} onClick={() => setLightbox(ph)}
                   className="shrink-0 w-36 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
                   <div className="relative">
-                    <img src={ph.dataUrl} alt={ph.caption}
+                    <img src={ph.url} alt={ph.caption}
                       className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
                     <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-barlow">
                       {i + 1}
@@ -735,7 +729,7 @@ export default function ResocontoPage() {
               {photos.map((ph, i) => (
                 <div key={ph.id} style={{ breakInside: 'avoid' }}>
                   <div style={{ position: 'relative' }}>
-                    <img src={ph.dataUrl} alt={ph.caption}
+                    <img src={ph.url} alt={ph.caption}
                       style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8 }} />
                     <span style={{
                       position: 'absolute', top: 6, left: 6,
@@ -780,7 +774,7 @@ export default function ResocontoPage() {
           {/* Hero */}
           <div className="pdf-block" style={{ position: 'relative', width: '100%', height: 220, overflow: 'hidden', marginBottom: 0 }}>
             {heroPhoto
-              ? <img src={heroPhoto.dataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img src={heroPhoto.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#1b4332,#40916c)' }} />
             }
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%)' }} />
@@ -815,7 +809,7 @@ export default function ResocontoPage() {
                     {sectionPhoto && slot > 0 && (
                       <div style={{ float: 'right', marginLeft: 12, marginBottom: 8, width: 120 }}>
                         <div style={{ position: 'relative' }}>
-                          <img src={sectionPhoto.dataUrl} alt={sectionPhoto.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                          <img src={sectionPhoto.url} alt={sectionPhoto.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
                           <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{slot+1}</span>
                         </div>
                         <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{sectionPhoto.caption}</p>
@@ -836,7 +830,7 @@ export default function ResocontoPage() {
                   {photos.map((ph, i) => (
                     <div key={ph.id} className="pdf-block">
                       <div style={{ position: 'relative' }}>
-                        <img src={ph.dataUrl} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                        <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
                         <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
                       </div>
                       {ph.caption && <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i+1}. {ph.caption}</p>}
@@ -857,7 +851,7 @@ export default function ResocontoPage() {
             <X className="w-6 h-6" />
           </button>
           <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-            <img src={lightbox.dataUrl} alt={lightbox.caption}
+            <img src={lightbox.url} alt={lightbox.caption}
               className="w-full rounded-2xl shadow-2xl" />
             {lightbox.caption && (
               <p className="font-lora text-sm italic text-white/70 text-center mt-3">

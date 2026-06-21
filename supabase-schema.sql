@@ -311,6 +311,67 @@ ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_computed_at timestamptz;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_available boolean DEFAULT false;
 
 
+-- ── Foto delle escursioni (persistenza server, sostituisce localStorage) ──────
+-- Le immagini vivono nel bucket Storage 'dtrek-photos' (path ${userId}/${activityId}/${photoId}.jpg);
+-- questa tabella salva solo URL + metadati, stesso pattern di hike_reports/dtrek-reports.
+CREATE TABLE IF NOT EXISTS activity_photos (
+  id            TEXT PRIMARY KEY,
+  user_id       UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  activity_id   TEXT NOT NULL,
+  url           TEXT NOT NULL,
+  storage_path  TEXT NOT NULL,
+  caption       TEXT NOT NULL DEFAULT '',
+  progress      DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+  has_exif_gps  BOOLEAN NOT NULL DEFAULT false,
+  lat           DOUBLE PRECISION,
+  lon           DOUBLE PRECISION,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_photos_activity_id ON activity_photos (activity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_photos_user_id     ON activity_photos (user_id);
+
+ALTER TABLE activity_photos ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "activity_photos_owner" ON activity_photos;
+CREATE POLICY "activity_photos_owner"
+  ON activity_photos FOR ALL
+  USING     (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- ── Supabase Storage bucket per le foto delle escursioni ──────────────────────
+-- Esegui nel SQL Editor di Supabase:
+--
+-- INSERT INTO storage.buckets (id, name, public)
+--   VALUES ('dtrek-photos', 'dtrek-photos', true)
+--   ON CONFLICT (id) DO NOTHING;
+--
+-- DROP POLICY IF EXISTS "users_write_own_photos" ON storage.objects;
+-- CREATE POLICY "users_write_own_photos" ON storage.objects
+--   FOR INSERT WITH CHECK (
+--     auth.uid()::text = (storage.foldername(name))[1]
+--     AND bucket_id = 'dtrek-photos'
+--   );
+--
+-- DROP POLICY IF EXISTS "users_update_own_photos" ON storage.objects;
+-- CREATE POLICY "users_update_own_photos" ON storage.objects
+--   FOR UPDATE USING (
+--     auth.uid()::text = (storage.foldername(name))[1]
+--     AND bucket_id = 'dtrek-photos'
+--   );
+--
+-- DROP POLICY IF EXISTS "users_delete_own_photos" ON storage.objects;
+-- CREATE POLICY "users_delete_own_photos" ON storage.objects
+--   FOR DELETE USING (
+--     auth.uid()::text = (storage.foldername(name))[1]
+--     AND bucket_id = 'dtrek-photos'
+--   );
+--
+-- DROP POLICY IF EXISTS "public_read_photos" ON storage.objects;
+-- CREATE POLICY "public_read_photos" ON storage.objects
+--   FOR SELECT USING (bucket_id = 'dtrek-photos');
+
+
 -- ═══════════════════════════════════════════════════════════
 -- MIGRAZIONE DATI ESISTENTI
 -- Esegui DOPO aver creato il tuo account su DTrek.

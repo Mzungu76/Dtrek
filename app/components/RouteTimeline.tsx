@@ -2,7 +2,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 
 export interface RouteTimelinePhoto {
   id: string
-  dataUrl: string
+  url: string
   progress: number
   caption: string
   hasExifGps: boolean
@@ -95,7 +95,7 @@ export default function RouteTimeline({
               className="absolute -translate-x-1/2 flex flex-col items-center"
               style={{ left: `${photo.progress * 100}%`, bottom: 0 }}>
               <div className="relative">
-                <img src={photo.dataUrl} alt={photo.caption}
+                <img src={photo.url} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
                 <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
                   {number}
@@ -165,7 +165,7 @@ export default function RouteTimeline({
                 <div style={{ height: row * ROW_HEIGHT, width: 0, borderLeft: '1px dashed #b5a48a' }} />
               )}
               <div className="relative">
-                <img src={photo.dataUrl} alt={photo.caption}
+                <img src={photo.url} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
                 <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
                   {number}

@@ -37,20 +37,11 @@ import {
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
+import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
-
-interface RoutePhoto {
-  id: string
-  dataUrl: string
-  progress: number
-  caption: string
-  hasExifGps: boolean
-  lat?: number
-  lon?: number
-}
 
 function ratingColor(n: number) {
   return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
@@ -99,6 +90,7 @@ export default function EscursionePage() {
   const [openVideoWizard, setOpenVideoWizard] = useState(false)
   const [showStreetView,  setShowStreetView]  = useState(false)
   const [photos,          setPhotos]          = useState<RoutePhoto[]>([])
+  const [photosError,     setPhotosError]     = useState<string | null>(null)
   const [coverPhotoId,    setCoverPhotoId]    = useState<string | null>(null)
   const [lightbox,        setLightbox]        = useState<RoutePhoto | null>(null)
   const [report,          setReport]          = useState<{ content: string } | null>(null)
@@ -147,13 +139,9 @@ export default function EscursionePage() {
 
   // Load gallery photos + cover preference + existing report (for hero photo / excerpt)
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`dtrek_vp_${id}`)
-      if (raw) {
-        const parsed = JSON.parse(raw) as RoutePhoto[]
-        setPhotos([...parsed].sort((a, b) => a.progress - b.progress))
-      }
-    } catch { /* ignore */ }
+    fetchActivityPhotos(id)
+      .then(setPhotos)
+      .catch(() => setPhotosError('Impossibile caricare le foto di questa escursione.'))
 
     const savedCover = localStorage.getItem(`dtrek_cover_${id}`)
     if (savedCover) setCoverPhotoId(savedCover)
@@ -312,7 +300,7 @@ export default function EscursionePage() {
       <div className="relative text-white overflow-hidden">
         {heroPhoto ? (
           <>
-            <img src={heroPhoto.dataUrl} alt=""
+            <img src={heroPhoto.url} alt=""
               className="absolute inset-0 w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-b from-black/70 to-black/20" />
           </>
@@ -444,10 +432,16 @@ export default function EscursionePage() {
         </div>
       </div>
 
+      {photosError && (
+        <div className="max-w-6xl mx-auto px-4 pt-4">
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{photosError}</p>
+        </div>
+      )}
+
       {/* ══ PHOTO MOSAIC ══ */}
       {photos.length >= 2 && (
         <PhotoMosaic
-          photos={photos.slice(1, 5).map(ph => ({ id: ph.id, url: ph.dataUrl, alt: ph.caption }))}
+          photos={photos.slice(1, 5).map(ph => ({ id: ph.id, url: ph.url, alt: ph.caption }))}
           onPhotoClick={photoId => {
             const ph = photos.find(p => p.id === photoId)
             if (ph) setLightbox(ph)
@@ -753,7 +747,7 @@ export default function EscursionePage() {
             <X className="w-6 h-6" />
           </button>
           <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-            <img src={lightbox.dataUrl} alt={lightbox.caption}
+            <img src={lightbox.url} alt={lightbox.caption}
               className="w-full rounded-2xl shadow-2xl" />
             {lightbox.caption && (
               <p className="font-lora text-sm italic text-white/70 text-center mt-3">

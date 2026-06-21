@@ -2,20 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { X, MapPin } from 'lucide-react'
-
-interface RoutePhoto {
-  id: string
-  dataUrl: string
-  progress: number
-  caption: string
-  hasExifGps: boolean
-  lat?: number
-  lon?: number
-}
+import { updateActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
+import { X, MapPin, AlertTriangle } from 'lucide-react'
 
 interface Props {
-  activityId: string
   trackPoints: TrackPoint[]
   photos: RoutePhoto[]
   onClose: () => void
@@ -38,12 +28,14 @@ function getPhotoPos(ph: RoutePhoto, pts: TrackPoint[]): { lat: number; lon: num
 }
 
 export default function PhotoPlacementMap({
-  activityId, trackPoints, photos: initialPhotos, onClose, onUpdate,
+  trackPoints, photos: initialPhotos, onClose, onUpdate,
 }: Props) {
   const mapRef        = useRef<HTMLDivElement>(null)
   const mapInstance   = useRef<any>(null)
   const pinMarkersRef = useRef<Map<string, any>>(new Map())
   const selectedIdRef = useRef<string | null>(null)
+  const localPhotosRef = useRef<RoutePhoto[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   const gpsPoints = trackPoints.filter(p => p.lat && p.lon)
 
@@ -55,8 +47,9 @@ export default function PhotoPlacementMap({
   )
   const [mapReady, setMapReady] = useState(false)
 
-  // keep ref in sync so the map click handler always sees current value
+  // keep refs in sync so the map click handler (registered once) always sees current values
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
+  useEffect(() => { localPhotosRef.current = localPhotos }, [localPhotos])
 
   // ── Leaflet init ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -102,20 +95,22 @@ export default function PhotoPlacementMap({
         const progress = bestIdx / (gpsPoints.length - 1)
         const nearPt   = gpsPoints[bestIdx]
 
-        const raw = localStorage.getItem(`dtrek_vp_${activityId}`)
-        if (!raw) return
-        const all: RoutePhoto[] = JSON.parse(raw)
-        const updated = all.map(p =>
+        const updated = localPhotosRef.current.map(p =>
           p.id === sid ? { ...p, progress, lat: nearPt.lat!, lon: nearPt.lon! } : p,
         )
-        localStorage.setItem(`dtrek_vp_${activityId}`, JSON.stringify(updated))
         const sorted = [...updated].sort((a, b) => a.progress - b.progress)
         setLocalPhotos(sorted)
-        onUpdate()
         // advance to next in route order
-        const newIdx  = sorted.findIndex(p => p.id === sid)
-        const nextId  = sorted[(newIdx + 1) % sorted.length]?.id ?? null
+        const newIdx = sorted.findIndex(p => p.id === sid)
+        const nextId = sorted[(newIdx + 1) % sorted.length]?.id ?? null
         setSelectedId(nextId)
+
+        updateActivityPhoto(sid, { progress, lat: nearPt.lat!, lon: nearPt.lon! })
+          .then(onUpdate)
+          .catch(() => {
+            setError('Posizionamento foto non riuscito. Riprova.')
+            onUpdate()
+          })
       })
 
       setMapReady(true)
@@ -180,6 +175,13 @@ export default function PhotoPlacementMap({
           </button>
         </div>
 
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 border-b border-red-200 px-5 py-2 shrink-0">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-red-600 leading-snug">{error}</p>
+          </div>
+        )}
+
         {/* Map */}
         <div
           ref={mapRef}
@@ -201,7 +203,7 @@ export default function PhotoPlacementMap({
                         : 'border-stone-200 bg-white hover:border-amber-200'
                     }`}>
                     <div className="relative">
-                      <img src={ph.dataUrl} alt={ph.caption}
+                      <img src={ph.url} alt={ph.caption}
                         className="w-16 h-16 object-cover rounded-lg" />
                       <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
                         {i + 1}

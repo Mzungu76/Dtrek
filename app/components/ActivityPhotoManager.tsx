@@ -4,21 +4,10 @@ import { useEffect, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff, Map, HardDriveDownload } from 'lucide-react'
+import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
+import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff, Map, AlertTriangle } from 'lucide-react'
 
 const PhotoPlacementMap = dynamic(() => import('@/app/components/PhotoPlacementMap'), { ssr: false })
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-export interface RoutePhoto {
-  id: string
-  dataUrl: string
-  progress: number   // 0–1 on route
-  caption: string
-  hasExifGps: boolean
-  lat?: number
-  lon?: number
-}
 
 // ── EXIF GPS parser (mirrors RouteMap3D logic) ─────────────────────────────────
 
@@ -77,16 +66,6 @@ async function readExifGps(file: File): Promise<{ lat: number; lon: number } | n
   })
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function progressLabel(p: number): string {
-  if (p < 0.15) return 'partenza'
-  if (p < 0.4)  return 'primo tratto'
-  if (p < 0.65) return 'metà percorso'
-  if (p < 0.85) return 'tratto finale'
-  return 'arrivo'
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -98,7 +77,7 @@ interface Props {
 }
 
 export default function ActivityPhotoManager({
-  activityId, trackPoints, activityTitle, distanceMeters, elevationGain,
+  activityId, trackPoints,
 }: Props) {
   const [photos,     setPhotos]     = useState<RoutePhoto[]>([])
   const [uploading,  setUploading]  = useState(false)
@@ -106,29 +85,22 @@ export default function ActivityPhotoManager({
   const [editCaption,setEditCaption]= useState('')
   const [dragging,          setDragging]          = useState(false)
   const [showPlacementMap,  setShowPlacementMap]  = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const fileRef   = useRef<HTMLInputElement>(null)
-  const saveReady = useRef(false)
 
-  // Load from localStorage
-  useEffect(() => {
+  async function refreshPhotos() {
     try {
-      const raw = localStorage.getItem(`dtrek_vp_${activityId}`)
-      if (raw) {
-        const parsed: RoutePhoto[] = JSON.parse(raw)
-        setPhotos([...parsed].sort((a, b) => a.progress - b.progress))
-      }
-    } catch { /* ignore */ }
-    saveReady.current = true
+      const fetched = await fetchActivityPhotos(activityId)
+      setPhotos(fetched)
+    } catch {
+      setError('Impossibile caricare le foto di questa escursione.')
+    }
+  }
+
+  useEffect(() => {
+    refreshPhotos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activityId])
-
-  // Persist to localStorage on every change
-  useEffect(() => {
-    if (!saveReady.current) return
-    try {
-      if (photos.length === 0) localStorage.removeItem(`dtrek_vp_${activityId}`)
-      else localStorage.setItem(`dtrek_vp_${activityId}`, JSON.stringify(photos))
-    } catch { /* ignore */ }
-  }, [photos, activityId])
 
   const pts = trackPoints.filter(p => p.lat && p.lon)
 
@@ -136,81 +108,83 @@ export default function ActivityPhotoManager({
     const imgs = files.filter(f => f.type.startsWith('image/'))
     if (!imgs.length) return
     setUploading(true)
+    setError(null)
     const added: RoutePhoto[] = []
 
-    for (const file of imgs) {
-      // Load original
-      const dataUrl = await new Promise<string>(res => {
-        const r = new FileReader()
-        r.onload = ev => res(ev.target!.result as string)
-        r.readAsDataURL(file)
-      })
-      const img = new Image()
-      await new Promise<void>(res => { img.onload = () => res(); img.src = dataUrl })
-
-      // Square-crop → 800×800 JPEG 0.82 (same as RouteMap3D)
-      const size = Math.min(img.width, img.height)
-      const cv   = document.createElement('canvas')
-      cv.width = cv.height = 800
-      cv.getContext('2d')!.drawImage(
-        img,
-        (img.width - size) / 2, (img.height - size) / 2, size, size,
-        0, 0, 800, 800,
-      )
-      const cropped = cv.toDataURL('image/jpeg', 0.82)
-
-      // EXIF GPS → nearest trackpoint → progress
-      const gps = await readExifGps(file)
-      let progress = 0.5
-      let hasExifGps = false
-      let lat: number | undefined
-      let lon: number | undefined
-
-      if (gps && pts.length > 1) {
-        hasExifGps = true
-        lat = gps.lat
-        lon = gps.lon
-        let minD = Infinity, bestIdx = 0
-        pts.forEach((pt, i) => {
-          const d = haversineM(pt.lat!, pt.lon!, gps.lat, gps.lon)
-          if (d < minD) { minD = d; bestIdx = i }
-        })
-        progress = bestIdx / (pts.length - 1)
-      }
-
-      added.push({
-        id:         `photo-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        dataUrl:    cropped,
-        progress,
-        caption:    file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').slice(0, 50),
-        hasExifGps,
-        ...(lat !== undefined && lon !== undefined ? { lat, lon } : {}),
-      })
-    }
-
-    setPhotos(prev => [...prev, ...added].sort((a, b) => a.progress - b.progress))
-    setUploading(false)
-
-    // Single upload → open its caption editor right away so the user writes
-    // their own caption instead of keeping the filename-derived default.
-    if (added.length === 1) {
-      setEditingId(added[0].id)
-      setEditCaption(added[0].caption)
-    }
-  }
-
-  function removePhoto(id: string) {
-    setPhotos(prev => prev.filter(p => p.id !== id))
-  }
-
-  function syncFromStorage() {
     try {
-      const raw = localStorage.getItem(`dtrek_vp_${activityId}`)
-      if (raw) {
-        const parsed: RoutePhoto[] = JSON.parse(raw)
-        setPhotos([...parsed].sort((a, b) => a.progress - b.progress))
+      for (const file of imgs) {
+        // Load original
+        const dataUrl = await new Promise<string>(res => {
+          const r = new FileReader()
+          r.onload = ev => res(ev.target!.result as string)
+          r.readAsDataURL(file)
+        })
+        const img = new Image()
+        await new Promise<void>(res => { img.onload = () => res(); img.src = dataUrl })
+
+        // Square-crop → 800×800 JPEG 0.82 (same as RouteMap3D)
+        const size = Math.min(img.width, img.height)
+        const cv   = document.createElement('canvas')
+        cv.width = cv.height = 800
+        cv.getContext('2d')!.drawImage(
+          img,
+          (img.width - size) / 2, (img.height - size) / 2, size, size,
+          0, 0, 800, 800,
+        )
+        const cropped = cv.toDataURL('image/jpeg', 0.82)
+
+        // EXIF GPS → nearest trackpoint → progress
+        const gps = await readExifGps(file)
+        let progress = 0.5
+        let hasExifGps = false
+        let lat: number | undefined
+        let lon: number | undefined
+
+        if (gps && pts.length > 1) {
+          hasExifGps = true
+          lat = gps.lat
+          lon = gps.lon
+          let minD = Infinity, bestIdx = 0
+          pts.forEach((pt, i) => {
+            const d = haversineM(pt.lat!, pt.lon!, gps.lat, gps.lon)
+            if (d < minD) { minD = d; bestIdx = i }
+          })
+          progress = bestIdx / (pts.length - 1)
+        }
+
+        const id = `photo-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        const caption = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').slice(0, 50)
+
+        const saved = await addActivityPhoto(activityId, {
+          id, dataUrl: cropped, progress, caption, hasExifGps,
+          ...(lat !== undefined && lon !== undefined ? { lat, lon } : {}),
+        })
+        added.push(saved)
       }
-    } catch { /* ignore */ }
+
+      setPhotos(prev => [...prev, ...added].sort((a, b) => a.progress - b.progress))
+
+      // Single upload → open its caption editor right away so the user writes
+      // their own caption instead of keeping the filename-derived default.
+      if (added.length === 1) {
+        setEditingId(added[0].id)
+        setEditCaption(added[0].caption)
+      }
+    } catch {
+      setError('Caricamento foto non riuscito. Controlla la connessione e riprova.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function removePhoto(id: string) {
+    setError(null)
+    try {
+      await removeActivityPhoto(id)
+      setPhotos(prev => prev.filter(p => p.id !== id))
+    } catch {
+      setError('Eliminazione foto non riuscita. Riprova.')
+    }
   }
 
   function startEdit(photo: RoutePhoto) {
@@ -218,10 +192,18 @@ export default function ActivityPhotoManager({
     setEditCaption(photo.caption)
   }
 
-  function saveCaption() {
+  async function saveCaption() {
     if (!editingId) return
-    setPhotos(prev => prev.map(p => p.id === editingId ? { ...p, caption: editCaption.trim() || p.caption } : p))
+    const id = editingId
+    const caption = editCaption.trim()
     setEditingId(null)
+    if (!caption) return
+    try {
+      await updateActivityPhoto(id, { caption })
+      setPhotos(prev => prev.map(p => p.id === id ? { ...p, caption } : p))
+    } catch {
+      setError('Aggiornamento didascalia non riuscito. Riprova.')
+    }
   }
 
   return (
@@ -236,13 +218,13 @@ export default function ActivityPhotoManager({
         Le foto vengono usate nel resoconto e nella mappa. Con GPS automatico vengono posizionate sul percorso;
         altrimenti clicca su una foto per posizionarla manualmente.
       </p>
-      <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-5">
-        <HardDriveDownload className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-        <p className="text-[11px] text-amber-700 leading-snug font-lora italic">
-          Le foto sono salvate <span className="font-semibold not-italic">solo in questo browser</span>.
-          Cambiando dispositivo o svuotando la cache non saranno più visibili nell&apos;app.
-        </p>
-      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-5">
+          <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-red-600 leading-snug">{error}</p>
+        </div>
+      )}
 
       {/* Upload zone */}
       <div
@@ -283,7 +265,7 @@ export default function ActivityPhotoManager({
             <div key={photo.id} className="group rounded-xl overflow-hidden border border-stone-100 shadow-sm bg-white">
               {/* Thumbnail — click to open placement map */}
               <div className="relative cursor-pointer" onClick={() => setShowPlacementMap(true)}>
-                <img src={photo.dataUrl} alt={photo.caption}
+                <img src={photo.url} alt={photo.caption}
                   className="w-full aspect-square object-cover group-hover:opacity-90 transition-opacity" />
                 {/* GPS / position badge */}
                 {photo.hasExifGps
@@ -335,11 +317,10 @@ export default function ActivityPhotoManager({
 
       {showPlacementMap && (
         <PhotoPlacementMap
-          activityId={activityId}
           trackPoints={trackPoints}
           photos={photos}
-          onClose={() => { setShowPlacementMap(false); syncFromStorage() }}
-          onUpdate={syncFromStorage}
+          onClose={() => { setShowPlacementMap(false); refreshPhotos() }}
+          onUpdate={refreshPhotos}
         />
       )}
     </section>
