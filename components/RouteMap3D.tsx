@@ -11,7 +11,7 @@ import {
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
 import { getProfile } from '@/lib/userProfile'
-import { type PoiItem, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
+import { type PoiItem, type PoiType, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 
 const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
@@ -42,6 +42,15 @@ const VIDEO_DIMS: Record<string, [number, number]> = {
   '1:1':    [1080, 1080],
   '1.91:1': [1080,  566],
   '16:9':   [1920, 1080],
+}
+
+// Overpass returns POIs with no cap (a route near villages/refuges can return 50-100+), and
+// baking one GPU texture per POI in the video stalled rendering — cap to the most notable ones.
+const MAX_VIDEO_POIS = 15
+const POI_NOTABILITY_TIER: Record<PoiType, 0|1|2> = {
+  peak: 0, hut: 0, bivouac: 0, pass: 0, viewpoint: 0,
+  waterfall: 1, cave: 1, shelter: 1, ruins: 1, castle: 1, archaeological: 1, cross: 1, monument: 1, chapel: 1, tower: 1, bridge: 1,
+  spring: 2, fountain: 2, picnic: 2, bench: 2,
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -615,6 +624,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const photoPinCleanupRef = useRef<(() => void) | null>(null)
   const poiPinCleanupRef   = useRef<(() => void) | null>(null)
   const stopAmbientAudioRef = useRef<(() => void) | null>(null)
+  const finalizeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const webglLostCleanupRef = useRef<(() => void) | null>(null)
 
   // Smooth camera refs (exponential interpolation)
   const smoothBearRef  = useRef(0)
@@ -662,6 +673,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [renderProgress,    setRenderProgress]   = useState(0)
   const [renderFrame,       setRenderFrame]      = useState(0)
   const [renderTotal,       setRenderTotal]      = useState(0)
+  const [finalizeElapsedSec,setFinalizeElapsedSec]= useState(0)
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
   const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
   const [photoDurationSec,  setPhotoDurationSec] = useState(3.0)
@@ -912,6 +924,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
       try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current=null } catch {}
       try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
+      if (finalizeIntervalRef.current) { clearInterval(finalizeIntervalRef.current); finalizeIntervalRef.current=null }
+      try { webglLostCleanupRef.current?.() } catch {}
       muxerRef.current=null; muxerTargetRef.current=null
       if(videoObjUrlRef.current) URL.revokeObjectURL(videoObjUrlRef.current)
       map.remove(); mapRef.current=null; markerRef.current=null
@@ -1120,9 +1134,53 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       setTimeout(()=>setShareToast(''),3000); setVideoState('idle'); return
     }
 
+    // Guards every map.once('idle') wait against a context that never settles (e.g. GPU
+    // pressure from many POI/photo textures) — without this the whole render hangs forever.
+    const withTimeout = <T,>(p: Promise<T>, ms: number) => Promise.race([
+      p,
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
+    ])
+
+    // Shared failure path: an unhandled exception during setup, or a lost WebGL context
+    // mid-render, otherwise leaves the UI stuck on "rendering"/"finalizing" with no feedback.
+    let renderFailed = false
+    const failRendering = (message: string) => {
+      if (renderFailed) return
+      renderFailed = true
+      renderAbortRef.current = true
+      cancelAnimationFrame(animRef.current)
+      console.error('[dtrek] video rendering failed:', message)
+      try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
+      try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
+      muxerRef.current=null; muxerTargetRef.current=null
+      try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current=null } catch {}
+      try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
+      if (finalizeIntervalRef.current) { clearInterval(finalizeIntervalRef.current); finalizeIntervalRef.current=null }
+      try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current=null } catch {}
+      try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current=null } catch {}
+      try { cleanupRouteReveal(map) } catch {}
+      const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
+      const cont=containerRef.current; if(cont){cont.style.width='';cont.style.height=''}
+      try { map.resize() } catch {}
+      if (typeof (map as any).setPixelRatio === 'function') { try{(map as any).setPixelRatio(window.devicePixelRatio||1)}catch{} }
+      webglLostCleanupRef.current?.()
+      setVideoState('idle')
+      setShareToast(message)
+      setTimeout(()=>setShareToast(''),4500)
+    }
+    const onWebglContextLost = (e: Event) => {
+      e.preventDefault?.()
+      failRendering('Il contesto grafico (GPU) si è interrotto durante la generazione del video. Riprova con meno foto/POI o un video più breve.')
+    }
+    const renderCanvas = map.getCanvas()
+    renderCanvas.addEventListener('webglcontextlost', onWebglContextLost)
+    webglLostCleanupRef.current = () => { try { renderCanvas.removeEventListener('webglcontextlost', onWebglContextLost) } catch {}; webglLostCleanupRef.current = null }
+
+    try {
+
     cancelAnimationFrame(animRef.current); isPlayingRef.current=false; setIsPlaying(false)
     progressRef.current=0; setProgress(0)
-    const pts=gpsRef.current; if(pts.length<2) return
+    const pts=gpsRef.current; if(pts.length<2) { webglLostCleanupRef.current?.(); return }
 
     const [outW,outH]=VIDEO_DIMS[videoOrientation]
 
@@ -1132,13 +1190,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     cont.style.width=`${outW/dpr}px`
     cont.style.height=`${outH/dpr}px`
     map.resize()
-    await new Promise<void>(r=>map.once('idle',r as any))
+    await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
 
     // 2× supersampling: map renders at 2× pixel density, drawImage downscales for sharper tiles
     if (typeof (map as any).setPixelRatio === 'function') {
       ;(map as any).setPixelRatio(dpr * 2)
       map.resize()
-      await new Promise<void>(r=>map.once('idle',r as any))
+      await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     }
 
     // Pre-compute smooth route bearings here so introBearing uses the same value
@@ -1157,18 +1215,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     for (const ki of prewarmIdxs) {
       const bearing = smoothRouteBears[Math.min(ki,smoothRouteBears.length-1)]??introBearing
       map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomFollow,pitch:48,bearing})
-      await new Promise<void>(r=>map.once('idle',r as any))
+      await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     }
     // Outro position (zoomed out) and intro zoom/pitch
     map.jumpTo({center:[pts[N-1].lon!,pts[N-1].lat!],zoom:zoomOutro,pitch:8,bearing:introBearing})
-    await new Promise<void>(r=>map.once('idle',r as any))
+    await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     for (const ki of prewarmIdxs.slice(0,5)) {
       map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomIntro,pitch:20,bearing:introBearing})
-      await new Promise<void>(r=>map.once('idle',r as any))
+      await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     }
     // Position at intro start
     map.jumpTo({center:[pts[0].lon!,pts[0].lat!],zoom:zoomIntro,pitch:20,bearing:introBearing})
-    await new Promise<void>(r=>map.once('idle',r as any))
+    await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
 
     // Hide HTML marker during rendering
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='0'
@@ -1211,6 +1269,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const tgt = muxerTargetRef.current
       if (!ve) return
       setVideoState('finalizing')
+      // Tick a visible elapsed-seconds counter — without this the UI shows a bar pinned at
+      // 100% with static text for the whole flush/mux duration, looking frozen even when
+      // it's legitimately still working (compression can take 20-30s for long/photo-heavy videos).
+      setFinalizeElapsedSec(0)
+      finalizeIntervalRef.current = setInterval(() => setFinalizeElapsedSec(s => s + 1), 1000)
+      try {
       // Stop ambient audio FIRST: oscillators/noise loop forever once started, so if they
       // keep feeding the AudioEncoder while we await flush(), the queue never drains and
       // finalize stalls indefinitely (the original cause of "stuck during compression").
@@ -1218,10 +1282,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // Flush encoders BEFORE nulling muxer: output callbacks use muxerRef.current.
       // Guard with a timeout so a stuck encoder (e.g. lost GPU context) surfaces as a
       // recoverable error instead of leaving the UI frozen on "finalizing" forever.
-      const withTimeout = <T,>(p: Promise<T>, ms: number) => Promise.race([
-        p,
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
-      ])
       try { await withTimeout(ve.flush(), 20000) } catch (err) {
         console.error('video flush:', err)
         try { ve.close() } catch {} // force-release a wedged encoder (e.g. lost GPU context)
@@ -1254,6 +1314,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
       if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
       cont.style.width=''; cont.style.height=''; map.resize()
+      } finally {
+        if (finalizeIntervalRef.current) { clearInterval(finalizeIntervalRef.current); finalizeIntervalRef.current = null }
+        webglLostCleanupRef.current?.()
+      }
     }
 
     if (hasWebCodecs) {
@@ -1351,9 +1415,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         setVideoRecordedBlob(blob); setVideoState('done')
         if(mEl) mEl.style.opacity='1'
         try { cleanupRouteReveal(map) } catch {}
+        try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
+        try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current = null } catch {}
         try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
         if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
         cont.style.width=''; cont.style.height=''; map.resize()
+        webglLostCleanupRef.current?.()
       }
       mediaRecorderRef.current=recorder; recorder.start(100)
     }
@@ -1429,7 +1496,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           },
           paint: { 'icon-opacity': 0 },
         } as any)
-        await new Promise<void>(r => map.once('idle', r as any))
+        await withTimeout(new Promise<void>(r => map.once('idle', r as any)), 8000).catch(()=>{})
       } catch {}
       photoPinCleanupRef.current = () => {
         const m = mapRef.current; if (!m) return
@@ -1440,27 +1507,34 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
 
     // Bake POI badges into MapLibre's WebGL render as a symbol layer (same rationale as photo pins).
+    // Overpass returns POIs with no cap (a route near villages/refuges can return 50-100+),
+    // and baking one texture per POI overwhelmed the GPU and stalled the 'idle' wait below —
+    // cap the count, prioritize the most notable types, and share one image per distinct type.
     const poiPinLayerId  = 'dtrek-poi-pins-layer'
     const poiPinSourceId = 'dtrek-poi-pins'
-    if (videoShowPois && pois && pois.length > 0) {
+    const videoPois = (pois ?? []).slice()
+      .sort((a, b) => (POI_NOTABILITY_TIER[a.type] - POI_NOTABILITY_TIER[b.type]) || (a.distFromTrack - b.distFromTrack))
+      .slice(0, MAX_VIDEO_POIS)
+    if (videoShowPois && videoPois.length > 0) {
       const iconSc = 2
       const poiPinImageIds: string[] = []
-      for (const poi of pois) {
+      const poiTypesUsed = Array.from(new Set(videoPois.map(p => p.type)))
+      for (const type of poiTypesUsed) {
         const D = 32 * iconSc
         const offC = document.createElement('canvas')
         offC.width = D; offC.height = D
         const offCtx = offC.getContext('2d')!
         offCtx.imageSmoothingEnabled = true; offCtx.imageSmoothingQuality = 'high'
-        drawPoiPin(offCtx, D / 2, D / 2, iconSc, POI_META[poi.type].emoji)
-        const imgId = `dtrek-poi-pin-${poi.id}`
+        drawPoiPin(offCtx, D / 2, D / 2, iconSc, POI_META[type].emoji)
+        const imgId = `dtrek-poi-pin-type-${type}`
         const imageData = offCtx.getImageData(0, 0, D, D)
         try { if (map.hasImage(imgId)) map.removeImage(imgId); map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
         poiPinImageIds.push(imgId)
       }
-      const poiPinFeatures = pois.map(poi => ({
+      const poiPinFeatures = videoPois.map(poi => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [poi.lon, poi.lat] },
-        properties: { pinId: `dtrek-poi-pin-${poi.id}` },
+        properties: { pinId: `dtrek-poi-pin-type-${poi.type}` },
       }))
       try {
         map.addSource(poiPinSourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: poiPinFeatures } })
@@ -1475,7 +1549,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           },
           paint: { 'icon-opacity': 0 },
         } as any)
-        await new Promise<void>(r => map.once('idle', r as any))
+        await withTimeout(new Promise<void>(r => map.once('idle', r as any)), 8000).catch(()=>{})
       } catch {}
       poiPinCleanupRef.current = () => {
         const m = mapRef.current; if (!m) return
@@ -1508,7 +1582,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return peakIdx / Math.max(1, pts.length - 1)
     })()
 
-    function frameToState(frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number} {
+    const frameToState = (frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number} => {
       // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
       if (frameIdx < INTRO_FRAMES) {
         return {p: 0, introP: frameIdx / Math.max(1, INTRO_FRAMES - 1)}
@@ -1546,18 +1620,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Fires callback after MapLibre renders the current frame, with a 200ms fallback.
     // Prevents the render loop from stalling if MapLibre skips a render cycle
     // (e.g. when the camera has fully converged and the map considers the scene unchanged).
-    function onNextRender(cb: () => void) {
+    const onNextRender = (cb: () => void) => {
       let fired = false
       const fire = () => { if (!fired) { fired = true; cb() } }
       try { map!.once('render' as any, fire) } catch {}
       setTimeout(fire, 200)
     }
 
-    function renderNextFrame() {
+    const renderNextFrame = () => {
       if(renderAbortRef.current) return
       const frameIdx=frameCountRef.current
       if(frameIdx>=TOTAL_FRAMES){
-        if(videoEncoderRef.current){ finishRecording().catch(console.error) }
+        if(videoEncoderRef.current){ finishRecording().catch(err=>{ console.error(err); failRendering('Errore durante la finalizzazione del video. Riprova.') }) }
         else { mediaRecorderRef.current?.stop() }
         return
       }
@@ -1835,6 +1909,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     setVideoState('rendering')
     renderNextFrame()
+
+    } catch (err) {
+      failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
+    }
   },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois])
 
   const cancelRendering=useCallback(()=>{
@@ -1847,6 +1925,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     muxerRef.current=null; muxerTargetRef.current=null
     try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current=null } catch {}
     try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
+    if (finalizeIntervalRef.current) { clearInterval(finalizeIntervalRef.current); finalizeIntervalRef.current=null }
+    try { webglLostCleanupRef.current?.() } catch {}
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
     if(mapRef.current) try{cleanupRouteReveal(mapRef.current)}catch{}
     try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
@@ -2146,7 +2226,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               </div>
             </div>
             <div>
-              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DURATA</p>
+              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DURATA PERCORSO</p>
               <div className="flex gap-2">
                 {[15,30,60,90].map(d=>(
                   <button key={d} onClick={()=>setVideoDuration(d)}
@@ -2156,12 +2236,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 ))}
               </div>
               {(()=>{
-                const est = Math.round(Math.max(2, videoDuration*0.08) + videoDuration + routePhotos.length*photoDurationSec + Math.max(3, videoDuration*0.17))
+                const introOutro = Math.round(Math.max(2, videoDuration*0.08) + Math.max(3, videoDuration*0.17))
+                const photoTotal = Math.round(routePhotos.length*photoDurationSec)
+                const est = videoDuration + photoTotal + introOutro
                 const over = est > 60
                 return (
                   <div className={`mt-2 rounded-xl px-3.5 py-2.5 ${over ? 'bg-amber-500/15 border border-amber-500/30' : 'bg-white/5'}`}>
-                    <p className={`text-xs font-semibold ${over ? 'text-amber-300' : 'text-white/40'}`}>
-                      Durata stimata con intro/outro{routePhotos.length>0?` e ${routePhotos.length} foto`:''}: ~{est}s
+                    <p className={`text-xs font-semibold ${over ? 'text-amber-300' : 'text-white/70'}`}>
+                      Percorso {videoDuration}s{routePhotos.length>0?` + foto ${routePhotos.length}×${photoDurationSec.toFixed(1)}s`:''} + intro/outro ~{introOutro}s = <span className="font-bold">~{est}s totali</span>
+                    </p>
+                    <p className="text-white/35 text-[11px] mt-1 leading-relaxed">
+                      Questa durata è indicativa: il percorso viene sempre mostrato per intero, le foto aggiungono tempo oltre a quello impostato qui.
                     </p>
                     {over && (
                       <p className="text-amber-300/75 text-[11px] mt-1 leading-relaxed">
@@ -2220,6 +2305,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   </button>
                 ))}
               </div>
+              {videoShowPois&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">I punti di interesse non aggiungono tempo al video (a differenza delle foto) — vengono mostrati i {Math.min(MAX_VIDEO_POIS, pois?.length??0)} più rilevanti vicino al percorso.</p>}
             </div>
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">AUDIO</p>
@@ -2447,13 +2533,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 {videoState==='rendering'&&<button onClick={cancelRendering} className="text-white/60 hover:text-white text-xs font-semibold px-3 py-1 bg-white/10 rounded-full">Annulla</button>}
               </div>
               <div className="w-full h-2 bg-white/15 rounded-full overflow-hidden mb-2">
-                <div className={`h-full rounded-full ${videoState==='finalizing'?'bg-amber-400':'bg-blue-500'}`} style={{width:`${videoState==='finalizing'?100:renderProgress*100}%`,transition:'none'}}/>
+                {videoState==='finalizing'
+                  ? <div className="h-full w-2/5 rounded-full bg-amber-400 progress-indeterminate"/>
+                  : <div className="h-full rounded-full bg-blue-500" style={{width:`${renderProgress*100}%`,transition:'none'}}/>
+                }
               </div>
               {videoState==='finalizing'
-                ? <p className="text-white/55 text-xs">Compressione video in corso…</p>
+                ? <p className="text-white/55 text-xs">Compressione in corso… ({finalizeElapsedSec}s)</p>
                 : <p className="text-white/55 text-xs">Frame {renderFrame}/{renderTotal} · {Math.round(renderProgress*100)}%</p>
               }
-              <p className="text-white/30 text-[10px] mt-0.5">Frame-by-frame rendering — qualità cinematografica garantita</p>
+              <p className="text-white/30 text-[10px] mt-0.5">
+                {videoState==='finalizing'
+                  ? 'Può richiedere fino a 20-30s con video lunghi o molte foto — non chiudere questa schermata'
+                  : 'Frame-by-frame rendering — qualità cinematografica garantita'}
+              </p>
             </div>
           </div>
         </div>
