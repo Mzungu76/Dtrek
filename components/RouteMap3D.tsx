@@ -616,6 +616,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const renderAbortRef     = useRef(false)
   const renderedFramesRef  = useRef(0)
   const encodedFramesRef   = useRef(0)
+  // Avoids calling setPaintProperty every single frame when the opacity value hasn't
+  // actually changed since the last frame — redundant calls force unnecessary style
+  // recalc/repaint work on every tick, adding to GPU pressure during export.
+  const lastIconOpacityRef = useRef<Map<string, number>>(new Map())
   // WebCodecs path refs
   const videoEncoderRef  = useRef<any>(null)
   const audioEncoderRef  = useRef<any>(null)
@@ -1141,6 +1145,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
     ])
 
+    // encode() is non-blocking — without backpressure a fast render loop can flood the
+    // encoder's internal queue faster than it can drain it. Weaker mobile hardware
+    // encoders react to a flooded queue by dropping/corrupting frames (visible as
+    // flicker), so stall briefly until the queue has room before enqueuing more.
+    const waitForEncoderQueue = async (enc: InstanceType<typeof VideoEncoder>) => {
+      while (enc.encodeQueueSize > 2) await new Promise(r => setTimeout(r, 10))
+    }
+
     // Shared failure path: an unhandled exception during setup, or a lost WebGL context
     // mid-render, otherwise leaves the UI stuck on "rendering"/"finalizing" with no feedback.
     let renderFailed = false
@@ -1240,7 +1252,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Setup progressive route reveal
     try { setupRouteReveal(map, pts) } catch {}
 
-    const mapCanvas=map.getCanvas(), srcW=mapCanvas.width, srcH=mapCanvas.height
+    const mapCanvas=map.getCanvas()
     const composite=document.createElement('canvas'); composite.width=outW; composite.height=outH
     compositeCanvasRef.current=composite
     const ctx=composite.getContext('2d')!
@@ -1382,11 +1394,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       let chosenCodec = 'avc1.420028'
       for (const c of avcCandidates) {
         try {
-          const sup = await VideoEncoder.isConfigSupported({ codec: c, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps })
+          const sup = await VideoEncoder.isConfigSupported({ codec: c, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
           if (sup.supported) { chosenCodec = c; break }
         } catch {}
       }
-      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'realtime' })
+      // 'quality' (not 'realtime'): this is a file export, not a live stream — the spec
+      // explicitly allows 'realtime' encoders to drop/degrade frames under load to
+      // minimize latency, which is the wrong tradeoff here and was producing flicker.
+      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
       videoEncoderRef.current = ve
 
     } else {
@@ -1445,7 +1460,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Prefer authoritative stored values over recomputed-from-GPS (which can differ due to downsampling)
     const totalKm=(distanceProp ?? totalDistRef.current) / 1000
     const elevGain = elevGainProp ?? elevStatsRef.current.gain
-    const cr=coverRect(srcW,srcH,outW,outH)
 
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
@@ -1608,6 +1622,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
 
     setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
+    lastIconOpacityRef.current.clear()
 
     // Always recompute shots with current slider values so intro/follow/outro
     // all use the same zoomFollow, even if sliders were changed after goToPostProd
@@ -1617,14 +1632,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Strip database code prefix (e.g. "dtrek1234567890" or "dtrek1234567890 - Titolo")
     const displayTitle=(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'')
 
-    // Fires callback after MapLibre renders the current frame, with a 200ms fallback.
+    // Fires callback after MapLibre renders the current frame, with a 600ms fallback.
     // Prevents the render loop from stalling if MapLibre skips a render cycle
     // (e.g. when the camera has fully converged and the map considers the scene unchanged).
-    const onNextRender = (cb: () => void) => {
+    // Callback is allowed to be async (capture callbacks await encoder backpressure).
+    const onNextRender = (cb: () => void | Promise<void>) => {
       let fired = false
       const fire = () => { if (!fired) { fired = true; cb() } }
       try { map!.once('render' as any, fire) } catch {}
-      setTimeout(fire, 200)
+      setTimeout(fire, 600)
     }
 
     const renderNextFrame = () => {
@@ -1641,13 +1657,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
       if (reveal) {
-        requestAnimationFrame(()=>{
+        requestAnimationFrame(async ()=>{
           if (renderAbortRef.current) return
           try {
           const t = reveal.revealFrame / PHOTO_REVEAL_FRAMES
           const alpha = t<0.08 ? t/0.08 : t>0.92 ? (1-t)/0.08 : 1
-          // Ken Burns: slow zoom + gentle drift per photo
           const img = reveal.img
+          // Defensive guard against the same black-frame class of bug as the map canvas:
+          // skip drawing/encoding entirely (instead of compositing a blank/partial image)
+          // if this photo somehow isn't fully decoded yet.
+          const imgReady = img.complete && img.naturalWidth > 0
+          ctx.clearRect(0, 0, outW, outH)
+          if (imgReady) {
+          // Ken Burns: slow zoom + gentle drift per photo
           const photoIdx = sortedPhotos.findIndex(s => s.photo.id === reveal.photo.id)
           const kbScale = 1 + 0.07 * t
           const driftDir = (photoIdx % 2 === 0) ? 1 : -1
@@ -1680,9 +1702,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // Fade overlay
           ctx.globalAlpha=1-alpha; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
           if (videoEncoderRef.current) {
+            await waitForEncoderQueue(videoEncoderRef.current)
             let _vf: InstanceType<typeof VideoFrame> | null = null
             try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
             finally { _vf?.close() }
+          }
           }
           } catch (err) { console.error('[dtrek] reveal frame error:', err) }
           frameCountRef.current++; renderedFramesRef.current++
@@ -1707,19 +1731,31 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           center: [pts[N-1].lon!, pts[N-1].lat!],
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
         })
-        // Photo pins: fade out over first 30% of outro via symbol layer opacity
-        try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', outroP < 0.3 ? (1 - outroP / 0.3) : 0) } catch {}
-        // POI pins: same fade-out as photo pins
-        try { map!.setPaintProperty(poiPinLayerId, 'icon-opacity', outroP < 0.3 ? (1 - outroP / 0.3) : 0) } catch {}
+        // Photo/POI pins: fade out over first 30% of outro via symbol layer opacity.
+        // setPaintProperty forces a style recalc even when the value is unchanged —
+        // skip the call when the cached value already matches.
+        const outroIconOpacity = outroP < 0.3 ? (1 - outroP / 0.3) : 0
+        if (lastIconOpacityRef.current.get(photoPinLayerId) !== outroIconOpacity) {
+          try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', outroIconOpacity); lastIconOpacityRef.current.set(photoPinLayerId, outroIconOpacity) } catch {}
+        }
+        if (lastIconOpacityRef.current.get(poiPinLayerId) !== outroIconOpacity) {
+          try { map!.setPaintProperty(poiPinLayerId, 'icon-opacity', outroIconOpacity); lastIconOpacityRef.current.set(poiPinLayerId, outroIconOpacity) } catch {}
+        }
         try { map!.triggerRepaint() } catch {}
-        onNextRender(() => {
+        onNextRender(async () => {
           if (!mapRef.current) { frameCountRef.current++; renderedFramesRef.current++; renderNextFrame(); return }
           try {
+          // Skip the entire tick (draw + encode) if the map canvas is momentarily
+          // unavailable (mid-resize/context hiccup) instead of compositing a blank
+          // frame — the composite canvas simply holds its last good content, and no
+          // VideoFrame is sent for this tick, so no black frame reaches the output file.
+          const mapAvailableO = mapCanvas.width > 0 && mapCanvas.height > 0
+          if (mapAvailableO) {
           ctx.clearRect(0, 0, outW, outH)
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
-          const mapAvailableO = mapCanvas.width > 0 && mapCanvas.height > 0
-          if (mapAvailableO) ctx.drawImage(mapCanvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, outW, outH)
+          const crO = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
+          ctx.drawImage(mapCanvas, crO.sx, crO.sy, crO.sw, crO.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
           // User pin visible at start of outro, fades out over first 20%
@@ -1764,9 +1800,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             }
           }
           if (videoEncoderRef.current) {
+            await waitForEncoderQueue(videoEncoderRef.current)
             let _vf: InstanceType<typeof VideoFrame> | null = null
             try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
             finally { _vf?.close() }
+          }
           }
           } catch (err) { console.error('[dtrek] outro frame error:', err) }
           frameCountRef.current++; renderedFramesRef.current++
@@ -1819,22 +1857,32 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
       }
 
-      // Photo pins: hidden in intro, visible in follow (symbol layer driven by opacity)
-      try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', introP !== undefined ? 0 : 1) } catch {}
-      // POI pins: hidden in intro, visible in follow (same choreography as photo pins)
-      try { map!.setPaintProperty(poiPinLayerId, 'icon-opacity', introP !== undefined ? 0 : 1) } catch {}
+      // Photo/POI pins: hidden in intro, visible in follow (symbol layer driven by opacity).
+      // Skip the call when the cached value already matches — avoids a style recalc
+      // every single frame for a value that's constant for the whole intro or follow phase.
+      const followIconOpacity = introP !== undefined ? 0 : 1
+      if (lastIconOpacityRef.current.get(photoPinLayerId) !== followIconOpacity) {
+        try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', followIconOpacity); lastIconOpacityRef.current.set(photoPinLayerId, followIconOpacity) } catch {}
+      }
+      if (lastIconOpacityRef.current.get(poiPinLayerId) !== followIconOpacity) {
+        try { map!.setPaintProperty(poiPinLayerId, 'icon-opacity', followIconOpacity); lastIconOpacityRef.current.set(poiPinLayerId, followIconOpacity) } catch {}
+      }
       // Capture frame after MapLibre's own render pass completes (guarantees frame reflects jumpTo)
       try { map!.triggerRepaint() } catch {}
-      onNextRender(()=>{
+      onNextRender(async ()=>{
         if(!mapRef.current) { frameCountRef.current++; renderedFramesRef.current++; renderNextFrame(); return }
         try {
 
+        // Skip the entire tick (draw + encode) if the map canvas is momentarily
+        // unavailable — see the matching comment in the outro block above.
+        const mapAvailableF = mapCanvas.width > 0 && mapCanvas.height > 0
+        if (mapAvailableF) {
         ctx.clearRect(0, 0, outW, outH)
         // Color grading: applica il grading del preset corrente
         const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
         try { ctx.filter=grading } catch {}
-        const mapAvailableF = mapCanvas.width > 0 && mapCanvas.height > 0
-        if (mapAvailableF) ctx.drawImage(mapCanvas,cr.sx,cr.sy,cr.sw,cr.sh,0,0,outW,outH)
+        const crF = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
+        ctx.drawImage(mapCanvas,crF.sx,crF.sy,crF.sw,crF.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
@@ -1897,9 +1945,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
 
         if (videoEncoderRef.current) {
+          await waitForEncoderQueue(videoEncoderRef.current)
           let _vf: InstanceType<typeof VideoFrame> | null = null
           try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
           finally { _vf?.close() }
+        }
         }
         } catch (err) { console.error('[dtrek] frame error:', err) }
         frameCountRef.current++; renderedFramesRef.current++
