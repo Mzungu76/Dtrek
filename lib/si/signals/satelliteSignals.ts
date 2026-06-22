@@ -36,7 +36,7 @@ interface SceneIndices {
 async function readBand(item: StacItem, bandId: string, bbox: GeoBbox, resampleMethod: 'bilinear' | 'nearest' = 'bilinear') {
   const href = assetHref(item, bandId)
   if (!href) return null
-  const sas = await getSasToken(COLLECTION)
+  const sas = await getSasToken(href)
   const win = await readWindow(signAssetHref(href, sas), bbox, TARGET_RESOLUTION_M, resampleMethod)
   return { win, bandScale: bandScaleFor(item, bandId) }
 }
