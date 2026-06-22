@@ -1,107 +1,48 @@
 // Sentinel-2 enrichment — phenology (monthly NDVI), landscape variety, shade
 // estimate, water sources, and hazard flags for the trail detail panel.
-// One-way dependency on lib/si: reuses getCdseToken() from satelliteSignals.ts
-// (same CDSE OAuth client) so the SI satellite collector and this module never
-// authenticate twice — nothing in lib/si imports from here.
+// Pulls Sentinel-2 (snapshot/hazard indices) and MODIS MOD13Q1 (monthly
+// phenology) from Microsoft Planetary Computer. No import from lib/si: both
+// this module and lib/si/signals/satelliteSignals.ts import the shared MPC
+// client/raster helpers independently (mirrors the old getCdseToken sharing,
+// just pointed at the new shared modules instead of at each other).
 import { supabase } from '@/lib/supabase'
 import { haversineM, computeBbox } from '@/lib/geoUtils'
-import { getCdseToken } from '@/lib/si/signals/satelliteSignals'
+import {
+  searchStac, getSasToken, signAssetHref, assetHref, bandScaleFor,
+  MpcUnreachableError, type StacBbox, type StacItem,
+} from '@/lib/sentinel2/planetaryComputerClient'
+import {
+  readWindow, readModisWindow, maskFromScl, toReflectance, modisNdviToFraction, applyMask,
+  ndvi, ndwi, nbr, evi, bsi, zonalMean, sampleAtPoint,
+  type GeoBbox, type RasterWindow,
+} from '@/lib/sentinel2/rasterIndices'
 import type { Sentinel2Data } from '@/lib/si/types'
 
-const STATISTICS_URL = 'https://sh.dataspace.copernicus.eu/api/v1/statistics'
-const TIMEOUT_MS = 8000
+const S2_COLLECTION = 'sentinel-2-l2a'
+const MODIS_COLLECTION = 'modis-13Q1-061'
+// STAC asset key mirrors the source HDF science-dataset name on MPC's
+// MOD13Q1 collection — verify against a live STAC item if monthly phenology
+// ever reads back all-zero (the one MPC asset-naming detail the connectivity
+// spike didn't exercise, since it only touched sentinel-2-l2a).
+const MODIS_NDVI_ASSET = '250m_16_days_NDVI'
+// Trail bbox has no size cap, so this matches the resolution the old CDSE
+// Statistics API used (resx/resy=60) rather than a band's native 10/20m.
+const S2_TARGET_RESOLUTION_M = 60
+const MODIS_TARGET_RESOLUTION_M = 250 // MOD13Q1 native pixel size
+const MAX_CLOUD_COVER = 60
+
 const SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export const SERIES_TTL_MS = 90 * 24 * 60 * 60 * 1000
 const MAX_SAMPLE_POINTS = 20
 const MAX_WATER_SOURCES = 10
 
-type Bbox = { minLat: number; maxLat: number; minLon: number; maxLon: number }
-
-const SNAPSHOT_EVALSCRIPT = `//VERSION=3
-function setup() {
-  return {
-    input: ["B02","B03","B04","B08","B11","B12","dataMask"],
-    output: [
-      { id: "ndvi", bands: 1, sampleType: "FLOAT32" },
-      { id: "ndwi", bands: 1, sampleType: "FLOAT32" },
-      { id: "nbr", bands: 1, sampleType: "FLOAT32" },
-      { id: "evi", bands: 1, sampleType: "FLOAT32" },
-      { id: "bsi", bands: 1, sampleType: "FLOAT32" },
-      { id: "dataMask", bands: 1 },
-    ],
-  }
-}
-function evaluatePixel(s) {
-  const ndvi = (s.B08 - s.B04) / (s.B08 + s.B04)
-  const ndwi = (s.B03 - s.B08) / (s.B03 + s.B08)
-  const nbr  = (s.B08 - s.B12) / (s.B08 + s.B12)
-  const evi  = 2.5 * (s.B08 - s.B04) / (s.B08 + 6 * s.B04 - 7.5 * s.B02 + 1)
-  const bsi  = ((s.B11 + s.B04) - (s.B08 + s.B02)) / ((s.B11 + s.B04) + (s.B08 + s.B02))
-  return { ndvi: [ndvi], ndwi: [ndwi], nbr: [nbr], evi: [evi], bsi: [bsi], dataMask: [s.dataMask] }
-}`
-
-const POINT_EVALSCRIPT = `//VERSION=3
-function setup() {
-  return { input: ["B03","B04","B08","dataMask"], output: [{ id: "ndvi", bands: 1, sampleType: "FLOAT32" }, { id: "ndwi", bands: 1, sampleType: "FLOAT32" }, { id: "dataMask", bands: 1 }] }
-}
-function evaluatePixel(s) {
-  return { ndvi: [(s.B08 - s.B04) / (s.B08 + s.B04)], ndwi: [(s.B03 - s.B08) / (s.B03 + s.B08)], dataMask: [s.dataMask] }
-}`
-
-const NDVI_ONLY_EVALSCRIPT = `//VERSION=3
-function setup() {
-  return { input: ["B04","B08","dataMask"], output: [{ id: "ndvi", bands: 1, sampleType: "FLOAT32" }, { id: "dataMask", bands: 1 }] }
-}
-function evaluatePixel(s) {
-  return { ndvi: [(s.B08 - s.B04) / (s.B08 + s.B04)], dataMask: [s.dataMask] }
-}`
-
-async function runStatistics(
-  token: string,
-  bbox: Bbox,
-  evalscript: string,
-  from: Date,
-  to: Date,
-  outputIds: string[],
-): Promise<Record<string, number | null>> {
-  const body = {
-    input: {
-      bounds: { bbox: [bbox.minLon, bbox.minLat, bbox.maxLon, bbox.maxLat], properties: { crs: 'http://www.opengis.net/def/crs/EPSG/0/4326' } },
-      data: [{ type: 'sentinel-2-l2a' }],
-    },
-    aggregation: {
-      timeRange: { from: from.toISOString(), to: to.toISOString() },
-      aggregationInterval: { of: 'P370D' },
-      evalscript,
-      resx: 60,
-      resy: 60,
-    },
-    calculations: Object.fromEntries(outputIds.map(id => [id, { statistics: { default: {} } }])),
-  }
-  const res = await fetch(STATISTICS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  })
-  if (!res.ok) throw new Error(`CDSE statistics error ${res.status}`)
-  const d = await res.json()
-  const bucket = d.data?.[0]?.outputs
-  const out: Record<string, number | null> = {}
-  for (const id of outputIds) out[id] = bucket?.[id]?.bands?.B0?.stats?.mean ?? null
-  return out
-}
-
-function pointBbox(lat: number, lon: number, radiusM = 30): Bbox {
-  const dLat = radiusM / 111_320
-  const dLon = radiusM / (111_320 * Math.cos(lat * Math.PI / 180))
-  return { minLat: lat - dLat, maxLat: lat + dLat, minLon: lon - dLon, maxLon: lon + dLon }
+function toStacBbox(bbox: GeoBbox): StacBbox {
+  return [bbox.minLon, bbox.minLat, bbox.maxLon, bbox.maxLat]
 }
 
 // Samples up to MAX_SAMPLE_POINTS points along the track, evenly spaced by
-// distance (not array index) — there's no raster-decoding dependency in this
-// codebase, so each "pixel" is approximated by a small bbox mean via the
-// Statistics API rather than true per-pixel extraction from a Process API image.
+// distance (not array index) — these feed sampleAtPoint against the
+// already-read snapshot window for landscapeVariety/waterSources below.
 function sampleTrackPoints(track: [number, number][], maxPoints: number): [number, number][] {
   if (track.length <= maxPoints) return track
   let totalM = 0
@@ -194,15 +135,73 @@ const UNAVAILABLE: Sentinel2Data = {
   shadeScore: null, landscapeVariety: null, waterSources: [], phenologyPeakMonth: null, computedAt: null,
 }
 
-export async function computeSentinel2(osmRelationId: number, trailPoints: [number, number][]): Promise<Sentinel2Data> {
-  let token: string | null
-  try {
-    token = await getCdseToken()
-  } catch (err) {
-    console.error('[sentinel2] CDSE auth failed', err)
-    return { ...UNAVAILABLE, osmRelationId, reason: 'auth_failed', debugInfo: err instanceof Error ? err.message : String(err) }
+interface SnapshotIndices {
+  ndvi: number | null
+  ndwi: number | null
+  nbr: number | null
+  evi: number | null
+  bsi: number | null
+  ndviWindow: RasterWindow | null
+  ndwiWindow: RasterWindow | null
+}
+
+async function readSnapshotBand(item: StacItem, bandId: string, bbox: GeoBbox, resampleMethod: 'bilinear' | 'nearest' = 'bilinear') {
+  const href = assetHref(item, bandId)
+  if (!href) return null
+  const sas = await getSasToken(S2_COLLECTION)
+  const win = await readWindow(signAssetHref(href, sas), bbox, S2_TARGET_RESOLUTION_M, resampleMethod)
+  return { win, bandScale: bandScaleFor(item, bandId) }
+}
+
+async function computeSnapshot(item: StacItem, bbox: GeoBbox): Promise<SnapshotIndices> {
+  const [b02, b03, b04, b08, b11, b12, scl] = await Promise.all([
+    readSnapshotBand(item, 'B02', bbox), readSnapshotBand(item, 'B03', bbox), readSnapshotBand(item, 'B04', bbox),
+    readSnapshotBand(item, 'B08', bbox), readSnapshotBand(item, 'B11', bbox), readSnapshotBand(item, 'B12', bbox),
+    readSnapshotBand(item, 'SCL', bbox, 'nearest'),
+  ])
+  if (!b02 || !b03 || !b04 || !b08 || !b11 || !b12 || !scl) {
+    return { ndvi: null, ndwi: null, nbr: null, evi: null, bsi: null, ndviWindow: null, ndwiWindow: null }
   }
-  if (!token) return { ...UNAVAILABLE, osmRelationId, reason: 'missing_credentials' }
+
+  const mask = maskFromScl(scl.win.data)
+  const r02 = toReflectance(b02.win.data, b02.bandScale.scale, b02.bandScale.offset)
+  const r03 = toReflectance(b03.win.data, b03.bandScale.scale, b03.bandScale.offset)
+  const r04 = toReflectance(b04.win.data, b04.bandScale.scale, b04.bandScale.offset)
+  const r08 = toReflectance(b08.win.data, b08.bandScale.scale, b08.bandScale.offset)
+  const r11 = toReflectance(b11.win.data, b11.bandScale.scale, b11.bandScale.offset)
+  const r12 = toReflectance(b12.win.data, b12.bandScale.scale, b12.bandScale.offset)
+
+  const ndviArr = ndvi(r08, r04)
+  const ndwiArr = ndwi(r03, r08)
+  const { width, height } = b08.win
+
+  return {
+    ndvi: zonalMean(ndviArr, mask),
+    ndwi: zonalMean(ndwiArr, mask),
+    nbr: zonalMean(nbr(r08, r12), mask),
+    evi: zonalMean(evi(r08, r04, r02), mask),
+    bsi: zonalMean(bsi(r11, r04, r08, r02), mask),
+    ndviWindow: { data: applyMask(ndviArr, mask), width, height, bbox },
+    ndwiWindow: { data: applyMask(ndwiArr, mask), width, height, bbox },
+  }
+}
+
+async function computeModisMonthNdvi(bbox: GeoBbox, month: number): Promise<number> {
+  try {
+    const { from, to } = monthWindow(month)
+    const item = await searchStac(MODIS_COLLECTION, toStacBbox(bbox), from, to, { limit: 1 })
+    if (!item) return 0
+    const href = assetHref(item, MODIS_NDVI_ASSET)
+    if (!href) return 0
+    const sas = await getSasToken(MODIS_COLLECTION)
+    const win = await readModisWindow(signAssetHref(href, sas), bbox, MODIS_TARGET_RESOLUTION_M)
+    return zonalMean(modisNdviToFraction(win.data)) ?? 0
+  } catch {
+    return 0
+  }
+}
+
+export async function computeSentinel2(osmRelationId: number, trailPoints: [number, number][]): Promise<Sentinel2Data> {
   if (trailPoints.length < 2) return { ...UNAVAILABLE, osmRelationId, reason: 'no_geometry' }
 
   try {
@@ -216,57 +215,50 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
     }
 
     const [minLat, minLon, maxLat, maxLon] = computeBbox(trailPoints, 0.005).split(',').map(Number)
-    const bbox: Bbox = { minLat, minLon, maxLat, maxLon }
+    const bbox: GeoBbox = { minLat, minLon, maxLat, maxLon }
 
     const snapshotEnd = new Date()
     const snapshotStart = new Date(snapshotEnd.getTime() - 10 * 24 * 60 * 60 * 1000)
-    const snapshot = await runStatistics(token, bbox, SNAPSHOT_EVALSCRIPT, snapshotStart, snapshotEnd, ['ndvi', 'ndwi', 'nbr', 'evi', 'bsi'])
+
+    const currentItem = await searchStac(S2_COLLECTION, toStacBbox(bbox), snapshotStart, snapshotEnd, { maxCloudCover: MAX_CLOUD_COVER })
+    if (!currentItem) return { ...UNAVAILABLE, osmRelationId, reason: 'no_data' }
+
+    const [snapshot, monthsResult, stats] = await Promise.all([
+      computeSnapshot(currentItem, bbox),
+      seriesExpired
+        ? Promise.all(Array.from({ length: 12 }, (_, i) => i + 1).map(month => computeModisMonthNdvi(bbox, month)))
+        : Promise.resolve(null),
+      fetchTrailStats(osmRelationId),
+    ])
 
     let ndviMonthly = cache?.ndviMonthly ?? null
+    let phenologyPeakMonth = cache?.phenologyPeakMonth ?? null
+    if (monthsResult) {
+      ndviMonthly = monthsResult
+      phenologyPeakMonth = monthsResult.reduce((best, v, i) => (v > monthsResult[best] ? i : best), 0) + 1
+    }
+
     let landscapeVariety = cache?.landscapeVariety ?? null
     let waterSources = cache?.waterSources ?? []
-    let phenologyPeakMonth = cache?.phenologyPeakMonth ?? null
-
     if (seriesExpired) {
-      const months = await Promise.all(
-        Array.from({ length: 12 }, (_, i) => i + 1).map(async month => {
-          try {
-            const { from, to } = monthWindow(month)
-            const r = await runStatistics(token, bbox, NDVI_ONLY_EVALSCRIPT, from, to, ['ndvi'])
-            return r.ndvi ?? 0
-          } catch {
-            return 0
-          }
-        }),
-      )
-      ndviMonthly = months
-      phenologyPeakMonth = months.reduce((best, v, i) => (v > months[best] ? i : best), 0) + 1
-
       const samplePoints = sampleTrackPoints(trailPoints, MAX_SAMPLE_POINTS)
-      const pointStats = await Promise.all(
-        samplePoints.map(async ([lat, lon]) => {
-          try {
-            return await runStatistics(token, pointBbox(lat, lon), POINT_EVALSCRIPT, snapshotStart, snapshotEnd, ['ndvi', 'ndwi'])
-          } catch {
-            return null
-          }
-        }),
-      )
-      const ndviSamples = pointStats.map(p => p?.ndvi).filter((v): v is number => v != null)
+
+      const ndviSamples = samplePoints
+        .map(([lat, lon]) => (snapshot.ndviWindow ? sampleAtPoint(snapshot.ndviWindow, lat, lon) : null))
+        .filter((v): v is number => v != null)
       landscapeVariety = ndviSamples.length > 0 ? stdDev(ndviSamples) : null
 
       waterSources = samplePoints
-        .map((pt, i) => ({ pt, ndwi: pointStats[i]?.ndwi ?? null }))
-        .filter(({ ndwi }) => ndwi != null && ndwi > 0.3)
+        .map(([lat, lon]) => ({ lat, lon, ndwiVal: snapshot.ndwiWindow ? sampleAtPoint(snapshot.ndwiWindow, lat, lon) : null }))
+        .filter((p): p is { lat: number; lon: number; ndwiVal: number } => p.ndwiVal != null && p.ndwiVal > 0.3)
         .slice(0, MAX_WATER_SOURCES)
-        .map(({ pt }) => ({ lat: pt[0], lon: pt[1] }))
+        .map(({ lat, lon }) => ({ lat, lon }))
     }
 
     const ndviDelta = ndviMonthly && snapshot.ndvi != null
       ? snapshot.ndvi - ndviMonthly.reduce((s, v) => s + v, 0) / ndviMonthly.length
       : null
 
-    const stats = await fetchTrailStats(osmRelationId)
     const shadeScore = computeShadeScore(snapshot.evi, stats)
 
     const result: S2CacheRow = {
@@ -300,8 +292,12 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
 
     return toSentinel2Data(osmRelationId, result)
   } catch (err) {
-    console.error('[sentinel2] CDSE statistics failed', err)
-    return { ...UNAVAILABLE, osmRelationId, reason: 'api_error', debugInfo: err instanceof Error ? err.message : String(err) }
+    console.error('[sentinel2] Planetary Computer pipeline failed', err)
+    return {
+      ...UNAVAILABLE, osmRelationId,
+      reason: err instanceof MpcUnreachableError ? 'unreachable' : 'api_error',
+      debugInfo: err instanceof Error ? err.message : String(err),
+    }
   }
 }
 
