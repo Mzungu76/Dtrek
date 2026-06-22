@@ -1,13 +1,13 @@
-export const runtime = 'edge'
 // Same dual-mode contract as /api/trails/si (?osm_relation_id= fast path,
 // ?polyline= slow path with { matched: false } on no match). A full
-// Sentinel-2 recompute is expensive (up to ~12 monthly + ~20 point calls to
-// CDSE when the 90-day series cache expires), well past a comfortable edge
-// request budget — so when the cached row is stale but still usable, this
-// route fires the recompute in the background and answers immediately with
-// the stale data tagged { stale: true }, the same pattern app/api/pois/route.ts
-// uses for its poi_cache writes. A first-ever (no cache) computation still
-// has to be awaited since there's nothing to show in the meantime.
+// Sentinel-2 recompute is expensive (Sentinel-2 snapshot + 12 MODIS monthly
+// reads from Microsoft Planetary Computer when the 90-day series cache
+// expires), well past a comfortable edge request budget — so when the
+// cached row is stale but still usable, this route fires the recompute in
+// the background and answers immediately with the stale data tagged
+// { stale: true }, the same pattern app/api/pois/route.ts uses for its
+// poi_cache writes. A first-ever (no cache) computation still has to be
+// awaited since there's nothing to show in the meantime.
 import { NextRequest, NextResponse } from 'next/server'
 import { computeSentinel2, fetchS2Cache, toSentinel2Data, SERIES_TTL_MS } from '@/lib/sentinel2/computeSentinel2'
 import { resolveTrailGeometry } from '@/lib/si/computeSI'

@@ -32,7 +32,7 @@ export interface ClimateSignal {
 }
 
 // Why available:false happened — diagnostic only, never affects scoring.
-export type UnavailableReason = 'missing_credentials' | 'auth_failed' | 'api_error' | 'no_geometry'
+export type UnavailableReason = 'unreachable' | 'no_data' | 'api_error' | 'no_geometry'
 
 export interface SatelliteSignal {
   available: boolean

@@ -1,4 +1,3 @@
-export const runtime = 'edge'
 // GET ?osm_relation_id= — fast path used by Esplora, trail already resolved.
 // GET ?polyline=<encodeURIComponent(JSON.stringify([[lat,lon],...]))> — slow
 // path used by Programma, which has no OSM linkage at all; resolves the trail
