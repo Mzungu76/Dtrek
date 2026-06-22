@@ -21,9 +21,8 @@ import type { Sentinel2Data } from '@/lib/si/types'
 const S2_COLLECTION = 'sentinel-2-l2a'
 const MODIS_COLLECTION = 'modis-13Q1-061'
 // STAC asset key mirrors the source HDF science-dataset name on MPC's
-// MOD13Q1 collection — verify against a live STAC item if monthly phenology
-// ever reads back all-zero (the one MPC asset-naming detail the connectivity
-// spike didn't exercise, since it only touched sentinel-2-l2a).
+// MOD13Q1 collection (confirmed against Microsoft's PlanetaryComputerExamples
+// notebooks and the MPC quickstart docs).
 const MODIS_NDVI_ASSET = '250m_16_days_NDVI'
 // Trail bbox has no size cap, so this matches the resolution the old CDSE
 // Statistics API used (resx/resy=60) rather than a band's native 10/20m.
@@ -148,7 +147,7 @@ interface SnapshotIndices {
 async function readSnapshotBand(item: StacItem, bandId: string, bbox: GeoBbox, resampleMethod: 'bilinear' | 'nearest' = 'bilinear') {
   const href = assetHref(item, bandId)
   if (!href) return null
-  const sas = await getSasToken(S2_COLLECTION)
+  const sas = await getSasToken(href)
   const win = await readWindow(signAssetHref(href, sas), bbox, S2_TARGET_RESOLUTION_M, resampleMethod)
   return { win, bandScale: bandScaleFor(item, bandId) }
 }
@@ -190,13 +189,20 @@ async function computeModisMonthNdvi(bbox: GeoBbox, month: number): Promise<numb
   try {
     const { from, to } = monthWindow(month)
     const item = await searchStac(MODIS_COLLECTION, toStacBbox(bbox), from, to, { limit: 1 })
-    if (!item) return 0
+    if (!item) {
+      console.error(`[sentinel2] MODIS NDVI month=${month}: no STAC item in window ${from.toISOString()}..${to.toISOString()}`)
+      return 0
+    }
     const href = assetHref(item, MODIS_NDVI_ASSET)
-    if (!href) return 0
-    const sas = await getSasToken(MODIS_COLLECTION)
+    if (!href) {
+      console.error(`[sentinel2] MODIS NDVI month=${month}: item ${item.id} has no ${MODIS_NDVI_ASSET} asset`)
+      return 0
+    }
+    const sas = await getSasToken(href)
     const win = await readModisWindow(signAssetHref(href, sas), bbox, MODIS_TARGET_RESOLUTION_M)
     return zonalMean(modisNdviToFraction(win.data)) ?? 0
-  } catch {
+  } catch (err) {
+    console.error(`[sentinel2] MODIS NDVI month=${month} failed`, err)
     return 0
   }
 }

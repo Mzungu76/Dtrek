@@ -86,15 +86,33 @@ export async function searchStac(
 
 const sasCache = new Map<string, { token: string; expiresAt: number }>()
 
-/** SAS token for a collection, cached in-memory until shortly before its msft:expiry. */
-export async function getSasToken(collection: string): Promise<string> {
-  const cached = sasCache.get(collection)
+/** {account, container} from an Azure Blob Storage URL (https://{account}.blob.core.windows.net/{container}/{path...}). */
+function parseBlobUrl(href: string): { account: string; container: string } {
+  const url = new URL(href)
+  const account = url.hostname.split('.')[0]
+  const container = url.pathname.split('/')[1]
+  return { account, container }
+}
+
+/**
+ * SAS token for an asset href, cached in-memory per account/container until
+ * shortly before its msft:expiry. Scoped from the href's own blob container
+ * rather than the STAC collection id: those two coincide for sentinel-2-l2a,
+ * but not for every collection — MODIS MOD13Q1's COG assets live in
+ * modis-061-cogs, a different container than what /api/sas/v1/token/{collection}
+ * resolves to for modis-13Q1-061, so signing by collection id there issues a
+ * token that can't actually read the asset.
+ */
+export async function getSasToken(href: string): Promise<string> {
+  const { account, container } = parseBlobUrl(href)
+  const cacheKey = `${account}/${container}`
+  const cached = sasCache.get(cacheKey)
   if (cached && Date.now() < cached.expiresAt) return cached.token
 
-  const data = await fetchJson(`${SAS_TOKEN_URL}/${collection}`, { headers: subscriptionHeaders() })
+  const data = await fetchJson(`${SAS_TOKEN_URL}/${cacheKey}`, { headers: subscriptionHeaders() })
   const token = data.token as string
   const expiryMs = data['msft:expiry'] ? new Date(data['msft:expiry']).getTime() : Date.now() + 5 * 60 * 1000
-  sasCache.set(collection, { token, expiresAt: expiryMs - 5000 })
+  sasCache.set(cacheKey, { token, expiresAt: expiryMs - 5000 })
   return token
 }
 
