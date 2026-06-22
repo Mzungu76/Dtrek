@@ -476,7 +476,7 @@ function createAmbientAudio(
   audioCtx: AudioContext,
   dest: MediaStreamAudioDestinationNode,
   style: 'epico' | 'snappy',
-): () => void {
+): { start: () => void; stop: () => void } {
   const master = audioCtx.createGain()
   master.gain.setValueAtTime(0, audioCtx.currentTime)
   master.connect(dest)
@@ -510,9 +510,18 @@ function createAmbientAudio(
   noise.connect(lp); lp.connect(ng); ng.connect(master)
   allNodes.push(noise)
 
-  return function start() {
-    allNodes.forEach(n => { try { n.start() } catch {} })
-    master.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 2.5)
+  return {
+    start() {
+      allNodes.forEach(n => { try { n.start() } catch {} })
+      master.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 2.5)
+    },
+    // Oscillators/noise loop forever once started — must be stopped explicitly,
+    // otherwise they keep feeding the AudioEncoder during finalize and the
+    // encoder queue never drains (flush() stalls indefinitely).
+    stop() {
+      allNodes.forEach(n => { try { n.stop() } catch {} })
+      try { master.disconnect() } catch {}
+    },
   }
 }
 
@@ -605,6 +614,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const muxerTargetRef   = useRef<any>(null)
   const photoPinCleanupRef = useRef<(() => void) | null>(null)
   const poiPinCleanupRef   = useRef<(() => void) | null>(null)
+  const stopAmbientAudioRef = useRef<(() => void) | null>(null)
 
   // Smooth camera refs (exponential interpolation)
   const smoothBearRef  = useRef(0)
@@ -900,6 +910,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
       try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
       try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
+      try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current=null } catch {}
+      try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
       muxerRef.current=null; muxerTargetRef.current=null
       if(videoObjUrlRef.current) URL.revokeObjectURL(videoObjUrlRef.current)
       map.remove(); mapRef.current=null; markerRef.current=null
@@ -1199,9 +1211,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const tgt = muxerTargetRef.current
       if (!ve) return
       setVideoState('finalizing')
-      // Flush encoders BEFORE nulling muxer: output callbacks use muxerRef.current
-      try { await ve.flush() } catch (err) { console.error('video flush:', err) }
-      try { if (ae && ae.state !== 'closed') await ae.flush() } catch {}
+      // Stop ambient audio FIRST: oscillators/noise loop forever once started, so if they
+      // keep feeding the AudioEncoder while we await flush(), the queue never drains and
+      // finalize stalls indefinitely (the original cause of "stuck during compression").
+      try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current = null } catch {}
+      // Flush encoders BEFORE nulling muxer: output callbacks use muxerRef.current.
+      // Guard with a timeout so a stuck encoder (e.g. lost GPU context) surfaces as a
+      // recoverable error instead of leaving the UI frozen on "finalizing" forever.
+      const withTimeout = <T,>(p: Promise<T>, ms: number) => Promise.race([
+        p,
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
+      ])
+      try { await withTimeout(ve.flush(), 20000) } catch (err) {
+        console.error('video flush:', err)
+        try { ve.close() } catch {} // force-release a wedged encoder (e.g. lost GPU context)
+      }
+      try { if (ae && ae.state !== 'closed') await withTimeout(ae.flush(), 10000) } catch { try { ae?.close() } catch {} }
       // Sort buffered video chunks by PTS (timestamp) so the muxer receives them in display order,
       // correcting any decode-order reordering from the hardware H.264 encoder.
       videoChunkBuffer.sort((a, b) => a.chunk.timestamp - b.chunk.timestamp)
@@ -1238,8 +1263,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const audioCtx = new AudioContext({ sampleRate: 44100 })
           const audioDest = audioCtx.createMediaStreamDestination()
           audioCtxRef.current = audioCtx
-          const startAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
-          startAudio()
+          const ambientAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
+          ambientAudio.start()
+          stopAmbientAudioRef.current = ambientAudio.stop
           if (typeof AudioEncoder !== 'undefined') {
             const aeCheck = await (AudioEncoder as any).isConfigSupported?.({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100 }).catch(() => null)
             if (aeCheck?.supported !== false) {
@@ -1263,6 +1289,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               }
               audioCtx.createMediaStreamSource(audioDest.stream).connect(proc)
               proc.connect(audioCtx.destination)
+              // onaudioprocess keeps firing for as long as proc stays connected, regardless
+              // of whether the oscillators are still producing sound — disconnect it too.
+              stopAmbientAudioRef.current = () => { ambientAudio.stop(); proc.disconnect() }
             }
           }
         } catch {}
@@ -1304,8 +1333,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const audioCtx = new AudioContext({ sampleRate: 44100 })
           const audioDest = audioCtx.createMediaStreamDestination()
           audioCtxRef.current = audioCtx
-          const startAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
-          startAudio()
+          const ambientAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
+          ambientAudio.start()
+          stopAmbientAudioRef.current = ambientAudio.stop
           audioStream = audioDest.stream
         } catch {}
       }
@@ -1375,7 +1405,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         drawPhotoPin(offCtx, W / 2, H + tipH, iconSc, s.img)
         const imgId = `dtrek-photo-pin-${s.photo.id}`
         const imageData = offCtx.getImageData(0, 0, offC.width, offC.height)
-        try { map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
+        try { if (map.hasImage(imgId)) map.removeImage(imgId); map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
         photoPinImageIds.push(imgId)
       }
       const pinFeatures = sortedPhotos.map(s => {
@@ -1424,7 +1454,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         drawPoiPin(offCtx, D / 2, D / 2, iconSc, POI_META[poi.type].emoji)
         const imgId = `dtrek-poi-pin-${poi.id}`
         const imageData = offCtx.getImageData(0, 0, D, D)
-        try { map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
+        try { if (map.hasImage(imgId)) map.removeImage(imgId); map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
         poiPinImageIds.push(imgId)
       }
       const poiPinFeatures = pois.map(poi => ({
@@ -1815,6 +1845,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
     try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
     muxerRef.current=null; muxerTargetRef.current=null
+    try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current=null } catch {}
     try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
     if(mapRef.current) try{cleanupRouteReveal(mapRef.current)}catch{}
