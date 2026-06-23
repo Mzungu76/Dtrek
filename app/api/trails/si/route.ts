@@ -48,7 +48,10 @@ export async function GET(req: NextRequest) {
     const matchedId = await withTimeout(
       findTrailForPolyline(polyline as [number, number][]),
       MATCH_TIMEOUT_MS,
-    ).catch(() => null)
+    ).catch((err) => {
+      console.error('[trails/si] findTrailForPolyline failed or timed out', err)
+      return null
+    })
 
     if (!matchedId) {
       const body: SIApiResponse = { matched: false }
