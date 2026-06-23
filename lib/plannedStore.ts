@@ -4,6 +4,7 @@ import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
 import type { SafetyScore } from './safetyScore'
+import type { ClassifiedDifficultyMarker } from './difficultyMarkers'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 
@@ -32,6 +33,10 @@ export interface PlannedHike {
   cachedTrailScore?:             number
   cachedTrailScoreConfidence?:   CtsConfidence
   cachedSafetyScore?:            SafetyScore
+  // Tratti difficili estratti dai waypoint/commenti del GPX importato
+  // (Komoot/AllTrails) — vedi lib/difficultyMarkers.ts. Persistiti su
+  // trail_difficulty_markers, non su questa riga.
+  difficultyMarkers?:            ClassifiedDifficultyMarker[]
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)

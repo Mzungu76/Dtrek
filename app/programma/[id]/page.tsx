@@ -577,17 +577,37 @@ export default function PlannedHikePage() {
           />
         )}
 
-        {/* Condizioni attuali — segnali esterni in tempo reale (non il rischio
-            intrinseco del tracciato, già coperto da Valutazione Sicurezza più sotto) */}
+        {/* Percorribilità & sicurezza ambientale — segnali esterni dinamici
+            (meteo/satellite/community), distinti dal rischio intrinseco del
+            tracciato coperto da "Rischi del terreno" più sotto */}
         {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
-          <div className="space-y-2">
-            <h2 className="font-display text-xl font-semibold text-stone-700">Condizioni attuali</h2>
-            {si.notMatched
-              ? <p className="text-sm text-stone-400">Sentiero non identificato — impossibile calcolare l&apos;indice di sicurezza.</p>
-              : !si.loading && !si.result
-                ? <p className="text-sm text-stone-400">Impossibile calcolare l&apos;indice di sicurezza in questo momento — riprova più tardi.</p>
-                : <SIBadge si={si.result?.si} label={si.result?.label} signals={si.result?.signals} partial={si.result?.partial} loading={si.loading} expanded />}
-            <Sentinel2Panel data={s2.data} loading={s2.loading} />
+          <div className="space-y-3">
+            <h2 className="font-display text-xl font-semibold text-stone-700">Percorribilità attuale</h2>
+            <div className="space-y-2">
+              {si.notMatched
+                ? <p className="text-sm text-stone-400">Sentiero non identificato — impossibile calcolare l&apos;indice di sicurezza.</p>
+                : !si.loading && !si.result
+                  ? <p className="text-sm text-stone-400">Impossibile calcolare l&apos;indice di sicurezza in questo momento — riprova più tardi.</p>
+                  : <SIBadge si={si.result?.si} label={si.result?.label} signals={si.result?.signals} partial={si.result?.partial} loading={si.loading} expanded />}
+              <Sentinel2Panel data={s2.data} loading={s2.loading} />
+            </div>
+
+            {hike.difficultyMarkers && hike.difficultyMarkers.length > 0 && (
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-stone-700 mb-3">Segnalazioni dal tracciato</p>
+                <ul className="space-y-2">
+                  {hike.difficultyMarkers.map((m, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      {m.severity === 'danger' ? <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                        : m.severity === 'warning' ? <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        : <Info className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />}
+                      <span className="text-stone-600">{m.text}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-stone-400 mt-2">Estratte automaticamente dai waypoint/commenti del file GPX importato (Komoot/AllTrails)</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -625,7 +645,7 @@ export default function PlannedHikePage() {
             </div>
             <div className="h-80">
               {polyline && polyline.length > 1 ? (
-                <MapView trackPoints={hike.trackPoints ?? []} showGradient={showGradient} pois={pois} wikiPages={wikiPages} planned />
+                <MapView trackPoints={hike.trackPoints ?? []} showGradient={showGradient} pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned />
               ) : (
                 <div className="h-full flex items-center justify-center text-stone-400 text-sm gap-2">
                   <Mountain className="w-8 h-8 text-stone-200" /> Tracciato non disponibile
@@ -659,10 +679,10 @@ export default function PlannedHikePage() {
           </div>
         )}
 
-        {/* Comfort TrailScore */}
+        {/* Qualità ed esperienza — TrailScore/CTS + Beauty/TEI, quanto vale il percorso */}
         {hasGps && (
           <div className="space-y-2">
-            <h2 className="font-display text-xl font-semibold text-stone-700">Comfort TrailScore</h2>
+            <h2 className="font-display text-xl font-semibold text-stone-700">Quanto vale il percorso</h2>
             {(ctsResult || (hike as { cachedTrailScore?: number }).cachedTrailScore != null) ? (
               <ComfortTrailScoreWidget
                 result={ctsResult}
@@ -687,10 +707,12 @@ export default function PlannedHikePage() {
           </div>
         )}
 
-        {/* Safety Score */}
+        {/* Rischio intrinseco del percorso — geometrico/statico (quota, terreno,
+            fauna), distinto dalla "Percorribilità attuale" più sopra che è
+            dinamica/ambientale */}
         {hasGps && safetyScore && (
           <div className="space-y-2">
-            <h2 className="font-display text-xl font-semibold text-stone-700">Valutazione Sicurezza</h2>
+            <h2 className="font-display text-xl font-semibold text-stone-700">Rischi del terreno</h2>
             <SafetyScoreWidget safety={safetyScore} />
           </div>
         )}

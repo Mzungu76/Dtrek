@@ -125,7 +125,19 @@ export async function GET(req: NextRequest) {
         .single()
 
       if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-      return NextResponse.json(rowToHike(data, true))
+
+      const { data: markers } = await supabase
+        .from('trail_difficulty_markers')
+        .select('lat, lon, source, source_text, severity, keywords')
+        .eq('planned_hike_id', id)
+
+      return NextResponse.json({
+        ...rowToHike(data, true),
+        difficultyMarkers: (markers ?? []).map(m => ({
+          lat: m.lat, lon: m.lon, source: m.source, text: m.source_text,
+          severity: m.severity, keywords: m.keywords ?? [],
+        })),
+      })
     }
 
     // Try full columns; fall back to core if newer ALTER TABLE columns don't exist yet
@@ -207,6 +219,26 @@ export async function POST(req: NextRequest) {
       .upsert({ ...hikeToRow(hike), user_id: user.id }, { onConflict: 'id' })
 
     if (error) throw error
+
+    // Persist GPX-derived difficulty markers (Komoot/AllTrails waypoints &
+    // track comments classified by lib/difficultyMarkers.ts) — replace any
+    // existing set for this hike since a re-import/re-save should reflect
+    // the current GPX content, not accumulate stale rows.
+    await supabase.from('trail_difficulty_markers').delete().eq('planned_hike_id', hike.id)
+    if (hike.difficultyMarkers?.length) {
+      await supabase.from('trail_difficulty_markers').insert(
+        hike.difficultyMarkers.map(m => ({
+          planned_hike_id: hike.id,
+          lat: m.lat,
+          lon: m.lon,
+          source: m.source,
+          source_text: m.text,
+          severity: m.severity,
+          keywords: m.keywords,
+        }))
+      )
+    }
+
     return NextResponse.json({ ok: true, assessment: hike.assessment })
   } catch (e) {
     console.error('POST /api/planned:', e)

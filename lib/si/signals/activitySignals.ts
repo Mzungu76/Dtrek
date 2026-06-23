@@ -1,8 +1,10 @@
 // Activity signal collector — DTrek usage-recency bonus from a spatially
-// matched activity/planned hike (resolved once by computeSI.ts via
+// matched *completed* activity (resolved once by computeSI.ts via
 // findMatchingActivity and threaded in through ctx.matchedActivity, so this
-// never re-queries activities/planned_hikes itself). The ghost-trail
-// determination lives in computeSI.ts (it isn't part of ActivitySignal).
+// never re-queries activities itself). Deliberately never sourced from
+// planned_hikes: importing/planning a GPX is not evidence anyone walked it.
+// The ghost-trail determination lives in computeSI.ts (it isn't part of
+// ActivitySignal).
 import type { ActivitySignal, SignalContext } from '@/lib/si/types'
 
 const HEATMAP_PENALTY = -10 // TODO: Strava heatmap tile analysis

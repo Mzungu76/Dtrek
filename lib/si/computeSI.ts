@@ -28,7 +28,7 @@ const NEUTRAL_WEATHER: WeatherSignal = { precipPenalty: 0, soilPenalty: 0, surfa
 const NEUTRAL_CLIMATE: ClimateSignal = { tempPenalty: 0, altitudeSeason: 0, seasonBonus: 0 }
 const NEUTRAL_SATELLITE: SatelliteSignal = { available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0, floodPenalty: 0, landslidePenalty: 0 }
 const NEUTRAL_ACTIVITY: ActivitySignal = { dtrekBonus: 0, heatmapPenalty: -10 }
-const NEUTRAL_COMMUNITY: CommunitySignal = { osmNotesPenalty: 0, osmNotesDetails: [], dtrekReviewsScore: 0 }
+const NEUTRAL_COMMUNITY: CommunitySignal = { osmNotesPenalty: 0, osmNotesDetails: [], difficultyMarkersPenalty: 0, difficultyMarkersDetails: [] }
 
 interface TrailSiRow {
   bbox: SignalContext['bbox'] | null
@@ -129,7 +129,7 @@ function computeScore(s: SISignals): number {
   score += s.climate.tempPenalty + s.climate.altitudeSeason + s.climate.seasonBonus
   score += s.satellite.ndviDeltaPenalty + s.satellite.ndviAbsolutePenalty + s.satellite.firePenalty + s.satellite.floodPenalty + s.satellite.landslidePenalty
   score += s.activity.heatmapPenalty + s.activity.dtrekBonus
-  score += s.community.osmNotesPenalty + s.community.dtrekReviewsScore
+  score += s.community.osmNotesPenalty + s.community.difficultyMarkersPenalty
   return clamp(score, 0, 100)
 }
 
@@ -180,8 +180,12 @@ function dominantWarningFor(s: SISignals): string | null {
       text: closest ? `Segnalazione recente della comunità OSM a ${closest.distanceM}m` : 'Segnalazioni recenti della comunità OSM nelle vicinanze',
     })
   }
-  if (s.community.dtrekReviewsScore < 0) {
-    candidates.push({ value: s.community.dtrekReviewsScore, text: 'Recensioni recenti DTrek negative per questo sentiero' })
+  if (s.community.difficultyMarkersPenalty < 0) {
+    const worst = [...s.community.difficultyMarkersDetails].sort((a, b) => a.distanceM - b.distanceM)[0]
+    candidates.push({
+      value: s.community.difficultyMarkersPenalty,
+      text: worst ? `Tratto difficile segnalato nel tracciato GPX a ${worst.distanceM}m` : 'Tratti difficili segnalati nel tracciato GPX importato',
+    })
   }
 
   if (candidates.length === 0) return null

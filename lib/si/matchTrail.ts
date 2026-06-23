@@ -1,8 +1,15 @@
 // Best-effort spatial matching between a trail's geometry and DTrek's own
-// activities/planned_hikes/trails rows — there is no real foreign key (no
-// trail_id column anywhere), so this approximates "is this the same trail"
-// by sampling the trail polyline every ~12 points and checking what fraction
-// of those samples lie within 90m of a candidate track.
+// activities/trails rows — there is no real foreign key (no trail_id column
+// anywhere), so this approximates "is this the same trail" by sampling the
+// trail polyline every ~12 points and checking what fraction of those
+// samples lie within 90m of a candidate track.
+//
+// Only `activities` (real, completed hikes with a true start_time) count
+// towards the SI recency bonus — `planned_hikes` is deliberately excluded:
+// its `created_at` is just "when the GPX was imported into DTrek", which
+// says nothing about whether the trail was actually walked recently, and
+// using it inflated the SI of any trail the moment someone imported a GPX
+// for it.
 import { supabase } from '@/lib/supabase'
 import { minDistToTrack, computeBbox } from '@/lib/geoUtils'
 import type { SignalContext } from '@/lib/si/types'
@@ -18,7 +25,7 @@ const CANDIDATE_LIMIT = 500
 export interface MatchedActivity {
   id: string
   recencyDate: string
-  source: 'activity' | 'planned'
+  source: 'activity'
 }
 
 function sampleEvery<T>(arr: T[], step: number): T[] {
@@ -47,11 +54,11 @@ function bboxesOverlap(a: Bbox, b: Bbox, pad: number): boolean {
 }
 
 /**
- * Finds the most recent DTrek activity/planned-hike whose tracked route
- * overlaps the given trail. Bounded to the last 3 years / 500 rows per
- * table — acceptable at current volume with no PostGIS spatial index;
- * revisit with a real spatial index if either table grows 10-100x and this
- * JS bbox+haversine scan becomes a bottleneck.
+ * Finds the most recent DTrek activity whose tracked route overlaps the
+ * given trail. Bounded to the last 3 years / 500 rows — acceptable at
+ * current volume with no PostGIS spatial index; revisit with a real spatial
+ * index if the table grows 10-100x and this JS bbox+haversine scan becomes
+ * a bottleneck.
  */
 export async function findMatchingActivity(
   trailGeometry: [number, number][],
@@ -62,33 +69,19 @@ export async function findMatchingActivity(
   const sinceIso = new Date(Date.now() - THREE_YEARS_MS).toISOString()
   const trailSample = sampleEvery(trailGeometry, 12)
 
-  const [actRes, planRes] = await Promise.all([
-    supabase.from('activities')
-      .select('id, route_polyline, start_time')
-      .gte('start_time', sinceIso)
-      .order('start_time', { ascending: false })
-      .limit(CANDIDATE_LIMIT),
-    supabase.from('planned_hikes')
-      .select('id, route_polyline, created_at')
-      .gte('created_at', sinceIso)
-      .order('created_at', { ascending: false })
-      .limit(CANDIDATE_LIMIT),
-  ])
+  const { data } = await supabase.from('activities')
+    .select('id, route_polyline, start_time')
+    .gte('start_time', sinceIso)
+    .order('start_time', { ascending: false })
+    .limit(CANDIDATE_LIMIT)
 
   const candidates: MatchedActivity[] = []
 
-  for (const row of actRes.data ?? []) {
+  for (const row of data ?? []) {
     const track = (row.route_polyline ?? []) as [number, number][]
     if (track.length < 2 || !trackTouchesBbox(track, trailBbox, BBOX_PREFILTER_PAD)) continue
     if (matchFraction(trailSample, track) >= MATCH_FRACTION_MIN) {
       candidates.push({ id: row.id, recencyDate: row.start_time, source: 'activity' })
-    }
-  }
-  for (const row of planRes.data ?? []) {
-    const track = (row.route_polyline ?? []) as [number, number][]
-    if (track.length < 2 || !trackTouchesBbox(track, trailBbox, BBOX_PREFILTER_PAD)) continue
-    if (matchFraction(trailSample, track) >= MATCH_FRACTION_MIN) {
-      candidates.push({ id: row.id, recencyDate: row.created_at, source: 'planned' })
     }
   }
 

@@ -71,10 +71,8 @@ function signalRows(s: SISignals): SignalRow[] {
   if (s.community.osmNotesPenalty < 0) {
     rows.push({ icon: '⚠️', text: `${signedNum(s.community.osmNotesPenalty)} Segnalazioni recenti della comunità OSM nelle vicinanze` })
   }
-  if (s.community.dtrekReviewsScore > 0) {
-    rows.push({ icon: '✅', text: `${signedNum(s.community.dtrekReviewsScore)} Recensioni DTrek positive recenti` })
-  } else if (s.community.dtrekReviewsScore < 0) {
-    rows.push({ icon: '⚠️', text: `${signedNum(s.community.dtrekReviewsScore)} Recensioni DTrek negative recenti` })
+  if (s.community.difficultyMarkersPenalty < 0) {
+    rows.push({ icon: '⚠️', text: `${signedNum(s.community.difficultyMarkersPenalty)} Tratti difficili segnalati nel tracciato GPX importato` })
   }
 
   return rows
