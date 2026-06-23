@@ -22,6 +22,7 @@ export interface PlannedHike {
   altitudeMin:          number
   estimatedTimeSeconds: number
   routePolyline?:       [number, number][]
+  osmId?:               number
   trackPoints?:         TrackPoint[]
   assessment?:          HikeAssessment
   cachedPois?:          unknown[]

@@ -65,7 +65,11 @@ export interface SISignals {
 }
 
 export interface SIResult {
-  osmRelationId: number
+  // Exactly one of the two is set: osmRelationId when scored against the
+  // shared `trails` cache, plannedHikeId when scored standalone for a
+  // planned hike with no OSM correspondence (see computeSIForPlannedHike).
+  osmRelationId?: number
+  plannedHikeId?: string
   si: number
   label: SILabel
   isGhostTrail: boolean
@@ -76,7 +80,8 @@ export interface SIResult {
 }
 
 export interface Sentinel2Data {
-  osmRelationId: number
+  osmRelationId?: number
+  plannedHikeId?: string
   available: boolean
   ndviMonthly: number[] | null        // 12 values, Jan→Dec
   ndviDelta: number | null

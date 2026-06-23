@@ -119,6 +119,7 @@ export default function EsploraPage() {
 
       const hike: PlannedHike = {
         id: t.id,
+        osmId: t.osmId,
         title: t.name,
         createdAt: new Date().toISOString(),
         distanceMeters: (t.distanceKm ?? 0) * 1000,

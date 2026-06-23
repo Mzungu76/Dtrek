@@ -9,22 +9,24 @@ import type { SIResult, Sentinel2Data } from '@/lib/si/types'
 interface Params {
   osmId?: number
   polyline?: [number, number][]
+  plannedId?: string
 }
 
-function queryFor({ osmId, polyline }: Params): string | null {
-  if (osmId != null) return `osm_relation_id=${osmId}`
-  if (polyline && polyline.length >= 2) return `polyline=${encodeURIComponent(JSON.stringify(polyline))}`
+function queryFor({ osmId, polyline, plannedId }: Params): string | null {
+  const plannedSuffix = plannedId ? `&planned_id=${encodeURIComponent(plannedId)}` : ''
+  if (osmId != null) return `osm_relation_id=${osmId}${plannedSuffix}`
+  if (polyline && polyline.length >= 2) return `polyline=${encodeURIComponent(JSON.stringify(polyline))}${plannedSuffix}`
   return null
 }
 
-export function useSI({ osmId, polyline }: Params): { result: SIResult | null; loading: boolean; notMatched: boolean } {
+export function useSI({ osmId, polyline, plannedId }: Params): { result: SIResult | null; loading: boolean; notMatched: boolean } {
   const [result, setResult] = useState<SIResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [notMatched, setNotMatched] = useState(false)
   const polylineKey = polyline ? JSON.stringify(polyline) : null
 
   useEffect(() => {
-    const qs = queryFor({ osmId, polyline })
+    const qs = queryFor({ osmId, polyline, plannedId })
     if (!qs) { setResult(null); setNotMatched(false); return }
 
     let cancelled = false
@@ -44,19 +46,19 @@ export function useSI({ osmId, polyline }: Params): { result: SIResult | null; l
 
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [osmId, polylineKey])
+  }, [osmId, polylineKey, plannedId])
 
   return { result, loading, notMatched }
 }
 
-export function useSentinel2({ osmId, polyline }: Params): { data: Sentinel2Data | null; loading: boolean; notMatched: boolean } {
+export function useSentinel2({ osmId, polyline, plannedId }: Params): { data: Sentinel2Data | null; loading: boolean; notMatched: boolean } {
   const [data, setData] = useState<Sentinel2Data | null>(null)
   const [loading, setLoading] = useState(false)
   const [notMatched, setNotMatched] = useState(false)
   const polylineKey = polyline ? JSON.stringify(polyline) : null
 
   useEffect(() => {
-    const qs = queryFor({ osmId, polyline })
+    const qs = queryFor({ osmId, polyline, plannedId })
     if (!qs) { setData(null); setNotMatched(false); return }
 
     let cancelled = false
@@ -76,7 +78,7 @@ export function useSentinel2({ osmId, polyline }: Params): { data: Sentinel2Data
 
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [osmId, polylineKey])
+  }, [osmId, polylineKey, plannedId])
 
   return { data, loading, notMatched }
 }

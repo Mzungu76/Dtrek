@@ -189,6 +189,123 @@ function dominantWarningFor(s: SISignals): string | null {
   return candidates[0].text
 }
 
+interface SiCacheFields {
+  siScore: number | null
+  siSignals: SISignals | null
+  siStaticComputedAt: string | null
+  siDynamicComputedAt: string | null
+  siSatelliteComputedAt: string | null
+  isGhostTrail: boolean
+}
+
+interface SiPipelineResult {
+  signals: SISignals
+  score: number
+  label: SILabel
+  dominantWarning: string | null
+  isGhostTrail: boolean
+  partial: boolean
+  staticExpired: boolean
+  dynamicExpired: boolean
+  satelliteExpired: boolean
+}
+
+// Pure scoring pipeline shared by computeSI (OSM trail, `trails` cache) and
+// computeSIForPlannedHike (arbitrary GPX track, `planned_hikes` cache) — no
+// I/O besides the collectors themselves. `overpassRelationId` is the only
+// thing genuinely tied to OSM (relation tags via Overpass): pass null for a
+// track with no OSM correspondence and every collector below degrades to
+// its already-existing neutral fallback (same as when Overpass itself is
+// unreachable), since none of them otherwise use the id parameter.
+async function runSiPipeline(
+  geometry: [number, number][],
+  bbox: SignalContext['bbox'],
+  distanceKm: number | null,
+  elevationGain: number | null,
+  elevationLoss: number | null,
+  cached: SiCacheFields,
+  overpassRelationId: number | null,
+): Promise<SiPipelineResult> {
+  const now = Date.now()
+  const staticExpired = !cached.siStaticComputedAt || now - new Date(cached.siStaticComputedAt).getTime() > STATIC_TTL_MS
+  const dynamicExpired = !cached.siDynamicComputedAt || now - new Date(cached.siDynamicComputedAt).getTime() > DYNAMIC_TTL_MS
+  const satelliteExpired = !cached.siSatelliteComputedAt || now - new Date(cached.siSatelliteComputedAt).getTime() > SATELLITE_TTL_MS
+
+  const needsOsmTags = staticExpired || dynamicExpired // weather (dynamic) reads ctx.osmTags.surface
+  const needsMatch = dynamicExpired // activity (dynamic) reads ctx.matchedActivity
+
+  const [tagsResult, matchResult] = await Promise.all([
+    needsOsmTags && overpassRelationId != null ? fetchOsmTags(overpassRelationId) : Promise.resolve({ tags: {}, lastModified: null }),
+    needsMatch ? findMatchingActivity(geometry, bbox).catch(() => null) : Promise.resolve(null),
+  ])
+
+  const ctx: SignalContext = {
+    bbox,
+    geometry,
+    centroid: { lat: (bbox.minLat + bbox.maxLat) / 2, lon: (bbox.minLon + bbox.maxLon) / 2 },
+    distanceKm,
+    elevationGain,
+    elevationLoss,
+    osmTags: tagsResult.tags,
+    osmLastModified: tagsResult.lastModified,
+    matchedActivity: matchResult,
+  }
+
+  // None of the collectors below actually use this id (it's vestigial in
+  // their signatures, kept for symmetry) — a placeholder is fine when there
+  // is no real OSM relation.
+  const collectorId = overpassRelationId ?? 0
+
+  type CollectorKey = 'osm' | 'weather' | 'climate' | 'satellite' | 'activity' | 'community'
+  const tasks: Array<{ key: CollectorKey; promise: Promise<unknown>; neutral: unknown }> = []
+  if (staticExpired) tasks.push({ key: 'osm', promise: collectOsmSignal(collectorId, ctx), neutral: NEUTRAL_OSM })
+  if (dynamicExpired) {
+    tasks.push({ key: 'weather', promise: collectWeatherSignal(collectorId, ctx), neutral: NEUTRAL_WEATHER })
+    tasks.push({ key: 'climate', promise: collectClimateSignal(collectorId, ctx), neutral: NEUTRAL_CLIMATE })
+    tasks.push({ key: 'activity', promise: collectActivitySignal(collectorId, ctx), neutral: NEUTRAL_ACTIVITY })
+    tasks.push({ key: 'community', promise: collectCommunitySignal(collectorId, ctx), neutral: NEUTRAL_COMMUNITY })
+  }
+  if (satelliteExpired) tasks.push({ key: 'satellite', promise: collectSatelliteSignal(collectorId, ctx), neutral: NEUTRAL_SATELLITE })
+
+  const settled = await Promise.allSettled(tasks.map(t => withTimeout(t.promise, COLLECTOR_TIMEOUT_MS)))
+
+  let partial = false
+  const fresh: Partial<Record<CollectorKey, unknown>> = {}
+  settled.forEach((result, i) => {
+    const { key, neutral } = tasks[i]
+    if (result.status === 'fulfilled') fresh[key] = result.value
+    else { fresh[key] = neutral; partial = true }
+  })
+
+  const cachedSignals = cached.siSignals
+  const signals: SISignals = {
+    osm:       (fresh.osm as OsmSignal) ?? cachedSignals?.osm ?? NEUTRAL_OSM,
+    weather:   (fresh.weather as WeatherSignal) ?? cachedSignals?.weather ?? NEUTRAL_WEATHER,
+    climate:   (fresh.climate as ClimateSignal) ?? cachedSignals?.climate ?? NEUTRAL_CLIMATE,
+    satellite: (fresh.satellite as SatelliteSignal) ?? cachedSignals?.satellite ?? NEUTRAL_SATELLITE,
+    activity:  (fresh.activity as ActivitySignal) ?? cachedSignals?.activity ?? NEUTRAL_ACTIVITY,
+    community: (fresh.community as CommunitySignal) ?? cachedSignals?.community ?? NEUTRAL_COMMUNITY,
+  }
+
+  // Ghost trail can only be newly *set* on the very first computation ever
+  // (si_score still null going in); afterwards it's sticky and can only be
+  // *cleared* once a DTrek activity/planned-hike match is found.
+  let isGhostTrail = cached.isGhostTrail
+  if (dynamicExpired) {
+    if (ctx.matchedActivity) {
+      isGhostTrail = false
+    } else if (cached.siScore == null && signals.osm.freshnessScore === -30) {
+      isGhostTrail = true
+    }
+  }
+
+  const score = computeScore(signals)
+  const label = labelFor(score)
+  const dominantWarning = dominantWarningFor(signals)
+
+  return { signals, score, label, dominantWarning, isGhostTrail, partial, staticExpired, dynamicExpired, satelliteExpired }
+}
+
 export async function computeSI(
   osmRelationId: number,
   precomputedGeometry?: { bbox: SignalContext['bbox']; geometrySimplified: [number, number][] },
@@ -210,92 +327,92 @@ export async function computeSI(
     geometry = fallback.geometry
   }
 
-  const now = Date.now()
-  const staticExpired = !trailRow?.siStaticComputedAt || now - new Date(trailRow.siStaticComputedAt).getTime() > STATIC_TTL_MS
-  const dynamicExpired = !trailRow?.siDynamicComputedAt || now - new Date(trailRow.siDynamicComputedAt).getTime() > DYNAMIC_TTL_MS
-  const satelliteExpired = !trailRow?.siSatelliteComputedAt || now - new Date(trailRow.siSatelliteComputedAt).getTime() > SATELLITE_TTL_MS
-
-  const needsOsmTags = staticExpired || dynamicExpired // weather (dynamic) reads ctx.osmTags.surface
-  const needsMatch = dynamicExpired // activity (dynamic) reads ctx.matchedActivity
-
-  const [tagsResult, matchResult] = await Promise.all([
-    needsOsmTags ? fetchOsmTags(osmRelationId) : Promise.resolve({ tags: {}, lastModified: null }),
-    needsMatch ? findMatchingActivity(geometry, bbox).catch(() => null) : Promise.resolve(null),
-  ])
-
-  const ctx: SignalContext = {
-    bbox,
-    geometry,
-    centroid: { lat: (bbox.minLat + bbox.maxLat) / 2, lon: (bbox.minLon + bbox.maxLon) / 2 },
-    distanceKm: trailRow?.distanceKm ?? null,
-    elevationGain: trailRow?.elevationGain ?? null,
-    elevationLoss: trailRow?.elevationLoss ?? null,
-    osmTags: tagsResult.tags,
-    osmLastModified: tagsResult.lastModified,
-    matchedActivity: matchResult,
+  const cached: SiCacheFields = {
+    siScore: trailRow?.siScore ?? null,
+    siSignals: trailRow?.siSignals ?? null,
+    siStaticComputedAt: trailRow?.siStaticComputedAt ?? null,
+    siDynamicComputedAt: trailRow?.siDynamicComputedAt ?? null,
+    siSatelliteComputedAt: trailRow?.siSatelliteComputedAt ?? null,
+    isGhostTrail: trailRow?.isGhostTrail ?? false,
   }
 
-  type CollectorKey = 'osm' | 'weather' | 'climate' | 'satellite' | 'activity' | 'community'
-  const tasks: Array<{ key: CollectorKey; promise: Promise<unknown>; neutral: unknown }> = []
-  if (staticExpired) tasks.push({ key: 'osm', promise: collectOsmSignal(osmRelationId, ctx), neutral: NEUTRAL_OSM })
-  if (dynamicExpired) {
-    tasks.push({ key: 'weather', promise: collectWeatherSignal(osmRelationId, ctx), neutral: NEUTRAL_WEATHER })
-    tasks.push({ key: 'climate', promise: collectClimateSignal(osmRelationId, ctx), neutral: NEUTRAL_CLIMATE })
-    tasks.push({ key: 'activity', promise: collectActivitySignal(osmRelationId, ctx), neutral: NEUTRAL_ACTIVITY })
-    tasks.push({ key: 'community', promise: collectCommunitySignal(osmRelationId, ctx), neutral: NEUTRAL_COMMUNITY })
-  }
-  if (satelliteExpired) tasks.push({ key: 'satellite', promise: collectSatelliteSignal(osmRelationId, ctx), neutral: NEUTRAL_SATELLITE })
+  const result = await runSiPipeline(
+    geometry, bbox,
+    trailRow?.distanceKm ?? null, trailRow?.elevationGain ?? null, trailRow?.elevationLoss ?? null,
+    cached, osmRelationId,
+  )
 
-  const settled = await Promise.allSettled(tasks.map(t => withTimeout(t.promise, COLLECTOR_TIMEOUT_MS)))
-
-  let partial = false
-  const fresh: Partial<Record<CollectorKey, unknown>> = {}
-  settled.forEach((result, i) => {
-    const { key, neutral } = tasks[i]
-    if (result.status === 'fulfilled') fresh[key] = result.value
-    else { fresh[key] = neutral; partial = true }
-  })
-
-  const cached = trailRow?.siSignals ?? null
-  const signals: SISignals = {
-    osm:       (fresh.osm as OsmSignal) ?? cached?.osm ?? NEUTRAL_OSM,
-    weather:   (fresh.weather as WeatherSignal) ?? cached?.weather ?? NEUTRAL_WEATHER,
-    climate:   (fresh.climate as ClimateSignal) ?? cached?.climate ?? NEUTRAL_CLIMATE,
-    satellite: (fresh.satellite as SatelliteSignal) ?? cached?.satellite ?? NEUTRAL_SATELLITE,
-    activity:  (fresh.activity as ActivitySignal) ?? cached?.activity ?? NEUTRAL_ACTIVITY,
-    community: (fresh.community as CommunitySignal) ?? cached?.community ?? NEUTRAL_COMMUNITY,
-  }
-
-  // Ghost trail can only be newly *set* on the very first computation ever
-  // (si_score still null going in); afterwards it's sticky and can only be
-  // *cleared* once a DTrek activity/planned-hike match is found.
-  let isGhostTrail = trailRow?.isGhostTrail ?? false
-  if (dynamicExpired) {
-    if (ctx.matchedActivity) {
-      isGhostTrail = false
-    } else if (trailRow?.siScore == null && signals.osm.freshnessScore === -30) {
-      isGhostTrail = true
-    }
-  }
-
-  const score = computeScore(signals)
-  const label = labelFor(score)
-  const dominantWarning = dominantWarningFor(signals)
   const cachedAt = new Date().toISOString()
-
   const updatePayload: Record<string, unknown> = {
-    si_score: score,
-    si_label: label.text,
-    si_signals: signals,
+    si_score: result.score,
+    si_label: result.label.text,
+    si_signals: result.signals,
     si_computed_at: cachedAt,
-    dominant_warning: dominantWarning,
-    is_ghost_trail: isGhostTrail,
+    dominant_warning: result.dominantWarning,
+    is_ghost_trail: result.isGhostTrail,
   }
-  if (staticExpired) updatePayload.si_static_computed_at = cachedAt
-  if (dynamicExpired) updatePayload.si_dynamic_computed_at = cachedAt
-  if (satelliteExpired) updatePayload.si_satellite_computed_at = cachedAt
+  if (result.staticExpired) updatePayload.si_static_computed_at = cachedAt
+  if (result.dynamicExpired) updatePayload.si_dynamic_computed_at = cachedAt
+  if (result.satelliteExpired) updatePayload.si_satellite_computed_at = cachedAt
 
   await supabase.from('trails').update(updatePayload).eq('osm_relation_id', osmRelationId)
 
-  return { osmRelationId, si: score, label, isGhostTrail, dominantWarning, signals, partial, cachedAt }
+  return {
+    osmRelationId, si: result.score, label: result.label, isGhostTrail: result.isGhostTrail,
+    dominantWarning: result.dominantWarning, signals: result.signals, partial: result.partial, cachedAt,
+  }
+}
+
+async function fetchPlannedSiCache(plannedHikeId: string): Promise<SiCacheFields> {
+  const { data } = await supabase
+    .from('planned_hikes')
+    .select('si_score, si_signals, si_static_computed_at, si_dynamic_computed_at, si_satellite_computed_at, is_ghost_trail')
+    .eq('id', plannedHikeId)
+    .maybeSingle()
+  return {
+    siScore: data?.si_score ?? null,
+    siSignals: data?.si_signals ?? null,
+    siStaticComputedAt: data?.si_static_computed_at ?? null,
+    siDynamicComputedAt: data?.si_dynamic_computed_at ?? null,
+    siSatelliteComputedAt: data?.si_satellite_computed_at ?? null,
+    isGhostTrail: data?.is_ghost_trail ?? false,
+  }
+}
+
+// Standalone SI computation for a planned hike with no OSM correspondence
+// (e.g. an imported GPX track that doesn't match any cached `trails` row).
+// Same scoring pipeline as computeSI, but cached on the planned_hikes row
+// itself instead of the shared `trails` cache — see
+// supabase/migrations/add_planned_hikes_si_sentinel2_columns.sql.
+export async function computeSIForPlannedHike(
+  plannedHikeId: string,
+  geometry: [number, number][],
+  bbox: SignalContext['bbox'],
+  distanceKm: number | null,
+  elevationGain: number | null,
+  elevationLoss: number | null,
+): Promise<SIResult> {
+  const cached = await fetchPlannedSiCache(plannedHikeId)
+
+  const result = await runSiPipeline(geometry, bbox, distanceKm, elevationGain, elevationLoss, cached, null)
+
+  const cachedAt = new Date().toISOString()
+  const updatePayload: Record<string, unknown> = {
+    si_score: result.score,
+    si_label: result.label.text,
+    si_signals: result.signals,
+    si_computed_at: cachedAt,
+    dominant_warning: result.dominantWarning,
+    is_ghost_trail: result.isGhostTrail,
+  }
+  if (result.staticExpired) updatePayload.si_static_computed_at = cachedAt
+  if (result.dynamicExpired) updatePayload.si_dynamic_computed_at = cachedAt
+  if (result.satelliteExpired) updatePayload.si_satellite_computed_at = cachedAt
+
+  await supabase.from('planned_hikes').update(updatePayload).eq('id', plannedHikeId)
+
+  return {
+    plannedHikeId, si: result.score, label: result.label, isGhostTrail: result.isGhostTrail,
+    dominantWarning: result.dominantWarning, signals: result.signals, partial: result.partial, cachedAt,
+  }
 }

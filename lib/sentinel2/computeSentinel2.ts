@@ -128,8 +128,8 @@ export async function fetchS2Cache(osmRelationId: number): Promise<S2CacheRow | 
   }
 }
 
-const UNAVAILABLE: Sentinel2Data = {
-  osmRelationId: 0, available: false, ndviMonthly: null, ndviDelta: null, ndwiCurrent: null, nbrCurrent: null,
+const UNAVAILABLE: Omit<Sentinel2Data, 'osmRelationId' | 'plannedHikeId'> = {
+  available: false, ndviMonthly: null, ndviDelta: null, ndwiCurrent: null, nbrCurrent: null,
   eviCurrent: null, bsiCurrent: null, fireDetected: false, floodDetected: false, landslideRisk: false,
   shadeScore: null, landscapeVariety: null, waterSources: [], phenologyPeakMonth: null, computedAt: null,
 }
@@ -207,17 +207,24 @@ async function computeModisMonthNdvi(bbox: GeoBbox, month: number): Promise<numb
   }
 }
 
-export async function computeSentinel2(osmRelationId: number, trailPoints: [number, number][]): Promise<Sentinel2Data> {
-  if (trailPoints.length < 2) return { ...UNAVAILABLE, osmRelationId, reason: 'no_geometry' }
+type S2PipelineResult =
+  | { status: 'cached'; row: S2CacheRow }
+  | { status: 'computed'; row: S2CacheRow }
+  | { status: 'unavailable'; reason: 'no_geometry' | 'no_data' | 'unreachable' | 'api_error'; debugInfo?: string }
+
+// Pure pipeline shared by computeSentinel2 (OSM trail, `trails` cache) and
+// computeSentinel2ForPlannedHike (arbitrary GPX track, `planned_hikes`
+// cache) — works purely off trailPoints/bbox, no OSM linkage needed.
+async function runSentinel2Pipeline(trailPoints: [number, number][], cache: S2CacheRow | null, stats: TrailStatsRow): Promise<S2PipelineResult> {
+  if (trailPoints.length < 2) return { status: 'unavailable', reason: 'no_geometry' }
 
   try {
-    const cache = await fetchS2Cache(osmRelationId)
     const now = Date.now()
     const snapshotExpired = !cache?.computedAt || now - new Date(cache.computedAt).getTime() > SNAPSHOT_TTL_MS
     const seriesExpired = !cache?.computedAt || now - new Date(cache.computedAt).getTime() > SERIES_TTL_MS
 
     if (!snapshotExpired && cache) {
-      return toSentinel2Data(osmRelationId, cache)
+      return { status: 'cached', row: cache }
     }
 
     const [minLat, minLon, maxLat, maxLon] = computeBbox(trailPoints, 0.005).split(',').map(Number)
@@ -227,14 +234,13 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
     const snapshotStart = new Date(snapshotEnd.getTime() - 10 * 24 * 60 * 60 * 1000)
 
     const currentItem = await searchStac(S2_COLLECTION, toStacBbox(bbox), snapshotStart, snapshotEnd, { maxCloudCover: MAX_CLOUD_COVER })
-    if (!currentItem) return { ...UNAVAILABLE, osmRelationId, reason: 'no_data' }
+    if (!currentItem) return { status: 'unavailable', reason: 'no_data' }
 
-    const [snapshot, monthsResult, stats] = await Promise.all([
+    const [snapshot, monthsResult] = await Promise.all([
       computeSnapshot(currentItem, bbox),
       seriesExpired
         ? Promise.all(Array.from({ length: 12 }, (_, i) => i + 1).map(month => computeModisMonthNdvi(bbox, month)))
         : Promise.resolve(null),
-      fetchTrailStats(osmRelationId),
     ])
 
     let ndviMonthly = cache?.ndviMonthly ?? null
@@ -267,7 +273,7 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
 
     const shadeScore = computeShadeScore(snapshot.evi, stats)
 
-    const result: S2CacheRow = {
+    const row: S2CacheRow = {
       ndviMonthly, ndviDelta,
       ndwiCurrent: snapshot.ndwi, nbrCurrent: snapshot.nbr, eviCurrent: snapshot.evi, bsiCurrent: snapshot.bsi,
       fireDetected: (snapshot.nbr ?? 0) < -0.05,
@@ -278,33 +284,97 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
       available: true,
     }
 
-    await supabase.from('trails').update({
-      s2_ndvi_monthly: result.ndviMonthly,
-      s2_ndvi_delta: result.ndviDelta,
-      s2_ndwi_current: result.ndwiCurrent,
-      s2_nbr_current: result.nbrCurrent,
-      s2_evi_current: result.eviCurrent,
-      s2_bsi_current: result.bsiCurrent,
-      s2_fire_detected: result.fireDetected,
-      s2_flood_detected: result.floodDetected,
-      s2_landslide_risk: result.landslideRisk,
-      s2_shade_score: result.shadeScore,
-      s2_landscape_variety: result.landscapeVariety,
-      s2_water_sources: result.waterSources,
-      s2_phenology_peak_month: result.phenologyPeakMonth,
-      s2_computed_at: result.computedAt,
-      s2_available: true,
-    }).eq('osm_relation_id', osmRelationId)
-
-    return toSentinel2Data(osmRelationId, result)
+    return { status: 'computed', row }
   } catch (err) {
     console.error('[sentinel2] Planetary Computer pipeline failed', err)
     return {
-      ...UNAVAILABLE, osmRelationId,
+      status: 'unavailable',
       reason: err instanceof MpcUnreachableError ? 'unreachable' : 'api_error',
       debugInfo: err instanceof Error ? err.message : String(err),
     }
   }
+}
+
+function s2RowToUpdatePayload(row: S2CacheRow): Record<string, unknown> {
+  return {
+    s2_ndvi_monthly: row.ndviMonthly,
+    s2_ndvi_delta: row.ndviDelta,
+    s2_ndwi_current: row.ndwiCurrent,
+    s2_nbr_current: row.nbrCurrent,
+    s2_evi_current: row.eviCurrent,
+    s2_bsi_current: row.bsiCurrent,
+    s2_fire_detected: row.fireDetected,
+    s2_flood_detected: row.floodDetected,
+    s2_landslide_risk: row.landslideRisk,
+    s2_shade_score: row.shadeScore,
+    s2_landscape_variety: row.landscapeVariety,
+    s2_water_sources: row.waterSources,
+    s2_phenology_peak_month: row.phenologyPeakMonth,
+    s2_computed_at: row.computedAt,
+    s2_available: true,
+  }
+}
+
+export async function computeSentinel2(osmRelationId: number, trailPoints: [number, number][]): Promise<Sentinel2Data> {
+  const [cache, stats] = await Promise.all([fetchS2Cache(osmRelationId), fetchTrailStats(osmRelationId)])
+  const result = await runSentinel2Pipeline(trailPoints, cache, stats)
+
+  if (result.status === 'unavailable') {
+    return { ...UNAVAILABLE, osmRelationId, reason: result.reason, debugInfo: result.debugInfo }
+  }
+  if (result.status === 'computed') {
+    await supabase.from('trails').update(s2RowToUpdatePayload(result.row)).eq('osm_relation_id', osmRelationId)
+  }
+  return toSentinel2Data(result.row, { osmRelationId })
+}
+
+async function fetchS2CacheForPlannedHike(plannedHikeId: string): Promise<S2CacheRow | null> {
+  const { data } = await supabase
+    .from('planned_hikes')
+    .select('s2_ndvi_monthly, s2_ndvi_delta, s2_ndwi_current, s2_nbr_current, s2_evi_current, s2_bsi_current, s2_fire_detected, s2_flood_detected, s2_landslide_risk, s2_shade_score, s2_landscape_variety, s2_water_sources, s2_phenology_peak_month, s2_computed_at, s2_available')
+    .eq('id', plannedHikeId)
+    .maybeSingle()
+  if (!data) return null
+  return {
+    ndviMonthly: data.s2_ndvi_monthly ?? null,
+    ndviDelta: data.s2_ndvi_delta,
+    ndwiCurrent: data.s2_ndwi_current,
+    nbrCurrent: data.s2_nbr_current,
+    eviCurrent: data.s2_evi_current,
+    bsiCurrent: data.s2_bsi_current,
+    fireDetected: data.s2_fire_detected ?? false,
+    floodDetected: data.s2_flood_detected ?? false,
+    landslideRisk: data.s2_landslide_risk ?? false,
+    shadeScore: data.s2_shade_score,
+    landscapeVariety: data.s2_landscape_variety,
+    waterSources: data.s2_water_sources ?? [],
+    phenologyPeakMonth: data.s2_phenology_peak_month,
+    computedAt: data.s2_computed_at,
+    available: data.s2_available ?? false,
+  }
+}
+
+// Standalone Sentinel-2 computation for a planned hike with no OSM
+// correspondence — same pipeline as computeSentinel2, cached on the
+// planned_hikes row itself (distanceKm/elevationGain/elevationLoss are
+// already known from the hike, no `trails` lookup needed for shade score).
+export async function computeSentinel2ForPlannedHike(
+  plannedHikeId: string,
+  trailPoints: [number, number][],
+  distanceKm: number | null,
+  elevationGain: number | null,
+  elevationLoss: number | null,
+): Promise<Sentinel2Data> {
+  const cache = await fetchS2CacheForPlannedHike(plannedHikeId)
+  const result = await runSentinel2Pipeline(trailPoints, cache, { distanceKm, elevationGain, elevationLoss })
+
+  if (result.status === 'unavailable') {
+    return { ...UNAVAILABLE, plannedHikeId, reason: result.reason, debugInfo: result.debugInfo }
+  }
+  if (result.status === 'computed') {
+    await supabase.from('planned_hikes').update(s2RowToUpdatePayload(result.row)).eq('id', plannedHikeId)
+  }
+  return toSentinel2Data(result.row, { plannedHikeId })
 }
 
 function computeShadeScore(evi: number | null, stats: TrailStatsRow): number | null {
@@ -317,9 +387,9 @@ function computeShadeScore(evi: number | null, stats: TrailStatsRow): number | n
   return Math.min(Math.max(evi * (1 - slopeNormalized), 0), 1)
 }
 
-export function toSentinel2Data(osmRelationId: number, row: S2CacheRow): Sentinel2Data {
+export function toSentinel2Data(row: S2CacheRow, ref: { osmRelationId?: number; plannedHikeId?: string }): Sentinel2Data {
   return {
-    osmRelationId,
+    ...ref,
     available: row.available,
     ndviMonthly: row.ndviMonthly,
     ndviDelta: row.ndviDelta,
