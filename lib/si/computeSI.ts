@@ -281,14 +281,20 @@ async function runSiPipeline(
     else { fresh[key] = neutral; partial = true }
   })
 
+  // Spread onto NEUTRAL_* (not a plain `?? NEUTRAL_X` fallback) so that a
+  // cached si_signals blob written by an older deploy — missing fields a
+  // later schema change added to one of these shapes — gets those fields
+  // backfilled instead of propagating `undefined` into computeScore()'s
+  // arithmetic (which turns into NaN, silently serialized as `null` by
+  // JSON, which then made SIBadge render nothing).
   const cachedSignals = cached.siSignals
   const signals: SISignals = {
-    osm:       (fresh.osm as OsmSignal) ?? cachedSignals?.osm ?? NEUTRAL_OSM,
-    weather:   (fresh.weather as WeatherSignal) ?? cachedSignals?.weather ?? NEUTRAL_WEATHER,
-    climate:   (fresh.climate as ClimateSignal) ?? cachedSignals?.climate ?? NEUTRAL_CLIMATE,
-    satellite: (fresh.satellite as SatelliteSignal) ?? cachedSignals?.satellite ?? NEUTRAL_SATELLITE,
-    activity:  (fresh.activity as ActivitySignal) ?? cachedSignals?.activity ?? NEUTRAL_ACTIVITY,
-    community: (fresh.community as CommunitySignal) ?? cachedSignals?.community ?? NEUTRAL_COMMUNITY,
+    osm:       (fresh.osm as OsmSignal) ?? { ...NEUTRAL_OSM, ...cachedSignals?.osm },
+    weather:   (fresh.weather as WeatherSignal) ?? { ...NEUTRAL_WEATHER, ...cachedSignals?.weather },
+    climate:   (fresh.climate as ClimateSignal) ?? { ...NEUTRAL_CLIMATE, ...cachedSignals?.climate },
+    satellite: (fresh.satellite as SatelliteSignal) ?? { ...NEUTRAL_SATELLITE, ...cachedSignals?.satellite },
+    activity:  (fresh.activity as ActivitySignal) ?? { ...NEUTRAL_ACTIVITY, ...cachedSignals?.activity },
+    community: (fresh.community as CommunitySignal) ?? { ...NEUTRAL_COMMUNITY, ...cachedSignals?.community },
   }
 
   // Ghost trail can only be newly *set* on the very first computation ever
