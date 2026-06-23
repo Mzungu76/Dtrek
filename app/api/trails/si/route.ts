@@ -10,7 +10,7 @@
 // no match still replies { matched: false } (200, not an error).
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { computeSI, computeSIForPlannedHike } from '@/lib/si/computeSI'
+import { computeSI, computeSIForPlannedHike, SIRateLimitError } from '@/lib/si/computeSI'
 import { findTrailForPolyline } from '@/lib/si/matchTrail'
 import { computeBbox } from '@/lib/geoUtils'
 import type { SIApiResponse } from '@/lib/si/types'
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
   const osmIdParam = req.nextUrl.searchParams.get('osm_relation_id')
   const polylineParam = req.nextUrl.searchParams.get('polyline')
   const plannedId = req.nextUrl.searchParams.get('planned_id')
+  const force = req.nextUrl.searchParams.get('force') === '1'
 
   if (!osmIdParam && !polylineParam) {
     return NextResponse.json({ error: 'osm_relation_id o polyline richiesto' }, { status: 400 })
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
 
   try {
     if (osmRelationId != null) {
-      const result = await withTimeout(computeSI(osmRelationId), COMPUTE_TIMEOUT_MS)
+      const result = await withTimeout(computeSI(osmRelationId, undefined, { force }), COMPUTE_TIMEOUT_MS)
       return NextResponse.json(result satisfies SIApiResponse)
     }
 
@@ -91,6 +92,7 @@ export async function GET(req: NextRequest) {
         computeSIForPlannedHike(
           plannedId, polyline, { minLat, minLon, maxLat, maxLon },
           distanceKm, plannedRow?.elevation_gain ?? null, plannedRow?.elevation_loss ?? null,
+          { force },
         ),
         COMPUTE_TIMEOUT_MS,
       )
@@ -100,6 +102,9 @@ export async function GET(req: NextRequest) {
     const body: SIApiResponse = { matched: false }
     return NextResponse.json(body)
   } catch (err) {
+    if (err instanceof SIRateLimitError) {
+      return NextResponse.json({ error: `Aggiornamento disponibile da: ${err.availableAt}` }, { status: 429 })
+    }
     console.error('[trails/si] computeSI failed or timed out', err)
     return NextResponse.json({ error: 'Impossibile calcolare l\'indice di sicurezza' }, { status: 502 })
   }

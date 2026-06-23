@@ -19,10 +19,19 @@ function queryFor({ osmId, polyline, plannedId }: Params): string | null {
   return null
 }
 
-export function useSI({ osmId, polyline, plannedId }: Params): { result: SIResult | null; loading: boolean; notMatched: boolean } {
+export function useSI({ osmId, polyline, plannedId }: Params): {
+  result: SIResult | null
+  loading: boolean
+  notMatched: boolean
+  refreshing: boolean
+  refreshError: string | null
+  refresh: () => void
+} {
   const [result, setResult] = useState<SIResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [notMatched, setNotMatched] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
   const polylineKey = polyline ? JSON.stringify(polyline) : null
 
   useEffect(() => {
@@ -48,7 +57,26 @@ export function useSI({ osmId, polyline, plannedId }: Params): { result: SIResul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [osmId, polylineKey, plannedId])
 
-  return { result, loading, notMatched }
+  const refresh = () => {
+    const qs = queryFor({ osmId, polyline, plannedId })
+    if (!qs) return
+    setRefreshing(true)
+    setRefreshError(null)
+    fetch(`/api/trails/si?${qs}&force=1`)
+      .then(async res => {
+        if (res.status === 429) {
+          const body = await res.json().catch(() => ({}))
+          setRefreshError(body.error ?? 'Aggiornamento non ancora disponibile — riprova più tardi.')
+          return
+        }
+        const data: SIResult | { matched: false } | { error: string } = await res.json()
+        if ('si' in data) setResult(data)
+      })
+      .catch(() => { setRefreshError('Impossibile aggiornare il punteggio in questo momento.') })
+      .finally(() => setRefreshing(false))
+  }
+
+  return { result, loading, notMatched, refreshing, refreshError, refresh }
 }
 
 export function useSentinel2({ osmId, polyline, plannedId }: Params): { data: Sentinel2Data | null; loading: boolean; notMatched: boolean } {

@@ -22,6 +22,17 @@ const STATIC_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DYNAMIC_TTL_MS = 1 * 24 * 60 * 60 * 1000
 const SATELLITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const COLLECTOR_TIMEOUT_MS = 5000
+const FORCE_REFRESH_COOLDOWN_MS = 24 * 60 * 60 * 1000
+
+// Thrown by computeSI/computeSIForPlannedHike when a manual `force` refresh
+// is requested before the previous one's 24h cooldown has elapsed — caught
+// by app/api/trails/si/route.ts to reply 429 instead of re-hitting every
+// external API on every click of the "Aggiorna SI" button.
+export class SIRateLimitError extends Error {
+  constructor(public availableAt: string) {
+    super('SI refresh rate limited')
+  }
+}
 
 const NEUTRAL_OSM: OsmSignal = { accessPenalty: 0, visibilityPenalty: 0, freshnessScore: 0, operatorBonus: 0, lastModified: null }
 const NEUTRAL_WEATHER: WeatherSignal = { precipPenalty: 0, soilPenalty: 0, surfaceMultiplier: 1.2, slopeMultiplier: 1.0, totalPenalty: 0 }
@@ -229,11 +240,12 @@ async function runSiPipeline(
   elevationLoss: number | null,
   cached: SiCacheFields,
   overpassRelationId: number | null,
+  force = false,
 ): Promise<SiPipelineResult> {
   const now = Date.now()
-  const staticExpired = !cached.siStaticComputedAt || now - new Date(cached.siStaticComputedAt).getTime() > STATIC_TTL_MS
-  const dynamicExpired = !cached.siDynamicComputedAt || now - new Date(cached.siDynamicComputedAt).getTime() > DYNAMIC_TTL_MS
-  const satelliteExpired = !cached.siSatelliteComputedAt || now - new Date(cached.siSatelliteComputedAt).getTime() > SATELLITE_TTL_MS
+  const staticExpired = force || !cached.siStaticComputedAt || now - new Date(cached.siStaticComputedAt).getTime() > STATIC_TTL_MS
+  const dynamicExpired = force || !cached.siDynamicComputedAt || now - new Date(cached.siDynamicComputedAt).getTime() > DYNAMIC_TTL_MS
+  const satelliteExpired = force || !cached.siSatelliteComputedAt || now - new Date(cached.siSatelliteComputedAt).getTime() > SATELLITE_TTL_MS
 
   const needsOsmTags = staticExpired || dynamicExpired // weather (dynamic) reads ctx.osmTags.surface
   const needsMatch = dynamicExpired // activity (dynamic) reads ctx.matchedActivity
@@ -319,8 +331,16 @@ async function runSiPipeline(
 export async function computeSI(
   osmRelationId: number,
   precomputedGeometry?: { bbox: SignalContext['bbox']; geometrySimplified: [number, number][] },
+  opts?: { force?: boolean },
 ): Promise<SIResult> {
   const trailRow = await fetchTrailSiRow(osmRelationId)
+
+  if (opts?.force && trailRow?.siDynamicComputedAt) {
+    const elapsed = Date.now() - new Date(trailRow.siDynamicComputedAt).getTime()
+    if (elapsed < FORCE_REFRESH_COOLDOWN_MS) {
+      throw new SIRateLimitError(new Date(new Date(trailRow.siDynamicComputedAt).getTime() + FORCE_REFRESH_COOLDOWN_MS).toISOString())
+    }
+  }
 
   let bbox: SignalContext['bbox']
   let geometry: [number, number][]
@@ -349,7 +369,7 @@ export async function computeSI(
   const result = await runSiPipeline(
     geometry, bbox,
     trailRow?.distanceKm ?? null, trailRow?.elevationGain ?? null, trailRow?.elevationLoss ?? null,
-    cached, osmRelationId,
+    cached, osmRelationId, opts?.force,
   )
 
   const cachedAt = new Date().toISOString()
@@ -401,10 +421,18 @@ export async function computeSIForPlannedHike(
   distanceKm: number | null,
   elevationGain: number | null,
   elevationLoss: number | null,
+  opts?: { force?: boolean },
 ): Promise<SIResult> {
   const cached = await fetchPlannedSiCache(plannedHikeId)
 
-  const result = await runSiPipeline(geometry, bbox, distanceKm, elevationGain, elevationLoss, cached, null)
+  if (opts?.force && cached.siDynamicComputedAt) {
+    const elapsed = Date.now() - new Date(cached.siDynamicComputedAt).getTime()
+    if (elapsed < FORCE_REFRESH_COOLDOWN_MS) {
+      throw new SIRateLimitError(new Date(new Date(cached.siDynamicComputedAt).getTime() + FORCE_REFRESH_COOLDOWN_MS).toISOString())
+    }
+  }
+
+  const result = await runSiPipeline(geometry, bbox, distanceKm, elevationGain, elevationLoss, cached, null, opts?.force)
 
   const cachedAt = new Date().toISOString()
   const updatePayload: Record<string, unknown> = {

@@ -8,11 +8,10 @@ import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import RouteThumb from '@/components/RouteThumb'
 import PhotoMosaic from '@/components/PhotoMosaic'
-import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
-import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
-import { SIBadge } from '@/components/SIBadge'
-import { Sentinel2Panel } from '@/components/Sentinel2Panel'
+import { ScoresSection } from '@/components/ScoresSection'
+import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { useSI, useSentinel2 } from '@/lib/si/useSI'
+import { useFlora } from '@/lib/useFlora'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
@@ -30,7 +29,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, RefreshCw,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen,
 } from 'lucide-react'
 
 import PdfExportButton from '@/components/PdfExportButton'
@@ -188,6 +187,7 @@ export default function PlannedHikePage() {
 
   const si = useSI({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
+  const flora = useFlora(hike?.routePolyline)
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -577,37 +577,21 @@ export default function PlannedHikePage() {
           />
         )}
 
-        {/* Percorribilità & sicurezza ambientale — segnali esterni dinamici
-            (meteo/satellite/community), distinti dal rischio intrinseco del
-            tracciato coperto da "Rischi del terreno" più sotto */}
-        {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
-          <div className="space-y-3">
-            <h2 className="font-display text-xl font-semibold text-stone-700">Percorribilità attuale</h2>
-            <div className="space-y-2">
-              {si.notMatched
-                ? <p className="text-sm text-stone-400">Sentiero non identificato — impossibile calcolare l&apos;indice di sicurezza.</p>
-                : !si.loading && !si.result
-                  ? <p className="text-sm text-stone-400">Impossibile calcolare l&apos;indice di sicurezza in questo momento — riprova più tardi.</p>
-                  : <SIBadge si={si.result?.si} label={si.result?.label} signals={si.result?.signals} partial={si.result?.partial} loading={si.loading} expanded />}
-              <Sentinel2Panel data={s2.data} loading={s2.loading} />
-            </div>
-
-            {hike.difficultyMarkers && hike.difficultyMarkers.length > 0 && (
-              <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm">
-                <p className="text-sm font-semibold text-stone-700 mb-3">Segnalazioni dal tracciato</p>
-                <ul className="space-y-2">
-                  {hike.difficultyMarkers.map((m, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      {m.severity === 'danger' ? <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                        : m.severity === 'warning' ? <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                        : <Info className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />}
-                      <span className="text-stone-600">{m.text}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-stone-400 mt-2">Estratte automaticamente dai waypoint/commenti del file GPX importato (Komoot/AllTrails)</p>
-              </div>
-            )}
+        {/* Segnalazioni dal tracciato */}
+        {hasGps && hike.difficultyMarkers && hike.difficultyMarkers.length > 0 && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-stone-700 mb-3">Segnalazioni dal tracciato</p>
+            <ul className="space-y-2">
+              {hike.difficultyMarkers.map((m, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  {m.severity === 'danger' ? <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    : m.severity === 'warning' ? <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    : <Info className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />}
+                  <span className="text-stone-600">{m.text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-stone-400 mt-2">Estratte automaticamente dai waypoint/commenti del file GPX importato (Komoot/AllTrails)</p>
           </div>
         )}
 
@@ -671,6 +655,11 @@ export default function PlannedHikePage() {
           </div>
         </div>
 
+        {/* Fenologia della vegetazione + specie arboree/flora (OSM) */}
+        {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
+          <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+        )}
+
         {/* Assessment */}
         {hike.assessment && (
           <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
@@ -679,42 +668,24 @@ export default function PlannedHikePage() {
           </div>
         )}
 
-        {/* Qualità ed esperienza — TrailScore/CTS + Beauty/TEI, quanto vale il percorso */}
+        {/* Punteggi — SI, Safety Score, Comfort TrailScore, Ombra/acqua */}
         {hasGps && (
-          <div className="space-y-2">
-            <h2 className="font-display text-xl font-semibold text-stone-700">Quanto vale il percorso</h2>
-            {(ctsResult || (hike as { cachedTrailScore?: number }).cachedTrailScore != null) ? (
-              <ComfortTrailScoreWidget
-                result={ctsResult}
-                cached={(hike as { cachedTrailScore?: number }).cachedTrailScore}
-                beautyScore={(hike as { cachedBeautyScore?: BeautyScore }).cachedBeautyScore}
-              />
-            ) : (
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 flex items-center justify-between gap-4">
-                <p className="text-sm text-stone-500">Il punteggio non è ancora stato calcolato per questa escursione.</p>
-                <button
-                  onClick={handleComputeCts}
-                  disabled={ctsComputing}
-                  className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
-                >
-                  {ctsComputing
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Calcolo…</>
-                    : <><RefreshCw className="w-4 h-4" /> Calcola CTS</>
-                  }
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Rischio intrinseco del percorso — geometrico/statico (quota, terreno,
-            fauna), distinto dalla "Percorribilità attuale" più sopra che è
-            dinamica/ambientale */}
-        {hasGps && safetyScore && (
-          <div className="space-y-2">
-            <h2 className="font-display text-xl font-semibold text-stone-700">Rischi del terreno</h2>
-            <SafetyScoreWidget safety={safetyScore} />
-          </div>
+          <ScoresSection
+            si={{
+              si: si.result?.si, label: si.result?.label, signals: si.result?.signals,
+              partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched,
+              onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError,
+            }}
+            safety={safetyScore}
+            cts={{
+              result: ctsResult,
+              cached: (hike as { cachedTrailScore?: number }).cachedTrailScore,
+              beautyScore: (hike as { cachedBeautyScore?: BeautyScore }).cachedBeautyScore,
+              computing: ctsComputing,
+              onCompute: handleComputeCts,
+            }}
+            shadeWater={{ data: s2.data, loading: s2.loading }}
+          />
         )}
 
         {/* POI-focused Wikipedia: articles for named elements physically on the route */}

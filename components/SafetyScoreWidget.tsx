@@ -1,17 +1,16 @@
 'use client'
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, AlertTriangle, Info, Shield, Zap } from 'lucide-react'
+import { AlertTriangle, Info, Shield, Zap } from 'lucide-react'
 import type { SafetyScore, WildlifeRisk, SafetyRiskItem } from '@/lib/safetyScore'
+import { InfoTooltip } from '@/components/InfoTooltip'
+import { ScoreTile } from '@/components/ScoreTile'
 
-function MiniBar({ value, max = 100, color }: { value: number; max?: number; color: string }) {
-  return (
-    <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden flex-1">
-      <div
-        className="h-full rounded-full transition-all"
-        style={{ width: `${Math.min(value / max * 100, 100)}%`, backgroundColor: color }}
-      />
-    </div>
-  )
+const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  altitude: 'Rischi legati alla quota massima raggiunta: mal di montagna, meteo instabile, temperature più basse.',
+  terrain: 'Difficoltà del terreno stimata dal dislivello e dalla distanza (indice di impegno tecnico).',
+  exposure: 'Durata dell\'escursione e rischio di trovarsi ancora in cammino con poca luce o tempo avverso.',
+  wildlife: 'Fauna selvatica potenzialmente presente nella zona in base a regione, quota e stagione.',
+  logistics: 'Difficoltà di un eventuale soccorso: quota, lunghezza del percorso, autonomia necessaria.',
 }
 
 function CategoryBar({
@@ -19,11 +18,13 @@ function CategoryBar({
   name,
   score,
   color,
+  description,
 }: {
   icon: string
   name: string
   score: number
   color: string
+  description: string
 }) {
   return (
     <div className="space-y-1">
@@ -31,6 +32,7 @@ function CategoryBar({
         <span className="flex items-center gap-1.5">
           <span>{icon}</span>
           {name}
+          <InfoTooltip text={description} />
         </span>
         <span className="font-semibold">{Math.round(score)}</span>
       </div>
@@ -157,87 +159,33 @@ export function SafetyScoreWidget({ safety }: { safety: SafetyScore | null }) {
   if (!safety) return null
 
   return (
-    <div className="rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4" style={{ background: safety.color + '14', borderBottom: `2px solid ${safety.color}30` }}>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Safety Score</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-black" style={{ color: safety.color }}>
-              {safety.overall}
-            </span>
-            <span className="text-sm font-semibold" style={{ color: safety.color }}>
-              {safety.label}
-            </span>
-          </div>
+    <ScoreTile
+      title="Safety Score"
+      score={safety.overall}
+      label={safety.label}
+      color={safety.color}
+      badge="SAFETY"
+      open={open}
+      onToggle={() => setOpen(v => !v)}
+    >
+      <div className="space-y-5">
+        <div className="space-y-3">
+          <CategoryBar icon="🏔" name="Quota" score={safety.categories.altitude.score} color="#8b5cf6" description={CATEGORY_DESCRIPTIONS.altitude} />
+          <CategoryBar icon="🗺" name="Terreno" score={safety.categories.terrain.score} color="#ec4899" description={CATEGORY_DESCRIPTIONS.terrain} />
+          <CategoryBar icon="☀️" name="Esposizione" score={safety.categories.exposure.score} color="#f59e0b" description={CATEGORY_DESCRIPTIONS.exposure} />
+          <CategoryBar icon="🦁" name="Fauna" score={safety.categories.wildlife.score} color="#10b981" description={CATEGORY_DESCRIPTIONS.wildlife} />
+          <CategoryBar icon="🚁" name="Logistica" score={safety.categories.logistics.score} color="#0ea5e9" description={CATEGORY_DESCRIPTIONS.logistics} />
         </div>
-        <div className="ml-auto text-xs font-bold px-2 py-1 rounded-lg text-white" style={{ backgroundColor: safety.color }}>
-          SAFETY
+
+        <WildlifeLegend risks={safety.wildlifeRisks} />
+
+        <div className="space-y-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+            ⚠️ Analisi rischi
+          </p>
+          <RisksLegend risks={safety.allRisks} />
         </div>
       </div>
-
-      {/* Summary bars */}
-      <div className="px-5 py-4 bg-white space-y-3">
-        <CategoryBar
-          icon="🏔"
-          name="Quota"
-          score={safety.categories.altitude.score}
-          color="#8b5cf6"
-        />
-        <CategoryBar
-          icon="🗺"
-          name="Terreno"
-          score={safety.categories.terrain.score}
-          color="#ec4899"
-        />
-        <CategoryBar
-          icon="☀️"
-          name="Esposizione"
-          score={safety.categories.exposure.score}
-          color="#f59e0b"
-        />
-        <CategoryBar
-          icon="🦁"
-          name="Fauna"
-          score={safety.categories.wildlife.score}
-          color="#10b981"
-        />
-        <CategoryBar
-          icon="🚁"
-          name="Logistica"
-          score={safety.categories.logistics.score}
-          color="#0ea5e9"
-        />
-
-        {/* Toggle details */}
-        <button
-          onClick={() => setOpen(v => !v)}
-          className="w-full flex items-center justify-center gap-1 pt-1 text-[11px] text-stone-400 hover:text-stone-600 transition-colors"
-        >
-          {open ? (
-            <>
-              <ChevronUp className="w-3.5 h-3.5" /> Nascondi dettagli
-            </>
-          ) : (
-            <>
-              <ChevronDown className="w-3.5 h-3.5" /> Mostra dettagli
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Expanded details */}
-      {open && (
-        <div className="border-t border-stone-100 bg-stone-50 px-5 py-4 space-y-6">
-          <WildlifeLegend risks={safety.wildlifeRisks} />
-          <div className="space-y-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
-              ⚠️ Analisi rischi
-            </p>
-            <RisksLegend risks={safety.allRisks} />
-          </div>
-        </div>
-      )}
-    </div>
+    </ScoreTile>
   )
 }
