@@ -54,7 +54,10 @@ export async function GET(req: NextRequest) {
     const matchedId = await withTimeout(
       findTrailForPolyline(polyline as [number, number][]),
       MATCH_TIMEOUT_MS,
-    ).catch(() => null)
+    ).catch((err) => {
+      console.error('[trails/sentinel2] findTrailForPolyline failed or timed out', err)
+      return null
+    })
 
     if (!matchedId) {
       const body: Sentinel2ApiResponse = { matched: false }

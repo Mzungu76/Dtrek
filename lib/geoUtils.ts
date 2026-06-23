@@ -7,10 +7,35 @@ export function haversineM(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+const EARTH_R_M = 6371000
+
+function toLocalXY(lat: number, lon: number, lat0: number): [number, number] {
+  const x = (lon * Math.PI / 180) * Math.cos(lat0 * Math.PI / 180) * EARTH_R_M
+  const y = (lat * Math.PI / 180) * EARTH_R_M
+  return [x, y]
+}
+
+/** Min distance in meters from (lat, lon) to the segment [a, b], via a local equirectangular projection (accurate well under 1% error at the segment lengths involved here). */
+function distToSegmentM(lat: number, lon: number, a: [number, number], b: [number, number]): number {
+  const lat0 = (a[0] + b[0]) / 2
+  const [px, py] = toLocalXY(lat, lon, lat0)
+  const [ax, ay] = toLocalXY(a[0], a[1], lat0)
+  const [bx, by] = toLocalXY(b[0], b[1], lat0)
+  const dx = bx - ax, dy = by - ay
+  const lenSq = dx * dx + dy * dy
+  if (lenSq === 0) return haversineM(lat, lon, a[0], a[1])
+  let t = ((px - ax) * dx + (py - ay) * dy) / lenSq
+  t = Math.max(0, Math.min(1, t))
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+}
+
+/** Min distance in meters from (lat, lon) to the polyline `track`, measured against every segment (not just vertices) so a point between two sparse track vertices is measured against the line connecting them. */
 export function minDistToTrack(lat: number, lon: number, track: [number, number][]): number {
+  if (track.length === 0) return Infinity
+  if (track.length === 1) return haversineM(lat, lon, track[0][0], track[0][1])
   let min = Infinity
-  for (const [tlat, tlon] of track) {
-    const d = haversineM(lat, lon, tlat, tlon)
+  for (let i = 1; i < track.length; i++) {
+    const d = distToSegmentM(lat, lon, track[i - 1], track[i])
     if (d < min) min = d
   }
   return min

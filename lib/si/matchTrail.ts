@@ -117,7 +117,7 @@ export async function findTrailForPolyline(polyline: [number, number][]): Promis
 
   const [minLatS, minLonS, maxLatS, maxLonS] = computeBbox(polyline, BBOX_PREFILTER_PAD).split(',')
   const queryBbox: Bbox = { minLat: Number(minLatS), minLon: Number(minLonS), maxLat: Number(maxLatS), maxLon: Number(maxLonS) }
-  const sample = sampleEvery(polyline, 12)
+  const sample = polyline
 
   const candidateIds: number[] = []
   for (let page = 0; page < TRAILS_SCAN_MAX_PAGES; page++) {
@@ -126,7 +126,8 @@ export async function findTrailForPolyline(polyline: [number, number][]): Promis
       .from('trails')
       .select('osm_relation_id, bbox')
       .range(offset, offset + TRAILS_SCAN_PAGE - 1)
-    if (error || !data || data.length === 0) break
+    if (error) { console.error('[matchTrail] trails bbox scan page', page, 'failed', error); break }
+    if (!data || data.length === 0) break
 
     for (const row of data) {
       const rowBbox = row.bbox as Bbox | null
