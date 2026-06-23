@@ -101,13 +101,21 @@ self.addEventListener('fetch', (event) => {
   // ── App pages: stale-while-revalidate ─────────────────────────────────────
   event.respondWith(
     caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      });
+      const fetchPromise = fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => new Response(
+          '<!DOCTYPE html><html lang="it"><meta charset="utf-8"><body style="font-family:sans-serif;text-align:center;padding:3rem 1rem;">' +
+          '<h1>Sei offline</h1><p>Controlla la connessione e riprova.</p>' +
+          '<button onclick="location.reload()" style="padding:.5rem 1.5rem;border-radius:.5rem;border:1px solid #ccc;">Riprova</button>' +
+          '</body></html>',
+          { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        ));
       return cached ?? fetchPromise;
     })
   );
