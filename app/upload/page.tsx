@@ -6,6 +6,7 @@ import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivity } from '@/lib/blobStore'
 import { parseGpx } from '@/lib/gpxParser'
+import { classifyMarkers } from '@/lib/difficultyMarkers'
 import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
@@ -381,6 +382,7 @@ interface ParsedGpxData {
   altitudeMin:          number
   estimatedTimeSeconds: number
   trackPoints:          import('@/lib/tcxParser').TrackPoint[]
+  difficultyMarkerCandidates: import('@/lib/difficultyMarkers').DifficultyMarkerCandidate[]
 }
 
 function GpxUploader() {
@@ -421,6 +423,7 @@ function GpxUploader() {
         plannedDate:  date || undefined,
         fileName:     fileName,
         createdAt:    new Date().toISOString(),
+        difficultyMarkers: classifyMarkers(parsed.difficultyMarkerCandidates ?? []),
       }
 
       // Prefetch POIs during save so the detail page shows them immediately.

@@ -4,6 +4,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 import { POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
+import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 
 interface Props {
   trackPoints: TrackPoint[]
@@ -11,7 +12,20 @@ interface Props {
   showGradient?: boolean
   pois?: PoiItem[]
   wikiPages?: WikiPage[]
+  difficultyMarkers?: ClassifiedDifficultyMarker[]
   planned?: boolean
+}
+
+const SEVERITY_COLOR: Record<ClassifiedDifficultyMarker['severity'], string> = {
+  danger: '#dc2626',
+  warning: '#f59e0b',
+  info: '#3b82f6',
+}
+
+const SEVERITY_EMOJI: Record<ClassifiedDifficultyMarker['severity'], string> = {
+  danger: '⚠️',
+  warning: '⚠️',
+  info: 'ℹ️',
 }
 
 // Slope → color (green=easy, yellow=moderate, orange=steep, red=extreme)
@@ -38,12 +52,14 @@ export default function MapView({
   showGradient = false,
   pois = [],
   wikiPages = [],
+  difficultyMarkers = [],
   planned = false,
 }: Props) {
-  const mapRef       = useRef<HTMLDivElement>(null)
-  const mapInstance  = useRef<any>(null)
-  const poiLayer     = useRef<any[]>([])
-  const wikiLayer    = useRef<any[]>([])
+  const mapRef          = useRef<HTMLDivElement>(null)
+  const mapInstance     = useRef<any>(null)
+  const poiLayer        = useRef<any[]>([])
+  const wikiLayer       = useRef<any[]>([])
+  const difficultyLayer = useRef<any[]>([])
   const [mapReady, setMapReady] = useState(false)
 
   // Main map init effect
@@ -211,6 +227,35 @@ export default function MapView({
       }
     })
   }, [wikiPages, mapReady])
+
+  // Difficulty-marker layer — tratti difficili dal GPX importato (Komoot/
+  // AllTrails waypoint & track comments classificati da lib/difficultyMarkers.ts)
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+
+    import('leaflet').then(L => {
+      difficultyLayer.current.forEach((m: any) => m.remove())
+      difficultyLayer.current = []
+
+      for (const marker of difficultyMarkers) {
+        const color = SEVERITY_COLOR[marker.severity]
+        const icon = L.divIcon({
+          html: `<div style="background:${color};color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35)">${SEVERITY_EMOJI[marker.severity]}</div>`,
+          iconSize: [26, 26], iconAnchor: [13, 13], className: '',
+        })
+        const popup = `
+          <div style="max-width:220px;font-size:12px;line-height:1.4">
+            <b style="color:${color}">${marker.severity === 'danger' ? 'Pericolo' : marker.severity === 'warning' ? 'Attenzione' : 'Info'}</b>
+            <div style="color:#374151;margin-top:4px">${marker.text}</div>
+          </div>`
+
+        const m = L.marker([marker.lat, marker.lon], { icon })
+          .addTo(mapInstance.current)
+          .bindPopup(popup, { maxWidth: 240 })
+        difficultyLayer.current.push(m)
+      }
+    })
+  }, [difficultyMarkers, mapReady])
 
   const hasGps = trackPoints.some(p => p.lat !== undefined)
 

@@ -1,8 +1,8 @@
 // Community signal collector — nearby OSM Notes (hazard/condition reports
-// from any OSM contributor) plus DTrek's own trail reviews. `trail_reviews`
-// does not exist yet in this schema (no excursions/trail_reviews table) —
-// the query is kept here for forward compatibility and is wrapped so a
-// missing-table error (Postgres 42P01) degrades to a neutral 0, never throws.
+// from any OSM contributor) plus difficulty markers extracted from imported
+// GPX files (Komoot/AllTrails waypoint & track comments, see
+// lib/difficultyMarkers.ts). No internal DTrek review system: the source is
+// always either OSM's own community data or the hiker's own GPX track.
 import { supabase } from '@/lib/supabase'
 import { haversineM } from '@/lib/geoUtils'
 import type { CommunitySignal, SignalContext } from '@/lib/si/types'
@@ -10,7 +10,8 @@ import type { CommunitySignal, SignalContext } from '@/lib/si/types'
 const TIMEOUT_MS = 5000
 const NOTES_RADIUS_M = 200
 const NOTES_PENALTY_CAP = -40
-const REVIEWS_RECENT_MONTHS = 3
+const MARKERS_RADIUS_M = 200
+const MARKERS_PENALTY_CAP = -40
 
 interface OsmNoteFeature {
   geometry: { coordinates: [number, number] } // [lon, lat]
@@ -18,9 +19,9 @@ interface OsmNoteFeature {
 }
 
 export async function collectCommunitySignal(_osmRelationId: number, ctx: SignalContext): Promise<CommunitySignal> {
-  const [notes, dtrekReviewsScore] = await Promise.all([
+  const [notes, difficultyMarkers] = await Promise.all([
     fetchNearbyOsmNotes(ctx),
-    fetchDtrekReviewsScore(_osmRelationId),
+    fetchNearbyDifficultyMarkers(ctx),
   ])
 
   let osmNotesPenalty = 0
@@ -29,7 +30,13 @@ export async function collectCommunitySignal(_osmRelationId: number, ctx: Signal
   }
   osmNotesPenalty = Math.max(osmNotesPenalty, NOTES_PENALTY_CAP)
 
-  return { osmNotesPenalty, osmNotesDetails: notes, dtrekReviewsScore }
+  let difficultyMarkersPenalty = 0
+  for (const m of difficultyMarkers) {
+    difficultyMarkersPenalty += markerPenaltyFor(m.severity)
+  }
+  difficultyMarkersPenalty = Math.max(difficultyMarkersPenalty, MARKERS_PENALTY_CAP)
+
+  return { osmNotesPenalty, osmNotesDetails: notes, difficultyMarkersPenalty, difficultyMarkersDetails: difficultyMarkers }
 }
 
 async function fetchNearbyOsmNotes(ctx: SignalContext): Promise<Array<{ text: string; date: string; distanceM: number }>> {
@@ -64,23 +71,32 @@ function notePenaltyFor(dateStr: string): number {
   return -5
 }
 
-async function fetchDtrekReviewsScore(osmRelationId: number): Promise<number> {
+async function fetchNearbyDifficultyMarkers(
+  ctx: SignalContext,
+): Promise<Array<{ text: string; severity: 'info' | 'warning' | 'danger'; distanceM: number }>> {
   try {
+    const { minLat, maxLat, minLon, maxLon } = ctx.bbox
     const { data, error } = await supabase
-      .from('trail_reviews')
-      .select('ne_e_valsa_la_pena, created_at')
-      .eq('osm_relation_id', osmRelationId)
-    if (error) return 0
-    if (!data) return 0
+      .from('trail_difficulty_markers')
+      .select('lat, lon, source_text, severity')
+      .gte('lat', minLat).lte('lat', maxLat)
+      .gte('lon', minLon).lte('lon', maxLon)
+    if (error || !data) return []
 
-    let score = 0
-    for (const row of data) {
-      const months = (Date.now() - new Date(row.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30)
-      if (months >= REVIEWS_RECENT_MONTHS) continue
-      score += row.ne_e_valsa_la_pena ? 10 : -20
-    }
-    return score
+    return data
+      .map(m => ({
+        text: m.source_text as string,
+        severity: m.severity as 'info' | 'warning' | 'danger',
+        distanceM: Math.round(haversineM(ctx.centroid.lat, ctx.centroid.lon, m.lat as number, m.lon as number)),
+      }))
+      .filter(m => m.distanceM <= MARKERS_RADIUS_M)
   } catch {
-    return 0
+    return []
   }
+}
+
+function markerPenaltyFor(severity: 'info' | 'warning' | 'danger'): number {
+  if (severity === 'danger') return -20
+  if (severity === 'warning') return -10
+  return 0
 }

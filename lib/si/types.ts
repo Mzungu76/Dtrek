@@ -45,14 +45,20 @@ export interface SatelliteSignal {
 }
 
 export interface ActivitySignal {
-  dtrekBonus: number     // 0 | +5 | +15 (DTrek activity/planned-hike match recency)
+  dtrekBonus: number     // 0 | +5 | +15 (DTrek *completed activity* match recency — never from planned/imported hikes)
   heatmapPenalty: number // -10 fixed — TODO: Strava heatmap tile analysis
 }
 
 export interface CommunitySignal {
   osmNotesPenalty: number
   osmNotesDetails: Array<{ text: string; date: string; distanceM: number }>
-  dtrekReviewsScore: number
+  // Penalty from difficulty markers extracted from imported GPX files
+  // (Komoot/AllTrails waypoint & track comments) near this trail — see
+  // lib/difficultyMarkers.ts and lib/si/signals/communitySignals.ts.
+  // Never positive: a GPX comment never says a trail "was worth it", only
+  // flags hazards.
+  difficultyMarkersPenalty: number
+  difficultyMarkersDetails: Array<{ text: string; severity: 'info' | 'warning' | 'danger'; distanceM: number }>
 }
 
 export interface SISignals {
@@ -119,5 +125,5 @@ export interface SignalContext {
   elevationLoss: number | null
   osmTags: Record<string, string>
   osmLastModified: string | null
-  matchedActivity: { id: string; recencyDate: string; source: 'activity' | 'planned' } | null
+  matchedActivity: { id: string; recencyDate: string; source: 'activity' } | null
 }

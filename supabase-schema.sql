@@ -70,6 +70,26 @@ CREATE INDEX IF NOT EXISTS idx_planned_created_at   ON planned_hikes (created_at
 CREATE INDEX IF NOT EXISTS idx_planned_planned_date ON planned_hikes (planned_date ASC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_planned_user_id      ON planned_hikes (user_id);
 
+-- ── Tratti difficili segnalati nei file GPX importati (Komoot/AllTrails) ───
+-- Waypoint/commenti del tracciato classificati per gravità — vedi
+-- lib/difficultyMarkers.ts. Alimentano la componente Community del SI
+-- (lib/si/signals/communitySignals.ts), interrogata per prossimità
+-- geografica e non per FK rigida.
+CREATE TABLE IF NOT EXISTS trail_difficulty_markers (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  planned_hike_id TEXT REFERENCES planned_hikes(id) ON DELETE CASCADE,
+  lat             DOUBLE PRECISION NOT NULL,
+  lon             DOUBLE PRECISION NOT NULL,
+  source          TEXT NOT NULL,
+  source_text     TEXT NOT NULL,
+  severity        TEXT NOT NULL,
+  keywords        TEXT[] NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_difficulty_markers_planned_hike ON trail_difficulty_markers (planned_hike_id);
+CREATE INDEX IF NOT EXISTS idx_difficulty_markers_latlon       ON trail_difficulty_markers (lat, lon);
+
 
 -- ── Impostazioni utente (chiave API Claude, abbonamento) ────
 CREATE TABLE IF NOT EXISTS user_settings (

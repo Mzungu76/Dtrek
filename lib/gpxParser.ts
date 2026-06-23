@@ -1,4 +1,5 @@
 import type { TrackPoint } from './tcxParser'
+import type { DifficultyMarkerCandidate } from './difficultyMarkers'
 
 export interface GpxActivity {
   id: string
@@ -11,6 +12,42 @@ export interface GpxActivity {
   altitudeMin: number
   estimatedTimeSeconds: number
   trackPoints: TrackPoint[]
+  // Raw waypoint/track-comment candidates for the difficulty-marker
+  // classifier (lib/difficultyMarkers.ts) — not yet filtered by keyword.
+  difficultyMarkerCandidates: DifficultyMarkerCandidate[]
+}
+
+// Komoot/AllTrails annotate points of interest and hazards along the track
+// either as standalone <wpt> nodes or, more rarely, as <cmt>/<desc> directly
+// on a <trkpt>. Both end up as candidates for the difficulty-marker
+// classifier — most will simply not match any hazard keyword and get
+// dropped there.
+function extractDifficultyMarkerCandidates(doc: Document): DifficultyMarkerCandidate[] {
+  const candidates: DifficultyMarkerCandidate[] = []
+
+  for (const el of Array.from(doc.querySelectorAll('wpt'))) {
+    const lat = parseFloat(el.getAttribute('lat') ?? '')
+    const lon = parseFloat(el.getAttribute('lon') ?? '')
+    if (isNaN(lat) || isNaN(lon)) continue
+    const name = el.querySelector('name')?.textContent?.trim() ?? ''
+    const desc = el.querySelector('desc')?.textContent?.trim() ?? ''
+    const cmt  = el.querySelector('cmt')?.textContent?.trim() ?? ''
+    const text = [name, desc, cmt].filter(Boolean).join(' — ')
+    if (text) candidates.push({ lat, lon, text, source: 'gpx_waypoint' })
+  }
+
+  for (const el of Array.from(doc.querySelectorAll('trkpt'))) {
+    const desc = el.querySelector('desc')?.textContent?.trim() ?? ''
+    const cmt  = el.querySelector('cmt')?.textContent?.trim() ?? ''
+    const text = [desc, cmt].filter(Boolean).join(' — ')
+    if (!text) continue
+    const lat = parseFloat(el.getAttribute('lat') ?? '')
+    const lon = parseFloat(el.getAttribute('lon') ?? '')
+    if (isNaN(lat) || isNaN(lon)) continue
+    candidates.push({ lat, lon, text, source: 'gpx_track_cmt' })
+  }
+
+  return candidates
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -98,5 +135,6 @@ export function parseGpx(xmlText: string): GpxActivity {
     altitudeMin,
     estimatedTimeSeconds,
     trackPoints,
+    difficultyMarkerCandidates: extractDifficultyMarkerCandidates(doc),
   }
 }
