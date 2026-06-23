@@ -93,7 +93,8 @@ export async function GET(req: NextRequest) {
 
     const result = await withTimeout(computeSentinel2(osmRelationId, trailPoints), COMPUTE_TIMEOUT_MS)
     return NextResponse.json(result satisfies Sentinel2ApiResponse)
-  } catch {
+  } catch (err) {
+    console.error('[trails/sentinel2] computeSentinel2 failed or timed out', err)
     return NextResponse.json({ error: 'Impossibile calcolare i dati Sentinel-2' }, { status: 502 })
   }
 }

@@ -582,7 +582,9 @@ export default function PlannedHikePage() {
             <h2 className="font-display text-xl font-semibold text-stone-700">Condizioni attuali</h2>
             {si.notMatched
               ? <p className="text-sm text-stone-400">Sentiero non identificato — impossibile calcolare l&apos;indice di sicurezza.</p>
-              : <SIBadge si={si.result?.si} label={si.result?.label} signals={si.result?.signals} partial={si.result?.partial} loading={si.loading} expanded />}
+              : !si.loading && !si.result
+                ? <p className="text-sm text-stone-400">Impossibile calcolare l&apos;indice di sicurezza in questo momento — riprova più tardi.</p>
+                : <SIBadge si={si.result?.si} label={si.result?.label} signals={si.result?.signals} partial={si.result?.partial} loading={si.loading} expanded />}
           </div>
         )}
 

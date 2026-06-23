@@ -9,7 +9,9 @@ import { computeSI } from '@/lib/si/computeSI'
 import { findTrailForPolyline } from '@/lib/si/matchTrail'
 import type { SIApiResponse } from '@/lib/si/types'
 
-const COMPUTE_TIMEOUT_MS = 8000
+export const maxDuration = 30
+
+const COMPUTE_TIMEOUT_MS = 15000
 const MATCH_TIMEOUT_MS = 4000
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -63,7 +65,8 @@ export async function GET(req: NextRequest) {
   try {
     const result = await withTimeout(computeSI(osmRelationId), COMPUTE_TIMEOUT_MS)
     return NextResponse.json(result satisfies SIApiResponse)
-  } catch {
+  } catch (err) {
+    console.error('[trails/si] computeSI failed or timed out', err)
     return NextResponse.json({ error: 'Impossibile calcolare l\'indice di sicurezza' }, { status: 502 })
   }
 }
