@@ -11,7 +11,8 @@ import PhotoMosaic from '@/components/PhotoMosaic'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
 import { SIBadge } from '@/components/SIBadge'
-import { useSI } from '@/lib/si/useSI'
+import { Sentinel2Panel } from '@/components/Sentinel2Panel'
+import { useSI, useSentinel2 } from '@/lib/si/useSI'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
@@ -185,7 +186,8 @@ export default function PlannedHikePage() {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [hike])
 
-  const si = useSI({ polyline: hike?.routePolyline })
+  const si = useSI({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
+  const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
 
   useEffect(() => {
     getPlannedById(id).then(h => {
@@ -585,6 +587,7 @@ export default function PlannedHikePage() {
               : !si.loading && !si.result
                 ? <p className="text-sm text-stone-400">Impossibile calcolare l&apos;indice di sicurezza in questo momento — riprova più tardi.</p>
                 : <SIBadge si={si.result?.si} label={si.result?.label} signals={si.result?.signals} partial={si.result?.partial} loading={si.loading} expanded />}
+            <Sentinel2Panel data={s2.data} loading={s2.loading} />
           </div>
         )}
 

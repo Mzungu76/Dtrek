@@ -1,15 +1,21 @@
 // Same dual-mode contract as /api/trails/si (?osm_relation_id= fast path,
-// ?polyline= slow path with { matched: false } on no match). A full
-// Sentinel-2 recompute is expensive (Sentinel-2 snapshot + 12 MODIS monthly
-// reads from Microsoft Planetary Computer when the 90-day series cache
-// expires), well past a comfortable edge request budget — so when the
-// cached row is stale but still usable, this route fires the recompute in
-// the background and answers immediately with the stale data tagged
-// { stale: true }, the same pattern app/api/pois/route.ts uses for its
-// poi_cache writes. A first-ever (no cache) computation still has to be
-// awaited since there's nothing to show in the meantime.
+// ?polyline=&planned_id= slow path). A full Sentinel-2 recompute is
+// expensive (Sentinel-2 snapshot + 12 MODIS monthly reads from Microsoft
+// Planetary Computer when the 90-day series cache expires), well past a
+// comfortable edge request budget — so when the cached row is stale but
+// still usable, this route fires the recompute in the background and
+// answers immediately with the stale data tagged { stale: true }, the same
+// pattern app/api/pois/route.ts uses for its poi_cache writes. A first-ever
+// (no cache) computation still has to be awaited since there's nothing to
+// show in the meantime.
+// When polyline matching finds no OSM trail and planned_id is given, falls
+// back to a standalone computation cached on the planned hike itself
+// (computeSentinel2ForPlannedHike) — so every planned hike gets Sentinel-2
+// data, OSM-backed or not. Without planned_id (legacy callers), no match
+// still replies { matched: false } (200, not an error).
 import { NextRequest, NextResponse } from 'next/server'
-import { computeSentinel2, fetchS2Cache, toSentinel2Data, SERIES_TTL_MS } from '@/lib/sentinel2/computeSentinel2'
+import { supabase } from '@/lib/supabase'
+import { computeSentinel2, computeSentinel2ForPlannedHike, fetchS2Cache, toSentinel2Data, SERIES_TTL_MS } from '@/lib/sentinel2/computeSentinel2'
 import { resolveTrailGeometry } from '@/lib/si/computeSI'
 import { findTrailForPolyline } from '@/lib/si/matchTrail'
 import type { Sentinel2ApiResponse } from '@/lib/si/types'
@@ -27,13 +33,14 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 export async function GET(req: NextRequest) {
   const osmIdParam = req.nextUrl.searchParams.get('osm_relation_id')
   const polylineParam = req.nextUrl.searchParams.get('polyline')
+  const plannedId = req.nextUrl.searchParams.get('planned_id')
 
   if (!osmIdParam && !polylineParam) {
     return NextResponse.json({ error: 'osm_relation_id o polyline richiesto' }, { status: 400 })
   }
 
-  let osmRelationId: number
-  let knownPolyline: [number, number][] | null = null
+  let osmRelationId: number | null = null
+  let polyline: [number, number][] | null = null
 
   if (osmIdParam) {
     if (!/^\d+$/.test(osmIdParam)) {
@@ -41,58 +48,79 @@ export async function GET(req: NextRequest) {
     }
     osmRelationId = Number(osmIdParam)
   } else {
-    let polyline: unknown
+    let parsed: unknown
     try {
-      polyline = JSON.parse(polylineParam as string)
+      parsed = JSON.parse(polylineParam as string)
     } catch {
       return NextResponse.json({ error: 'polyline non valido' }, { status: 400 })
     }
-    if (!Array.isArray(polyline) || polyline.length < 2) {
+    if (!Array.isArray(parsed) || parsed.length < 2) {
       return NextResponse.json({ error: 'polyline non valido' }, { status: 400 })
     }
+    polyline = parsed as [number, number][]
 
     const matchedId = await withTimeout(
-      findTrailForPolyline(polyline as [number, number][]),
+      findTrailForPolyline(polyline),
       MATCH_TIMEOUT_MS,
     ).catch((err) => {
       console.error('[trails/sentinel2] findTrailForPolyline failed or timed out', err)
       return null
     })
 
-    if (!matchedId) {
-      const body: Sentinel2ApiResponse = { matched: false }
-      return NextResponse.json(body)
+    if (matchedId) {
+      osmRelationId = matchedId
+      if (plannedId) {
+        supabase.from('planned_hikes').update({ osm_relation_id: matchedId }).eq('id', plannedId)
+          .then(({ error }) => { if (error) console.error('[trails/sentinel2] failed to persist osm_relation_id', error) })
+      }
     }
-    osmRelationId = matchedId
-    knownPolyline = polyline as [number, number][]
   }
 
   try {
-    const cache = await fetchS2Cache(osmRelationId)
-    const seriesExpired = !cache?.computedAt || Date.now() - new Date(cache.computedAt).getTime() > SERIES_TTL_MS
+    if (osmRelationId != null) {
+      const cache = await fetchS2Cache(osmRelationId)
+      const seriesExpired = !cache?.computedAt || Date.now() - new Date(cache.computedAt).getTime() > SERIES_TTL_MS
 
-    if (cache?.available && seriesExpired) {
-      resolveTrailGeometry(osmRelationId)
-        .then(geometry => {
-          const trailPoints = knownPolyline ?? geometry
-          if (trailPoints) return computeSentinel2(osmRelationId, trailPoints)
-        })
-        .catch(() => {})
-      return NextResponse.json({ ...toSentinel2Data(osmRelationId, cache), stale: true } satisfies Sentinel2ApiResponse)
+      if (cache?.available && seriesExpired) {
+        resolveTrailGeometry(osmRelationId)
+          .then(geometry => {
+            const trailPoints = polyline ?? geometry
+            if (trailPoints) return computeSentinel2(osmRelationId as number, trailPoints)
+          })
+          .catch(() => {})
+        return NextResponse.json({ ...toSentinel2Data(cache, { osmRelationId }), stale: true } satisfies Sentinel2ApiResponse)
+      }
+
+      const trailPoints = polyline ?? await resolveTrailGeometry(osmRelationId)
+      if (!trailPoints) {
+        return NextResponse.json({
+          osmRelationId, available: false, ndviMonthly: null, ndviDelta: null, ndwiCurrent: null,
+          nbrCurrent: null, eviCurrent: null, bsiCurrent: null, fireDetected: false, floodDetected: false,
+          landslideRisk: false, shadeScore: null, landscapeVariety: null, waterSources: [],
+          phenologyPeakMonth: null, computedAt: null, reason: 'no_geometry',
+        } satisfies Sentinel2ApiResponse)
+      }
+
+      const result = await withTimeout(computeSentinel2(osmRelationId, trailPoints), COMPUTE_TIMEOUT_MS)
+      return NextResponse.json(result satisfies Sentinel2ApiResponse)
     }
 
-    const trailPoints = knownPolyline ?? await resolveTrailGeometry(osmRelationId)
-    if (!trailPoints) {
-      return NextResponse.json({
-        osmRelationId, available: false, ndviMonthly: null, ndviDelta: null, ndwiCurrent: null,
-        nbrCurrent: null, eviCurrent: null, bsiCurrent: null, fireDetected: false, floodDetected: false,
-        landslideRisk: false, shadeScore: null, landscapeVariety: null, waterSources: [],
-        phenologyPeakMonth: null, computedAt: null, reason: 'no_geometry',
-      } satisfies Sentinel2ApiResponse)
+    if (plannedId && polyline) {
+      const { data: plannedRow } = await supabase
+        .from('planned_hikes')
+        .select('distance_meters, elevation_gain, elevation_loss')
+        .eq('id', plannedId)
+        .maybeSingle()
+      const distanceKm = plannedRow?.distance_meters != null ? plannedRow.distance_meters / 1000 : null
+      const result = await withTimeout(
+        computeSentinel2ForPlannedHike(plannedId, polyline, distanceKm, plannedRow?.elevation_gain ?? null, plannedRow?.elevation_loss ?? null),
+        COMPUTE_TIMEOUT_MS,
+      )
+      return NextResponse.json(result satisfies Sentinel2ApiResponse)
     }
 
-    const result = await withTimeout(computeSentinel2(osmRelationId, trailPoints), COMPUTE_TIMEOUT_MS)
-    return NextResponse.json(result satisfies Sentinel2ApiResponse)
+    const body: Sentinel2ApiResponse = { matched: false }
+    return NextResponse.json(body)
   } catch (err) {
     console.error('[trails/sentinel2] computeSentinel2 failed or timed out', err)
     return NextResponse.json({ error: 'Impossibile calcolare i dati Sentinel-2' }, { status: 502 })
