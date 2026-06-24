@@ -5,16 +5,22 @@ import type { PoiItem } from '@/lib/overpass'
 import { POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
+import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import { colorSegmentsByDtm, aspectDegToColor } from '@/lib/dtm/dtmColors'
 
 interface Props {
   trackPoints: TrackPoint[]
   height?: string
   showGradient?: boolean
+  showAspect?: boolean
+  dtmProfile?: TrailDtmProfile
   pois?: PoiItem[]
   wikiPages?: WikiPage[]
   difficultyMarkers?: ClassifiedDifficultyMarker[]
   planned?: boolean
 }
+
+const DTM_MATCH_RADIUS_M = 25
 
 const SEVERITY_COLOR: Record<ClassifiedDifficultyMarker['severity'], string> = {
   danger: '#dc2626',
@@ -50,6 +56,8 @@ export default function MapView({
   trackPoints,
   height = '400px',
   showGradient = false,
+  showAspect = false,
+  dtmProfile,
   pois = [],
   wikiPages = [],
   difficultyMarkers = [],
@@ -88,32 +96,75 @@ export default function MapView({
       }).addTo(map)
 
       const baseColor = planned ? '#0ea5e9' : '#378d44'
+      const dtmActive = dtmProfile?.source === 'lidar1m'
+      const latLons = coords.map(([lat, lon]) => ({ lat, lon }))
 
-      if (showGradient && points.some(p => p.altitudeMeters !== undefined)) {
-        // Draw per-segment colored polylines
+      if (showAspect && dtmActive) {
+        // Draw per-segment aspect-colored polylines (DTM-only — no GPX fallback exists for exposure)
+        const aspectColors = colorSegmentsByDtm(latLons, dtmProfile!, 'aspect', DTM_MATCH_RADIUS_M)
         for (let i = 0; i < coords.length - 1; i++) {
-          const p1 = points[i], p2 = points[i + 1]
-          const dist = haversineM(p1.lat!, p1.lon!, p2.lat!, p2.lon!)
-          const dEle = ((p2.altitudeMeters ?? p1.altitudeMeters ?? 0) - (p1.altitudeMeters ?? 0))
-          const slopePct = dist > 0 ? (dEle / dist) * 100 : 0
           L.polyline([coords[i], coords[i + 1]], {
-            color: slopeColor(slopePct),
+            color: aspectColors[i] ?? '#9ca3af',
             weight: 4,
             opacity: 0.9,
           }).addTo(map)
         }
-        // Add gradient legend using extend pattern
-        const LegendControl = L.Control.extend({
+        const AspectLegend = L.Control.extend({
           onAdd(): HTMLElement {
             const d = L.DomUtil.create('div', '')
             d.style.cssText = 'background:white;padding:6px 10px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,0.2)'
             d.innerHTML = [
-              '<b>Pendenza</b>',
-              '<span style="color:#22c55e">■</span> &lt;8%',
-              '<span style="color:#eab308">■</span> 8-15%',
-              '<span style="color:#f97316">■</span> 15-25%',
-              '<span style="color:#ef4444">■</span> &gt;25%',
+              '<b>Esposizione</b>',
+              `<span style="color:${aspectDegToColor(0)}">■</span> N`,
+              `<span style="color:${aspectDegToColor(90)}">■</span> E`,
+              `<span style="color:${aspectDegToColor(180)}">■</span> S`,
+              `<span style="color:${aspectDegToColor(270)}">■</span> O`,
             ].join('<br>')
+            return d
+          },
+        })
+        new AspectLegend({ position: 'bottomright' }).addTo(map)
+      } else if (showGradient && points.some(p => p.altitudeMeters !== undefined)) {
+        // Draw per-segment colored polylines — DTM slope where a sample is close enough,
+        // GPX net-elevation-delta fallback per pair otherwise (degrades per-segment, not the whole toggle)
+        const slopeColors = dtmActive ? colorSegmentsByDtm(latLons, dtmProfile!, 'slope', DTM_MATCH_RADIUS_M) : null
+        for (let i = 0; i < coords.length - 1; i++) {
+          let color = slopeColors?.[i] ?? null
+          if (!color) {
+            const p1 = points[i], p2 = points[i + 1]
+            const dist = haversineM(p1.lat!, p1.lon!, p2.lat!, p2.lon!)
+            const dEle = ((p2.altitudeMeters ?? p1.altitudeMeters ?? 0) - (p1.altitudeMeters ?? 0))
+            const slopePct = dist > 0 ? (dEle / dist) * 100 : 0
+            color = slopeColor(slopePct)
+          }
+          L.polyline([coords[i], coords[i + 1]], {
+            color,
+            weight: 4,
+            opacity: 0.9,
+          }).addTo(map)
+        }
+        // Legend: degree buckets (matching lib/trailScore.ts's slopeTerrainMult) when DTM is
+        // live, otherwise the existing percent buckets used by the GPX-only fallback.
+        const LegendControl = L.Control.extend({
+          onAdd(): HTMLElement {
+            const d = L.DomUtil.create('div', '')
+            d.style.cssText = 'background:white;padding:6px 10px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,0.2)'
+            d.innerHTML = dtmActive
+              ? [
+                  '<b>Pendenza</b>',
+                  '<span style="color:#22c55e">■</span> &lt;10°',
+                  '<span style="color:#eab308">■</span> 10-20°',
+                  '<span style="color:#f97316">■</span> 20-30°',
+                  '<span style="color:#ef4444">■</span> 30-40°',
+                  '<span style="color:#7f1d1d">■</span> &gt;40°',
+                ].join('<br>')
+              : [
+                  '<b>Pendenza</b>',
+                  '<span style="color:#22c55e">■</span> &lt;8%',
+                  '<span style="color:#eab308">■</span> 8-15%',
+                  '<span style="color:#f97316">■</span> 15-25%',
+                  '<span style="color:#ef4444">■</span> &gt;25%',
+                ].join('<br>')
             return d
           },
         })
@@ -128,8 +179,8 @@ export default function MapView({
         map.fitBounds(polyline.getBounds(), { padding: [20, 20] })
       }
 
-      // Always fit bounds (for gradient mode, fit after drawing segments)
-      if (showGradient) {
+      // Always fit bounds (for gradient/aspect mode, fit after drawing segments)
+      if (showGradient || showAspect) {
         map.fitBounds(L.polyline(coords).getBounds(), { padding: [20, 20] })
       }
 
@@ -158,7 +209,7 @@ export default function MapView({
         setMapReady(false)
       }
     }
-  }, [trackPoints, showGradient, planned])
+  }, [trackPoints, showGradient, showAspect, dtmProfile, planned])
 
   // POI layer — re-runs when pois arrive OR when map finishes initializing
   useEffect(() => {
