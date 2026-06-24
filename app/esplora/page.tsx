@@ -8,6 +8,7 @@ import { SIBadge } from '@/components/SIBadge'
 import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { ShadeWaterTile } from '@/components/ShadeWaterTile'
 import { useSI, useSentinel2 } from '@/lib/si/useSI'
+import { useFlora } from '@/lib/useFlora'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { interpolateElevations } from '@/lib/trailStats'
 import {
@@ -62,6 +63,7 @@ export default function EsploraPage() {
   const geoTimer                      = useRef<ReturnType<typeof setTimeout> | null>(null)
   const si                            = useSI({ osmId: preview?.osmId })
   const s2                            = useSentinel2({ osmId: preview?.osmId })
+  const flora                         = useFlora(preview?.geometryPolyline, preview?.altitudeMax ?? undefined)
 
   // ── Geocoding ──
   function handleQueryChange(v: string) {
@@ -342,7 +344,7 @@ export default function EsploraPage() {
                   refreshError={si.refreshError}
                   expanded
                 />
-                <PhenologyPanel data={s2.data} loading={s2.loading} flora={null} floraLoading={false} />
+                <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
                 <ShadeWaterTile data={s2.data} loading={s2.loading} />
               </div>
 
