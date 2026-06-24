@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { computeBbox } from '@/lib/geoUtils'
 import type { FloraResult } from '@/lib/floraTypes'
 
-export function useFlora(polyline?: [number, number][] | null): { data: FloraResult | null; loading: boolean } {
+export function useFlora(polyline?: [number, number][] | null, altitudeMax?: number): { data: FloraResult | null; loading: boolean } {
   const [data, setData] = useState<FloraResult | null>(null)
   const [loading, setLoading] = useState(false)
   const polylineKey = polyline ? JSON.stringify(polyline) : null
@@ -14,8 +14,9 @@ export function useFlora(polyline?: [number, number][] | null): { data: FloraRes
     let cancelled = false
     setLoading(true)
     const bbox = computeBbox(polyline, 0.005)
+    const altParam = altitudeMax ? `&altitude=${altitudeMax}` : ''
 
-    fetch(`/api/trails/flora?bbox=${encodeURIComponent(bbox)}`)
+    fetch(`/api/trails/flora?bbox=${encodeURIComponent(bbox)}${altParam}`)
       .then(res => res.json())
       .then((d: FloraResult) => { if (!cancelled) setData(d) })
       .catch(() => { if (!cancelled) setData(null) })
@@ -23,7 +24,7 @@ export function useFlora(polyline?: [number, number][] | null): { data: FloraRes
 
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [polylineKey])
+  }, [polylineKey, altitudeMax])
 
   return { data, loading }
 }

@@ -187,7 +187,7 @@ export default function PlannedHikePage() {
 
   const si = useSI({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
-  const flora = useFlora(hike?.routePolyline)
+  const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
 
   useEffect(() => {
     getPlannedById(id).then(h => {

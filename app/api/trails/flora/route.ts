@@ -19,12 +19,14 @@ export async function GET(req: NextRequest) {
   if (!bbox || bbox.split(',').length !== 4) {
     return NextResponse.json({ error: 'bbox richiesto' }, { status: 400 })
   }
+  const altitudeParam = req.nextUrl.searchParams.get('altitude')
+  const altitudeMax = altitudeParam ? Number(altitudeParam) : undefined
 
   try {
-    const result = await withTimeout(fetchFloraAlongRoute(bbox), 20_000)
+    const result = await withTimeout(fetchFloraAlongRoute(bbox, altitudeMax), 20_000)
     return NextResponse.json(result satisfies FloraResult)
   } catch (err) {
     console.error('[trails/flora] fetchFloraAlongRoute failed or timed out', err)
-    return NextResponse.json({ available: false, leafTypeDominant: null, speciesFound: [], forestCoveragePct: null } satisfies FloraResult)
+    return NextResponse.json({ available: false, leafTypeDominant: null, speciesFound: [], forestCoveragePct: null, estimatedBelt: null } satisfies FloraResult)
   }
 }

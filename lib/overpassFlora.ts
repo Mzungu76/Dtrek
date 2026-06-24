@@ -6,6 +6,7 @@
 // invent data when OSM has none.
 import { fetchOverpass } from '@/lib/overpassTrails'
 import type { FloraResult } from '@/lib/floraTypes'
+import { estimateVegetationBelt } from '@/lib/vegetationBelt'
 
 interface OverpassWayEl {
   type: 'way'
@@ -30,9 +31,12 @@ function polygonAreaApprox(geometry: Array<{ lat: number; lon: number }>): numbe
   return Math.abs(area) / 2
 }
 
-export async function fetchFloraAlongRoute(bbox: string): Promise<FloraResult> {
+export async function fetchFloraAlongRoute(bbox: string, altitudeMax?: number): Promise<FloraResult> {
   const [minLat, minLon, maxLat, maxLon] = bbox.split(',').map(Number)
   const bboxStr = `${minLat},${minLon},${maxLat},${maxLon}`
+  const estimatedBelt = altitudeMax && altitudeMax > 0
+    ? estimateVegetationBelt((minLat + maxLat) / 2, altitudeMax)
+    : null
 
   const query = `[out:json][timeout:20];
 (
@@ -46,7 +50,7 @@ export async function fetchFloraAlongRoute(bbox: string): Promise<FloraResult> {
     const ways = (data.elements ?? []).filter(e => e.type === 'way' && e.tags)
 
     if (ways.length === 0) {
-      return { available: true, leafTypeDominant: null, speciesFound: [], forestCoveragePct: null }
+      return { available: true, leafTypeDominant: null, speciesFound: [], forestCoveragePct: null, estimatedBelt }
     }
 
     let totalArea = 0
@@ -84,9 +88,10 @@ export async function fetchFloraAlongRoute(bbox: string): Promise<FloraResult> {
       leafTypeDominant,
       speciesFound: Array.from(species).slice(0, 12),
       forestCoveragePct,
+      estimatedBelt,
     }
   } catch {
-    return { available: false, leafTypeDominant: null, speciesFound: [], forestCoveragePct: null }
+    return { available: false, leafTypeDominant: null, speciesFound: [], forestCoveragePct: null, estimatedBelt: null }
   }
 }
 

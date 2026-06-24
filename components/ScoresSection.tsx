@@ -44,7 +44,7 @@ export function ScoresSection({
   return (
     <div className="space-y-3">
       <h2 className="font-display text-xl font-semibold text-stone-700">Punteggi</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
         {si.notMatched
           ? <p className="text-sm text-stone-400 col-span-full">Sentiero non identificato — impossibile calcolare l&apos;indice di sicurezza.</p>
           : <SIBadge

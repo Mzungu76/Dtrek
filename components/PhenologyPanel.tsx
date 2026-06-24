@@ -93,6 +93,8 @@ function FloraSection({ flora, loading }: { flora: FloraResult | null; loading?:
     )
   }
 
+  const belt = flora.estimatedBelt
+
   return (
     <div className="space-y-2">
       <p className="text-sm font-semibold text-stone-700 flex items-center gap-1.5"><Leaf className="w-4 h-4 text-emerald-600" /> Specie arboree e flora</p>
@@ -100,6 +102,11 @@ function FloraSection({ flora, loading }: { flora: FloraResult | null; loading?:
         <p className="text-xs text-stone-600">
           Bosco prevalente: <span className="font-semibold">{LEAF_TYPE_LABEL[flora.leafTypeDominant]}</span>
           {flora.forestCoveragePct != null && <span className="text-stone-400"> · copertura boschiva ~{flora.forestCoveragePct}%</span>}
+        </p>
+      ) : belt ? (
+        <p className="text-xs text-stone-600">
+          <span className="text-[10px] font-semibold uppercase text-amber-600 mr-1">Stima</span>
+          Tipo di bosco non mappato su OSM — in base a quota e posizione è probabile la <span className="font-semibold">{belt.label}</span>.
         </p>
       ) : (
         <p className="text-xs text-stone-400">Nessuna area boschiva rilevata via OSM lungo il percorso.</p>
@@ -110,6 +117,10 @@ function FloraSection({ flora, loading }: { flora: FloraResult | null; loading?:
             <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{s}</span>
           ))}
         </div>
+      ) : belt ? (
+        <p className="text-[11px] text-stone-500 leading-snug">
+          <span className="italic">Specie non annotate su OSM. </span>{belt.description}
+        </p>
       ) : (
         <p className="text-[11px] text-stone-400 italic">Nessuna specie o genere arboreo specifico annotato su OSM per quest&apos;area.</p>
       )}

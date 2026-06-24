@@ -34,7 +34,7 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-xs w-4 text-center">{cat.emoji}</span>
             <span className="text-xs text-stone-600 flex-1">{cat.label}</span>
-            <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.beautyCategory} />
+            <InfoTooltip text={CTS_PARAM_DESCRIPTIONS[cat.key] ?? CTS_PARAM_DESCRIPTIONS.beautyCategory} />
             <span className="text-[11px] font-semibold" style={{ color: cat.color }}>{cat.score.toFixed(1)}</span>
           </div>
           <div className="flex items-center gap-2 pl-6">
