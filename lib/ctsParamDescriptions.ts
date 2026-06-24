@@ -4,7 +4,7 @@ export const CTS_PARAM_DESCRIPTIONS: Record<string, string> = {
   v_topo: 'Valore topografico: quanto il profilo altimetrico (pendenze, dislivello per km) rende il percorso vario e interessante da camminare.',
   v_idro: 'Valore idrografico: presenza di torrenti, cascate, sorgenti o sponde di laghi lungo il tracciato.',
   v_fond: 'Valore del fondo: quanto il sentiero è su terreno naturale (sterrato, roccia) piuttosto che su asfalto o cemento.',
-  v_geo: 'Valore di geodiversità: varietà di formazioni geologiche e morfologie del terreno (stima standard, non ancora calcolata dal modello digitale del terreno).',
+  v_geo: 'Valore di geodiversità: varietà di forme del terreno stimata dal profilo altimetrico, combinando il range di quota complessivo e l\'alternanza tra tratti in salita e in discesa lungo il percorso.',
   // BeautyScore v1 categories (percorsi storici salvati prima della v2)
   natura: 'Elementi naturalistici di pregio: cime, cascate, grotte, sorgenti, ghiacciai o aree protette presenti lungo il percorso.',
   paesaggio: 'Qualità panoramica: punti panoramici, laghi, fiumi, coste o tratti di terreno aperto con vista ampia.',
