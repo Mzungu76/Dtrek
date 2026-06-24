@@ -19,6 +19,7 @@ export interface TrailScoreInputs {
   prefDurata?: number   // minutes, default 270
   hrRest?: number       // resting HR for Karvonen HII
   hrMax?: number        // max HR override (falls back to Tanaka formula)
+  avgSlopeDeg?: number  // from DTM 1m LiDAR (lib/dtm), Horn's method — independent of self-reported sacScale
 }
 
 export interface TrailScoreBreakdown {
@@ -78,6 +79,19 @@ function surfaceTerrainMult(surfaces?: string[]): number {
   return Math.max(...mults)
 }
 
+// Same physical reality as sacTerrainMult (slope) but from a measured source (DTM) rather
+// than a self-declared SAC tag — scaled to sacTerrainMult's wider range (1.00-2.50), not
+// surfaceTerrainMult's narrower one (0.90-1.20). undefined/no data -> 1.00, never the max
+// unless the slope genuinely warrants it.
+function slopeTerrainMult(avgSlopeDeg?: number): number {
+  if (avgSlopeDeg == null) return 1.00
+  if (avgSlopeDeg < 10) return 1.00
+  if (avgSlopeDeg < 20) return 1.20
+  if (avgSlopeDeg < 30) return 1.45
+  if (avgSlopeDeg < 40) return 1.80
+  return 2.20
+}
+
 function terrainLabel(sacScale?: string, surfaces?: string[]): string {
   if (sacScale) return `SAC ${sacScale}`
   if (surfaces && surfaces.length > 0) return surfaces[0]
@@ -119,7 +133,7 @@ export function computeTrailScore(
     sacScale, surfaces, avgHeartRate, userAge,
     personalDelta, hrHikeCount = 0,
     prefSforzo = 50, prefDurata = 270,
-    hrRest, hrMax,
+    hrRest, hrMax, avgSlopeDeg,
   } = inputs
 
   const distKm = distanceMeters / 1000
@@ -140,10 +154,11 @@ export function computeTrailScore(
   }
 
   // Terrain multiplier
-  const sacMult  = sacTerrainMult(sacScale)
-  const surfMult = surfaceTerrainMult(surfaces)
-  const terrMult = Math.max(sacMult, surfMult)
-  const tLabel   = terrainLabel(sacScale, surfaces)
+  const sacMult   = sacTerrainMult(sacScale)
+  const surfMult  = surfaceTerrainMult(surfaces)
+  const slopeMult = slopeTerrainMult(avgSlopeDeg)
+  const terrMult  = Math.max(sacMult, surfMult, slopeMult)
+  const tLabel    = terrainLabel(sacScale, surfaces)
 
   const tTot = (tNaismith + tDesa + tDescRaw) * altPhysioMult * terrMult
   const fStd = clamp(tTot * 2, 0, 10)
