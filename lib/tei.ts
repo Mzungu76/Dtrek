@@ -62,6 +62,7 @@ export interface TeiInput {
   osmData?:        OsmTeiData
   dtmProfile?:     TrailDtmProfile
   terrainProfile?: TrailTerrainProfile
+  inProtectedArea?: boolean
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -163,7 +164,12 @@ function proximityFactor(distM: number): number {
 
 // ── V_cult ────────────────────────────────────────────────────────────────────
 
-function computeVcult(segments: GpxSegment[], pois: PoiItem[]): number {
+// Small, capped bonus — being inside a recognized Natura2000 site (SIC/ZSC/ZPS) is itself a
+// form of acknowledged value, consistent with V_cult already rewarding recognized-value places,
+// even though it's independent of the POI-density logic below.
+const PROTECTED_AREA_BONUS = 0.5
+
+function computeVcultBase(segments: GpxSegment[], pois: PoiItem[]): number {
   const cultPois = pois.filter(p => relevanceGrade(p) > 0)
   if (cultPois.length === 0) return 2
 
@@ -194,6 +200,15 @@ function computeVcult(segments: GpxSegment[], pois: PoiItem[]): number {
 
   if (totalLength === 0) return 2
   return clamp(weightedSum / totalLength)
+}
+
+// Bonus applied uniformly on top of every exit path of computeVcultBase (not folded into the
+// loop above) so the existing POI-density logic stays byte-for-byte untouched — when
+// inProtectedArea is undefined/false this returns exactly computeVcultBase's value, same
+// no-regression discipline as Fase 1-4.
+function computeVcult(segments: GpxSegment[], pois: PoiItem[], inProtectedArea?: boolean): number {
+  const base = computeVcultBase(segments, pois)
+  return inProtectedArea ? clamp(base + PROTECTED_AREA_BONUS) : base
 }
 
 // ── V_topo ────────────────────────────────────────────────────────────────────
@@ -498,12 +513,12 @@ function computeFantr(
 // ── Main: computeTEI ──────────────────────────────────────────────────────────
 
 export function computeTEI(input: TeiInput): TeiResult {
-  const { track, elevGain, distanceMeters, pois, osmData, dtmProfile, terrainProfile } = input
+  const { track, elevGain, distanceMeters, pois, osmData, dtmProfile, terrainProfile, inProtectedArea } = input
   const elevProfile = input.elevProfile ?? []
 
   const segments = segmentGpx(track, elevProfile)
 
-  const vCult = computeVcult(segments, pois)
+  const vCult = computeVcult(segments, pois, inProtectedArea)
   const vTopo = computeVtopo(elevGain, distanceMeters, segments, dtmProfile)
   const vIdro = computeVidro(segments, pois, osmData?.waterways ?? [], osmData?.waterShore ?? [])
   const { vFond, vFondSource } = computeVfond(segments, osmData?.highways ?? [], terrainProfile)
