@@ -6,6 +6,8 @@ import type { CtsConfidence } from './trailScore'
 import { haversineM } from './geoUtils'
 import { nearestPerSegment } from './geo/nearestPoint'
 import type { TrailDtmProfile } from './dtm/trailDtmProfile'
+import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
+import type { LandCoverSurface } from './tei/landCoverSurfaceMap'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,7 @@ export interface TeiBreakdown {
   vTopo: number
   vIdro: number
   vFond: number
+  vFondSource: string
   vGeo:  number
   fAntr: number
   raw:   number
@@ -58,6 +61,7 @@ export interface TeiInput {
   pois:            PoiItem[]
   osmData?:        OsmTeiData
   dtmProfile?:     TrailDtmProfile
+  terrainProfile?: TrailTerrainProfile
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -288,13 +292,46 @@ function surfaceScore(surface: string | undefined): number {
   return SURFACE_SCORE[surface] ?? 5
 }
 
-function computeVfond(segments: GpxSegment[], highways: OsmElement[]): number {
-  if (highways.length === 0) return 5  // neutral: no surface data
+// Land-cover surface scores on the same 0-10 scale as SURFACE_SCORE above (higher = better
+// natural hiking surface) — only reached when landCoverCodeToSurface ever returns something
+// other than 'unknown' (today it always does), so this branch stays dormant until
+// USO_SUOLO_DATASET is live.
+function landCoverScore(surface: LandCoverSurface): number {
+  if (surface === 'paved') return 3
+  if (surface === 'natural') return 9
+  return 5 // 'water' / 'unknown'
+}
 
-  let totalWeight = 0
-  let totalScore = 0
+const PAVED_OSM_SURFACES = new Set(['asphalt', 'concrete', 'paved', 'paving_stones'])
 
-  for (const seg of segments) {
+// Strong contradiction only: OSM says paved but land cover says natural vegetation/water.
+// Anything weaker isn't treated as a conflict — OSM stays the primary source either way,
+// this only decides whether to flag the disagreement in vFondSource.
+function landCoverContradictsOsm(osmSurface: string, landCover: LandCoverSurface): boolean {
+  return PAVED_OSM_SURFACES.has(osmSurface) && (landCover === 'natural' || landCover === 'water')
+}
+
+type VFondSource = 'osm' | 'osm-contraddetto' | 'landcover' | 'neutro'
+
+interface VFondSegmentResult {
+  weight: number
+  score:  number
+  source: VFondSource
+}
+
+// Index-aligned, not nearest-match: terrainProfile.segments[i] comes from the exact same
+// segmentGpx(track, ..., 100) call on the same track (see lib/terrain/trailTerrainProfile.ts)
+// — no need for the nearestPerSegment match computeVtopo uses against the DTM's denser 15m
+// sampling. Falls back to undefined (identical to "no terrain data") if the two arrays ever
+// diverge in length.
+function computeVfondSegments(
+  segments: GpxSegment[],
+  highways: OsmElement[],
+  terrainProfile?: TrailTerrainProfile,
+): VFondSegmentResult[] {
+  const terrainSegs = terrainProfile?.source === 'geoportale' ? terrainProfile.segments : undefined
+
+  return segments.map((seg, i) => {
     let nearestDist = Infinity
     let nearestSurface: string | undefined
     for (const h of highways) {
@@ -304,12 +341,51 @@ function computeVfond(segments: GpxSegment[], highways: OsmElement[]): number {
         nearestSurface = h.tags.surface
       }
     }
-    totalScore += surfaceScore(nearestSurface) * seg.lengthM
-    totalWeight += seg.lengthM
+
+    const landCover = terrainSegs?.[i]?.landCoverSurface
+
+    if (nearestSurface === undefined) {
+      if (landCover && landCover !== 'unknown') {
+        return { weight: seg.lengthM, score: landCoverScore(landCover), source: 'landcover' as const }
+      }
+      return { weight: seg.lengthM, score: 5, source: 'neutro' as const }
+    }
+
+    const score = surfaceScore(nearestSurface)
+    if (landCover && landCover !== 'unknown' && landCoverContradictsOsm(nearestSurface, landCover)) {
+      return { weight: seg.lengthM, score, source: 'osm-contraddetto' as const }
+    }
+    return { weight: seg.lengthM, score, source: 'osm' as const }
+  })
+}
+
+function vFondSourceLabel(results: VFondSegmentResult[]): string {
+  const hasContradiction = results.some(r => r.source === 'osm-contraddetto')
+  const hasOsm = results.some(r => r.source === 'osm' || r.source === 'osm-contraddetto')
+  const hasLandCover = results.some(r => r.source === 'landcover')
+  if (hasContradiction) return 'osm+landcover-contraddetto'
+  if (hasOsm && hasLandCover) return 'osm+landcover'
+  if (hasLandCover) return 'landcover'
+  if (hasOsm) return 'osm'
+  return 'neutro'
+}
+
+function computeVfond(
+  segments: GpxSegment[],
+  highways: OsmElement[],
+  terrainProfile?: TrailTerrainProfile,
+): { vFond: number; vFondSource: string } {
+  const results = computeVfondSegments(segments, highways, terrainProfile)
+
+  let totalWeight = 0
+  let totalScore = 0
+  for (const r of results) {
+    totalScore += r.score * r.weight
+    totalWeight += r.weight
   }
 
-  if (totalWeight === 0) return 5
-  return clamp(totalScore / totalWeight)
+  const vFond = totalWeight === 0 ? 5 : clamp(totalScore / totalWeight)
+  return { vFond, vFondSource: vFondSourceLabel(results) }
 }
 
 // ── V_geo ─────────────────────────────────────────────────────────────────────
@@ -422,7 +498,7 @@ function computeFantr(
 // ── Main: computeTEI ──────────────────────────────────────────────────────────
 
 export function computeTEI(input: TeiInput): TeiResult {
-  const { track, elevGain, distanceMeters, pois, osmData, dtmProfile } = input
+  const { track, elevGain, distanceMeters, pois, osmData, dtmProfile, terrainProfile } = input
   const elevProfile = input.elevProfile ?? []
 
   const segments = segmentGpx(track, elevProfile)
@@ -430,7 +506,7 @@ export function computeTEI(input: TeiInput): TeiResult {
   const vCult = computeVcult(segments, pois)
   const vTopo = computeVtopo(elevGain, distanceMeters, segments, dtmProfile)
   const vIdro = computeVidro(segments, pois, osmData?.waterways ?? [], osmData?.waterShore ?? [])
-  const vFond = computeVfond(segments, osmData?.highways ?? [])
+  const { vFond, vFondSource } = computeVfond(segments, osmData?.highways ?? [], terrainProfile)
   const vGeo  = computeVgeo(segments, elevProfile, dtmProfile)
 
   const fAntr = computeFantr(
@@ -454,7 +530,7 @@ export function computeTEI(input: TeiInput): TeiResult {
     score,
     label,
     color,
-    breakdown: { vCult, vTopo, vIdro, vFond, vGeo, fAntr, raw },
+    breakdown: { vCult, vTopo, vIdro, vFond, vFondSource, vGeo, fAntr, raw },
     confidence,
     version: 2,
   }
@@ -470,19 +546,33 @@ function teiGrade(score: number): { grade: string; gradeLabel: string; color: st
   return               { grade: 'D', gradeLabel: 'Basso',          color: '#E24B4A' }
 }
 
-function mkCat(key: string, label: string, emoji: string, score: number): CategoryScore {
+function mkCat(key: string, label: string, emoji: string, score: number, reasons: string[] = []): CategoryScore {
   const g = teiGrade(score)
-  return { key, label, emoji, score, grade: g.grade, gradeLabel: g.gradeLabel, color: g.color, reasons: [] }
+  return { key, label, emoji, score, grade: g.grade, gradeLabel: g.gradeLabel, color: g.color, reasons }
+}
+
+// vFondSource is the internal label from computeVfond's vFondSourceLabel() — translates it to
+// a user-facing reason string for SIBadge/TEI breakdown UI. 'neutro' has nothing worth saying
+// (no OSM tag nearby and no land-cover data either), so it stays an empty reasons array.
+function vFondReasons(vFondSource: string): string[] {
+  switch (vFondSource) {
+    case 'osm': return ['Fondo: tag sentiero OSM']
+    case 'osm+landcover': return ['Fondo: tag sentiero OSM + uso del suolo']
+    case 'osm+landcover-contraddetto':
+      return ['Fondo: tag OSM (pavimentato) in contraddizione con l\'uso del suolo (vegetazione naturale)']
+    case 'landcover': return ['Fondo: uso del suolo (nessun tag OSM nelle vicinanze)']
+    default: return []
+  }
 }
 
 export function teiToBeautyScore(tei: TeiResult): BeautyScore {
-  const { vCult, vTopo, vIdro, vFond, vGeo, fAntr, raw } = tei.breakdown
+  const { vCult, vTopo, vIdro, vFond, vFondSource, vGeo, fAntr, raw } = tei.breakdown
   const { grade, gradeLabel, color } = teiGrade(tei.score)
   const categories: CategoryScore[] = [
     mkCat('v_cult', 'V. Culturale',    '🏛',  vCult),
     mkCat('v_topo', 'V. Topografico',  '⛰',   vTopo),
     mkCat('v_idro', 'V. Idrografico',  '💧',  vIdro),
-    mkCat('v_fond', 'V. Fondo',        '🛤',  vFond),
+    mkCat('v_fond', 'V. Fondo',        '🛤',  vFond, vFondReasons(vFondSource)),
     mkCat('v_geo',  'V. Geodiversità', '🌍',  vGeo),
   ]
   // Store penalty metadata as special categories so the widget can explain the score reduction
