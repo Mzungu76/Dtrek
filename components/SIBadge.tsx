@@ -79,6 +79,11 @@ function signalRows(s: SISignals): SignalRow[] {
       ? { icon: '⚠️', kind: 'paiLandslide', text: `${signedNum(s.satellite.landslidePenalty)} Rischio frana ufficiale PAI (classe ${s.satellite.paiLandslideClass})` }
       : { icon: '⚠️', kind: 'satelliteLandslide', text: `${signedNum(s.satellite.landslidePenalty)} Possibile rischio frana (satellite)` })
   }
+  // Rockfall sits outside the `available` gate too, same reason as flood/landslide above —
+  // it's a geologia/CARG lookup, independent of whether the Sentinel-2 fetch itself ran.
+  if (s.satellite.rockfallPenalty < 0) {
+    rows.push({ icon: '⚠️', kind: 'rockfall', text: `${signedNum(s.satellite.rockfallPenalty)} Rischio crollo roccioso da litologia CARG (classe ${s.satellite.rockfallClass})` })
+  }
 
   if (s.activity.dtrekBonus > 0) {
     rows.push({ icon: '✅', kind: 'activityDtrek', text: `${signedNum(s.activity.dtrekBonus)} Percorso recentemente registrato su DTrek` })

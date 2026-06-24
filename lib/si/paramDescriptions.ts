@@ -16,6 +16,7 @@ export const SI_PARAM_DESCRIPTIONS: Record<string, string> = {
   satelliteLandslide: 'Indice di suolo nudo/eroso (BSI) rilevato da satellite — possibile rischio frana o dissesto.',
   paiFlood: 'Classificazione ufficiale di rischio alluvione dal Piano di Assetto Idrogeologico (PAI) — sostituisce la stima satellitare quando disponibile.',
   paiLandslide: 'Classificazione ufficiale di rischio frana dal Piano di Assetto Idrogeologico (PAI) — sostituisce la stima satellitare quando disponibile.',
+  rockfall: 'Rischio di crollo roccioso stimato dalla litologia della Carta Geologica d\'Italia (CARG/ISPRA) lungo il tracciato.',
   satelliteUnavailable: 'Nessuna immagine satellitare recente sufficientemente priva di nuvole per questa zona.',
   activityDtrek: 'Bonus per un’attività DTrek registrata di recente su questo stesso percorso — segno che è stato effettivamente percorso.',
   activityHeatmap: 'Analisi dell’utilizzo recente del sentiero tramite heatmap (funzionalità non ancora disponibile, penalità fissa).',
