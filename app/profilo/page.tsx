@@ -7,6 +7,7 @@ import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blo
 import { computeTrailScore, getCtsFallback, type CtsConfidence } from '@/lib/trailScore'
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
+import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { type PoiItem } from '@/lib/overpass'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import {
@@ -298,10 +299,14 @@ function ComfortTrailScoreSection() {
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
-        const [pois, osmData] = await Promise.all([
+        const [pois, osmData, dtmProfile] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
           Promise.race([
             fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
+          Promise.race([
+            fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
             deadline,
           ]).then(r => r ?? undefined).catch(() => undefined),
         ])
@@ -318,6 +323,7 @@ function ComfortTrailScoreSection() {
           elevProfile,
           pois,
           osmData,
+          dtmProfile,
         })
         const bs = teiToBeautyScore(tei)
         const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
@@ -336,6 +342,7 @@ function ComfortTrailScoreSection() {
             prefDurata:     prefs.prefDurata ?? prefDurata,
             hrRest:         prefs.hrRest ?? hrRest,
             hrMax:          prefs.hrMax ?? hrMax ?? undefined,
+            avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
           })
           finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
         }
@@ -368,10 +375,14 @@ function ComfortTrailScoreSection() {
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
-        const [pois, osmData] = await Promise.all([
+        const [pois, osmData, dtmProfile] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
           Promise.race([
             fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
+          Promise.race([
+            fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
             deadline,
           ]).then(r => r ?? undefined).catch(() => undefined),
         ])
@@ -388,6 +399,7 @@ function ComfortTrailScoreSection() {
           elevProfile,
           pois,
           osmData,
+          dtmProfile,
         })
         const bs = teiToBeautyScore(tei)
         const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
@@ -406,6 +418,7 @@ function ComfortTrailScoreSection() {
             prefDurata:     prefs.prefDurata ?? prefDurata,
             hrRest:         prefs.hrRest ?? hrRest,
             hrMax:          prefs.hrMax ?? hrMax ?? undefined,
+            avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
           })
           finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
         }
@@ -423,10 +436,14 @@ function ComfortTrailScoreSection() {
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
-        const [pois, osmData] = await Promise.all([
+        const [pois, osmData, dtmProfile] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
           Promise.race([
             fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
+          Promise.race([
+            fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
             deadline,
           ]).then(r => r ?? undefined).catch(() => undefined),
         ])
@@ -443,6 +460,7 @@ function ComfortTrailScoreSection() {
           elevProfile,
           pois,
           osmData,
+          dtmProfile,
         })
         const bs = teiToBeautyScore(tei)
         const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
@@ -460,6 +478,7 @@ function ComfortTrailScoreSection() {
             prefDurata:     prefs.prefDurata ?? prefDurata,
             hrRest:         prefs.hrRest ?? hrRest,
             hrMax:          prefs.hrMax ?? hrMax ?? undefined,
+            avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
           })
           finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
         }

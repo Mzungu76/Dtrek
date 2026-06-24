@@ -13,6 +13,9 @@ import {
   readWindow, maskFromScl, toReflectance, ndvi, ndwi, nbr, evi, bsi, zonalMean,
   type GeoBbox,
 } from '@/lib/sentinel2/rasterIndices'
+import { PaiUnavailableError, type PaiFeature, type PaiRiskType } from '@/lib/pai/paiClient'
+import { fetchPaiPolygonsCached } from '@/lib/pai/paiCache'
+import { segmentIntersectsPolygon } from '@/lib/geo/pointInPolygon'
 
 const COLLECTION = 'sentinel-2-l2a'
 // ctx.bbox can span an entire trail (no size cap), so this matches the
@@ -23,6 +26,67 @@ const MAX_CLOUD_COVER = 60
 
 function toStacBbox(bbox: SignalContext['bbox']): StacBbox {
   return [bbox.minLon, bbox.minLat, bbox.maxLon, bbox.maxLat]
+}
+
+// "s,w,n,e" — same convention as geoUtils.ts's computeBbox / lib/geo/wfsClient.ts.
+function toPaiBbox(bbox: SignalContext['bbox']): string {
+  return `${bbox.minLat},${bbox.minLon},${bbox.maxLat},${bbox.maxLon}`
+}
+
+const PAI_RISK_RANK: Record<string, number> = { R1: 1, P1: 1, R2: 2, P2: 2, R3: 3, P3: 3, R4: 4, P4: 4, unknown: 1 }
+const PAI_RISK_PENALTY: Record<string, number> = { R1: -5, P1: -5, R2: -15, P2: -15, R3: -35, P3: -35, R4: -60, P4: -60, unknown: -5 }
+
+// Worst (highest-rank) PAI polygon of `riskType` that actually intersects the trail
+// geometry — ctx.geometry is the sparse geometry_simplified polyline (see computeSI.ts),
+// so this checks every consecutive pair, not just whether a vertex lands inside.
+function worstPaiIntersection(features: PaiFeature[], riskType: PaiRiskType, geometry: [number, number][]): PaiFeature | null {
+  let worst: PaiFeature | null = null
+  let worstRank = 0
+  for (const f of features) {
+    if (f.riskType !== riskType) continue
+    const rank = PAI_RISK_RANK[f.riskClass] ?? 1
+    if (rank <= worstRank) continue
+    for (let i = 0; i < geometry.length - 1; i++) {
+      const [latA, lonA] = geometry[i]
+      const [latB, lonB] = geometry[i + 1]
+      if (segmentIntersectsPolygon(latA, lonA, latB, lonB, f.geometry)) {
+        worst = f
+        worstRank = rank
+        break
+      }
+    }
+  }
+  return worst
+}
+
+interface PaiOverride {
+  landslidePenalty: number | null // null = no PAI polygon found, caller falls back to BSI
+  landslideClass: string | null
+  floodPenalty: number | null     // null = no PAI polygon found, caller falls back to NDWI
+  floodClass: string | null
+}
+
+const NO_PAI_OVERRIDE: PaiOverride = { landslidePenalty: null, landslideClass: null, floodPenalty: null, floodClass: null }
+
+// Never rejects — PaiUnavailableError is the expected steady state until
+// lib/geo/datasetConfig.ts's PAI_DATASET is populated with a real endpoint, and any
+// other failure (network, bad schema) must degrade to the existing satellite heuristic
+// exactly the same way, not break the whole collector.
+async function fetchPaiOverride(ctx: SignalContext): Promise<PaiOverride> {
+  try {
+    const features = await fetchPaiPolygonsCached(toPaiBbox(ctx.bbox))
+    const landslide = worstPaiIntersection(features, 'landslide', ctx.geometry)
+    const flood = worstPaiIntersection(features, 'flood', ctx.geometry)
+    return {
+      landslidePenalty: landslide ? PAI_RISK_PENALTY[landslide.riskClass] ?? -5 : null,
+      landslideClass: landslide?.riskClass ?? null,
+      floodPenalty: flood ? PAI_RISK_PENALTY[flood.riskClass] ?? -5 : null,
+      floodClass: flood?.riskClass ?? null,
+    }
+  } catch (err) {
+    if (!(err instanceof PaiUnavailableError)) console.error('[si] PAI fetch failed', err)
+    return NO_PAI_OVERRIDE
+  }
 }
 
 interface SceneIndices {
@@ -81,8 +145,15 @@ async function computeNdviOnly(item: StacItem, bbox: GeoBbox): Promise<number | 
 
 export async function collectSatelliteSignal(_osmRelationId: number, ctx: SignalContext): Promise<SatelliteSignal> {
   const neutral: SatelliteSignal = {
-    available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0, floodPenalty: 0, landslidePenalty: 0,
+    available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0,
+    floodPenalty: 0, landslidePenalty: 0, landslideSource: 'none', floodSource: 'none',
   }
+
+  // Runs alongside the Sentinel-2 fetch below (not awaited until needed) so an official
+  // PAI lookup never adds latency on top of the MPC round-trip. Independent of whether
+  // Sentinel-2 itself succeeds — see the catch block, where a PAI hit still counts even
+  // if MPC is unreachable.
+  const paiPromise = fetchPaiOverride(ctx)
 
   try {
     const now = new Date()
@@ -95,7 +166,10 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
       searchStac(COLLECTION, stacBbox, tenDaysAgo, now, { maxCloudCover: MAX_CLOUD_COVER }),
       searchStac(COLLECTION, stacBbox, priorStart, priorEnd, { maxCloudCover: MAX_CLOUD_COVER }),
     ])
-    if (!currentItem) return { ...neutral, reason: 'no_data' }
+    if (!currentItem) {
+      const pai = await paiPromise
+      return applyPaiOverride({ ...neutral, reason: 'no_data' }, pai)
+    }
 
     const [current, ndviPrior] = await Promise.all([
       computeCombinedIndices(currentItem, ctx.bbox),
@@ -104,18 +178,39 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
 
     const ndviCurrent = current.ndvi
     const ndviDelta = ndviCurrent != null && ndviPrior != null ? ndviCurrent - ndviPrior : null
+    const pai = await paiPromise
 
-    return {
+    return applyPaiOverride({
       available: true,
       ndviDeltaPenalty: ndviDeltaPenaltyFor(ndviDelta),
       ndviAbsolutePenalty: ndviAbsolutePenaltyFor(ndviCurrent),
       firePenalty: firePenaltyFor(current.nbr),
       floodPenalty: floodPenaltyFor(current.ndwi),
       landslidePenalty: landslidePenaltyFor(current.bsi),
-    }
+      landslideSource: current.bsi != null ? 'bsi' : 'none',
+      floodSource: current.ndwi != null ? 'ndwi' : 'none',
+    }, pai)
   } catch (err) {
     console.error('[si] Planetary Computer satellite signal failed', err)
-    return { ...neutral, reason: err instanceof MpcUnreachableError ? 'unreachable' : 'api_error' }
+    // An official PAI polygon is authoritative regardless of whether the Sentinel-2
+    // heuristic itself ran — don't lose it just because MPC is down.
+    const pai = await paiPromise
+    return applyPaiOverride({ ...neutral, reason: err instanceof MpcUnreachableError ? 'unreachable' : 'api_error' }, pai)
+  }
+}
+
+// Substitutes (never sums with) the BSI/NDWI-derived penalty when an official PAI
+// polygon intersects the trail — same precedence rule for both risk types.
+function applyPaiOverride(signal: SatelliteSignal, pai: PaiOverride): SatelliteSignal {
+  if (pai.landslidePenalty == null && pai.floodPenalty == null) return signal
+  return {
+    ...signal,
+    landslidePenalty: pai.landslidePenalty ?? signal.landslidePenalty,
+    landslideSource: pai.landslidePenalty != null ? 'pai' : signal.landslideSource,
+    paiLandslideClass: pai.landslideClass ?? undefined,
+    floodPenalty: pai.floodPenalty ?? signal.floodPenalty,
+    floodSource: pai.floodPenalty != null ? 'pai' : signal.floodSource,
+    paiFloodClass: pai.floodClass ?? undefined,
   }
 }
 

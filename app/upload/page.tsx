@@ -13,6 +13,7 @@ import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
 import { type PoiItem } from '@/lib/overpass'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
+import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTrailScore } from '@/lib/trailScore'
 import { computeBbox } from '@/lib/geoUtils'
@@ -94,6 +95,10 @@ function ActivityUploader() {
           .map(p => [p.lat!, p.lon!] as [number, number])
         if (gps.length >= 2) {
           const deadline = new Promise<null>(r => setTimeout(() => r(null), 18000))
+          const dtmPromise = Promise.race([
+            fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined)
           const rawPois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline]).then(r => r ?? [])
           const pois = rawPois as PoiItem[]
           const bbox = computeBbox(gps)
@@ -104,6 +109,7 @@ function ActivityUploader() {
             fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
             deadline,
           ]).then(r => r ?? undefined).catch(() => undefined)
+          const dtmProfile = await dtmPromise
           const tei = computeTEI({
             track: gps,
             elevGain: parsedActivity.elevationGain,
@@ -112,6 +118,7 @@ function ActivityUploader() {
             elevProfile,
             pois,
             osmData,
+            dtmProfile,
           })
           const bs = teiToBeautyScore(tei)
           const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
@@ -126,6 +133,7 @@ function ActivityUploader() {
             hrHikeCount:    prefs.hrHikeCount,
             prefSforzo:     prefs.prefSforzo,
             prefDurata:     prefs.prefDurata,
+            avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
           }, prefs.beautyNaturaWeight ?? 50)
           linkedBeautyScore = bs
           trailScore = ts
@@ -453,9 +461,14 @@ function GpxUploader() {
             const elevProfile = (parsed.trackPoints ?? [])
               .filter(p => p.lat && p.lon)
               .map(p => p.altitudeMeters ?? 0)
-            const osmData = await fetch(`/api/tei-overpass?bbox=${bbox}`)
-              .then(r => r.json() as Promise<OsmTeiData>)
-              .catch(() => undefined)
+            const [osmData, dtmProfile] = await Promise.all([
+              fetch(`/api/tei-overpass?bbox=${bbox}`)
+                .then(r => r.json() as Promise<OsmTeiData>)
+                .catch(() => undefined),
+              fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
+                .then(r => r.json() as Promise<TrailDtmProfile>)
+                .catch(() => undefined),
+            ])
             const tei = computeTEI({
               track: gps,
               elevGain: hike.elevationGain,
@@ -464,6 +477,7 @@ function GpxUploader() {
               elevProfile,
               pois: hike.cachedPois as PoiItem[],
               osmData,
+              dtmProfile,
             })
             const bs = teiToBeautyScore(tei)
             const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
@@ -474,6 +488,7 @@ function GpxUploader() {
               altitudeMax:    hike.altitudeMax,
               prefSforzo:     prefs.prefSforzo,
               prefDurata:     prefs.prefDurata,
+              avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
             })
             await updatePlannedMeta(hike.id, { cachedBeautyScore: bs, cachedTrailScore: ts })
           } catch {}

@@ -14,9 +14,13 @@ export const SI_PARAM_DESCRIPTIONS: Record<string, string> = {
   satelliteFire: 'Indice di area bruciata (NBR) rilevato da satellite — possibile zona recentemente incendiata.',
   satelliteFlood: 'Indice di acqua superficiale (NDWI) rilevato da satellite — possibile area alluvionata o impaludata.',
   satelliteLandslide: 'Indice di suolo nudo/eroso (BSI) rilevato da satellite — possibile rischio frana o dissesto.',
+  paiFlood: 'Classificazione ufficiale di rischio alluvione dal Piano di Assetto Idrogeologico (PAI) — sostituisce la stima satellitare quando disponibile.',
+  paiLandslide: 'Classificazione ufficiale di rischio frana dal Piano di Assetto Idrogeologico (PAI) — sostituisce la stima satellitare quando disponibile.',
   satelliteUnavailable: 'Nessuna immagine satellitare recente sufficientemente priva di nuvole per questa zona.',
   activityDtrek: 'Bonus per un’attività DTrek registrata di recente su questo stesso percorso — segno che è stato effettivamente percorso.',
   activityHeatmap: 'Analisi dell’utilizzo recente del sentiero tramite heatmap (funzionalità non ancora disponibile, penalità fissa).',
   communityNotes: 'Segnalazioni recenti della comunità OpenStreetMap (note) nelle vicinanze del tracciato.',
   communityMarkers: 'Tratti difficili individuati automaticamente nei commenti/waypoint dei file GPX importati (Komoot/AllTrails) vicino al tracciato.',
+  groundStability: 'Velocità di deformazione del suolo (mm/anno) misurata via interferometria radar satellitare (PSInSAR) entro 250m dal tracciato.',
+  groundStabilityUnavailable: 'Nessun punto di misura PSInSAR trovato nelle vicinanze del tracciato — non significa che il terreno sia stabile, solo che non c\'è copertura del dato in questa zona.',
 }

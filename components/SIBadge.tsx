@@ -63,10 +63,21 @@ function signalRows(s: SISignals): SignalRow[] {
     if (s.satellite.ndviDeltaPenalty < 0) rows.push({ icon: '⚠️', kind: 'satelliteNdviDelta', text: `${signedNum(s.satellite.ndviDeltaPenalty)} Variazione anomala della vegetazione (satellite)` })
     if (s.satellite.ndviAbsolutePenalty < 0) rows.push({ icon: '⚠️', kind: 'satelliteNdviAbs', text: `${signedNum(s.satellite.ndviAbsolutePenalty)} Vegetazione molto fitta (satellite)` })
     if (s.satellite.firePenalty < 0) rows.push({ icon: '⚠️', kind: 'satelliteFire', text: `${signedNum(s.satellite.firePenalty)} Possibile area incendiata (satellite)` })
-    if (s.satellite.floodPenalty < 0) rows.push({ icon: '⚠️', kind: 'satelliteFlood', text: `${signedNum(s.satellite.floodPenalty)} Possibile area alluvionata (satellite)` })
-    if (s.satellite.landslidePenalty < 0) rows.push({ icon: '⚠️', kind: 'satelliteLandslide', text: `${signedNum(s.satellite.landslidePenalty)} Possibile rischio frana (satellite)` })
-  } else {
+  } else if (s.satellite.floodSource === 'none' && s.satellite.landslideSource === 'none') {
     rows.push({ icon: 'ℹ️', kind: 'satelliteUnavailable', text: 'Dati satellitari non disponibili' })
+  }
+  // Flood/landslide rows sit outside the `available` gate: an official PAI polygon is
+  // authoritative even when the Sentinel-2 heuristic itself didn't run (see
+  // lib/si/signals/satelliteSignals.ts's applyPaiOverride).
+  if (s.satellite.floodPenalty < 0) {
+    rows.push(s.satellite.floodSource === 'pai'
+      ? { icon: '⚠️', kind: 'paiFlood', text: `${signedNum(s.satellite.floodPenalty)} Rischio alluvione ufficiale PAI (classe ${s.satellite.paiFloodClass})` }
+      : { icon: '⚠️', kind: 'satelliteFlood', text: `${signedNum(s.satellite.floodPenalty)} Possibile area alluvionata (satellite)` })
+  }
+  if (s.satellite.landslidePenalty < 0) {
+    rows.push(s.satellite.landslideSource === 'pai'
+      ? { icon: '⚠️', kind: 'paiLandslide', text: `${signedNum(s.satellite.landslidePenalty)} Rischio frana ufficiale PAI (classe ${s.satellite.paiLandslideClass})` }
+      : { icon: '⚠️', kind: 'satelliteLandslide', text: `${signedNum(s.satellite.landslidePenalty)} Possibile rischio frana (satellite)` })
   }
 
   if (s.activity.dtrekBonus > 0) {
@@ -79,6 +90,15 @@ function signalRows(s: SISignals): SignalRow[] {
   }
   if (s.community.difficultyMarkersPenalty < 0) {
     rows.push({ icon: '⚠️', kind: 'communityMarkers', text: `${signedNum(s.community.difficultyMarkersPenalty)} Tratti difficili segnalati nel tracciato GPX importato` })
+  }
+
+  if (s.groundStability.available) {
+    if (s.groundStability.penalty < 0) {
+      const confidenceNote = s.groundStability.confidence === 'low' ? ', confidenza bassa' : ''
+      rows.push({ icon: '⚠️', kind: 'groundStability', text: `${signedNum(s.groundStability.penalty)} Deformazione del suolo rilevata via PSInSAR (${s.groundStability.classification}${confidenceNote})` })
+    }
+  } else {
+    rows.push({ icon: 'ℹ️', kind: 'groundStabilityUnavailable', text: 'Dati radar di deformazione del suolo (PSInSAR) non disponibili' })
   }
 
   return rows

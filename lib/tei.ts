@@ -4,6 +4,8 @@ import type { PoiItem } from './overpass'
 import type { BeautyScore, CategoryScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
 import { haversineM } from './geoUtils'
+import { nearestPerSegment } from './geo/nearestPoint'
+import type { TrailDtmProfile } from './dtm/trailDtmProfile'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,7 @@ export interface TeiInput {
   elevProfile?:    number[]   // elevation (m) aligned with track[]
   pois:            PoiItem[]
   osmData?:        OsmTeiData
+  dtmProfile?:     TrailDtmProfile
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -195,18 +198,34 @@ function computeVtopo(
   elevGain: number,
   distanceMeters: number,
   segments: GpxSegment[],
+  dtmProfile?: TrailDtmProfile,
 ): number {
   const distKm = distanceMeters / 1000 || 1
 
   // Component 3 always available
   const relativeGainScore = clamp((elevGain / distKm) / 80, 0, 1) * 10
 
-  // Per-segment slope analysis
-  const slopes: number[] = []
-  for (const seg of segments) {
-    if (seg.elevations.length < 2 || seg.lengthM <= 0) continue
-    const elevDiff = Math.abs(seg.elevations[seg.elevations.length - 1] - seg.elevations[0])
-    slopes.push((elevDiff / seg.lengthM) * 100)
+  // Per-segment slope analysis — prefer real LiDAR slope (Horn's method, degrees) over the
+  // net segment elevation diff (blind to a slope reversal inside a ~100m segment) once at
+  // least 3 segments have a nearby DTM sample (50m). Horn's method returns degrees while the
+  // thresholds below (10<=s<=25, /15 in the variance) are calibrated for percent grade —
+  // convert via tan, not a linear factor, or those thresholds silently change meaning.
+  let slopes: number[] = []
+  if (dtmProfile?.source === 'lidar1m') {
+    const segmentCenters = segments.map(seg => ({ lat: seg.centroid[0], lon: seg.centroid[1] }))
+    const matches = nearestPerSegment(segmentCenters, dtmProfile.points, 50)
+    const dtmSlopes: number[] = []
+    for (const m of matches) {
+      if (m) dtmSlopes.push(Math.tan(m.candidate.slopeDeg * Math.PI / 180) * 100)
+    }
+    if (dtmSlopes.length >= 3) slopes = dtmSlopes
+  }
+  if (slopes.length === 0) {
+    for (const seg of segments) {
+      if (seg.elevations.length < 2 || seg.lengthM <= 0) continue
+      const elevDiff = Math.abs(seg.elevations[seg.elevations.length - 1] - seg.elevations[0])
+      slopes.push((elevDiff / seg.lengthM) * 100)
+    }
   }
 
   let stdScore = 5
@@ -299,7 +318,30 @@ function computeVfond(segments: GpxSegment[], highways: OsmElement[]): number {
 // alto = più forme del terreno diverse attraversate) con l'alternanza salita/discesa
 // tra segmenti consecutivi (un percorso che alterna su e giù di continuo attraversa
 // morfologie più varie di una singola salita o discesa monotona).
-function computeVgeo(segments: GpxSegment[], elevProfile: number[]): number {
+// Circular std dev (degrees) of a set of compass bearings — mean resultant length R via
+// vector sum, then sqrt(-2*ln(R)). R->0 (bearings spread uniformly in all directions, the
+// most "varied" case) is capped at 180 rather than diverging.
+function circularStdDevDeg(aspectDegs: number[]): number {
+  let sumSin = 0, sumCos = 0
+  for (const deg of aspectDegs) {
+    const rad = deg * Math.PI / 180
+    sumSin += Math.sin(rad)
+    sumCos += Math.cos(rad)
+  }
+  const R = Math.sqrt(sumSin * sumSin + sumCos * sumCos) / aspectDegs.length
+  if (R <= 1e-9) return 180
+  return Math.min(180, Math.sqrt(-2 * Math.log(R)) * 180 / Math.PI)
+}
+
+// null below 3 valid (non-flat) samples — with n<3 the circular std dev is not meaningful
+// (n=1 always yields a spurious 0, falsely reading as "no variety").
+function aspectVarietyScore(aspectDegs: number[]): number | null {
+  const valid = aspectDegs.filter(d => !Number.isNaN(d))
+  if (valid.length < 3) return null
+  return clamp((circularStdDevDeg(valid) / 180) * 10)
+}
+
+function computeVgeo(segments: GpxSegment[], elevProfile: number[], dtmProfile?: TrailDtmProfile): number {
   if (segments.length < 3 || elevProfile.length < 3) return 5
 
   const minElev = Math.min(...elevProfile)
@@ -316,6 +358,17 @@ function computeVgeo(segments: GpxSegment[], elevProfile: number[]): number {
     if (sign !== 0) prevSign = sign
   }
   const alternationScore = clamp((signChanges / Math.max(segments.length - 1, 1)) * 20)
+
+  // Two-branch weighting, not one formula with a neutral default: a single formula with
+  // aspectVarietyScore defaulted to 5 when the DTM is unavailable would still shift every
+  // existing caller's score (the weights move even when the third term is neutral) —
+  // breaks the "no regression when the new data isn't there" invariant kept since Fase 1/2.
+  if (dtmProfile?.source === 'lidar1m') {
+    const varietyScore = aspectVarietyScore(dtmProfile.points.map(p => p.aspectDeg))
+    if (varietyScore !== null) {
+      return clamp(rangeScore * 0.40 + alternationScore * 0.30 + varietyScore * 0.30)
+    }
+  }
 
   return clamp(rangeScore * 0.5 + alternationScore * 0.5)
 }
@@ -369,16 +422,16 @@ function computeFantr(
 // ── Main: computeTEI ──────────────────────────────────────────────────────────
 
 export function computeTEI(input: TeiInput): TeiResult {
-  const { track, elevGain, distanceMeters, pois, osmData } = input
+  const { track, elevGain, distanceMeters, pois, osmData, dtmProfile } = input
   const elevProfile = input.elevProfile ?? []
 
   const segments = segmentGpx(track, elevProfile)
 
   const vCult = computeVcult(segments, pois)
-  const vTopo = computeVtopo(elevGain, distanceMeters, segments)
+  const vTopo = computeVtopo(elevGain, distanceMeters, segments, dtmProfile)
   const vIdro = computeVidro(segments, pois, osmData?.waterways ?? [], osmData?.waterShore ?? [])
   const vFond = computeVfond(segments, osmData?.highways ?? [])
-  const vGeo  = computeVgeo(segments, elevProfile)
+  const vGeo  = computeVgeo(segments, elevProfile, dtmProfile)
 
   const fAntr = computeFantr(
     track, segments,

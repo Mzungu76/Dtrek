@@ -26,6 +26,7 @@ import PdfExportButton from '@/components/PdfExportButton'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
+import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -229,13 +230,17 @@ export default function EscursionePage() {
     try {
       const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
       const bbox = computeBbox(gps)
-      const [allPoisRes, osmData] = await Promise.all([
+      const [allPoisRes, osmData, dtmProfile] = await Promise.all([
         Promise.race([
           fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>,
           deadline,
         ]).then(r => r ?? []),
         Promise.race([
           fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+          deadline,
+        ]).then(r => r ?? undefined).catch(() => undefined),
+        Promise.race([
+          fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
           deadline,
         ]).then(r => r ?? undefined).catch(() => undefined),
       ])
@@ -256,6 +261,7 @@ export default function EscursionePage() {
         elevProfile,
         pois,
         osmData,
+        dtmProfile,
       })
       const bs = teiToBeautyScore(tei)
       const confidence: CtsConfidence = tei.confidence
@@ -271,6 +277,7 @@ export default function EscursionePage() {
         prefDurata:     prefs.prefDurata,
         hrRest:         prefs.hrRest,
         hrMax:          prefs.hrMax ?? undefined,
+        avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
       })
       if (confidence === 'estimated') ts = Math.round(ts * 0.9)
 
