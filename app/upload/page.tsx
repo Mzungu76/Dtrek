@@ -84,7 +84,7 @@ function ActivityUploader() {
         } catch {}
       }
 
-      // ── CTS analysis (best-effort, 9s deadline) ───────────────────
+      // ── CTS analysis (best-effort, 18s deadline) ───────────────────
       setStatus('analyzing')
       let linkedBeautyScore: BeautyScore | undefined
       let trailScore: number | undefined
@@ -93,7 +93,7 @@ function ActivityUploader() {
           .filter(p => p.lat && p.lon)
           .map(p => [p.lat!, p.lon!] as [number, number])
         if (gps.length >= 2) {
-          const deadline = new Promise<null>(r => setTimeout(() => r(null), 9000))
+          const deadline = new Promise<null>(r => setTimeout(() => r(null), 18000))
           const rawPois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline]).then(r => r ?? [])
           const pois = rawPois as PoiItem[]
           const bbox = computeBbox(gps)

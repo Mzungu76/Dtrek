@@ -293,6 +293,33 @@ function computeVfond(segments: GpxSegment[], highways: OsmElement[]): number {
   return clamp(totalScore / totalWeight)
 }
 
+// ── V_geo ─────────────────────────────────────────────────────────────────────
+// Stima di geodiversità dal profilo altimetrico già disponibile (nessun DEM esterno):
+// combina il range altimetrico complessivo (più dislivello tra punto più basso e più
+// alto = più forme del terreno diverse attraversate) con l'alternanza salita/discesa
+// tra segmenti consecutivi (un percorso che alterna su e giù di continuo attraversa
+// morfologie più varie di una singola salita o discesa monotona).
+function computeVgeo(segments: GpxSegment[], elevProfile: number[]): number {
+  if (segments.length < 3 || elevProfile.length < 3) return 5
+
+  const minElev = Math.min(...elevProfile)
+  const maxElev = Math.max(...elevProfile)
+  const rangeScore = clamp((maxElev - minElev) / 100)
+
+  let signChanges = 0
+  let prevSign = 0
+  for (const seg of segments) {
+    if (seg.elevations.length < 2) continue
+    const diff = seg.elevations[seg.elevations.length - 1] - seg.elevations[0]
+    const sign = diff > 1 ? 1 : diff < -1 ? -1 : 0
+    if (sign !== 0 && prevSign !== 0 && sign !== prevSign) signChanges++
+    if (sign !== 0) prevSign = sign
+  }
+  const alternationScore = clamp((signChanges / Math.max(segments.length - 1, 1)) * 20)
+
+  return clamp(rangeScore * 0.5 + alternationScore * 0.5)
+}
+
 // ── f_antr ────────────────────────────────────────────────────────────────────
 
 function computeFantr(
@@ -351,7 +378,7 @@ export function computeTEI(input: TeiInput): TeiResult {
   const vTopo = computeVtopo(elevGain, distanceMeters, segments)
   const vIdro = computeVidro(segments, pois, osmData?.waterways ?? [], osmData?.waterShore ?? [])
   const vFond = computeVfond(segments, osmData?.highways ?? [])
-  const vGeo  = 5.0  // placeholder until Viewshed on DEM
+  const vGeo  = computeVgeo(segments, elevProfile)
 
   const fAntr = computeFantr(
     track, segments,

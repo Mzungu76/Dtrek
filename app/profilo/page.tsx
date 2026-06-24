@@ -296,7 +296,7 @@ function ComfortTrailScoreSection() {
           .filter(p => p.lat && p.lon)
           .map(p => [p.lat!, p.lon!] as [number, number])
 
-        const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+        const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
         const [pois, osmData] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
@@ -366,7 +366,7 @@ function ComfortTrailScoreSection() {
           .filter(p => p.lat && p.lon)
           .map(p => [p.lat!, p.lon!] as [number, number])
 
-        const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+        const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
         const [pois, osmData] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
@@ -421,7 +421,7 @@ function ComfortTrailScoreSection() {
           .filter(p => p.lat && p.lon)
           .map(p => [p.lat!, p.lon!] as [number, number])
 
-        const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+        const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
         const [pois, osmData] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,

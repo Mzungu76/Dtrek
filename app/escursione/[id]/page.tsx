@@ -227,7 +227,7 @@ export default function EscursionePage() {
     if (gps.length < 2) return
     setCtsComputing(true)
     try {
-      const deadline = new Promise<null>(r => setTimeout(() => r(null), 12000))
+      const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
       const bbox = computeBbox(gps)
       const [allPoisRes, osmData] = await Promise.all([
         Promise.race([
