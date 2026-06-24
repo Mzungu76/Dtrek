@@ -9,6 +9,7 @@ import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
+import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { type PoiItem } from '@/lib/overpass'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import {
@@ -300,7 +301,7 @@ function ComfortTrailScoreSection() {
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
-        const [pois, osmData, dtmProfile, terrainProfile] = await Promise.all([
+        const [pois, osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
           Promise.race([
             fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
@@ -312,6 +313,10 @@ function ComfortTrailScoreSection() {
           ]).then(r => r ?? undefined).catch(() => undefined),
           Promise.race([
             fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
+          Promise.race([
+            checkProtectedArea(gps).then(r => r.inProtectedArea),
             deadline,
           ]).then(r => r ?? undefined).catch(() => undefined),
         ])
@@ -330,6 +335,7 @@ function ComfortTrailScoreSection() {
           osmData,
           dtmProfile,
           terrainProfile,
+          inProtectedArea,
         })
         const bs = teiToBeautyScore(tei)
         const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
@@ -381,7 +387,7 @@ function ComfortTrailScoreSection() {
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
-        const [pois, osmData, dtmProfile, terrainProfile] = await Promise.all([
+        const [pois, osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
           Promise.race([
             fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
@@ -393,6 +399,10 @@ function ComfortTrailScoreSection() {
           ]).then(r => r ?? undefined).catch(() => undefined),
           Promise.race([
             fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
+          Promise.race([
+            checkProtectedArea(gps).then(r => r.inProtectedArea),
             deadline,
           ]).then(r => r ?? undefined).catch(() => undefined),
         ])
@@ -411,6 +421,7 @@ function ComfortTrailScoreSection() {
           osmData,
           dtmProfile,
           terrainProfile,
+          inProtectedArea,
         })
         const bs = teiToBeautyScore(tei)
         const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
@@ -447,7 +458,7 @@ function ComfortTrailScoreSection() {
 
         const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
         const bbox = computeBbox(gps)
-        const [pois, osmData, dtmProfile, terrainProfile] = await Promise.all([
+        const [pois, osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
           Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
           Promise.race([
             fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
@@ -459,6 +470,10 @@ function ComfortTrailScoreSection() {
           ]).then(r => r ?? undefined).catch(() => undefined),
           Promise.race([
             fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
+            deadline,
+          ]).then(r => r ?? undefined).catch(() => undefined),
+          Promise.race([
+            checkProtectedArea(gps).then(r => r.inProtectedArea),
             deadline,
           ]).then(r => r ?? undefined).catch(() => undefined),
         ])
@@ -477,6 +492,7 @@ function ComfortTrailScoreSection() {
           osmData,
           dtmProfile,
           terrainProfile,
+          inProtectedArea,
         })
         const bs = teiToBeautyScore(tei)
         const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence

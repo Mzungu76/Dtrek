@@ -24,6 +24,7 @@ import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
+import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
@@ -168,6 +169,7 @@ export default function PlannedHikePage() {
   const [showAspect,     setShowAspect]    = useState(false)
   const [dtmProfile,     setDtmProfile]    = useState<TrailDtmProfile | undefined>(undefined)
   const [terrainProfile, setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
+  const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [show3D,         setShow3D]        = useState(false)
   const [showStreetView, setShowStreetView] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
@@ -250,6 +252,17 @@ export default function PlannedHikePage() {
     fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
       .then(r => r.json())
       .then((p: TrailTerrainProfile) => setTerrainProfile(p))
+      .catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check Natura2000 protected-area overlap once per hike — same shared-state pattern as
+  // the DTM/terrain effects above, used by handleComputeCts for the TEI V_cult bonus.
+  useEffect(() => {
+    if (!hike) return
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    checkProtectedArea(gps)
+      .then(r => setInProtectedArea(r.inProtectedArea))
       .catch(() => {})
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -391,6 +404,7 @@ export default function PlannedHikePage() {
         osmData,
         dtmProfile,
         terrainProfile,
+        inProtectedArea,
       })
       const bs = teiToBeautyScore(tei)
       const confidence: CtsConfidence = tei.confidence

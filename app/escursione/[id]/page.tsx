@@ -28,6 +28,7 @@ import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
+import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -85,6 +86,7 @@ export default function EscursionePage() {
   const [showAspect,      setShowAspect]     = useState(false)
   const [dtmProfile,      setDtmProfile]     = useState<TrailDtmProfile | undefined>(undefined)
   const [terrainProfile,  setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
+  const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [pois,            setPois]           = useState<PoiItem[]>([])
   const [wikiPages,       setWikiPages]      = useState<WikiPage[]>([])
   const [ratingVal,       setRatingVal]      = useState(0)
@@ -164,6 +166,17 @@ export default function EscursionePage() {
     fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
       .then(r => r.json())
       .then((p: TrailTerrainProfile) => setTerrainProfile(p))
+      .catch(() => {})
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check Natura2000 protected-area overlap once per activity — same shared-state pattern as
+  // the DTM/terrain effects above, used by handleComputeCts for the TEI V_cult bonus.
+  useEffect(() => {
+    if (!activity) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    checkProtectedArea(gps)
+      .then(r => setInProtectedArea(r.inProtectedArea))
       .catch(() => {})
   }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -291,6 +304,7 @@ export default function EscursionePage() {
         osmData,
         dtmProfile,
         terrainProfile,
+        inProtectedArea,
       })
       const bs = teiToBeautyScore(tei)
       const confidence: CtsConfidence = tei.confidence
