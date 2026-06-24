@@ -39,14 +39,36 @@ export interface SatelliteSignal {
   ndviDeltaPenalty: number    // 0 | -10 | -20 | -35
   ndviAbsolutePenalty: number // 0 | -5 | -15
   firePenalty: number         // 0 | -25 | -50  (from NBR)
-  floodPenalty: number        // 0 | -15 | -30  (from NDWI)
-  landslidePenalty: number    // 0 | -10 | -25  (from BSI)
+  // floodPenalty/landslidePenalty: NDWI/BSI-derived by default, overridden (not summed)
+  // by an official PAI polygon when one intersects the trail — see *Source below and
+  // lib/si/signals/satelliteSignals.ts's fetchPaiOverride.
+  floodPenalty: number        // 0 | -15 | -30 (ndwi) | -5/-15/-35/-60 (pai P1-P4)
+  landslidePenalty: number    // 0 | -10 | -25 (bsi) | -5/-15/-35/-60 (pai R1-R4)
+  landslideSource: 'pai' | 'bsi' | 'none'
+  floodSource: 'pai' | 'ndwi' | 'none'
+  paiLandslideClass?: string  // e.g. 'R3' — set only when landslideSource === 'pai'
+  paiFloodClass?: string      // e.g. 'P2' — set only when floodSource === 'pai'
   reason?: UnavailableReason
 }
 
 export interface ActivitySignal {
   dtrekBonus: number     // 0 | +5 | +15 (DTrek *completed activity* match recency — never from planned/imported hikes)
   heatmapPenalty: number // -10 fixed — TODO: Strava heatmap tile analysis
+}
+
+export type GroundStabilityClass = 'stable' | 'slow' | 'moderate' | 'rapid' | 'unknown'
+
+// PSInSAR (radar deformation velocity) — 7° segnale SI, vedi
+// lib/si/signals/groundStability.ts. Bucket TTL dedicato (180gg, non quello satellite):
+// il prodotto è aggiornato su scala annuale/pluriennale.
+export interface GroundStabilitySignal {
+  available: boolean
+  pointCount: number             // punti PSInSAR trovati nel bbox (0 = nessuna copertura, non "stabile")
+  maxVelocityMmYear: number | null // valore con segno, punto più veloce entro 250m da un vertice del tracciato
+  classification: GroundStabilityClass
+  confidence: 'high' | 'low' | 'none' // high: punto più vicino <=100m, low: 100-250m, none: nessun match
+  penalty: number                 // 0 | -10 (slow) | -25 (moderate) | -45 (rapid), dimezzata se confidence è 'low'
+  reason?: UnavailableReason
 }
 
 export interface CommunitySignal {
@@ -68,6 +90,7 @@ export interface SISignals {
   satellite: SatelliteSignal
   activity: ActivitySignal
   community: CommunitySignal
+  groundStability: GroundStabilitySignal
 }
 
 export interface SIResult {
