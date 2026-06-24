@@ -27,6 +27,7 @@ import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -83,6 +84,7 @@ export default function EscursionePage() {
   const [showGradient,    setShowGradient]   = useState(false)
   const [showAspect,      setShowAspect]     = useState(false)
   const [dtmProfile,      setDtmProfile]     = useState<TrailDtmProfile | undefined>(undefined)
+  const [terrainProfile,  setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
   const [pois,            setPois]           = useState<PoiItem[]>([])
   const [wikiPages,       setWikiPages]      = useState<WikiPage[]>([])
   const [ratingVal,       setRatingVal]      = useState(0)
@@ -149,6 +151,19 @@ export default function EscursionePage() {
     fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
       .then(r => r.json())
       .then((p: TrailDtmProfile) => setDtmProfile(p))
+      .catch(() => {})
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch terrain (geologia/uso-suolo) profile once per activity — same pattern as the DTM
+  // effect above, shared by handleComputeCts so the geologia/uso-suolo endpoint is never
+  // double-fetched.
+  useEffect(() => {
+    if (!activity) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailTerrainProfile) => setTerrainProfile(p))
       .catch(() => {})
   }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -275,6 +290,7 @@ export default function EscursionePage() {
         pois,
         osmData,
         dtmProfile,
+        terrainProfile,
       })
       const bs = teiToBeautyScore(tei)
       const confidence: CtsConfidence = tei.confidence

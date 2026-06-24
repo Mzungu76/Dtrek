@@ -23,6 +23,7 @@ import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
@@ -166,6 +167,7 @@ export default function PlannedHikePage() {
   const [showGradient,   setShowGradient]  = useState(false)
   const [showAspect,     setShowAspect]    = useState(false)
   const [dtmProfile,     setDtmProfile]    = useState<TrailDtmProfile | undefined>(undefined)
+  const [terrainProfile, setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
   const [show3D,         setShow3D]        = useState(false)
   const [showStreetView, setShowStreetView] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
@@ -235,6 +237,19 @@ export default function PlannedHikePage() {
     fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
       .then(r => r.json())
       .then((p: TrailDtmProfile) => setDtmProfile(p))
+      .catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch terrain (geologia/uso-suolo) profile once per hike — same pattern as the DTM
+  // effect above, shared by handleComputeCts so the geologia/uso-suolo endpoint is never
+  // double-fetched.
+  useEffect(() => {
+    if (!hike) return
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailTerrainProfile) => setTerrainProfile(p))
       .catch(() => {})
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -375,6 +390,7 @@ export default function PlannedHikePage() {
         pois,
         osmData,
         dtmProfile,
+        terrainProfile,
       })
       const bs = teiToBeautyScore(tei)
       const confidence: CtsConfidence = tei.confidence
