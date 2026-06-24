@@ -1,0 +1,22 @@
+// Plain-language explanations shown by InfoTooltip next to each SI signal row
+// (components/SIBadge.tsx) — one entry per `SignalRow.kind`.
+export const SI_PARAM_DESCRIPTIONS: Record<string, string> = {
+  osmAccess: 'Il tag "access" su OpenStreetMap indica che il sentiero è segnalato come vietato o privato dal proprietario del terreno.',
+  osmVisibility: 'Il tag "trail_visibility" su OSM indica quanto è facile seguire il tracciato sul terreno (segnaletica, evidenza del sentiero).',
+  osmFreshness: 'Da quanto tempo il tracciato non viene aggiornato su OpenStreetMap — dati più vecchi sono meno affidabili.',
+  osmOperator: 'Il sentiero è gestito da una rete escursionistica ufficiale (CAI, rete regionale/nazionale), segno di manutenzione regolare.',
+  weather: 'Precipitazioni e umidità del suolo stimate negli ultimi 7 giorni, pesate in base al tipo di fondo e alla pendenza del sentiero.',
+  climateTemp: 'Temperature medie attuali per la zona e la quota del sentiero rispetto ai valori favorevoli per l’escursionismo.',
+  climateAltitude: 'Quota elevata combinata con la stagione invernale aumenta il rischio di neve e condizioni difficili.',
+  climateSeason: 'Bonus per i mesi di transizione (aprile-maggio, ottobre-novembre) generalmente più favorevoli per camminare.',
+  satelliteNdviDelta: 'Variazione anomala della vegetazione rilevata dal satellite rispetto alla media stagionale per questa zona.',
+  satelliteNdviAbs: 'Vegetazione molto fitta rilevata dal satellite, che può rendere il sentiero meno percorribile o visibile.',
+  satelliteFire: 'Indice di area bruciata (NBR) rilevato da satellite — possibile zona recentemente incendiata.',
+  satelliteFlood: 'Indice di acqua superficiale (NDWI) rilevato da satellite — possibile area alluvionata o impaludata.',
+  satelliteLandslide: 'Indice di suolo nudo/eroso (BSI) rilevato da satellite — possibile rischio frana o dissesto.',
+  satelliteUnavailable: 'Nessuna immagine satellitare recente sufficientemente priva di nuvole per questa zona.',
+  activityDtrek: 'Bonus per un’attività DTrek registrata di recente su questo stesso percorso — segno che è stato effettivamente percorso.',
+  activityHeatmap: 'Analisi dell’utilizzo recente del sentiero tramite heatmap (funzionalità non ancora disponibile, penalità fissa).',
+  communityNotes: 'Segnalazioni recenti della comunità OpenStreetMap (note) nelle vicinanze del tracciato.',
+  communityMarkers: 'Tratti difficili individuati automaticamente nei commenti/waypoint dei file GPX importati (Komoot/AllTrails) vicino al tracciato.',
+}

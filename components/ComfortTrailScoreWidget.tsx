@@ -2,7 +2,9 @@
 import { useState } from 'react'
 import { ctsLabel, type TrailScoreResult } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { InfoTooltip } from '@/components/InfoTooltip'
+import { ScoreTile } from '@/components/ScoreTile'
+import { CTS_PARAM_DESCRIPTIONS } from '@/lib/ctsParamDescriptions'
 
 // ── mini bar ──────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,7 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-xs w-4 text-center">{cat.emoji}</span>
             <span className="text-xs text-stone-600 flex-1">{cat.label}</span>
+            <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.beautyCategory} />
             <span className="text-[11px] font-semibold" style={{ color: cat.color }}>{cat.score.toFixed(1)}</span>
           </div>
           <div className="flex items-center gap-2 pl-6">
@@ -52,11 +55,13 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
           <div className="flex items-center gap-2">
             <span className="text-xs w-4 text-center">{rawCat.emoji}</span>
             <span className="text-xs text-stone-500 flex-1">{rawCat.label}</span>
+            <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.anthropicRaw} />
             <span className="text-[11px] text-stone-600">{rawCat.score.toFixed(1)} / 10</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs w-4 text-center">{antrCat.emoji}</span>
             <span className="text-xs text-stone-500 flex-1">{antrCat.label}</span>
+            <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.anthropicPenalty} />
             <span className="text-[11px] font-semibold" style={{ color: antrCat.color }}>{antrCat.gradeLabel}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -87,14 +92,14 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
     return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60 ? (m % 60) + 'min' : ''}`
   }
 
-  const rows: [string, string, string][] = [
-    ['🏃', 'Distanza',         fmtH(bd.tNaismith)],
-    ['⛰',  'Dislivello +',    fmtH(bd.tDesc)],
+  const rows: [string, string, string, string][] = [
+    ['🏃', 'Distanza',         fmtH(bd.tNaismith), 'effortDistance'],
+    ['⛰',  'Dislivello +',    fmtH(bd.tDesc), 'effortGain'],
   ]
   if (bd.altPhysioMult > 1.01)
-    rows.push(['🏔', `Quota alta (×${bd.altPhysioMult.toFixed(2)})`, ''])
+    rows.push(['🏔', `Quota alta (×${bd.altPhysioMult.toFixed(2)})`, '', 'effortAltitude'])
   if (bd.terrainMult > 1.01)
-    rows.push(['🗺', `Terreno: ${bd.terrainLabel} (×${bd.terrainMult.toFixed(2)})`, ''])
+    rows.push(['🗺', `Terreno: ${bd.terrainLabel} (×${bd.terrainMult.toFixed(2)})`, '', 'effortTerrain'])
 
   const deltaLabel =
     bd.deltaSource === 'hr'       ? '⌚ FC attività' :
@@ -105,10 +110,11 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
       <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Dettaglio Fatica</p>
 
       <div className="space-y-1.5">
-        {rows.map(([icon, label, val]) => (
+        {rows.map(([icon, label, val, kind]) => (
           <div key={label} className="flex items-center gap-2">
             <span className="text-xs w-4 text-center">{icon}</span>
             <span className="text-xs text-stone-600 flex-1">{label}</span>
+            <InfoTooltip text={CTS_PARAM_DESCRIPTIONS[kind]} />
             {val && <span className="text-[11px] text-stone-500">{val}</span>}
           </div>
         ))}
@@ -121,11 +127,13 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-stone-500 flex-1">Fatica standard</span>
+          <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.effortStandard} />
           <span className="text-[11px] font-semibold text-orange-600">{bd.fStd.toFixed(1)} / 10</span>
         </div>
         {deltaLabel && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-stone-500 flex-1">Correzione {deltaLabel}</span>
+            <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.effortDelta} />
             <span className="text-[11px] font-semibold" style={{ color: bd.delta >= 0 ? '#dc2626' : '#16a34a' }}>
               {bd.delta >= 0 ? '+' : ''}{(bd.delta * 100).toFixed(0)}%
             </span>
@@ -133,6 +141,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
         )}
         <div className="flex items-center gap-2">
           <span className="text-xs text-stone-500 flex-1">Fatica corretta</span>
+          <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.effortFinal} />
           <span className="text-xs font-bold text-orange-700">{bd.fFinal.toFixed(1)} / 10</span>
         </div>
       </div>
@@ -143,6 +152,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
           {bd.sfidaBonus !== 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-stone-500 flex-1">💪 Sfida</span>
+              <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.bonusSfida} />
               <span className="text-[11px]" style={{ color: bd.sfidaBonus >= 0 ? '#059669' : '#dc2626' }}>
                 {bd.sfidaBonus >= 0 ? '+' : ''}{Math.round(bd.sfidaBonus)} pt
               </span>
@@ -151,6 +161,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
           {bd.duraBonus !== 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-stone-500 flex-1">⏱ Durata</span>
+              <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.bonusDurata} />
               <span className="text-[11px]" style={{ color: bd.duraBonus >= 0 ? '#059669' : '#dc2626' }}>
                 {bd.duraBonus >= 0 ? '+' : ''}{Math.round(bd.duraBonus)} pt
               </span>
@@ -179,69 +190,54 @@ export function ComfortTrailScoreWidget({
   const hasDetail = !!bd
 
   return (
-    <div className="rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4" style={{ background: color + '14', borderBottom: `2px solid ${color}30` }}>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Comfort TrailScore</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-black" style={{ color }}>{Math.round(ts)}</span>
-            <span className="text-sm font-semibold" style={{ color }}>{label}</span>
-          </div>
-        </div>
-        <div className="ml-auto text-xs font-bold px-2 py-1 rounded-lg text-white" style={{ backgroundColor: color }}>CTS</div>
-      </div>
-
-      {/* Summary bars */}
+    <ScoreTile
+      title="Comfort TrailScore"
+      score={Math.round(ts)}
+      label={label}
+      color={color}
+      badge="CTS"
+      open={open}
+      onToggle={() => setOpen(v => !v)}
+      hasDetail={hasDetail}
+    >
       {bd && (
-        <div className="px-5 py-4 bg-white space-y-3">
-          {/* Beauty / TEI bar */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-stone-500">
-              <span>{beautyScore?.version === 2 ? '🏆 TEI' : '🌄 Bellezza'}</span>
-              <span className="font-semibold">{result!.b.toFixed(1)}/10</span>
+        <div className="space-y-4">
+          <div className="space-y-3">
+            {/* Beauty / TEI bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-stone-500">
+                <span>{beautyScore?.version === 2 ? '🏆 TEI' : '🌄 Bellezza'}</span>
+                <span className="font-semibold">{result!.b.toFixed(1)}/10</span>
+              </div>
+              <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${result!.b * 10}%` }} />
+              </div>
             </div>
-            <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${result!.b * 10}%` }} />
+            {/* Effort bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-stone-500">
+                <span>💪 Fatica</span>
+                <span className="font-semibold">{bd.fFinal.toFixed(1)}/10</span>
+              </div>
+              <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                <div className="h-full bg-orange-400 rounded-full" style={{ width: `${bd.fFinal * 10}%` }} />
+              </div>
             </div>
+            {/* Delta source note */}
+            {bd.deltaSource !== 'none' && (
+              <p className="text-[10px] text-stone-400 italic">
+                {bd.deltaSource === 'hr' ? '⌚ Corretto con FC attività' :
+                 bd.deltaSource === 'personal' ? '📊 Corretto con profilo storico' : ''}
+              </p>
+            )}
           </div>
-          {/* Effort bar */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-stone-500">
-              <span>💪 Fatica</span>
-              <span className="font-semibold">{bd.fFinal.toFixed(1)}/10</span>
-            </div>
-            <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-              <div className="h-full bg-orange-400 rounded-full" style={{ width: `${bd.fFinal * 10}%` }} />
-            </div>
-          </div>
-          {/* Delta source note */}
-          {bd.deltaSource !== 'none' && (
-            <p className="text-[10px] text-stone-400 italic">
-              {bd.deltaSource === 'hr' ? '⌚ Corretto con FC attività' :
-               bd.deltaSource === 'personal' ? '📊 Corretto con profilo storico' : ''}
-            </p>
-          )}
 
-          {/* Toggle legenda */}
-          {hasDetail && (
-            <button
-              onClick={() => setOpen(v => !v)}
-              className="w-full flex items-center justify-center gap-1 pt-1 text-[11px] text-stone-400 hover:text-stone-600 transition-colors"
-            >
-              {open ? <><ChevronUp className="w-3.5 h-3.5" /> Nascondi dettagli</> : <><ChevronDown className="w-3.5 h-3.5" /> Mostra dettagli</>}
-            </button>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {beautyScore && <BeautyLegend beauty={beautyScore} b={result!.b} />}
+            <EffortLegend bd={bd} />
+          </div>
         </div>
       )}
-
-      {/* Expanded legend */}
-      {open && bd && (
-        <div className="border-t border-stone-100 bg-stone-50 px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {beautyScore && <BeautyLegend beauty={beautyScore} b={result!.b} />}
-          <EffortLegend bd={bd} />
-        </div>
-      )}
-    </div>
+    </ScoreTile>
   )
 }

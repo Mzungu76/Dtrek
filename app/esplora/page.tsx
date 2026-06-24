@@ -5,7 +5,8 @@ import Navbar from '@/components/Navbar'
 import ExploreMap, { type TrailResult } from '@/components/ExploreMap'
 import TrailMiniMap from '@/components/TrailMiniMap'
 import { SIBadge } from '@/components/SIBadge'
-import { Sentinel2Panel } from '@/components/Sentinel2Panel'
+import { PhenologyPanel } from '@/components/PhenologyPanel'
+import { ShadeWaterTile } from '@/components/ShadeWaterTile'
 import { useSI, useSentinel2 } from '@/lib/si/useSI'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { interpolateElevations } from '@/lib/trailStats'
@@ -336,9 +337,13 @@ export default function EsploraPage() {
                   isGhostTrail={si.result?.isGhostTrail}
                   partial={si.result?.partial}
                   loading={si.loading}
+                  onRefresh={si.refresh}
+                  refreshing={si.refreshing}
+                  refreshError={si.refreshError}
                   expanded
                 />
-                <Sentinel2Panel data={s2.data} loading={s2.loading} />
+                <PhenologyPanel data={s2.data} loading={s2.loading} flora={null} floraLoading={false} />
+                <ShadeWaterTile data={s2.data} loading={s2.loading} />
               </div>
 
               {/* Add to programma — disabled while elevation/duration are still
