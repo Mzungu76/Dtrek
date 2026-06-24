@@ -1,5 +1,6 @@
 // Security Index (SI) — composite 0-100 trail-condition score from 6 signal
 // collectors, cached on `trails` with per-bucket TTLs (see computeSI.ts).
+import type { RockfallRisk } from '@/lib/geologia/lithologyRiskMap'
 
 export type SILabelText = 'Percorribile' | 'Probabilmente ok' | 'Verificare prima' | 'Attenzione' | 'Sconsigliato'
 
@@ -48,6 +49,13 @@ export interface SatelliteSignal {
   floodSource: 'pai' | 'ndwi' | 'none'
   paiLandslideClass?: string  // e.g. 'R3' — set only when landslideSource === 'pai'
   paiFloodClass?: string      // e.g. 'P2' — set only when floodSource === 'pai'
+  // rockfallPenalty has no satellite-heuristic predecessor (BSI is bare-soil/erosion, not
+  // rockfall) — purely additive, always 0/'none' until GEOLOGIA_DATASET is live (see
+  // satelliteSignals.ts's fetchRockfallOverride). Stays in this signal/TTL bucket rather than
+  // becoming its own collector, unlike groundStability (which needed a dedicated 180d TTL).
+  rockfallPenalty: number     // 0 | -5 (low) | -20 (medium) | -45 (high)
+  rockfallSource: 'geologia' | 'none'
+  rockfallClass?: RockfallRisk // set only when rockfallSource === 'geologia'
   reason?: UnavailableReason
 }
 

@@ -16,6 +16,9 @@ import {
 import { PaiUnavailableError, type PaiFeature, type PaiRiskType } from '@/lib/pai/paiClient'
 import { fetchPaiPolygonsCached } from '@/lib/pai/paiCache'
 import { segmentIntersectsPolygon } from '@/lib/geo/pointInPolygon'
+import { GeologiaUnavailableError } from '@/lib/geologia/geologiaClient'
+import { fetchGeologiaAtPointCached } from '@/lib/geologia/geologiaCache'
+import type { RockfallRisk } from '@/lib/geologia/lithologyRiskMap'
 
 const COLLECTION = 'sentinel-2-l2a'
 // ctx.bbox can span an entire trail (no size cap), so this matches the
@@ -89,6 +92,48 @@ async function fetchPaiOverride(ctx: SignalContext): Promise<PaiOverride> {
   }
 }
 
+const ROCKFALL_RISK_RANK: Record<RockfallRisk, number> = { unknown: 0, low: 1, medium: 2, high: 3 }
+const ROCKFALL_RISK_PENALTY: Record<RockfallRisk, number> = { unknown: 0, low: -5, medium: -20, high: -45 }
+
+interface RockfallOverride {
+  penalty: number       // 0 until a non-'unknown' risk is found anywhere along the trail
+  riskClass: RockfallRisk
+}
+
+const NO_ROCKFALL: RockfallOverride = { penalty: 0, riskClass: 'unknown' }
+
+// One WMS GetFeatureInfo call per vertex of ctx.geometry (the sparse geometry_simplified
+// polyline, ~200m spacing) run in parallel — same per-point query shape as
+// lib/terrain/trailTerrainProfile.ts, just against SI's sparser geometry instead of TEI's
+// ~100m segments. GeologiaUnavailableError (dataset not configured) is the expected steady
+// state until GEOLOGIA_DATASET is populated — degrades silently to "no rockfall signal",
+// same precedent as fetchPaiOverride above. lithologyCodeToRockfallRisk always returns
+// 'unknown' today (real geological-domain gap, see lithologyRiskMap.ts), so in practice this
+// stays a no-op until that mapping is populated even once the dataset is live.
+async function fetchRockfallOverride(ctx: SignalContext): Promise<RockfallOverride> {
+  try {
+    const features = await Promise.all(
+      ctx.geometry.map(([lat, lon]) => fetchGeologiaAtPointCached(lat, lon))
+    )
+    let worst: RockfallRisk = 'unknown'
+    for (const f of features) {
+      const risk = f?.rockfallRisk ?? 'unknown'
+      if (ROCKFALL_RISK_RANK[risk] > ROCKFALL_RISK_RANK[worst]) worst = risk
+    }
+    return { penalty: ROCKFALL_RISK_PENALTY[worst], riskClass: worst }
+  } catch (err) {
+    if (!(err instanceof GeologiaUnavailableError)) console.error('[si] Geologia fetch failed', err)
+    return NO_ROCKFALL
+  }
+}
+
+// Additive only (no predecessor to override) — a no-op when riskClass is still 'unknown',
+// same "absence of data is silence, not a value" rule PAI/PSInSAR already follow.
+function applyRockfall(signal: SatelliteSignal, rockfall: RockfallOverride): SatelliteSignal {
+  if (rockfall.riskClass === 'unknown') return signal
+  return { ...signal, rockfallPenalty: rockfall.penalty, rockfallSource: 'geologia', rockfallClass: rockfall.riskClass }
+}
+
 interface SceneIndices {
   ndvi: number | null
   ndwi: number | null
@@ -147,13 +192,15 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
   const neutral: SatelliteSignal = {
     available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0,
     floodPenalty: 0, landslidePenalty: 0, landslideSource: 'none', floodSource: 'none',
+    rockfallPenalty: 0, rockfallSource: 'none',
   }
 
-  // Runs alongside the Sentinel-2 fetch below (not awaited until needed) so an official
-  // PAI lookup never adds latency on top of the MPC round-trip. Independent of whether
-  // Sentinel-2 itself succeeds — see the catch block, where a PAI hit still counts even
-  // if MPC is unreachable.
+  // Both run alongside the Sentinel-2 fetch below (not awaited until needed) so neither
+  // lookup adds latency on top of the MPC round-trip. Independent of whether Sentinel-2
+  // itself succeeds — see the catch block, where a PAI/rockfall hit still counts even if
+  // MPC is unreachable.
   const paiPromise = fetchPaiOverride(ctx)
+  const rockfallPromise = fetchRockfallOverride(ctx)
 
   try {
     const now = new Date()
@@ -167,8 +214,8 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
       searchStac(COLLECTION, stacBbox, priorStart, priorEnd, { maxCloudCover: MAX_CLOUD_COVER }),
     ])
     if (!currentItem) {
-      const pai = await paiPromise
-      return applyPaiOverride({ ...neutral, reason: 'no_data' }, pai)
+      const [pai, rockfall] = await Promise.all([paiPromise, rockfallPromise])
+      return applyRockfall(applyPaiOverride({ ...neutral, reason: 'no_data' }, pai), rockfall)
     }
 
     const [current, ndviPrior] = await Promise.all([
@@ -178,9 +225,9 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
 
     const ndviCurrent = current.ndvi
     const ndviDelta = ndviCurrent != null && ndviPrior != null ? ndviCurrent - ndviPrior : null
-    const pai = await paiPromise
+    const [pai, rockfall] = await Promise.all([paiPromise, rockfallPromise])
 
-    return applyPaiOverride({
+    return applyRockfall(applyPaiOverride({
       available: true,
       ndviDeltaPenalty: ndviDeltaPenaltyFor(ndviDelta),
       ndviAbsolutePenalty: ndviAbsolutePenaltyFor(ndviCurrent),
@@ -189,13 +236,15 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
       landslidePenalty: landslidePenaltyFor(current.bsi),
       landslideSource: current.bsi != null ? 'bsi' : 'none',
       floodSource: current.ndwi != null ? 'ndwi' : 'none',
-    }, pai)
+      rockfallPenalty: 0,
+      rockfallSource: 'none',
+    }, pai), rockfall)
   } catch (err) {
     console.error('[si] Planetary Computer satellite signal failed', err)
-    // An official PAI polygon is authoritative regardless of whether the Sentinel-2
+    // An official PAI/rockfall hit is authoritative regardless of whether the Sentinel-2
     // heuristic itself ran — don't lose it just because MPC is down.
-    const pai = await paiPromise
-    return applyPaiOverride({ ...neutral, reason: err instanceof MpcUnreachableError ? 'unreachable' : 'api_error' }, pai)
+    const [pai, rockfall] = await Promise.all([paiPromise, rockfallPromise])
+    return applyRockfall(applyPaiOverride({ ...neutral, reason: err instanceof MpcUnreachableError ? 'unreachable' : 'api_error' }, pai), rockfall)
   }
 }
 

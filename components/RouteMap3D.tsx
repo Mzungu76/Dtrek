@@ -6,13 +6,15 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
   Download, Share2, ChevronLeft, ChevronRight, ImagePlus,
-  Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy, MapPin,
+  Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy, MapPin, Compass,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
 import { getProfile } from '@/lib/userProfile'
 import { type PoiItem, type PoiType, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
+import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 
 const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
 
@@ -590,9 +592,10 @@ interface Props {
   elevationGain?: number
   pois?: PoiItem[]
   initialVideoState?: 'idle' | 'config'
+  dtmProfile?: TrailDtmProfile
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState, dtmProfile }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -660,6 +663,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [showStreetView,     setShowStreetView]    = useState(false)
   const [showPlannedRoute,   setShowPlannedRoute]  = useState(false)
   const [showPois,           setShowPois]          = useState(true)
+  const [dtmColorMode,       setDtmColorMode]      = useState<'none' | 'slope' | 'aspect'>('none')
   const [streetViewPos,  setStreetViewPos] = useState<[number,number]|null>(null)
 
   // Video config
@@ -966,6 +970,53 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     if (!map || !mapReady) return
     try { map.setLayoutProperty('planned-route-line', 'visibility', showPlannedRoute ? 'visible' : 'none') } catch {}
   }, [showPlannedRoute, mapReady])
+
+  // ── DTM slope/aspect colored route overlay ─────────────────────────────────────
+  // One short LineString per consecutive pair of dtmProfile.points (already ~15m apart along
+  // the trail) with both colorSlope/colorAspect precomputed — a single source/layer with a
+  // data-driven paint expression, not one addLayer() per segment. Only built when real LiDAR
+  // data is present; route-line (the fixed-color default) remains the "Nessuno" fallback.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady || dtmProfile?.source !== 'lidar1m' || dtmProfile.points.length < 2) return
+    const pts = dtmProfile.points
+    const features = []
+    for (let i = 0; i < pts.length - 1; i++) {
+      features.push({
+        type: 'Feature' as const,
+        geometry: { type: 'LineString' as const, coordinates: [[pts[i].lon, pts[i].lat], [pts[i + 1].lon, pts[i + 1].lat]] },
+        properties: { colorSlope: slopeDegToColor(pts[i].slopeDeg), colorAspect: aspectDegToColor(pts[i].aspectDeg) },
+      })
+    }
+    const data = { type: 'FeatureCollection' as const, features }
+    if (map.getSource('route-colored')) {
+      ;(map.getSource('route-colored') as any).setData(data)
+    } else {
+      map.addSource('route-colored', { type: 'geojson', data })
+      map.addLayer({
+        id: 'route-colored',
+        type: 'line',
+        source: 'route-colored',
+        layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
+        paint: { 'line-color': ['get', 'colorSlope'], 'line-width': 5 },
+      })
+    }
+  }, [mapReady, dtmProfile])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady || !map.getLayer('route-colored')) return
+    try {
+      if (dtmColorMode === 'none') {
+        map.setLayoutProperty('route-colored', 'visibility', 'none')
+        map.setLayoutProperty('route-line', 'visibility', 'visible')
+      } else {
+        map.setPaintProperty('route-colored', 'line-color', ['get', dtmColorMode === 'slope' ? 'colorSlope' : 'colorAspect'])
+        map.setLayoutProperty('route-colored', 'visibility', 'visible')
+        map.setLayoutProperty('route-line', 'visibility', 'none')
+      }
+    } catch {}
+  }, [dtmColorMode, mapReady])
 
   const switchStyle=useCallback((i:number)=>{setStyleIdx(i);setMapReady(false);mapRef.current?.setStyle(STYLES[i].url())},[])
 
@@ -2115,6 +2166,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   showPois ? 'bg-violet-500/80 hover:bg-violet-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
                 }`}>
                 <MapPin style={{width:'1.1rem',height:'1.1rem'}}/>
+              </button>
+            )}
+            {dtmProfile?.source === 'lidar1m' && (
+              <button
+                onClick={() => setDtmColorMode(m => m === 'none' ? 'slope' : m === 'slope' ? 'aspect' : 'none')}
+                title={dtmColorMode === 'none' ? 'Colora per pendenza/esposizione (DTM LiDAR)' : dtmColorMode === 'slope' ? 'Pendenza (LiDAR) — tocca per esposizione' : 'Esposizione (LiDAR) — tocca per disattivare'}
+                className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
+                  dtmColorMode === 'slope' ? 'bg-emerald-500/80 hover:bg-emerald-600 text-white'
+                  : dtmColorMode === 'aspect' ? 'bg-sky-500/80 hover:bg-sky-600 text-white'
+                  : 'bg-black/50 hover:bg-black/75 text-white'
+                }`}>
+                {dtmColorMode === 'aspect' ? <Compass style={{width:'1.1rem',height:'1.1rem'}}/> : <Layers style={{width:'1.1rem',height:'1.1rem'}}/>}
               </button>
             )}
             <button onClick={onClose}

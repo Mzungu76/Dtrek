@@ -27,6 +27,8 @@ import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
+import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -34,7 +36,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -81,6 +83,10 @@ export default function EscursionePage() {
   const [tagInput,        setTagInput]       = useState('')
   const [showShare,       setShowShare]      = useState(false)
   const [showGradient,    setShowGradient]   = useState(false)
+  const [showAspect,      setShowAspect]     = useState(false)
+  const [dtmProfile,      setDtmProfile]     = useState<TrailDtmProfile | undefined>(undefined)
+  const [terrainProfile,  setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
+  const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [pois,            setPois]           = useState<PoiItem[]>([])
   const [wikiPages,       setWikiPages]      = useState<WikiPage[]>([])
   const [ratingVal,       setRatingVal]      = useState(0)
@@ -137,6 +143,42 @@ export default function EscursionePage() {
       }
     }).finally(() => setLoading(false))
   }, [id, router])
+
+  // Fetch DTM slope/aspect profile once per activity — shared by the map color toggles
+  // below and by handleComputeCts, so the WCS-backed endpoint is never double-fetched.
+  useEffect(() => {
+    if (!activity) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailDtmProfile) => setDtmProfile(p))
+      .catch(() => {})
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch terrain (geologia/uso-suolo) profile once per activity — same pattern as the DTM
+  // effect above, shared by handleComputeCts so the geologia/uso-suolo endpoint is never
+  // double-fetched.
+  useEffect(() => {
+    if (!activity) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailTerrainProfile) => setTerrainProfile(p))
+      .catch(() => {})
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check Natura2000 protected-area overlap once per activity — same shared-state pattern as
+  // the DTM/terrain effects above, used by handleComputeCts for the TEI V_cult bonus.
+  useEffect(() => {
+    if (!activity) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    checkProtectedArea(gps)
+      .then(r => setInProtectedArea(r.inProtectedArea))
+      .catch(() => {})
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load gallery photos + cover preference + existing report (for hero photo / excerpt)
   useEffect(() => {
@@ -230,17 +272,16 @@ export default function EscursionePage() {
     try {
       const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
       const bbox = computeBbox(gps)
-      const [allPoisRes, osmData, dtmProfile] = await Promise.all([
+      // dtmProfile comes from page state (fetched once by the dedicated effect above, shared
+      // with the map color toggles) — not refetched here, to avoid hitting the WCS-backed
+      // endpoint twice for the same track.
+      const [allPoisRes, osmData] = await Promise.all([
         Promise.race([
           fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>,
           deadline,
         ]).then(r => r ?? []),
         Promise.race([
           fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
-          deadline,
-        ]).then(r => r ?? undefined).catch(() => undefined),
-        Promise.race([
-          fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
           deadline,
         ]).then(r => r ?? undefined).catch(() => undefined),
       ])
@@ -262,6 +303,8 @@ export default function EscursionePage() {
         pois,
         osmData,
         dtmProfile,
+        terrainProfile,
+        inProtectedArea,
       })
       const bs = teiToBeautyScore(tei)
       const confidence: CtsConfidence = tei.confidence
@@ -579,9 +622,15 @@ export default function EscursionePage() {
             <h2 className="font-display text-xl font-semibold text-stone-700">Tracciato GPS</h2>
             <div className="flex items-center gap-2">
               {hasGps && activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
-                <button onClick={() => setShowGradient(g => !g)}
+                <button onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
                   <Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Pendenza</span>
+                </button>
+              )}
+              {hasGps && dtmProfile?.source === 'lidar1m' && (
+                <button onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showAspect ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                  <Compass className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Esposizione</span>
                 </button>
               )}
               {hasGps && (
@@ -605,7 +654,7 @@ export default function EscursionePage() {
             </div>
           </div>
           <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
-            <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} pois={pois} wikiPages={wikiPages} />
+            <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} />
           </div>
           {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
         </section>
@@ -740,7 +789,7 @@ export default function EscursionePage() {
         <RouteMap3D trackPoints={activity.trackPoints} title={activity.title ?? activity.notes}
           onClose={() => { setShow3D(false); setOpenVideoWizard(false) }} plannedTrackPoints={activity.linkedPlannedTrackPoints}
           activityId={activity.id} initialVideoState={openVideoWizard ? 'config' : 'idle'}
-          distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain} pois={pois} />
+          distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain} pois={pois} dtmProfile={dtmProfile} />
       )}
       {showStreetView && centerPt?.lat && centerPt?.lon && (
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity.title ?? undefined}

@@ -23,6 +23,8 @@ import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
+import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
@@ -30,7 +32,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass,
 } from 'lucide-react'
 
 import PdfExportButton from '@/components/PdfExportButton'
@@ -164,6 +166,10 @@ export default function PlannedHikePage() {
   const [notesVal,       setNotesVal]      = useState('')
   const [dateVal,        setDateVal]       = useState('')
   const [showGradient,   setShowGradient]  = useState(false)
+  const [showAspect,     setShowAspect]    = useState(false)
+  const [dtmProfile,     setDtmProfile]    = useState<TrailDtmProfile | undefined>(undefined)
+  const [terrainProfile, setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
+  const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [show3D,         setShow3D]        = useState(false)
   const [showStreetView, setShowStreetView] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
@@ -223,6 +229,42 @@ export default function PlannedHikePage() {
       }
     }).finally(() => setLoading(false))
   }, [id, router])
+
+  // Fetch DTM slope/aspect profile once per hike — shared by the map color toggles
+  // below and by handleComputeCts, so the WCS-backed endpoint is never double-fetched.
+  useEffect(() => {
+    if (!hike) return
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailDtmProfile) => setDtmProfile(p))
+      .catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch terrain (geologia/uso-suolo) profile once per hike — same pattern as the DTM
+  // effect above, shared by handleComputeCts so the geologia/uso-suolo endpoint is never
+  // double-fetched.
+  useEffect(() => {
+    if (!hike) return
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailTerrainProfile) => setTerrainProfile(p))
+      .catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check Natura2000 protected-area overlap once per hike — same shared-state pattern as
+  // the DTM/terrain effects above, used by handleComputeCts for the TEI V_cult bonus.
+  useEffect(() => {
+    if (!hike) return
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    checkProtectedArea(gps)
+      .then(r => setInProtectedArea(r.inProtectedArea))
+      .catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save POI data to DB after first successful fetch
   useEffect(() => {
@@ -333,17 +375,13 @@ export default function PlannedHikePage() {
     try {
       const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
       const bbox = computeBbox(gps)
-      const [allPoisRes, osmData, dtmProfile] = await Promise.all([
+      const [allPoisRes, osmData] = await Promise.all([
         Promise.race([
           fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>,
           deadline,
         ]).then(r => r ?? []),
         Promise.race([
           fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
-          deadline,
-        ]).then(r => r ?? undefined).catch(() => undefined),
-        Promise.race([
-          fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
           deadline,
         ]).then(r => r ?? undefined).catch(() => undefined),
       ])
@@ -365,6 +403,8 @@ export default function PlannedHikePage() {
         pois,
         osmData,
         dtmProfile,
+        terrainProfile,
+        inProtectedArea,
       })
       const bs = teiToBeautyScore(tei)
       const confidence: CtsConfidence = tei.confidence
@@ -610,10 +650,18 @@ export default function PlannedHikePage() {
               <div className="flex items-center gap-1.5">
                 {hasGps && hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
                   <button
-                    onClick={() => setShowGradient(g => !g)}
+                    onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
                   >
                     <Layers className="w-3 h-3" /> Pendenza
+                  </button>
+                )}
+                {hasGps && dtmProfile?.source === 'lidar1m' && (
+                  <button
+                    onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
+                  >
+                    <Compass className="w-3 h-3" /> Esposizione
                   </button>
                 )}
                 {hasGps && (
@@ -636,7 +684,7 @@ export default function PlannedHikePage() {
             </div>
             <div className="h-80">
               {polyline && polyline.length > 1 ? (
-                <MapView trackPoints={hike.trackPoints ?? []} showGradient={showGradient} pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned />
+                <MapView trackPoints={hike.trackPoints ?? []} showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned />
               ) : (
                 <div className="h-full flex items-center justify-center text-stone-400 text-sm gap-2">
                   <Mountain className="w-8 h-8 text-stone-200" /> Tracciato non disponibile
@@ -791,6 +839,7 @@ export default function PlannedHikePage() {
           activityId={hike.id}
           distanceMeters={hike.distanceMeters} elevationGain={hike.elevationGain}
           pois={pois}
+          dtmProfile={dtmProfile}
         />
       )}
 

@@ -417,6 +417,64 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS dtm_track_hash text;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS dtm_computed_at timestamptz;
 
 
+-- ═══════════════════════════════════════════════════════════
+-- Geoportale Nazionale MASE/ISPRA — Fase 4 (Geologia CARG + Uso del suolo)
+-- Stesso blocco anche in supabase/migrations/add_geologia_usosuolo_tables.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- ── Cache geologia (litologia CARG, per-punto via WMS GetFeatureInfo) ─────────
+-- point_key (non bbox_key): GetFeatureInfo risponde per un singolo punto, non
+-- un'area — stesso rounding a 2 decimali (~1km) di normalizeBboxKey, riusato su
+-- "lat,lon" invece che su un bbox a 4 valori. feature può essere JSON null
+-- (nessun dato litologico in quel punto) — stesso stato cacheable di un array
+-- vuoto in pai_polygon_cache. TTL lungo (180gg): la litologia non cambia nel
+-- tempo a parità di punto.
+CREATE TABLE IF NOT EXISTS geologia_cache (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  point_key     text NOT NULL UNIQUE,
+  feature       jsonb NOT NULL,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_geologia_cache_expires_at ON geologia_cache (expires_at);
+
+-- ── Cache uso del suolo (land-cover, bbox-keyed via WCS GetCoverage) ──────────
+-- tile serializza UsoSuoloTile con classCodes come number[] (jsonb non supporta
+-- TypedArray) — vedi lib/usosuolo/usoSuoloCache.ts per il round-trip. TTL più
+-- corto (30gg) di PAI/geologia: il land cover cambia su scala stagionale/
+-- annuale (incendi, disboscamento, stagioni), non pluriennale.
+CREATE TABLE IF NOT EXISTS uso_suolo_cache (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  bbox_key      text NOT NULL UNIQUE,
+  tile          jsonb NOT NULL,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_uso_suolo_cache_expires_at ON uso_suolo_cache (expires_at);
+
+
+-- ═══════════════════════════════════════════════════════════
+-- Geoportale Nazionale MASE/ISPRA — Fase 5 (Rete Natura 2000)
+-- Stesso blocco anche in supabase/migrations/add_natura2000_tables.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- ── Cache poligoni Natura 2000 (SIC/ZSC/ZPS) ──────────────────────────────────
+-- bbox-keyed, stesso pattern lazy-cleanup di pai_polygon_cache. TTL più lungo
+-- (270gg) di PAI (90gg): le designazioni di siti protetti cambiano su scala
+-- pluriennale, ancora più stabili di un piano di bacino.
+CREATE TABLE IF NOT EXISTS natura2000_cache (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  bbox_key      text NOT NULL UNIQUE,
+  features      jsonb NOT NULL,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_natura2000_cache_expires_at ON natura2000_cache (expires_at);
+
+
 -- ── Foto delle escursioni (persistenza server, sostituisce localStorage) ──────
 -- Le immagini vivono nel bucket Storage 'dtrek-photos' (path ${userId}/${activityId}/${photoId}.jpg);
 -- questa tabella salva solo URL + metadati, stesso pattern di hike_reports/dtrek-reports.

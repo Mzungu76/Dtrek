@@ -40,7 +40,7 @@ export class SIRateLimitError extends Error {
 const NEUTRAL_OSM: OsmSignal = { accessPenalty: 0, visibilityPenalty: 0, freshnessScore: 0, operatorBonus: 0, lastModified: null }
 const NEUTRAL_WEATHER: WeatherSignal = { precipPenalty: 0, soilPenalty: 0, surfaceMultiplier: 1.2, slopeMultiplier: 1.0, totalPenalty: 0 }
 const NEUTRAL_CLIMATE: ClimateSignal = { tempPenalty: 0, altitudeSeason: 0, seasonBonus: 0 }
-const NEUTRAL_SATELLITE: SatelliteSignal = { available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0, floodPenalty: 0, landslidePenalty: 0, landslideSource: 'none', floodSource: 'none' }
+const NEUTRAL_SATELLITE: SatelliteSignal = { available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0, floodPenalty: 0, landslidePenalty: 0, landslideSource: 'none', floodSource: 'none', rockfallPenalty: 0, rockfallSource: 'none' }
 const NEUTRAL_ACTIVITY: ActivitySignal = { dtrekBonus: 0, heatmapPenalty: -10 }
 const NEUTRAL_COMMUNITY: CommunitySignal = { osmNotesPenalty: 0, osmNotesDetails: [], difficultyMarkersPenalty: 0, difficultyMarkersDetails: [] }
 const NEUTRAL_GROUND_STABILITY: GroundStabilitySignal = { available: false, pointCount: 0, maxVelocityMmYear: null, classification: 'unknown', confidence: 'none', penalty: 0 }
@@ -144,7 +144,7 @@ function computeScore(s: SISignals): number {
   score += s.osm.accessPenalty + s.osm.visibilityPenalty + s.osm.freshnessScore + s.osm.operatorBonus
   score += clamp(s.weather.totalPenalty, -35, 0)
   score += s.climate.tempPenalty + s.climate.altitudeSeason + s.climate.seasonBonus
-  score += s.satellite.ndviDeltaPenalty + s.satellite.ndviAbsolutePenalty + s.satellite.firePenalty + s.satellite.floodPenalty + s.satellite.landslidePenalty
+  score += s.satellite.ndviDeltaPenalty + s.satellite.ndviAbsolutePenalty + s.satellite.firePenalty + s.satellite.floodPenalty + s.satellite.landslidePenalty + s.satellite.rockfallPenalty
   score += s.activity.heatmapPenalty + s.activity.dtrekBonus
   score += s.community.osmNotesPenalty + s.community.difficultyMarkersPenalty
   score += s.groundStability.penalty
@@ -190,6 +190,12 @@ function dominantWarningFor(s: SISignals): string | null {
       text: s.satellite.landslideSource === 'pai'
         ? `Rischio frana ufficiale (PAI${s.satellite.paiLandslideClass ? `, classe ${s.satellite.paiLandslideClass}` : ''})`
         : 'Possibile rischio frana rilevato via satellite',
+    })
+  }
+  if (s.satellite.rockfallPenalty < 0) {
+    candidates.push({
+      value: s.satellite.rockfallPenalty,
+      text: `Rischio crollo roccioso da litologia (CARG${s.satellite.rockfallClass ? `, classe ${s.satellite.rockfallClass}` : ''})`,
     })
   }
   if (s.satellite.ndviDeltaPenalty < 0) {
