@@ -21,6 +21,4 @@ export const SI_PARAM_DESCRIPTIONS: Record<string, string> = {
   activityDtrek: 'Bonus per un’attività DTrek registrata di recente su questo stesso percorso — segno che è stato effettivamente percorso.',
   communityNotes: 'Segnalazioni recenti della comunità OpenStreetMap (note) nelle vicinanze del tracciato.',
   communityMarkers: 'Tratti difficili individuati automaticamente nei commenti/waypoint dei file GPX importati (Komoot/AllTrails) vicino al tracciato.',
-  groundStability: 'Velocità di deformazione del suolo (mm/anno) misurata via interferometria radar satellitare (PSInSAR) entro 250m dal tracciato.',
-  groundStabilityUnavailable: 'Nessun punto di misura PSInSAR trovato nelle vicinanze del tracciato — non significa che il terreno sia stabile, solo che non c\'è copertura del dato in questa zona.',
 }

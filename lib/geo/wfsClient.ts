@@ -1,6 +1,6 @@
 // Generalizes the WFS 2.0.0 GetFeature pattern already used ad hoc for GNA in
 // app/api/pois/route.ts (fetchGnaPois) — that code is left untouched; new geo
-// clients (PAI, PSInSAR, Natura2000) call this instead.
+// clients (PAI, Natura2000) call this instead.
 
 const USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
 

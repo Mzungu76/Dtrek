@@ -11,8 +11,8 @@
  * Usage:
  *   npx tsx scripts/probe-dtm.ts [--bbox s,w,n,e]
  *
- * Default bbox is the Vernazza/Cinque Terre area (Liguria), same as scripts/probe-pai.ts/
- * probe-psinsar.ts — steep terraced terrain, useful as a manual sanity check.
+ * Default bbox is the Vernazza/Cinque Terre area (Liguria), same as scripts/probe-pai.ts —
+ * steep terraced terrain, useful as a manual sanity check.
  */
 
 import { fetchDtmTile, DtmUnavailableError } from '@/lib/dtm/dtmClient'

@@ -1,7 +1,7 @@
 // DTM raster client (after the pivot off TINITALY/WCS — see lib/dtm/openTopographyClient.ts).
 // Two distinct failure modes, not one: (1) OPENTOPOGRAPHY_API_KEY not set at all is a static
 // fact, known before any network call — throws DtmUnavailableError, same contract as
-// PaiUnavailableError/PsinsarUnavailableError; (2) key set but no coverage for this specific
+// PaiUnavailableError; (2) key set but no coverage for this specific
 // bbox (e.g. the API answers with an error for this dataset/area) is a per-request fact —
 // returns null, never throws, because there's nothing anomalous to report, it's the normal
 // "no DTM here". fetchDtmTile is the single network-aware boundary that folds every flavor of
