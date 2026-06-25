@@ -128,7 +128,7 @@ async function fetchRockfallOverride(ctx: SignalContext): Promise<RockfallOverri
 }
 
 // Additive only (no predecessor to override) — a no-op when riskClass is still 'unknown',
-// same "absence of data is silence, not a value" rule PAI/PSInSAR already follow.
+// same "absence of data is silence, not a value" rule PAI already follows.
 function applyRockfall(signal: SatelliteSignal, rockfall: RockfallOverride): SatelliteSignal {
   if (rockfall.riskClass === 'unknown') return signal
   return { ...signal, rockfallPenalty: rockfall.penalty, rockfallSource: 'geologia', rockfallClass: rockfall.riskClass }

@@ -24,7 +24,7 @@ export function nearestWithinThreshold<T extends LatLon>(
   return best
 }
 
-/** Per-segment-center nearest match, e.g. for joining PSInSAR points or DTM samples onto trail segments. */
+/** Per-segment-center nearest match, e.g. for joining DTM samples onto trail segments. */
 export function nearestPerSegment<T extends LatLon, S extends LatLon>(
   segmentCenters: S[],
   candidates: T[],

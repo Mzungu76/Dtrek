@@ -11,8 +11,8 @@
  * Usage:
  *   npx tsx scripts/probe-geologia.ts [--lat 44.12] [--lon 9.68]
  *
- * Default point is inside the Vernazza/Cinque Terre bbox used by probe-pai.ts/probe-dtm.ts/
- * probe-psinsar.ts, for a consistent manual cross-check across all probes.
+ * Default point is inside the Vernazza/Cinque Terre bbox used by probe-pai.ts/probe-dtm.ts,
+ * for a consistent manual cross-check across all probes.
  */
 
 import { GEOLOGIA_DATASET } from '@/lib/geo/datasetConfig'

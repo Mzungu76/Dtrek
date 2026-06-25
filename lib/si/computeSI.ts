@@ -8,7 +8,7 @@ import { computeBbox } from '@/lib/geoUtils'
 import { fetchOverpass, stitchWays, type OsmRelation, type OsmWay } from '@/lib/overpassTrails'
 import type {
   SIResult, SISignals, SILabel, SignalContext,
-  OsmSignal, WeatherSignal, ClimateSignal, SatelliteSignal, ActivitySignal, CommunitySignal, GroundStabilitySignal,
+  OsmSignal, WeatherSignal, ClimateSignal, SatelliteSignal, ActivitySignal, CommunitySignal,
 } from '@/lib/si/types'
 import { fetchOsmTags, collectOsmSignal } from '@/lib/si/signals/osmSignals'
 import { collectWeatherSignal } from '@/lib/si/signals/weatherSignals'
@@ -16,14 +16,11 @@ import { collectClimateSignal } from '@/lib/si/signals/climateSignals'
 import { collectSatelliteSignal } from '@/lib/si/signals/satelliteSignals'
 import { collectActivitySignal } from '@/lib/si/signals/activitySignals'
 import { collectCommunitySignal } from '@/lib/si/signals/communitySignals'
-import { collectGroundStabilitySignal } from '@/lib/si/signals/groundStability'
 import { findMatchingActivity } from '@/lib/si/matchTrail'
 
 const STATIC_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DYNAMIC_TTL_MS = 1 * 24 * 60 * 60 * 1000
 const SATELLITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
-// PSInSAR è aggiornato su scala annuale/pluriennale — bucket proprio, non quello satellite.
-const GROUND_TTL_MS = 180 * 24 * 60 * 60 * 1000
 const COLLECTOR_TIMEOUT_MS = 5000
 const FORCE_REFRESH_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
@@ -43,7 +40,6 @@ const NEUTRAL_CLIMATE: ClimateSignal = { tempPenalty: 0, altitudeSeason: 0, seas
 const NEUTRAL_SATELLITE: SatelliteSignal = { available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0, floodPenalty: 0, landslidePenalty: 0, landslideSource: 'none', floodSource: 'none', rockfallPenalty: 0, rockfallSource: 'none' }
 const NEUTRAL_ACTIVITY: ActivitySignal = { dtrekBonus: 0 }
 const NEUTRAL_COMMUNITY: CommunitySignal = { osmNotesPenalty: 0, osmNotesDetails: [], difficultyMarkersPenalty: 0, difficultyMarkersDetails: [] }
-const NEUTRAL_GROUND_STABILITY: GroundStabilitySignal = { available: false, pointCount: 0, maxVelocityMmYear: null, classification: 'unknown', confidence: 'none', penalty: 0 }
 
 interface TrailSiRow {
   bbox: SignalContext['bbox'] | null
@@ -56,14 +52,13 @@ interface TrailSiRow {
   siStaticComputedAt: string | null
   siDynamicComputedAt: string | null
   siSatelliteComputedAt: string | null
-  siGroundComputedAt: string | null
   isGhostTrail: boolean
 }
 
 async function fetchTrailSiRow(osmRelationId: number): Promise<TrailSiRow | null> {
   const { data } = await supabase
     .from('trails')
-    .select('bbox, geometry_simplified, distance_km, elevation_gain, elevation_loss, si_score, si_signals, si_static_computed_at, si_dynamic_computed_at, si_satellite_computed_at, si_ground_computed_at, is_ghost_trail')
+    .select('bbox, geometry_simplified, distance_km, elevation_gain, elevation_loss, si_score, si_signals, si_static_computed_at, si_dynamic_computed_at, si_satellite_computed_at, is_ghost_trail')
     .eq('osm_relation_id', osmRelationId)
     .maybeSingle()
   if (!data) return null
@@ -78,7 +73,6 @@ async function fetchTrailSiRow(osmRelationId: number): Promise<TrailSiRow | null
     siStaticComputedAt: data.si_static_computed_at,
     siDynamicComputedAt: data.si_dynamic_computed_at,
     siSatelliteComputedAt: data.si_satellite_computed_at,
-    siGroundComputedAt: data.si_ground_computed_at,
     isGhostTrail: data.is_ghost_trail ?? false,
   }
 }
@@ -147,7 +141,6 @@ function computeScore(s: SISignals): number {
   score += s.satellite.ndviDeltaPenalty + s.satellite.ndviAbsolutePenalty + s.satellite.firePenalty + s.satellite.floodPenalty + s.satellite.landslidePenalty + s.satellite.rockfallPenalty
   score += s.activity.dtrekBonus
   score += s.community.osmNotesPenalty + s.community.difficultyMarkersPenalty
-  score += s.groundStability.penalty
   return clamp(score, 0, 100)
 }
 
@@ -218,13 +211,6 @@ function dominantWarningFor(s: SISignals): string | null {
       text: worst ? `Tratto difficile segnalato nel tracciato GPX a ${worst.distanceM}m` : 'Tratti difficili segnalati nel tracciato GPX importato',
     })
   }
-  if (s.groundStability.penalty < 0) {
-    const confidenceNote = s.groundStability.confidence === 'low' ? ', confidenza bassa' : ''
-    candidates.push({
-      value: s.groundStability.penalty,
-      text: `Deformazione del suolo rilevata via PSInSAR — movimento ${s.groundStability.classification}${confidenceNote}`,
-    })
-  }
 
   if (candidates.length === 0) return null
   candidates.sort((a, b) => a.value - b.value)
@@ -237,7 +223,6 @@ interface SiCacheFields {
   siStaticComputedAt: string | null
   siDynamicComputedAt: string | null
   siSatelliteComputedAt: string | null
-  siGroundComputedAt: string | null
   isGhostTrail: boolean
 }
 
@@ -251,7 +236,6 @@ interface SiPipelineResult {
   staticExpired: boolean
   dynamicExpired: boolean
   satelliteExpired: boolean
-  groundExpired: boolean
 }
 
 // Pure scoring pipeline shared by computeSI (OSM trail, `trails` cache) and
@@ -275,7 +259,6 @@ async function runSiPipeline(
   const staticExpired = force || !cached.siStaticComputedAt || now - new Date(cached.siStaticComputedAt).getTime() > STATIC_TTL_MS
   const dynamicExpired = force || !cached.siDynamicComputedAt || now - new Date(cached.siDynamicComputedAt).getTime() > DYNAMIC_TTL_MS
   const satelliteExpired = force || !cached.siSatelliteComputedAt || now - new Date(cached.siSatelliteComputedAt).getTime() > SATELLITE_TTL_MS
-  const groundExpired = force || !cached.siGroundComputedAt || now - new Date(cached.siGroundComputedAt).getTime() > GROUND_TTL_MS
 
   const needsOsmTags = staticExpired || dynamicExpired // weather (dynamic) reads ctx.osmTags.surface
   const needsMatch = dynamicExpired // activity (dynamic) reads ctx.matchedActivity
@@ -302,7 +285,7 @@ async function runSiPipeline(
   // is no real OSM relation.
   const collectorId = overpassRelationId ?? 0
 
-  type CollectorKey = 'osm' | 'weather' | 'climate' | 'satellite' | 'activity' | 'community' | 'groundStability'
+  type CollectorKey = 'osm' | 'weather' | 'climate' | 'satellite' | 'activity' | 'community'
   const tasks: Array<{ key: CollectorKey; promise: Promise<unknown>; neutral: unknown }> = []
   if (staticExpired) tasks.push({ key: 'osm', promise: collectOsmSignal(collectorId, ctx), neutral: NEUTRAL_OSM })
   if (dynamicExpired) {
@@ -312,7 +295,6 @@ async function runSiPipeline(
     tasks.push({ key: 'community', promise: collectCommunitySignal(collectorId, ctx), neutral: NEUTRAL_COMMUNITY })
   }
   if (satelliteExpired) tasks.push({ key: 'satellite', promise: collectSatelliteSignal(collectorId, ctx), neutral: NEUTRAL_SATELLITE })
-  if (groundExpired) tasks.push({ key: 'groundStability', promise: collectGroundStabilitySignal(collectorId, ctx), neutral: NEUTRAL_GROUND_STABILITY })
 
   const settled = await Promise.allSettled(tasks.map(t => withTimeout(t.promise, COLLECTOR_TIMEOUT_MS)))
 
@@ -338,7 +320,6 @@ async function runSiPipeline(
     satellite: (fresh.satellite as SatelliteSignal) ?? { ...NEUTRAL_SATELLITE, ...cachedSignals?.satellite },
     activity:  (fresh.activity as ActivitySignal) ?? { ...NEUTRAL_ACTIVITY, ...cachedSignals?.activity },
     community: (fresh.community as CommunitySignal) ?? { ...NEUTRAL_COMMUNITY, ...cachedSignals?.community },
-    groundStability: (fresh.groundStability as GroundStabilitySignal) ?? { ...NEUTRAL_GROUND_STABILITY, ...cachedSignals?.groundStability },
   }
 
   // Ghost trail can only be newly *set* on the very first computation ever
@@ -357,7 +338,7 @@ async function runSiPipeline(
   const label = labelFor(score)
   const dominantWarning = dominantWarningFor(signals)
 
-  return { signals, score, label, dominantWarning, isGhostTrail, partial, staticExpired, dynamicExpired, satelliteExpired, groundExpired }
+  return { signals, score, label, dominantWarning, isGhostTrail, partial, staticExpired, dynamicExpired, satelliteExpired }
 }
 
 export async function computeSI(
@@ -395,7 +376,6 @@ export async function computeSI(
     siStaticComputedAt: trailRow?.siStaticComputedAt ?? null,
     siDynamicComputedAt: trailRow?.siDynamicComputedAt ?? null,
     siSatelliteComputedAt: trailRow?.siSatelliteComputedAt ?? null,
-    siGroundComputedAt: trailRow?.siGroundComputedAt ?? null,
     isGhostTrail: trailRow?.isGhostTrail ?? false,
   }
 
@@ -417,7 +397,6 @@ export async function computeSI(
   if (result.staticExpired) updatePayload.si_static_computed_at = cachedAt
   if (result.dynamicExpired) updatePayload.si_dynamic_computed_at = cachedAt
   if (result.satelliteExpired) updatePayload.si_satellite_computed_at = cachedAt
-  if (result.groundExpired) updatePayload.si_ground_computed_at = cachedAt
 
   await supabase.from('trails').update(updatePayload).eq('osm_relation_id', osmRelationId)
 
@@ -430,7 +409,7 @@ export async function computeSI(
 async function fetchPlannedSiCache(plannedHikeId: string): Promise<SiCacheFields> {
   const { data } = await supabase
     .from('planned_hikes')
-    .select('si_score, si_signals, si_static_computed_at, si_dynamic_computed_at, si_satellite_computed_at, si_ground_computed_at, is_ghost_trail')
+    .select('si_score, si_signals, si_static_computed_at, si_dynamic_computed_at, si_satellite_computed_at, is_ghost_trail')
     .eq('id', plannedHikeId)
     .maybeSingle()
   return {
@@ -439,7 +418,6 @@ async function fetchPlannedSiCache(plannedHikeId: string): Promise<SiCacheFields
     siStaticComputedAt: data?.si_static_computed_at ?? null,
     siDynamicComputedAt: data?.si_dynamic_computed_at ?? null,
     siSatelliteComputedAt: data?.si_satellite_computed_at ?? null,
-    siGroundComputedAt: data?.si_ground_computed_at ?? null,
     isGhostTrail: data?.is_ghost_trail ?? false,
   }
 }
@@ -481,7 +459,6 @@ export async function computeSIForPlannedHike(
   if (result.staticExpired) updatePayload.si_static_computed_at = cachedAt
   if (result.dynamicExpired) updatePayload.si_dynamic_computed_at = cachedAt
   if (result.satelliteExpired) updatePayload.si_satellite_computed_at = cachedAt
-  if (result.groundExpired) updatePayload.si_ground_computed_at = cachedAt
 
   await supabase.from('planned_hikes').update(updatePayload).eq('id', plannedHikeId)
 

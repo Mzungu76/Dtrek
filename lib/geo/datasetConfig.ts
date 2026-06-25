@@ -32,15 +32,6 @@ export const PAI_DATASET: DatasetEndpoint = {
   notes: 'Workspace nz1 = solo alluvioni (WFS 2.0.0, GetCapabilities verificata). P2 = pericolosità media, TR 100-200 anni (default qui); p1 (TR 30-50, alta) e p3 (TR 200-500, bassa) sono typeName alternativi disponibili sullo stesso endpoint ma non interrogati. Frane (workspace nz2, atteso "aree_peric_frana_pai") NON verificato: nessuna risposta reale ricevuta — resta fuori da questo client. Schema attributi reale non ancora ispezionato via DescribeFeatureType — vedi lib/pai/paiAttributeMap.ts.',
 }
 
-export const PSINSAR_DATASET: DatasetEndpoint = {
-  name: 'PSInSAR — velocità di deformazione del suolo (mm/anno)',
-  agency: 'MASE',
-  protocol: 'WFS',
-  baseUrl: null,
-  verifiedAt: null,
-  notes: 'Densità di copertura ignota — vedi soglie in lib/si/signals/groundStability.ts',
-}
-
 // DTM (pendenza/esposizione sentieri) NON è più in questo registro: il pivot TINITALY/INGV
 // (WCS, mai raggiunto — host negato anche da questa sandbox, nessuna GetCapabilities reale
 // mai ispezionata) e l'opzione LiDAR 1m PST-A precedente (scartata prima di scrivere codice:
@@ -80,7 +71,6 @@ export const NATURA2000_DATASET: DatasetEndpoint = {
 
 export const ALL_DATASETS: DatasetEndpoint[] = [
   PAI_DATASET,
-  PSINSAR_DATASET,
   GEOLOGIA_DATASET,
   USO_SUOLO_DATASET,
   NATURA2000_DATASET,

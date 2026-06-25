@@ -95,15 +95,6 @@ function signalRows(s: SISignals): SignalRow[] {
     rows.push({ icon: '⚠️', kind: 'communityMarkers', text: `${signedNum(s.community.difficultyMarkersPenalty)} Tratti difficili segnalati nel tracciato GPX importato` })
   }
 
-  if (s.groundStability.available) {
-    if (s.groundStability.penalty < 0) {
-      const confidenceNote = s.groundStability.confidence === 'low' ? ', confidenza bassa' : ''
-      rows.push({ icon: '⚠️', kind: 'groundStability', text: `${signedNum(s.groundStability.penalty)} Deformazione del suolo rilevata via PSInSAR (${s.groundStability.classification}${confidenceNote})` })
-    }
-  } else {
-    rows.push({ icon: 'ℹ️', kind: 'groundStabilityUnavailable', text: 'Dati radar di deformazione del suolo (PSInSAR) non disponibili' })
-  }
-
   return rows
 }
 

@@ -52,7 +52,7 @@ export interface SatelliteSignal {
   // rockfallPenalty has no satellite-heuristic predecessor (BSI is bare-soil/erosion, not
   // rockfall) — purely additive, always 0/'none' until GEOLOGIA_DATASET is live (see
   // satelliteSignals.ts's fetchRockfallOverride). Stays in this signal/TTL bucket rather than
-  // becoming its own collector, unlike groundStability (which needed a dedicated 180d TTL).
+  // becoming its own collector.
   rockfallPenalty: number     // 0 | -5 (low) | -20 (medium) | -45 (high)
   rockfallSource: 'geologia' | 'none'
   rockfallClass?: RockfallRisk // set only when rockfallSource === 'geologia'
@@ -61,21 +61,6 @@ export interface SatelliteSignal {
 
 export interface ActivitySignal {
   dtrekBonus: number     // 0 | +5 | +15 (DTrek *completed activity* match recency — never from planned/imported hikes)
-}
-
-export type GroundStabilityClass = 'stable' | 'slow' | 'moderate' | 'rapid' | 'unknown'
-
-// PSInSAR (radar deformation velocity) — 7° segnale SI, vedi
-// lib/si/signals/groundStability.ts. Bucket TTL dedicato (180gg, non quello satellite):
-// il prodotto è aggiornato su scala annuale/pluriennale.
-export interface GroundStabilitySignal {
-  available: boolean
-  pointCount: number             // punti PSInSAR trovati nel bbox (0 = nessuna copertura, non "stabile")
-  maxVelocityMmYear: number | null // valore con segno, punto più veloce entro 250m da un vertice del tracciato
-  classification: GroundStabilityClass
-  confidence: 'high' | 'low' | 'none' // high: punto più vicino <=100m, low: 100-250m, none: nessun match
-  penalty: number                 // 0 | -10 (slow) | -25 (moderate) | -45 (rapid), dimezzata se confidence è 'low'
-  reason?: UnavailableReason
 }
 
 export interface CommunitySignal {
@@ -97,7 +82,6 @@ export interface SISignals {
   satellite: SatelliteSignal
   activity: ActivitySignal
   community: CommunitySignal
-  groundStability: GroundStabilitySignal
 }
 
 export interface SIResult {
