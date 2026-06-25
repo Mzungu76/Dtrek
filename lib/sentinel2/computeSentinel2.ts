@@ -215,13 +215,13 @@ type S2PipelineResult =
 // Pure pipeline shared by computeSentinel2 (OSM trail, `trails` cache) and
 // computeSentinel2ForPlannedHike (arbitrary GPX track, `planned_hikes`
 // cache) — works purely off trailPoints/bbox, no OSM linkage needed.
-async function runSentinel2Pipeline(trailPoints: [number, number][], cache: S2CacheRow | null, stats: TrailStatsRow): Promise<S2PipelineResult> {
+async function runSentinel2Pipeline(trailPoints: [number, number][], cache: S2CacheRow | null, stats: TrailStatsRow, force = false): Promise<S2PipelineResult> {
   if (trailPoints.length < 2) return { status: 'unavailable', reason: 'no_geometry' }
 
   try {
     const now = Date.now()
-    const snapshotExpired = !cache?.computedAt || now - new Date(cache.computedAt).getTime() > SNAPSHOT_TTL_MS
-    const seriesExpired = !cache?.computedAt || now - new Date(cache.computedAt).getTime() > SERIES_TTL_MS
+    const snapshotExpired = force || !cache?.computedAt || now - new Date(cache.computedAt).getTime() > SNAPSHOT_TTL_MS
+    const seriesExpired = force || !cache?.computedAt || now - new Date(cache.computedAt).getTime() > SERIES_TTL_MS
 
     if (!snapshotExpired && cache) {
       return { status: 'cached', row: cache }
@@ -315,9 +315,9 @@ function s2RowToUpdatePayload(row: S2CacheRow): Record<string, unknown> {
   }
 }
 
-export async function computeSentinel2(osmRelationId: number, trailPoints: [number, number][]): Promise<Sentinel2Data> {
+export async function computeSentinel2(osmRelationId: number, trailPoints: [number, number][], opts?: { force?: boolean }): Promise<Sentinel2Data> {
   const [cache, stats] = await Promise.all([fetchS2Cache(osmRelationId), fetchTrailStats(osmRelationId)])
-  const result = await runSentinel2Pipeline(trailPoints, cache, stats)
+  const result = await runSentinel2Pipeline(trailPoints, cache, stats, opts?.force)
 
   if (result.status === 'unavailable') {
     return { ...UNAVAILABLE, osmRelationId, reason: result.reason, debugInfo: result.debugInfo }
@@ -364,9 +364,10 @@ export async function computeSentinel2ForPlannedHike(
   distanceKm: number | null,
   elevationGain: number | null,
   elevationLoss: number | null,
+  opts?: { force?: boolean },
 ): Promise<Sentinel2Data> {
   const cache = await fetchS2CacheForPlannedHike(plannedHikeId)
-  const result = await runSentinel2Pipeline(trailPoints, cache, { distanceKm, elevationGain, elevationLoss })
+  const result = await runSentinel2Pipeline(trailPoints, cache, { distanceKm, elevationGain, elevationLoss }, opts?.force)
 
   if (result.status === 'unavailable') {
     return { ...UNAVAILABLE, plannedHikeId, reason: result.reason, debugInfo: result.debugInfo }

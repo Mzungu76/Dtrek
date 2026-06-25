@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
   const osmIdParam = req.nextUrl.searchParams.get('osm_relation_id')
   const polylineParam = req.nextUrl.searchParams.get('polyline')
   const plannedId = req.nextUrl.searchParams.get('planned_id')
+  const force = req.nextUrl.searchParams.get('force') === '1'
 
   if (!osmIdParam && !polylineParam) {
     return NextResponse.json({ error: 'osm_relation_id o polyline richiesto' }, { status: 400 })
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
       const cache = await fetchS2Cache(osmRelationId)
       const seriesExpired = !cache?.computedAt || Date.now() - new Date(cache.computedAt).getTime() > SERIES_TTL_MS
 
-      if (cache?.available && seriesExpired) {
+      if (!force && cache?.available && seriesExpired) {
         resolveTrailGeometry(osmRelationId)
           .then(geometry => {
             const trailPoints = polyline ?? geometry
@@ -101,7 +102,7 @@ export async function GET(req: NextRequest) {
         } satisfies Sentinel2ApiResponse)
       }
 
-      const result = await withTimeout(computeSentinel2(osmRelationId, trailPoints), COMPUTE_TIMEOUT_MS)
+      const result = await withTimeout(computeSentinel2(osmRelationId, trailPoints, { force }), COMPUTE_TIMEOUT_MS)
       return NextResponse.json(result satisfies Sentinel2ApiResponse)
     }
 
@@ -113,7 +114,7 @@ export async function GET(req: NextRequest) {
         .maybeSingle()
       const distanceKm = plannedRow?.distance_meters != null ? plannedRow.distance_meters / 1000 : null
       const result = await withTimeout(
-        computeSentinel2ForPlannedHike(plannedId, polyline, distanceKm, plannedRow?.elevation_gain ?? null, plannedRow?.elevation_loss ?? null),
+        computeSentinel2ForPlannedHike(plannedId, polyline, distanceKm, plannedRow?.elevation_gain ?? null, plannedRow?.elevation_loss ?? null, { force }),
         COMPUTE_TIMEOUT_MS,
       )
       return NextResponse.json(result satisfies Sentinel2ApiResponse)

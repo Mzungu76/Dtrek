@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
-import { getAllPlanned, getPlannedById, updatePlannedMeta } from '@/lib/plannedStore'
+import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
 import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blobStore'
 import { computeTrailScore, getCtsFallback, type CtsConfidence } from '@/lib/trailScore'
 import { type BeautyScore } from '@/lib/beautyScore'
@@ -11,10 +11,11 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { type PoiItem } from '@/lib/overpass'
-import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { computeBbox } from '@/lib/geoUtils'
+import { batchUpdate, fetchPoisForGps, recalcAllCts, recalcAllSafety, recalcAllSI, recalcAllSentinel2 } from '@/lib/recalcScores'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw,
+  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers,
 } from 'lucide-react'
 
 // ── Claude API key section ─────────────────────────────────────────────────
@@ -149,35 +150,6 @@ function ClaudeKeySection() {
 }
 
 // ── Comfort TrailScore settings ───────────────────────────────────────────────
-
-async function batchUpdate<T>(
-  items: T[],
-  fn: (item: T) => Promise<void>,
-  chunkSize = 5,
-  delayMs = 200,
-): Promise<{ ok: number; failed: number }> {
-  let ok = 0, failed = 0
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize)
-    await Promise.allSettled(chunk.map(async item => {
-      try { await fn(item); ok++ }
-      catch { failed++ }
-    }))
-    if (i + chunkSize < items.length) await new Promise(r => setTimeout(r, delayMs))
-  }
-  return { ok, failed }
-}
-
-async function fetchPoisForGps(gps: [number, number][]): Promise<PoiItem[]> {
-  if (gps.length < 2) return []
-  const bbox = computeBbox(gps)
-  try {
-    const res = await fetch(`/api/pois?bbox=${bbox}`)
-    if (!res.ok) return []
-    const all: PoiItem[] = await res.json()
-    return all.filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
-  } catch { return [] }
-}
 
 function ComfortTrailScoreSection() {
   const [hrRest,           setHrRest]           = useState(55)
@@ -372,151 +344,7 @@ function ComfortTrailScoreSection() {
     setFullRecalcProgress('Recupero preferenze…')
     let computed = 0
     try {
-      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      const [activities, hikes] = await Promise.all([getAllActivities(), getAllPlanned()])
-      const total = activities.length + hikes.length
-
-      let idx = 0
-      await batchUpdate(activities, async meta => {
-        setFullRecalcProgress(`${++idx}/${total} — ${meta.title ?? 'Escursione'}`)
-        const full = await getActivityById(meta.id)
-        if (!full) return
-        const gps = (full.trackPoints ?? [])
-          .filter(p => p.lat && p.lon)
-          .map(p => [p.lat!, p.lon!] as [number, number])
-
-        const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
-        const bbox = computeBbox(gps)
-        const [pois, osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
-          Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
-          Promise.race([
-            fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            checkProtectedArea(gps).then(r => r.inProtectedArea),
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-        ])
-
-        const elevProfile = (full.trackPoints ?? [])
-          .filter(p => p.lat && p.lon)
-          .map(p => p.altitudeMeters ?? 0)
-
-        const tei = computeTEI({
-          track: gps,
-          elevGain: full.elevationGain,
-          distanceMeters: full.distanceMeters,
-          altitudeMax: full.altitudeMax,
-          elevProfile,
-          pois,
-          osmData,
-          dtmProfile,
-          terrainProfile,
-          inProtectedArea,
-        })
-        const bs = teiToBeautyScore(tei)
-        const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
-
-        let finalTs: number
-        if (pois.length === 0) {
-          finalTs = getCtsFallback(activities)
-        } else {
-          const { ts } = computeTrailScore(bs, {
-            distanceMeters: full.distanceMeters,
-            elevationGain:  full.elevationGain,
-            elevationLoss:  full.elevationLoss ?? 0,
-            altitudeMax:    full.altitudeMax,
-            avgHeartRate:   full.avgHeartRate,
-            prefSforzo:     prefs.prefSforzo ?? prefSforzo,
-            prefDurata:     prefs.prefDurata ?? prefDurata,
-            hrRest:         prefs.hrRest ?? hrRest,
-            hrMax:          prefs.hrMax ?? hrMax ?? undefined,
-            avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
-          })
-          finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
-        }
-        await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence })
-        computed++
-      })
-
-      await batchUpdate(hikes, async meta => {
-        setFullRecalcProgress(`${++idx}/${total} — ${meta.title ?? 'Pianificata'}`)
-        const full = await getPlannedById(meta.id)
-        if (!full) return
-        const gps = (full.trackPoints ?? [])
-          .filter(p => p.lat && p.lon)
-          .map(p => [p.lat!, p.lon!] as [number, number])
-
-        const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
-        const bbox = computeBbox(gps)
-        const [pois, osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
-          Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
-          Promise.race([
-            fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            checkProtectedArea(gps).then(r => r.inProtectedArea),
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-        ])
-
-        const elevProfile = (full.trackPoints ?? [])
-          .filter(p => p.lat && p.lon)
-          .map(p => p.altitudeMeters ?? 0)
-
-        const tei = computeTEI({
-          track: gps,
-          elevGain: full.elevationGain,
-          distanceMeters: full.distanceMeters,
-          altitudeMax: full.altitudeMax,
-          elevProfile,
-          pois,
-          osmData,
-          dtmProfile,
-          terrainProfile,
-          inProtectedArea,
-        })
-        const bs = teiToBeautyScore(tei)
-        const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
-
-        let finalTs: number
-        if (pois.length === 0) {
-          finalTs = getCtsFallback(activities)
-        } else {
-          const { ts } = computeTrailScore(bs, {
-            distanceMeters: full.distanceMeters,
-            elevationGain:  full.elevationGain,
-            elevationLoss:  full.elevationLoss,
-            altitudeMax:    full.altitudeMax,
-            prefSforzo:     prefs.prefSforzo ?? prefSforzo,
-            prefDurata:     prefs.prefDurata ?? prefDurata,
-            hrRest:         prefs.hrRest ?? hrRest,
-            hrMax:          prefs.hrMax ?? hrMax ?? undefined,
-            avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
-          })
-          finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
-        }
-        await updatePlannedMeta(full.id, { cachedBeautyScore: bs, cachedTrailScore: finalTs, cachedTrailScoreConfidence: confidence })
-        computed++
-      })
+      computed = await recalcAllCts({ hrRest, hrMax, prefSforzo, prefDurata }, setFullRecalcProgress)
     } catch {}
     setFullRecalcRunning(false)
     setFullRecalcProgress(computed > 0 ? `Completato · ${computed} CTS ricalcolati.` : 'Nessun CTS ricalcolato.')
@@ -644,6 +472,140 @@ function ComfortTrailScoreSection() {
           {status.ok ? '✓ ' : '✗ '}{status.msg}
         </p>
       )}
+    </div>
+  )
+}
+
+// ── All-scores recalculation ─────────────────────────────────────────────────
+
+function AllScoresRecalcSection() {
+  const [siRunning,      setSiRunning]      = useState(false)
+  const [siProgress,     setSiProgress]     = useState('')
+  const [safetyRunning,  setSafetyRunning]  = useState(false)
+  const [safetyProgress, setSafetyProgress] = useState('')
+  const [s2Running,      setS2Running]      = useState(false)
+  const [s2Progress,     setS2Progress]     = useState('')
+  const [allRunning,     setAllRunning]     = useState(false)
+  const [allProgress,    setAllProgress]    = useState('')
+
+  const anyRunning = siRunning || safetyRunning || s2Running || allRunning
+
+  async function handleRecalcSI() {
+    setSiRunning(true)
+    setSiProgress('Recupero percorsi…')
+    const { ok, rateLimited } = await recalcAllSI(setSiProgress).catch(() => ({ ok: 0, rateLimited: 0, failed: 0 }))
+    setSiRunning(false)
+    setSiProgress(`Completato · ${ok} SI ricalcolati${rateLimited ? `, ${rateLimited} già aggiornati di recente` : ''}.`)
+    setTimeout(() => setSiProgress(''), 4000)
+  }
+
+  async function handleRecalcSafety() {
+    setSafetyRunning(true)
+    setSafetyProgress('Recupero percorsi…')
+    const ok = await recalcAllSafety(setSafetyProgress).catch(() => 0)
+    setSafetyRunning(false)
+    setSafetyProgress(ok > 0 ? `Completato · ${ok} Safety Score ricalcolati.` : 'Nessuna Safety Score ricalcolata.')
+    setTimeout(() => setSafetyProgress(''), 4000)
+  }
+
+  async function handleRecalcSentinel2() {
+    setS2Running(true)
+    setS2Progress('Recupero percorsi…')
+    const { ok } = await recalcAllSentinel2(setS2Progress).catch(() => ({ ok: 0, failed: 0 }))
+    setS2Running(false)
+    setS2Progress(ok > 0 ? `Completato · ${ok} dati Sentinel-2 ricalcolati.` : 'Nessun dato Sentinel-2 ricalcolato.')
+    setTimeout(() => setS2Progress(''), 4000)
+  }
+
+  async function handleRecalcAll() {
+    setAllRunning(true)
+    setAllProgress('CTS: recupero preferenze…')
+    try {
+      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const ctsCount = await recalcAllCts(
+        { hrRest: prefs.hrRest ?? 55, hrMax: prefs.hrMax ?? null, prefSforzo: prefs.prefSforzo ?? 50, prefDurata: prefs.prefDurata ?? 270 },
+        text => setAllProgress(`CTS: ${text}`),
+      )
+      const si = await recalcAllSI(text => setAllProgress(`SI: ${text}`))
+      const safety = await recalcAllSafety(text => setAllProgress(`Safety: ${text}`))
+      const s2 = await recalcAllSentinel2(text => setAllProgress(`Sentinel-2: ${text}`))
+      setAllProgress(`Completato · ${ctsCount} CTS, ${si.ok} SI, ${safety} Safety Score, ${s2.ok} Sentinel-2 ricalcolati.`)
+    } catch {
+      setAllProgress('Errore durante il ricalcolo.')
+    }
+    setAllRunning(false)
+    setTimeout(() => setAllProgress(''), 5000)
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
+      <div className="flex items-center gap-2.5">
+        <Layers className="w-5 h-5 text-forest-600 shrink-0" />
+        <div>
+          <h2 className="text-sm font-semibold text-stone-800">Punteggi — ricalcolo</h2>
+          <p className="text-xs text-stone-400">Rifai il calcolo di SI, Safety Score e Sentinel-2 per tutti i percorsi pianificati</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <button
+          onClick={handleRecalcSI}
+          disabled={anyRunning}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-700 text-sm font-medium border border-stone-200 transition"
+        >
+          {siRunning
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {siProgress || 'Ricalcolo in corso…'}</>
+            : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutti gli SI</>
+          }
+        </button>
+        {!siRunning && siProgress && (
+          <p className="text-xs text-forest-600 font-medium">✓ {siProgress}</p>
+        )}
+
+        <button
+          onClick={handleRecalcSafety}
+          disabled={anyRunning}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-700 text-sm font-medium border border-stone-200 transition"
+        >
+          {safetyRunning
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {safetyProgress || 'Ricalcolo in corso…'}</>
+            : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutte le Safety Score</>
+          }
+        </button>
+        {!safetyRunning && safetyProgress && (
+          <p className="text-xs text-forest-600 font-medium">✓ {safetyProgress}</p>
+        )}
+
+        <button
+          onClick={handleRecalcSentinel2}
+          disabled={anyRunning}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-700 text-sm font-medium border border-stone-200 transition"
+        >
+          {s2Running
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {s2Progress || 'Ricalcolo in corso…'}</>
+            : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutti i dati Sentinel-2</>
+          }
+        </button>
+        {!s2Running && s2Progress && (
+          <p className="text-xs text-forest-600 font-medium">✓ {s2Progress}</p>
+        )}
+
+        <div className="border-t border-stone-100 pt-2 mt-1">
+          <button
+            onClick={handleRecalcAll}
+            disabled={anyRunning}
+            className="w-full flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-700 text-sm font-medium border border-red-200 transition"
+          >
+            {allRunning
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {allProgress || 'Ricalcolo in corso…'}</>
+              : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutti i punteggi di tutti i percorsi</>
+            }
+          </button>
+          {!allRunning && allProgress && (
+            <p className="text-xs text-forest-600 font-medium mt-2">✓ {allProgress}</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -978,6 +940,11 @@ export default function ProfiloPage() {
         <div className="pt-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">Comfort TrailScore</p>
           <ComfortTrailScoreSection />
+        </div>
+
+        {/* All scores recalc */}
+        <div className="pt-2">
+          <AllScoresRecalcSection />
         </div>
 
         {/* AI settings */}
