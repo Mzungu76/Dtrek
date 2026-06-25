@@ -61,11 +61,13 @@ export const GEOLOGIA_DATASET: DatasetEndpoint = {
 }
 
 export const USO_SUOLO_DATASET: DatasetEndpoint = {
-  name: 'Uso/copertura del suolo',
+  name: 'Uso/copertura del suolo (Corine Land Cover 2018, livello III)',
   agency: 'ISPRA',
-  protocol: 'WCS',
-  baseUrl: null,
-  verifiedAt: null,
+  protocol: 'WFS',
+  baseUrl: 'http://sdi.isprambiente.it/geoserver/lc/wfs',
+  typeName: 'lc:clc18_it_4258',
+  verifiedAt: '2026-06-25',
+  notes: 'Confermato WFS 2.0.0 vettoriale (16 typeName disponibili) — NON WCS raster come assunto inizialmente. clc18_it_4258 = CLC 2018 livello III, la classificazione base più recente. Nomenclatura pubblica EEA (codici 111-523) — vedi lib/tei/landCoverSurfaceMap.ts. Nome-campo classe reale non ancora confermato via DescribeFeatureType — vedi CLASS_CODE_FIELDS in lib/usosuolo/usoSuoloClient.ts.',
 }
 
 export const NATURA2000_DATASET: DatasetEndpoint = {
