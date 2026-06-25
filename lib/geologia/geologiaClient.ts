@@ -1,9 +1,8 @@
 // CARG (Carta Geologica d'Italia) — lithology lookup at a single point via WMS GetFeatureInfo.
 // Mirrors lib/pai/paiClient.ts's shape, but the query is point-based (WMS GetFeatureInfo), not
-// bbox-based (WFS GetFeature) — see lib/geo/wmsClient.ts. GEOLOGIA_DATASET.protocol is WMS
-// pending confirmation (see lib/geo/datasetConfig.ts); if a real endpoint turns out to expose a
-// WFS for the lithology attribute table instead, swap wmsGetFeatureInfo for wfsGetFeature here,
-// not at any call site.
+// bbox-based (WFS GetFeature) — see lib/geo/wmsClient.ts. GEOLOGIA_DATASET.protocol confirmed
+// WMS-only (ArcGIS Server at sinacloud.isprambiente.it, no WFS exposed for this layer) — see
+// lib/geo/datasetConfig.ts.
 import { GEOLOGIA_DATASET } from '@/lib/geo/datasetConfig'
 import { wmsGetFeatureInfo } from '@/lib/geo/wmsClient'
 import { lithologyCodeToRockfallRisk, type RockfallRisk } from '@/lib/geologia/lithologyRiskMap'
@@ -61,6 +60,11 @@ export async function fetchGeologiaAtPoint(lat: number, lon: number): Promise<Ge
     layerName: GEOLOGIA_DATASET.layerName,
     lat,
     lon,
+    // This ArcGIS Server (sinacloud.isprambiente.it) doesn't support plain application/json
+    // for GetFeatureInfo — confirmed against its real GetCapabilities format list (only
+    // application/geo+json among the JSON-ish options). Response shape is still standard
+    // GeoJSON, so extractProperties() below doesn't need to change.
+    infoFormat: 'application/geo+json',
     timeoutMs: GEOLOGIA_TIMEOUT_MS,
   })
 
