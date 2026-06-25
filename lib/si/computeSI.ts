@@ -41,7 +41,7 @@ const NEUTRAL_OSM: OsmSignal = { accessPenalty: 0, visibilityPenalty: 0, freshne
 const NEUTRAL_WEATHER: WeatherSignal = { precipPenalty: 0, soilPenalty: 0, surfaceMultiplier: 1.2, slopeMultiplier: 1.0, totalPenalty: 0 }
 const NEUTRAL_CLIMATE: ClimateSignal = { tempPenalty: 0, altitudeSeason: 0, seasonBonus: 0 }
 const NEUTRAL_SATELLITE: SatelliteSignal = { available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0, floodPenalty: 0, landslidePenalty: 0, landslideSource: 'none', floodSource: 'none', rockfallPenalty: 0, rockfallSource: 'none' }
-const NEUTRAL_ACTIVITY: ActivitySignal = { dtrekBonus: 0, heatmapPenalty: -10 }
+const NEUTRAL_ACTIVITY: ActivitySignal = { dtrekBonus: 0 }
 const NEUTRAL_COMMUNITY: CommunitySignal = { osmNotesPenalty: 0, osmNotesDetails: [], difficultyMarkersPenalty: 0, difficultyMarkersDetails: [] }
 const NEUTRAL_GROUND_STABILITY: GroundStabilitySignal = { available: false, pointCount: 0, maxVelocityMmYear: null, classification: 'unknown', confidence: 'none', penalty: 0 }
 
@@ -145,7 +145,7 @@ function computeScore(s: SISignals): number {
   score += clamp(s.weather.totalPenalty, -35, 0)
   score += s.climate.tempPenalty + s.climate.altitudeSeason + s.climate.seasonBonus
   score += s.satellite.ndviDeltaPenalty + s.satellite.ndviAbsolutePenalty + s.satellite.firePenalty + s.satellite.floodPenalty + s.satellite.landslidePenalty + s.satellite.rockfallPenalty
-  score += s.activity.heatmapPenalty + s.activity.dtrekBonus
+  score += s.activity.dtrekBonus
   score += s.community.osmNotesPenalty + s.community.difficultyMarkersPenalty
   score += s.groundStability.penalty
   return clamp(score, 0, 100)
@@ -203,9 +203,6 @@ function dominantWarningFor(s: SISignals): string | null {
   }
   if (s.satellite.ndviAbsolutePenalty < 0) {
     candidates.push({ value: s.satellite.ndviAbsolutePenalty, text: 'Vegetazione molto fitta che potrebbe rendere il sentiero poco percorribile' })
-  }
-  if (s.activity.heatmapPenalty < 0) {
-    candidates.push({ value: s.activity.heatmapPenalty, text: 'Scarso utilizzo recente rilevato' })
   }
   if (s.community.osmNotesPenalty < 0) {
     const closest = [...s.community.osmNotesDetails].sort((a, b) => a.distanceM - b.distanceM)[0]

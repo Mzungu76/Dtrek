@@ -61,7 +61,6 @@ export interface SatelliteSignal {
 
 export interface ActivitySignal {
   dtrekBonus: number     // 0 | +5 | +15 (DTrek *completed activity* match recency — never from planned/imported hikes)
-  heatmapPenalty: number // -10 fixed — TODO: Strava heatmap tile analysis
 }
 
 export type GroundStabilityClass = 'stable' | 'slow' | 'moderate' | 'rapid' | 'unknown'
