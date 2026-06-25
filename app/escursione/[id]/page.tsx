@@ -627,7 +627,7 @@ export default function EscursionePage() {
                   <Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Pendenza</span>
                 </button>
               )}
-              {hasGps && dtmProfile?.source === 'lidar1m' && (
+              {hasGps && dtmProfile?.source === 'dtm' && (
                 <button onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showAspect ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
                   <Compass className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Esposizione</span>

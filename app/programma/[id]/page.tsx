@@ -656,7 +656,7 @@ export default function PlannedHikePage() {
                     <Layers className="w-3 h-3" /> Pendenza
                   </button>
                 )}
-                {hasGps && dtmProfile?.source === 'lidar1m' && (
+                {hasGps && dtmProfile?.source === 'dtm' && (
                   <button
                     onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}

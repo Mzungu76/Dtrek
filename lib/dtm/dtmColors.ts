@@ -39,7 +39,7 @@ export function colorSegmentsByDtm(
   mode: DtmColorMode,
   matchRadiusM = 25,
 ): (string | null)[] {
-  if (dtmProfile.source !== 'lidar1m' || points.length < 2) {
+  if (dtmProfile.source !== 'dtm' || points.length < 2) {
     return new Array(Math.max(points.length - 1, 0)).fill(null)
   }
 

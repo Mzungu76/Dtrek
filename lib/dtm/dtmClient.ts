@@ -3,11 +3,10 @@
 // coverageId still null per datasetConfig.ts) is a static fact, known before any network
 // call — throws DtmUnavailableError, same contract as PaiUnavailableError/
 // PsinsarUnavailableError; (2) dataset configured but no coverage for this specific bbox
-// (PST national coverage is partial, or GetCoverage fails with a WCS exception report)
-// is a per-request fact — returns null, never throws, because there's nothing anomalous
-// to report, it's the normal "no LiDAR here". fetchDtmTile is the single network-aware
-// boundary that folds every flavor of (2) — HTTP error, exception report, undecodable
-// GeoTIFF — into null.
+// (e.g. GetCoverage fails with a WCS exception report) is a per-request fact — returns
+// null, never throws, because there's nothing anomalous to report, it's the normal "no
+// DTM here". fetchDtmTile is the single network-aware boundary that folds every flavor
+// of (2) — HTTP error, exception report, undecodable GeoTIFF — into null.
 import { DTM_DATASET } from '@/lib/geo/datasetConfig'
 import { wcsGetCoverage } from '@/lib/geo/wcsClient'
 import { parseDtmGeoTiff } from '@/lib/dtm/slopeAspect'

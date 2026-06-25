@@ -96,7 +96,7 @@ export default function MapView({
       }).addTo(map)
 
       const baseColor = planned ? '#0ea5e9' : '#378d44'
-      const dtmActive = dtmProfile?.source === 'lidar1m'
+      const dtmActive = dtmProfile?.source === 'dtm'
       const latLons = coords.map(([lat, lon]) => ({ lat, lon }))
 
       if (showAspect && dtmActive) {
