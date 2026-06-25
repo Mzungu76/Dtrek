@@ -1,12 +1,9 @@
 /**
- * Probe script — Uso/copertura del suolo (ISPRA) WCS endpoint.
+ * Probe script — Uso/copertura del suolo (ISPRA Corine Land Cover) WFS endpoint.
  *
- * Run once after populating lib/geo/datasetConfig.ts's USO_SUOLO_DATASET.baseUrl/coverageId
- * with a real endpoint, to confirm reachability, inspect the real DescribeCoverage response
- * (native CRS, resolution, extent — same geographic-CRS assumption as dtmClient.ts), and —
- * most importantly — resolve which class-code nomenclature the coverage actually serves
- * (raw Corine Land Cover level-3, a national reclass, or Copernicus HRL), the open question
- * blocking lib/tei/landCoverSurfaceMap.ts from being populated.
+ * Run once after populating lib/geo/datasetConfig.ts's USO_SUOLO_DATASET.baseUrl/typeName
+ * with a real endpoint, to confirm reachability and inspect the real attribute schema
+ * (cross-check against lib/usosuolo/usoSuoloClient.ts's CLASS_CODE_FIELDS field-name guesses).
  *
  * Usage:
  *   npx tsx scripts/probe-usosuolo.ts [--bbox s,w,n,e]
@@ -16,8 +13,9 @@
  */
 
 import { USO_SUOLO_DATASET } from '@/lib/geo/datasetConfig'
-import { wcsDescribeCoverage } from '@/lib/geo/wcsClient'
+import { wfsGetCapabilities } from '@/lib/geo/wfsClient'
 import { fetchUsoSuoloTile, sampleLandCoverAtPoint } from '@/lib/usosuolo/usoSuoloClient'
+import { landCoverCodeToSurface } from '@/lib/tei/landCoverSurfaceMap'
 
 const BBOX_IDX = process.argv.indexOf('--bbox')
 const BBOX = BBOX_IDX !== -1 ? process.argv[BBOX_IDX + 1] : '44.10,9.65,44.15,9.70'
@@ -26,51 +24,46 @@ async function main() {
   console.log('--- USO_SUOLO_DATASET config (lib/geo/datasetConfig.ts) ---')
   console.log(JSON.stringify(USO_SUOLO_DATASET, null, 2))
 
-  if (!USO_SUOLO_DATASET.baseUrl || !USO_SUOLO_DATASET.coverageId) {
+  if (!USO_SUOLO_DATASET.baseUrl || !USO_SUOLO_DATASET.typeName) {
     console.log(
-      '\nUSO_SUOLO_DATASET.baseUrl/coverageId non sono ancora configurati — ' +
-      'questo è lo stato corrente atteso finché un endpoint WCS reale non viene verificato ' +
-      '(vedi Rischio #5 del piano di integrazione). Nulla da probare.',
+      '\nUSO_SUOLO_DATASET.baseUrl/typeName non sono ancora configurati — ' +
+      'questo è lo stato corrente atteso finché un endpoint WFS reale non viene verificato. ' +
+      'Nulla da probare.',
     )
     return
   }
 
-  console.log(`\n--- DescribeCoverage: ${USO_SUOLO_DATASET.baseUrl} (coverageId=${USO_SUOLO_DATASET.coverageId}) ---`)
-  const describe = await wcsDescribeCoverage(USO_SUOLO_DATASET.baseUrl, USO_SUOLO_DATASET.coverageId)
-  console.log(`(${describe.length} bytes)`)
-  console.log(describe.slice(0, 1000))
+  console.log(`\n--- GetCapabilities: ${USO_SUOLO_DATASET.baseUrl} ---`)
+  const caps = await wfsGetCapabilities(USO_SUOLO_DATASET.baseUrl)
+  console.log(`(${caps.length} bytes)`)
+  console.log(caps.includes(USO_SUOLO_DATASET.typeName)
+    ? `typeName "${USO_SUOLO_DATASET.typeName}" trovato nella GetCapabilities.`
+    : `ATTENZIONE: typeName "${USO_SUOLO_DATASET.typeName}" NON trovato nella GetCapabilities — verificare il nome esatto.`)
 
-  console.log(`\n--- GetCoverage su bbox=${BBOX} ---`)
+  console.log(`\n--- GetFeature su bbox=${BBOX} ---`)
   const tile = await fetchUsoSuoloTile(BBOX)
   if (!tile) {
-    console.log(
-      'fetchUsoSuoloTile ha restituito null — nessuna copertura per questo bbox, oppure ' +
-      'risposta GeoTIFF non decodificabile. Comportamento atteso fuori dalla copertura del dataset, ' +
-      'da non confondere con un endpoint mal configurato.',
-    )
+    console.log('fetchUsoSuoloTile ha restituito null — richiesta fallita o non decodificabile.')
     return
   }
 
-  console.log(`Tile ${tile.width}x${tile.height}px`)
-  console.log(`bbox tile: ${JSON.stringify(tile.bbox)}`)
+  console.log(`${tile.features.length} poligoni CLC nel bbox.`)
+  for (const f of tile.features.slice(0, 10)) {
+    console.log(`  classCode=${f.classCode} -> surface=${landCoverCodeToSurface(f.classCode)}`)
+  }
+  if (tile.features.some(f => f.classCode == null)) {
+    console.log(
+      '\nNota: alcuni poligoni hanno classCode null — significa che nessun campo noto ' +
+      'in lib/usosuolo/usoSuoloClient.ts (CLASS_CODE_FIELDS) ha trovato un match. Ispezionare le ' +
+      'properties raw del GetFeature e aggiungere il nome del campo reale a CLASS_CODE_FIELDS.',
+    )
+  }
 
   const [s, w, n, e] = BBOX.split(',').map(Number)
   const centerLat = (s + n) / 2
   const centerLon = (w + e) / 2
   const sample = sampleLandCoverAtPoint(tile, centerLat, centerLon)
-  console.log(`Campione al centro del bbox richiesto (${centerLat}, ${centerLon}): classCode=${sample}`)
-  if (sample == null) {
-    console.log('Punto centrale fuori dal bbox effettivo del tile restituito — verificare l\'allineamento tra bbox richiesto e risposta del server.')
-  }
-
-  const unique = new Set<number>()
-  for (const v of tile.classCodes) unique.add(v)
-  console.log(`\nCodici classe distinti nel tile (${unique.size}): ${[...unique].sort((a, b) => a - b).join(', ')}`)
-  console.log(
-    'Confrontare questi codici con la documentazione ISPRA reale del dataset per determinare la ' +
-    'nomenclatura esatta (CLC raw 111-523, reclass nazionale, o Copernicus HRL 0-100), poi popolare ' +
-    'lib/tei/landCoverSurfaceMap.ts di conseguenza.',
-  )
+  console.log(`\nCampione al centro del bbox richiesto (${centerLat}, ${centerLon}): classCode=${sample} -> surface=${landCoverCodeToSurface(sample)}`)
 }
 
 main().catch(err => {
