@@ -1,10 +1,9 @@
 // Central registry of MASE/ISPRA dataset endpoints (architectural decision: hardcoded
 // config over CSW discovery — see piano di integrazione). baseUrl/typeName/coverageId
-// are intentionally null until each is confirmed against a real GetCapabilities/
-// DescribeCoverage response — this environment's egress policy blocks all external
-// hosts (verified against a control domain, not just gn.mase.gov.it), so none of
-// these could be probed live during this implementation pass. Populate them via
-// scripts/probe-<dataset>.ts from an environment with real network access.
+// stay null until confirmed against a real GetCapabilities/DescribeFeatureType response —
+// this sandbox blocks external HTTPS egress, so verification happens out-of-band (real
+// responses captured outside the sandbox, inspected file-by-file) before a value is
+// written here. Never populate from a "plausible" claim — only from an observed response.
 
 export type DatasetAgency = 'MASE' | 'ISPRA'
 export type DatasetProtocol = 'WFS' | 'WCS' | 'WMS'
@@ -24,12 +23,13 @@ export interface DatasetEndpoint {
 }
 
 export const PAI_DATASET: DatasetEndpoint = {
-  name: 'PAI — rischio idrogeologico (frane R1-R4, alluvioni P1-P4)',
+  name: 'PAI — rischio idraulico (alluvioni, scenario P2)',
   agency: 'ISPRA',
   protocol: 'WFS',
-  baseUrl: null,
-  verifiedAt: null,
-  notes: 'Mosaicatura nazionale plausibilmente via piattaforma IdroGEO (ISPRA); schema attributi varia per Autorità di Bacino — vedi lib/pai/paiAttributeMap.ts',
+  baseUrl: 'http://sdi.isprambiente.it/geoserver/nz1/wfs',
+  typeName: 'nz1:aree_peric_idraulica_p2',
+  verifiedAt: '2026-06-25',
+  notes: 'Workspace nz1 = solo alluvioni (WFS 2.0.0, GetCapabilities verificata). P2 = pericolosità media, TR 100-200 anni (default qui); p1 (TR 30-50, alta) e p3 (TR 200-500, bassa) sono typeName alternativi disponibili sullo stesso endpoint ma non interrogati. Frane (workspace nz2, atteso "aree_peric_frana_pai") NON verificato: nessuna risposta reale ricevuta — resta fuori da questo client. Schema attributi reale non ancora ispezionato via DescribeFeatureType — vedi lib/pai/paiAttributeMap.ts.',
 }
 
 export const PSINSAR_DATASET: DatasetEndpoint = {
