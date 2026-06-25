@@ -19,7 +19,6 @@ export const SI_PARAM_DESCRIPTIONS: Record<string, string> = {
   rockfall: 'Rischio di crollo roccioso stimato dalla litologia della Carta Geologica d\'Italia (CARG/ISPRA) lungo il tracciato.',
   satelliteUnavailable: 'Nessuna immagine satellitare recente sufficientemente priva di nuvole per questa zona.',
   activityDtrek: 'Bonus per un’attività DTrek registrata di recente su questo stesso percorso — segno che è stato effettivamente percorso.',
-  activityHeatmap: 'Analisi dell’utilizzo recente del sentiero tramite heatmap (funzionalità non ancora disponibile, penalità fissa).',
   communityNotes: 'Segnalazioni recenti della comunità OpenStreetMap (note) nelle vicinanze del tracciato.',
   communityMarkers: 'Tratti difficili individuati automaticamente nei commenti/waypoint dei file GPX importati (Komoot/AllTrails) vicino al tracciato.',
   groundStability: 'Velocità di deformazione del suolo (mm/anno) misurata via interferometria radar satellitare (PSInSAR) entro 250m dal tracciato.',

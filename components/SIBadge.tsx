@@ -88,8 +88,6 @@ function signalRows(s: SISignals): SignalRow[] {
   if (s.activity.dtrekBonus > 0) {
     rows.push({ icon: '✅', kind: 'activityDtrek', text: `${signedNum(s.activity.dtrekBonus)} Percorso recentemente registrato su DTrek` })
   }
-  rows.push({ icon: 'ℹ️', kind: 'activityHeatmap', text: `${signedNum(s.activity.heatmapPenalty)} Analisi heatmap non ancora disponibile` })
-
   if (s.community.osmNotesPenalty < 0) {
     rows.push({ icon: '⚠️', kind: 'communityNotes', text: `${signedNum(s.community.osmNotesPenalty)} Segnalazioni recenti della comunità OSM nelle vicinanze` })
   }
