@@ -74,8 +74,10 @@ export const NATURA2000_DATASET: DatasetEndpoint = {
   name: 'Rete Natura 2000 (SIC/ZSC/ZPS)',
   agency: 'MASE',
   protocol: 'WFS',
-  baseUrl: null,
-  verifiedAt: null,
+  baseUrl: 'http://wms.pcn.minambiente.it/ogc?map=/ms_ogc/wfs/SIC_ZSC_ZPS.map',
+  typeName: 'SP.SITIPROTETTI.SIC_ZSC_ZPS',
+  verifiedAt: '2026-06-25',
+  notes: 'Host legacy PCN (non gn.mase.gov.it). WFS 1.1.0, GetCapabilities verificata: unico outputFormat per GetFeature è "text/xml; subtype=gml/3.1.1" — nessuna opzione JSON, quindi questo client usa wfsGetFeatureGml + un parser GML scritto a mano (vedi lib/natura2000/natura2000Client.ts). Nomi-tag GML esatti non confermati da una GetFeature reale (sandbox blocca la chiamata) — solo da GetCapabilities + fingerprint MapServer.',
 }
 
 export const ALL_DATASETS: DatasetEndpoint[] = [
