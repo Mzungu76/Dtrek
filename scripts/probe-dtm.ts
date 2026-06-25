@@ -1,5 +1,6 @@
 /**
- * Probe script — DTM 1m LiDAR (Piano Straordinario di Telerilevamento Ambientale) WCS endpoint.
+ * Probe script — DTM WCS endpoint (TINITALY 10m/INGV, after the pivot away from the
+ * manual-download-only LiDAR 1m PST-A — see lib/geo/datasetConfig.ts's DTM_DATASET notes).
  *
  * Run once after populating lib/geo/datasetConfig.ts's DTM_DATASET.baseUrl/coverageId with
  * a real endpoint, to confirm reachability, inspect the real DescribeCoverage response
@@ -30,8 +31,8 @@ async function main() {
   if (!DTM_DATASET.baseUrl || !DTM_DATASET.coverageId) {
     console.log(
       '\nDTM_DATASET.baseUrl/coverageId non sono ancora configurati — ' +
-      'questo è lo stato corrente atteso finché un endpoint WCS reale non viene verificato ' +
-      '(vedi Rischio #4 del piano di integrazione: copertura PST nazionale parziale). Nulla da probare.',
+      'questo è lo stato corrente atteso finché un endpoint WCS reale (TINITALY/INGV) non viene ' +
+      'verificato da una GetCapabilities/DescribeCoverage reale ispezionata fuori da questa sandbox. Nulla da probare.',
     )
     return
   }
@@ -45,9 +46,9 @@ async function main() {
   const tile = await fetchDtmTile(BBOX)
   if (!tile) {
     console.log(
-      'fetchDtmTile ha restituito null — nessuna copertura LiDAR per questo bbox, oppure ' +
+      'fetchDtmTile ha restituito null — nessuna copertura DTM per questo bbox, oppure ' +
       'risposta GeoTIFF non decodificabile. Comportamento atteso per zone fuori dalla ' +
-      'copertura PST, da non confondere con un endpoint mal configurato.',
+      'copertura del DEM, da non confondere con un endpoint mal configurato.',
     )
     return
   }

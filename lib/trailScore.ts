@@ -19,7 +19,7 @@ export interface TrailScoreInputs {
   prefDurata?: number   // minutes, default 270
   hrRest?: number       // resting HR for Karvonen HII
   hrMax?: number        // max HR override (falls back to Tanaka formula)
-  avgSlopeDeg?: number  // from DTM 1m LiDAR (lib/dtm), Horn's method — independent of self-reported sacScale
+  avgSlopeDeg?: number  // from DTM (lib/dtm), Horn's method — independent of self-reported sacScale
 }
 
 export interface TrailScoreBreakdown {

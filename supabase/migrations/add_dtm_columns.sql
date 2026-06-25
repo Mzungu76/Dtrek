@@ -1,5 +1,6 @@
 -- ═══════════════════════════════════════════════════════════
--- Geoportale Nazionale MASE/ISPRA — Fase 3 (DTM 1m LiDAR)
+-- Geoportale Nazionale MASE/ISPRA — Fase 3 (DTM, ora TINITALY/INGV — vedi
+-- lib/geo/datasetConfig.ts's DTM_DATASET per il pivot dal LiDAR 1m PST-A)
 -- Esegui nel Supabase SQL Editor (idempotente, IF NOT EXISTS).
 -- Stesso blocco è anche presente in fondo a supabase-schema.sql.
 --
@@ -7,7 +8,7 @@
 -- ancora queste colonne (vedi lib/dtm/trailDtmProfile.ts, ricalcolato
 -- ad ogni CTS via /api/tei-dtm, stesso schema "nessuna persistenza" di
 -- /api/tei-overpass). dtm_track_hash invece di un TTL temporale: un
--- rilievo LiDAR non cambia nel tempo a parità di traccia, l'invalidazione
+-- rilievo DTM non cambia nel tempo a parità di traccia, l'invalidazione
 -- naturale è un hash della traccia densa, non una scadenza.
 -- ═══════════════════════════════════════════════════════════
 

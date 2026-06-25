@@ -974,11 +974,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // ── DTM slope/aspect colored route overlay ─────────────────────────────────────
   // One short LineString per consecutive pair of dtmProfile.points (already ~15m apart along
   // the trail) with both colorSlope/colorAspect precomputed — a single source/layer with a
-  // data-driven paint expression, not one addLayer() per segment. Only built when real LiDAR
+  // data-driven paint expression, not one addLayer() per segment. Only built when real DTM
   // data is present; route-line (the fixed-color default) remains the "Nessuno" fallback.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady || dtmProfile?.source !== 'lidar1m' || dtmProfile.points.length < 2) return
+    if (!map || !mapReady || dtmProfile?.source !== 'dtm' || dtmProfile.points.length < 2) return
     const pts = dtmProfile.points
     const features = []
     for (let i = 0; i < pts.length - 1; i++) {
@@ -2168,10 +2168,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <MapPin style={{width:'1.1rem',height:'1.1rem'}}/>
               </button>
             )}
-            {dtmProfile?.source === 'lidar1m' && (
+            {dtmProfile?.source === 'dtm' && (
               <button
                 onClick={() => setDtmColorMode(m => m === 'none' ? 'slope' : m === 'slope' ? 'aspect' : 'none')}
-                title={dtmColorMode === 'none' ? 'Colora per pendenza/esposizione (DTM LiDAR)' : dtmColorMode === 'slope' ? 'Pendenza (LiDAR) — tocca per esposizione' : 'Esposizione (LiDAR) — tocca per disattivare'}
+                title={dtmColorMode === 'none' ? 'Colora per pendenza/esposizione (DTM)' : dtmColorMode === 'slope' ? 'Pendenza (DTM) — tocca per esposizione' : 'Esposizione (DTM) — tocca per disattivare'}
                 className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
                   dtmColorMode === 'slope' ? 'bg-emerald-500/80 hover:bg-emerald-600 text-white'
                   : dtmColorMode === 'aspect' ? 'bg-sky-500/80 hover:bg-sky-600 text-white'

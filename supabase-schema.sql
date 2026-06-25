@@ -397,14 +397,15 @@ CREATE INDEX IF NOT EXISTS idx_psinsar_point_cache_expires_at ON psinsar_point_c
 
 
 -- ═══════════════════════════════════════════════════════════
--- Geoportale Nazionale MASE/ISPRA — Fase 3 (DTM 1m LiDAR)
+-- Geoportale Nazionale MASE/ISPRA — Fase 3 (DTM, ora TINITALY/INGV — vedi
+-- lib/geo/datasetConfig.ts's DTM_DATASET per il pivot dal LiDAR 1m PST-A)
 -- Stesso blocco anche in supabase/migrations/add_dtm_columns.sql
 --
 -- Schema-only in questa fase: nessun codice applicativo legge/scrive
 -- ancora queste colonne (vedi lib/dtm/trailDtmProfile.ts, ricalcolato
 -- ad ogni CTS via /api/tei-dtm, stesso schema "nessuna persistenza" di
 -- /api/tei-overpass). dtm_track_hash invece di un TTL temporale: un
--- rilievo LiDAR non cambia nel tempo a parità di traccia, l'invalidazione
+-- rilievo DTM non cambia nel tempo a parità di traccia, l'invalidazione
 -- naturale è un hash della traccia densa, non una scadenza.
 -- ═══════════════════════════════════════════════════════════
 

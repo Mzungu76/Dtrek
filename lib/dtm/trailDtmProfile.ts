@@ -18,7 +18,7 @@ export interface DtmProfilePoint {
 }
 
 export interface TrailDtmProfile {
-  source: 'lidar1m' | 'unavailable'
+  source: 'dtm' | 'unavailable'
   points: DtmProfilePoint[]
   avgSlopeDeg: number | null
   maxSlopeDeg: number | null
@@ -49,5 +49,5 @@ export async function computeTrailDtmProfile(track: [number, number][]): Promise
   const avgSlopeDeg = slopes.reduce((a, b) => a + b, 0) / slopes.length
   const maxSlopeDeg = Math.max(...slopes)
 
-  return { source: 'lidar1m', points, avgSlopeDeg, maxSlopeDeg }
+  return { source: 'dtm', points, avgSlopeDeg, maxSlopeDeg }
 }

@@ -224,13 +224,13 @@ function computeVtopo(
   // Component 3 always available
   const relativeGainScore = clamp((elevGain / distKm) / 80, 0, 1) * 10
 
-  // Per-segment slope analysis — prefer real LiDAR slope (Horn's method, degrees) over the
+  // Per-segment slope analysis — prefer real DTM slope (Horn's method, degrees) over the
   // net segment elevation diff (blind to a slope reversal inside a ~100m segment) once at
   // least 3 segments have a nearby DTM sample (50m). Horn's method returns degrees while the
   // thresholds below (10<=s<=25, /15 in the variance) are calibrated for percent grade —
   // convert via tan, not a linear factor, or those thresholds silently change meaning.
   let slopes: number[] = []
-  if (dtmProfile?.source === 'lidar1m') {
+  if (dtmProfile?.source === 'dtm') {
     const segmentCenters = segments.map(seg => ({ lat: seg.centroid[0], lon: seg.centroid[1] }))
     const matches = nearestPerSegment(segmentCenters, dtmProfile.points, 50)
     const dtmSlopes: number[] = []
@@ -454,7 +454,7 @@ function computeVgeo(segments: GpxSegment[], elevProfile: number[], dtmProfile?:
   // aspectVarietyScore defaulted to 5 when the DTM is unavailable would still shift every
   // existing caller's score (the weights move even when the third term is neutral) —
   // breaks the "no regression when the new data isn't there" invariant kept since Fase 1/2.
-  if (dtmProfile?.source === 'lidar1m') {
+  if (dtmProfile?.source === 'dtm') {
     const varietyScore = aspectVarietyScore(dtmProfile.points.map(p => p.aspectDeg))
     if (varietyScore !== null) {
       return clamp(rangeScore * 0.40 + alternationScore * 0.30 + varietyScore * 0.30)

@@ -42,12 +42,12 @@ export const PSINSAR_DATASET: DatasetEndpoint = {
 }
 
 export const DTM_DATASET: DatasetEndpoint = {
-  name: 'DTM 1m LiDAR (Piano Straordinario di Telerilevamento Ambientale)',
+  name: 'DTM TINITALY 10m (INGV)',
   agency: 'MASE',
   protocol: 'WCS',
   baseUrl: null,
   verifiedAt: null,
-  notes: 'Copertura nazionale parziale — spike di verifica raccomandato prima del kernel slope/aspect completo',
+  notes: 'Pivot da LiDAR 1m PST-A (Piano Straordinario di Telerilevamento Ambientale): quel dato è distribuito solo via download manuale per-tile ("Grigliato 1x1"), incompatibile col vincolo "zero manualità utente" di questo prodotto — abbandonato. TINITALY è un DEM nazionale 10m con un servizio WCS live, stesso protocollo già implementato qui. Endpoint candidato (NON verificato — nessuna GetCapabilities reale ispezionata): http://tinitaly.pi.ingv.it/TINItaly_1_1/wcs. Risoluzione 10m, CRS nativo EPSG:32632 (UTM zona 32N, già registrato in lib/geo/projections.ts), licenza CC BY 4.0. Questa sandbox nega l\'host (proxy allowlist, host_not_allowed) — baseUrl/coverageId restano null finché non arriva una risposta reale ispezionata da fuori sandbox (stessa disciplina di PAI Frane/PSInSAR). Fallback documentato ma non implementato se TINITALY non si sblocca mai: Copernicus DEM GLO-30 (30m, globale, AWS S3/COG, richiederebbe un client nuovo).',
 }
 
 export const GEOLOGIA_DATASET: DatasetEndpoint = {
