@@ -1,54 +1,46 @@
 /**
- * Probe script — DTM WCS endpoint (TINITALY 10m/INGV, after the pivot away from the
- * manual-download-only LiDAR 1m PST-A — see lib/geo/datasetConfig.ts's DTM_DATASET notes).
+ * Probe script — DTM backend (OpenTopography Global DEM REST API, EU_DTM dataset, after the
+ * pivot off TINITALY/WCS — see lib/dtm/openTopographyClient.ts's header comment).
  *
- * Run once after populating lib/geo/datasetConfig.ts's DTM_DATASET.baseUrl/coverageId with
- * a real endpoint, to confirm reachability, inspect the real DescribeCoverage response
- * (native CRS, resolution, extent — cross-check against slopeAspect.ts's geographic-vs-
- * projected CRS handling), and sanity check a sample slope/aspect against a known feature
- * for the same bbox.
+ * Run once OPENTOPOGRAPHY_API_KEY is set (free key: portal.opentopography.org/requestService
+ * ?service=other) to confirm reachability, inspect a real response, and sanity check a sample
+ * slope/aspect against a known feature for the same bbox. This sandbox cannot reach
+ * portal.opentopography.org (policy-denied egress) — run this from an environment with real
+ * network access (local dev, or the deployed app) with a real key.
  *
  * Usage:
  *   npx tsx scripts/probe-dtm.ts [--bbox s,w,n,e]
  *
  * Default bbox is the Vernazza/Cinque Terre area (Liguria), same as scripts/probe-pai.ts/
- * probe-psinsar.ts — steep terraced terrain, useful as a manual sanity check once real
- * data comes back.
+ * probe-psinsar.ts — steep terraced terrain, useful as a manual sanity check.
  */
 
-import { DTM_DATASET } from '@/lib/geo/datasetConfig'
-import { wcsDescribeCoverage } from '@/lib/geo/wcsClient'
-import { fetchDtmTile } from '@/lib/dtm/dtmClient'
+import { fetchDtmTile, DtmUnavailableError } from '@/lib/dtm/dtmClient'
 import { sampleSlopeAspectAtPoint } from '@/lib/dtm/slopeAspect'
 
 const BBOX_IDX = process.argv.indexOf('--bbox')
 const BBOX = BBOX_IDX !== -1 ? process.argv[BBOX_IDX + 1] : '44.10,9.65,44.15,9.70'
 
 async function main() {
-  console.log('--- DTM_DATASET config (lib/geo/datasetConfig.ts) ---')
-  console.log(JSON.stringify(DTM_DATASET, null, 2))
+  console.log(`OPENTOPOGRAPHY_API_KEY: ${process.env.OPENTOPOGRAPHY_API_KEY ? 'set' : 'NOT SET'}`)
 
-  if (!DTM_DATASET.baseUrl || !DTM_DATASET.coverageId) {
-    console.log(
-      '\nDTM_DATASET.baseUrl/coverageId non sono ancora configurati — ' +
-      'questo è lo stato corrente atteso finché un endpoint WCS reale (TINITALY/INGV) non viene ' +
-      'verificato da una GetCapabilities/DescribeCoverage reale ispezionata fuori da questa sandbox. Nulla da probare.',
-    )
-    return
+  let tile
+  try {
+    tile = await fetchDtmTile(BBOX)
+  } catch (err) {
+    if (err instanceof DtmUnavailableError) {
+      console.log(`\n${err.message}`)
+      return
+    }
+    throw err
   }
 
-  console.log(`\n--- DescribeCoverage: ${DTM_DATASET.baseUrl} (coverageId=${DTM_DATASET.coverageId}) ---`)
-  const describe = await wcsDescribeCoverage(DTM_DATASET.baseUrl, DTM_DATASET.coverageId)
-  console.log(`(${describe.length} bytes)`)
-  console.log(describe.slice(0, 1000))
-
-  console.log(`\n--- GetCoverage su bbox=${BBOX} ---`)
-  const tile = await fetchDtmTile(BBOX)
   if (!tile) {
     console.log(
-      'fetchDtmTile ha restituito null — nessuna copertura DTM per questo bbox, oppure ' +
-      'risposta GeoTIFF non decodificabile. Comportamento atteso per zone fuori dalla ' +
-      'copertura del DEM, da non confondere con un endpoint mal configurato.',
+      'fetchDtmTile ha restituito null — nessuna copertura DTM per questo bbox, risposta ' +
+      'GeoTIFF non decodificabile, oppure rate limit raggiunto (50 chiamate/24h per chiavi ' +
+      'non accademiche). Comportamento atteso per zone fuori dalla copertura del DEM, da non ' +
+      'confondere con una chiave mal configurata.',
     )
     return
   }

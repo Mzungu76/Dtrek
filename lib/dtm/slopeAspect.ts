@@ -1,8 +1,8 @@
 // First in-memory GeoTIFF decode in the repo — lib/sentinel2/rasterIndices.ts only ever
-// uses geotiff's fromUrl (whole pre-published COGs); this decodes raw WCS GetCoverage
-// response bytes already held in memory via fromArrayBuffer. Horn's method slope/aspect
-// kernel (same algorithm as gdaldem slope/QGIS), pure math beyond the initial decode —
-// no network calls past parseDtmGeoTiff.
+// uses geotiff's fromUrl (whole pre-published COGs); this decodes raw OpenTopography
+// globaldem response bytes already held in memory via fromArrayBuffer. Horn's method
+// slope/aspect kernel (same algorithm as gdaldem slope/QGIS), pure math beyond the initial
+// decode — no network calls past parseDtmGeoTiff.
 import { fromArrayBuffer, type GeoTIFFImage } from 'geotiff'
 import { proj4 } from '@/lib/geo/projections' // side-effect: registers EPSG:32632/33/3003/3004 defs
 import { metersPerDegreeAt } from '@/lib/geo/bufferUtils'
@@ -30,15 +30,16 @@ function projForImage(image: GeoTIFFImage): string | null {
 }
 
 /**
- * Decodes a WCS GetCoverage response (raw GeoTIFF bytes) into a DtmTile. Returns null
- * (never throws) on any decode failure — undecodable bytes are a per-request fact
- * (e.g. a WCS exception report returned with a 200 status), not a configuration error;
- * dtmClient.ts's fetchDtmTile is the boundary that distinguishes this from "not configured".
+ * Decodes an OpenTopography globaldem response (raw GeoTIFF bytes) into a DtmTile. Returns
+ * null (never throws) on any decode failure — undecodable bytes are a per-request fact, not
+ * a configuration error; dtmClient.ts's fetchDtmTile is the boundary that distinguishes this
+ * from "not configured".
  *
- * Handles both CRS cases wcsClient.ts can produce: geographic (the default outputCrs,
- * EPSG:4326 — degree resolution converted to meters via metersPerDegreeAt) and projected
- * (native meter resolution — proj4 used only to reproject the tile's corners to WGS84
- * for DtmTile.bbox, exactly like rasterIndices.ts's projForImage/projectCorner).
+ * Handles both CRS cases: geographic (EPSG:4326, the format OpenTopography's GTiff output
+ * uses — degree resolution converted to meters via metersPerDegreeAt) and projected (native
+ * meter resolution — proj4 used only to reproject the tile's corners to WGS84 for
+ * DtmTile.bbox, exactly like rasterIndices.ts's projForImage/projectCorner), kept for
+ * robustness in case a future demtype or outputCrs choice returns a projected GeoTIFF.
  */
 export async function parseDtmGeoTiff(buf: ArrayBuffer): Promise<DtmTile | null> {
   try {

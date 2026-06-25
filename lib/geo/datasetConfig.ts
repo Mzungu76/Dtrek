@@ -6,7 +6,7 @@
 // written here. Never populate from a "plausible" claim — only from an observed response.
 
 export type DatasetAgency = 'MASE' | 'ISPRA'
-export type DatasetProtocol = 'WFS' | 'WCS' | 'WMS'
+export type DatasetProtocol = 'WFS' | 'WMS'
 
 export interface DatasetEndpoint {
   name: string
@@ -41,14 +41,12 @@ export const PSINSAR_DATASET: DatasetEndpoint = {
   notes: 'Densità di copertura ignota — vedi soglie in lib/si/signals/groundStability.ts',
 }
 
-export const DTM_DATASET: DatasetEndpoint = {
-  name: 'DTM TINITALY 10m (INGV)',
-  agency: 'MASE',
-  protocol: 'WCS',
-  baseUrl: null,
-  verifiedAt: null,
-  notes: 'Pivot da LiDAR 1m PST-A (Piano Straordinario di Telerilevamento Ambientale): quel dato è distribuito solo via download manuale per-tile ("Grigliato 1x1"), incompatibile col vincolo "zero manualità utente" di questo prodotto — abbandonato. TINITALY è un DEM nazionale 10m con un servizio WCS live, stesso protocollo già implementato qui. Endpoint candidato (NON verificato — nessuna GetCapabilities reale ispezionata): http://tinitaly.pi.ingv.it/TINItaly_1_1/wcs. Risoluzione 10m, CRS nativo EPSG:32632 (UTM zona 32N, già registrato in lib/geo/projections.ts), licenza CC BY 4.0. Questa sandbox nega l\'host (proxy allowlist, host_not_allowed) — baseUrl/coverageId restano null finché non arriva una risposta reale ispezionata da fuori sandbox (stessa disciplina di PAI Frane/PSInSAR). Fallback documentato ma non implementato se TINITALY non si sblocca mai: Copernicus DEM GLO-30 (30m, globale, AWS S3/COG, richiederebbe un client nuovo).',
-}
+// DTM (pendenza/esposizione sentieri) NON è più in questo registro: il pivot TINITALY/INGV
+// (WCS, mai raggiunto — host negato anche da questa sandbox, nessuna GetCapabilities reale
+// mai ispezionata) e l'opzione LiDAR 1m PST-A precedente (scartata prima di scrivere codice:
+// download manuale per-tile, incompatibile col vincolo "zero manualità utente") sono stati
+// rimossi. Il backend attuale è OpenTopography (REST pubblico globale, non MASE/ISPRA — vedi
+// lib/dtm/openTopographyClient.ts), che non appartiene a questo registro per definizione.
 
 export const GEOLOGIA_DATASET: DatasetEndpoint = {
   name: "Carta Geologica d'Italia (progetto CARG)",
@@ -83,7 +81,6 @@ export const NATURA2000_DATASET: DatasetEndpoint = {
 export const ALL_DATASETS: DatasetEndpoint[] = [
   PAI_DATASET,
   PSINSAR_DATASET,
-  DTM_DATASET,
   GEOLOGIA_DATASET,
   USO_SUOLO_DATASET,
   NATURA2000_DATASET,

@@ -1,5 +1,5 @@
-// First WMS client in the repo (no precedent — wfsClient.ts/wcsClient.ts cover vector/raster
-// fetch, this covers the GetFeatureInfo pixel-query protocol). GetFeatureInfo always needs a
+// First WMS client in the repo (no precedent — wfsClient.ts covers vector fetch, this covers
+// the GetFeatureInfo pixel-query protocol). GetFeatureInfo always needs a
 // full BBOX+WIDTH/HEIGHT+I/J map-render context, even for a single point — this builds a tiny
 // fixed pixel window centered exactly on (lat, lon), so the "queried point" is always the
 // center pixel regardless of bufferM (which only changes ground resolution per pixel).
@@ -19,7 +19,7 @@ export interface WmsGetFeatureInfoOptions {
   infoFormat?: string
   version?: string
   timeoutMs?: number
-  /** Escape hatch for server-specific params, same spirit as wcsClient.ts's extraParams. */
+  /** Escape hatch for server-specific params. */
   extraParams?: Record<string, string>
 }
 
