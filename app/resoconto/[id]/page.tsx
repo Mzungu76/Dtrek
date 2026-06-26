@@ -11,6 +11,7 @@ import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { parseSections, type Section } from '@/lib/reportStore'
 import {
   ArrowLeft, FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
   Images, X, BookOpen, Share2, Copy, Link2Off, ExternalLink,
@@ -32,27 +33,6 @@ interface HikeReport {
 }
 
 type ResocontoLength = 'breve' | 'media' | 'lunga'
-
-// ── Markdown section parser ────────────────────────────────────────────────────
-
-interface Section {
-  title: string
-  body: string
-}
-
-function parseSections(md: string): Section[] {
-  const parts = md.split(/\n(?=## )/)
-  return parts
-    .map(part => {
-      const nl = part.indexOf('\n')
-      if (!part.startsWith('## ') || nl === -1) return null
-      return {
-        title: part.slice(3, nl).trim(),
-        body:  part.slice(nl + 1).trim(),
-      }
-    })
-    .filter((s): s is Section => s !== null)
-}
 
 // Photo slot is keyed by section title (not array position) so that omitting
 // "Cronaca" (no questionnaire answered) doesn't shift the photos bound to the

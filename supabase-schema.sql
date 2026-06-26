@@ -438,6 +438,13 @@ ALTER TABLE activities ADD COLUMN IF NOT EXISTS iev double precision;
 
 
 -- ═══════════════════════════════════════════════════════════
+-- Editor resoconto strutturato (Blocco 7.1 piano DTrek)
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS authored_by TEXT DEFAULT 'ai';
+ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS sections JSONB;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- Geoportale Nazionale MASE/ISPRA — Fase 4 (Geologia CARG + Uso del suolo)
 -- Stesso blocco anche in supabase/migrations/add_geologia_usosuolo_tables.sql
 -- ═══════════════════════════════════════════════════════════

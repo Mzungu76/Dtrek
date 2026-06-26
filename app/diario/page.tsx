@@ -16,6 +16,7 @@ import {
 import RouteThumb from '@/components/RouteThumb'
 import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
 import { findAnniversaries } from '@/lib/stats'
+import { parseSections } from '@/lib/reportStore'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
 
@@ -39,19 +40,6 @@ interface StatsToggles {
   record:  boolean
   medie:   boolean
   andamento: boolean
-}
-
-// ── Section parser ─────────────────────────────────────────────────────────────
-
-interface Section { title: string; body: string }
-function parseSections(md: string): Section[] {
-  return md.split(/\n(?=## )/)
-    .map(part => {
-      const nl = part.indexOf('\n')
-      if (!part.startsWith('## ') || nl === -1) return null
-      return { title: part.slice(3, nl).trim(), body: part.slice(nl + 1).trim() }
-    })
-    .filter((s): s is Section => s !== null)
 }
 
 // ── SVG Charts & Stats ─────────────────────────────────────────────────────────
