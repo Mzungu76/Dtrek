@@ -879,7 +879,11 @@ export default function DiarioPage() {
             <BookMarked className="w-4 h-4 text-forest-600" />
             <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm">Diario</span>
             {!loading && (
-              <span className="text-xs text-stone-400 font-lora italic">{reports.length} resoconti</span>
+              <span className="text-xs text-stone-400 font-lora italic">
+                {reports.length} resoconti
+                {bookPages.filter(p => p.kind === 'stub').length > 0 &&
+                  ` · ${bookPages.filter(p => p.kind === 'stub').length} da narrare`}
+              </span>
             )}
           </div>
 

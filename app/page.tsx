@@ -8,6 +8,7 @@ import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { findAnniversaries } from '@/lib/stats'
+import type { ResocontoStatus } from '@/app/api/resoconto-status/route'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -33,6 +34,13 @@ interface CardProps {
   dotCount?: number
   dotActive?: number
   onDotClick?: (idx: number) => void
+  reportStatus?: ResocontoStatus
+}
+
+function reportBadge(status?: ResocontoStatus): { label: string; className: string } | null {
+  if (status === 'narrato') return { label: 'Narrato', className: 'bg-forest-600 text-white' }
+  if (status === 'parziale') return { label: 'Parziale', className: 'bg-amber-500 text-white' }
+  return { label: 'Da narrare', className: 'bg-stone-300 text-stone-700' }
 }
 
 function ratingColor(n: number): string {
@@ -50,7 +58,8 @@ function ratingLabel(n: number): string {
   return 'Mediocre'
 }
 
-function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, dotCount, dotActive, onDotClick }: CardProps) {
+function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, dotCount, dotActive, onDotClick, reportStatus }: CardProps) {
+  const badge = reportBadge(reportStatus)
   const isToday   = isSameDay(date, new Date())
   const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
   const showDots  = dotCount && dotCount > 1
@@ -128,6 +137,11 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             ${isToday ? 'bg-terra-500 text-white' : 'bg-white/90 text-stone-600'}`}>
             {dateLabel}
           </span>
+          {badge && (
+            <span className={`absolute top-2 left-2 text-[9px] font-bold rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap ${badge.className}`}>
+              {badge.label}
+            </span>
+          )}
           {/* Navigation dots */}
           {showDots && (
             <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1">
@@ -271,6 +285,7 @@ export default function HomePage() {
   const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'suitability' | 'cts'>('date')
   const [typeFilter, setTypeFilter] = useState<'all' | 'done' | 'planned'>('all')
   const [showAllHistory, setShowAllHistory] = useState(false)
+  const [reportStatus, setReportStatus] = useState<Record<string, ResocontoStatus>>({})
   const monthBarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -280,6 +295,7 @@ export default function HomePage() {
     ])
       .then(([acts, plan]) => { setActivities(acts); setPlanned(plan) })
       .finally(() => setLoading(false))
+    fetch('/api/resoconto-status').then(r => r.ok ? r.json() : {}).then(setReportStatus).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -683,6 +699,7 @@ export default function HomePage() {
                     dotCount={acts.length}
                     dotActive={curIdx}
                     onDotClick={idx => setDayIdx(prev => ({ ...prev, [key]: idx }))}
+                    reportStatus={reportStatus[act.id]}
                   />
                 )
                 if (planHike) return <PlannedCard key={key} hike={planHike} date={date} compact />
@@ -736,6 +753,7 @@ export default function HomePage() {
                       activity={activity}
                       date={new Date(activity.startTime)}
                       showFullDate
+                      reportStatus={reportStatus[activity.id]}
                     />
                   ))}
                 </div>
