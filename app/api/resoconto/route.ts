@@ -439,6 +439,25 @@ export async function PATCH(req: NextRequest) {
   if (sections) update.sections = sections
   if (authoredBy) update.authored_by = authoredBy
 
+  // hike_reports.title is NOT NULL — resolve a fallback so the upsert can't
+  // fail on INSERT when no report row exists yet (e.g. a brand-new manual
+  // report that was never AI-generated first).
+  const { data: existingReport } = await supabase
+    .from('hike_reports')
+    .select('title')
+    .eq('id', `report-${activityId}`)
+    .maybeSingle()
+
+  if (!existingReport?.title) {
+    const { data: act } = await supabase
+      .from('activities')
+      .select('title')
+      .eq('id', activityId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    update.title = (act?.title as string) ?? 'Escursione'
+  }
+
   const { error } = await supabase
     .from('hike_reports')
     .upsert(
