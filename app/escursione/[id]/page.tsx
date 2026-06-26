@@ -612,8 +612,11 @@ export default function EscursionePage() {
           const hasHR  = (activity.avgHeartRate ?? 0) > 0
           const hasCal = (activity.calories ?? 0) > 0
           const hasNetSpeed = (activity.netSpeedMs ?? 0) > 0 && (activity.pauseTimeSeconds ?? 0) > 0
-          const cols   = 5 + (hasHR ? 1 : 0) + (hasCal ? 1 : 0) + (hasNetSpeed ? 1 : 0)
-          const gridCls = cols >= 8
+          const hasIev = (activity.iev ?? 0) > 0
+          const cols   = 5 + (hasHR ? 1 : 0) + (hasCal ? 1 : 0) + (hasNetSpeed ? 1 : 0) + (hasIev ? 1 : 0)
+          const gridCls = cols >= 9
+            ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2 sm:gap-3'
+            : cols === 8
             ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3'
             : cols === 7
             ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3'
@@ -633,6 +636,8 @@ export default function EscursionePage() {
               {hasCal && <StatCard label="Calorie"    value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
               <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone"
                 tooltip="Distanza Equivalente in Piano (formula CAI): km + (dislivello positivo / 100). Stima lo sforzo come se l'escursione fosse interamente in piano." />
+              {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest"
+                tooltip="Metri di dislivello guadagnati per minuto durante i tratti in salita. Misura quanto sei efficiente in ascesa." />}
             </div>
           )
         })()}

@@ -29,6 +29,7 @@ export interface TcxActivity {
   trackPoints: TrackPoint[]
   netSpeedMs?: number
   pauseTimeSeconds?: number
+  iev?: number | null
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -64,6 +65,28 @@ export function computeMovingStats(
   }
   const movingTimeSeconds = Math.max(totalTimeSeconds - pauseTimeSeconds, 1)
   return { netSpeedMs: distanceMeters / movingTimeSeconds, pauseTimeSeconds }
+}
+
+/**
+ * IEV (Indice Efficienza Verticale): metri di dislivello guadagnati al minuto
+ * nei tratti in salita (soglia 1m per filtrare il rumore GPS/barometrico).
+ * Richiede timestamp validi sui trackpoints; altrimenti null.
+ */
+export function computeIEV(trackPoints: TrackPoint[]): number | null {
+  let climbM = 0
+  let climbTimeSec = 0
+  for (let i = 1; i < trackPoints.length; i++) {
+    const p = trackPoints[i], q = trackPoints[i - 1]
+    if (p.altitudeMeters === undefined || q.altitudeMeters === undefined) continue
+    const diff = p.altitudeMeters - q.altitudeMeters
+    if (diff <= 1) continue
+    const dt = (new Date(p.time).getTime() - new Date(q.time).getTime()) / 1000
+    if (dt <= 0 || dt > 300) continue
+    climbM += diff
+    climbTimeSec += dt
+  }
+  if (climbTimeSec <= 0) return null
+  return climbM / (climbTimeSec / 60)
 }
 
 export function parseTcx(xmlText: string): TcxActivity {
@@ -128,6 +151,7 @@ export function parseTcx(xmlText: string): TcxActivity {
   const endTime = trackPoints[trackPoints.length - 1]?.time ?? id
 
   const { netSpeedMs, pauseTimeSeconds } = computeMovingStats(trackPoints, distanceMeters, totalTimeSeconds)
+  const iev = computeIEV(trackPoints)
 
   return {
     id,
@@ -150,6 +174,7 @@ export function parseTcx(xmlText: string): TcxActivity {
     trackPoints,
     netSpeedMs,
     pauseTimeSeconds,
+    iev,
   }
 }
 

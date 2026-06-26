@@ -135,6 +135,29 @@ export function computeEFTrend(activities: ActivityMeta[]): EFPoint[] {
   })
 }
 
+// IEV (Indice Efficienza Verticale) trend data for chart — last 20 activities with IEV
+export interface IevPoint { date: string; iev: number; ievSmoothed: number }
+
+export function computeIEVTrend(activities: ActivityMeta[]): IevPoint[] {
+  const sorted = [...activities]
+    .filter(a => (a.iev ?? 0) > 0)
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+    .slice(-20)
+
+  if (sorted.length < 2) return []
+
+  const raw = sorted.map(a => ({ date: a.startTime, iev: a.iev! }))
+  const windowSize = Math.min(5, Math.ceil(raw.length / 3))
+
+  return raw.map((d, i) => {
+    const start = Math.max(0, i - Math.floor(windowSize / 2))
+    const end   = Math.min(raw.length, i + Math.ceil(windowSize / 2))
+    const slice = raw.slice(start, end)
+    const ievSmoothed = slice.reduce((s, x) => s + x.iev, 0) / slice.length
+    return { date: d.date, iev: Math.round(d.iev * 10) / 10, ievSmoothed: Math.round(ievSmoothed * 10) / 10 }
+  })
+}
+
 // Polarized training distribution from zone times (seconds per zone)
 export interface PolarizedDistribution {
   lowIntensityPct: number   // Z1 + Z2

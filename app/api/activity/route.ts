@@ -65,6 +65,7 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     weatherAtHike:        row.weather_at_hike          as StoredActivity['weatherAtHike'] | undefined,
     netSpeedMs:           row.net_speed_ms             as number | undefined,
     pauseTimeSeconds:     row.pause_time_seconds       as number | undefined,
+    iev:                  row.iev                      as number | null | undefined,
   }
 }
 
@@ -102,6 +103,7 @@ function activityToRow(a: StoredActivity) {
     weather_at_hike:              a.weatherAtHike ?? null,
     net_speed_ms:                 a.netSpeedMs ?? null,
     pause_time_seconds:           a.pauseTimeSeconds ?? null,
+    iev:                          a.iev ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }

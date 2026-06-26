@@ -432,6 +432,12 @@ ALTER TABLE activities ADD COLUMN IF NOT EXISTS pause_time_seconds double precis
 
 
 -- ═══════════════════════════════════════════════════════════
+-- IEV — Indice Efficienza Verticale (Blocco 5.1 piano DTrek)
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS iev double precision;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- Geoportale Nazionale MASE/ISPRA — Fase 4 (Geologia CARG + Uso del suolo)
 -- Stesso blocco anche in supabase/migrations/add_geologia_usosuolo_tables.sql
 -- ═══════════════════════════════════════════════════════════

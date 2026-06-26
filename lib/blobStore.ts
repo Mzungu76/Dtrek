@@ -48,6 +48,7 @@ export interface ActivityMeta {
   trailScore?: number
   trailScoreConfidence?: CtsConfidence
   depKm?: number
+  iev?: number
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     trailScore:              a.trailScore,
     trailScoreConfidence:    a.trailScoreConfidence,
     depKm:           computeDEP(a.distanceMeters, a.elevationGain),
+    iev:             a.iev ?? undefined,  // a.iev is number | null | undefined (TcxActivity)
   }
 }
 
