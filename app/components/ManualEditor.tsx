@@ -44,10 +44,27 @@ export default function ManualEditor({
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Mirrors latest state into a ref so the unmount-flush effect (which only
+  // runs once, on mount/unmount) can read up-to-date values without forcing
+  // a re-subscription on every keystroke.
+  const latest = useRef({ sections, authoredBy, dirty })
+  useEffect(() => { latest.current = { sections, authoredBy, dirty } }, [sections, authoredBy, dirty])
+
   useEffect(() => {
     function onOpenPhotoManager() { setShowPhotoManager(true) }
     window.addEventListener('dtrek:open-photo-manager', onOpenPhotoManager)
     return () => window.removeEventListener('dtrek:open-photo-manager', onOpenPhotoManager)
+  }, [])
+
+  // Flush any unsaved edits when the editor disappears for any reason —
+  // "Chiudi editor", the top "Escursione" back button (router.push, bypasses
+  // onCancel entirely), or a mobile back gesture — all unmount this component.
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      if (latest.current.dirty) onSave(latest.current.sections, latest.current.authoredBy)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

@@ -152,11 +152,12 @@ export default function ResocontoPage() {
 
   const saveSections = useCallback(async (sections: ReportSection[], authoredBy: ReportAuthoredBy) => {
     const newContent = sectionsToMarkdown(sections)
-    await fetch('/api/resoconto', {
+    const res = await fetch('/api/resoconto', {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ activityId: id, content: newContent, sections, authoredBy }),
     })
+    if (!res.ok) { console.error('Salvataggio sezioni fallito', await res.text().catch(() => '')); return }
     setReportSections(sections)
     setReportAuthoredBy(authoredBy)
     setContent(newContent)
