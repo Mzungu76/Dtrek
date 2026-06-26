@@ -419,6 +419,19 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS dtm_computed_at timestamptz;
 
 
 -- ═══════════════════════════════════════════════════════════
+-- Meteo storico al momento dell'escursione (Blocco 1.2 piano DTrek)
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS weather_at_hike jsonb;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- Velocità di crociera netta (Blocco 1.3 piano DTrek)
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS net_speed_ms double precision;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS pause_time_seconds double precision;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- Geoportale Nazionale MASE/ISPRA — Fase 4 (Geologia CARG + Uso del suolo)
 -- Stesso blocco anche in supabase/migrations/add_geologia_usosuolo_tables.sql
 -- ═══════════════════════════════════════════════════════════

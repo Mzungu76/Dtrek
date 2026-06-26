@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { ActivityMeta } from '@/lib/blobStore'
+import { computeDEP } from '@/lib/stats'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +42,7 @@ function rowToMeta(row: Record<string, unknown>): ActivityMeta {
     linkedBeautyScore:    row.linked_beauty_score   as import('@/lib/blobStore').ActivityMeta['linkedBeautyScore'] | undefined,
     trailScore:           row.trail_score            as number | undefined,
     trailScoreConfidence: row.trail_score_confidence as import('@/lib/blobStore').ActivityMeta['trailScoreConfidence'] | undefined,
+    depKm:           computeDEP(row.distance_meters as number, row.elevation_gain as number),
   }
 }
 

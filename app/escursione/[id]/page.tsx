@@ -29,6 +29,7 @@ import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
+import { computeDEP, depLabel } from '@/lib/stats'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -595,26 +596,53 @@ export default function EscursionePage() {
         {(() => {
           const hasHR  = (activity.avgHeartRate ?? 0) > 0
           const hasCal = (activity.calories ?? 0) > 0
-          const cols   = 4 + (hasHR ? 1 : 0) + (hasCal ? 1 : 0)
-          const gridCls = cols === 6
+          const hasNetSpeed = (activity.netSpeedMs ?? 0) > 0 && (activity.pauseTimeSeconds ?? 0) > 0
+          const cols   = 5 + (hasHR ? 1 : 0) + (hasCal ? 1 : 0) + (hasNetSpeed ? 1 : 0)
+          const gridCls = cols >= 8
+            ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3'
+            : cols === 7
+            ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3'
+            : cols === 6
             ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3'
-            : cols === 5
-            ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3'
-            : 'grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3'
+            : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3'
+          const dep = computeDEP(activity.distanceMeters, activity.elevationGain)
           return (
             <div className={gridCls}>
               <StatCard label="Distanza"     value={`${(activity.distanceMeters/1000).toFixed(2)} km`} color="forest" icon={<Route className="w-3.5 h-3.5" />} />
               <StatCard label="Durata"       value={formatDuration(activity.totalTimeSeconds)} color="terra" icon={<Clock className="w-3.5 h-3.5" />} />
               {hasHR && <StatCard label="FC Media"   value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
               <StatCard label="Vel. Media"   value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
+              {hasNetSpeed && <StatCard label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue"
+                tooltip="Velocità di crociera netta: distanza / tempo in movimento, escludendo le soste rilevate dalla traccia GPS." />}
               <StatCard label="Dislivello ↑" value={`${activity.elevationGain.toFixed(0)} m`} sub={`↓ ${activity.elevationLoss.toFixed(0)} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5" />} />
               {hasCal && <StatCard label="Calorie"    value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
+              <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone"
+                tooltip="Distanza Equivalente in Piano (formula CAI): km + (dislivello positivo / 100). Stima lo sforzo come se l'escursione fosse interamente in piano." />
             </div>
           )
         })()}
 
         {/* Weather */}
         {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
+        {hasGps && !activity.weatherAtHike && (
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/activity-weather', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: activity.id }),
+                })
+                if (res.ok) {
+                  const weather = await res.json()
+                  setActivity(a => a ? { ...a, weatherAtHike: weather } : a)
+                }
+              } catch { /* ignore */ }
+            }}
+            className="text-xs text-stone-400 hover:text-stone-600 underline transition-colors"
+          >
+            Salva meteo per il diario
+          </button>
+        )}
 
         {/* Map */}
         <section>

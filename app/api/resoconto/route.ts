@@ -225,7 +225,7 @@ export async function GET(req: NextRequest) {
 
     const activityIds = (reports ?? []).map((r: Record<string, unknown>) => r.activity_id as string).filter(Boolean)
     const { data: activities } = activityIds.length
-      ? await supabase.from('activities').select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain').in('id', activityIds)
+      ? await supabase.from('activities').select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain, weather_at_hike').in('id', activityIds)
       : { data: [] }
 
     const actMap = new Map((activities ?? []).map((a: Record<string, unknown>) => [a.id, a]))

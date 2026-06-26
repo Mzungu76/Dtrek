@@ -1,4 +1,4 @@
-import { ActivityMeta } from './blobStore'
+import type { ActivityMeta } from './blobStore'
 import { TrackPoint } from './tcxParser'
 import { format } from 'date-fns'
 
@@ -218,6 +218,18 @@ export function movingAverage(
     const slice = data.slice(Math.max(0, i - half), Math.min(data.length, i + half + 1)).filter(x => x.value > 0)
     return { date: d.date, value: slice.length > 0 ? Math.round(slice.reduce((s, x) => s + x.value, 0) / slice.length * 10) / 10 : 0 }
   })
+}
+
+// ── DEP (Distanza Equivalente in Piano) ──────────────────────────────────────
+export function computeDEP(distanceM: number, elevationGain: number): number {
+  return distanceM / 1000 + elevationGain / 100
+}
+
+export function depLabel(dep: number): string {
+  if (dep < 5) return 'passeggiata'
+  if (dep < 10) return 'escursione media'
+  if (dep < 20) return 'escursione impegnativa'
+  return 'giornata alpinistica'
 }
 
 export function linearRegression(points: { x: number; y: number }[]): { slope: number; intercept: number } {

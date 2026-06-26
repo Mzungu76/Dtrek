@@ -62,6 +62,9 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     linkedBeautyScore:    row.linked_beauty_score    as StoredActivity['linkedBeautyScore'] | undefined,
     trailScore:           row.trail_score             as number | undefined,
     trailScoreConfidence: row.trail_score_confidence  as StoredActivity['trailScoreConfidence'] | undefined,
+    weatherAtHike:        row.weather_at_hike          as StoredActivity['weatherAtHike'] | undefined,
+    netSpeedMs:           row.net_speed_ms             as number | undefined,
+    pauseTimeSeconds:     row.pause_time_seconds       as number | undefined,
   }
 }
 
@@ -96,6 +99,9 @@ function activityToRow(a: StoredActivity) {
     linked_beauty_score:          a.linkedBeautyScore ?? null,
     trail_score:                  a.trailScore ?? null,
     trail_score_confidence:       a.trailScoreConfidence ?? null,
+    weather_at_hike:              a.weatherAtHike ?? null,
+    net_speed_ms:                 a.netSpeedMs ?? null,
+    pause_time_seconds:           a.pauseTimeSeconds ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }
@@ -163,6 +169,7 @@ export async function PATCH(req: NextRequest) {
       linkedBeautyScore?: StoredActivity['linkedBeautyScore']
       trailScore?: number
       trailScoreConfidence?: string
+      weatherAtHike?: StoredActivity['weatherAtHike']
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -176,6 +183,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.linkedBeautyScore    !== undefined) dbPatch.linked_beauty_score    = patch.linkedBeautyScore
     if (patch.trailScore           !== undefined) dbPatch.trail_score            = patch.trailScore
     if (patch.trailScoreConfidence !== undefined) dbPatch.trail_score_confidence = patch.trailScoreConfidence
+    if (patch.weatherAtHike        !== undefined) dbPatch.weather_at_hike        = patch.weatherAtHike
 
     const { error } = await supabase
       .from('activities')

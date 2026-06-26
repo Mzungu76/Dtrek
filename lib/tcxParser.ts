@@ -27,6 +27,43 @@ export interface TcxActivity {
   elevationGain: number
   elevationLoss: number
   trackPoints: TrackPoint[]
+  netSpeedMs?: number
+  pauseTimeSeconds?: number
+}
+
+function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+const PAUSE_SPEED_THRESHOLD_MS = 0.3 // below this, the hiker is considered stopped
+
+/**
+ * Splits total time into moving time vs. pause time by walking the GPS track
+ * and flagging consecutive segments slower than the pause threshold.
+ * Returns the net cruising speed (distance / moving time) and total pause time.
+ */
+export function computeMovingStats(
+  trackPoints: TrackPoint[],
+  distanceMeters: number,
+  totalTimeSeconds: number,
+): { netSpeedMs: number; pauseTimeSeconds: number } {
+  let pauseTimeSeconds = 0
+  for (let i = 1; i < trackPoints.length; i++) {
+    const p = trackPoints[i], q = trackPoints[i - 1]
+    if (p.lat === undefined || p.lon === undefined || q.lat === undefined || q.lon === undefined) continue
+    const dt = (new Date(p.time).getTime() - new Date(q.time).getTime()) / 1000
+    if (dt <= 0 || dt > 300) continue
+    const dist = haversineM(q.lat, q.lon, p.lat, p.lon)
+    if (dist / dt < PAUSE_SPEED_THRESHOLD_MS) pauseTimeSeconds += dt
+  }
+  const movingTimeSeconds = Math.max(totalTimeSeconds - pauseTimeSeconds, 1)
+  return { netSpeedMs: distanceMeters / movingTimeSeconds, pauseTimeSeconds }
 }
 
 export function parseTcx(xmlText: string): TcxActivity {
@@ -90,6 +127,8 @@ export function parseTcx(xmlText: string): TcxActivity {
   const startTime = trackPoints[0]?.time ?? id
   const endTime = trackPoints[trackPoints.length - 1]?.time ?? id
 
+  const { netSpeedMs, pauseTimeSeconds } = computeMovingStats(trackPoints, distanceMeters, totalTimeSeconds)
+
   return {
     id,
     sport,
@@ -109,6 +148,8 @@ export function parseTcx(xmlText: string): TcxActivity {
     elevationGain: elevGain,
     elevationLoss: elevLoss,
     trackPoints,
+    netSpeedMs,
+    pauseTimeSeconds,
   }
 }
 

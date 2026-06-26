@@ -4,6 +4,7 @@ interface Props {
   sub?: string
   color?: 'terra' | 'forest' | 'red' | 'blue' | 'stone'
   icon?: React.ReactNode
+  tooltip?: string
 }
 
 const colorMap = {
@@ -14,10 +15,10 @@ const colorMap = {
   stone:  { bg: 'bg-stone-50',  border: 'border-stone-200',  text: 'text-stone-500',  val: 'text-stone-800'  },
 }
 
-export default function StatCard({ label, value, sub, color = 'stone', icon }: Props) {
+export default function StatCard({ label, value, sub, color = 'stone', icon, tooltip }: Props) {
   const c = colorMap[color]
   return (
-    <div className={`rounded-xl border ${c.bg} ${c.border} px-4 py-3 flex flex-col gap-0.5`}>
+    <div className={`rounded-xl border ${c.bg} ${c.border} px-4 py-3 flex flex-col gap-0.5`} title={tooltip}>
       <div className={`flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider stat-badge ${c.text}`}>
         {icon && <span>{icon}</span>}
         {label}
