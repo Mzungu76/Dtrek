@@ -827,7 +827,7 @@ export default function DiarioPage() {
 
       let blob: Blob
       try {
-        blob = await paginateToPdf(clones)
+        blob = await paginateToPdf(clones, '.pdf-block', { diaryTitle, authorName: diaryAuthor })
       } finally {
         document.body.removeChild(host)
       }
