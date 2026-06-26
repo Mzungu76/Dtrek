@@ -4,7 +4,7 @@
 // from raw COG windows (see lib/sentinel2/rasterIndices.ts). MPC's STAC/SAS
 // endpoints are public for low-volume use, so unlike the old CDSE OAuth2
 // flow this collector has no credentials gate — it always attempts a call.
-import type { SatelliteSignal, SignalContext } from '@/lib/si/types'
+import type { SatelliteSignal, SignalContext } from '@/lib/cl/types'
 import {
   searchStac, getSasToken, signAssetHref, assetHref, bandScaleFor,
   MpcUnreachableError, type StacBbox, type StacItem,
@@ -40,7 +40,7 @@ const PAI_RISK_RANK: Record<string, number> = { R1: 1, P1: 1, R2: 2, P2: 2, R3: 
 const PAI_RISK_PENALTY: Record<string, number> = { R1: -5, P1: -5, R2: -15, P2: -15, R3: -35, P3: -35, R4: -60, P4: -60, unknown: -5 }
 
 // Worst (highest-rank) PAI polygon of `riskType` that actually intersects the trail
-// geometry — ctx.geometry is the sparse geometry_simplified polyline (see computeSI.ts),
+// geometry — ctx.geometry is the sparse geometry_simplified polyline (see computeCL.ts),
 // so this checks every consecutive pair, not just whether a vertex lands inside.
 function worstPaiIntersection(features: PaiFeature[], riskType: PaiRiskType, geometry: [number, number][]): PaiFeature | null {
   let worst: PaiFeature | null = null

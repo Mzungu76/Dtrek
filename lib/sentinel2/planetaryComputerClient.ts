@@ -1,6 +1,6 @@
 // Shared Microsoft Planetary Computer (MPC) access layer — STAC search +
 // SAS token issuance + asset URL signing. This is the MPC-era equivalent of
-// the old getCdseToken in lib/si/signals/satelliteSignals.ts: both lib/si
+// the old getCdseToken in lib/cl/signals/satelliteSignals.ts: both lib/cl
 // and lib/sentinel2 import from here (one-way dependency stays the same
 // shape, just pointed at a new shared module instead of at satelliteSignals.ts).
 // MPC's STAC/SAS endpoints are public for low-volume use — no credentials

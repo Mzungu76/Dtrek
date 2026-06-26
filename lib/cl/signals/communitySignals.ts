@@ -5,7 +5,7 @@
 // always either OSM's own community data or the hiker's own GPX track.
 import { supabase } from '@/lib/supabase'
 import { haversineM } from '@/lib/geoUtils'
-import type { CommunitySignal, SignalContext } from '@/lib/si/types'
+import type { CommunitySignal, SignalContext } from '@/lib/cl/types'
 
 const TIMEOUT_MS = 5000
 const NOTES_RADIUS_M = 200

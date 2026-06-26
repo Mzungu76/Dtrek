@@ -1,8 +1,8 @@
 // Sentinel-2 enrichment — phenology (monthly NDVI), landscape variety, shade
 // estimate, water sources, and hazard flags for the trail detail panel.
 // Pulls Sentinel-2 (snapshot/hazard indices) and MODIS MOD13Q1 (monthly
-// phenology) from Microsoft Planetary Computer. No import from lib/si: both
-// this module and lib/si/signals/satelliteSignals.ts import the shared MPC
+// phenology) from Microsoft Planetary Computer. No import from lib/cl: both
+// this module and lib/cl/signals/satelliteSignals.ts import the shared MPC
 // client/raster helpers independently (mirrors the old getCdseToken sharing,
 // just pointed at the new shared modules instead of at each other).
 import { supabase } from '@/lib/supabase'
@@ -16,7 +16,7 @@ import {
   ndvi, ndwi, nbr, evi, bsi, zonalMean, sampleAtPoint,
   type GeoBbox, type RasterWindow,
 } from '@/lib/sentinel2/rasterIndices'
-import type { Sentinel2Data } from '@/lib/si/types'
+import type { Sentinel2Data } from '@/lib/cl/types'
 
 const S2_COLLECTION = 'sentinel-2-l2a'
 const MODIS_COLLECTION = 'modis-13Q1-061'
@@ -323,7 +323,8 @@ export async function computeSentinel2(osmRelationId: number, trailPoints: [numb
     return { ...UNAVAILABLE, osmRelationId, reason: result.reason, debugInfo: result.debugInfo }
   }
   if (result.status === 'computed') {
-    await supabase.from('trails').update(s2RowToUpdatePayload(result.row)).eq('osm_relation_id', osmRelationId)
+    const { error } = await supabase.from('trails').update(s2RowToUpdatePayload(result.row)).eq('osm_relation_id', osmRelationId)
+    if (error) console.error('[computeSentinel2] update trails failed', error)
   }
   return toSentinel2Data(result.row, { osmRelationId })
 }
@@ -373,7 +374,8 @@ export async function computeSentinel2ForPlannedHike(
     return { ...UNAVAILABLE, plannedHikeId, reason: result.reason, debugInfo: result.debugInfo }
   }
   if (result.status === 'computed') {
-    await supabase.from('planned_hikes').update(s2RowToUpdatePayload(result.row)).eq('id', plannedHikeId)
+    const { error } = await supabase.from('planned_hikes').update(s2RowToUpdatePayload(result.row)).eq('id', plannedHikeId)
+    if (error) console.error('[computeSentinel2] update planned_hikes failed', error)
   }
   return toSentinel2Data(result.row, { plannedHikeId })
 }

@@ -1,11 +1,11 @@
-// Security Index (SI) — composite 0-100 trail-condition score from 6 signal
-// collectors, cached on `trails` with per-bucket TTLs (see computeSI.ts).
+// Confidence Level (CL) — composite 0-100 data-trust score from signal
+// collectors, cached on `trails` with per-bucket TTLs (see computeCL.ts).
 import type { RockfallRisk } from '@/lib/geologia/lithologyRiskMap'
 
-export type SILabelText = 'Percorribile' | 'Probabilmente ok' | 'Verificare prima' | 'Attenzione' | 'Sconsigliato'
+export type CLLabelText = 'Alta affidabilità' | 'Affidabile' | 'Da verificare' | 'Dati incerti' | 'Dati inaffidabili'
 
-export interface SILabel {
-  text: SILabelText
+export interface CLLabel {
+  text: CLLabelText
   color: string     // semantic color name: green | lime | amber | red | black
   tailwind: string   // tailwind bg-* class for the badge
 }
@@ -42,7 +42,7 @@ export interface SatelliteSignal {
   firePenalty: number         // 0 | -25 | -50  (from NBR)
   // floodPenalty/landslidePenalty: NDWI/BSI-derived by default, overridden (not summed)
   // by an official PAI polygon when one intersects the trail — see *Source below and
-  // lib/si/signals/satelliteSignals.ts's fetchPaiOverride.
+  // lib/cl/signals/satelliteSignals.ts's fetchPaiOverride.
   floodPenalty: number        // 0 | -15 | -30 (ndwi) | -5/-15/-35/-60 (pai P1-P4)
   landslidePenalty: number    // 0 | -10 | -25 (bsi) | -5/-15/-35/-60 (pai R1-R4)
   landslideSource: 'pai' | 'bsi' | 'none'
@@ -68,14 +68,14 @@ export interface CommunitySignal {
   osmNotesDetails: Array<{ text: string; date: string; distanceM: number }>
   // Penalty from difficulty markers extracted from imported GPX files
   // (Komoot/AllTrails waypoint & track comments) near this trail — see
-  // lib/difficultyMarkers.ts and lib/si/signals/communitySignals.ts.
+  // lib/difficultyMarkers.ts and lib/cl/signals/communitySignals.ts.
   // Never positive: a GPX comment never says a trail "was worth it", only
   // flags hazards.
   difficultyMarkersPenalty: number
   difficultyMarkersDetails: Array<{ text: string; severity: 'info' | 'warning' | 'danger'; distanceM: number }>
 }
 
-export interface SISignals {
+export interface CLSignals {
   osm: OsmSignal
   weather: WeatherSignal
   climate: ClimateSignal
@@ -84,17 +84,17 @@ export interface SISignals {
   community: CommunitySignal
 }
 
-export interface SIResult {
+export interface CLResult {
   // Exactly one of the two is set: osmRelationId when scored against the
   // shared `trails` cache, plannedHikeId when scored standalone for a
-  // planned hike with no OSM correspondence (see computeSIForPlannedHike).
+  // planned hike with no OSM correspondence (see computeCLForPlannedHike).
   osmRelationId?: number
   plannedHikeId?: string
   si: number
-  label: SILabel
+  label: CLLabel
   isGhostTrail: boolean
   dominantWarning: string | null
-  signals: SISignals
+  signals: CLSignals
   partial: boolean
   cachedAt: string
 }
@@ -124,11 +124,11 @@ export interface Sentinel2Data {
 
 // Discriminated responses for the `?polyline=` slow-path API mode, where the
 // trail might not be spatially resolvable at all (no error — just no match).
-export type SIApiResponse = SIResult | { matched: false }
+export type CLApiResponse = CLResult | { matched: false }
 export type Sentinel2ApiResponse = Sentinel2Data | { matched: false }
 
 // Internal orchestration plumbing (not persisted, not part of any API response) —
-// bbox/geometry/OSM tags resolved once by computeSI.ts and threaded into every
+// bbox/geometry/OSM tags resolved once by computeCL.ts and threaded into every
 // collector so none of them re-fetch the same Overpass/trails-cache data.
 export interface SignalContext {
   bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number }

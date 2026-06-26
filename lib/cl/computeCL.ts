@@ -1,22 +1,22 @@
-// Security Index orchestrator — resolves a trail's bbox/geometry, decides
+// Confidence Level orchestrator — resolves a trail's bbox/geometry, decides
 // which of the 3 TTL buckets (static/dynamic/satellite) are due, runs only
 // those collectors, merges them with whatever is still cached, and persists
-// the result. See lib/si/types.ts for the data shapes and supabase-schema.sql
+// the result. See lib/cl/types.ts for the data shapes and supabase-schema.sql
 // for the `trails.si_*` columns this reads/writes.
 import { supabase } from '@/lib/supabase'
 import { computeBbox } from '@/lib/geoUtils'
 import { fetchOverpass, stitchWays, type OsmRelation, type OsmWay } from '@/lib/overpassTrails'
 import type {
-  SIResult, SISignals, SILabel, SignalContext,
+  CLResult, CLSignals, CLLabel, SignalContext,
   OsmSignal, WeatherSignal, ClimateSignal, SatelliteSignal, ActivitySignal, CommunitySignal,
-} from '@/lib/si/types'
-import { fetchOsmTags, collectOsmSignal } from '@/lib/si/signals/osmSignals'
-import { collectWeatherSignal } from '@/lib/si/signals/weatherSignals'
-import { collectClimateSignal } from '@/lib/si/signals/climateSignals'
-import { collectSatelliteSignal } from '@/lib/si/signals/satelliteSignals'
-import { collectActivitySignal } from '@/lib/si/signals/activitySignals'
-import { collectCommunitySignal } from '@/lib/si/signals/communitySignals'
-import { findMatchingActivity } from '@/lib/si/matchTrail'
+} from '@/lib/cl/types'
+import { fetchOsmTags, collectOsmSignal } from '@/lib/cl/signals/osmSignals'
+import { collectWeatherSignal } from '@/lib/cl/signals/weatherSignals'
+import { collectClimateSignal } from '@/lib/cl/signals/climateSignals'
+import { collectSatelliteSignal } from '@/lib/cl/signals/satelliteSignals'
+import { collectActivitySignal } from '@/lib/cl/signals/activitySignals'
+import { collectCommunitySignal } from '@/lib/cl/signals/communitySignals'
+import { findMatchingActivity } from '@/lib/cl/matchTrail'
 
 const STATIC_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DYNAMIC_TTL_MS = 1 * 24 * 60 * 60 * 1000
@@ -24,11 +24,11 @@ const SATELLITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const COLLECTOR_TIMEOUT_MS = 5000
 const FORCE_REFRESH_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
-// Thrown by computeSI/computeSIForPlannedHike when a manual `force` refresh
+// Thrown by computeCL/computeCLForPlannedHike when a manual `force` refresh
 // is requested before the previous one's 24h cooldown has elapsed — caught
-// by app/api/trails/si/route.ts to reply 429 instead of re-hitting every
-// external API on every click of the "Aggiorna SI" button.
-export class SIRateLimitError extends Error {
+// by app/api/trails/cl/route.ts to reply 429 instead of re-hitting every
+// external API on every click of the "Aggiorna CL" button.
+export class CLRateLimitError extends Error {
   constructor(public availableAt: string) {
     super('SI refresh rate limited')
   }
@@ -48,7 +48,7 @@ interface TrailSiRow {
   elevationGain: number | null
   elevationLoss: number | null
   siScore: number | null
-  siSignals: SISignals | null
+  siSignals: CLSignals | null
   siStaticComputedAt: string | null
   siDynamicComputedAt: string | null
   siSatelliteComputedAt: string | null
@@ -82,10 +82,10 @@ interface OverpassGeometryResponse {
 }
 
 // Only used when a trail has no `trails` cache row yet — fetches bbox/geometry
-// for this single computeSI call without writing anything back, so this path
+// for this single computeCL call without writing anything back, so this path
 // never competes with app/api/waymarked-trails/details/route.ts's own writer
 // for the same row's data_quality.
-async function resolveGeometryFallback(osmRelationId: number): Promise<{ bbox: SignalContext['bbox']; geometry: [number, number][] } | null> {
+export async function resolveGeometryFallback(osmRelationId: number): Promise<{ bbox: SignalContext['bbox']; geometry: [number, number][] } | null> {
   try {
     const query = `[out:json][timeout:20];relation(${osmRelationId})->.rel;.rel out body;way(r.rel);out geom;`
     const data = await fetchOverpass<OverpassGeometryResponse>(query, 15_000)
@@ -106,7 +106,7 @@ async function resolveGeometryFallback(osmRelationId: number): Promise<{ bbox: S
 }
 
 // Shared with app/api/trails/sentinel2/route.ts so it never duplicates the
-// cached-row-or-Overpass-fallback geometry resolution computeSI already does.
+// cached-row-or-Overpass-fallback geometry resolution computeCL already does.
 export async function resolveTrailGeometry(osmRelationId: number): Promise<[number, number][] | null> {
   const row = await fetchTrailSiRow(osmRelationId)
   if (row?.geometrySimplified && row.geometrySimplified.length >= 2) return row.geometrySimplified
@@ -125,46 +125,42 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   ])
 }
 
-function labelFor(score: number): SILabel {
-  if (score >= 80) return { text: 'Percorribile', color: 'green', tailwind: 'bg-forest-700' }
-  if (score >= 60) return { text: 'Probabilmente ok', color: 'lime', tailwind: 'bg-lime-600' }
-  if (score >= 40) return { text: 'Verificare prima', color: 'amber', tailwind: 'bg-amber-500' }
-  if (score >= 20) return { text: 'Attenzione', color: 'red', tailwind: 'bg-red-600' }
-  return { text: 'Sconsigliato', color: 'black', tailwind: 'bg-gray-800' }
+function labelFor(score: number): CLLabel {
+  if (score >= 80) return { text: 'Alta affidabilità', color: 'green', tailwind: 'bg-forest-700' }
+  if (score >= 60) return { text: 'Affidabile', color: 'lime', tailwind: 'bg-lime-600' }
+  if (score >= 40) return { text: 'Da verificare', color: 'amber', tailwind: 'bg-amber-500' }
+  if (score >= 20) return { text: 'Dati incerti', color: 'red', tailwind: 'bg-red-600' }
+  return { text: 'Dati inaffidabili', color: 'black', tailwind: 'bg-gray-800' }
 }
 
-function computeScore(s: SISignals): number {
-  let score = 100
-  score += s.osm.accessPenalty + s.osm.visibilityPenalty + s.osm.freshnessScore + s.osm.operatorBonus
-  score += clamp(s.weather.totalPenalty, -35, 0)
-  score += s.climate.tempPenalty + s.climate.altitudeSeason + s.climate.seasonBonus
-  score += s.satellite.ndviDeltaPenalty + s.satellite.ndviAbsolutePenalty + s.satellite.firePenalty + s.satellite.floodPenalty + s.satellite.landslidePenalty + s.satellite.rockfallPenalty
-  score += s.activity.dtrekBonus
-  score += s.community.osmNotesPenalty + s.community.difficultyMarkersPenalty
-  return clamp(score, 0, 100)
+function computeScore(s: CLSignals): number {
+  // Only a subset of the still-computed-and-persisted signals feed the CL
+  // score. Excluded (calculated + stored in si_signals, but not summed here):
+  // osm.visibilityPenalty, all weather.*, all climate.*,
+  // satellite.ndviAbsolutePenalty, satellite.rockfallPenalty.
+  const sum =
+    s.osm.accessPenalty +
+    s.osm.freshnessScore +
+    s.osm.operatorBonus +
+    s.satellite.ndviDeltaPenalty +
+    s.satellite.firePenalty +
+    s.satellite.floodPenalty +
+    s.satellite.landslidePenalty +
+    s.activity.dtrekBonus +
+    s.community.osmNotesPenalty +
+    s.community.difficultyMarkersPenalty
+  return clamp(100 + sum, 0, 100)
 }
 
-function dominantWarningFor(s: SISignals): string | null {
+function dominantWarningFor(s: CLSignals): string | null {
   const candidates: Array<{ value: number; text: string }> = []
 
   if (s.osm.accessPenalty < 0) {
     candidates.push({ value: s.osm.accessPenalty, text: s.osm.accessPenalty <= -60 ? 'Accesso al sentiero segnalato come vietato su OSM' : 'Accesso al sentiero segnalato come privato su OSM' })
   }
-  if (s.osm.visibilityPenalty < 0) {
-    candidates.push({ value: s.osm.visibilityPenalty, text: 'Scarsa visibilità del sentiero segnalata su OSM' })
-  }
   if (s.osm.freshnessScore < 0) {
     const months = s.osm.lastModified ? Math.round((Date.now() - new Date(s.osm.lastModified).getTime()) / (1000 * 60 * 60 * 24 * 30)) : null
     candidates.push({ value: s.osm.freshnessScore, text: months ? `Dati OSM non aggiornati da circa ${months} mesi` : 'Dati OSM non aggiornati da molto tempo' })
-  }
-  if (s.weather.totalPenalty < 0) {
-    candidates.push({ value: s.weather.totalPenalty, text: 'Precipitazioni e umidità del suolo elevate negli ultimi 7 giorni' })
-  }
-  if (s.climate.tempPenalty < 0) {
-    candidates.push({ value: s.climate.tempPenalty, text: 'Temperature attuali sfavorevoli per questo sentiero' })
-  }
-  if (s.climate.altitudeSeason < 0) {
-    candidates.push({ value: s.climate.altitudeSeason, text: 'Quota elevata in stagione invernale' })
   }
   if (s.satellite.firePenalty < 0) {
     candidates.push({ value: s.satellite.firePenalty, text: 'Possibile area incendiata rilevata via satellite' })
@@ -185,17 +181,8 @@ function dominantWarningFor(s: SISignals): string | null {
         : 'Possibile rischio frana rilevato via satellite',
     })
   }
-  if (s.satellite.rockfallPenalty < 0) {
-    candidates.push({
-      value: s.satellite.rockfallPenalty,
-      text: `Rischio crollo roccioso da litologia (CARG${s.satellite.rockfallClass ? `, classe ${s.satellite.rockfallClass}` : ''})`,
-    })
-  }
   if (s.satellite.ndviDeltaPenalty < 0) {
     candidates.push({ value: s.satellite.ndviDeltaPenalty, text: 'Variazione anomala della vegetazione rilevata via satellite' })
-  }
-  if (s.satellite.ndviAbsolutePenalty < 0) {
-    candidates.push({ value: s.satellite.ndviAbsolutePenalty, text: 'Vegetazione molto fitta che potrebbe rendere il sentiero poco percorribile' })
   }
   if (s.community.osmNotesPenalty < 0) {
     const closest = [...s.community.osmNotesDetails].sort((a, b) => a.distanceM - b.distanceM)[0]
@@ -219,7 +206,7 @@ function dominantWarningFor(s: SISignals): string | null {
 
 interface SiCacheFields {
   siScore: number | null
-  siSignals: SISignals | null
+  siSignals: CLSignals | null
   siStaticComputedAt: string | null
   siDynamicComputedAt: string | null
   siSatelliteComputedAt: string | null
@@ -227,9 +214,9 @@ interface SiCacheFields {
 }
 
 interface SiPipelineResult {
-  signals: SISignals
+  signals: CLSignals
   score: number
-  label: SILabel
+  label: CLLabel
   dominantWarning: string | null
   isGhostTrail: boolean
   partial: boolean
@@ -238,14 +225,14 @@ interface SiPipelineResult {
   satelliteExpired: boolean
 }
 
-// Pure scoring pipeline shared by computeSI (OSM trail, `trails` cache) and
-// computeSIForPlannedHike (arbitrary GPX track, `planned_hikes` cache) — no
+// Pure scoring pipeline shared by computeCL (OSM trail, `trails` cache) and
+// computeCLForPlannedHike (arbitrary GPX track, `planned_hikes` cache) — no
 // I/O besides the collectors themselves. `overpassRelationId` is the only
 // thing genuinely tied to OSM (relation tags via Overpass): pass null for a
 // track with no OSM correspondence and every collector below degrades to
 // its already-existing neutral fallback (same as when Overpass itself is
 // unreachable), since none of them otherwise use the id parameter.
-async function runSiPipeline(
+async function runClPipeline(
   geometry: [number, number][],
   bbox: SignalContext['bbox'],
   distanceKm: number | null,
@@ -311,9 +298,9 @@ async function runSiPipeline(
   // later schema change added to one of these shapes — gets those fields
   // backfilled instead of propagating `undefined` into computeScore()'s
   // arithmetic (which turns into NaN, silently serialized as `null` by
-  // JSON, which then made SIBadge render nothing).
+  // JSON, which then made CLBadge render nothing).
   const cachedSignals = cached.siSignals
-  const signals: SISignals = {
+  const signals: CLSignals = {
     osm:       (fresh.osm as OsmSignal) ?? { ...NEUTRAL_OSM, ...cachedSignals?.osm },
     weather:   (fresh.weather as WeatherSignal) ?? { ...NEUTRAL_WEATHER, ...cachedSignals?.weather },
     climate:   (fresh.climate as ClimateSignal) ?? { ...NEUTRAL_CLIMATE, ...cachedSignals?.climate },
@@ -341,17 +328,17 @@ async function runSiPipeline(
   return { signals, score, label, dominantWarning, isGhostTrail, partial, staticExpired, dynamicExpired, satelliteExpired }
 }
 
-export async function computeSI(
+export async function computeCL(
   osmRelationId: number,
   precomputedGeometry?: { bbox: SignalContext['bbox']; geometrySimplified: [number, number][] },
   opts?: { force?: boolean },
-): Promise<SIResult> {
+): Promise<CLResult> {
   const trailRow = await fetchTrailSiRow(osmRelationId)
 
   if (opts?.force && trailRow?.siDynamicComputedAt) {
     const elapsed = Date.now() - new Date(trailRow.siDynamicComputedAt).getTime()
     if (elapsed < FORCE_REFRESH_COOLDOWN_MS) {
-      throw new SIRateLimitError(new Date(new Date(trailRow.siDynamicComputedAt).getTime() + FORCE_REFRESH_COOLDOWN_MS).toISOString())
+      throw new CLRateLimitError(new Date(new Date(trailRow.siDynamicComputedAt).getTime() + FORCE_REFRESH_COOLDOWN_MS).toISOString())
     }
   }
 
@@ -379,13 +366,15 @@ export async function computeSI(
     isGhostTrail: trailRow?.isGhostTrail ?? false,
   }
 
-  const result = await runSiPipeline(
+  const result = await runClPipeline(
     geometry, bbox,
     trailRow?.distanceKm ?? null, trailRow?.elevationGain ?? null, trailRow?.elevationLoss ?? null,
     cached, osmRelationId, opts?.force,
   )
 
   const cachedAt = new Date().toISOString()
+  // DB columns are intentionally kept as `si_*` to avoid a DB migration —
+  // only in-code symbols were renamed SI -> CL.
   const updatePayload: Record<string, unknown> = {
     si_score: result.score,
     si_label: result.label.text,
@@ -398,7 +387,8 @@ export async function computeSI(
   if (result.dynamicExpired) updatePayload.si_dynamic_computed_at = cachedAt
   if (result.satelliteExpired) updatePayload.si_satellite_computed_at = cachedAt
 
-  await supabase.from('trails').update(updatePayload).eq('osm_relation_id', osmRelationId)
+  const { error } = await supabase.from('trails').update(updatePayload).eq('osm_relation_id', osmRelationId)
+  if (error) console.error('[computeCL] update trails failed', error)
 
   return {
     osmRelationId, si: result.score, label: result.label, isGhostTrail: result.isGhostTrail,
@@ -424,10 +414,10 @@ async function fetchPlannedSiCache(plannedHikeId: string): Promise<SiCacheFields
 
 // Standalone SI computation for a planned hike with no OSM correspondence
 // (e.g. an imported GPX track that doesn't match any cached `trails` row).
-// Same scoring pipeline as computeSI, but cached on the planned_hikes row
+// Same scoring pipeline as computeCL, but cached on the planned_hikes row
 // itself instead of the shared `trails` cache — see
 // supabase/migrations/add_planned_hikes_si_sentinel2_columns.sql.
-export async function computeSIForPlannedHike(
+export async function computeCLForPlannedHike(
   plannedHikeId: string,
   geometry: [number, number][],
   bbox: SignalContext['bbox'],
@@ -435,19 +425,21 @@ export async function computeSIForPlannedHike(
   elevationGain: number | null,
   elevationLoss: number | null,
   opts?: { force?: boolean },
-): Promise<SIResult> {
+): Promise<CLResult> {
   const cached = await fetchPlannedSiCache(plannedHikeId)
 
   if (opts?.force && cached.siDynamicComputedAt) {
     const elapsed = Date.now() - new Date(cached.siDynamicComputedAt).getTime()
     if (elapsed < FORCE_REFRESH_COOLDOWN_MS) {
-      throw new SIRateLimitError(new Date(new Date(cached.siDynamicComputedAt).getTime() + FORCE_REFRESH_COOLDOWN_MS).toISOString())
+      throw new CLRateLimitError(new Date(new Date(cached.siDynamicComputedAt).getTime() + FORCE_REFRESH_COOLDOWN_MS).toISOString())
     }
   }
 
-  const result = await runSiPipeline(geometry, bbox, distanceKm, elevationGain, elevationLoss, cached, null, opts?.force)
+  const result = await runClPipeline(geometry, bbox, distanceKm, elevationGain, elevationLoss, cached, null, opts?.force)
 
   const cachedAt = new Date().toISOString()
+  // DB columns are intentionally kept as `si_*` to avoid a DB migration —
+  // only in-code symbols were renamed SI -> CL.
   const updatePayload: Record<string, unknown> = {
     si_score: result.score,
     si_label: result.label.text,
@@ -460,7 +452,8 @@ export async function computeSIForPlannedHike(
   if (result.dynamicExpired) updatePayload.si_dynamic_computed_at = cachedAt
   if (result.satelliteExpired) updatePayload.si_satellite_computed_at = cachedAt
 
-  await supabase.from('planned_hikes').update(updatePayload).eq('id', plannedHikeId)
+  const { error } = await supabase.from('planned_hikes').update(updatePayload).eq('id', plannedHikeId)
+  if (error) console.error('[computeCL] update planned_hikes failed', error)
 
   return {
     plannedHikeId, si: result.score, label: result.label, isGhostTrail: result.isGhostTrail,

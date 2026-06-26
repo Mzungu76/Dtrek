@@ -2,7 +2,7 @@
 // precipitation + soil moisture at the trail's bbox centroid, modulated by
 // surface (from the OSM tags already resolved by osmSignals.ts via ctx) and
 // estimated average slope (from the trails-cache row, already in ctx).
-import type { WeatherSignal, SignalContext } from '@/lib/si/types'
+import type { WeatherSignal, SignalContext } from '@/lib/cl/types'
 
 const TIMEOUT_MS = 5000
 

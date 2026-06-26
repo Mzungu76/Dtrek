@@ -1,4 +1,4 @@
-// Same dual-mode contract as /api/trails/si (?osm_relation_id= fast path,
+// Same dual-mode contract as /api/trails/cl (?osm_relation_id= fast path,
 // ?polyline=&planned_id= slow path). A full Sentinel-2 recompute is
 // expensive (Sentinel-2 snapshot + 12 MODIS monthly reads from Microsoft
 // Planetary Computer when the 90-day series cache expires), well past a
@@ -16,9 +16,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { computeSentinel2, computeSentinel2ForPlannedHike, fetchS2Cache, toSentinel2Data, SERIES_TTL_MS } from '@/lib/sentinel2/computeSentinel2'
-import { resolveTrailGeometry } from '@/lib/si/computeSI'
-import { findTrailForPolyline } from '@/lib/si/matchTrail'
-import type { Sentinel2ApiResponse } from '@/lib/si/types'
+import { resolveTrailGeometry } from '@/lib/cl/computeCL'
+import { findTrailForPolyline } from '@/lib/cl/matchTrail'
+import type { Sentinel2ApiResponse } from '@/lib/cl/types'
 
 const COMPUTE_TIMEOUT_MS = 20000
 const MATCH_TIMEOUT_MS = 4000

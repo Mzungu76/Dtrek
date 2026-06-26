@@ -1,10 +1,10 @@
 'use client'
-// Shared fetch+state hooks for GET /api/trails/si and GET /api/trails/sentinel2
-// (lib/si/types.ts' SIApiResponse/Sentinel2ApiResponse) — used by both
+// Shared fetch+state hooks for GET /api/trails/cl and GET /api/trails/sentinel2
+// (lib/cl/types.ts' CLApiResponse/Sentinel2ApiResponse) — used by both
 // app/esplora/page.tsx and app/programma/[id]/page.tsx so neither duplicates
 // the same fetch+useEffect plumbing or the { matched: false } branching.
 import { useEffect, useState } from 'react'
-import type { SIResult, Sentinel2Data } from '@/lib/si/types'
+import type { CLResult, Sentinel2Data } from '@/lib/cl/types'
 
 interface Params {
   osmId?: number
@@ -19,15 +19,15 @@ function queryFor({ osmId, polyline, plannedId }: Params): string | null {
   return null
 }
 
-export function useSI({ osmId, polyline, plannedId }: Params): {
-  result: SIResult | null
+export function useCL({ osmId, polyline, plannedId }: Params): {
+  result: CLResult | null
   loading: boolean
   notMatched: boolean
   refreshing: boolean
   refreshError: string | null
   refresh: () => void
 } {
-  const [result, setResult] = useState<SIResult | null>(null)
+  const [result, setResult] = useState<CLResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [notMatched, setNotMatched] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -42,9 +42,9 @@ export function useSI({ osmId, polyline, plannedId }: Params): {
     setLoading(true)
     setNotMatched(false)
 
-    fetch(`/api/trails/si?${qs}`)
+    fetch(`/api/trails/cl?${qs}`)
       .then(res => res.json())
-      .then((data: SIResult | { matched: false } | { error: string }) => {
+      .then((data: CLResult | { matched: false } | { error: string }) => {
         if (cancelled) return
         if ('matched' in data) { setNotMatched(true); setResult(null) }
         else if ('si' in data) setResult(data)
@@ -62,14 +62,14 @@ export function useSI({ osmId, polyline, plannedId }: Params): {
     if (!qs) return
     setRefreshing(true)
     setRefreshError(null)
-    fetch(`/api/trails/si?${qs}&force=1`)
+    fetch(`/api/trails/cl?${qs}&force=1`)
       .then(async res => {
         if (res.status === 429) {
           const body = await res.json().catch(() => ({}))
           setRefreshError(body.error ?? 'Aggiornamento non ancora disponibile — riprova più tardi.')
           return
         }
-        const data: SIResult | { matched: false } | { error: string } = await res.json()
+        const data: CLResult | { matched: false } | { error: string } = await res.json()
         if ('si' in data) setResult(data)
       })
       .catch(() => { setRefreshError('Impossibile aggiornare il punteggio in questo momento.') })

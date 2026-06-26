@@ -223,7 +223,7 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
   return ok
 }
 
-function siSentinelQuery(meta: { osmId?: number; routePolyline?: [number, number][]; id: string }): string | null {
+function clSentinelQuery(meta: { osmId?: number; routePolyline?: [number, number][]; id: string }): string | null {
   const plannedSuffix = `&planned_id=${encodeURIComponent(meta.id)}`
   if (meta.osmId != null) return `osm_relation_id=${meta.osmId}${plannedSuffix}`
   if (meta.routePolyline && meta.routePolyline.length >= 2) {
@@ -232,17 +232,17 @@ function siSentinelQuery(meta: { osmId?: number; routePolyline?: [number, number
   return null
 }
 
-/** Forces an SI recompute (server-side, 24h cooldown) for every planned hike that has either an OSM match or a polyline. */
-export async function recalcAllSI(onProgress?: (text: string) => void): Promise<{ ok: number; rateLimited: number; failed: number }> {
+/** Forces a CL recompute (server-side, 24h cooldown) for every planned hike that has either an OSM match or a polyline. */
+export async function recalcAllCL(onProgress?: (text: string) => void): Promise<{ ok: number; rateLimited: number; failed: number }> {
   const hikes = await getAllPlanned()
   let ok = 0, rateLimited = 0, failed = 0
   let idx = 0
-  const eligible = hikes.filter(h => siSentinelQuery(h) != null)
+  const eligible = hikes.filter(h => clSentinelQuery(h) != null)
   await batchUpdate(eligible, async meta => {
     onProgress?.(`${++idx}/${eligible.length} — ${meta.title ?? 'Pianificata'}`)
-    const qs = siSentinelQuery(meta)
+    const qs = clSentinelQuery(meta)
     if (!qs) return
-    const res = await fetch(`/api/trails/si?${qs}&force=1`)
+    const res = await fetch(`/api/trails/cl?${qs}&force=1`)
     if (res.status === 429) { rateLimited++; return }
     if (!res.ok) { failed++; return }
     ok++
@@ -254,10 +254,10 @@ export async function recalcAllSI(onProgress?: (text: string) => void): Promise<
 export async function recalcAllSentinel2(onProgress?: (text: string) => void): Promise<{ ok: number; failed: number }> {
   const hikes = await getAllPlanned()
   let idx = 0
-  const eligible = hikes.filter(h => siSentinelQuery(h) != null)
+  const eligible = hikes.filter(h => clSentinelQuery(h) != null)
   const { ok, failed } = await batchUpdate(eligible, async meta => {
     onProgress?.(`${++idx}/${eligible.length} — ${meta.title ?? 'Pianificata'}`)
-    const qs = siSentinelQuery(meta)
+    const qs = clSentinelQuery(meta)
     if (!qs) return
     const res = await fetch(`/api/trails/sentinel2?${qs}&force=1`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)

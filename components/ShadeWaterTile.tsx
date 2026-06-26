@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { Sun, Waves } from 'lucide-react'
-import type { Sentinel2Data } from '@/lib/si/types'
+import type { Sentinel2Data } from '@/lib/cl/types'
 import { ScoreTile } from '@/components/ScoreTile'
 
 function ShadeBar({ score }: { score: number }) {

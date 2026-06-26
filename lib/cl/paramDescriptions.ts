@@ -1,6 +1,6 @@
 // Plain-language explanations shown by InfoTooltip next to each SI signal row
-// (components/SIBadge.tsx) — one entry per `SignalRow.kind`.
-export const SI_PARAM_DESCRIPTIONS: Record<string, string> = {
+// (components/CLBadge.tsx) — one entry per `SignalRow.kind`.
+export const CL_PARAM_DESCRIPTIONS: Record<string, string> = {
   osmAccess: 'Il tag "access" su OpenStreetMap indica che il sentiero è segnalato come vietato o privato dal proprietario del terreno.',
   osmVisibility: 'Il tag "trail_visibility" su OSM indica quanto è facile seguire il tracciato sul terreno (segnaletica, evidenza del sentiero).',
   osmFreshness: 'Da quanto tempo il tracciato non viene aggiornato su OpenStreetMap — dati più vecchi sono meno affidabili.',

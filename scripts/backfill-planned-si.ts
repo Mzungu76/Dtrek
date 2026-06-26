@@ -5,17 +5,17 @@
  * For each row missing si_computed_at:
  *   - try findTrailForPolyline(routePolyline) → if matched, persist
  *     osm_relation_id and compute against the shared `trails` cache
- *     (computeSI / computeSentinel2 — same as Esplora's fast path).
+ *     (computeCL / computeSentinel2 — same as Esplora's fast path).
  *   - if no match, compute standalone against the planned_hikes row itself
- *     (computeSIForPlannedHike / computeSentinel2ForPlannedHike).
+ *     (computeCLForPlannedHike / computeSentinel2ForPlannedHike).
  *
  * Usage:
  *   NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npx tsx scripts/backfill-planned-si.ts [--dry-run]
  */
 import { supabase } from '../lib/supabase'
-import { computeSI, computeSIForPlannedHike } from '../lib/si/computeSI'
+import { computeCL, computeCLForPlannedHike } from '../lib/cl/computeCL'
 import { computeSentinel2, computeSentinel2ForPlannedHike } from '../lib/sentinel2/computeSentinel2'
-import { findTrailForPolyline } from '../lib/si/matchTrail'
+import { findTrailForPolyline } from '../lib/cl/matchTrail'
 import { computeBbox } from '../lib/geoUtils'
 
 const DRY_RUN = process.argv.includes('--dry-run')
@@ -65,7 +65,7 @@ async function processRow(row: PlannedRow) {
       const { error } = await supabase.from('planned_hikes').update({ osm_relation_id: osmRelationId }).eq('id', row.id)
       if (error) console.error(`  [persist-error] ${row.id}`, error)
     }
-    await computeSI(osmRelationId).catch(err => console.error(`  [si-error] ${row.id}`, err))
+    await computeCL(osmRelationId).catch(err => console.error(`  [si-error] ${row.id}`, err))
     await computeSentinel2(osmRelationId, polyline).catch(err => console.error(`  [s2-error] ${row.id}`, err))
     console.log(`  [done] ${row.id} (osm_relation_id=${osmRelationId})`)
     return
@@ -73,7 +73,7 @@ async function processRow(row: PlannedRow) {
 
   const distanceKm = row.distance_meters != null ? row.distance_meters / 1000 : null
   const [minLat, minLon, maxLat, maxLon] = computeBbox(polyline, 0.005).split(',').map(Number)
-  await computeSIForPlannedHike(row.id, polyline, { minLat, minLon, maxLat, maxLon }, distanceKm, row.elevation_gain, row.elevation_loss)
+  await computeCLForPlannedHike(row.id, polyline, { minLat, minLon, maxLat, maxLon }, distanceKm, row.elevation_gain, row.elevation_loss)
     .catch(err => console.error(`  [si-error] ${row.id}`, err))
   await computeSentinel2ForPlannedHike(row.id, polyline, distanceKm, row.elevation_gain, row.elevation_loss)
     .catch(err => console.error(`  [s2-error] ${row.id}`, err))

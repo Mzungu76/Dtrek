@@ -1,15 +1,15 @@
 'use client'
 import { useState } from 'react'
 import { RefreshCw, Loader2 } from 'lucide-react'
-import type { SILabel, SISignals } from '@/lib/si/types'
-import { SI_PARAM_DESCRIPTIONS } from '@/lib/si/paramDescriptions'
+import type { CLLabel, CLSignals } from '@/lib/cl/types'
+import { CL_PARAM_DESCRIPTIONS } from '@/lib/cl/paramDescriptions'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { ScoreTile } from '@/components/ScoreTile'
 
 interface Props {
   si?: number
-  label?: SILabel
-  signals?: SISignals
+  label?: CLLabel
+  signals?: CLSignals
   isGhostTrail?: boolean
   partial?: boolean
   loading?: boolean
@@ -20,20 +20,17 @@ interface Props {
   refreshError?: string | null
 }
 
-interface SignalRow { icon: '✅' | '⚠️' | 'ℹ️'; text: string; kind: keyof typeof SI_PARAM_DESCRIPTIONS }
+interface SignalRow { icon: '✅' | '⚠️' | 'ℹ️'; text: string; kind: keyof typeof CL_PARAM_DESCRIPTIONS }
 
 function signedNum(v: number): string {
   return `${v > 0 ? '+' : ''}${v}`
 }
 
-function signalRows(s: SISignals): SignalRow[] {
+function signalRows(s: CLSignals): SignalRow[] {
   const rows: SignalRow[] = []
 
   if (s.osm.accessPenalty < 0) {
     rows.push({ icon: '⚠️', kind: 'osmAccess', text: `${signedNum(s.osm.accessPenalty)} ${s.osm.accessPenalty <= -60 ? 'Accesso vietato segnalato su OSM' : 'Accesso privato segnalato su OSM'}` })
-  }
-  if (s.osm.visibilityPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'osmVisibility', text: `${signedNum(s.osm.visibilityPenalty)} Scarsa visibilità del sentiero su OSM` })
   }
   if (s.osm.freshnessScore > 0) {
     rows.push({ icon: '✅', kind: 'osmFreshness', text: `${signedNum(s.osm.freshnessScore)} Dati OSM aggiornati di recente` })
@@ -45,30 +42,15 @@ function signalRows(s: SISignals): SignalRow[] {
     rows.push({ icon: '✅', kind: 'osmOperator', text: `${signedNum(s.osm.operatorBonus)} Gestito da una rete escursionistica ufficiale` })
   }
 
-  if (s.weather.totalPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'weather', text: `${signedNum(Math.round(s.weather.totalPenalty))} Condizioni meteo/suolo sfavorevoli negli ultimi 7 giorni` })
-  }
-
-  if (s.climate.tempPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'climateTemp', text: `${signedNum(s.climate.tempPenalty)} Temperature attuali sfavorevoli` })
-  }
-  if (s.climate.altitudeSeason < 0) {
-    rows.push({ icon: '⚠️', kind: 'climateAltitude', text: `${signedNum(s.climate.altitudeSeason)} Quota elevata in stagione invernale` })
-  }
-  if (s.climate.seasonBonus > 0) {
-    rows.push({ icon: '✅', kind: 'climateSeason', text: `${signedNum(s.climate.seasonBonus)} Stagione favorevole per questo sentiero` })
-  }
-
   if (s.satellite.available) {
     if (s.satellite.ndviDeltaPenalty < 0) rows.push({ icon: '⚠️', kind: 'satelliteNdviDelta', text: `${signedNum(s.satellite.ndviDeltaPenalty)} Variazione anomala della vegetazione (satellite)` })
-    if (s.satellite.ndviAbsolutePenalty < 0) rows.push({ icon: '⚠️', kind: 'satelliteNdviAbs', text: `${signedNum(s.satellite.ndviAbsolutePenalty)} Vegetazione molto fitta (satellite)` })
     if (s.satellite.firePenalty < 0) rows.push({ icon: '⚠️', kind: 'satelliteFire', text: `${signedNum(s.satellite.firePenalty)} Possibile area incendiata (satellite)` })
   } else if (s.satellite.floodSource === 'none' && s.satellite.landslideSource === 'none') {
     rows.push({ icon: 'ℹ️', kind: 'satelliteUnavailable', text: 'Dati satellitari non disponibili' })
   }
   // Flood/landslide rows sit outside the `available` gate: an official PAI polygon is
   // authoritative even when the Sentinel-2 heuristic itself didn't run (see
-  // lib/si/signals/satelliteSignals.ts's applyPaiOverride).
+  // lib/cl/signals/satelliteSignals.ts's applyPaiOverride).
   if (s.satellite.floodPenalty < 0) {
     rows.push(s.satellite.floodSource === 'pai'
       ? { icon: '⚠️', kind: 'paiFlood', text: `${signedNum(s.satellite.floodPenalty)} Rischio alluvione ufficiale PAI (classe ${s.satellite.paiFloodClass})` }
@@ -79,12 +61,6 @@ function signalRows(s: SISignals): SignalRow[] {
       ? { icon: '⚠️', kind: 'paiLandslide', text: `${signedNum(s.satellite.landslidePenalty)} Rischio frana ufficiale PAI (classe ${s.satellite.paiLandslideClass})` }
       : { icon: '⚠️', kind: 'satelliteLandslide', text: `${signedNum(s.satellite.landslidePenalty)} Possibile rischio frana (satellite)` })
   }
-  // Rockfall sits outside the `available` gate too, same reason as flood/landslide above —
-  // it's a geologia/CARG lookup, independent of whether the Sentinel-2 fetch itself ran.
-  if (s.satellite.rockfallPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'rockfall', text: `${signedNum(s.satellite.rockfallPenalty)} Rischio crollo roccioso da litologia CARG (classe ${s.satellite.rockfallClass})` })
-  }
-
   if (s.activity.dtrekBonus > 0) {
     rows.push({ icon: '✅', kind: 'activityDtrek', text: `${signedNum(s.activity.dtrekBonus)} Percorso recentemente registrato su DTrek` })
   }
@@ -104,7 +80,7 @@ function Pill({ children, className, title }: { children: React.ReactNode; class
 
 // Tailwind color tokens aren't readable at runtime as hex — map the semantic
 // `label.color` name to a hex used only for the inline header tint/text here.
-function colorFor(label: SILabel): string {
+function colorFor(label: CLLabel): string {
   switch (label.color) {
     case 'green': return '#277134'
     case 'lime': return '#65a30d'
@@ -114,12 +90,12 @@ function colorFor(label: SILabel): string {
   }
 }
 
-export function SIBadge({ si, label, signals, isGhostTrail, partial, loading, compact, expanded, onRefresh, refreshing, refreshError }: Props) {
+export function CLBadge({ si, label, signals, isGhostTrail, partial, loading, compact, expanded, onRefresh, refreshing, refreshError }: Props) {
   const [open, setOpen] = useState(false)
 
   if (loading) {
     return compact
-      ? <Pill className="bg-stone-100 text-stone-400 animate-pulse">SI —</Pill>
+      ? <Pill className="bg-stone-100 text-stone-400 animate-pulse">CL —</Pill>
       : (
         <div className="rounded-2xl border border-stone-200 shadow-sm overflow-hidden animate-pulse">
           <div className="px-5 py-4 bg-stone-50 h-20" />
@@ -145,7 +121,7 @@ export function SIBadge({ si, label, signals, isGhostTrail, partial, loading, co
   if (compact) {
     return (
       <Pill className={`${label.tailwind} text-white`}>
-        SI {si} — {label.text}{partial ? ' (parziale)' : ''}
+        CL {si} — {label.text}{partial ? ' (parziale)' : ''}
       </Pill>
     )
   }
@@ -156,11 +132,11 @@ export function SIBadge({ si, label, signals, isGhostTrail, partial, loading, co
 
   return (
     <ScoreTile
-      title={`Security Index${partial ? ' (parziale)' : ''}`}
+      title={`Confidence Level${partial ? ' (parziale)' : ''}`}
       score={si}
       label={label.text}
       color={colorFor(label)}
-      badge="SI"
+      badge="CL"
       open={open}
       onToggle={() => setOpen(v => !v)}
       hasDetail={rows.length > 0 || !!onRefresh}
@@ -170,7 +146,7 @@ export function SIBadge({ si, label, signals, isGhostTrail, partial, loading, co
           <p key={i} className="text-xs text-stone-600 leading-tight flex items-start gap-1.5">
             <span>{r.icon}</span>
             <span className="flex-1">{r.text}</span>
-            <InfoTooltip text={SI_PARAM_DESCRIPTIONS[r.kind]} />
+            <InfoTooltip text={CL_PARAM_DESCRIPTIONS[r.kind]} />
           </p>
         ))}
       </div>
@@ -182,7 +158,7 @@ export function SIBadge({ si, label, signals, isGhostTrail, partial, loading, co
             disabled={refreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
           >
-            {refreshing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Aggiornamento…</> : <><RefreshCw className="w-3.5 h-3.5" /> Aggiorna SI</>}
+            {refreshing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Aggiornamento…</> : <><RefreshCw className="w-3.5 h-3.5" /> Aggiorna CL</>}
           </button>
           {refreshError && <p className="text-[11px] text-amber-600 mt-1.5">{refreshError}</p>}
         </div>

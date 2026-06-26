@@ -4,10 +4,11 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import ExploreMap, { type TrailResult } from '@/components/ExploreMap'
 import TrailMiniMap from '@/components/TrailMiniMap'
-import { SIBadge } from '@/components/SIBadge'
+import { CLBadge } from '@/components/CLBadge'
+import { CurrentConditionsNotice } from '@/components/CurrentConditionsNotice'
 import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { ShadeWaterTile } from '@/components/ShadeWaterTile'
-import { useSI, useSentinel2 } from '@/lib/si/useSI'
+import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { interpolateElevations } from '@/lib/trailStats'
@@ -61,7 +62,7 @@ export default function EsploraPage() {
   const [added, setAdded]             = useState<Set<string>>(new Set())
   const [preview, setPreview]         = useState<TrailResult | null>(null)
   const geoTimer                      = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const si                            = useSI({ osmId: preview?.osmId })
+  const si                            = useCL({ osmId: preview?.osmId })
   const s2                            = useSentinel2({ osmId: preview?.osmId })
   const flora                         = useFlora(preview?.geometryPolyline, preview?.altitudeMax ?? undefined)
 
@@ -233,7 +234,7 @@ export default function EsploraPage() {
                         dati stimati
                       </span>
                     )}
-                    <SIBadge si={si.result?.si} label={si.result?.label} isGhostTrail={si.result?.isGhostTrail} loading={si.loading} compact />
+                    <CLBadge si={si.result?.si} label={si.result?.label} isGhostTrail={si.result?.isGhostTrail} loading={si.loading} compact />
                   </div>
                   {(t.from || t.to) && (
                     <p className="text-xs text-stone-400 mt-0.5">
@@ -332,7 +333,7 @@ export default function EsploraPage() {
 
               {/* Sicurezza e dati satellitari */}
               <div className="px-5 pb-2 space-y-3">
-                <SIBadge
+                <CLBadge
                   si={si.result?.si}
                   label={si.result?.label}
                   signals={si.result?.signals}
@@ -344,6 +345,7 @@ export default function EsploraPage() {
                   refreshError={si.refreshError}
                   expanded
                 />
+                {!si.notMatched && <CurrentConditionsNotice osmId={preview?.osmId} signals={si.result?.signals} />}
                 <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
                 <ShadeWaterTile data={s2.data} loading={s2.loading} />
               </div>
