@@ -232,6 +232,28 @@ export function depLabel(dep: number): string {
   return 'giornata alpinistica'
 }
 
+// ── Anniversari ───────────────────────────────────────────────────────────────
+export interface Anniversary {
+  activity: ActivityMeta
+  yearsAgo: number
+}
+
+/**
+ * Trova le escursioni fatte esattamente N anni fa (±windowDays) rispetto a `today`.
+ */
+export function findAnniversaries(activities: ActivityMeta[], today = new Date(), windowDays = 3): Anniversary[] {
+  const result: Anniversary[] = []
+  for (const a of activities) {
+    const d = new Date(a.startTime)
+    const yearsAgo = today.getFullYear() - d.getFullYear()
+    if (yearsAgo <= 0) continue
+    const sameYearDate = new Date(today.getFullYear(), d.getMonth(), d.getDate())
+    const diffDays = Math.abs((sameYearDate.getTime() - today.getTime()) / 86400000)
+    if (diffDays <= windowDays) result.push({ activity: a, yearsAgo })
+  }
+  return result.sort((a, b) => b.yearsAgo - a.yearsAgo)
+}
+
 export function linearRegression(points: { x: number; y: number }[]): { slope: number; intercept: number } {
   const n = points.length
   if (n < 2) return { slope: 0, intercept: n === 1 ? points[0].y : 0 }

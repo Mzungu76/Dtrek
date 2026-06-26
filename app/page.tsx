@@ -7,11 +7,12 @@ import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
+import { findAnniversaries } from '@/lib/stats'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
-  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, History,
+  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, History, PartyPopper,
 } from 'lucide-react'
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -290,6 +291,8 @@ export default function HomePage() {
     return () => window.removeEventListener('cts-updated', refresh)
   }, [])
 
+  const anniversaries = useMemo(() => findAnniversaries(activities), [activities])
+
   const months = useMemo(() => {
     const now = new Date()
     let curY = now.getFullYear(), curM = now.getMonth()
@@ -505,6 +508,24 @@ export default function HomePage() {
 
       {/* ── Main ── */}
       <main className="max-w-[1400px] mx-auto px-3 sm:px-4 py-5 sm:py-8">
+        {!loading && anniversaries.length > 0 && (
+          <div className="mb-5 sm:mb-6 flex flex-col gap-2">
+            {anniversaries.map(({ activity, yearsAgo }) => (
+              <Link
+                key={activity.id}
+                href={`/escursione/${activity.id}`}
+                className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors"
+              >
+                <PartyPopper className="w-5 h-5 text-amber-600 shrink-0" />
+                <p className="text-sm text-amber-900">
+                  <span className="font-semibold">{yearsAgo} anno{yearsAgo === 1 ? '' : 'i'} fa</span>
+                  {' '}facevi <span className="font-semibold">{activity.title}</span>
+                  {' '}({(activity.distanceMeters / 1000).toFixed(1)} km, {format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })})
+                </p>
+              </Link>
+            ))}
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
             <Loader2 className="w-6 h-6 animate-spin" />

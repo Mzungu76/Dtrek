@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
+import { findAnniversaries } from '@/lib/stats'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
 
@@ -366,6 +367,28 @@ function DiarioYearDivider({ year, count, totalKm }: { year: string; count: numb
           </span>
         )}
       </div>
+    </div>
+  )
+}
+
+function AnniversaryBanner({ activities }: { activities: ActivityMeta[] }) {
+  const anniversaries = useMemo(() => findAnniversaries(activities), [activities])
+  if (anniversaries.length === 0) return null
+  return (
+    <div className="print:hidden max-w-[794px] mx-auto mb-6 flex flex-col gap-2">
+      {anniversaries.map(({ activity, yearsAgo }) => (
+        <a
+          key={activity.id}
+          href={`/escursione/${activity.id}`}
+          className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors"
+        >
+          <span className="text-sm text-amber-900">
+            🎉 <span className="font-semibold">{yearsAgo} anno{yearsAgo === 1 ? '' : 'i'} fa</span>
+            {' '}facevi <span className="font-semibold">{activity.title}</span>
+            {' '}({(activity.distanceMeters / 1000).toFixed(1)} km, {format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })})
+          </span>
+        </a>
+      ))}
     </div>
   )
 }
@@ -995,6 +1018,7 @@ export default function DiarioPage() {
             coverUrl={coverUrl} diaryTitle={diaryTitle} diarySubtitle={diarySubtitle} diaryAuthor={diaryAuthor}
             dateRange={coverDateRange} totalActivities={activities.length} totalKm={computeGlobalStats(activities).totalDistanceKm}
           />
+          <AnniversaryBanner activities={activities} />
           {bookPages.length > 0 && <DiarioIndice pages={bookPages} />}
           {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} />}
           {activities.length > 0 && showStats && (
