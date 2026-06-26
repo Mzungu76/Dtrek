@@ -19,6 +19,7 @@ import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTrailScore } from '@/lib/trailScore'
 import { computeBbox } from '@/lib/geoUtils'
+import { fetchWeatherAtHike, type WeatherAtHike } from '@/lib/openmeteo'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
@@ -154,6 +155,16 @@ function ActivityUploader() {
         }
       } catch {} // non-blocking — save proceeds regardless
 
+      // ── Historical weather (best-effort) ────────────────────────────
+      let weatherAtHike: WeatherAtHike | undefined
+      try {
+        const gpsPt = (parsedActivity.trackPoints ?? []).find(p => p.lat !== undefined && p.lon !== undefined)
+        if (gpsPt && parsedActivity.startTime) {
+          const date = parsedActivity.startTime.slice(0, 10)
+          weatherAtHike = (await fetchWeatherAtHike(gpsPt.lat!, gpsPt.lon!, date)) ?? undefined
+        }
+      } catch {} // non-blocking — save proceeds regardless
+
       // ── Save ───────────────────────────────────────────────────────
       setStatus('saving')
       await saveActivity({
@@ -164,6 +175,7 @@ function ActivityUploader() {
         linkedPlannedTrackPoints,
         linkedBeautyScore,
         trailScore,
+        weatherAtHike,
       })
       if (selectedPlanned) {
         await deletePlanned(selectedPlanned.id).catch(() => {})

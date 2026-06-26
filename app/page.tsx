@@ -7,11 +7,13 @@ import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
+import { findAnniversaries } from '@/lib/stats'
+import type { ResocontoStatus } from '@/app/api/resoconto-status/route'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
-  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, History,
+  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, History, PartyPopper,
 } from 'lucide-react'
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -32,6 +34,13 @@ interface CardProps {
   dotCount?: number
   dotActive?: number
   onDotClick?: (idx: number) => void
+  reportStatus?: ResocontoStatus
+}
+
+function reportBadge(status?: ResocontoStatus): { label: string; className: string } | null {
+  if (status === 'narrato') return { label: 'Narrato', className: 'bg-forest-600 text-white' }
+  if (status === 'parziale') return { label: 'Parziale', className: 'bg-amber-500 text-white' }
+  return { label: 'Da narrare', className: 'bg-stone-300 text-stone-700' }
 }
 
 function ratingColor(n: number): string {
@@ -49,7 +58,8 @@ function ratingLabel(n: number): string {
   return 'Mediocre'
 }
 
-function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, dotCount, dotActive, onDotClick }: CardProps) {
+function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, dotCount, dotActive, onDotClick, reportStatus }: CardProps) {
+  const badge = reportBadge(reportStatus)
   const isToday   = isSameDay(date, new Date())
   const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
   const showDots  = dotCount && dotCount > 1
@@ -127,6 +137,11 @@ function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact
             ${isToday ? 'bg-terra-500 text-white' : 'bg-white/90 text-stone-600'}`}>
             {dateLabel}
           </span>
+          {badge && (
+            <span className={`absolute top-2 left-2 text-[9px] font-bold rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap ${badge.className}`}>
+              {badge.label}
+            </span>
+          )}
           {/* Navigation dots */}
           {showDots && (
             <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1">
@@ -270,6 +285,7 @@ export default function HomePage() {
   const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'suitability' | 'cts'>('date')
   const [typeFilter, setTypeFilter] = useState<'all' | 'done' | 'planned'>('all')
   const [showAllHistory, setShowAllHistory] = useState(false)
+  const [reportStatus, setReportStatus] = useState<Record<string, ResocontoStatus>>({})
   const monthBarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -279,6 +295,7 @@ export default function HomePage() {
     ])
       .then(([acts, plan]) => { setActivities(acts); setPlanned(plan) })
       .finally(() => setLoading(false))
+    fetch('/api/resoconto-status').then(r => r.ok ? r.json() : {}).then(setReportStatus).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -289,6 +306,8 @@ export default function HomePage() {
     window.addEventListener('cts-updated', refresh)
     return () => window.removeEventListener('cts-updated', refresh)
   }, [])
+
+  const anniversaries = useMemo(() => findAnniversaries(activities), [activities])
 
   const months = useMemo(() => {
     const now = new Date()
@@ -505,6 +524,24 @@ export default function HomePage() {
 
       {/* ── Main ── */}
       <main className="max-w-[1400px] mx-auto px-3 sm:px-4 py-5 sm:py-8">
+        {!loading && anniversaries.length > 0 && (
+          <div className="mb-5 sm:mb-6 flex flex-col gap-2">
+            {anniversaries.map(({ activity, yearsAgo }) => (
+              <Link
+                key={activity.id}
+                href={`/escursione/${activity.id}`}
+                className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors"
+              >
+                <PartyPopper className="w-5 h-5 text-amber-600 shrink-0" />
+                <p className="text-sm text-amber-900">
+                  <span className="font-semibold">{yearsAgo} anno{yearsAgo === 1 ? '' : 'i'} fa</span>
+                  {' '}facevi <span className="font-semibold">{activity.title}</span>
+                  {' '}({(activity.distanceMeters / 1000).toFixed(1)} km, {format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })})
+                </p>
+              </Link>
+            ))}
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -662,6 +699,7 @@ export default function HomePage() {
                     dotCount={acts.length}
                     dotActive={curIdx}
                     onDotClick={idx => setDayIdx(prev => ({ ...prev, [key]: idx }))}
+                    reportStatus={reportStatus[act.id]}
                   />
                 )
                 if (planHike) return <PlannedCard key={key} hike={planHike} date={date} compact />
@@ -715,6 +753,7 @@ export default function HomePage() {
                       activity={activity}
                       date={new Date(activity.startTime)}
                       showFullDate
+                      reportStatus={reportStatus[activity.id]}
                     />
                   ))}
                 </div>

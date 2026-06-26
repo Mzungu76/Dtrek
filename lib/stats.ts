@@ -1,4 +1,4 @@
-import { ActivityMeta } from './blobStore'
+import type { ActivityMeta } from './blobStore'
 import { TrackPoint } from './tcxParser'
 import { format } from 'date-fns'
 
@@ -218,6 +218,89 @@ export function movingAverage(
     const slice = data.slice(Math.max(0, i - half), Math.min(data.length, i + half + 1)).filter(x => x.value > 0)
     return { date: d.date, value: slice.length > 0 ? Math.round(slice.reduce((s, x) => s + x.value, 0) / slice.length * 10) / 10 : 0 }
   })
+}
+
+// ── DEP (Distanza Equivalente in Piano) ──────────────────────────────────────
+export function computeDEP(distanceM: number, elevationGain: number): number {
+  return distanceM / 1000 + elevationGain / 100
+}
+
+export function depLabel(dep: number): string {
+  if (dep < 5) return 'passeggiata'
+  if (dep < 10) return 'escursione media'
+  if (dep < 20) return 'escursione impegnativa'
+  return 'giornata alpinistica'
+}
+
+// ── Anniversari ───────────────────────────────────────────────────────────────
+export interface Anniversary {
+  activity: ActivityMeta
+  yearsAgo: number
+}
+
+/**
+ * Trova le escursioni fatte esattamente N anni fa (±windowDays) rispetto a `today`.
+ */
+export function findAnniversaries(activities: ActivityMeta[], today = new Date(), windowDays = 3): Anniversary[] {
+  const result: Anniversary[] = []
+  for (const a of activities) {
+    const d = new Date(a.startTime)
+    const yearsAgo = today.getFullYear() - d.getFullYear()
+    if (yearsAgo <= 0) continue
+    const sameYearDate = new Date(today.getFullYear(), d.getMonth(), d.getDate())
+    const diffDays = Math.abs((sameYearDate.getTime() - today.getTime()) / 86400000)
+    if (diffDays <= windowDays) result.push({ activity: a, yearsAgo })
+  }
+  return result.sort((a, b) => b.yearsAgo - a.yearsAgo)
+}
+
+// ── Confronto percorsi simili ────────────────────────────────────────────────
+export interface SimilarActivity {
+  activity: ActivityMeta
+  startDistanceM: number
+  distanceDiffPct: number
+}
+
+const SIMILAR_START_RADIUS_M = 800
+const SIMILAR_DISTANCE_TOLERANCE_PCT = 0.3
+
+interface SimilarTarget {
+  id: string
+  distanceMeters: number
+  startLat: number
+  startLon: number
+}
+
+/**
+ * Trova escursioni con punto di partenza vicino (raggio fisso) e lunghezza
+ * simile (±30%) rispetto a `target`, escludendo l'attività stessa.
+ */
+export function findSimilarActivities(target: SimilarTarget, all: ActivityMeta[]): SimilarActivity[] {
+  if (target.distanceMeters <= 0) return []
+  const start: [number, number] = [target.startLat, target.startLon]
+
+  const result: SimilarActivity[] = []
+  for (const a of all) {
+    if (a.id === target.id) continue
+    const aStart = a.routePolyline?.[0]
+    if (!aStart || a.distanceMeters <= 0) continue
+    const startDistanceM = haversineM(start[0], start[1], aStart[0], aStart[1])
+    if (startDistanceM > SIMILAR_START_RADIUS_M) continue
+    const distanceDiffPct = Math.abs(a.distanceMeters - target.distanceMeters) / target.distanceMeters
+    if (distanceDiffPct > SIMILAR_DISTANCE_TOLERANCE_PCT) continue
+    result.push({ activity: a, startDistanceM, distanceDiffPct })
+  }
+  return result.sort((a, b) => a.startDistanceM - b.startDistanceM)
+}
+
+// ── Volume storico (DEP cumulata) ────────────────────────────────────────────
+export function computeLifetimeDEP(activities: ActivityMeta[]): { total: number; analogies: string[] } {
+  const total = activities.reduce((s, a) => s + (a.depKm ?? computeDEP(a.distanceMeters, a.elevationGain)), 0)
+  const analogies: string[] = []
+  if (total > 100) analogies.push("hai percorso l'equivalente della Via Francigena")
+  if (total > 500) analogies.push(`hai percorso l'equivalente di ${Math.round(total / 780)} Cammini di Santiago`)
+  if (total > 1000) analogies.push(`hai percorso l'equivalente di ${Math.round(total / 1300)} volte l'Italia in lunghezza`)
+  return { total, analogies }
 }
 
 export function linearRegression(points: { x: number; y: number }[]): { slope: number; intercept: number } {

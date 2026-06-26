@@ -2,6 +2,8 @@ import { TcxActivity, type TrackPoint } from './tcxParser'
 import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
+import type { WeatherAtHike } from './openmeteo'
+import { computeDEP } from './stats'
 
 export interface StoredActivity extends TcxActivity {
   userNotes?: string
@@ -16,6 +18,8 @@ export interface StoredActivity extends TcxActivity {
   linkedBeautyScore?: BeautyScore
   trailScore?: number
   trailScoreConfidence?: CtsConfidence
+  depKm?: number
+  weatherAtHike?: WeatherAtHike
 }
 
 export interface ActivityMeta {
@@ -43,6 +47,8 @@ export interface ActivityMeta {
   linkedBeautyScore?: BeautyScore
   trailScore?: number
   trailScoreConfidence?: CtsConfidence
+  depKm?: number
+  iev?: number
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -80,6 +86,8 @@ function toMeta(a: StoredActivity): ActivityMeta {
     linkedBeautyScore:       a.linkedBeautyScore,
     trailScore:              a.trailScore,
     trailScoreConfidence:    a.trailScoreConfidence,
+    depKm:           computeDEP(a.distanceMeters, a.elevationGain),
+    iev:             a.iev ?? undefined,  // a.iev is number | null | undefined (TcxActivity)
   }
 }
 
@@ -188,6 +196,7 @@ export function computeGlobalStats(activities: ActivityMeta[]) {
     totalTimeSeconds:  activities.reduce((s, a) => s + a.totalTimeSeconds, 0),
     totalCalories:     activities.reduce((s, a) => s + a.calories, 0),
     totalElevationGain: activities.reduce((s, a) => s + a.elevationGain, 0),
+    totalDepKm: activities.reduce((s, a) => s + (a.depKm ?? computeDEP(a.distanceMeters, a.elevationGain)), 0),
     avgHeartRate:      activities.length
       ? Math.round(activities.reduce((s, a) => s + a.avgHeartRate, 0) / activities.length)
       : 0,

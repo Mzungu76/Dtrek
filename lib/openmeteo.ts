@@ -27,6 +27,16 @@ export interface DailyWeather {
   weathercode: number
 }
 
+// Compact weather summary persisted alongside an activity (weather_at_hike column)
+export interface WeatherAtHike {
+  temperature: number   // °C, midday reading
+  tempMin: number
+  tempMax: number
+  windspeed: number     // km/h, midday reading
+  precipitation: number // mm, summed over the day
+  weathercode: number   // WMO code, midday reading
+}
+
 export interface ClothingItem {
   icon: string
   item: string
@@ -64,6 +74,22 @@ const WMO: Record<number, [string, string]> = {
 export function wmoInfo(code: number): { emoji: string; label: string } {
   const entry = WMO[code] ?? ['❓', `Codice ${code}`]
   return { emoji: entry[0], label: entry[1] }
+}
+
+// Fetches and condenses the day's weather for a single GPS point + date into a
+// compact summary suitable for persisting alongside an activity.
+export async function fetchWeatherAtHike(lat: number, lon: number, date: string): Promise<WeatherAtHike | null> {
+  const hourly = await fetchHistoricalWeather(lat, lon, date, date)
+  if (!hourly.length) return null
+  const noon = hourly.find(h => h.time.slice(11, 13) === '12') ?? hourly[Math.floor(hourly.length / 2)]
+  return {
+    temperature:   noon.temperature,
+    tempMin:       Math.min(...hourly.map(h => h.temperature)),
+    tempMax:       Math.max(...hourly.map(h => h.temperature)),
+    windspeed:     noon.windspeed,
+    precipitation: hourly.reduce((s, h) => s + h.precipitation, 0),
+    weathercode:   noon.weathercode,
+  }
 }
 
 export async function fetchHistoricalWeather(

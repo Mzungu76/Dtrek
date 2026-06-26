@@ -5,6 +5,7 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { formatDuration }    from '@/lib/tcxParser'
 import { format }            from 'date-fns'
 import { it }                from 'date-fns/locale'
+import { sectionsToMarkdown, type ReportSection } from '@/lib/reportStore'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -218,14 +219,14 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get('all') === 'true') {
     const { data: reports, error } = await supabase
       .from('hike_reports')
-      .select('id, activity_id, title, content, created_at, updated_at, share_token')
+      .select('id, activity_id, title, content, created_at, updated_at, share_token, authored_by')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } })
 
     const activityIds = (reports ?? []).map((r: Record<string, unknown>) => r.activity_id as string).filter(Boolean)
     const { data: activities } = activityIds.length
-      ? await supabase.from('activities').select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain').in('id', activityIds)
+      ? await supabase.from('activities').select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain, weather_at_hike').in('id', activityIds)
       : { data: [] }
 
     const actMap = new Map((activities ?? []).map((a: Record<string, unknown>) => [a.id, a]))
@@ -245,7 +246,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('hike_reports')
-    .select('id, activity_id, title, content, photos, created_at, updated_at')
+    .select('id, activity_id, title, content, photos, created_at, updated_at, sections, authored_by')
     .eq('activity_id', activityId)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -381,6 +382,8 @@ export async function POST(req: NextRequest) {
               title:       (activity.title as string) ?? 'Escursione',
               content:     fullText,
               photos:      photoMeta,
+              authored_by: 'ai',
+              sections:    null,
               updated_at:  new Date().toISOString(),
             },
             { onConflict: 'id' },
@@ -414,10 +417,14 @@ export async function PATCH(req: NextRequest) {
   }
 
   let activityId: string, content: string
+  let sections: ReportSection[] | undefined
+  let authoredBy: string | undefined
   try {
     const body = await req.json()
     activityId = body.activityId
     content    = body.content
+    if (Array.isArray(body.sections)) sections = body.sections as ReportSection[]
+    if (typeof body.authoredBy === 'string') authoredBy = body.authoredBy
     if (!activityId || content === undefined) throw new Error()
   } catch {
     return new Response('{"error":"Body non valido"}', {
@@ -425,11 +432,19 @@ export async function PATCH(req: NextRequest) {
     })
   }
 
+  const update: Record<string, unknown> = {
+    content:    sections ? sectionsToMarkdown(sections) : content,
+    updated_at: new Date().toISOString(),
+  }
+  if (sections) update.sections = sections
+  if (authoredBy) update.authored_by = authoredBy
+
   const { error } = await supabase
     .from('hike_reports')
-    .update({ content, updated_at: new Date().toISOString() })
-    .eq('id', `report-${activityId}`)
-    .eq('user_id', user.id)
+    .upsert(
+      { id: `report-${activityId}`, user_id: user.id, activity_id: activityId, ...update },
+      { onConflict: 'id' },
+    )
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {

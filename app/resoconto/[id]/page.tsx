@@ -12,6 +12,12 @@ import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
+  parseSections, markdownToSections, sectionsToMarkdown, SCAFFOLD_SECTIONS,
+  type ReportSection, type ReportAuthoredBy,
+} from '@/lib/reportStore'
+import SectionCard from '@/app/components/ResocontoSectionCard'
+import ManualEditor from '@/app/components/ManualEditor'
+import {
   ArrowLeft, FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
   Images, X, BookOpen, Share2, Copy, Link2Off, ExternalLink,
 } from 'lucide-react'
@@ -27,32 +33,13 @@ interface HikeReport {
   title: string
   content: string
   photos: { caption: string; lat?: number; lon?: number; progress: number }[]
+  sections?: ReportSection[] | null
+  authored_by?: ReportAuthoredBy
   created_at: string
   updated_at: string
 }
 
 type ResocontoLength = 'breve' | 'media' | 'lunga'
-
-// ── Markdown section parser ────────────────────────────────────────────────────
-
-interface Section {
-  title: string
-  body: string
-}
-
-function parseSections(md: string): Section[] {
-  const parts = md.split(/\n(?=## )/)
-  return parts
-    .map(part => {
-      const nl = part.indexOf('\n')
-      if (!part.startsWith('## ') || nl === -1) return null
-      return {
-        title: part.slice(3, nl).trim(),
-        body:  part.slice(nl + 1).trim(),
-      }
-    })
-    .filter((s): s is Section => s !== null)
-}
 
 // Photo slot is keyed by section title (not array position) so that omitting
 // "Cronaca" (no questionnaire answered) doesn't shift the photos bound to the
@@ -66,89 +53,6 @@ const SECTION_PHOTO_SLOT: Record<string, number> = {
 
 function slotFor(title: string, fallbackIndex: number): number {
   return SECTION_PHOTO_SLOT[title] ?? fallbackIndex
-}
-
-// ── Render body text — paragraphs + [curiosita] blocks ─────────────────────────
-
-function RenderBody({ text }: { text: string }) {
-  const parts = text.split(/(\[curiosita\][\s\S]*?\[\/curiosita\])/g)
-  return (
-    <div className="space-y-3">
-      {parts.map((part, i) => {
-        const m = part.match(/^\[curiosita\]([\s\S]*?)\[\/curiosita\]$/)
-        if (m) {
-          return (
-            <blockquote key={i}
-              className="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 rounded-r-xl font-lora text-sm italic text-stone-700 leading-relaxed">
-              {m[1].trim()}
-            </blockquote>
-          )
-        }
-        return part.trim()
-          ? <div key={i} className="space-y-2.5">
-              {part.trim().split(/\n\n+/).map((p, j) => (
-                <p key={j} className="font-lora text-[15px] leading-[1.8] text-stone-700">{p.trim()}</p>
-              ))}
-            </div>
-          : null
-      })}
-    </div>
-  )
-}
-
-// ── Section card ───────────────────────────────────────────────────────────────
-
-const SECTION_COLORS = ['#2d6a4f', '#40916c', '#74c69d', '#b7e4c7', '#d8f3dc']
-
-function SectionCard({
-  section,
-  index,
-  photo,
-  photoIndex,
-  floatNode,
-}: {
-  section: Section
-  index: number
-  photo?: RoutePhoto
-  photoIndex?: number
-  floatNode?: ReactNode
-}) {
-  const color = SECTION_COLORS[index % SECTION_COLORS.length]
-  return (
-    <article className="bg-white rounded-2xl shadow-sm overflow-hidden mb-5 print:rounded-none print:shadow-none print:mb-0 print:border-b print:border-stone-200">
-      <div className="px-6 py-3 flex items-center gap-3" style={{ backgroundColor: color }}>
-        <span className="font-barlow text-[11px] font-bold tracking-[2px] uppercase text-white/70">
-          {String(index + 1).padStart(2, '0')}
-        </span>
-        <h2 className="font-barlow text-lg font-bold tracking-wide uppercase text-white leading-tight">
-          {section.title}
-        </h2>
-      </div>
-
-      <div className="p-6 print-columns-2">
-        {floatNode}
-        {photo && (
-          <div className="float-right ml-5 mb-3 w-44 print:w-40 print:ml-4 shrink-0 hidden md:block print:block">
-            <div className="relative">
-              {photoIndex !== undefined && (
-                <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-barlow z-10">
-                  {photoIndex}
-                </span>
-              )}
-              <img src={photo.url} alt={photo.caption}
-                className="w-full aspect-[4/3] object-cover rounded-xl shadow-md print:rounded-lg" />
-            </div>
-            {photo.caption && (
-              <p className="font-lora text-[10px] italic text-stone-400 mt-1 text-center leading-snug">
-                {photoIndex !== undefined ? `${photoIndex}. ` : ''}{photo.caption}
-              </p>
-            )}
-          </div>
-        )}
-        <RenderBody text={section.body} />
-      </div>
-    </article>
-  )
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
@@ -179,6 +83,10 @@ export default function ResocontoPage() {
   const [publishing,    setPublishing]    = useState(false)
   const [publishError,  setPublishError]  = useState<string | null>(null)
   const [questionnaireStatus, setQuestionnaireStatus] = useState<'none' | 'in_progress' | 'completed' | 'skipped'>('none')
+  const [editorMode,       setEditorMode]       = useState<'view' | 'manual'>('view')
+  const [showAiPanel,      setShowAiPanel]      = useState(true)
+  const [reportSections,   setReportSections]   = useState<ReportSection[]>([])
+  const [reportAuthoredBy, setReportAuthoredBy] = useState<ReportAuthoredBy>('ai')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load activity + report + photos
@@ -193,6 +101,9 @@ export default function ResocontoPage() {
       if (rep) {
         setReport(rep)
         setContent(rep.content ?? '')
+        if (Array.isArray(rep.sections) && rep.sections.length > 0) setReportSections(rep.sections)
+        setReportAuthoredBy(rep.authored_by ?? 'ai')
+        if (rep.content) setShowAiPanel(false)
       }
       setQuestionnaireStatus(questionnaire?.status ?? 'none')
     }).finally(() => setLoading(false))
@@ -237,6 +148,18 @@ export default function ResocontoPage() {
     } finally {
       setSaving(false)
     }
+  }, [id])
+
+  const saveSections = useCallback(async (sections: ReportSection[], authoredBy: ReportAuthoredBy) => {
+    const newContent = sectionsToMarkdown(sections)
+    await fetch('/api/resoconto', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ activityId: id, content: newContent, sections, authoredBy }),
+    })
+    setReportSections(sections)
+    setReportAuthoredBy(authoredBy)
+    setContent(newContent)
   }, [id])
 
   const generateReport = useCallback(async () => {
@@ -481,6 +404,13 @@ export default function ResocontoPage() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 print:max-w-full print:px-0">
 
         {/* ── Controls ── */}
+        {editorMode === 'view' && content && (
+          <button onClick={() => setShowAiPanel(s => !s)}
+            className="flex items-center gap-1.5 mb-3 text-xs font-barlow font-bold uppercase tracking-wide text-stone-500 hover:text-stone-700 transition-colors print:hidden">
+            Genera / rigenera con AI {showAiPanel ? '▲' : '▼'}
+          </button>
+        )}
+        {editorMode === 'view' && content && showAiPanel && (
         <div className="mb-6 print:hidden">
           <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5">
             <div className="flex items-center justify-between flex-wrap gap-4">
@@ -564,18 +494,74 @@ export default function ResocontoPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* ── Empty state ── */}
-        {!content && !generating && (
-          <div className="flex flex-col items-center py-20 text-stone-400 print:hidden">
-            <BookOpen className="w-12 h-12 mb-4 opacity-30" />
-            <p className="font-barlow uppercase tracking-wide text-sm">Nessun resoconto ancora</p>
-            <p className="font-lora text-sm italic mt-1">Clicca "Genera" per creare il tuo racconto</p>
+        {!content && !generating && editorMode === 'view' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-8 print:hidden">
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col items-start">
+              <Pencil className="w-10 h-10 text-stone-400 mb-3" />
+              <p className="font-barlow font-bold uppercase tracking-wide text-stone-700 mb-2">Scrivi tu</p>
+              <p className="text-sm text-stone-500 font-lora italic mb-4">
+                Costruisci il resoconto sezione per sezione, con le tue parole. Puoi richiedere aiuto
+                all&apos;AI su singoli paragrafi e associare le tue foto.
+              </p>
+              <button
+                onClick={() => {
+                  setReportSections(SCAFFOLD_SECTIONS)
+                  setReportAuthoredBy('manual')
+                  setEditorMode('manual')
+                }}
+                className="mt-auto flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                Inizia a scrivere
+              </button>
+            </div>
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col items-start">
+              <BookOpen className="w-10 h-10 text-forest-400 mb-3" />
+              <p className="font-barlow font-bold uppercase tracking-wide text-stone-700 mb-2">Genera con AI</p>
+              <p className="text-sm text-stone-500 font-lora italic mb-4">
+                L&apos;AI scrive un reportage giornalistico completo basato sui tuoi dati GPS,
+                biometrici e foto.
+              </p>
+              <div className="flex items-center gap-2 mt-auto flex-wrap">
+                <div className="flex rounded-xl overflow-hidden border border-stone-200">
+                  {(['breve', 'media', 'lunga'] as const).map(l => (
+                    <button key={l} onClick={() => setLength(l)}
+                      className={`px-3 py-1.5 text-xs font-barlow font-bold uppercase tracking-wide transition-colors
+                        ${length === l ? 'bg-forest-600 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={generateReport} disabled={generating}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                  {generating
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</>
+                    : <><BookOpen className="w-4 h-4" /> Genera</>
+                  }
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
+        {/* ── Manual editor ── */}
+        {editorMode === 'manual' && (
+          <ManualEditor
+            activityId={id}
+            activity={activity}
+            photos={photos}
+            onPhotosChange={setPhotos}
+            initialSections={reportSections}
+            initialAuthoredBy={reportAuthoredBy}
+            onSave={saveSections}
+            onCancel={() => setEditorMode('view')}
+            saving={saving}
+          />
+        )}
+
         {/* ── Streaming indicator ── */}
-        {generating && !sections.length && (
+        {editorMode === 'view' && generating && !sections.length && (
           <div className="flex items-center gap-3 py-8 text-stone-500 print:hidden">
             <Loader2 className="w-5 h-5 animate-spin text-forest-500" />
             <span className="font-lora italic text-sm">Giulia sta scrivendo il tuo resoconto…</span>
@@ -583,7 +569,7 @@ export default function ResocontoPage() {
         )}
 
         {/* ── Edit / view toggle ── */}
-        {content && (
+        {editorMode === 'view' && content && (
           <div className="flex items-center justify-between mb-5 print:hidden">
             <div className="flex items-center gap-2">
               {report?.updated_at && (
@@ -602,22 +588,37 @@ export default function ResocontoPage() {
                 </span>
               )}
             </div>
-            <button
-              onClick={() => {
-                if (isEditing) { saveContent(content); setIsEditing(false) }
-                else setIsEditing(true)
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
-              {isEditing
-                ? <><Check className="w-3.5 h-3.5" /> Fatto</>
-                : <><Pencil className="w-3.5 h-3.5" /> Modifica</>
-              }
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (reportSections.length > 0) {
+                    setEditorMode('manual')
+                  } else {
+                    setReportSections(markdownToSections(content))
+                    setReportAuthoredBy(reportAuthoredBy === 'ai' ? 'mixed' : reportAuthoredBy)
+                    setEditorMode('manual')
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-barlow font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
+                <Pencil className="w-3.5 h-3.5" /> Editor strutturato
+              </button>
+              <button
+                onClick={() => {
+                  if (isEditing) { saveContent(content); setIsEditing(false) }
+                  else setIsEditing(true)
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                {isEditing
+                  ? <><Check className="w-3.5 h-3.5" /> Fatto</>
+                  : <><Pencil className="w-3.5 h-3.5" /> Modifica</>
+                }
+              </button>
+            </div>
           </div>
         )}
 
         {/* ── Edit textarea ── */}
-        {isEditing && (
+        {editorMode === 'view' && isEditing && (
           <div className="mb-6 print:hidden">
             <textarea
               value={content}
@@ -630,7 +631,7 @@ export default function ResocontoPage() {
         )}
 
         {/* ── Rendered sections ── */}
-        {!isEditing && (() => {
+        {editorMode === 'view' && !isEditing && (() => {
           const miniMapNode = activity.trackPoints.length > 4 ? (
             <div className="float-right ml-5 mb-4 w-52 shrink-0 hidden md:block print:block">
               <div className="bg-stone-50 rounded-xl border border-stone-200 overflow-hidden shadow-sm">
@@ -685,14 +686,14 @@ export default function ResocontoPage() {
         })()}
 
         {/* ── Raw streaming text (before first section parsed) ── */}
-        {generating && !sections.length && content && (
+        {editorMode === 'view' && generating && !sections.length && content && (
           <div className="bg-white rounded-2xl shadow-sm p-6 print:hidden">
             <p className="font-lora text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{content}</p>
           </div>
         )}
 
         {/* ── Photo gallery (screen only) ── */}
-        {photos.length > 0 && content && (
+        {editorMode === 'view' && photos.length > 0 && content && (
           <section className="mt-8 print:hidden">
             <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
               Le tue foto
@@ -720,7 +721,7 @@ export default function ResocontoPage() {
         )}
 
         {/* ── Print-only photo grid ── */}
-        {photos.length > 0 && content && (
+        {editorMode === 'view' && photos.length > 0 && content && (
           <section className="hidden print:block mt-6 pt-4 border-t border-stone-200">
             <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
               Documentazione fotografica

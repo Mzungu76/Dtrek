@@ -23,17 +23,58 @@ const PAGE_H = 1123  // A4 height @ 96dpi (px)
  * host) so their layout — and the layout of their `.pdf-block` children — is
  * computed before this runs.
  */
+export interface PaginateOptions {
+  diaryTitle?: string
+  authorName?: string
+}
+
+function injectHeaderFooter(
+  el: HTMLElement,
+  pageIndex: number,
+  options?: PaginateOptions,
+): HTMLElement[] {
+  const injected: HTMLElement[] = []
+
+  if (pageIndex > 0 && options?.diaryTitle) {
+    const header = document.createElement('div')
+    header.style.cssText =
+      'position:absolute;top:0;left:0;right:0;height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:7px;color:#a8a29e;font-family:sans-serif;letter-spacing:0.5px;text-transform:uppercase;z-index:50'
+    header.innerHTML =
+      `<span>DTrek</span><span>${options.diaryTitle}</span>`
+    el.style.position = el.style.position || 'relative'
+    el.appendChild(header)
+    injected.push(header)
+  }
+
+  const footer = document.createElement('div')
+  footer.style.cssText =
+    'position:absolute;bottom:0;left:0;right:0;height:24px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#a8a29e;font-family:sans-serif;z-index:50'
+  footer.dataset.pdfFooter = 'true'
+  el.style.position = el.style.position || 'relative'
+  el.appendChild(footer)
+  injected.push(footer)
+
+  return injected
+}
+
 export async function paginateToPdf(
   elements: HTMLElement[],
   softBreakSelector = '.pdf-block',
+  options?: PaginateOptions,
 ): Promise<Blob> {
   const html2canvas = (await import('html2canvas')).default
   const { jsPDF } = await import('jspdf')
 
   const pdf = new jsPDF({ unit: 'px', format: [PAGE_W, PAGE_H], orientation: 'portrait' })
   let firstPage = true
+  const totalPages = elements.length
 
-  for (const el of elements) {
+  for (let pageIndex = 0; pageIndex < elements.length; pageIndex++) {
+    const el = elements[pageIndex]
+    const injected = injectHeaderFooter(el, pageIndex, options)
+    const footer = injected.find(n => n.dataset.pdfFooter === 'true')
+    if (footer) footer.textContent = `${pageIndex + 1} / ${totalPages}`
+
     const canvas = await html2canvas(el, {
       scale: 2,
       backgroundColor: '#ffffff',
@@ -41,6 +82,8 @@ export async function paginateToPdf(
       allowTaint: false,
       logging: false,
     })
+
+    injected.forEach(n => n.remove())
 
     const cssTotalH = el.scrollHeight
     if (cssTotalH < 1) continue

@@ -7,7 +7,7 @@ import InfoButton from './InfoButton'
 import ShareModal from '@/components/ShareModal'
 import { computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
-import { formatPaceMinkm, difficultyIndex, caloriesPerHour, type PersonalRecords, type Streaks } from '@/lib/stats'
+import { formatPaceMinkm, difficultyIndex, caloriesPerHour, computeLifetimeDEP, type PersonalRecords, type Streaks } from '@/lib/stats'
 import { format } from 'date-fns'
 import {
   Route, Clock, Flame, Mountain, Heart, TrendingUp, Activity, Trophy,
@@ -44,22 +44,39 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
     [routesWithPolyline],
   )
 
+  const lifetimeDEP = useMemo(() => computeLifetimeDEP(activities), [activities])
+
   return (
     <>
     <div className="space-y-8">
+      {/* Volume storico (DEP cumulata) */}
+      <div className="bg-gradient-to-br from-forest-800 to-forest-900 text-white rounded-2xl p-6 shadow-sm">
+        <p className="text-xs uppercase tracking-wide text-forest-300 font-medium mb-1">Il tuo volume di trekking</p>
+        <p className="font-display text-4xl sm:text-5xl font-bold">{lifetimeDEP.total.toFixed(0)} km <span className="text-lg font-normal text-forest-300">DEP</span></p>
+        {lifetimeDEP.analogies.length > 0 && (
+          <ul className="mt-3 space-y-1 text-sm text-forest-200">
+            {lifetimeDEP.analogies.map(a => <li key={a}>· {a}</li>)}
+          </ul>
+        )}
+      </div>
+
       {/* Global KPI */}
       <div>
         <div className="flex items-center gap-1.5 mb-2">
           <span className="text-xs text-stone-400 font-medium uppercase tracking-wide">Totali storici</span>
           <InfoButton section="kpi" onGuideLink={onGuideLink} />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           <StatCard label="Distanza totale"   value={`${stats.totalDistanceKm.toFixed(1)} km`}                         color="forest" icon={<Route className="w-3.5 h-3.5"/>} />
           <StatCard label="Tempo totale"      value={formatDuration(stats.totalTimeSeconds)}                            color="terra"  icon={<Clock className="w-3.5 h-3.5"/>} />
           <StatCard label="Calorie totali"    value={`${stats.totalCalories.toLocaleString('it')} kcal`}               color="red"    icon={<Flame className="w-3.5 h-3.5"/>} />
           <StatCard label="Dislivello totale" value={`${Math.round(stats.totalElevationGain).toLocaleString('it')} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5"/>} />
           <StatCard label="FC media storica"  value={`${stats.avgHeartRate} bpm`}                                      color="red"    icon={<Heart className="w-3.5 h-3.5"/>} />
           <StatCard label="Quota max mai"     value={`${Math.round(stats.highestAlt)} m`}                              color="blue"   icon={<TrendingUp className="w-3.5 h-3.5"/>} />
+          <StatCard label="DEP totale"        value={`${stats.totalDepKm.toFixed(0)} km`}
+            sub={`equivale all'Italia ×${(stats.totalDepKm / 1300).toFixed(1)}`}
+            color="stone" icon={<Route className="w-3.5 h-3.5"/>}
+            tooltip="Distanza Equivalente in Piano cumulata (formula CAI): somma di km + dislivello/100 di tutte le escursioni." />
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 import { useMemo, useEffect, useState } from 'react'
 import { ActivityMeta } from '@/lib/blobStore'
 import {
-  computeRecoveryScore, computeFitnessScore, computeEFTrend,
+  computeRecoveryScore, computeFitnessScore, computeEFTrend, computeIEVTrend,
   estimateZoneTimesFromMeta, computePolarizedDistribution,
   computeVO2maxEstimate, computeCalorieEfficiency, type EFPoint,
 } from '@/lib/bioMetrics'
@@ -59,6 +59,7 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
   const recovery   = useMemo(() => computeRecoveryScore(tsb), [tsb])
   const fitnessInfo = useMemo(() => computeFitnessScore(activities), [activities])
   const efTrend    = useMemo(() => computeEFTrend(activities), [activities])
+  const ievTrend   = useMemo(() => computeIEVTrend(activities), [activities])
 
   // Zone approximation from avgHR
   const zoneTimes  = useMemo(() => estimateZoneTimesFromMeta(activities, maxHR), [activities, maxHR])
@@ -87,6 +88,7 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
   }, [activities, userSettings.userWeightKg])
 
   const hasEFData = efTrend.length >= 3
+  const hasIevData = ievTrend.length >= 3
 
   const TrendIcon = fitnessInfo.trend === 'up' ? ArrowUp : fitnessInfo.trend === 'down' ? ArrowDown : Minus
   const trendColor = fitnessInfo.trend === 'up' ? '#16a34a' : fitnessInfo.trend === 'down' ? '#dc2626' : '#ca8a04'
@@ -223,6 +225,48 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
           <div className="py-10 text-center text-stone-400">
             <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-30" />
             <p className="text-sm">Dati insufficienti. Servono almeno 3 attività con dati di velocità e FC.</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Efficienza Verticale (IEV) ── */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-amber-600" /> IEV nel Tempo
+          <InfoButton section="iev" onGuideLink={onGuideLink} />
+        </h3>
+        <p className="text-xs text-stone-400 mb-4">
+          Metri di dislivello guadagnati al minuto nei tratti in salita, ultime 20 escursioni con dato disponibile.
+        </p>
+        {hasIevData ? (
+          <>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
+                    tickFormatter={d => format(new Date(d), 'dd/MM')}
+                    type="category" hide />
+                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={44}
+                    tickFormatter={v => v.toFixed(0)} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                    labelFormatter={d => format(new Date(d as string), 'dd MMM yy', { locale: it })}
+                    formatter={(v: any, name: string) => [`${Number(v).toFixed(0)} m/min`, name === 'iev' ? 'IEV raw' : 'IEV (media mobile)']} />
+                  <Scatter data={ievTrend} dataKey="iev" name="iev" fill="#c05a17" fillOpacity={0.3} />
+                  <Line data={ievTrend} type="monotone" dataKey="ievSmoothed" name="ievSmoothed"
+                    stroke="#c05a17" strokeWidth={2.5} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-3 flex items-center gap-3 text-xs text-stone-500">
+              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-amber-600 inline-block rounded" /> Media mobile</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-300 inline-block opacity-60" /> Valori singoli</span>
+            </div>
+          </>
+        ) : (
+          <div className="py-10 text-center text-stone-400">
+            <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Dati insufficienti. Servono almeno 3 attività con IEV calcolato (richiede traccia GPX/TCX con timestamp reali).</p>
           </div>
         )}
       </div>

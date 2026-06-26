@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, useEffect, useRef, useState } from 'react'
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -11,8 +11,12 @@ import { formatDuration } from '@/lib/tcxParser'
 import {
   BookMarked, FileDown, Share2, Copy, Link2Off, ExternalLink,
   Loader2, Image as ImageIcon, BarChart2, ChevronDown, X, Pencil,
-  Route, Mountain, Clock, Flame, Trophy, TrendingUp,
+  Route, Mountain, Clock, Flame, Trophy, TrendingUp, NotebookPen,
 } from 'lucide-react'
+import RouteThumb from '@/components/RouteThumb'
+import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
+import { findAnniversaries } from '@/lib/stats'
+import { parseSections } from '@/lib/reportStore'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
 
@@ -27,6 +31,7 @@ interface DiaryReport {
   activity: {
     id: string; title: string; start_time: string
     distance_meters: number; total_time_seconds: number; elevation_gain: number
+    weather_at_hike?: WeatherAtHike | null
   } | null
 }
 
@@ -35,19 +40,6 @@ interface StatsToggles {
   record:  boolean
   medie:   boolean
   andamento: boolean
-}
-
-// ── Section parser ─────────────────────────────────────────────────────────────
-
-interface Section { title: string; body: string }
-function parseSections(md: string): Section[] {
-  return md.split(/\n(?=## )/)
-    .map(part => {
-      const nl = part.indexOf('\n')
-      if (!part.startsWith('## ') || nl === -1) return null
-      return { title: part.slice(3, nl).trim(), body: part.slice(nl + 1).trim() }
-    })
-    .filter((s): s is Section => s !== null)
 }
 
 // ── SVG Charts & Stats ─────────────────────────────────────────────────────────
@@ -124,9 +116,10 @@ function StatCard({ value, label, sub, icon, accent }: {
 // ── Diario pages (A4) ─────────────────────────────────────────────────────────
 
 function DiarioCover({
-  coverUrl, diaryTitle, diarySubtitle, diaryAuthor,
+  coverUrl, diaryTitle, diarySubtitle, diaryAuthor, dateRange, totalActivities, totalKm,
 }: {
   coverUrl: string | null; diaryTitle: string; diarySubtitle: string; diaryAuthor: string
+  dateRange?: string; totalActivities?: number; totalKm?: number
 }) {
   return (
     <div className="diario-page" style={{
@@ -171,6 +164,27 @@ function DiarioCover({
         }}>
           {diarySubtitle}
         </p>
+
+        {/* Compact summary — date range + counters */}
+        {(dateRange || totalActivities) && (
+          <div style={{ display: 'flex', gap: 18, marginTop: 22 }}>
+            {dateRange && (
+              <span style={{ fontFamily: 'Arial, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                {dateRange}
+              </span>
+            )}
+            {!!totalActivities && (
+              <span style={{ fontFamily: 'Arial, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                {totalActivities} {totalActivities === 1 ? 'escursione' : 'escursioni'}
+              </span>
+            )}
+            {!!totalKm && (
+              <span style={{ fontFamily: 'Arial, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                {totalKm.toFixed(0)} km
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Author — bottom center */}
@@ -192,7 +206,11 @@ function DiarioCover({
   )
 }
 
-function DiarioIndice({ reports }: { reports: DiaryReport[] }) {
+type BookPage =
+  | { kind: 'report'; startTime: string; report: DiaryReport }
+  | { kind: 'stub'; startTime: string; activity: ActivityMeta }
+
+function DiarioIndice({ pages }: { pages: BookPage[] }) {
   return (
     <div className="diario-page" style={{
       width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
@@ -205,39 +223,160 @@ function DiarioIndice({ reports }: { reports: DiaryReport[] }) {
         Le escursioni
       </h2>
       <div style={{ borderTop: '1px solid #e5e7eb' }}>
-        {reports.map((rep, i) => {
-          const act = rep.activity
-          const dateStr = act?.start_time
-            ? format(new Date(act.start_time), 'd MMMM yyyy', { locale: it })
-            : rep.created_at ? format(new Date(rep.created_at), 'd MMMM yyyy', { locale: it }) : ''
+        {pages.map((page, i) => {
+          const isStub = page.kind === 'stub'
+          const title = isStub ? (page.activity.title ?? 'Escursione') : (page.report.title || page.report.activity?.title || 'Escursione')
+          const distanceM = isStub ? page.activity.distanceMeters : page.report.activity?.distance_meters ?? 0
+          const elevGain  = isStub ? page.activity.elevationGain  : page.report.activity?.elevation_gain ?? 0
+          const dateStr = format(new Date(page.startTime), 'd MMMM yyyy', { locale: it })
+          const year = new Date(page.startTime).getFullYear()
+          const prevYear = i > 0 ? new Date(pages[i - 1].startTime).getFullYear() : null
+          const showYearHeader = year !== prevYear
           return (
-            <div key={rep.id} className="pdf-block" style={{
-              display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-              padding: '14px 0', borderBottom: '1px solid #f3f4f6',
-            }}>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'baseline', flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, minWidth: 24 }}>
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: '#1f2937', textTransform: 'uppercase', letterSpacing: 0.3 }}>
-                    {rep.title || act?.title || 'Escursione'}
+            <div key={isStub ? `stub-${page.activity.id}` : `rep-${page.report.id}`}>
+              {showYearHeader && (
+                <p style={{ fontSize: 11, color: '#16a34a', fontFamily: 'Arial Black, sans-serif', fontWeight: 900, letterSpacing: 1, margin: i === 0 ? '0 0 4px' : '24px 0 4px' }}>
+                  {year}
+                </p>
+              )}
+              <div className="pdf-block" style={{
+                display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                padding: '14px 0', borderBottom: '1px solid #f3f4f6',
+              }}>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'baseline', flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, minWidth: 24 }}>
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: isStub ? '#9ca3af' : '#1f2937', textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                      {title} {isStub && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>· da narrare</span>}
+                    </div>
+                    {dateStr && (
+                      <div style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'Georgia, serif', fontStyle: 'italic', marginTop: 2 }}>{dateStr}</div>
+                    )}
                   </div>
-                  {dateStr && (
-                    <div style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'Georgia, serif', fontStyle: 'italic', marginTop: 2 }}>{dateStr}</div>
-                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#6b7280', fontFamily: 'Arial, sans-serif', flexShrink: 0, marginLeft: 16 }}>
+                  {distanceM > 0 && <span>{(distanceM / 1000).toFixed(1)} km</span>}
+                  {elevGain > 0 && <span>{Math.round(elevGain)} m D+</span>}
                 </div>
               </div>
-              {act && (
-                <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#6b7280', fontFamily: 'Arial, sans-serif', flexShrink: 0, marginLeft: 16 }}>
-                  {act.distance_meters > 0 && <span>{(act.distance_meters / 1000).toFixed(1)} km</span>}
-                  {act.elevation_gain > 0 && <span>{Math.round(act.elevation_gain)} m D+</span>}
-                </div>
-              )}
             </div>
           )
         })}
       </div>
+    </div>
+  )
+}
+
+function DiarioStubPage({ activity }: { activity: ActivityMeta }) {
+  const dateStr = format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })
+  return (
+    <div className="diario-page" style={{
+      width: 794, minHeight: 1123, background: '#fafaf9', margin: '24px auto',
+      boxShadow: '0 4px 32px rgba(0,0,0,0.14)', border: '2px dashed #d6d3d1', position: 'relative', overflow: 'hidden',
+    }}>
+      <span style={{
+        position: 'absolute', top: 40, right: -50, transform: 'rotate(35deg)',
+        fontSize: 13, fontFamily: 'Arial, sans-serif', fontWeight: 900, letterSpacing: 4,
+        color: 'rgba(120,113,108,0.18)', textTransform: 'uppercase', width: 240, textAlign: 'center',
+      }}>
+        Da narrare
+      </span>
+
+      <div style={{ padding: '32px 32px 0' }}>
+        <p style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 4px' }}>
+          {dateStr}
+        </p>
+        <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 22, fontWeight: 900, color: '#57534e', margin: '0 0 20px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {activity.title ?? 'Escursione'}
+        </h2>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
+          <div style={{ background: 'white', border: '1px solid #e7e5e4', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Distanza</div>
+            <div style={{ fontSize: 18, fontFamily: 'Arial Black, sans-serif', color: '#57534e' }}>{(activity.distanceMeters / 1000).toFixed(2)} km</div>
+          </div>
+          <div style={{ background: 'white', border: '1px solid #e7e5e4', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Dislivello</div>
+            <div style={{ fontSize: 18, fontFamily: 'Arial Black, sans-serif', color: '#57534e' }}>{Math.round(activity.elevationGain)} m</div>
+          </div>
+          <div style={{ background: 'white', border: '1px solid #e7e5e4', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Durata</div>
+            <div style={{ fontSize: 18, fontFamily: 'Arial Black, sans-serif', color: '#57534e' }}>{formatDuration(activity.totalTimeSeconds)}</div>
+          </div>
+          <div style={{ background: 'white', border: '1px solid #e7e5e4', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Calorie</div>
+            <div style={{ fontSize: 18, fontFamily: 'Arial Black, sans-serif', color: '#57534e' }}>{activity.calories ? `${activity.calories} kcal` : '—'}</div>
+          </div>
+        </div>
+
+        {activity.routePolyline && activity.routePolyline.length > 1 && (
+          <div style={{ height: 220, borderRadius: 10, overflow: 'hidden', border: '1px solid #e7e5e4', background: 'white', marginBottom: 20 }}>
+            <RouteThumb polyline={activity.routePolyline} color="#a8a29e" />
+          </div>
+        )}
+      </div>
+
+      <div className="print:hidden" style={{ position: 'absolute', bottom: 32, left: 32, right: 32, textAlign: 'center' }}>
+        <a href={`/resoconto/${encodeURIComponent(activity.id)}/racconta`}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, background: '#1b4332', color: 'white',
+            padding: '10px 20px', borderRadius: 10, fontFamily: 'Arial, sans-serif', fontSize: 12, fontWeight: 700,
+            textDecoration: 'none', textTransform: 'uppercase', letterSpacing: 0.5,
+          }}>
+          Racconta questa escursione →
+        </a>
+      </div>
+    </div>
+  )
+}
+
+function DiarioYearDivider({ year, count, totalKm }: { year: string; count: number; totalKm: number }) {
+  return (
+    <div className="diario-page" style={{
+      width: 794, minHeight: 1123, background: 'linear-gradient(135deg,#1b4332,#2d6a4f)', margin: '24px auto',
+      boxShadow: '0 4px 32px rgba(0,0,0,0.14)', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', position: 'relative',
+    }}>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 6, textTransform: 'uppercase', margin: '0 0 12px' }}>
+        Anno
+      </p>
+      <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 96, fontWeight: 900, color: 'white', margin: 0, letterSpacing: -2 }}>
+        {year}
+      </h2>
+      <div style={{ display: 'flex', gap: 24, marginTop: 24 }}>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'Arial, sans-serif' }}>
+          {count} {count === 1 ? 'escursione' : 'escursioni'}
+        </span>
+        {totalKm > 0 && (
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'Arial, sans-serif' }}>
+            {totalKm.toFixed(0)} km
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AnniversaryBanner({ activities }: { activities: ActivityMeta[] }) {
+  const anniversaries = useMemo(() => findAnniversaries(activities), [activities])
+  if (anniversaries.length === 0) return null
+  return (
+    <div className="print:hidden max-w-[794px] mx-auto mb-6 flex flex-col gap-2">
+      {anniversaries.map(({ activity, yearsAgo }) => (
+        <a
+          key={activity.id}
+          href={`/escursione/${activity.id}`}
+          className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors"
+        >
+          <span className="text-sm text-amber-900">
+            🎉 <span className="font-semibold">{yearsAgo} anno{yearsAgo === 1 ? '' : 'i'} fa</span>
+            {' '}facevi <span className="font-semibold">{activity.title}</span>
+            {' '}({(activity.distanceMeters / 1000).toFixed(1)} km, {format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })})
+          </span>
+        </a>
+      ))}
     </div>
   )
 }
@@ -301,6 +440,33 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
     !best || a.altitudeMax > best.altitudeMax ? a : best, null)
   const maxD = activities.reduce((m, a) => Math.max(m, a.elevationGain), 0)
 
+  // ── Year-by-year breakdown ──────────────────────────────────────────────────
+  const yearMap = new Map<number, { count: number; km: number; elevGain: number }>()
+  activities.forEach(a => {
+    const year = new Date(a.startTime).getFullYear()
+    const entry = yearMap.get(year) ?? { count: 0, km: 0, elevGain: 0 }
+    entry.count++
+    entry.km += a.distanceMeters / 1000
+    entry.elevGain += a.elevationGain
+    yearMap.set(year, entry)
+  })
+  const years = Array.from(yearMap.entries()).sort((a, b) => a[0] - b[0])
+
+  // ── Best month (across all years, by total km) ─────────────────────────────
+  const MONTH_NAMES = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+  const monthKm = Array(12).fill(0)
+  activities.forEach(a => { monthKm[new Date(a.startTime).getMonth()] += a.distanceMeters / 1000 })
+  const bestMonthIdx = monthKm.reduce((best, v, i) => v > monthKm[best] ? i : best, 0)
+  const bestMonthLabel = monthKm[bestMonthIdx] > 0 ? MONTH_NAMES[bestMonthIdx] : null
+
+  // ── Narrative paragraph (uses DEP for an evocative comparison) ─────────────
+  const italyLengths = gs.totalDepKm / 1300
+  const narrative = activities.length > 0
+    ? `In ${years.length} ${years.length === 1 ? 'anno' : 'anni'} di escursioni hai percorso ${gs.totalDistanceKm.toFixed(0)} km e accumulato ${Math.round(gs.totalElevationGain).toLocaleString('it')} m di dislivello positivo — l'equivalente di ${(gs.totalElevationGain / 8849).toFixed(1)} volte l'altezza dell'Everest. ` +
+      `Considerando lo sforzo in DEP, hai coperto una distanza equivalente in piano di ${gs.totalDepKm.toFixed(0)} km: come attraversare l'Italia da nord a sud ${italyLengths.toFixed(1)} ${italyLengths === 1 ? 'volta' : 'volte'}. ` +
+      (bestMonthLabel ? `Il tuo mese più attivo è stato ${bestMonthLabel}.` : '')
+    : ''
+
   return (
     <div className="diario-page" style={{
       width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
@@ -309,9 +475,44 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
       <p style={{ fontSize: 9, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', margin: '0 0 8px' }}>
         Statistiche
       </p>
-      <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 32, fontWeight: 900, color: '#111827', margin: '0 0 32px', textTransform: 'uppercase', letterSpacing: -0.5 }}>
+      <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 32, fontWeight: 900, color: '#111827', margin: '0 0 20px', textTransform: 'uppercase', letterSpacing: -0.5 }}>
         I tuoi numeri
       </h2>
+
+      {narrative && (
+        <p className="pdf-block" style={{
+          fontFamily: 'Georgia, serif', fontSize: 12, lineHeight: 1.7, color: '#374151',
+          margin: '0 0 32px', fontStyle: 'italic',
+        }}>
+          {narrative}
+        </p>
+      )}
+
+      {years.length > 1 && (
+        <div className="pdf-block" style={{ marginBottom: 32 }}>
+          <PillHeader label="Anno per anno" accent={GREEN} />
+          <table style={{ width: '100%', fontSize: 11, fontFamily: 'Arial, sans-serif', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ color: '#9ca3af', textTransform: 'uppercase', fontSize: 9, letterSpacing: 1 }}>
+                <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Anno</th>
+                <th style={{ textAlign: 'right', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Escursioni</th>
+                <th style={{ textAlign: 'right', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Distanza</th>
+                <th style={{ textAlign: 'right', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Dislivello</th>
+              </tr>
+            </thead>
+            <tbody>
+              {years.map(([year, d]) => (
+                <tr key={year} style={{ color: '#374151' }}>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #f3f4f6', fontWeight: 700 }}>{year}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #f3f4f6', textAlign: 'right' }}>{d.count}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #f3f4f6', textAlign: 'right' }}>{d.km.toFixed(0)} km</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #f3f4f6', textAlign: 'right' }}>{Math.round(d.elevGain).toLocaleString('it')} m</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {toggles.totali && (
         <div className="pdf-block" style={{ marginBottom: 32 }}>
@@ -321,6 +522,9 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
             <StatCard value={`${gs.totalElevationGain.toFixed(0)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
             <StatCard value={formatDuration(gs.totalTimeSeconds)} label="In cammino" icon={<Clock style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
             <StatCard value={`${gs.totalCalories.toFixed(0)}`} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 12 }}>
+            <StatCard value={`${gs.totalDepKm.toFixed(0)} km`} label="DEP totale" icon={<Route style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
           </div>
         </div>
       )}
@@ -368,6 +572,8 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
     ? format(new Date(act.start_time), 'd MMMM yyyy', { locale: it })
     : report.created_at ? format(new Date(report.created_at), 'd MMMM yyyy', { locale: it }) : ''
   const heroPhoto = photos[0] ?? null
+  const weather = act?.weather_at_hike
+  const weatherInfo = weather ? wmoInfo(weather.weathercode) : null
 
   return (
     <div className="diario-page" style={{
@@ -391,6 +597,11 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
               {act.distance_meters > 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: 'Arial, sans-serif' }}>{(act.distance_meters / 1000).toFixed(1)} km</span>}
               {act.elevation_gain > 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: 'Arial, sans-serif' }}>{Math.round(act.elevation_gain)} m D+</span>}
               {act.total_time_seconds > 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: 'Arial, sans-serif' }}>{formatDuration(act.total_time_seconds)}</span>}
+              {weatherInfo && weather && (
+                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: 'Arial, sans-serif' }}>
+                  {weatherInfo.emoji} {Math.round(weather.temperature)}°C
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -446,6 +657,7 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
 export default function DiarioPage() {
   const [activities,   setActivities]   = useState<ActivityMeta[]>([])
   const [reports,      setReports]      = useState<DiaryReport[]>([])
+  const [bookPages,    setBookPages]    = useState<BookPage[]>([])
   const [photosByAct,  setPhotosByAct]  = useState<Record<string, RoutePhoto[]>>({})
   const [coverUrl,     setCoverUrl]     = useState<string | null>(null)
   const [mapImgUrl,    setMapImgUrl]    = useState<string | null>(null)
@@ -490,6 +702,18 @@ export default function DiarioPage() {
         new Date(b.activity?.start_time ?? b.created_at).getTime()
       ) : []
       setReports(sortedReps)
+
+      const reportedIds = new Set(sortedReps.map((r: DiaryReport) => r.activity_id))
+      const unreportedActivities = sortedActs.filter(a => !reportedIds.has(a.id))
+      const pages: BookPage[] = [
+        ...sortedReps.map((rep: DiaryReport): BookPage => ({
+          kind: 'report', startTime: rep.activity?.start_time ?? rep.created_at, report: rep,
+        })),
+        ...unreportedActivities.map((a): BookPage => ({
+          kind: 'stub', startTime: a.startTime, activity: a,
+        })),
+      ].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+      setBookPages(pages)
 
       // Load diary PDF url and viewer token
       const dtData = dt as { diary_pdf_url?: string | null; diary_token?: string | null }
@@ -591,7 +815,7 @@ export default function DiarioPage() {
 
       let blob: Blob
       try {
-        blob = await paginateToPdf(clones)
+        blob = await paginateToPdf(clones, '.pdf-block', { diaryTitle, authorName: diaryAuthor })
       } finally {
         document.body.removeChild(host)
       }
@@ -625,6 +849,13 @@ export default function DiarioPage() {
 
   const showStats = Object.values(statsToggles).some(Boolean)
 
+  const coverDateRange = useMemo(() => {
+    if (!activities.length) return undefined
+    const first = format(new Date(activities[0].startTime), 'MMMM yyyy', { locale: it })
+    const last  = format(new Date(activities[activities.length - 1].startTime), 'MMMM yyyy', { locale: it })
+    return first === last ? first : `${first} – ${last}`
+  }, [activities])
+
   return (
     <div className="min-h-screen bg-stone-100 pb-24 md:pb-0">
       <Navbar />
@@ -636,7 +867,11 @@ export default function DiarioPage() {
             <BookMarked className="w-4 h-4 text-forest-600" />
             <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm">Diario</span>
             {!loading && (
-              <span className="text-xs text-stone-400 font-lora italic">{reports.length} resoconti</span>
+              <span className="text-xs text-stone-400 font-lora italic">
+                {reports.length} resoconti
+                {bookPages.filter(p => p.kind === 'stub').length > 0 &&
+                  ` · ${bookPages.filter(p => p.kind === 'stub').length} da narrare`}
+              </span>
             )}
           </div>
 
@@ -771,19 +1006,39 @@ export default function DiarioPage() {
       {/* Book */}
       {!loading && (
         <div id="diario-book" className="bg-stone-200 py-6 min-h-screen">
-          <DiarioCover coverUrl={coverUrl} diaryTitle={diaryTitle} diarySubtitle={diarySubtitle} diaryAuthor={diaryAuthor} />
-          {reports.length > 0 && <DiarioIndice reports={reports} />}
+          <DiarioCover
+            coverUrl={coverUrl} diaryTitle={diaryTitle} diarySubtitle={diarySubtitle} diaryAuthor={diaryAuthor}
+            dateRange={coverDateRange} totalActivities={activities.length} totalKm={computeGlobalStats(activities).totalDistanceKm}
+          />
+          <AnniversaryBanner activities={activities} />
+          {bookPages.length > 0 && <DiarioIndice pages={bookPages} />}
           {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} />}
           {activities.length > 0 && showStats && (
             <DiarioStatistiche activities={activities} toggles={statsToggles} />
           )}
-          {reports.map(rep => (
-            <DiarioReportPage
-              key={rep.id}
-              report={rep}
-              photos={photosByAct[rep.activity_id] ?? []}
-            />
-          ))}
+          {bookPages.map((page, i) => {
+            const year = new Date(page.startTime).getFullYear()
+            const prevYear = i > 0 ? new Date(bookPages[i - 1].startTime).getFullYear() : null
+            const showDivider = year !== prevYear
+            const yearPages = bookPages.filter(p => new Date(p.startTime).getFullYear() === year)
+            const yearKm = yearPages.reduce((s, p) =>
+              s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
+            return (
+              <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}>
+                {showDivider && (
+                  <DiarioYearDivider year={String(year)} count={yearPages.length} totalKm={yearKm} />
+                )}
+                {page.kind === 'report' ? (
+                  <DiarioReportPage
+                    report={page.report}
+                    photos={photosByAct[page.report.activity_id] ?? []}
+                  />
+                ) : (
+                  <DiarioStubPage activity={page.activity} />
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

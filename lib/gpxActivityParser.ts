@@ -1,4 +1,5 @@
 import type { TrackPoint, TcxActivity } from './tcxParser'
+import { computeMovingStats, computeIEV } from './tcxParser'
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
@@ -98,6 +99,11 @@ export function parseGpxActivity(xmlText: string): TcxActivity {
 
   const id = 'gpx_' + startTime.replace(/\D/g, '').slice(0, 14) + '_' + Math.floor(distanceMeters)
 
+  const { netSpeedMs, pauseTimeSeconds } = hasRealTimestamps
+    ? computeMovingStats(rawPoints, distanceMeters, totalTimeSeconds)
+    : { netSpeedMs: avgSpeedMs, pauseTimeSeconds: 0 }
+  const iev = hasRealTimestamps ? computeIEV(rawPoints) : null
+
   return {
     id,
     sport: 'Hiking',
@@ -117,5 +123,8 @@ export function parseGpxActivity(xmlText: string): TcxActivity {
     elevationGain,
     elevationLoss,
     trackPoints,
+    netSpeedMs,
+    pauseTimeSeconds,
+    iev,
   }
 }
