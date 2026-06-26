@@ -1,19 +1,19 @@
 // GET ?osm_relation_id= — fast path used by Esplora, trail already resolved.
 // GET ?polyline=<encodeURIComponent(JSON.stringify([[lat,lon],...]))>&planned_id=<id>
 // — used by Programma, which may have no OSM linkage. Tries best-effort
-// spatial matching to a cached OSM trail first (lib/si/matchTrail.ts); if
+// spatial matching to a cached OSM trail first (lib/cl/matchTrail.ts); if
 // that matches, persists osm_relation_id on the planned hike so future
 // requests can skip straight to the fast path. If nothing matches and
 // planned_id is given, falls back to a standalone computation cached on the
-// planned hike itself (computeSIForPlannedHike) — so every planned hike
+// planned hike itself (computeCLForPlannedHike) — so every planned hike
 // gets a SI score, OSM-backed or not. Without planned_id (legacy callers),
 // no match still replies { matched: false } (200, not an error).
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { computeSI, computeSIForPlannedHike, SIRateLimitError } from '@/lib/si/computeSI'
-import { findTrailForPolyline } from '@/lib/si/matchTrail'
+import { computeCL, computeCLForPlannedHike, CLRateLimitError } from '@/lib/cl/computeCL'
+import { findTrailForPolyline } from '@/lib/cl/matchTrail'
 import { computeBbox } from '@/lib/geoUtils'
-import type { SIApiResponse } from '@/lib/si/types'
+import type { CLApiResponse } from '@/lib/cl/types'
 
 export const maxDuration = 30
 
@@ -76,8 +76,8 @@ export async function GET(req: NextRequest) {
 
   try {
     if (osmRelationId != null) {
-      const result = await withTimeout(computeSI(osmRelationId, undefined, { force }), COMPUTE_TIMEOUT_MS)
-      return NextResponse.json(result satisfies SIApiResponse)
+      const result = await withTimeout(computeCL(osmRelationId, undefined, { force }), COMPUTE_TIMEOUT_MS)
+      return NextResponse.json(result satisfies CLApiResponse)
     }
 
     if (plannedId && polyline) {
@@ -89,23 +89,23 @@ export async function GET(req: NextRequest) {
         .maybeSingle()
       const distanceKm = plannedRow?.distance_meters != null ? plannedRow.distance_meters / 1000 : null
       const result = await withTimeout(
-        computeSIForPlannedHike(
+        computeCLForPlannedHike(
           plannedId, polyline, { minLat, minLon, maxLat, maxLon },
           distanceKm, plannedRow?.elevation_gain ?? null, plannedRow?.elevation_loss ?? null,
           { force },
         ),
         COMPUTE_TIMEOUT_MS,
       )
-      return NextResponse.json(result satisfies SIApiResponse)
+      return NextResponse.json(result satisfies CLApiResponse)
     }
 
-    const body: SIApiResponse = { matched: false }
+    const body: CLApiResponse = { matched: false }
     return NextResponse.json(body)
   } catch (err) {
-    if (err instanceof SIRateLimitError) {
+    if (err instanceof CLRateLimitError) {
       return NextResponse.json({ error: `Aggiornamento disponibile da: ${err.availableAt}` }, { status: 429 })
     }
-    console.error('[trails/si] computeSI failed or timed out', err)
-    return NextResponse.json({ error: 'Impossibile calcolare l\'indice di sicurezza' }, { status: 502 })
+    console.error('[trails/si] computeCL failed or timed out', err)
+    return NextResponse.json({ error: 'Impossibile calcolare il livello di affidabilità' }, { status: 502 })
   }
 }

@@ -18,7 +18,7 @@ export interface GeologiaFeature {
 // interrupt the existing satellite signal pipeline in satelliteSignals.ts.
 export class GeologiaUnavailableError extends Error {}
 
-// Same budget reasoning as paiClient.ts's PAI_TIMEOUT_MS: stays inside computeSI.ts's 5s
+// Same budget reasoning as paiClient.ts's PAI_TIMEOUT_MS: stays inside computeCL.ts's 5s
 // per-collector budget (COLLECTOR_TIMEOUT_MS).
 const GEOLOGIA_TIMEOUT_MS = 4000
 

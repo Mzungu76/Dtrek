@@ -6,7 +6,7 @@ import {
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { TreePine, Leaf } from 'lucide-react'
-import type { Sentinel2Data } from '@/lib/si/types'
+import type { Sentinel2Data } from '@/lib/cl/types'
 import type { FloraResult } from '@/lib/floraTypes'
 
 const MONTH_LABEL = Array.from({ length: 12 }, (_, i) => format(new Date(2024, i, 1), 'MMM', { locale: it }))

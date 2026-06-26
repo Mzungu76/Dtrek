@@ -36,7 +36,7 @@ export interface Natura2000Feature {
 export class Natura2000UnavailableError extends Error {}
 
 // Same budget reasoning as PAI_TIMEOUT_MS/GEOLOGIA_TIMEOUT_MS, though this client is never
-// called from computeSI.ts's 5s collector budget (plan: "Nessun hook SI" for Natura2000) —
+// called from computeCL.ts's 5s collector budget (plan: "Nessun hook SI" for Natura2000) —
 // kept tight anyway since it does run inside computeTEI's client-side fetch path.
 const NATURA2000_TIMEOUT_MS = 4000
 

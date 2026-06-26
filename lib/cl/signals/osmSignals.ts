@@ -1,10 +1,10 @@
 // OSM signal collector — relation tags/meta freshness, access & visibility
 // penalties, operator/network trust bonus. The Overpass fetch lives here
-// (fetchOsmTags) and is run once by computeSI.ts, which threads its result
+// (fetchOsmTags) and is run once by computeCL.ts, which threads its result
 // into SignalContext so weatherSignals.ts can read `surface` without a
 // second Overpass round-trip for the same relation.
 import { fetchOverpass } from '@/lib/overpassTrails'
-import type { OsmSignal, SignalContext } from '@/lib/si/types'
+import type { OsmSignal, SignalContext } from '@/lib/cl/types'
 
 const TIMEOUT_MS = 5000
 

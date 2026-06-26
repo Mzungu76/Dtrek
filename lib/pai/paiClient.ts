@@ -25,7 +25,7 @@ export interface PaiFeature {
 // it interrupt the existing BSI/NDWI satellite fallback in satelliteSignals.ts.
 export class PaiUnavailableError extends Error {}
 
-// Tighter than wfsClient.ts's own 20s default: this runs inside computeSI.ts's 5s
+// Tighter than wfsClient.ts's own 20s default: this runs inside computeCL.ts's 5s
 // per-collector budget (COLLECTOR_TIMEOUT_MS), so failing fast matters more than
 // tolerating a slow PAI server once one is actually configured.
 const PAI_TIMEOUT_MS = 4000

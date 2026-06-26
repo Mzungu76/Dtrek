@@ -12,7 +12,7 @@ import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { type PoiItem } from '@/lib/overpass'
 import { computeBbox } from '@/lib/geoUtils'
-import { batchUpdate, fetchPoisForGps, recalcAllCts, recalcAllSafety, recalcAllSI, recalcAllSentinel2 } from '@/lib/recalcScores'
+import { batchUpdate, fetchPoisForGps, recalcAllCts, recalcAllSafety, recalcAllCL, recalcAllSentinel2 } from '@/lib/recalcScores'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
   Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers,
@@ -479,8 +479,8 @@ function ComfortTrailScoreSection() {
 // ── All-scores recalculation ─────────────────────────────────────────────────
 
 function AllScoresRecalcSection() {
-  const [siRunning,      setSiRunning]      = useState(false)
-  const [siProgress,     setSiProgress]     = useState('')
+  const [clRunning,      setClRunning]      = useState(false)
+  const [clProgress,     setClProgress]     = useState('')
   const [safetyRunning,  setSafetyRunning]  = useState(false)
   const [safetyProgress, setSafetyProgress] = useState('')
   const [s2Running,      setS2Running]      = useState(false)
@@ -488,15 +488,15 @@ function AllScoresRecalcSection() {
   const [allRunning,     setAllRunning]     = useState(false)
   const [allProgress,    setAllProgress]    = useState('')
 
-  const anyRunning = siRunning || safetyRunning || s2Running || allRunning
+  const anyRunning = clRunning || safetyRunning || s2Running || allRunning
 
   async function handleRecalcSI() {
-    setSiRunning(true)
-    setSiProgress('Recupero percorsi…')
-    const { ok, rateLimited } = await recalcAllSI(setSiProgress).catch(() => ({ ok: 0, rateLimited: 0, failed: 0 }))
-    setSiRunning(false)
-    setSiProgress(`Completato · ${ok} SI ricalcolati${rateLimited ? `, ${rateLimited} già aggiornati di recente` : ''}.`)
-    setTimeout(() => setSiProgress(''), 4000)
+    setClRunning(true)
+    setClProgress('Recupero percorsi…')
+    const { ok, rateLimited } = await recalcAllCL(setClProgress).catch(() => ({ ok: 0, rateLimited: 0, failed: 0 }))
+    setClRunning(false)
+    setClProgress(`Completato · ${ok} CL ricalcolati${rateLimited ? `, ${rateLimited} già aggiornati di recente` : ''}.`)
+    setTimeout(() => setClProgress(''), 4000)
   }
 
   async function handleRecalcSafety() {
@@ -526,10 +526,10 @@ function AllScoresRecalcSection() {
         { hrRest: prefs.hrRest ?? 55, hrMax: prefs.hrMax ?? null, prefSforzo: prefs.prefSforzo ?? 50, prefDurata: prefs.prefDurata ?? 270 },
         text => setAllProgress(`CTS: ${text}`),
       )
-      const si = await recalcAllSI(text => setAllProgress(`SI: ${text}`))
+      const cl = await recalcAllCL(text => setAllProgress(`CL: ${text}`))
       const safety = await recalcAllSafety(text => setAllProgress(`Safety: ${text}`))
       const s2 = await recalcAllSentinel2(text => setAllProgress(`Sentinel-2: ${text}`))
-      setAllProgress(`Completato · ${ctsCount} CTS, ${si.ok} SI, ${safety} Safety Score, ${s2.ok} Sentinel-2 ricalcolati.`)
+      setAllProgress(`Completato · ${ctsCount} CTS, ${cl.ok} CL, ${safety} Safety Score, ${s2.ok} Sentinel-2 ricalcolati.`)
     } catch {
       setAllProgress('Errore durante il ricalcolo.')
     }
@@ -553,13 +553,13 @@ function AllScoresRecalcSection() {
           disabled={anyRunning}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-700 text-sm font-medium border border-stone-200 transition"
         >
-          {siRunning
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {siProgress || 'Ricalcolo in corso…'}</>
-            : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutti gli SI</>
+          {clRunning
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {clProgress || 'Ricalcolo in corso…'}</>
+            : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutti i CL</>
           }
         </button>
-        {!siRunning && siProgress && (
-          <p className="text-xs text-forest-600 font-medium">✓ {siProgress}</p>
+        {!clRunning && clProgress && (
+          <p className="text-xs text-forest-600 font-medium">✓ {clProgress}</p>
         )}
 
         <button

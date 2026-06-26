@@ -10,7 +10,7 @@ import RouteThumb from '@/components/RouteThumb'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { ScoresSection } from '@/components/ScoresSection'
 import { PhenologyPanel } from '@/components/PhenologyPanel'
-import { useSI, useSentinel2 } from '@/lib/si/useSI'
+import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import {
   getPlannedById, updatePlannedMeta, deletePlanned,
@@ -192,7 +192,7 @@ export default function PlannedHikePage() {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [hike])
 
-  const si = useSI({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
+  const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
 
@@ -726,10 +726,11 @@ export default function PlannedHikePage() {
         {/* Punteggi — SI, Safety Score, Comfort TrailScore, Ombra/acqua */}
         {hasGps && (
           <ScoresSection
-            si={{
+            cl={{
               si: si.result?.si, label: si.result?.label, signals: si.result?.signals,
               partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched,
               onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError,
+              osmId: hike.osmId, polyline: hike.routePolyline, plannedId: hike.id,
             }}
             safety={safetyScore}
             cts={{

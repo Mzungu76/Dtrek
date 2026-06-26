@@ -2,7 +2,7 @@
 // the current calendar month over the last 10 years (one wide-range query,
 // filtered client-side to the current month — not 10 separate requests),
 // plus altitude/season penalties and a shoulder-season bonus.
-import type { ClimateSignal, SignalContext } from '@/lib/si/types'
+import type { ClimateSignal, SignalContext } from '@/lib/cl/types'
 
 const TIMEOUT_MS = 5000
 const WINTER_MONTHS = [12, 1, 2, 3] // Dic, Gen, Feb, Mar

@@ -22,7 +22,7 @@ export interface UsoSuoloTile {
 }
 
 // Same budget reasoning as DTM_TIMEOUT_MS in dtmClient.ts: this runs once per bbox inside
-// trailTerrainProfile.ts, not inside computeSI.ts's tighter 5s collector budget.
+// trailTerrainProfile.ts, not inside computeCL.ts's tighter 5s collector budget.
 const USO_SUOLO_TIMEOUT_MS = 8000
 
 // CLC class-code field-name candidates for the real endpoint (lc:clc18_it_4258) — provisional

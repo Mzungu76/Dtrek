@@ -12,7 +12,7 @@
 // for it.
 import { supabase } from '@/lib/supabase'
 import { minDistToTrack, computeBbox } from '@/lib/geoUtils'
-import type { SignalContext } from '@/lib/si/types'
+import type { SignalContext } from '@/lib/cl/types'
 
 type Bbox = SignalContext['bbox']
 
