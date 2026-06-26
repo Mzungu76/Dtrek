@@ -254,6 +254,45 @@ export function findAnniversaries(activities: ActivityMeta[], today = new Date()
   return result.sort((a, b) => b.yearsAgo - a.yearsAgo)
 }
 
+// ── Confronto percorsi simili ────────────────────────────────────────────────
+export interface SimilarActivity {
+  activity: ActivityMeta
+  startDistanceM: number
+  distanceDiffPct: number
+}
+
+const SIMILAR_START_RADIUS_M = 800
+const SIMILAR_DISTANCE_TOLERANCE_PCT = 0.3
+
+interface SimilarTarget {
+  id: string
+  distanceMeters: number
+  startLat: number
+  startLon: number
+}
+
+/**
+ * Trova escursioni con punto di partenza vicino (raggio fisso) e lunghezza
+ * simile (±30%) rispetto a `target`, escludendo l'attività stessa.
+ */
+export function findSimilarActivities(target: SimilarTarget, all: ActivityMeta[]): SimilarActivity[] {
+  if (target.distanceMeters <= 0) return []
+  const start: [number, number] = [target.startLat, target.startLon]
+
+  const result: SimilarActivity[] = []
+  for (const a of all) {
+    if (a.id === target.id) continue
+    const aStart = a.routePolyline?.[0]
+    if (!aStart || a.distanceMeters <= 0) continue
+    const startDistanceM = haversineM(start[0], start[1], aStart[0], aStart[1])
+    if (startDistanceM > SIMILAR_START_RADIUS_M) continue
+    const distanceDiffPct = Math.abs(a.distanceMeters - target.distanceMeters) / target.distanceMeters
+    if (distanceDiffPct > SIMILAR_DISTANCE_TOLERANCE_PCT) continue
+    result.push({ activity: a, startDistanceM, distanceDiffPct })
+  }
+  return result.sort((a, b) => a.startDistanceM - b.startDistanceM)
+}
+
 export function linearRegression(points: { x: number; y: number }[]): { slope: number; intercept: number } {
   const n = points.length
   if (n < 2) return { slope: 0, intercept: n === 1 ? points[0].y : 0 }

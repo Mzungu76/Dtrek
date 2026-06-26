@@ -13,7 +13,7 @@ import RouteThumb from '@/components/RouteThumb'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import {
-  getActivityById, updateActivityMeta, deleteActivity,
+  getActivityById, updateActivityMeta, deleteActivity, getAllActivities,
   type StoredActivity, type ActivityMeta,
 } from '@/lib/blobStore'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
@@ -29,7 +29,7 @@ import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
-import { computeDEP, depLabel } from '@/lib/stats'
+import { computeDEP, depLabel, findSimilarActivities } from '@/lib/stats'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -109,6 +109,7 @@ export default function EscursionePage() {
   const [prefsLoaded,     setPrefsLoaded]     = useState(false)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefDurata,      setPrefDurata]      = useState(270)
+  const [allActivities,   setAllActivities]   = useState<ActivityMeta[]>([])
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat && p.lon)
@@ -117,6 +118,20 @@ export default function EscursionePage() {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [activity])
 
+
+  useEffect(() => {
+    getAllActivities().then(setAllActivities).catch(() => {})
+  }, [])
+
+  const similarActivities = useMemo(() => {
+    if (!activity) return []
+    const startPt = activity.trackPoints.find(p => p.lat !== undefined && p.lon !== undefined)
+    if (!startPt) return []
+    return findSimilarActivities(
+      { id: activity.id, distanceMeters: activity.distanceMeters, startLat: startPt.lat!, startLon: startPt.lon! },
+      allActivities,
+    )
+  }, [activity, allActivities])
 
   useEffect(() => {
     getActivityById(id).then(a => {
@@ -686,6 +701,38 @@ export default function EscursionePage() {
           </div>
           {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
         </section>
+
+        {/* Percorsi simili */}
+        {similarActivities.length > 0 && (
+          <section>
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-2">Percorsi simili</h2>
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide">
+                    <th className="text-left px-4 py-2 font-semibold">Data</th>
+                    <th className="text-left px-4 py-2 font-semibold">Distanza</th>
+                    <th className="text-left px-4 py-2 font-semibold">Dislivello</th>
+                    <th className="text-left px-4 py-2 font-semibold">Durata</th>
+                    <th className="text-left px-4 py-2 font-semibold">Partenza a</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {similarActivities.map(({ activity: a, startDistanceM }) => (
+                    <tr key={a.id} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer"
+                      onClick={() => router.push(`/escursione/${a.id}`)}>
+                      <td className="px-4 py-2 text-stone-700">{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
+                      <td className="px-4 py-2 text-stone-700">{(a.distanceMeters / 1000).toFixed(1)} km</td>
+                      <td className="px-4 py-2 text-stone-700">{a.elevationGain.toFixed(0)} m</td>
+                      <td className="px-4 py-2 text-stone-700">{formatDuration(a.totalTimeSeconds)}</td>
+                      <td className="px-4 py-2 text-stone-400">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* Charts */}
         {(() => {
