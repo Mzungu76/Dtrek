@@ -293,6 +293,16 @@ export function findSimilarActivities(target: SimilarTarget, all: ActivityMeta[]
   return result.sort((a, b) => a.startDistanceM - b.startDistanceM)
 }
 
+// ── Volume storico (DEP cumulata) ────────────────────────────────────────────
+export function computeLifetimeDEP(activities: ActivityMeta[]): { total: number; analogies: string[] } {
+  const total = activities.reduce((s, a) => s + (a.depKm ?? computeDEP(a.distanceMeters, a.elevationGain)), 0)
+  const analogies: string[] = []
+  if (total > 100) analogies.push("hai percorso l'equivalente della Via Francigena")
+  if (total > 500) analogies.push(`hai percorso l'equivalente di ${Math.round(total / 780)} Cammini di Santiago`)
+  if (total > 1000) analogies.push(`hai percorso l'equivalente di ${Math.round(total / 1300)} volte l'Italia in lunghezza`)
+  return { total, analogies }
+}
+
 export function linearRegression(points: { x: number; y: number }[]): { slope: number; intercept: number } {
   const n = points.length
   if (n < 2) return { slope: 0, intercept: n === 1 ? points[0].y : 0 }

@@ -7,7 +7,7 @@ import InfoButton from './InfoButton'
 import ShareModal from '@/components/ShareModal'
 import { computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
-import { formatPaceMinkm, difficultyIndex, caloriesPerHour, type PersonalRecords, type Streaks } from '@/lib/stats'
+import { formatPaceMinkm, difficultyIndex, caloriesPerHour, computeLifetimeDEP, type PersonalRecords, type Streaks } from '@/lib/stats'
 import { format } from 'date-fns'
 import {
   Route, Clock, Flame, Mountain, Heart, TrendingUp, Activity, Trophy,
@@ -44,9 +44,22 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
     [routesWithPolyline],
   )
 
+  const lifetimeDEP = useMemo(() => computeLifetimeDEP(activities), [activities])
+
   return (
     <>
     <div className="space-y-8">
+      {/* Volume storico (DEP cumulata) */}
+      <div className="bg-gradient-to-br from-forest-800 to-forest-900 text-white rounded-2xl p-6 shadow-sm">
+        <p className="text-xs uppercase tracking-wide text-forest-300 font-medium mb-1">Il tuo volume di trekking</p>
+        <p className="font-display text-4xl sm:text-5xl font-bold">{lifetimeDEP.total.toFixed(0)} km <span className="text-lg font-normal text-forest-300">DEP</span></p>
+        {lifetimeDEP.analogies.length > 0 && (
+          <ul className="mt-3 space-y-1 text-sm text-forest-200">
+            {lifetimeDEP.analogies.map(a => <li key={a}>· {a}</li>)}
+          </ul>
+        )}
+      </div>
+
       {/* Global KPI */}
       <div>
         <div className="flex items-center gap-1.5 mb-2">
