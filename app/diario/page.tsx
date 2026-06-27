@@ -11,7 +11,7 @@ import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import {
   BookMarked, FileDown, Share2, Copy, Link2Off, ExternalLink,
   Loader2, Image as ImageIcon, BarChart2, ChevronDown, X, Pencil,
-  Route, Mountain, Clock, Flame, Trophy, TrendingUp, NotebookPen, Lock, LockOpen,
+  Route, Mountain, Clock, Flame, Trophy, TrendingUp, NotebookPen, Lock, LockOpen, Eye, EyeOff,
 } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
@@ -362,7 +362,7 @@ function DiarioIndice({ pages }: { pages: BookPage[] }) {
 function DiarioStubPage({ activity }: { activity: ActivityMeta }) {
   const dateStr = format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })
   return (
-    <div className="diario-page" style={{
+    <div className="diario-page diario-stub-page" style={{
       width: 794, minHeight: 1123, background: '#fafaf9', margin: '24px auto',
       boxShadow: '0 4px 32px rgba(0,0,0,0.14)', border: '2px dashed #d6d3d1', position: 'relative', overflow: 'hidden',
     }}>
@@ -727,7 +727,7 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
         {(showMappa || showStatistiche || showGrafico || showCuore || showVelocita) && (
           <div className="pdf-block" style={{ marginBottom: 24 }}>
             {showMappa && (
-              <div className="print:hidden diario-report-map" style={{ height: 260, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+              <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
                 <AllRoutesMap
                   routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
                   height="260px"
@@ -784,7 +784,7 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
             </div>
             <div style={{ padding: '10px 14px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 5px 5px' }}>
               {photos[i + 1] && (
-                <div style={{ float: 'right', marginLeft: 18, marginBottom: 10, width: 190, shapeOutside: 'margin-box' } as CSSProperties}>
+                <div className="pdf-block" style={{ float: 'right', marginLeft: 18, marginBottom: 10, width: 190, shapeOutside: 'margin-box' } as CSSProperties}>
                   <div style={{ position: 'relative' }}>
                     <img src={photos[i + 1].url} alt={photos[i + 1].caption}
                       style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 7, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
@@ -815,9 +815,9 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
 
         {/* Photo row */}
         {photos.length > 0 && (
-          <div className="pdf-block" style={{ marginTop: 22, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+          <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
             {photos.map((ph, i) => (
-              <div key={ph.id} style={{ position: 'relative' }}>
+              <div key={ph.id} className="pdf-block" style={{ position: 'relative' }}>
                 <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
                 <span style={{ position: 'absolute', top: 6, left: 6, width: 20, height: 20, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '20px', fontSize: 10, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
                 {ph.caption && <p style={{ fontSize: 9, color: '#78716c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>{ph.caption}</p>}
@@ -851,6 +851,7 @@ export default function DiarioPage() {
   const [showStatsMenu, setShowStatsMenu] = useState(false)
   const [showTextMenu,  setShowTextMenu]  = useState(false)
   const [mapsInteractive, setMapsInteractive] = useState(false)
+  const [showStubs, setShowStubs] = useState(true)
   const [statsToggles, setStatsToggles] = useState<StatsToggles>(() => {
     try { return JSON.parse(localStorage.getItem('dtrek_diary_stats') ?? '') }
     catch { return { totali: true, record: true, medie: true, andamento: true } }
@@ -948,11 +949,11 @@ export default function DiarioPage() {
       trackPointEntries.forEach(([activityId, tps]) => { if (tps.length) tpByAct[activityId] = tps })
       setTrackPointsByAct(tpByAct)
 
-      // Pre-generate canvas map for PDF
-      import('@/utils/pdfExport').then(({ chartAllRoutes }) => {
-        const img = chartAllRoutes(sortedActs, 660, 400)
-        if (img) setMapImgUrl(img)
-      })
+      // Pre-generate a tiled raster map for native browser printing (Ctrl+P) —
+      // our own PDF export path fetches a fresh one instead, ignoring this.
+      import('@/utils/pdfExport').then(({ fetchAllRoutesSatMap }) =>
+        fetchAllRoutesSatMap(sortedActs, 660, 400)
+      ).then(img => { if (img) setMapImgUrl(img) })
     }).finally(() => setLoading(false))
   }, [])
 
@@ -992,7 +993,12 @@ export default function DiarioPage() {
     ro.observe(inner)
     window.addEventListener('resize', recalc)
     return () => { ro.disconnect(); window.removeEventListener('resize', recalc) }
-  }, [loading, bookPages, activities, statsToggles, reportExtras, trackPointsByAct])
+  }, [loading, bookPages, showStubs, activities, statsToggles, reportExtras, trackPointsByAct])
+
+  const visibleBookPages = useMemo(
+    () => showStubs ? bookPages : bookPages.filter(p => p.kind !== 'stub'),
+    [bookPages, showStubs]
+  )
 
   function handleCoverUpload(file: File) {
     const reader = new FileReader()
@@ -1009,20 +1015,27 @@ export default function DiarioPage() {
     key(true); setPublishError(null)
     try {
       const { paginateToPdf, nextLayout } = await import('@/lib/pdfPaginate')
-      const { chartAllRoutes } = await import('@/utils/pdfExport')
-      const mapForPdf = mapImgUrl || chartAllRoutes(activities, 660, 400) || null
+      const { fetchAllRoutesSatMap, fetchSatMap } = await import('@/utils/pdfExport')
+      const mapForPdf = mapImgUrl || await fetchAllRoutesSatMap(activities, 660, 400) || null
+
+      const actById = new Map(activities.map(a => [a.id, a]))
+      const PALETTE = ['#166534','#0369a1','#9333ea','#c2410c','#0f766e','#b45309','#be123c','#1d4ed8']
 
       const host = document.createElement('div')
       host.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
 
       const clones: HTMLElement[] = []
-      document.querySelectorAll<HTMLElement>('#diario-book .diario-page').forEach(p => {
+      const reportPages = Array.from(
+        document.querySelectorAll<HTMLElement>('#diario-book .diario-page')
+      ).filter(p => !p.classList.contains('diario-stub-page'))
+
+      for (const p of reportPages) {
         const clone = p.cloneNode(true) as HTMLElement
         clone.style.margin = '0'
         clone.style.boxShadow = 'none'
-        // Remove OSM tile canvases (cross-origin tainted); the global all-routes map
-        // gets replaced with a fresh <img> raster, per-report route maps are screen-only
-        // (no per-route raster generated) so they're simply dropped from the PDF.
+        // Remove OSM tile canvases (cross-origin tainted by live Leaflet tiles);
+        // both the global and per-report maps get replaced with fresh rasterized
+        // tile images fetched directly (no canvas, no CORS taint).
         clone.querySelectorAll('canvas').forEach(c => c.remove())
         const globalMapWrapper = clone.querySelector<HTMLElement>('.diario-global-map')
         if (globalMapWrapper) {
@@ -1035,13 +1048,30 @@ export default function DiarioPage() {
             globalMapWrapper.appendChild(img)
           }
         }
-        clone.querySelectorAll<HTMLElement>('.diario-report-map').forEach(el => el.remove())
+        const reportMapEls = clone.querySelectorAll<HTMLElement>('.diario-report-map')
+        for (const el of Array.from(reportMapEls)) {
+          const actId = el.dataset.activityId
+          const act = actId ? actById.get(actId) : undefined
+          el.innerHTML = ''
+          el.style.height = 'auto'
+          if (act?.routePolyline && act.routePolyline.length > 1) {
+            const idx = activities.indexOf(act)
+            const color = PALETTE[idx % PALETTE.length]
+            const mapImg = await fetchSatMap(act.routePolyline, 660, 300, color)
+            if (mapImg) {
+              const img = document.createElement('img')
+              img.src = mapImg
+              img.style.cssText = 'width:100%;border-radius:10px;display:block'
+              el.appendChild(img)
+            }
+          }
+        }
         clone.querySelectorAll<HTMLElement>('img[alt="Mappa percorsi"]').forEach(i => {
           i.style.display = 'none'
         })
         host.appendChild(clone)
         clones.push(clone)
-      })
+      }
 
       document.body.appendChild(host)
       await nextLayout()
@@ -1211,6 +1241,16 @@ export default function DiarioPage() {
             Mappe {mapsInteractive ? 'navigabili' : 'bloccate'}
           </button>
 
+          {/* Toggle stub (non narrate) pages visibility — they're never exported to PDF/link regardless */}
+          <button onClick={() => setShowStubs(v => !v)}
+            title={showStubs ? 'Nascondi i percorsi non ancora narrati' : 'Mostra i percorsi non ancora narrati'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-barlow font-bold uppercase tracking-wide transition-colors ${
+              showStubs ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+            }`}>
+            {showStubs ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            Da narrare {showStubs ? 'visibili' : 'nascosti'}
+          </button>
+
           {/* Download PDF */}
           <button onClick={() => generateAndUploadPdf(true)} disabled={downloading || loading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 disabled:opacity-50 transition-colors">
@@ -1277,16 +1317,16 @@ export default function DiarioPage() {
                 dateRange={coverDateRange} totalActivities={activities.length} totalKm={computeGlobalStats(activities).totalDistanceKm}
               />
               <AnniversaryBanner activities={activities} />
-              {bookPages.length > 0 && <DiarioIndice pages={bookPages} />}
+              {visibleBookPages.length > 0 && <DiarioIndice pages={visibleBookPages} />}
               {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} mapsInteractive={mapsInteractive} />}
               {activities.length > 0 && showStats && (
                 <DiarioStatistiche activities={activities} toggles={statsToggles} />
               )}
-              {bookPages.map((page, i) => {
+              {visibleBookPages.map((page, i) => {
                 const year = new Date(page.startTime).getFullYear()
-                const prevYear = i > 0 ? new Date(bookPages[i - 1].startTime).getFullYear() : null
+                const prevYear = i > 0 ? new Date(visibleBookPages[i - 1].startTime).getFullYear() : null
                 const showDivider = year !== prevYear
-                const yearPages = bookPages.filter(p => new Date(p.startTime).getFullYear() === year)
+                const yearPages = visibleBookPages.filter(p => new Date(p.startTime).getFullYear() === year)
                 const yearKm = yearPages.reduce((s, p) =>
                   s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
                 return (

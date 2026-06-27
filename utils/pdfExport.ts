@@ -302,7 +302,108 @@ export async function fetchSatMap(
   }
 }
 
-/** All routes combined (stats map page) */
+/**
+ * All routes combined, with a real OSM tile basemap underneath (used for the
+ * diario PDF export, where the live Leaflet map can't be captured — canvases
+ * tainted by cross-origin tiles get stripped before html2canvas runs).
+ * Falls back to the flat vector-only rendering on any tile-fetch error.
+ */
+export async function fetchAllRoutesSatMap(activities: ActivityMeta[], outW: number, outH: number): Promise<string> {
+  const polylines = activities.filter(a => (a.routePolyline?.length ?? 0) > 1).map(a => a.routePolyline!)
+  if (!polylines.length) return ''
+
+  try {
+    const allPts = polylines.flat()
+    const lats = allPts.map(p => p[0]), lons = allPts.map(p => p[1])
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+    const minLon = Math.min(...lons), maxLon = Math.max(...lons)
+    const padFrac = 0.12
+    const padLat = (maxLat - minLat) * padFrac || 0.003
+    const padLon = (maxLon - minLon) * padFrac || 0.003
+    const bMinLat = minLat - padLat, bMaxLat = maxLat + padLat
+    const bMinLon = minLon - padLon, bMaxLon = maxLon + padLon
+
+    let zoom = 16
+    for (let z = 16; z >= 6; z--) {
+      const tl = latLonToXY(bMaxLat, bMinLon, z)
+      const br = latLonToXY(bMinLat, bMaxLon, z)
+      const tw = Math.floor(br.x) - Math.floor(tl.x) + 1
+      const th = Math.floor(br.y) - Math.floor(tl.y) + 1
+      if (tw * th <= 40) { zoom = z; break }
+    }
+
+    const tl = latLonToXY(bMaxLat, bMinLon, zoom)
+    const br = latLonToXY(bMinLat, bMaxLon, zoom)
+    const minTX = Math.floor(tl.x), maxTX = Math.floor(br.x)
+    const minTY = Math.floor(tl.y), maxTY = Math.floor(br.y)
+    const tilesW = maxTX - minTX + 1
+    const tilesH = maxTY - minTY + 1
+
+    const full = document.createElement('canvas')
+    full.width = tilesW * TILE_SIZE
+    full.height = tilesH * TILE_SIZE
+    const fctx = full.getContext('2d')!
+
+    await Promise.all(
+      Array.from({ length: tilesW * tilesH }, (_, idx) => {
+        const tx = minTX + (idx % tilesW)
+        const ty = minTY + Math.floor(idx / tilesW)
+        const url = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`
+        return loadTileImage(url)
+          .then(img => fctx.drawImage(img, (tx - minTX) * TILE_SIZE, (ty - minTY) * TILE_SIZE))
+          .catch(() => {
+            fctx.fillStyle = '#e8e8e8'
+            fctx.fillRect((tx - minTX) * TILE_SIZE, (ty - minTY) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+          })
+      })
+    )
+
+    const project = (lat: number, lon: number) => {
+      const xy = latLonToXY(lat, lon, zoom)
+      return { x: (xy.x - minTX) * TILE_SIZE, y: (xy.y - minTY) * TILE_SIZE }
+    }
+
+    const PALETTE = ['#166534','#0369a1','#9333ea','#c2410c','#0f766e','#b45309','#be123c','#1d4ed8']
+    const lineW = Math.max(3, Math.min(6, full.width / 160))
+    fctx.lineCap = 'round'; fctx.lineJoin = 'round'
+
+    polylines.forEach(pl => {
+      fctx.strokeStyle = 'rgba(0,0,0,0.45)'; fctx.lineWidth = lineW + 2
+      fctx.beginPath()
+      pl.forEach(([lat, lon], i) => {
+        const { x, y } = project(lat, lon)
+        i === 0 ? fctx.moveTo(x, y) : fctx.lineTo(x, y)
+      })
+      fctx.stroke()
+    })
+    polylines.forEach((pl, idx) => {
+      fctx.strokeStyle = PALETTE[idx % PALETTE.length]; fctx.lineWidth = lineW
+      fctx.beginPath()
+      pl.forEach(([lat, lon], i) => {
+        const { x, y } = project(lat, lon)
+        i === 0 ? fctx.moveTo(x, y) : fctx.lineTo(x, y)
+      })
+      fctx.stroke()
+    })
+
+    const topLeft  = project(bMaxLat, bMinLon)
+    const botRight = project(bMinLat, bMaxLon)
+    const cropX = Math.max(0, topLeft.x), cropY = Math.max(0, topLeft.y)
+    const cropW = Math.min(full.width,  botRight.x) - cropX
+    const cropH = Math.min(full.height, botRight.y) - cropY
+
+    const out = document.createElement('canvas')
+    out.width = outW; out.height = outH
+    const octx = out.getContext('2d')!
+    octx.drawImage(full, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
+
+    return out.toDataURL('image/png')
+  } catch {
+    return chartAllRoutes(activities, outW, outH)
+  }
+}
+
+/** All routes combined (stats map page) — flat vector fallback, no tiles */
 export function chartAllRoutes(activities: ActivityMeta[], w: number, h: number): string {
   const polylines = activities.filter(a => (a.routePolyline?.length ?? 0) > 1).map(a => a.routePolyline!)
   if (!polylines.length) return ''
