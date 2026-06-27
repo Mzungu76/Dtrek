@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { ReactNode, CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -40,6 +40,12 @@ interface StatsToggles {
   record:  boolean
   medie:   boolean
   andamento: boolean
+}
+
+interface ReportExtras {
+  mappa:       boolean
+  statistiche: boolean
+  grafico:     boolean
 }
 
 // ── SVG Charts & Stats ─────────────────────────────────────────────────────────
@@ -92,6 +98,29 @@ function MonthBarChart({ activities }: { activities: ActivityMeta[] }) {
           </g>
         )
       })}
+    </svg>
+  )
+}
+
+function ElevationProfileChart({ profile, accent }: { profile: number[]; accent: AccentTheme }) {
+  if (profile.length < 2) return null
+  const min = Math.min(...profile)
+  const max = Math.max(...profile)
+  const range = max - min || 1
+  const W = 660, H = 110, pad = 4
+  const pts = profile.map((alt, i) => {
+    const x = (i / (profile.length - 1)) * (W - pad * 2) + pad
+    const y = H - pad - ((alt - min) / range) * (H - pad * 2)
+    return [x, y]
+  })
+  const linePath = `M ${pts.map(p => p.join(',')).join(' L ')}`
+  const areaPath = `${linePath} L ${pts[pts.length - 1][0]},${H} L ${pts[0][0]},${H} Z`
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+      <path d={areaPath} fill={accent.iconColor} opacity={0.12} />
+      <path d={linePath} fill="none" stroke={accent.iconColor} strokeWidth={1.6} />
+      <text x={pad} y={H - 2} fontSize={8} fill="#9ca3af" fontFamily="Arial">{Math.round(min)} m</text>
+      <text x={W - pad} y={10} textAnchor="end" fontSize={8} fill="#9ca3af" fontFamily="Arial">{Math.round(max)} m</text>
     </svg>
   )
 }
@@ -402,7 +431,7 @@ function DiarioMappa({ activities, mapImgUrl }: { activities: ActivityMeta[]; ma
 
       {/* Screen map (Leaflet) */}
       {routes.length > 0 && (
-        <div className="print:hidden" style={{ height: 400, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+        <div className="print:hidden diario-global-map" style={{ height: 400, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
           <AllRoutesMap routes={routes} height="400px" />
         </div>
       )}
@@ -565,7 +594,9 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
 
 const SECTION_COLORS = ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc']
 
-function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: RoutePhoto[] }) {
+function DiarioReportPage({ report, photos, meta, extras }: {
+  report: DiaryReport; photos: RoutePhoto[]; meta?: ActivityMeta; extras: ReportExtras
+}) {
   const act     = report.activity
   const sections = parseSections(report.content)
   const dateStr  = act?.start_time
@@ -574,6 +605,9 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
   const heroPhoto = photos[0] ?? null
   const weather = act?.weather_at_hike
   const weatherInfo = weather ? wmoInfo(weather.weathercode) : null
+  const showMappa       = extras.mappa       && (meta?.routePolyline?.length ?? 0) > 1
+  const showStatistiche = extras.statistiche && !!meta
+  const showGrafico     = extras.grafico     && (meta?.elevationProfile?.length ?? 0) > 1
 
   return (
     <div className="diario-page" style={{
@@ -609,6 +643,37 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
 
       {/* Sections */}
       <div style={{ padding: '24px 32px' }}>
+        {(showMappa || showStatistiche || showGrafico) && (
+          <div className="pdf-block" style={{ marginBottom: 24 }}>
+            {showMappa && (
+              <div className="print:hidden diario-report-map" style={{ height: 260, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+                <AllRoutesMap
+                  routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
+                  height="260px"
+                />
+              </div>
+            )}
+            {showStatistiche && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: showGrafico ? 16 : 0 }}>
+                <StatCard value={`${(meta!.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+                <StatCard value={`${Math.round(meta!.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+                <StatCard value={formatDuration(meta!.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+                <StatCard value={meta!.calories ? `${meta!.calories}` : '—'} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+              </div>
+            )}
+            {showGrafico && (
+              <div>
+                <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                  Profilo altimetrico
+                </p>
+                <div style={{ background: GREEN.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${GREEN.border}` }}>
+                  <ElevationProfileChart profile={meta!.elevationProfile!} accent={GREEN} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {sections.map((section, i) => (
           <div key={i} className="pdf-block" style={{ marginBottom: 20 }}>
             <div style={{ background: SECTION_COLORS[i % SECTION_COLORS.length], padding: '5px 14px', borderRadius: '5px 5px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -617,32 +682,43 @@ function DiarioReportPage({ report, photos }: { report: DiaryReport; photos: Rou
             </div>
             <div style={{ padding: '10px 14px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 5px 5px' }}>
               {photos[i + 1] && (
-                <div style={{ float: 'right', marginLeft: 10, marginBottom: 6, width: 100 }}>
+                <div style={{ float: 'right', marginLeft: 18, marginBottom: 10, width: 190, shapeOutside: 'margin-box' } as CSSProperties}>
                   <div style={{ position: 'relative' }}>
                     <img src={photos[i + 1].url} alt={photos[i + 1].caption}
-                      style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 5 }} />
-                    <span style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '14px', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box' }}>{i+2}</span>
+                      style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 7, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
+                    <span style={{ position: 'absolute', top: 5, left: 5, width: 18, height: 18, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '18px', fontSize: 9, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box' }}>{i+2}</span>
                   </div>
-                  {photos[i + 1].caption && <p style={{ fontSize: 7, color: '#78716c', textAlign: 'center', marginTop: 2, fontStyle: 'italic' }}>{photos[i + 1].caption}</p>}
+                  {photos[i + 1].caption && <p style={{ fontSize: 9, color: '#78716c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>{photos[i + 1].caption}</p>}
                 </div>
               )}
-              {section.body.split(/\n\n+/).slice(0, 3).map((p, j) => (
-                <p key={j} style={{ fontSize: 10, lineHeight: 1.65, color: '#374151', margin: '0 0 6px', fontFamily: 'Georgia, serif' }}>
-                  {p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()}
-                </p>
-              ))}
+              {section.body.split(/\n\n+/).slice(0, 3).map((p, j) => {
+                const text = p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()
+                const dropCap = i === 0 && j === 0
+                return (
+                  <p key={j} style={{ fontSize: 11, lineHeight: 1.75, color: '#374151', margin: '0 0 8px', fontFamily: 'Georgia, serif' }}>
+                    {dropCap && text.length > 0 ? (
+                      <>
+                        <span style={{ float: 'left', fontSize: 38, lineHeight: 0.8, fontWeight: 700, color: SECTION_COLORS[0], padding: '4px 4px 0 0', fontFamily: 'Georgia, serif' }}>
+                          {text[0]}
+                        </span>
+                        {text.slice(1)}
+                      </>
+                    ) : text}
+                  </p>
+                )
+              })}
             </div>
           </div>
         ))}
 
         {/* Photo row */}
         {photos.length > 0 && (
-          <div className="pdf-block" style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <div className="pdf-block" style={{ marginTop: 22, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
             {photos.map((ph, i) => (
               <div key={ph.id} style={{ position: 'relative' }}>
-                <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                <span style={{ position: 'absolute', top: 4, left: 4, width: 15, height: 15, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '15px', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
-                {ph.caption && <p style={{ fontSize: 7, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{ph.caption}</p>}
+                <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
+                <span style={{ position: 'absolute', top: 6, left: 6, width: 20, height: 20, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '20px', fontSize: 10, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
+                {ph.caption && <p style={{ fontSize: 9, color: '#78716c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>{ph.caption}</p>}
               </div>
             ))}
           </div>
@@ -675,6 +751,14 @@ export default function DiarioPage() {
     try { return JSON.parse(localStorage.getItem('dtrek_diary_stats') ?? '') }
     catch { return { totali: true, record: true, medie: true, andamento: true } }
   })
+  const [reportExtras, setReportExtras] = useState<ReportExtras>(() => {
+    try { return JSON.parse(localStorage.getItem('dtrek_diary_report_extras') ?? '') }
+    catch { return { mappa: true, statistiche: true, grafico: true } }
+  })
+  const bookOuterRef = useRef<HTMLDivElement>(null)
+  const bookInnerRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+  const [innerHeight, setInnerHeight] = useState(0)
   const [diaryTitle,    setDiaryTitle]    = useState<string>(() => {
     try { return localStorage.getItem('dtrek_diary_title')    ?? 'DIARIO di VIAGGIO' } catch { return 'DIARIO di VIAGGIO' }
   })
@@ -762,6 +846,36 @@ export default function DiarioPage() {
     })
   }
 
+  function toggleReportExtra(key: keyof ReportExtras) {
+    setReportExtras(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      localStorage.setItem('dtrek_diary_report_extras', JSON.stringify(next))
+      return next
+    })
+  }
+
+  // Scale the fixed-794px book to fit the viewport, like a responsive PDF viewer —
+  // recalculated on resize and whenever content height changes (photos load async).
+  useLayoutEffect(() => {
+    if (loading) return
+    const outer = bookOuterRef.current
+    const inner = bookInnerRef.current
+    if (!outer || !inner) return
+
+    function recalc() {
+      const outerWidth = outer!.clientWidth
+      setScale(Math.min(1, outerWidth / 794))
+      setInnerHeight(inner!.scrollHeight)
+    }
+    recalc()
+
+    const ro = new ResizeObserver(recalc)
+    ro.observe(outer)
+    ro.observe(inner)
+    window.addEventListener('resize', recalc)
+    return () => { ro.disconnect(); window.removeEventListener('resize', recalc) }
+  }, [loading, bookPages, activities, statsToggles, reportExtras])
+
   function handleCoverUpload(file: File) {
     const reader = new FileReader()
     reader.onload = e => {
@@ -788,21 +902,22 @@ export default function DiarioPage() {
         const clone = p.cloneNode(true) as HTMLElement
         clone.style.margin = '0'
         clone.style.boxShadow = 'none'
-        // Remove OSM tile canvases (cross-origin tainted); replace Leaflet container
-        // with a fresh <img> element so no Tailwind 'hidden' class can interfere.
+        // Remove OSM tile canvases (cross-origin tainted); the global all-routes map
+        // gets replaced with a fresh <img> raster, per-report route maps are screen-only
+        // (no per-route raster generated) so they're simply dropped from the PDF.
         clone.querySelectorAll('canvas').forEach(c => c.remove())
-        const leafletEl = clone.querySelector<HTMLElement>('.leaflet-container')
-        if (leafletEl) {
-          const wrapper = leafletEl.parentElement as HTMLElement
-          wrapper.innerHTML = ''
-          wrapper.style.height = 'auto'
+        const globalMapWrapper = clone.querySelector<HTMLElement>('.diario-global-map')
+        if (globalMapWrapper) {
+          globalMapWrapper.innerHTML = ''
+          globalMapWrapper.style.height = 'auto'
           if (mapForPdf) {
             const img = document.createElement('img')
             img.src = mapForPdf
             img.style.cssText = 'width:100%;border-radius:12px;display:block'
-            wrapper.appendChild(img)
+            globalMapWrapper.appendChild(img)
           }
         }
+        clone.querySelectorAll<HTMLElement>('.diario-report-map').forEach(el => el.remove())
         clone.querySelectorAll<HTMLElement>('img[alt="Mappa percorsi"]').forEach(i => {
           i.style.display = 'none'
         })
@@ -948,6 +1063,20 @@ export default function DiarioPage() {
                     {l}
                   </button>
                 ))}
+                <p className="px-3 pt-2 pb-1 text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 border-t border-stone-100 mt-1">Per ogni percorso</p>
+                {([
+                  ['mappa', 'Mappa percorso'],
+                  ['statistiche', 'Statistiche dettagliate'],
+                  ['grafico', 'Grafico altimetria'],
+                ] as [keyof ReportExtras, string][]).map(([k, l]) => (
+                  <button key={k} onClick={() => toggleReportExtra(k)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors">
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center text-xs font-bold ${reportExtras[k] ? 'bg-forest-600 border-forest-600 text-white' : 'border-stone-300'}`}>
+                      {reportExtras[k] ? '✓' : ''}
+                    </span>
+                    {l}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -1003,42 +1132,53 @@ export default function DiarioPage() {
         </div>
       )}
 
-      {/* Book */}
+      {/* Book — scaled to fit the viewport width, like a responsive PDF viewer */}
       {!loading && (
-        <div id="diario-book" className="bg-stone-200 py-6 min-h-screen">
-          <DiarioCover
-            coverUrl={coverUrl} diaryTitle={diaryTitle} diarySubtitle={diarySubtitle} diaryAuthor={diaryAuthor}
-            dateRange={coverDateRange} totalActivities={activities.length} totalKm={computeGlobalStats(activities).totalDistanceKm}
-          />
-          <AnniversaryBanner activities={activities} />
-          {bookPages.length > 0 && <DiarioIndice pages={bookPages} />}
-          {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} />}
-          {activities.length > 0 && showStats && (
-            <DiarioStatistiche activities={activities} toggles={statsToggles} />
-          )}
-          {bookPages.map((page, i) => {
-            const year = new Date(page.startTime).getFullYear()
-            const prevYear = i > 0 ? new Date(bookPages[i - 1].startTime).getFullYear() : null
-            const showDivider = year !== prevYear
-            const yearPages = bookPages.filter(p => new Date(p.startTime).getFullYear() === year)
-            const yearKm = yearPages.reduce((s, p) =>
-              s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
-            return (
-              <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}>
-                {showDivider && (
-                  <DiarioYearDivider year={String(year)} count={yearPages.length} totalKm={yearKm} />
-                )}
-                {page.kind === 'report' ? (
-                  <DiarioReportPage
-                    report={page.report}
-                    photos={photosByAct[page.report.activity_id] ?? []}
-                  />
-                ) : (
-                  <DiarioStubPage activity={page.activity} />
-                )}
-              </div>
-            )
-          })}
+        <div ref={bookOuterRef} className="bg-stone-200 min-h-screen overflow-hidden">
+          <div style={{ height: innerHeight ? innerHeight * scale + 48 : undefined, position: 'relative' }}>
+            <div
+              ref={bookInnerRef}
+              id="diario-book"
+              className="py-6"
+              style={{ width: 794, transform: `scale(${scale})`, transformOrigin: 'top center', position: 'absolute', top: 0, left: '50%', marginLeft: -397 }}
+            >
+              <DiarioCover
+                coverUrl={coverUrl} diaryTitle={diaryTitle} diarySubtitle={diarySubtitle} diaryAuthor={diaryAuthor}
+                dateRange={coverDateRange} totalActivities={activities.length} totalKm={computeGlobalStats(activities).totalDistanceKm}
+              />
+              <AnniversaryBanner activities={activities} />
+              {bookPages.length > 0 && <DiarioIndice pages={bookPages} />}
+              {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} />}
+              {activities.length > 0 && showStats && (
+                <DiarioStatistiche activities={activities} toggles={statsToggles} />
+              )}
+              {bookPages.map((page, i) => {
+                const year = new Date(page.startTime).getFullYear()
+                const prevYear = i > 0 ? new Date(bookPages[i - 1].startTime).getFullYear() : null
+                const showDivider = year !== prevYear
+                const yearPages = bookPages.filter(p => new Date(p.startTime).getFullYear() === year)
+                const yearKm = yearPages.reduce((s, p) =>
+                  s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
+                return (
+                  <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}>
+                    {showDivider && (
+                      <DiarioYearDivider year={String(year)} count={yearPages.length} totalKm={yearKm} />
+                    )}
+                    {page.kind === 'report' ? (
+                      <DiarioReportPage
+                        report={page.report}
+                        photos={photosByAct[page.report.activity_id] ?? []}
+                        meta={activities.find(a => a.id === page.report.activity_id)}
+                        extras={reportExtras}
+                      />
+                    ) : (
+                      <DiarioStubPage activity={page.activity} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>
