@@ -175,6 +175,30 @@ function latLonToXY(lat: number, lon: number, z: number) {
   }
 }
 
+/**
+ * Draw a cropped region of `src` onto a new outW×outH canvas, scaling
+ * uniformly (preserving aspect ratio) and letterboxing with white bars
+ * instead of stretching non-uniformly to fill the target box.
+ */
+function drawLetterboxed(
+  src: HTMLCanvasElement,
+  cropX: number, cropY: number, cropW: number, cropH: number,
+  outW: number, outH: number,
+): HTMLCanvasElement {
+  const out = document.createElement('canvas')
+  out.width = outW; out.height = outH
+  const octx = out.getContext('2d')!
+  octx.fillStyle = '#ffffff'
+  octx.fillRect(0, 0, outW, outH)
+  if (cropW > 0 && cropH > 0) {
+    const scale = Math.min(outW / cropW, outH / cropH)
+    const drawW = cropW * scale, drawH = cropH * scale
+    const dx = (outW - drawW) / 2, dy = (outH - drawH) / 2
+    octx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, drawW, drawH)
+  }
+  return out
+}
+
 function loadTileImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -291,10 +315,7 @@ export async function fetchSatMap(
     const cropW = Math.min(full.width,  botRight.x) - cropX
     const cropH = Math.min(full.height, botRight.y) - cropY
 
-    const out = document.createElement('canvas')
-    out.width = outW; out.height = outH
-    const octx = out.getContext('2d')!
-    octx.drawImage(full, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
+    const out = drawLetterboxed(full, cropX, cropY, cropW, cropH, outW, outH)
 
     return out.toDataURL('image/png')
   } catch {
@@ -392,10 +413,7 @@ export async function fetchAllRoutesSatMap(activities: ActivityMeta[], outW: num
     const cropW = Math.min(full.width,  botRight.x) - cropX
     const cropH = Math.min(full.height, botRight.y) - cropY
 
-    const out = document.createElement('canvas')
-    out.width = outW; out.height = outH
-    const octx = out.getContext('2d')!
-    octx.drawImage(full, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
+    const out = drawLetterboxed(full, cropX, cropY, cropW, cropH, outW, outH)
 
     return out.toDataURL('image/png')
   } catch {
