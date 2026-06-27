@@ -25,5 +25,8 @@ export async function uploadDiaryPdf(userId: string, blob: Blob): Promise<string
   })
   if (error) throw error
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
-  return data.publicUrl
+  // Cache-bust: the storage path is fixed (upsert), so the public URL never
+  // changes across republishes — browsers/CDN would keep serving the stale
+  // PDF without a fresh query string forcing revalidation.
+  return `${data.publicUrl}?v=${Date.now()}`
 }
