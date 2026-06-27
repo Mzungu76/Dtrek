@@ -714,7 +714,17 @@ export default function HomePage() {
         ) : (
           /* ────────── LIST VIEW ────────── */
           <div className="fade-up space-y-6">
-            {!showAllHistory && (
+            {showAllHistory ? (
+              <div className="flex items-center justify-between gap-2 -mt-1">
+                <p className="font-semibold text-stone-700 text-sm sm:text-base">Tutto lo storico</p>
+                <button
+                  onClick={() => { setShowAllHistory(false); setTypeFilter('all') }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-forest-400 transition-all shadow-sm text-forest-700 text-sm font-medium"
+                >
+                  <CalendarDays className="w-4 h-4" /> Torna al mese
+                </button>
+              </div>
+            ) : (
               <div className="flex items-center justify-between gap-2 -mt-1">
                 <button
                   onClick={() => setMonthIdx(i => Math.max(0, (i < 0 ? months.length - 1 : i) - 1))}
