@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, CSSProperties, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -58,6 +58,19 @@ const GREEN:  AccentTheme = { bg: '#f0fdf4', border: '#bbf7d0', text: '#166534',
 const AMBER:  AccentTheme = { bg: '#fffbeb', border: '#fde68a', text: '#78350f', iconBg: '#fef3c7', iconColor: '#d97706' }
 const BLUE:   AccentTheme = { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af', iconBg: '#dbeafe', iconColor: '#2563eb' }
 const VIOLET: AccentTheme = { bg: '#f5f3ff', border: '#ddd6fe', text: '#4c1d95', iconBg: '#ede9fe', iconColor: '#7c3aed' }
+
+function PageHeader({ label, title }: { label: string; title: string }) {
+  return (
+    <>
+      <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 8px' }}>
+        {label}
+      </p>
+      <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, fontWeight: 700, color: '#193b20', margin: '0 0 40px', letterSpacing: -0.5 }}>
+        {title}
+      </h2>
+    </>
+  )
+}
 
 function PillHeader({ label, accent }: { label: string; accent: AccentTheme }) {
   return (
@@ -218,92 +231,116 @@ function StatCard({ value, label, sub, icon, accent }: {
 // ── Diario pages (A4) ─────────────────────────────────────────────────────────
 
 function DiarioCover({
-  coverUrl, diaryTitle, diarySubtitle, diaryAuthor, dateRange, totalActivities, totalKm,
+  coverUrl, diaryTitle, diarySubtitle, diaryAuthor, dateRange, totalActivities, totalKm, totalElevationGain,
 }: {
   coverUrl: string | null; diaryTitle: string; diarySubtitle: string; diaryAuthor: string
-  dateRange?: string; totalActivities?: number; totalKm?: number
+  dateRange?: string; totalActivities?: number; totalKm?: number; totalElevationGain?: number
 }) {
+  const stats: { value: string; label: string }[] = []
+  if (totalActivities)     stats.push({ value: String(totalActivities), label: 'Escursioni' })
+  if (totalKm)              stats.push({ value: totalKm.toFixed(0), label: 'Km percorsi' })
+  if (totalElevationGain)   stats.push({ value: Math.round(totalElevationGain).toLocaleString('it'), label: 'M dislivello' })
+
   return (
     <div className="diario-page" style={{
       width: 794, height: 1123,
       position: 'relative', overflow: 'hidden', margin: '24px auto',
-      boxShadow: '0 4px 32px rgba(0,0,0,0.14)',
+      boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
+      background: coverUrl ? undefined : 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)',
     }}>
-      {/* Full-bleed background */}
-      <img
-        src={coverUrl || '/diary-cover-default.png'}
-        alt=""
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-      />
+      {/* Full-bleed background photo, when the user has set one */}
+      {coverUrl && (
+        <img src={coverUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      )}
 
-      {/* Dark overlay */}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(8,24,14,0.68) 0%, rgba(8,24,14,0.48) 60%, rgba(8,24,14,0.55) 100%)' }} />
+      {/* Topographic texture + mountain silhouette — only on the illustrated (no-photo) cover */}
+      {!coverUrl && (
+        <>
+          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.045 }} viewBox="0 0 794 1123" preserveAspectRatio="xMidYMid slice">
+            <path d="M0,900 Q200,820 400,840 Q600,860 794,780 L794,1123 L0,1123 Z" fill="white" opacity="0.6" />
+            <path d="M0,780 Q180,700 380,720 Q580,740 794,665" stroke="white" strokeWidth="0.8" fill="none" />
+            <path d="M0,660 Q200,590 400,610 Q600,630 794,555" stroke="white" strokeWidth="0.8" fill="none" />
+            <path d="M0,545 Q220,480 400,500 Q600,520 794,445" stroke="white" strokeWidth="0.7" fill="none" />
+            <path d="M0,430 Q200,372 400,392 Q600,412 794,340" stroke="white" strokeWidth="0.6" fill="none" />
+            <path d="M0,315 Q200,265 400,285 Q600,305 794,235" stroke="white" strokeWidth="0.5" fill="none" />
+          </svg>
+          <svg style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', opacity: 0.08 }} viewBox="0 0 794 320" preserveAspectRatio="none">
+            <path d="M0,320 L70,215 L130,255 L225,125 L305,178 L385,58 L450,125 L520,72 L595,128 L660,82 L730,118 L794,88 L794,320 Z" fill="white" />
+          </svg>
+          <div style={{ position: 'absolute', top: 100, right: 40, fontFamily: 'Playfair Display, serif', fontSize: 220, fontWeight: 900, color: 'rgba(255,255,255,0.025)', lineHeight: 1, userSelect: 'none', pointerEvents: 'none' }}>II</div>
+        </>
+      )}
 
-      {/* Title block — ~1/3 from top, left */}
-      <div style={{ position: 'absolute', top: 340, left: 64, right: 120 }}>
+      {/* Dark overlay — only needed for legibility over a photo */}
+      {coverUrl && (
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(8,24,14,0.68) 0%, rgba(8,24,14,0.48) 60%, rgba(8,24,14,0.55) 100%)' }} />
+      )}
+
+      {/* Terra top stripe */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: '#e08d3c' }} />
+
+      {/* Brand header */}
+      <div style={{ position: 'absolute', top: 38, left: 64, right: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 15, fontWeight: 900, letterSpacing: 7, color: '#e08d3c', textTransform: 'uppercase' }}>DTrek</span>
+        <span style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>Diario di Escursioni</span>
+      </div>
+
+      {/* Title block */}
+      <div style={{ position: 'absolute', top: 270, left: 64, right: 100 }}>
+        {dateRange && (
+          <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 6, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 22px' }}>
+            {dateRange}
+          </p>
+        )}
         <h1 style={{
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          fontSize: 54,
+          fontFamily: 'Playfair Display, serif',
+          fontSize: 64,
           fontWeight: 700,
           color: 'white',
-          margin: '0 0 18px',
-          letterSpacing: 4,
-          lineHeight: 1.2,
-          textTransform: 'uppercase',
+          lineHeight: 1.05,
+          letterSpacing: -1,
+          margin: '0 0 30px',
         }}>
           {diaryTitle}
         </h1>
-        {/* Thin decorative rule */}
-        <div style={{ width: 72, height: 1, background: 'rgba(255,255,255,0.45)', margin: '0 0 18px' }} />
-        {/* Subtitle */}
-        <p style={{
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          fontSize: 14,
-          fontStyle: 'italic',
-          color: 'rgba(255,255,255,0.7)',
-          margin: 0,
-          letterSpacing: 1.5,
-        }}>
-          {diarySubtitle}
-        </p>
+        <div style={{ width: 80, height: 2, background: '#e08d3c', margin: '0 0 30px' }} />
+        {diarySubtitle && (
+          <p style={{ fontFamily: 'Lora, serif', fontSize: 16, fontStyle: 'italic', color: 'rgba(255,255,255,0.58)', letterSpacing: 0.5, margin: '0 0 42px' }}>
+            {diarySubtitle}
+          </p>
+        )}
 
-        {/* Compact summary — date range + counters */}
-        {(dateRange || totalActivities) && (
-          <div style={{ display: 'flex', gap: 18, marginTop: 22 }}>
-            {dateRange && (
-              <span style={{ fontFamily: 'Arial, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5, textTransform: 'uppercase' }}>
-                {dateRange}
-              </span>
-            )}
-            {!!totalActivities && (
-              <span style={{ fontFamily: 'Arial, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5, textTransform: 'uppercase' }}>
-                {totalActivities} {totalActivities === 1 ? 'escursione' : 'escursioni'}
-              </span>
-            )}
-            {!!totalKm && (
-              <span style={{ fontFamily: 'Arial, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5, textTransform: 'uppercase' }}>
-                {totalKm.toFixed(0)} km
-              </span>
-            )}
+        {/* Stats trio */}
+        {stats.length > 0 && (
+          <div style={{ display: 'flex', gap: 0, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 28 }}>
+            {stats.map((s, i) => (
+              <div key={s.label} style={{
+                flex: 1,
+                padding: i === 0 ? '0 28px 0 0' : i === stats.length - 1 ? '0 0 0 28px' : '0 28px',
+                borderRight: i < stats.length - 1 ? '1px solid rgba(255,255,255,0.08)' : undefined,
+              }}>
+                <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 30, fontWeight: 500, color: 'white', margin: 0, lineHeight: 1 }}>{s.value}</p>
+                <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.38)', textTransform: 'uppercase', margin: '7px 0 0' }}>{s.label}</p>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Author — bottom center */}
-      {diaryAuthor && (
-        <div style={{ position: 'absolute', bottom: 60, left: 0, right: 0, textAlign: 'center' }}>
-          <p style={{
-            fontFamily: 'Arial, sans-serif',
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.55)',
-            letterSpacing: 5,
-            textTransform: 'uppercase',
-            margin: 0,
-          }}>
+      {/* Author */}
+      <div style={{ position: 'absolute', bottom: 52, left: 64, right: 64, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        {diaryAuthor && (
+          <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 10, letterSpacing: 5, color: 'rgba(255,255,255,0.38)', textTransform: 'uppercase', margin: 0 }}>
             {diaryAuthor}
           </p>
-        </div>
-      )}
+        )}
+        <p style={{ fontFamily: 'Lora, serif', fontSize: 10, fontStyle: 'italic', color: 'rgba(255,255,255,0.2)', margin: 0 }}>
+          Stampato con DTrek
+        </p>
+      </div>
+
+      {/* Terra bottom stripe */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg,#e08d3c 0%,#d97220 55%,transparent 100%)' }} />
     </div>
   )
 }
@@ -316,15 +353,10 @@ function DiarioIndice({ pages }: { pages: BookPage[] }) {
   return (
     <div className="diario-page" style={{
       width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
-      padding: '72px 64px', boxShadow: '0 4px 32px rgba(0,0,0,0.14)',
+      padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
     }}>
-      <p style={{ fontSize: 9, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', margin: '0 0 8px' }}>
-        Indice
-      </p>
-      <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 32, fontWeight: 900, color: '#111827', margin: '0 0 40px', textTransform: 'uppercase', letterSpacing: -0.5 }}>
-        Le escursioni
-      </h2>
-      <div style={{ borderTop: '1px solid #e5e7eb' }}>
+      <PageHeader label="Indice" title="Le escursioni" />
+      <div style={{ borderTop: '1px solid #eeece5' }}>
         {pages.map((page, i) => {
           const isStub = page.kind === 'stub'
           const title = isStub ? (page.activity.title ?? 'Escursione') : (page.report.title || page.report.activity?.title || 'Escursione')
@@ -337,28 +369,28 @@ function DiarioIndice({ pages }: { pages: BookPage[] }) {
           return (
             <div key={isStub ? `stub-${page.activity.id}` : `rep-${page.report.id}`}>
               {showYearHeader && (
-                <p style={{ fontSize: 11, color: '#16a34a', fontFamily: 'Arial Black, sans-serif', fontWeight: 900, letterSpacing: 1, margin: i === 0 ? '0 0 4px' : '24px 0 4px' }}>
+                <p style={{ fontSize: 11, color: '#e08d3c', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 900, letterSpacing: 4, margin: i === 0 ? '0 0 4px' : '24px 0 4px' }}>
                   {year}
                 </p>
               )}
               <div className="pdf-block" style={{
                 display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                padding: '14px 0', borderBottom: '1px solid #f3f4f6',
+                padding: '14px 0', borderBottom: '1px solid #eeece5',
               }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'baseline', flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, minWidth: 24 }}>
+                  <span style={{ fontSize: 11, color: '#a9a18e', fontFamily: 'JetBrains Mono, monospace', fontWeight: 500, minWidth: 24 }}>
                     {String(i + 1).padStart(2, '0')}
                   </span>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: isStub ? '#9ca3af' : '#1f2937', textTransform: 'uppercase', letterSpacing: 0.3 }}>
-                      {title} {isStub && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>· da narrare</span>}
+                    <div style={{ fontSize: 15, fontFamily: 'Playfair Display, serif', fontWeight: 700, color: isStub ? '#a9a18e' : '#193b20', letterSpacing: -0.2 }}>
+                      {title} {isStub && <span style={{ fontSize: 9, fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>· da narrare</span>}
                     </div>
                     {dateStr && (
-                      <div style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'Georgia, serif', fontStyle: 'italic', marginTop: 2 }}>{dateStr}</div>
+                      <div style={{ fontSize: 10, color: '#a9a18e', fontFamily: 'Lora, serif', fontStyle: 'italic', marginTop: 2 }}>{dateStr}</div>
                     )}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#6b7280', fontFamily: 'Arial, sans-serif', flexShrink: 0, marginLeft: 16 }}>
+                <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#73695c', fontFamily: 'DM Sans, sans-serif', flexShrink: 0, marginLeft: 16 }}>
                   {distanceM > 0 && <span>{(distanceM / 1000).toFixed(1)} km</span>}
                   {elevGain > 0 && <span>{Math.round(elevGain)} m D+</span>}
                 </div>
@@ -380,42 +412,42 @@ function DiarioStubPage({ activity }: { activity: ActivityMeta }) {
     }}>
       <span style={{
         position: 'absolute', top: 40, right: -50, transform: 'rotate(35deg)',
-        fontSize: 13, fontFamily: 'Arial, sans-serif', fontWeight: 900, letterSpacing: 4,
-        color: 'rgba(120,113,108,0.18)', textTransform: 'uppercase', width: 240, textAlign: 'center',
+        fontSize: 13, fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, letterSpacing: 4,
+        color: 'rgba(115,105,92,0.18)', textTransform: 'uppercase', width: 240, textAlign: 'center',
       }}>
         Da narrare
       </span>
 
       <div style={{ padding: '32px 32px 0' }}>
-        <p style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 4px' }}>
+        <p style={{ fontSize: 9, color: '#a9a18e', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 4px' }}>
           {dateStr}
         </p>
-        <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 22, fontWeight: 900, color: '#57534e', margin: '0 0 20px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 700, color: '#4d4740', margin: '0 0 20px' }}>
           {activity.title ?? 'Escursione'}
         </h2>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
-          <div style={{ background: 'white', border: '1px solid #e7e5e4', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Distanza</div>
-            <div style={{ fontSize: 18, fontFamily: 'Arial Black, sans-serif', color: '#57534e' }}>{(activity.distanceMeters / 1000).toFixed(2)} km</div>
+          <div style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: 'Barlow Condensed, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Distanza</div>
+            <div style={{ fontSize: 18, fontFamily: 'JetBrains Mono, monospace', color: '#4d4740' }}>{(activity.distanceMeters / 1000).toFixed(2)} km</div>
           </div>
-          <div style={{ background: 'white', border: '1px solid #e7e5e4', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Dislivello</div>
-            <div style={{ fontSize: 18, fontFamily: 'Arial Black, sans-serif', color: '#57534e' }}>{Math.round(activity.elevationGain)} m</div>
+          <div style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: 'Barlow Condensed, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Dislivello</div>
+            <div style={{ fontSize: 18, fontFamily: 'JetBrains Mono, monospace', color: '#4d4740' }}>{Math.round(activity.elevationGain)} m</div>
           </div>
-          <div style={{ background: 'white', border: '1px solid #e7e5e4', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Durata</div>
-            <div style={{ fontSize: 18, fontFamily: 'Arial Black, sans-serif', color: '#57534e' }}>{formatDuration(activity.totalTimeSeconds)}</div>
+          <div style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: 'Barlow Condensed, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Durata</div>
+            <div style={{ fontSize: 18, fontFamily: 'JetBrains Mono, monospace', color: '#4d4740' }}>{formatDuration(activity.totalTimeSeconds)}</div>
           </div>
-          <div style={{ background: 'white', border: '1px solid #e7e5e4', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 9, color: '#a8a29e', fontFamily: 'Arial, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Calorie</div>
-            <div style={{ fontSize: 18, fontFamily: 'Arial Black, sans-serif', color: '#57534e' }}>{activity.calories ? `${activity.calories} kcal` : '—'}</div>
+          <div style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: 'Barlow Condensed, sans-serif', textTransform: 'uppercase', letterSpacing: 1 }}>Calorie</div>
+            <div style={{ fontSize: 18, fontFamily: 'JetBrains Mono, monospace', color: '#4d4740' }}>{activity.calories ? `${activity.calories} kcal` : '—'}</div>
           </div>
         </div>
 
         {activity.routePolyline && activity.routePolyline.length > 1 && (
-          <div style={{ height: 220, borderRadius: 10, overflow: 'hidden', border: '1px solid #e7e5e4', background: 'white', marginBottom: 20 }}>
-            <RouteThumb polyline={activity.routePolyline} color="#a8a29e" />
+          <div style={{ height: 220, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc', background: 'white', marginBottom: 20 }}>
+            <RouteThumb polyline={activity.routePolyline} color="#a9a18e" />
           </div>
         )}
       </div>
@@ -423,8 +455,8 @@ function DiarioStubPage({ activity }: { activity: ActivityMeta }) {
       <div className="print:hidden" style={{ position: 'absolute', bottom: 32, left: 32, right: 32, textAlign: 'center' }}>
         <a href={`/resoconto/${encodeURIComponent(activity.id)}/racconta`}
           style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8, background: '#1b4332', color: 'white',
-            padding: '10px 20px', borderRadius: 10, fontFamily: 'Arial, sans-serif', fontSize: 12, fontWeight: 700,
+            display: 'inline-flex', alignItems: 'center', gap: 8, background: '#193b20', color: 'white',
+            padding: '10px 20px', borderRadius: 10, fontFamily: 'Barlow Condensed, sans-serif', fontSize: 12, fontWeight: 700,
             textDecoration: 'none', textTransform: 'uppercase', letterSpacing: 0.5,
           }}>
           Racconta questa escursione →
@@ -437,22 +469,23 @@ function DiarioStubPage({ activity }: { activity: ActivityMeta }) {
 function DiarioYearDivider({ year, count, totalKm }: { year: string; count: number; totalKm: number }) {
   return (
     <div className="diario-page" style={{
-      width: 794, minHeight: 1123, background: 'linear-gradient(135deg,#1b4332,#2d6a4f)', margin: '24px auto',
-      boxShadow: '0 4px 32px rgba(0,0,0,0.14)', display: 'flex', flexDirection: 'column',
+      width: 794, minHeight: 1123, background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)', margin: '24px auto',
+      boxShadow: '0 8px 56px rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', position: 'relative',
     }}>
-      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 6, textTransform: 'uppercase', margin: '0 0 12px' }}>
+      <p style={{ fontSize: 11, color: '#e08d3c', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, letterSpacing: 6, textTransform: 'uppercase', margin: '0 0 16px' }}>
         Anno
       </p>
-      <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 96, fontWeight: 900, color: 'white', margin: 0, letterSpacing: -2 }}>
+      <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 96, fontWeight: 700, color: 'white', margin: 0, letterSpacing: -2 }}>
         {year}
       </h2>
-      <div style={{ display: 'flex', gap: 24, marginTop: 24 }}>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'Arial, sans-serif' }}>
+      <div style={{ width: 80, height: 2, background: '#e08d3c', margin: '24px 0' }} />
+      <div style={{ display: 'flex', gap: 24 }}>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'DM Sans, sans-serif' }}>
           {count} {count === 1 ? 'escursione' : 'escursioni'}
         </span>
         {totalKm > 0 && (
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'Arial, sans-serif' }}>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'DM Sans, sans-serif' }}>
             {totalKm.toFixed(0)} km
           </span>
         )}
@@ -493,14 +526,9 @@ function DiarioMappa({ activities, mapImgUrl, mapsInteractive }: { activities: A
   return (
     <div className="diario-page" style={{
       width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
-      padding: '72px 64px', boxShadow: '0 4px 32px rgba(0,0,0,0.14)',
+      padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
     }}>
-      <p style={{ fontSize: 9, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', margin: '0 0 8px' }}>
-        Mappa
-      </p>
-      <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 32, fontWeight: 900, color: '#111827', margin: '0 0 24px', textTransform: 'uppercase', letterSpacing: -0.5 }}>
-        Tutti i percorsi
-      </h2>
+      <PageHeader label="Mappa" title="Tutti i percorsi" />
 
       {/* Screen map (Leaflet) */}
       {routes.length > 0 && (
@@ -521,8 +549,8 @@ function DiarioMappa({ activities, mapImgUrl, mapsInteractive }: { activities: A
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', marginTop: 16 }}>
           {routes.slice(0, 8).map((r, i) => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 24, height: 3, background: PALETTE[i % PALETTE.length], borderRadius: 2 }} />
-              <span style={{ fontSize: 9, color: '#6b7280', fontFamily: 'Arial, sans-serif' }}>
+              <div style={{ width: 24, height: 3.5, background: PALETTE[i % PALETTE.length], borderRadius: 2 }} />
+              <span style={{ fontSize: 9, color: '#73695c', fontFamily: 'DM Sans, sans-serif' }}>
                 {r.title || 'Percorso'}
               </span>
             </div>
@@ -572,19 +600,14 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
   return (
     <div className="diario-page" style={{
       width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
-      padding: '72px 64px', boxShadow: '0 4px 32px rgba(0,0,0,0.14)',
+      padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
     }}>
-      <p style={{ fontSize: 9, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', margin: '0 0 8px' }}>
-        Statistiche
-      </p>
-      <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 32, fontWeight: 900, color: '#111827', margin: '0 0 20px', textTransform: 'uppercase', letterSpacing: -0.5 }}>
-        I tuoi numeri
-      </h2>
+      <PageHeader label="Statistiche" title="I tuoi numeri" />
 
       {narrative && (
         <p className="pdf-block" style={{
-          fontFamily: 'Georgia, serif', fontSize: 12, lineHeight: 1.7, color: '#374151',
-          margin: '0 0 32px', fontStyle: 'italic',
+          fontFamily: 'Lora, serif', fontSize: 13, lineHeight: 1.8, color: '#4d4740',
+          margin: '-20px 0 32px', fontStyle: 'italic',
         }}>
           {narrative}
         </p>
@@ -665,18 +688,34 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
   )
 }
 
-const SECTION_COLORS = ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc']
+/** Extracts `[curiosita]…[/curiosita]` blocks out of a section body so they can be
+ * rendered as a pull quote / storytelling box instead of inline plain text. */
+function extractCuriosita(body: string): { clean: string; quotes: string[] } {
+  const quotes: string[] = []
+  const clean = body.replace(/\[curiosita\]([\s\S]*?)\[\/curiosita\]/g, (_, inner) => { quotes.push(inner.trim()); return '' }).trim()
+  return { clean, quotes }
+}
 
-function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive }: {
+function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive, escNumber }: {
   report: DiaryReport; photos: RoutePhoto[]; meta?: ActivityMeta; extras: ReportExtras
-  trackPoints?: TrackPoint[]; mapsInteractive: boolean
+  trackPoints?: TrackPoint[]; mapsInteractive: boolean; escNumber: number
 }) {
-  const act     = report.activity
-  const sections = parseSections(report.content)
+  const act = report.activity
+  const sections = useMemo(() => parseSections(report.content).map(s => {
+    const { clean, quotes } = extractCuriosita(s.body)
+    return { title: s.title, body: clean, quotes }
+  }), [report.content])
+  const allQuotes  = useMemo(() => sections.flatMap(s => s.quotes), [sections])
+  const pullQuote  = allQuotes[0]
+  const storyBoxes = allQuotes.slice(1, 3)
+
+  const escLabel = String(escNumber).padStart(2, '0')
   const dateStr  = act?.start_time
     ? format(new Date(act.start_time), 'd MMMM yyyy', { locale: it })
     : report.created_at ? format(new Date(report.created_at), 'd MMMM yyyy', { locale: it }) : ''
+  const monthYear = act?.start_time ? format(new Date(act.start_time), 'MMMM yyyy', { locale: it }) : ''
   const heroPhoto = photos[0] ?? null
+  const detailPhoto = photos[1] ?? null
   const weather = act?.weather_at_hike
   const weatherInfo = weather ? wmoInfo(weather.weathercode) : null
   const showMappa       = extras.mappa       && (meta?.routePolyline?.length ?? 0) > 1
@@ -702,53 +741,174 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
   const showCuore    = extras.cuore    && hrSeries.length > 1
   const showVelocita = extras.velocita && speedSeries.length > 1
 
+  const introSection = sections[0]
+  const restSections = sections.slice(1)
+  const STORY_ACCENTS = [
+    { bg: '#fdf6ee', border: '#e08d3c', label: '#c05a17', text: '#6a2e18' },
+    { bg: '#f1f8f2', border: '#378d44', label: '#277134', text: '#193b20' },
+  ]
+
   return (
     <div className="diario-page" style={{
       width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
-      boxShadow: '0 4px 32px rgba(0,0,0,0.14)', overflow: 'hidden',
+      boxShadow: '0 8px 56px rgba(0,0,0,0.28)', overflow: 'hidden',
     }}>
-      {/* Report header */}
-      <div style={{ position: 'relative', height: 180, overflow: 'hidden' }}>
-        {heroPhoto
-          ? <img src={heroPhoto.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#1b4332,#40916c)' }} />
-        }
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 60%)' }} />
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 32px' }}>
-          {dateStr && <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', margin: '0 0 4px' }}>{dateStr}</p>}
-          <h2 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 22, fontWeight: 900, color: 'white', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      {/* Full-bleed hero */}
+      <div style={{ height: 420, position: 'relative', overflow: 'hidden', background: heroPhoto ? undefined : 'linear-gradient(170deg,#0f2e1a 0%,#1b4332 30%,#193b20 62%,#0d1f12 100%)' }}>
+        {heroPhoto && (
+          <img src={heroPhoto.url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        )}
+        {!heroPhoto && (
+          <svg style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', opacity: 0.1 }} viewBox="0 0 794 260" preserveAspectRatio="none">
+            <path d="M0,260 L55,190 L115,225 L195,128 L278,172 L358,65 L418,118 L490,60 L558,108 L630,68 L704,105 L794,78 L794,260 Z" fill="white" />
+          </svg>
+        )}
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 50% 40%, transparent 25%, rgba(0,0,0,0.35) 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.12) 0%, transparent 35%, rgba(0,0,0,0.72) 100%)' }} />
+
+        <div style={{ position: 'absolute', top: 32, left: 48, right: 48 }}>
+          <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 5, color: '#e08d3c', textTransform: 'uppercase' }}>
+            Escursione #{escLabel}{monthYear ? ` · ${monthYear}` : ''}
+          </span>
+        </div>
+
+        <div style={{ position: 'absolute', bottom: 32, left: 48, right: 48 }}>
+          <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 48, fontWeight: 700, color: 'white', lineHeight: 1.02, letterSpacing: -1, margin: '0 0 18px' }}>
             {report.title || act?.title || 'Escursione'}
-          </h2>
-          {act && (
-            <div style={{ display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
-              {act.distance_meters > 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: 'Arial, sans-serif' }}>{(act.distance_meters / 1000).toFixed(1)} km</span>}
-              {act.elevation_gain > 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: 'Arial, sans-serif' }}>{Math.round(act.elevation_gain)} m D+</span>}
-              {act.total_time_seconds > 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: 'Arial, sans-serif' }}>{formatDuration(act.total_time_seconds)}</span>}
-              {weatherInfo && weather && (
-                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: 'Arial, sans-serif' }}>
-                  {weatherInfo.emoji} {Math.round(weather.temperature)}°C
-                </span>
-              )}
-            </div>
-          )}
+          </h1>
+          <div style={{ width: 56, height: 2, background: '#e08d3c' }} />
         </div>
       </div>
 
-      {/* Sections */}
-      <div style={{ padding: '24px 32px' }}>
-        {(showMappa || showStatistiche || showGrafico || showCuore || showVelocita) && (
-          <div style={{ marginBottom: 24 }}>
-            {showMappa && (
-              <div className="print:hidden diario-report-map pdf-block" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
-                <AllRoutesMap
-                  routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
-                  height="260px"
-                  interactive={mapsInteractive}
-                />
+      {/* Stat strip — dark forest */}
+      {act && (
+        <div style={{ background: '#193b20', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          {[
+            { label: '▸ Distanza', value: act.distance_meters > 0 ? `${(act.distance_meters / 1000).toFixed(1)}` : '—', sub: 'km' },
+            { label: '▲ Dislivello', value: act.elevation_gain > 0 ? `${Math.round(act.elevation_gain)}` : '—', sub: 'm D+' },
+            { label: '◷ Durata', value: act.total_time_seconds > 0 ? formatDuration(act.total_time_seconds) : '—', sub: 'in movimento' },
+            weatherInfo && weather
+              ? { label: '◆ Meteo', value: `${Math.round(weather.temperature)}°C`, sub: weatherInfo.label }
+              : { label: '◆ Calorie', value: meta?.calories ? `${meta.calories}` : '—', sub: 'kcal' },
+          ].map((s, i) => (
+            <div key={s.label} style={{ padding: '22px 28px', borderRight: i < 3 ? '1px solid rgba(255,255,255,0.07)' : undefined }}>
+              <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 7px' }}>{s.label}</p>
+              <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 26, fontWeight: 500, color: 'white', margin: 0, lineHeight: 1 }}>{s.value}</p>
+              <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.38)', margin: '5px 0 0' }}>{s.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Date bar */}
+      {dateStr && (
+        <div style={{ background: '#f8f7f4', padding: '12px 48px', borderTop: '1px solid #dcd8cc' }}>
+          <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: 3, color: '#8a7f6e', textTransform: 'uppercase', margin: 0 }}>
+            {dateStr}
+          </p>
+        </div>
+      )}
+
+      <div style={{ padding: '48px 48px 40px' }}>
+        <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 36px' }}>
+          Cronaca · Escursione #{escLabel}
+        </p>
+
+        {/* Scheda editoriale + intro */}
+        <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', gap: 36, marginBottom: 40 }}>
+          <div>
+            <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 8, fontWeight: 900, letterSpacing: 3, color: '#a9a18e', textTransform: 'uppercase', margin: '0 0 14px', paddingBottom: 9, borderBottom: '1.5px solid #e08d3c' }}>
+              Scheda
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+              <SchedaField label="Escursione" value={`#${escLabel}`} />
+              {dateStr && <SchedaField label="Periodo" value={dateStr} />}
+              {!!meta?.altitudeMax && <SchedaField label="Quota massima" value={`${Math.round(meta.altitudeMax)} m`} />}
+              {weatherInfo && weather && <SchedaField label="Meteo" value={`${weatherInfo.emoji} ${weatherInfo.label} · ${Math.round(weather.temperature)}°C`} />}
+            </div>
+          </div>
+
+          <div>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: '0 0 24px', letterSpacing: -0.5 }}>
+              {report.title || act?.title || 'Escursione'}
+            </h2>
+            {introSection && introSection.body.split(/\n\n+/).slice(0, 3).map((p, j) => {
+              const text = p.trim()
+              const dropCap = j === 0 && text.length > 0
+              return (
+                <p key={j} style={{ fontFamily: 'Lora, serif', fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 16px' }}>
+                  {dropCap ? (
+                    <>
+                      <span style={{ float: 'left', fontSize: 52, lineHeight: 0.8, fontWeight: 700, color: '#e08d3c', padding: '4px 7px 0 0', fontFamily: 'Playfair Display, serif' }}>
+                        {text[0]}
+                      </span>
+                      {text.slice(1)}
+                    </>
+                  ) : text}
+                </p>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Pull quote */}
+        {pullQuote && (
+          <div className="pdf-block" style={{ margin: '0 -8px 40px', padding: '32px 40px', borderTop: '2px solid #193b20', borderBottom: '2px solid #193b20', position: 'relative' }}>
+            <span style={{ position: 'absolute', top: -26, left: 36, fontFamily: 'Playfair Display, serif', fontSize: 70, lineHeight: 1, color: '#193b20', opacity: 0.12, userSelect: 'none' }}>&ldquo;</span>
+            <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 19, fontStyle: 'italic', lineHeight: 1.55, color: '#193b20', margin: 0 }}>
+              {pullQuote}
+            </p>
+          </div>
+        )}
+
+        {/* Detail photo alongside remaining sections */}
+        <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: detailPhoto ? '1fr 164px' : '1fr', gap: 32, marginBottom: 32 }}>
+          <div>
+            {restSections.map((section, i) => (
+              <div key={i} style={{ marginBottom: 22 }}>
+                <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 900, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 8px' }}>
+                  {section.title}
+                </p>
+                {section.body.split(/\n\n+/).slice(0, 3).map((p, j) => (
+                  <p key={j} style={{ fontFamily: 'Lora, serif', fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 14px' }}>{p.trim()}</p>
+                ))}
               </div>
-            )}
+            ))}
+          </div>
+          {detailPhoto && (
+            <div>
+              <div style={{ width: 164, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+                <img src={detailPhoto.url} alt={detailPhoto.caption} style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', display: 'block' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(0,0,0,0.5) 0%,transparent 55%)' }} />
+                {detailPhoto.caption && (
+                  <p style={{ position: 'absolute', bottom: 10, left: 10, right: 10, fontFamily: 'Lora, serif', fontSize: 9, fontStyle: 'italic', color: 'rgba(255,255,255,0.88)', margin: 0, lineHeight: 1.4 }}>
+                    {detailPhoto.caption}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Storytelling boxes */}
+        {storyBoxes.length > 0 && (
+          <div className="pdf-block" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 36 }}>
+            {storyBoxes.map((q, i) => {
+              const acc = STORY_ACCENTS[i % STORY_ACCENTS.length]
+              return (
+                <div key={i} style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}`, borderRadius: '0 6px 6px 0', padding: '18px 22px' }}>
+                  <p style={{ fontFamily: 'Lora, serif', fontSize: 13, fontStyle: 'italic', lineHeight: 1.75, color: acc.text, margin: 0 }}>{q}</p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Dati & percorso */}
+        {(showMappa || showStatistiche || showGrafico || showCuore || showVelocita) && (
+          <div className="pdf-block" style={{ marginBottom: 32 }}>
             {showStatistiche && (
-              <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: (showGrafico || showCuore || showVelocita) ? 16 : 0 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
                 <StatCard value={`${(meta!.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
                 <StatCard value={`${Math.round(meta!.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
                 <StatCard value={formatDuration(meta!.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
@@ -756,8 +916,8 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
               </div>
             )}
             {showGrafico && (
-              <div className="pdf-block" style={{ marginBottom: (showCuore || showVelocita) ? 16 : 0 }}>
-                <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+              <div style={{ marginBottom: (showCuore || showVelocita) ? 16 : 0 }}>
+                <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                   Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
                 </p>
                 <div style={{ background: GREEN.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${GREEN.border}` }}>
@@ -766,10 +926,10 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
               </div>
             )}
             {(showCuore || showVelocita) && (
-              <div className="pdf-block" style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', gap: 16, marginBottom: showMappa ? 24 : 0 }}>
                 {showCuore && (
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                       Frequenza cardiaca
                     </p>
                     <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 12px', border: '1px solid #fecaca' }}>
@@ -779,7 +939,7 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
                 )}
                 {showVelocita && (
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                       Velocità
                     </p>
                     <div style={{ background: BLUE.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${BLUE.border}` }}>
@@ -789,60 +949,53 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
                 )}
               </div>
             )}
+            {showMappa && (
+              <>
+                <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
+                <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
+                  <AllRoutesMap
+                    routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
+                    height="260px"
+                    interactive={mapsInteractive}
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {sections.map((section, i) => (
-          <div key={i} className="pdf-block" style={{ marginBottom: 20 }}>
-            <div style={{ background: SECTION_COLORS[i % SECTION_COLORS.length], padding: '5px 14px', borderRadius: '5px 5px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i+1).padStart(2,'0')}</span>
-              <span style={{ fontSize: 12, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: 'white', textTransform: 'uppercase', letterSpacing: 0.5 }}>{section.title}</span>
-            </div>
-            <div style={{ padding: '10px 14px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 5px 5px' }}>
-              {photos[i + 1] && (
-                <div className="pdf-block" style={{ float: 'right', marginLeft: 22, marginBottom: 14, width: 260, shapeOutside: 'margin-box' } as CSSProperties}>
-                  <div style={{ position: 'relative' }}>
-                    <img src={photos[i + 1].url} alt={photos[i + 1].caption}
-                      style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 7, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
-                    <span style={{ position: 'absolute', top: 6, left: 6, width: 22, height: 22, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '22px', fontSize: 10, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box' }}>{i+2}</span>
-                  </div>
-                  {photos[i + 1].caption && <p style={{ fontSize: 10, color: '#78716c', textAlign: 'center', marginTop: 6, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>{photos[i + 1].caption}</p>}
-                </div>
-              )}
-              {section.body.split(/\n\n+/).slice(0, 3).map((p, j) => {
-                const text = p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()
-                const dropCap = i === 0 && j === 0
-                return (
-                  <p key={j} style={{ fontSize: 13, lineHeight: 1.7, color: '#374151', margin: '0 0 10px', fontFamily: 'Georgia, serif' }}>
-                    {dropCap && text.length > 0 ? (
-                      <>
-                        <span style={{ float: 'left', fontSize: 42, lineHeight: 0.8, fontWeight: 700, color: SECTION_COLORS[0], padding: '4px 4px 0 0', fontFamily: 'Georgia, serif' }}>
-                          {text[0]}
-                        </span>
-                        {text.slice(1)}
-                      </>
-                    ) : text}
-                  </p>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-
         {/* Photo row */}
         {photos.length > 0 && (
-          <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+          <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 32 }}>
             {photos.map((ph, i) => (
-              <div key={ph.id} className="pdf-block" style={{ position: 'relative' }}>
+              <div key={ph.id} style={{ position: 'relative' }}>
                 <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
-                <span style={{ position: 'absolute', top: 6, left: 6, width: 20, height: 20, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '20px', fontSize: 10, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
-                {ph.caption && <p style={{ fontSize: 9, color: '#78716c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>{ph.caption}</p>}
+                <span style={{ position: 'absolute', top: 6, left: 6, width: 20, height: 20, background: '#e08d3c', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '20px', fontSize: 10, fontWeight: 'bold', fontFamily: 'DM Sans, sans-serif', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
+                {ph.caption && <p style={{ fontSize: 9, color: '#73695c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: 'Lora, serif' }}>{ph.caption}</p>}
               </div>
             ))}
           </div>
         )}
+
+        {/* Page footer */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #eeece5', paddingTop: 14 }}>
+          <span style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 9, letterSpacing: 3, color: '#c4bead', textTransform: 'uppercase' }}>{report.title || act?.title || 'Escursione'}</span>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#c4bead' }}>{escLabel}</span>
+        </div>
       </div>
     </div>
+  )
+}
+
+function SchedaField({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <div>
+        <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 7.5, fontWeight: 600, letterSpacing: 2, color: '#a9a18e', textTransform: 'uppercase', margin: '0 0 3px' }}>{label}</p>
+        <p style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#2c2520', margin: 0 }}>{value}</p>
+      </div>
+      <div style={{ height: 1, background: '#eeece5' }} />
+    </>
   )
 }
 
@@ -1026,6 +1179,13 @@ export default function DiarioPage() {
     () => showStubs ? bookPages : bookPages.filter(p => p.kind !== 'stub'),
     [bookPages, showStubs]
   )
+
+  const reportNumbers = useMemo(() => {
+    const m = new Map<string, number>()
+    let n = 0
+    visibleBookPages.forEach(p => { if (p.kind === 'report') { n++; m.set(p.report.id, n) } })
+    return m
+  }, [visibleBookPages])
 
   function handleCoverUpload(file: File) {
     const reader = new FileReader()
@@ -1359,7 +1519,9 @@ export default function DiarioPage() {
             >
               <DiarioCover
                 coverUrl={coverUrl} diaryTitle={diaryTitle} diarySubtitle={diarySubtitle} diaryAuthor={diaryAuthor}
-                dateRange={coverDateRange} totalActivities={activities.length} totalKm={computeGlobalStats(activities).totalDistanceKm}
+                dateRange={coverDateRange} totalActivities={activities.length}
+                totalKm={computeGlobalStats(activities).totalDistanceKm}
+                totalElevationGain={computeGlobalStats(activities).totalElevationGain}
               />
               <AnniversaryBanner activities={activities} />
               {visibleBookPages.length > 0 && <DiarioIndice pages={visibleBookPages} />}
@@ -1387,6 +1549,7 @@ export default function DiarioPage() {
                         extras={reportExtras}
                         trackPoints={trackPointsByAct[page.report.activity_id]}
                         mapsInteractive={mapsInteractive}
+                        escNumber={reportNumbers.get(page.report.id) ?? 1}
                       />
                     ) : (
                       <DiarioStubPage activity={page.activity} />
