@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ReactNode, CSSProperties, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -11,7 +11,7 @@ import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import {
   BookMarked, FileDown, Share2, Copy, Link2Off, ExternalLink,
   Loader2, Image as ImageIcon, BarChart2, ChevronDown, X, Pencil,
-  Route, Mountain, Clock, Flame, Trophy, TrendingUp, NotebookPen,
+  Route, Mountain, Clock, Flame, Trophy, TrendingUp, NotebookPen, Lock, LockOpen,
 } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
@@ -138,6 +138,10 @@ function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0 }: {
   unit: string
   decimals?: number
 }) {
+  // clipPath ids must be unique across the whole document — many ProgressChart instances
+  // (one per report, possibly several per report) render simultaneously in the Diario book,
+  // and duplicate ids made the browser pick the wrong clipPath for later charts.
+  const uid = useId()
   if (series.length < 2) return null
   const values = series.map(s => s.value)
   const min = Math.min(...values)
@@ -157,7 +161,7 @@ function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0 }: {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
       <defs>
         {photoMarkers?.map((m, i) => (
-          <clipPath key={i} id={`photo-clip-${i}`}>
+          <clipPath key={i} id={`photo-clip-${uid}-${i}`}>
             <circle cx={pad + Math.min(Math.max(m.progress, 0), 1) * (W - pad * 2)} cy={14} r={13} />
           </clipPath>
         ))}
@@ -169,7 +173,7 @@ function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0 }: {
         return (
           <g key={i}>
             <line x1={x} y1={28} x2={x} y2={topPad + chartH} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2,2" opacity={0.7} />
-            <image href={m.url} x={x - 13} y={1} width={26} height={26} clipPath={`url(#photo-clip-${i})`} preserveAspectRatio="xMidYMid slice" />
+            <image href={m.url} x={x - 13} y={1} width={26} height={26} clipPath={`url(#photo-clip-${uid}-${i})`} preserveAspectRatio="xMidYMid slice" />
             <circle cx={x} cy={14} r={13} fill="none" stroke="#f59e0b" strokeWidth={1.5} />
             <circle cx={x + 9} cy={5} r={5.5} fill="#f59e0b" stroke="white" strokeWidth={1} />
             <text x={x + 9} y={7.3} textAnchor="middle" fontSize={6} fill="white" fontFamily="Arial" fontWeight="bold">{i + 1}</text>
@@ -467,7 +471,7 @@ function AnniversaryBanner({ activities }: { activities: ActivityMeta[] }) {
   )
 }
 
-function DiarioMappa({ activities, mapImgUrl }: { activities: ActivityMeta[]; mapImgUrl: string | null }) {
+function DiarioMappa({ activities, mapImgUrl, mapsInteractive }: { activities: ActivityMeta[]; mapImgUrl: string | null; mapsInteractive: boolean }) {
   const routes = activities
     .filter(a => (a.routePolyline?.length ?? 0) > 1)
     .map(a => ({ id: a.id, title: a.title, startTime: a.startTime, polyline: a.routePolyline! }))
@@ -489,7 +493,7 @@ function DiarioMappa({ activities, mapImgUrl }: { activities: ActivityMeta[]; ma
       {/* Screen map (Leaflet) */}
       {routes.length > 0 && (
         <div className="print:hidden diario-global-map" style={{ height: 400, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
-          <AllRoutesMap routes={routes} height="400px" />
+          <AllRoutesMap routes={routes} height="400px" interactive={mapsInteractive} />
         </div>
       )}
 
@@ -651,9 +655,9 @@ function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]
 
 const SECTION_COLORS = ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc']
 
-function DiarioReportPage({ report, photos, meta, extras, trackPoints }: {
+function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive }: {
   report: DiaryReport; photos: RoutePhoto[]; meta?: ActivityMeta; extras: ReportExtras
-  trackPoints?: TrackPoint[]
+  trackPoints?: TrackPoint[]; mapsInteractive: boolean
 }) {
   const act     = report.activity
   const sections = parseSections(report.content)
@@ -727,6 +731,7 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints }: {
                 <AllRoutesMap
                   routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
                   height="260px"
+                  interactive={mapsInteractive}
                 />
               </div>
             )}
@@ -845,6 +850,7 @@ export default function DiarioPage() {
   const [copyOk,       setCopyOk]       = useState(false)
   const [showStatsMenu, setShowStatsMenu] = useState(false)
   const [showTextMenu,  setShowTextMenu]  = useState(false)
+  const [mapsInteractive, setMapsInteractive] = useState(false)
   const [statsToggles, setStatsToggles] = useState<StatsToggles>(() => {
     try { return JSON.parse(localStorage.getItem('dtrek_diary_stats') ?? '') }
     catch { return { totali: true, record: true, medie: true, andamento: true } }
@@ -1195,6 +1201,16 @@ export default function DiarioPage() {
             )}
           </div>
 
+          {/* Toggle map interactivity */}
+          <button onClick={() => setMapsInteractive(v => !v)}
+            title={mapsInteractive ? 'Blocca le mappe (evita spostamenti involontari)' : 'Sblocca le mappe per navigarle'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-barlow font-bold uppercase tracking-wide transition-colors ${
+              mapsInteractive ? 'bg-forest-600 border-forest-600 text-white hover:bg-forest-700' : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+            }`}>
+            {mapsInteractive ? <LockOpen className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+            Mappe {mapsInteractive ? 'navigabili' : 'bloccate'}
+          </button>
+
           {/* Download PDF */}
           <button onClick={() => generateAndUploadPdf(true)} disabled={downloading || loading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 disabled:opacity-50 transition-colors">
@@ -1262,7 +1278,7 @@ export default function DiarioPage() {
               />
               <AnniversaryBanner activities={activities} />
               {bookPages.length > 0 && <DiarioIndice pages={bookPages} />}
-              {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} />}
+              {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} mapsInteractive={mapsInteractive} />}
               {activities.length > 0 && showStats && (
                 <DiarioStatistiche activities={activities} toggles={statsToggles} />
               )}
@@ -1285,6 +1301,7 @@ export default function DiarioPage() {
                         meta={activities.find(a => a.id === page.report.activity_id)}
                         extras={reportExtras}
                         trackPoints={trackPointsByAct[page.report.activity_id]}
+                        mapsInteractive={mapsInteractive}
                       />
                     ) : (
                       <DiarioStubPage activity={page.activity} />

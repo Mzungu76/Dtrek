@@ -11,6 +11,7 @@ interface RouteEntry {
 interface Props {
   routes: RouteEntry[]
   height?: string
+  interactive?: boolean
 }
 
 const PALETTE = [
@@ -24,9 +25,11 @@ const PALETTE = [
   '#059669',
 ]
 
-export default function AllRoutesMap({ routes, height = '500px' }: Props) {
+export default function AllRoutesMap({ routes, height = '500px', interactive = true }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
+  const interactiveRef = useRef(interactive)
+  interactiveRef.current = interactive
 
   const validRoutes = routes.filter(r => r.polyline && r.polyline.length > 1)
 
@@ -54,7 +57,14 @@ export default function AllRoutesMap({ routes, height = '500px' }: Props) {
         shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
       })
 
-      const map = L.map(mapRef.current!).setView([44, 11], 7)
+      const map = L.map(mapRef.current!, {
+        dragging: interactiveRef.current,
+        scrollWheelZoom: interactiveRef.current,
+        doubleClickZoom: interactiveRef.current,
+        touchZoom: interactiveRef.current,
+        boxZoom: interactiveRef.current,
+        keyboard: interactiveRef.current,
+      }).setView([44, 11], 7)
       mapInstance.current = map
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -108,6 +118,13 @@ export default function AllRoutesMap({ routes, height = '500px' }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    const map = mapInstance.current
+    if (!map) return
+    const handlers = [map.dragging, map.scrollWheelZoom, map.doubleClickZoom, map.touchZoom, map.boxZoom, map.keyboard]
+    handlers.forEach(h => { if (h) interactive ? h.enable() : h.disable() })
+  }, [interactive])
 
   if (validRoutes.length === 0) {
     return (
