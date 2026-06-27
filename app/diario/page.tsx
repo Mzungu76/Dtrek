@@ -114,6 +114,18 @@ function haversineMDiario(lat1: number, lon1: number, lat2: number, lon2: number
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+/**
+ * Output canvas height for a fixed-`outW` route map, derived from the
+ * route's own aspect ratio (clamped) instead of a one-size-fits-all
+ * landscape box — keeps drawLetterboxed's white margins minimal so the map
+ * fills the page width like the rest of the layout, without touching its
+ * zoom/crop selection.
+ */
+function mapOutH(aspect: number, outW = 660): number {
+  const clamped = Math.min(3.2, Math.max(0.9, aspect))
+  return Math.round(outW / clamped)
+}
+
 /** Maps each trackpoint to its fraction (0–1) of cumulative GPS distance along the route. */
 function trackPointsProgress(trackPoints: TrackPoint[]): number[] {
   const cum: number[] = [0]
@@ -158,7 +170,7 @@ function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0 }: {
   const linePath = `M ${pts.map(p => p.join(',')).join(' L ')}`
   const areaPath = `${linePath} L ${pts[pts.length - 1][0]},${topPad + chartH} L ${pts[0][0]},${topPad + chartH} Z`
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       <defs>
         {photoMarkers?.map((m, i) => (
           <clipPath key={i} id={`photo-clip-${uid}-${i}`}>
@@ -753,24 +765,28 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
                 </div>
               </div>
             )}
-            {showCuore && (
-              <div className="pdf-block" style={{ marginBottom: showVelocita ? 16 : 0 }}>
-                <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
-                  Frequenza cardiaca
-                </p>
-                <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 12px', border: '1px solid #fecaca' }}>
-                  <ProgressChart series={hrSeries} accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }} unit=" bpm" />
-                </div>
-              </div>
-            )}
-            {showVelocita && (
-              <div className="pdf-block">
-                <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
-                  Velocità
-                </p>
-                <div style={{ background: BLUE.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${BLUE.border}` }}>
-                  <ProgressChart series={speedSeries} accent={BLUE} unit=" km/h" decimals={1} />
-                </div>
+            {(showCuore || showVelocita) && (
+              <div className="pdf-block" style={{ display: 'flex', gap: 16 }}>
+                {showCuore && (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                      Frequenza cardiaca
+                    </p>
+                    <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 12px', border: '1px solid #fecaca' }}>
+                      <ProgressChart series={hrSeries} accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }} unit=" bpm" />
+                    </div>
+                  </div>
+                )}
+                {showVelocita && (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                      Velocità
+                    </p>
+                    <div style={{ background: BLUE.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${BLUE.border}` }}>
+                      <ProgressChart series={speedSeries} accent={BLUE} unit=" km/h" decimals={1} />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -784,23 +800,23 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
             </div>
             <div style={{ padding: '10px 14px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 5px 5px' }}>
               {photos[i + 1] && (
-                <div className="pdf-block" style={{ float: 'right', marginLeft: 18, marginBottom: 10, width: 190, shapeOutside: 'margin-box' } as CSSProperties}>
+                <div className="pdf-block" style={{ float: 'right', marginLeft: 22, marginBottom: 14, width: 260, shapeOutside: 'margin-box' } as CSSProperties}>
                   <div style={{ position: 'relative' }}>
                     <img src={photos[i + 1].url} alt={photos[i + 1].caption}
                       style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 7, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
-                    <span style={{ position: 'absolute', top: 5, left: 5, width: 18, height: 18, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '18px', fontSize: 9, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box' }}>{i+2}</span>
+                    <span style={{ position: 'absolute', top: 6, left: 6, width: 22, height: 22, background: '#f59e0b', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '22px', fontSize: 10, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', display: 'block', boxSizing: 'border-box' }}>{i+2}</span>
                   </div>
-                  {photos[i + 1].caption && <p style={{ fontSize: 9, color: '#78716c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>{photos[i + 1].caption}</p>}
+                  {photos[i + 1].caption && <p style={{ fontSize: 10, color: '#78716c', textAlign: 'center', marginTop: 6, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>{photos[i + 1].caption}</p>}
                 </div>
               )}
               {section.body.split(/\n\n+/).slice(0, 3).map((p, j) => {
                 const text = p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()
                 const dropCap = i === 0 && j === 0
                 return (
-                  <p key={j} style={{ fontSize: 11, lineHeight: 1.75, color: '#374151', margin: '0 0 8px', fontFamily: 'Georgia, serif' }}>
+                  <p key={j} style={{ fontSize: 13, lineHeight: 1.7, color: '#374151', margin: '0 0 10px', fontFamily: 'Georgia, serif' }}>
                     {dropCap && text.length > 0 ? (
                       <>
-                        <span style={{ float: 'left', fontSize: 38, lineHeight: 0.8, fontWeight: 700, color: SECTION_COLORS[0], padding: '4px 4px 0 0', fontFamily: 'Georgia, serif' }}>
+                        <span style={{ float: 'left', fontSize: 42, lineHeight: 0.8, fontWeight: 700, color: SECTION_COLORS[0], padding: '4px 4px 0 0', fontFamily: 'Georgia, serif' }}>
                           {text[0]}
                         </span>
                         {text.slice(1)}
@@ -961,9 +977,10 @@ export default function DiarioPage() {
 
       // Pre-generate a tiled raster map for native browser printing (Ctrl+P) —
       // our own PDF export path fetches a fresh one instead, ignoring this.
-      import('@/utils/pdfExport').then(({ fetchAllRoutesSatMap }) =>
-        fetchAllRoutesSatMap(sortedActs, 660, 400)
-      ).then(img => { if (img) setMapImgUrl(img) })
+      import('@/utils/pdfExport').then(({ fetchAllRoutesSatMap, mapBoxAspect }) => {
+        const allPts = sortedActs.filter(a => (a.routePolyline?.length ?? 0) > 1).flatMap(a => a.routePolyline!)
+        return fetchAllRoutesSatMap(sortedActs, 660, mapOutH(mapBoxAspect(allPts, 0.12)))
+      }).then(img => { if (img) setMapImgUrl(img) })
     }).catch(() => setLoading(false))
   }, [])
 
@@ -1025,8 +1042,9 @@ export default function DiarioPage() {
     key(true); setPublishError(null)
     try {
       const { paginateToPdf, nextLayout } = await import('@/lib/pdfPaginate')
-      const { fetchAllRoutesSatMap, fetchSatMap } = await import('@/utils/pdfExport')
-      const mapForPdf = mapImgUrl || await fetchAllRoutesSatMap(activities, 660, 400) || null
+      const { fetchAllRoutesSatMap, fetchSatMap, mapBoxAspect } = await import('@/utils/pdfExport')
+      const allPts = activities.filter(a => (a.routePolyline?.length ?? 0) > 1).flatMap(a => a.routePolyline!)
+      const mapForPdf = mapImgUrl || await fetchAllRoutesSatMap(activities, 660, mapOutH(mapBoxAspect(allPts, 0.12))) || null
 
       const actById = new Map(activities.map(a => [a.id, a]))
       const PALETTE = ['#166534','#0369a1','#9333ea','#c2410c','#0f766e','#b45309','#be123c','#1d4ed8']
@@ -1088,7 +1106,7 @@ export default function DiarioPage() {
       const MAP_CONCURRENCY = 5
       for (let i = 0; i < mapTasks.length; i += MAP_CONCURRENCY) {
         const batch = mapTasks.slice(i, i + MAP_CONCURRENCY)
-        const imgs = await Promise.all(batch.map(t => fetchSatMap(t.pts, 660, 300, t.color)))
+        const imgs = await Promise.all(batch.map(t => fetchSatMap(t.pts, 660, mapOutH(mapBoxAspect(t.pts, 0.18)), t.color)))
         batch.forEach((t, j) => {
           const mapImg = imgs[j]
           if (mapImg) {
