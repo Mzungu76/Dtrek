@@ -725,9 +725,9 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
       {/* Sections */}
       <div style={{ padding: '24px 32px' }}>
         {(showMappa || showStatistiche || showGrafico || showCuore || showVelocita) && (
-          <div className="pdf-block" style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 24 }}>
             {showMappa && (
-              <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+              <div className="print:hidden diario-report-map pdf-block" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
                 <AllRoutesMap
                   routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
                   height="260px"
@@ -736,7 +736,7 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
               </div>
             )}
             {showStatistiche && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: (showGrafico || showCuore || showVelocita) ? 16 : 0 }}>
+              <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: (showGrafico || showCuore || showVelocita) ? 16 : 0 }}>
                 <StatCard value={`${(meta!.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
                 <StatCard value={`${Math.round(meta!.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
                 <StatCard value={formatDuration(meta!.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
@@ -744,7 +744,7 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
               </div>
             )}
             {showGrafico && (
-              <div style={{ marginBottom: (showCuore || showVelocita) ? 16 : 0 }}>
+              <div className="pdf-block" style={{ marginBottom: (showCuore || showVelocita) ? 16 : 0 }}>
                 <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                   Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
                 </p>
@@ -754,7 +754,7 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
               </div>
             )}
             {showCuore && (
-              <div style={{ marginBottom: showVelocita ? 16 : 0 }}>
+              <div className="pdf-block" style={{ marginBottom: showVelocita ? 16 : 0 }}>
                 <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                   Frequenza cardiaca
                 </p>
@@ -764,7 +764,7 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInter
               </div>
             )}
             {showVelocita && (
-              <div>
+              <div className="pdf-block">
                 <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                   Velocità
                 </p>
@@ -924,37 +924,47 @@ export default function DiarioPage() {
       const cover = localStorage.getItem('dtrek_diary_cover')
       if (cover) setCoverUrl(cover)
 
+      // Core data (activities/reports/pages) is ready — show the book now
+      // rather than waiting for every report's photos and full trackpoints to
+      // load too. Those are fetched below in the background and populate the
+      // charts/photos progressively as they arrive, instead of blocking the
+      // initial render (which used to make opening the diary feel very slow
+      // once there were many reports).
+      setLoading(false)
+
       // Load photos for each activity from the server (migra automaticamente da localStorage se serve)
-      const photoEntries = await Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, RoutePhoto[]]> => {
+      Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, RoutePhoto[]]> => {
         try {
           return [rep.activity_id, await fetchActivityPhotos(rep.activity_id)]
         } catch {
           return [rep.activity_id, []]
         }
-      }))
-      const byAct: Record<string, RoutePhoto[]> = {}
-      photoEntries.forEach(([activityId, photos]) => { if (photos.length) byAct[activityId] = photos })
-      setPhotosByAct(byAct)
+      })).then(photoEntries => {
+        const byAct: Record<string, RoutePhoto[]> = {}
+        photoEntries.forEach(([activityId, photos]) => { if (photos.length) byAct[activityId] = photos })
+        setPhotosByAct(byAct)
+      })
 
       // Load full trackPoints per reported activity for the elevation/HR/speed charts
-      const trackPointEntries = await Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, TrackPoint[]]> => {
+      Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, TrackPoint[]]> => {
         try {
           const full = await getActivityById(rep.activity_id)
           return [rep.activity_id, full?.trackPoints ?? []]
         } catch {
           return [rep.activity_id, []]
         }
-      }))
-      const tpByAct: Record<string, TrackPoint[]> = {}
-      trackPointEntries.forEach(([activityId, tps]) => { if (tps.length) tpByAct[activityId] = tps })
-      setTrackPointsByAct(tpByAct)
+      })).then(trackPointEntries => {
+        const tpByAct: Record<string, TrackPoint[]> = {}
+        trackPointEntries.forEach(([activityId, tps]) => { if (tps.length) tpByAct[activityId] = tps })
+        setTrackPointsByAct(tpByAct)
+      })
 
       // Pre-generate a tiled raster map for native browser printing (Ctrl+P) —
       // our own PDF export path fetches a fresh one instead, ignoring this.
       import('@/utils/pdfExport').then(({ fetchAllRoutesSatMap }) =>
         fetchAllRoutesSatMap(sortedActs, 660, 400)
       ).then(img => { if (img) setMapImgUrl(img) })
-    }).finally(() => setLoading(false))
+    }).catch(() => setLoading(false))
   }, [])
 
   function toggleStat(key: keyof StatsToggles) {
@@ -1029,6 +1039,13 @@ export default function DiarioPage() {
         document.querySelectorAll<HTMLElement>('#diario-book .diario-page')
       ).filter(p => !p.classList.contains('diario-stub-page'))
 
+      // Clone all pages first (cheap, synchronous) and collect the per-report
+      // map fetches needed, without awaiting them yet — they're fired off
+      // together below with limited concurrency instead of one-at-a-time,
+      // which is what made publishing scale linearly (and badly) with the
+      // number of reports.
+      const mapTasks: { el: HTMLElement; pts: [number, number][]; color: string }[] = []
+
       for (const p of reportPages) {
         const clone = p.cloneNode(true) as HTMLElement
         clone.style.margin = '0'
@@ -1056,14 +1073,7 @@ export default function DiarioPage() {
           el.style.height = 'auto'
           if (act?.routePolyline && act.routePolyline.length > 1) {
             const idx = activities.indexOf(act)
-            const color = PALETTE[idx % PALETTE.length]
-            const mapImg = await fetchSatMap(act.routePolyline, 660, 300, color)
-            if (mapImg) {
-              const img = document.createElement('img')
-              img.src = mapImg
-              img.style.cssText = 'width:100%;border-radius:10px;display:block'
-              el.appendChild(img)
-            }
+            mapTasks.push({ el, pts: act.routePolyline, color: PALETTE[idx % PALETTE.length] })
           }
         }
         clone.querySelectorAll<HTMLElement>('img[alt="Mappa percorsi"]').forEach(i => {
@@ -1071,6 +1081,23 @@ export default function DiarioPage() {
         })
         host.appendChild(clone)
         clones.push(clone)
+      }
+
+      // Fetch report maps in parallel, capped at 5 concurrent requests so we
+      // don't hammer the public OSM tile servers when there are many reports.
+      const MAP_CONCURRENCY = 5
+      for (let i = 0; i < mapTasks.length; i += MAP_CONCURRENCY) {
+        const batch = mapTasks.slice(i, i + MAP_CONCURRENCY)
+        const imgs = await Promise.all(batch.map(t => fetchSatMap(t.pts, 660, 300, t.color)))
+        batch.forEach((t, j) => {
+          const mapImg = imgs[j]
+          if (mapImg) {
+            const img = document.createElement('img')
+            img.src = mapImg
+            img.style.cssText = 'width:100%;border-radius:10px;display:block'
+            t.el.appendChild(img)
+          }
+        })
       }
 
       document.body.appendChild(host)
