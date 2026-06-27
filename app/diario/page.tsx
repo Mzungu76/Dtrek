@@ -131,9 +131,9 @@ function trackPointsProgress(trackPoints: TrackPoint[]): number[] {
  * Distance-aligned SVG chart (progress 0–1 on x-axis) so photo markers — placed by
  * RoutePhoto.progress — line up exactly with the metric series, unlike a time-based axis.
  */
-function ProgressChart({ series, photoProgress, accent, unit, decimals = 0 }: {
+function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0 }: {
   series: { progress: number; value: number }[]
-  photoProgress?: number[]
+  photoMarkers?: { progress: number; url: string }[]
   accent: AccentTheme
   unit: string
   decimals?: number
@@ -144,29 +144,40 @@ function ProgressChart({ series, photoProgress, accent, unit, decimals = 0 }: {
   const max = Math.max(...values)
   const range = max - min || 1
   const W = 660, H = 110, pad = 4
+  const topPad = photoMarkers?.length ? 30 : 0
+  const chartH = H - topPad
   const pts = series.map(({ progress, value }) => {
     const x = pad + progress * (W - pad * 2)
-    const y = H - pad - ((value - min) / range) * (H - pad * 2)
+    const y = topPad + chartH - pad - ((value - min) / range) * (chartH - pad * 2)
     return [x, y]
   })
   const linePath = `M ${pts.map(p => p.join(',')).join(' L ')}`
-  const areaPath = `${linePath} L ${pts[pts.length - 1][0]},${H} L ${pts[0][0]},${H} Z`
+  const areaPath = `${linePath} L ${pts[pts.length - 1][0]},${topPad + chartH} L ${pts[0][0]},${topPad + chartH} Z`
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+      <defs>
+        {photoMarkers?.map((m, i) => (
+          <clipPath key={i} id={`photo-clip-${i}`}>
+            <circle cx={pad + Math.min(Math.max(m.progress, 0), 1) * (W - pad * 2)} cy={14} r={13} />
+          </clipPath>
+        ))}
+      </defs>
       <path d={areaPath} fill={accent.iconColor} opacity={0.12} />
       <path d={linePath} fill="none" stroke={accent.iconColor} strokeWidth={1.6} />
-      {photoProgress?.map((p, i) => {
-        const x = pad + Math.min(Math.max(p, 0), 1) * (W - pad * 2)
+      {photoMarkers?.map((m, i) => {
+        const x = pad + Math.min(Math.max(m.progress, 0), 1) * (W - pad * 2)
         return (
           <g key={i}>
-            <line x1={x} y1={0} x2={x} y2={H - 10} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2,2" opacity={0.7} />
-            <circle cx={x} cy={H - 10} r={5} fill="#f59e0b" stroke="white" strokeWidth={1} />
-            <text x={x} y={H - 7} textAnchor="middle" fontSize={6} fill="white" fontFamily="Arial" fontWeight="bold">{i + 1}</text>
+            <line x1={x} y1={28} x2={x} y2={topPad + chartH} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2,2" opacity={0.7} />
+            <image href={m.url} x={x - 13} y={1} width={26} height={26} clipPath={`url(#photo-clip-${i})`} preserveAspectRatio="xMidYMid slice" />
+            <circle cx={x} cy={14} r={13} fill="none" stroke="#f59e0b" strokeWidth={1.5} />
+            <circle cx={x + 9} cy={5} r={5.5} fill="#f59e0b" stroke="white" strokeWidth={1} />
+            <text x={x + 9} y={7.3} textAnchor="middle" fontSize={6} fill="white" fontFamily="Arial" fontWeight="bold">{i + 1}</text>
           </g>
         )
       })}
       <text x={pad} y={H - 2} fontSize={8} fill="#9ca3af" fontFamily="Arial">{min.toFixed(decimals)}{unit}</text>
-      <text x={W - pad} y={10} textAnchor="end" fontSize={8} fill="#9ca3af" fontFamily="Arial">{max.toFixed(decimals)}{unit}</text>
+      <text x={W - pad} y={topPad + 6} textAnchor="end" fontSize={8} fill="#9ca3af" fontFamily="Arial">{max.toFixed(decimals)}{unit}</text>
     </svg>
   )
 }
@@ -657,7 +668,9 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints }: {
 
   const tp = trackPoints ?? []
   const progress = useMemo(() => tp.length > 1 ? trackPointsProgress(tp) : [], [tp])
-  const photoProgress = useMemo(() => photos.map(p => p.progress).filter(p => typeof p === 'number'), [photos])
+  const photoMarkers = useMemo(() => photos
+    .filter(p => typeof p.progress === 'number')
+    .map(p => ({ progress: p.progress, url: p.url })), [photos])
 
   const altitudeSeries = useMemo(() => tp
     .map((p, i) => p.altitudeMeters !== undefined ? { progress: progress[i], value: p.altitudeMeters } : null)
@@ -728,10 +741,10 @@ function DiarioReportPage({ report, photos, meta, extras, trackPoints }: {
             {showGrafico && (
               <div style={{ marginBottom: (showCuore || showVelocita) ? 16 : 0 }}>
                 <p style={{ fontSize: 8, color: '#9ca3af', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
-                  Profilo altimetrico {photoProgress.length > 0 && '· con posizione foto'}
+                  Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
                 </p>
                 <div style={{ background: GREEN.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${GREEN.border}` }}>
-                  <ProgressChart series={altitudeSeries} photoProgress={photoProgress} accent={GREEN} unit=" m" />
+                  <ProgressChart series={altitudeSeries} photoMarkers={photoMarkers} accent={GREEN} unit=" m" />
                 </div>
               </div>
             )}
@@ -837,7 +850,7 @@ export default function DiarioPage() {
     catch { return { totali: true, record: true, medie: true, andamento: true } }
   })
   const [reportExtras, setReportExtras] = useState<ReportExtras>(() => {
-    const defaults: ReportExtras = { mappa: true, statistiche: true, grafico: true, cuore: false, velocita: false }
+    const defaults: ReportExtras = { mappa: true, statistiche: true, grafico: true, cuore: true, velocita: true }
     try { return { ...defaults, ...JSON.parse(localStorage.getItem('dtrek_diary_report_extras') ?? '') } }
     catch { return defaults }
   })
