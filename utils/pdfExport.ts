@@ -176,6 +176,27 @@ function latLonToXY(lat: number, lon: number, z: number) {
 }
 
 /**
+ * Width:height ratio of a route's padded bounding box in Web Mercator pixel
+ * space (x and y both scale by 2^z, so the ratio is the same at any zoom).
+ * Callers use this to size the output canvas passed to fetchSatMap /
+ * fetchAllRoutesSatMap so drawLetterboxed's white bars — needed there to
+ * avoid distorting the map — stay minimal instead of assuming every route
+ * fits a fixed landscape shape.
+ */
+export function mapBoxAspect(pts: [number, number][], padFrac: number): number {
+  if (pts.length < 2) return 1
+  const lats = pts.map(p => p[0]), lons = pts.map(p => p[1])
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
+  const padLat = (maxLat - minLat) * padFrac || 0.003
+  const padLon = (maxLon - minLon) * padFrac || 0.003
+  const tl = latLonToXY(maxLat + padLat, minLon - padLon, 0)
+  const br = latLonToXY(minLat - padLat, maxLon + padLon, 0)
+  const w = br.x - tl.x, h = br.y - tl.y
+  return h > 0 ? w / h : 1
+}
+
+/**
  * Draw a cropped region of `src` onto a new outW×outH canvas, scaling
  * uniformly (preserving aspect ratio) and letterboxing with white bars
  * instead of stretching non-uniformly to fill the target box.
