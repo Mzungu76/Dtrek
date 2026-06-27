@@ -13,7 +13,7 @@ import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
-  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, History, PartyPopper,
+  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, PartyPopper,
 } from 'lucide-react'
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -504,17 +504,6 @@ export default function HomePage() {
                     <LayoutGrid className="w-4 h-4" />
                     <span className="hidden sm:inline">Lista</span>
                   </button>
-                  {view === 'list' && (
-                    <button
-                      onClick={() => setShowAllHistory(v => !v)}
-                      title="Vedi tutte"
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                        ${showAllHistory ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
-                    >
-                      <History className="w-4 h-4" />
-                      <span className="hidden sm:inline">Vedi tutte</span>
-                    </button>
-                  )}
                 </div>
               </div>
             )}
@@ -725,6 +714,25 @@ export default function HomePage() {
         ) : (
           /* ────────── LIST VIEW ────────── */
           <div className="fade-up space-y-6">
+            {!showAllHistory && (
+              <div className="flex items-center justify-between gap-2 -mt-1">
+                <button
+                  onClick={() => setMonthIdx(i => Math.max(0, (i < 0 ? months.length - 1 : i) - 1))}
+                  disabled={safeIdx === 0}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 text-sm"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <p className="font-semibold text-stone-700 capitalize text-sm sm:text-base">{monthLabel}</p>
+                <button
+                  onClick={() => setMonthIdx(i => Math.min(months.length - 1, (i < 0 ? months.length - 1 : i) + 1))}
+                  disabled={safeIdx === months.length - 1}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 text-sm"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             {typeFilter !== 'planned' && sortedActivities.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -745,6 +753,12 @@ export default function HomePage() {
                       </button>
                     ))}
                   </div>
+                  <button
+                    onClick={() => { setShowAllHistory(true); setTypeFilter('done') }}
+                    className="flex items-center gap-1 text-xs text-forest-600 hover:text-forest-700 font-medium ml-1"
+                  >
+                    <CalendarClock className="w-3.5 h-3.5" /> Tutte
+                  </button>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                   {sortedActivities.map(activity => (
