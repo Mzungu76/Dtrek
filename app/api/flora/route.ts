@@ -107,12 +107,12 @@ export async function GET(req: Request) {
   const params = new URLSearchParams()
   params.set('decimalLatitude', `${minLat},${maxLat}`)
   params.set('decimalLongitude', `${minLon},${maxLon}`)
-  params.set('kingdom', 'Plantae')
+  params.set('kingdomKey', '6') // Plantae
   params.set('month', String(month))
   params.set('mediaType', 'StillImage')
   params.set('hasCoordinate', 'true')
-  params.append('license', 'CC_BY')
-  params.append('license', 'CC0')
+  params.append('license', 'CC0_1_0')
+  params.append('license', 'CC_BY_4_0')
   params.set('limit', '40')
 
   let data: GbifSearchResponse
