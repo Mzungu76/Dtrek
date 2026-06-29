@@ -2,10 +2,13 @@ import { NextRequest } from 'next/server'
 import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
-import { formatDuration }    from '@/lib/tcxParser'
+import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format }            from 'date-fns'
 import { it }                from 'date-fns/locale'
 import { sectionsToMarkdown, type ReportSection } from '@/lib/reportStore'
+import type { PoiItem }      from '@/lib/overpass'
+import type { WikiPage }     from '@/lib/wikipedia'
+import { fetchNatureContext, formatNatureContextBlock, type NatureContext } from '@/lib/aiNatureContext'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -70,6 +73,30 @@ interface QuestionnaireAnswerRow {
   skipped: boolean
 }
 
+function poiDistance(m: number) {
+  return m < 1000 ? `${m.toFixed(0)} m dal percorso` : `${(m / 1000).toFixed(1)} km dal percorso`
+}
+
+function buildPoiBlock(cachedPois?: PoiItem[], cachedPoiWiki?: { poi: PoiItem; wiki: WikiPage }[]): string {
+  const wiki = cachedPoiWiki ?? []
+  const raw  = cachedPois    ?? []
+
+  const wikiBlock = wiki.length > 0
+    ? wiki.map(({ poi, wiki: w }) =>
+        `• ${w.title} [${poi.type}${poi.ele ? `, ${poi.ele} m slm` : ''}, ${poiDistance(poi.distFromTrack)}]\n  ${(w.extract ?? '').slice(0, 400)}`,
+      ).join('\n\n')
+    : ''
+
+  const rawOnly = raw
+    .filter(p => !wiki.some(e => e.poi.id === p.id) && p.name)
+    .slice(0, 10)
+    .map(p => `• ${p.name} [${p.type}${p.ele ? `, ${p.ele} m` : ''}]`)
+    .join('\n')
+
+  if (!wikiBlock && !rawOnly) return ''
+  return [wikiBlock, rawOnly && `ALTRI PUNTI DI INTERESSE OSM:\n${rawOnly}`].filter(Boolean).join('\n\n')
+}
+
 function buildQa(questions: QuestionnaireQuestionRow[], answers: Record<string, QuestionnaireAnswerRow>): QaItem[] {
   return questions
     .filter(q => answers[q.id] && !answers[q.id].skipped && answers[q.id].text?.trim())
@@ -88,6 +115,8 @@ function buildPrompt(
   photos: PhotoMeta[],
   guideText?: string,
   qa?: QaItem[],
+  poiBlock?: string,
+  nature?: NatureContext,
 ): string {
   const dateStr = activity.start_time
     ? format(new Date(activity.start_time as string), "EEEE d MMMM yyyy", { locale: it })
@@ -140,6 +169,15 @@ function buildPrompt(
     ? `\nCONTESTO STORICO-NATURALISTICO (estratto dalla guida del percorso — usalo come fonte per approfondimenti):\n${guideText.slice(0, 2500)}\n`
     : ''
 
+  const poiSection = poiBlock
+    ? `\nPUNTI DI INTERESSE LUNGO IL PERCORSO:\n${poiBlock}\n`
+    : ''
+
+  const natureBlock = nature ? formatNatureContextBlock(nature) : ''
+  const natureSection = natureBlock
+    ? `\nDATI NATURALISTICI E FENOLOGICI REALI (usa questi dati per la sezione "Natura e storia" — non inventare flora/fauna in contraddizione con questi dati):\n${natureBlock}\n`
+    : ''
+
   const qaBlock = qa && qa.length > 0
     ? `\nRISPOSTE DELL'ESCURSIONISTA AL QUESTIONARIO GUIDATO (in ordine cronologico lungo il percorso — usa solo per assorbirne contenuto e tono, non riportarle alla lettera né tra virgolette):\n${
         qa.map(item =>
@@ -175,6 +213,8 @@ ${(activity.altitude_max as number) > 0 ? `QUOTA MASSIMA RAGGIUNTA: ${Math.round
 ${biometricBlock ? `\nDATI DI RIFERIMENTO (usa solo se rilevanti, non come sezione separata):\n${biometricBlock}` : ''}
 ${activity.user_notes ? `\nNOTE DELL'ESCURSIONISTA:\n${activity.user_notes}` : ''}
 ${guideBlock}
+${poiSection}
+${natureSection}
 ${qaBlock}
 DOCUMENTAZIONE FOTOGRAFICA (in ordine cronologico dal punto di partenza):
 ${photoBlock}
@@ -189,7 +229,7 @@ ${cronacaBlock}
 ## Natura e storia
 Approfondisci i luoghi attraversati: geologia, flora, fauna, siti storici o
 archeologici nelle vicinanze, tradizioni locali. Includi almeno un fatto poco noto
-che arricchisca la conoscenza del territorio.
+che arricchisca la conoscenza del territorio.${natureBlock ? ' Fonda la parte naturalistica sui DATI NATURALISTICI E FENOLOGICI REALI forniti sopra (specie osservate, tipo di bosco, fenologia satellitare).' : ''}${poiBlock ? ' Usa i PUNTI DI INTERESSE forniti sopra per la parte storico-culturale.' : ''}
 
 ## In sintesi
 Valutazione complessiva: difficoltà effettiva, qualità del contesto, periodo ideale,
@@ -323,15 +363,36 @@ export async function POST(req: NextRequest) {
   }
 
   let guideText: string | undefined
+  let poiBlock: string | undefined
+  let s2: Record<string, unknown> | undefined
   if (activity.linked_planned_id) {
     const { data: hike } = await supabase
       .from('planned_hikes')
-      .select('cached_guide')
+      .select('cached_guide, cached_pois, cached_poi_wiki, s2_available, s2_phenology_peak_month, s2_ndvi_delta, s2_landscape_variety, s2_shade_score, s2_water_sources')
       .eq('id', activity.linked_planned_id)
       .eq('user_id', user.id)
       .maybeSingle()
     if (hike?.cached_guide) guideText = hike.cached_guide
+    if (hike) {
+      poiBlock = buildPoiBlock(hike.cached_pois, hike.cached_poi_wiki)
+      s2 = hike
+    }
   }
+
+  const track: TrackPoint[] = Array.isArray(activity.track_points) ? activity.track_points : []
+  const nature = await fetchNatureContext({
+    trackPoints: track,
+    altitudeMax: activity.altitude_max as number | undefined,
+    month: activity.start_time ? new Date(activity.start_time as string).getMonth() + 1 : new Date().getMonth() + 1,
+    s2: s2 ? {
+      available:          s2.s2_available as boolean | undefined,
+      phenologyPeakMonth:  s2.s2_phenology_peak_month as number | null,
+      ndviDelta:           s2.s2_ndvi_delta as number | null,
+      landscapeVariety:    s2.s2_landscape_variety as number | null,
+      shadeScore:          s2.s2_shade_score as number | null,
+      waterSources:        s2.s2_water_sources as unknown[] | null,
+    } : undefined,
+  })
 
   let qa: QaItem[] | undefined
   const { data: questionnaire } = await supabase
@@ -348,7 +409,7 @@ export async function POST(req: NextRequest) {
   }
 
   const client  = new Anthropic({ apiKey })
-  const prompt  = buildPrompt(activity, length, photos, guideText, qa)
+  const prompt  = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature)
   const { maxTokens } = LENGTH_CONFIG[length]
 
   let fullText = ''
