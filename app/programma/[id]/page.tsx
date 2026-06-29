@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
+import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
@@ -861,6 +862,14 @@ export default function PlannedHikePage() {
               {hike.userNotes || 'Nessuna nota — clicca Modifica per aggiungerne una.'}
             </p>
           )}
+        </div>
+
+        {/* Appunti vocali/testuali */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+          <HikeNotesRecorder
+            notes={hike.hikeNotes ?? []}
+            onChange={notes => patch({ hikeNotes: notes })}
+          />
         </div>
       </main>
 

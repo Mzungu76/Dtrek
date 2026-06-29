@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
+import BackButton from '@/app/components/BackButton'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import RouteTimeline from '@/app/components/RouteTimeline'
 import { getActivityById, type StoredActivity } from '@/lib/blobStore'
@@ -18,7 +19,7 @@ import {
 import SectionCard from '@/app/components/ResocontoSectionCard'
 import ManualEditor from '@/app/components/ManualEditor'
 import {
-  ArrowLeft, FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
+  FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
   Images, X, BookOpen, Share2, Copy, Link2Off, ExternalLink,
 } from 'lucide-react'
 
@@ -231,11 +232,8 @@ export default function ResocontoPage() {
       {/* ── Nav ── */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-stone-200 print:hidden">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-          <button onClick={() => router.push(`/escursione/${encodeURIComponent(id)}`)}
-            className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-            <span>Escursione</span>
-          </button>
+          <BackButton fallbackHref={`/escursione/${encodeURIComponent(id)}`} label="Escursione"
+            className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors" />
           <div className="flex items-center gap-2 min-w-0">
             <BookOpen className="w-4 h-4 text-forest-600 shrink-0" />
             <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm truncate">

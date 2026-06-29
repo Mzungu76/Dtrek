@@ -38,6 +38,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     plannedDate:           row.planned_date as string | undefined,
     fileName:              row.file_name as string | undefined,
     userNotes:             row.user_notes as string | undefined,
+    hikeNotes:             row.hike_notes as PlannedHike['hikeNotes'] | undefined,
     tags:                  row.tags as string[] | undefined,
     createdAt:             row.created_at as string,
     distanceMeters:        row.distance_meters as number,
@@ -67,6 +68,7 @@ function hikeToRow(h: PlannedHike) {
     planned_date:           h.plannedDate ?? null,
     file_name:              h.fileName ?? null,
     user_notes:             h.userNotes ?? null,
+    hike_notes:             h.hikeNotes ?? [],
     tags:                   h.tags ?? null,
     created_at:             h.createdAt,
     distance_meters:        h.distanceMeters,
@@ -91,7 +93,7 @@ function hikeToRow(h: PlannedHike) {
 
 // Columns for list view — excludes track_points
 const META_COLS = [
-  'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
+  'id', 'title', 'planned_date', 'file_name', 'user_notes', 'hike_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
   'route_polyline', 'assessment', 'cached_guide', 'osm_relation_id',
@@ -257,6 +259,7 @@ export async function PATCH(req: NextRequest) {
       id: string
       title?: string
       userNotes?: string
+      hikeNotes?: PlannedHike['hikeNotes']
       tags?: string[]
       plannedDate?: string
       cachedPois?: unknown[]
@@ -271,6 +274,7 @@ export async function PATCH(req: NextRequest) {
     const dbPatch: Record<string, unknown> = {}
     if (patch.title                        !== undefined) dbPatch.title                          = patch.title
     if (patch.userNotes                    !== undefined) dbPatch.user_notes                     = patch.userNotes
+    if (patch.hikeNotes                    !== undefined) dbPatch.hike_notes                     = patch.hikeNotes
     if (patch.tags                         !== undefined) dbPatch.tags                           = patch.tags
     if (patch.plannedDate                  !== undefined) dbPatch.planned_date                   = patch.plannedDate || null
     if (patch.cachedPois                   !== undefined) dbPatch.cached_pois                    = patch.cachedPois

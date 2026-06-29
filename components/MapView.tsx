@@ -19,6 +19,7 @@ interface Props {
   difficultyMarkers?: ClassifiedDifficultyMarker[]
   floraMarkers?: { lat: number; lon: number; label: string }[]
   planned?: boolean
+  activeIndex?: number | null
 }
 
 const DTM_MATCH_RADIUS_M = 25
@@ -64,6 +65,7 @@ export default function MapView({
   difficultyMarkers = [],
   floraMarkers = [],
   planned = false,
+  activeIndex = null,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<any>(null)
@@ -73,6 +75,7 @@ export default function MapView({
   dtmProfileRef.current = dtmProfile
   const difficultyLayer = useRef<any[]>([])
   const floraLayer      = useRef<any[]>([])
+  const activeMarker    = useRef<any>(null)
   const [mapReady, setMapReady] = useState(false)
 
   // Main map init effect
@@ -241,6 +244,27 @@ export default function MapView({
       }
     })
   }, [pois, mapReady])
+
+  // Active point marker — driven by hover on the synced charts
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+
+    import('leaflet').then(L => {
+      if (activeMarker.current) { activeMarker.current.remove(); activeMarker.current = null }
+      if (activeIndex == null) return
+
+      const pt = trackPoints[activeIndex]
+      if (!pt || pt.lat === undefined || pt.lon === undefined) return
+
+      const icon = L.divIcon({
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:#dc2626;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+        className: '',
+      })
+      activeMarker.current = L.marker([pt.lat, pt.lon], { icon, interactive: false, zIndexOffset: 1000 }).addTo(mapInstance.current)
+    })
+  }, [activeIndex, mapReady, trackPoints])
 
   // Wikipedia layer — only pages that have coordinates
   useEffect(() => {

@@ -13,4 +13,7 @@ export function getProfile(): UserProfile {
 export function saveProfile(patch: Partial<UserProfile>): void {
   const current = getProfile()
   localStorage.setItem(KEY, JSON.stringify({ ...current, ...patch }))
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('dtrek:profile-updated', { detail: patch }))
+  }
 }

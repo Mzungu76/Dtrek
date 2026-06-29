@@ -1,8 +1,11 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
+import BackButton from '@/app/components/BackButton'
+import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
 import AltimetryChart from '@/components/AltimetryChart'
@@ -35,9 +38,9 @@ import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
-  ArrowLeft, FileSpreadsheet, FileText, Map,
+  FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -111,6 +114,8 @@ export default function EscursionePage() {
   const [prefDurata,      setPrefDurata]      = useState(270)
   const [allActivities,   setAllActivities]   = useState<ActivityMeta[]>([])
   const [showFloraNotice, setShowFloraNotice] = useState(false)
+  const [showCoverPicker, setShowCoverPicker] = useState(false)
+  const [activeChartIndex, setActiveChartIndex] = useState<number | null>(null)
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -279,6 +284,13 @@ export default function EscursionePage() {
     } finally { setSavingRating(false) }
   }
 
+  const setCover = (photoId: string | null) => {
+    setCoverPhotoId(photoId)
+    if (photoId) localStorage.setItem(`dtrek_cover_${id}`, photoId)
+    else localStorage.removeItem(`dtrek_cover_${id}`)
+    setShowCoverPicker(false)
+  }
+
   const addTag    = async () => { if (!tagInput.trim()) return; await patch({ tags: [...(activity.tags ?? []), tagInput.trim()] }); setTagInput('') }
   const removeTag = async (tag: string) => patch({ tags: (activity.tags ?? []).filter(t => t !== tag) })
   const handleDelete = async () => {
@@ -391,16 +403,15 @@ export default function EscursionePage() {
 
         <div className="relative max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between pt-4 pb-3 border-b border-white/10">
-            <button onClick={() => router.push('/')}
-              className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Diario
-            </button>
+            <BackButton fallbackHref="/" label="Diario"
+              className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors" />
             <div className="flex gap-1.5">
               {([
                 { icon: <FileSpreadsheet className="w-3.5 h-3.5" />, title: 'Excel', fn: () => exportActivityToExcel(activity) },
                 { icon: <FileText className="w-3.5 h-3.5" />, title: 'Word', fn: () => exportActivityToDoc(activity) },
                 { icon: <Map className="w-3.5 h-3.5" />, title: 'GPX', fn: () => exportActivityToGpx(activity) },
                 { icon: <Share2 className="w-3.5 h-3.5" />, title: 'Condividi', fn: () => setShowShare(true) },
+                ...(photos.length > 0 ? [{ icon: <Camera className="w-3.5 h-3.5" />, title: 'Cambia copertina', fn: () => setShowCoverPicker(true) }] : []),
               ] as const).map(({ icon, title, fn }) => (
                 <button key={title} title={title} onClick={fn}
                   className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
@@ -573,10 +584,12 @@ export default function EscursionePage() {
         </div>
       </div>
 
-      {/* ══ RATING PANEL ══ */}
-      {showRatingPanel && (
-        <div className="bg-forest-900 border-b border-forest-800 text-white">
-          <div className="max-w-6xl mx-auto px-4 py-5">
+      {/* ══ RATING MODAL ══ */}
+      {showRatingPanel && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowRatingPanel(false)}>
+          <div className="bg-forest-900 text-white rounded-2xl shadow-2xl w-full max-w-md p-5"
+            onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-forest-200">
                 {rated ? `Voto attuale: ${activity.userRating}/10` : 'Dai il tuo voto di bellezza'}
@@ -585,7 +598,7 @@ export default function EscursionePage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex gap-2 mb-4 max-w-sm">
+            <div className="flex gap-2 mb-4">
               {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
                 const sel = n === ratingVal
                 return (
@@ -600,7 +613,7 @@ export default function EscursionePage() {
             </div>
             <textarea value={ratingNote} onChange={e => setRatingNote(e.target.value)}
               placeholder="Nota (opzionale)…" rows={2}
-              className="w-full max-w-lg bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 resize-none outline-none focus:border-white/40 mb-3" />
+              className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 resize-none outline-none focus:border-white/40 mb-3" />
             <div className="flex gap-2">
               <button onClick={saveRating} disabled={savingRating || ratingVal === 0}
                 className="flex items-center gap-2 px-5 py-2 bg-forest-500 hover:bg-forest-400 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-40">
@@ -610,7 +623,43 @@ export default function EscursionePage() {
               <button onClick={() => setShowRatingPanel(false)} className="px-4 py-2 text-sm text-forest-400 hover:text-white">Annulla</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* ══ COVER PICKER MODAL ══ */}
+      {showCoverPicker && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowCoverPicker(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm">
+                Scegli la copertina
+              </h3>
+              <button onClick={() => setShowCoverPicker(false)} className="text-stone-400 hover:text-stone-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-80 overflow-y-auto">
+              <button onClick={() => setCover(null)}
+                className={`aspect-square rounded-lg border-2 flex items-center justify-center text-xs text-stone-400 font-medium transition-colors ${
+                  !coverPhotoId ? 'border-forest-500 bg-forest-50' : 'border-stone-200 hover:border-forest-300'
+                }`}>
+                Predefinita
+              </button>
+              {photos.map(ph => (
+                <button key={ph.id} onClick={() => setCover(ph.id)}
+                  className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
+                    coverPhotoId === ph.id ? 'border-forest-500' : 'border-stone-200 hover:border-forest-300'
+                  }`}>
+                  <img src={ph.url} alt={ph.caption ?? ''} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {showShare && (() => {
@@ -734,7 +783,7 @@ export default function EscursionePage() {
             </div>
           </div>
           <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
-            <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} />
+            <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} activeIndex={activeChartIndex} />
           </div>
           {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
         </section>
@@ -781,20 +830,21 @@ export default function EscursionePage() {
                   <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
                     <Heart className="w-4 h-4 text-red-400" /> Frequenza Cardiaca
                   </h3>
-                  <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
+                  <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate}
+                    syncId="hike-charts" onHover={setActiveChartIndex} />
                 </div>
               )}
               <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
                 <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
                   <Mountain className="w-4 h-4 text-forest-500" /> Profilo Altimetrico
                 </h3>
-                <AltimetryChart trackPoints={activity.trackPoints} />
+                <AltimetryChart trackPoints={activity.trackPoints} syncId="hike-charts" onHover={setActiveChartIndex} />
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
                 <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
                   <Zap className="w-4 h-4 text-terra-400" /> Velocità
                 </h3>
-                <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
+                <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} syncId="hike-charts" onHover={setActiveChartIndex} />
               </div>
               <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
                 <h3 className="text-sm font-semibold text-stone-600 mb-4">Dati tecnici</h3>
@@ -894,6 +944,14 @@ export default function EscursionePage() {
               {activity.userNotes || 'Nessuna nota. Clicca "Modifica" per aggiungere appunti.'}
             </p>
           )}
+        </section>
+
+        {/* Appunti vocali/testuali */}
+        <section className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+          <HikeNotesRecorder
+            notes={activity.hikeNotes ?? []}
+            onChange={hikeNotes => patch({ hikeNotes })}
+          />
         </section>
       </main>
 

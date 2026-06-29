@@ -6,16 +6,22 @@ import {
 import type { TrackPoint } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 
-interface Props { trackPoints: TrackPoint[] }
+interface Props {
+  trackPoints: TrackPoint[]
+  syncId?: string
+  onHover?: (index: number | null) => void
+}
 
-export default function AltimetryChart({ trackPoints }: Props) {
+export default function AltimetryChart({ trackPoints, syncId, onHover }: Props) {
   const step = Math.max(1, Math.floor(trackPoints.length / 300))
   const data = trackPoints
-    .filter((_, i) => i % step === 0)
-    .filter(p => p.altitudeMeters !== undefined)
-    .map(p => ({
+    .map((p, i) => ({ p, i }))
+    .filter(({ i }) => i % step === 0)
+    .filter(({ p }) => p.altitudeMeters !== undefined)
+    .map(({ p, i }) => ({
       time: format(new Date(p.time), 'HH:mm'),
       alt: Math.round(p.altitudeMeters!),
+      idx: i,
     }))
 
   if (data.length === 0) {
@@ -29,7 +35,9 @@ export default function AltimetryChart({ trackPoints }: Props) {
   return (
     <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }} syncId={syncId}
+          onMouseMove={(e: any) => { const idx = e?.activePayload?.[0]?.payload?.idx; if (idx != null) onHover?.(idx) }}
+          onMouseLeave={() => onHover?.(null)}>
           <defs>
             <linearGradient id="altGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%"  stopColor="#378d44" stopOpacity={0.3} />

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import BackButton from '@/app/components/BackButton'
 import QuestionnaireWizard from '@/app/components/QuestionnaireWizard'
 import type { RouteTimelinePhoto } from '@/app/components/RouteTimeline'
 import { fetchActivityPhotos } from '@/lib/activityPhotos'
@@ -11,7 +12,7 @@ import {
   getQuestionnaire, generateQuestionnaire, saveAnswer, setQuestionnaireStatus,
   type Questionnaire, type QuestionnairePhotoMeta, type QuestionnaireError,
 } from '@/lib/questionnaireStore'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
 function toPhotoMeta(photos: RouteTimelinePhoto[]): QuestionnairePhotoMeta[] {
   return photos.map(p => ({ caption: p.caption, lat: p.lat, lon: p.lon, progress: p.progress, hasExifGps: p.hasExifGps }))
@@ -126,11 +127,8 @@ export default function RacconaPage() {
     <div className="min-h-screen bg-stone-50">
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-stone-200">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-          <button onClick={goToResoconto}
-            className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-            <span>Resoconto</span>
-          </button>
+          <BackButton fallbackHref={`/resoconto/${encodeURIComponent(id)}`} label="Resoconto"
+            className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors" />
           <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
             Racconta il tuo percorso
           </span>

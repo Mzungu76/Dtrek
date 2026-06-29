@@ -13,9 +13,11 @@ import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { type PoiItem } from '@/lib/overpass'
 import { computeBbox } from '@/lib/geoUtils'
 import { batchUpdate, fetchPoisForGps, recalcAllCts, recalcAllSafety, recalcAllCL, recalcAllSentinel2 } from '@/lib/recalcScores'
+import { computeStreaks } from '@/lib/stats'
+import { computeBadges } from '@/lib/badges'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers,
+  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers, Trophy,
 } from 'lucide-react'
 
 // ── Claude API key section ─────────────────────────────────────────────────
@@ -823,6 +825,7 @@ export default function ProfiloPage() {
   const [saved,      setSaved]      = useState(false)
   const [saving,     setSaving]     = useState(false)
   const [saveError,  setSaveError]  = useState<string | null>(null)
+  const [badgeCount, setBadgeCount] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -837,6 +840,9 @@ export default function ProfiloPage() {
         if (d.hikerFaceDataUrl) { setFaceUrl(d.hikerFaceDataUrl); saveProfile({ hikerFaceDataUrl: d.hikerFaceDataUrl }) }
         if (d.displayName)      { setName(d.displayName);         saveProfile({ displayName: d.displayName }) }
       })
+      .catch(() => {})
+    getAllActivities()
+      .then(acts => setBadgeCount(computeBadges(acts, computeStreaks(acts)).filter(b => b.unlocked).length))
       .catch(() => {})
   }, [])
 
@@ -915,6 +921,12 @@ export default function ProfiloPage() {
               >
                 <Camera className="w-4 h-4" />
               </button>
+              {badgeCount > 0 && (
+                <a href="/statistiche/traguardi" title={`${badgeCount} traguardi sbloccati`}
+                  className="absolute -top-1 -left-1 min-w-[22px] h-[22px] px-1 rounded-full bg-forest-600 hover:bg-forest-700 border-2 border-white text-white text-[10px] font-bold flex items-center justify-center gap-0.5 shadow-md transition-colors">
+                  <Trophy className="w-3 h-3" />{badgeCount}
+                </a>
+              )}
               <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
             </div>
             <div className="flex-1">
