@@ -32,7 +32,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass, Leaf,
 } from 'lucide-react'
 
 import PdfExportButton from '@/components/PdfExportButton'
@@ -183,10 +183,11 @@ export default function PlannedHikePage() {
   const [prefDurata,     setPrefDurata]    = useState(270)
   const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
   const [routePhotos,    setRoutePhotos]   = useState<string[]>([])
+  const [showFloraNotice, setShowFloraNotice] = useState(false)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
-    const pts = (hike?.trackPoints ?? []).filter(p => p.lat && p.lon)
+    const pts = (hike?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
     if (!pts.length) return []
     const step = Math.max(1, Math.ceil(pts.length / 100))
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
@@ -485,6 +486,30 @@ export default function PlannedHikePage() {
                 iconOnly
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
               />
+              <div className="relative">
+                <button
+                  title="Galleria Verde"
+                  onClick={() => {
+                    if (heroPolyline.length > 1) {
+                      router.push(`/programma/${encodeURIComponent(id)}/flora`)
+                    } else {
+                      setShowFloraNotice(v => !v)
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-semibold transition-colors ${
+                    heroPolyline.length > 1
+                      ? 'border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/15'
+                      : 'border-white/15 text-white/30 cursor-not-allowed'
+                  }`}
+                >
+                  <Leaf className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Galleria Verde</span>
+                </button>
+                {showFloraNotice && heroPolyline.length <= 1 && (
+                  <div className="absolute right-0 top-full mt-2 w-56 p-3 rounded-lg bg-stone-900 border border-white/10 text-xs text-stone-300 shadow-xl z-20">
+                    Percorso GPS non disponibile per questo programma: la Galleria Verde richiede una traccia GPS valida.
+                  </div>
+                )}
+              </div>
               <button onClick={handleDelete} disabled={saving}
                 className="flex items-center gap-1.5 text-sm text-red-300 hover:text-white transition-colors">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
@@ -712,7 +737,15 @@ export default function PlannedHikePage() {
 
         {/* Fenologia della vegetazione + specie arboree/flora (OSM) */}
         {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
-          <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+          <div className="space-y-3">
+            <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+            <button
+              onClick={() => router.push(`/programma/${encodeURIComponent(id)}/flora`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold transition-colors"
+            >
+              <Leaf className="w-4 h-4" /> Galleria Verde — flora osservata in zona
+            </button>
+          </div>
         )}
 
         {/* Assessment */}
