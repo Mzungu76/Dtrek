@@ -52,6 +52,9 @@ function FloraCard({ item, onClick }: { item: FloraItem; onClick: () => void }) 
         {item.family && (
           <p className="text-xs uppercase tracking-wide text-stone-400 truncate">{item.family}</p>
         )}
+        {item.description && (
+          <p className="text-xs text-stone-500 line-clamp-2">{item.description}</p>
+        )}
         <p className="text-xs text-stone-300 truncate">📷 {item.attribution}</p>
       </div>
     </button>
@@ -90,6 +93,9 @@ function FloraDetailModal({ item, month, onClose }: { item: FloraItem; month: nu
           )}
           {item.family && (
             <p className="text-sm uppercase tracking-wide text-stone-400">{item.family}</p>
+          )}
+          {item.description && (
+            <p className="text-sm text-stone-600 pt-2">{item.description}</p>
           )}
           <p className="text-sm text-stone-600 pt-2">
             Osservata in questa zona nel mese di {MONTHS[month - 1]}.
@@ -235,7 +241,7 @@ export default function FloraGallery({ trackPoints, month, loadingTrack, backHre
             GBIF.org
           </a>{' '}
           — Global Biodiversity Information Facility. Licenze: CC0 e CC BY. Attribution per immagine
-          nelle singole schede.
+          nelle singole schede. Descrizioni: Wikipedia (CC BY-SA).
         </div>
       </div>
 
