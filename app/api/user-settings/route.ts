@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max')
     .eq('user_id', user.id)
     .single()
 
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     // Retry without CTS + hr columns (they may not be migrated yet)
     const { data: d2, error: e2 } = await supabase
       .from('user_settings')
-      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, hiker_face_data_url, display_name')
+      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, hiker_face_data_url, display_name')
       .eq('user_id', user.id)
       .single()
     if (!e2) data = d2 as Record<string, unknown> | null
@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
     userAge:            age,
     userWeightKg:       (data?.user_weight_kg as number) ?? 0,
     userHeightCm:       (data?.user_height_cm as number) ?? 0,
+    userGender:         (data?.user_gender as string) ?? 'non_specificato',
     derivedFCmax:       age > 0 ? deriveFCmax(age) : 0,
     beautyNaturaWeight:       (data?.beauty_natura_weight       as number) ?? 55,
     beautyPaesaggioWeight:    (data?.beauty_paesaggio_weight    as number) ?? 45,
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
     userAge?: number
     userWeightKg?: number
     userHeightCm?: number
+    userGender?: 'maschio' | 'femmina' | 'altro' | 'non_specificato'
     beautyNaturaWeight?: number
     beautyPaesaggioWeight?: number
     beautyArcheologiaWeight?: number
@@ -133,6 +135,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Altezza fuori range (100–250 cm)' }, { status: 400 })
     }
     upsertData.user_height_cm = h
+  }
+
+  if (body.userGender !== undefined) {
+    if (!['maschio', 'femmina', 'altro', 'non_specificato'].includes(body.userGender)) {
+      return NextResponse.json({ error: 'Sesso non valido' }, { status: 400 })
+    }
+    upsertData.user_gender = body.userGender
   }
 
   // Beauty weights — old 5 and new 3 slider columns (each 0–100)
