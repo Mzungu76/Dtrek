@@ -110,9 +110,10 @@ export default function EscursionePage() {
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefDurata,      setPrefDurata]      = useState(270)
   const [allActivities,   setAllActivities]   = useState<ActivityMeta[]>([])
+  const [showFloraNotice, setShowFloraNotice] = useState(false)
 
   const heroPolyline = useMemo((): [number, number][] => {
-    const pts = (activity?.trackPoints ?? []).filter(p => p.lat && p.lon)
+    const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
     if (!pts.length) return []
     const step = Math.max(1, Math.ceil(pts.length / 100))
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
@@ -404,14 +405,29 @@ export default function EscursionePage() {
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
                 <BookOpen className="w-3.5 h-3.5" /> Resoconto
               </button>
-              {heroPolyline.length > 1 && (
+              <div className="relative">
                 <button
                   title="Galleria Verde"
-                  onClick={() => router.push(`/escursione/${encodeURIComponent(id)}/flora`)}
-                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-green-400/40 text-green-300 hover:bg-green-500/15 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                  onClick={() => {
+                    if (heroPolyline.length > 1) {
+                      router.push(`/escursione/${encodeURIComponent(id)}/flora`)
+                    } else {
+                      setShowFloraNotice(v => !v)
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-barlow font-bold uppercase tracking-wide transition-colors ${
+                    heroPolyline.length > 1
+                      ? 'border-green-400/40 text-green-300 hover:bg-green-500/15'
+                      : 'border-white/15 text-white/30 cursor-not-allowed'
+                  }`}>
                   <Leaf className="w-3.5 h-3.5" /> Galleria Verde
                 </button>
-              )}
+                {showFloraNotice && heroPolyline.length <= 1 && (
+                  <div className="absolute right-0 top-full mt-2 w-56 p-3 rounded-lg bg-stone-900 border border-white/10 text-xs text-stone-300 shadow-xl z-20">
+                    Percorso GPS non disponibile per questa escursione: la Galleria Verde richiede una traccia GPS valida.
+                  </div>
+                )}
+              </div>
               <PdfExportButton variant="activity" data={activity} iconOnly
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors" />
               <button title="Elimina" onClick={handleDelete} disabled={saving}
