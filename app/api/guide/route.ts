@@ -5,7 +5,7 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
 
-export const maxDuration = 120  // allow up to 120s for streaming responses
+export const maxDuration = 300  // "lunga" can take well over 120s to stream fully; avoid cutting it off mid-guide
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format }          from 'date-fns'
@@ -31,6 +31,19 @@ Non usare bullet point eccessivi: preferisci frasi di narrazione fluida.
 Nella sezione "I luoghi da non perdere", usa ### (tre cancelletti e spazio) come sottotitolo per ogni luogo specifico prima di descriverlo (es: ### Castello di Calcata).
 Per le curiosità e aneddoti più memorabili, racchiudili in un riquadro speciale usando il formato esatto su una riga separata: [curiosita] testo della curiosità [/curiosita]`
 
+function genderInstruction(gender: string): string {
+  switch (gender) {
+    case 'maschio':
+      return "\n\nL'escursionista a cui ti rivolgi è di genere maschile: quando usi aggettivi o participi riferiti a lui (es. \"pronto\", \"stanco\", \"emozionato\"), usa sempre la forma maschile."
+    case 'femmina':
+      return "\n\nL'escursionista a cui ti rivolgi è di genere femminile: quando usi aggettivi o participi riferiti a lei (es. \"pronta\", \"stanca\", \"emozionata\"), usa sempre la forma femminile."
+    case 'altro':
+      return '\n\nEvita di presupporre il genere dell\'escursionista: quando ti rivolgi a lui/lei con aggettivi o participi, preferisci formulazioni neutre (es. "pronto/a a partire" o giri di frase che non richiedono accordo di genere, come "sei pronto per partire" → "non vedi l\'ora di partire").'
+    default:
+      return '\n\nNon presupporre il genere dell\'escursionista: quando un aggettivo o un participio richiederebbe l\'accordo di genere (es. "pronto/a", "stanco/a"), preferisci formulazioni neutre o giri di frase che lo evitino.'
+  }
+}
+
 // ── POI helpers ───────────────────────────────────────────────────────────────
 
 function poiDistance(m: number) {
@@ -49,7 +62,7 @@ const LENGTH_CONFIG: Record<GuideLength, { maxTokens: number; instruction: strin
     instruction: 'Scrivi con buon equilibrio di dettagli: 3-4 paragrafi per sezione, circa 300 parole per sezione.',
   },
   lunga: {
-    maxTokens: 10000,
+    maxTokens: 16000,
     instruction: 'Scrivi con grande ricchezza di dettagli: 5-6 paragrafi per sezione, circa 500-600 parole per sezione, con aneddoti, curiosità e descrizioni vivide.',
   },
 }
@@ -143,13 +156,14 @@ export async function POST(req: NextRequest) {
   // Resolve API key: user's personal key → else subscription (future) → else 402
   const { data: settings } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier')
+    .select('claude_api_key, subscription_tier, user_gender')
     .eq('user_id', user.id)
     .maybeSingle()
 
   const userKey = settings?.claude_api_key as string | null | undefined
   const hasSub  = (settings?.subscription_tier as string) === 'premium'
   const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
+  const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
 
   if (!apiKey) {
     return new Response(
@@ -226,12 +240,13 @@ export async function POST(req: NextRequest) {
   const client = new Anthropic({ apiKey })
   const prompt = buildPrompt(hike, length, nature)
   const { maxTokens } = LENGTH_CONFIG[length]
+  const system = SYSTEM + genderInstruction(userGender)
 
   // Stream Claude response
   const stream = client.messages.stream({
     model:      'claude-sonnet-4-6',
     max_tokens: maxTokens,
-    system:     SYSTEM,
+    system,
     messages:   [{ role: 'user', content: prompt }],
   })
 

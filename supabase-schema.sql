@@ -188,6 +188,9 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_pdf_url TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_token   UUID UNIQUE;
 CREATE INDEX IF NOT EXISTS idx_user_settings_diary_token ON user_settings (diary_token);
 
+-- Sesso dell'utente, usato dalla AI per l'accordo grammaticale di genere nella guida
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_gender TEXT CHECK (user_gender IN ('maschio','femmina','altro','non_specificato'));
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

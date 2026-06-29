@@ -659,10 +659,20 @@ function SubscriptionTeaser() {
 
 // ── Biometric settings ────────────────────────────────────────────────────────
 
+type Gender = 'maschio' | 'femmina' | 'altro' | 'non_specificato'
+
+const GENDER_OPTS: { key: Gender; label: string }[] = [
+  { key: 'maschio',          label: 'Maschio' },
+  { key: 'femmina',          label: 'Femmina' },
+  { key: 'altro',            label: 'Altro' },
+  { key: 'non_specificato',  label: 'Non specificare' },
+]
+
 function BiometricSettingsSection() {
   const [age,     setAge]     = useState(0)
   const [weight,  setWeight]  = useState(0)
   const [height,  setHeight]  = useState(0)
+  const [gender,  setGender]  = useState<Gender>('non_specificato')
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
   const [status,  setStatus]  = useState<{ ok: boolean; msg: string } | null>(null)
@@ -677,6 +687,7 @@ function BiometricSettingsSection() {
         if (d.userAge)      setAge(d.userAge)
         if (d.userWeightKg) setWeight(d.userWeightKg)
         if (d.userHeightCm) setHeight(d.userHeightCm)
+        if (d.userGender)   setGender(d.userGender)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -684,10 +695,11 @@ function BiometricSettingsSection() {
 
   async function handleSave() {
     setSaving(true); setStatus(null)
-    const body: Record<string, number> = {}
+    const body: Record<string, number | string> = {}
     if (age > 0)    body.userAge      = age
     if (weight > 0) body.userWeightKg = weight
     if (height > 0) body.userHeightCm = height
+    body.userGender = gender
     const res = await fetch('/api/user-settings', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -764,6 +776,24 @@ function BiometricSettingsSection() {
               FC max derivata (formula Tanaka): <span className="font-bold">{derivedFCmax} bpm</span>
             </p>
           )}
+
+          <div>
+            <p className="text-[10px] text-stone-400 mb-1.5 font-medium uppercase tracking-wider">Sesso</p>
+            <div className="grid grid-cols-2 gap-2">
+              {GENDER_OPTS.map(opt => (
+                <button key={opt.key} onClick={() => { setGender(opt.key); setStatus(null) }}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                    gender === opt.key
+                      ? 'border-forest-500 bg-forest-50 text-forest-800'
+                      : 'border-stone-200 text-stone-500 hover:border-forest-200'
+                  }`}
+                >{opt.label}</button>
+              ))}
+            </div>
+            <p className="text-[11px] text-stone-400 mt-1.5 leading-relaxed">
+              Usato dalla guida AI per l&apos;accordo grammaticale di genere (es. &quot;pronto/a&quot;, &quot;stanco/a&quot;).
+            </p>
+          </div>
 
           <button
             onClick={handleSave}
