@@ -17,6 +17,8 @@ export interface FloraItem {
   attribution: string
   license: string
   gbifUrl: string
+  lat: number
+  lon: number
 }
 
 interface GbifMedia {
@@ -34,6 +36,8 @@ interface GbifOccurrence {
   usageKey?: number
   license?: string
   media?: GbifMedia[]
+  decimalLatitude?: number
+  decimalLongitude?: number
 }
 
 interface GbifSearchResponse {
@@ -126,7 +130,9 @@ export async function GET(req: Request) {
     return Response.json({ items: [], total: 0, error: 'gbif_unavailable' })
   }
 
-  const withMedia = (data.results ?? []).filter(r => r.media && r.media.length > 0)
+  const withMedia = (data.results ?? []).filter(r =>
+    r.media && r.media.length > 0 && r.decimalLatitude !== undefined && r.decimalLongitude !== undefined,
+  )
 
   // dedupe by speciesKey, keeping the record with the most media
   const bySpecies = new Map<number, GbifOccurrence>()
@@ -156,11 +162,13 @@ export async function GET(req: Request) {
       family: occ.family ?? null,
       vernacularIta: vernacular.status === 'fulfilled' ? vernacular.value : null,
       vernacularEn: null,
-      thumbUrl: imageApiUrl(occ.key, identifier, '120x'),
+      thumbUrl: imageApiUrl(occ.key, identifier, '400x'),
       imageUrl: imageApiUrl(occ.key, identifier, '400x'),
       attribution: attributionName ? `© ${attributionName}` : 'Autore sconosciuto',
       license: licenseLabel(media.license ?? occ.license),
       gbifUrl: `https://www.gbif.org/occurrence/${occ.key}`,
+      lat: occ.decimalLatitude!,
+      lon: occ.decimalLongitude!,
     }
   })
 
