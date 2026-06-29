@@ -33,12 +33,24 @@ interface GbifOccurrence {
   key: number
   speciesKey?: number
   scientificName?: string
+  species?: string // canonical binomial, no author — what Wikipedia titles use
   family?: string
   usageKey?: number
   license?: string
   media?: GbifMedia[]
   decimalLatitude?: number
   decimalLongitude?: number
+}
+
+// GBIF's scientificName carries the taxonomic author (e.g. "Quercus ilex L."),
+// which never matches a Wikipedia title. Prefer the canonical "species" field;
+// fall back to stripping the author suffix off scientificName via regex.
+function canonicalSpeciesName(occ: GbifOccurrence): string | null {
+  if (occ.species) return occ.species
+  const sn = occ.scientificName
+  if (!sn) return null
+  const m = sn.match(/^([A-Z][a-zà-ÿ]+(?:\s+[×x]\s*[a-zà-ÿ-]+|\s+[a-zà-ÿ-]+){1,2})/)
+  return m ? m[1] : null
 }
 
 interface GbifSearchResponse {
@@ -174,7 +186,10 @@ export async function GET(req: Request) {
       deduped.map(occ => occ.usageKey ? fetchVernacularIta(occ.usageKey) : Promise.resolve(null)),
     ),
     Promise.allSettled(
-      deduped.map(occ => occ.scientificName ? fetchSpeciesDescription(occ.scientificName) : Promise.resolve(null)),
+      deduped.map(occ => {
+        const name = canonicalSpeciesName(occ)
+        return name ? fetchSpeciesDescription(name) : Promise.resolve(null)
+      }),
     ),
   ])
 
