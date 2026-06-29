@@ -7,11 +7,12 @@ import { formatDuration } from '@/lib/tcxParser'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem }    from '@/lib/overpass'
 import { POI_META }        from '@/lib/overpass'
+import { fetchNatureContext, type NatureContext } from '@/lib/aiNatureContext'
 
 export const dynamic = 'force-dynamic'
 
 const SYSTEM = `Sei un'intervistatrice esperta che aiuta gli escursionisti a raccontare le proprie esperienze in montagna con parole proprie.
-Il tuo compito è preparare un breve questionario mirato, basato su punti specifici di un percorso (vette, salite, punti di interesse, foto scattate), per raccogliere ricordi, sensazioni e dettagli personali da fondere poi in un resoconto scritto.
+Il tuo compito è preparare un breve questionario mirato, basato su punti specifici di un percorso (vette, salite, punti di interesse, foto scattate, vegetazione/fenologia osservata), per raccogliere ricordi, sensazioni e dettagli personali da fondere poi in un resoconto scritto.
 Le domande devono essere concrete e ancorate a un punto preciso del percorso, mai generiche o intercambiabili tra escursioni diverse.
 Scrivi in italiano naturale e colloquiale, come faresti parlando di persona con l'escursionista.
 Rispondi sempre e solo con un array JSON valido, senza alcun testo introduttivo o conclusivo fuori dal JSON.`
@@ -24,7 +25,7 @@ interface PhotoMeta {
   hasExifGps?: boolean
 }
 
-type AnchorType = 'start' | 'poi' | 'photo' | 'climb' | 'summit' | 'end'
+type AnchorType = 'start' | 'poi' | 'photo' | 'climb' | 'summit' | 'end' | 'flora'
 
 interface Anchor {
   type: AnchorType
@@ -127,6 +128,25 @@ function buildPoiAnchors(pois: PoiItem[], track: TrackPoint[]): Anchor[] {
     }))
 }
 
+const LEAF_LABEL_IT: Record<string, string> = { broadleaved: 'latifoglie', needleleaved: 'conifere', mixed: 'bosco misto' }
+
+/** A single anchor summarizing real flora/phenology data (GBIF seasonal species, OSM forest type) —
+ * placed at the route's midpoint since none of these sources resolve to a specific track position. */
+function buildFloraAnchor(nature: NatureContext): Anchor | null {
+  let detail: string | null = null
+  if (nature.species.length > 0) {
+    const names = nature.species.slice(0, 4).map(s => s.vernacularIta ?? s.scientificName)
+    detail = `Specie osservate in zona in questo periodo: ${names.join(', ')}`
+  } else if (nature.forest?.leafTypeDominant) {
+    detail = `Bosco di ${LEAF_LABEL_IT[nature.forest.leafTypeDominant]}`
+  } else if (nature.forest?.estimatedBelt) {
+    detail = nature.forest.estimatedBelt.label
+  }
+  if (!detail) return null
+
+  return { type: 'flora', label: 'Vegetazione del percorso', progress: 0.5, detail }
+}
+
 function buildPhotoAnchors(photos: PhotoMeta[]): Anchor[] {
   return photos.map((p, i) => ({
     type:      'photo' as const,
@@ -139,7 +159,7 @@ function buildPhotoAnchors(photos: PhotoMeta[]): Anchor[] {
 /** Caps the merged anchor list at `max`, always keeping start/end/summit/climb and trimming photos/POIs first. */
 function capAnchors(anchors: Anchor[], max = 12): Anchor[] {
   if (anchors.length <= max) return anchors
-  const essential = anchors.filter(a => a.type === 'start' || a.type === 'end' || a.type === 'summit' || a.type === 'climb')
+  const essential = anchors.filter(a => a.type === 'start' || a.type === 'end' || a.type === 'summit' || a.type === 'climb' || a.type === 'flora')
   const pois      = anchors.filter(a => a.type === 'poi')
   const photos    = anchors.filter(a => a.type === 'photo')
 
@@ -339,11 +359,19 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(hike?.cached_pois)) pois = hike.cached_pois
   }
 
+  const nature = await fetchNatureContext({
+    trackPoints: track,
+    altitudeMax: activity.altitude_max as number | undefined,
+    month: activity.start_time ? new Date(activity.start_time as string).getMonth() + 1 : new Date().getMonth() + 1,
+  })
+  const floraAnchor = buildFloraAnchor(nature)
+
   const anchors = capAnchors(
     [
       ...buildAltimetryAnchors(track),
       ...buildPoiAnchors(pois, track),
       ...buildPhotoAnchors(photos),
+      ...(floraAnchor ? [floraAnchor] : []),
     ].sort((a, b) => a.progress - b.progress),
   )
 

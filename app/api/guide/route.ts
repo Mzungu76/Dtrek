@@ -7,9 +7,10 @@ import type { PoiItem }    from '@/lib/overpass'
 
 export const maxDuration = 120  // allow up to 120s for streaming responses
 import type { WikiPage }   from '@/lib/wikipedia'
-import { formatDuration }  from '@/lib/tcxParser'
+import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format }          from 'date-fns'
 import { it }              from 'date-fns/locale'
+import { fetchNatureContext, formatNatureContextBlock, type NatureContext } from '@/lib/aiNatureContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +54,7 @@ const LENGTH_CONFIG: Record<GuideLength, { maxTokens: number; instruction: strin
   },
 }
 
-function buildPrompt(hike: PlannedHike, length: GuideLength = 'media'): string {
+function buildPrompt(hike: PlannedHike, length: GuideLength = 'media', nature?: NatureContext): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
 
@@ -75,6 +76,8 @@ function buildPrompt(hike: PlannedHike, length: GuideLength = 'media'): string {
 
   const diffStr = (hike.assessment?.difficulty ?? '')
 
+  const natureBlock = nature ? formatNatureContextBlock(nature) : ''
+
   return `Crea una guida escursionistica completa e coinvolgente per questo percorso:
 
 NOME: ${hike.title}
@@ -92,6 +95,7 @@ LUOGHI CON VOCE WIKIPEDIA (usa questi come base per la narrazione storico-cultur
 ${wikiBlock}
 ${rawOnly ? `\nALTRI PUNTI DI INTERESSE OSM:\n${rawOnly}` : ''}
 ${hike.userNotes ? `\nNOTE DEL PROPRIETARIO DEL PERCORSO:\n${hike.userNotes}` : ''}
+${natureBlock ? `\nDATI NATURALISTICI E FENOLOGICI REALI (usa questi dati per la sezione "La natura intorno a te" — non inventare flora/fauna in contraddizione con questi dati):\n${natureBlock}` : ''}
 
 Scrivi la guida strutturata esattamente in queste sei sezioni (usa ## per ogni titolo):
 
@@ -109,7 +113,7 @@ le curiosità che la maggior parte dei turisti non conosce. Rendi ogni luogo mem
 
 ## La natura intorno a te
 Flora, fauna e geologia della zona. Cosa potresti incontrare (animali, fiori, rocce particolari).
-Aggiungi curiosità naturalistiche legate alla stagione.
+Aggiungi curiosità naturalistiche legate alla stagione.${natureBlock ? ' Fonda questa sezione sui DATI NATURALISTICI E FENOLOGICI REALI forniti sopra (specie osservate, tipo di bosco, picco di fioritura, copertura d\'ombra): cita le specie con il loro nome comune dove possibile, e usa il periodo dell\'anno indicato per dire cosa si può vedere fiorito o in foglia in questo momento.' : ''}
 
 ## Sapori e tradizioni
 Gastronomia locale, prodotti tipici del territorio, piatti da assaggiare dopo l'escursione.
@@ -204,8 +208,23 @@ export async function POST(req: NextRequest) {
     cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,
   }
 
+  const trackPoints: TrackPoint[] = Array.isArray(data.track_points) ? data.track_points : []
+  const nature = await fetchNatureContext({
+    trackPoints,
+    altitudeMax: hike.altitudeMax,
+    month: hike.plannedDate ? new Date(hike.plannedDate + 'T12:00').getMonth() + 1 : new Date().getMonth() + 1,
+    s2: {
+      available:         data.s2_available,
+      phenologyPeakMonth: data.s2_phenology_peak_month,
+      ndviDelta:          data.s2_ndvi_delta,
+      landscapeVariety:   data.s2_landscape_variety,
+      shadeScore:         data.s2_shade_score,
+      waterSources:       data.s2_water_sources,
+    },
+  })
+
   const client = new Anthropic({ apiKey })
-  const prompt = buildPrompt(hike, length)
+  const prompt = buildPrompt(hike, length, nature)
   const { maxTokens } = LENGTH_CONFIG[length]
 
   // Stream Claude response
