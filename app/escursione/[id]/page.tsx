@@ -37,7 +37,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -404,6 +404,14 @@ export default function EscursionePage() {
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
                 <BookOpen className="w-3.5 h-3.5" /> Resoconto
               </button>
+              {heroPolyline.length > 1 && (
+                <button
+                  title="Galleria Verde"
+                  onClick={() => router.push(`/escursione/${encodeURIComponent(id)}/flora`)}
+                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-green-400/40 text-green-300 hover:bg-green-500/15 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                  <Leaf className="w-3.5 h-3.5" /> Galleria Verde
+                </button>
+              )}
               <PdfExportButton variant="activity" data={activity} iconOnly
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors" />
               <button title="Elimina" onClick={handleDelete} disabled={saving}
