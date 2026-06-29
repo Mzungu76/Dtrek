@@ -18,11 +18,7 @@ export default function ActivityFloraPage() {
     }).catch(() => setLoadingActivity(false))
   }, [id])
 
-  const gpsPoints = useMemo(() => {
-    if (!activity) return []
-    return activity.trackPoints
-      .filter((p): p is typeof p & { lat: number; lon: number } => p.lat !== undefined && p.lon !== undefined)
-  }, [activity])
+  const trackPoints = useMemo(() => activity?.trackPoints ?? [], [activity])
 
   const month = useMemo(() => {
     if (!activity?.startTime) return new Date().getMonth() + 1
@@ -33,7 +29,7 @@ export default function ActivityFloraPage() {
 
   return (
     <FloraGallery
-      gpsPoints={gpsPoints}
+      trackPoints={trackPoints}
       month={month}
       loadingTrack={loadingActivity}
       backHref={`/escursione/${encodeURIComponent(id)}`}

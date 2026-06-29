@@ -18,11 +18,7 @@ export default function PlannedFloraPage() {
     }).catch(() => setLoadingHike(false))
   }, [id])
 
-  const gpsPoints = useMemo(() => {
-    if (!hike?.trackPoints) return []
-    return hike.trackPoints
-      .filter((p): p is typeof p & { lat: number; lon: number } => p.lat !== undefined && p.lon !== undefined)
-  }, [hike])
+  const trackPoints = useMemo(() => hike?.trackPoints ?? [], [hike])
 
   const month = useMemo(() => {
     if (!hike?.plannedDate) return new Date().getMonth() + 1
@@ -31,7 +27,7 @@ export default function PlannedFloraPage() {
 
   return (
     <FloraGallery
-      gpsPoints={gpsPoints}
+      trackPoints={trackPoints}
       month={month}
       loadingTrack={loadingHike}
       backHref={`/programma/${encodeURIComponent(id)}`}

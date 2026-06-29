@@ -17,6 +17,7 @@ interface Props {
   pois?: PoiItem[]
   wikiPages?: WikiPage[]
   difficultyMarkers?: ClassifiedDifficultyMarker[]
+  floraMarkers?: { lat: number; lon: number; label: string }[]
   planned?: boolean
 }
 
@@ -61,6 +62,7 @@ export default function MapView({
   pois = [],
   wikiPages = [],
   difficultyMarkers = [],
+  floraMarkers = [],
   planned = false,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
@@ -70,6 +72,7 @@ export default function MapView({
   const dtmProfileRef   = useRef(dtmProfile)
   dtmProfileRef.current = dtmProfile
   const difficultyLayer = useRef<any[]>([])
+  const floraLayer      = useRef<any[]>([])
   const [mapReady, setMapReady] = useState(false)
 
   // Main map init effect
@@ -310,6 +313,29 @@ export default function MapView({
       }
     })
   }, [difficultyMarkers, mapReady])
+
+  // Flora-marker layer — GBIF observation positions (Galleria Verde map)
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+
+    import('leaflet').then(L => {
+      floraLayer.current.forEach((m: any) => m.remove())
+      floraLayer.current = []
+
+      for (const marker of floraMarkers) {
+        const icon = L.divIcon({
+          html: `<div style="font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🌿</div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+          className: '',
+        })
+        const m = L.marker([marker.lat, marker.lon], { icon })
+          .addTo(mapInstance.current)
+          .bindPopup(`<div style="font-size:12px">${marker.label}</div>`)
+        floraLayer.current.push(m)
+      }
+    })
+  }, [floraMarkers, mapReady])
 
   const hasGps = trackPoints.some(p => p.lat !== undefined)
 

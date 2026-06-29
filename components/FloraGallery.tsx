@@ -1,9 +1,13 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { Leaf, ArrowLeft, X, Loader2 } from 'lucide-react'
 import type { FloraItem } from '@/app/api/flora/route'
+import type { TrackPoint } from '@/lib/tcxParser'
+
+const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
 const MONTHS = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -124,8 +128,7 @@ function SkeletonGrid() {
 }
 
 interface FloraGalleryProps {
-  /** Already filtered to points with valid lat/lon. */
-  gpsPoints: { lat: number; lon: number }[]
+  trackPoints: TrackPoint[]
   /** 1-12 — month to use for the seasonal GBIF query. */
   month: number
   loadingTrack: boolean
@@ -133,11 +136,21 @@ interface FloraGalleryProps {
   backLabel: string
 }
 
-export default function FloraGallery({ gpsPoints, month, loadingTrack, backHref, backLabel }: FloraGalleryProps) {
+export default function FloraGallery({ trackPoints, month, loadingTrack, backHref, backLabel }: FloraGalleryProps) {
   const router = useRouter()
   const [items, setItems] = useState<FloraItem[]>([])
   const [loadingFlora, setLoadingFlora] = useState(true)
   const [selected, setSelected] = useState<FloraItem | null>(null)
+
+  const gpsPoints = useMemo(
+    () => trackPoints.filter((p): p is TrackPoint & { lat: number; lon: number } => p.lat !== undefined && p.lon !== undefined),
+    [trackPoints],
+  )
+
+  const floraMarkers = useMemo(
+    () => items.map(i => ({ lat: i.lat, lon: i.lon, label: i.vernacularIta ?? i.scientificName })),
+    [items],
+  )
 
   useEffect(() => {
     if (loadingTrack) return
@@ -176,6 +189,17 @@ export default function FloraGallery({ gpsPoints, month, loadingTrack, backHref,
         <p className="text-sm text-stone-500 mb-6">
           Flora osservata in zona — {MONTHS[month - 1]}
         </p>
+
+        {!loadingTrack && gpsPoints.length > 1 && !loadingFlora && items.length > 0 && (
+          <div className="mb-6">
+            <MapView
+              trackPoints={trackPoints}
+              pois={[]}
+              floraMarkers={floraMarkers}
+              height="320px"
+            />
+          </div>
+        )}
 
         {loadingTrack ? (
           <div className="flex items-center gap-2 text-stone-400 text-sm py-12 justify-center">
