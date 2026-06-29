@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { updateActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import { X, MapPin, AlertTriangle } from 'lucide-react'
@@ -150,7 +151,7 @@ export default function PhotoPlacementMap({
 
   const selectedPhoto = localPhotos.find(p => p.id === selectedId)
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-3xl overflow-hidden"
@@ -224,6 +225,7 @@ export default function PhotoPlacementMap({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

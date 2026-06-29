@@ -453,7 +453,7 @@ function DiarioStubPage({ activity }: { activity: ActivityMeta }) {
       </div>
 
       <div className="print:hidden" style={{ position: 'absolute', bottom: 32, left: 32, right: 32, textAlign: 'center' }}>
-        <a href={`/resoconto/${encodeURIComponent(activity.id)}/racconta`}
+        <a href={`/resoconto/${encodeURIComponent(activity.id)}`}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 8, background: '#193b20', color: 'white',
             padding: '10px 20px', borderRadius: 10, fontFamily: 'Barlow Condensed, sans-serif', fontSize: 12, fontWeight: 700,

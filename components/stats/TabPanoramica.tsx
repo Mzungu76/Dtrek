@@ -11,7 +11,7 @@ import { formatPaceMinkm, difficultyIndex, caloriesPerHour, computeLifetimeDEP, 
 import { format } from 'date-fns'
 import {
   Route, Clock, Flame, Mountain, Heart, TrendingUp, Activity, Trophy,
-  Zap, Target, ChevronUp, GitCommitHorizontal, Map, Info, Share2,
+  Zap, Target, ChevronUp, ChevronDown, ChevronsUpDown, GitCommitHorizontal, Map, Info, Share2,
 } from 'lucide-react'
 import { msToKmh } from '@/lib/tcxParser'
 
@@ -24,9 +24,44 @@ interface Props {
   onGuideLink: (section: string) => void
 }
 
+type SortKey = 'date' | 'title' | 'distance' | 'duration' | 'pace' | 'difficulty' | 'hr' | 'calories' | 'calhour'
+
+const SORT_VALUE: Record<SortKey, (a: ActivityMeta) => number | string> = {
+  date:       a => new Date(a.startTime).getTime(),
+  title:      a => (a.title ?? 'Escursione').toLowerCase(),
+  distance:   a => a.distanceMeters,
+  duration:   a => a.totalTimeSeconds,
+  pace:       a => a.totalTimeSeconds / Math.max(a.distanceMeters, 1),
+  difficulty: a => a.elevationGain / Math.max(a.distanceMeters / 1000, 0.001),
+  hr:         a => a.avgHeartRate || 0,
+  calories:   a => a.calories || 0,
+  calhour:    a => a.calories ? a.calories / (a.totalTimeSeconds / 3600) : 0,
+}
+
 export default function TabPanoramica({ activities, records, streaks, onGuideLink }: Props) {
   const stats = computeGlobalStats(activities)
   const [showShareMap, setShowShareMap] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  const sortedActivities = useMemo(() => {
+    const getValue = SORT_VALUE[sortKey]
+    const sorted = [...activities].sort((a, b) => {
+      const va = getValue(a), vb = getValue(b)
+      if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb))
+      return va - vb
+    })
+    return sortDir === 'asc' ? sorted : sorted.reverse()
+  }, [activities, sortKey, sortDir])
 
   const routesWithPolyline = useMemo(
     () => activities.filter(a => a.routePolyline && a.routePolyline.length > 1),
@@ -235,21 +270,26 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
             <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wider">
               <tr>
                 {[
-                  { label: 'Data' }, { label: 'Titolo' }, { label: 'Distanza' }, { label: 'Durata' },
-                  { label: 'Passo', section: 'passo' }, { label: 'D+/km', section: 'difficolta' },
-                  { label: 'FC media', section: 'zone-fc' }, { label: 'Calorie' }, { label: 'Cal/h' },
-                ].map(({ label, section }) => (
+                  { label: 'Data', key: 'date' }, { label: 'Titolo', key: 'title' },
+                  { label: 'Distanza', key: 'distance' }, { label: 'Durata', key: 'duration' },
+                  { label: 'Passo', key: 'pace', section: 'passo' }, { label: 'D+/km', key: 'difficulty', section: 'difficolta' },
+                  { label: 'FC media', key: 'hr', section: 'zone-fc' }, { label: 'Calorie', key: 'calories' }, { label: 'Cal/h', key: 'calhour' },
+                ].map(({ label, key, section }) => (
                   <th key={label} className="px-4 py-3 text-left font-medium whitespace-nowrap">
-                    <span className="flex items-center gap-1">
+                    <button onClick={() => toggleSort(key as SortKey)}
+                      className="flex items-center gap-1 hover:text-stone-700 transition-colors">
                       {label}
-                      {section && <InfoButton section={section} onGuideLink={onGuideLink} />}
-                    </span>
+                      {sortKey === key
+                        ? (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)
+                        : <ChevronsUpDown className="w-3 h-3 text-stone-300" />}
+                    </button>
+                    {section && <InfoButton section={section} onGuideLink={onGuideLink} />}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {activities.map(a => (
+              {sortedActivities.map(a => (
                 <tr key={a.id} className="hover:bg-stone-50 cursor-pointer transition-colors"
                   onClick={() => window.location.href = `/escursione/${encodeURIComponent(a.id)}`}>
                   <td className="px-4 py-3 text-stone-500 whitespace-nowrap">{format(new Date(a.startTime), 'dd/MM/yy')}</td>

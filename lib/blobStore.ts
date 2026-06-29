@@ -5,8 +5,17 @@ import type { CtsConfidence } from './trailScore'
 import type { WeatherAtHike } from './openmeteo'
 import { computeDEP } from './stats'
 
+export interface HikeNote {
+  id:        string
+  text:      string
+  timestamp: string
+  lat?:      number
+  lon?:      number
+}
+
 export interface StoredActivity extends TcxActivity {
   userNotes?: string
+  hikeNotes?: HikeNote[]
   title?: string
   tags?: string[]
   fileName?: string
@@ -160,7 +169,7 @@ export async function saveActivity(activity: StoredActivity): Promise<void> {
 /** Patches Supabase, then applies the same patch to local cached copies. */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore' | 'trailScoreConfidence'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore' | 'trailScoreConfidence'>>
 ): Promise<void> {
   // Update local caches optimistically (before API) so scores always persist locally
   lsGet<StoredActivity>(LS_KEYS.activity(id)).then((local) => {

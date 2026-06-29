@@ -3,10 +3,13 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Upload, BarChart2, CalendarDays, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked } from 'lucide-react'
+import { Upload, BarChart2, CalendarDays, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked, Trophy } from 'lucide-react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
+import { getAllActivities } from '@/lib/blobStore'
+import { computeStreaks } from '@/lib/stats'
+import { computeBadges } from '@/lib/badges'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 const NAV_LINKS = [
@@ -92,6 +95,7 @@ function UserMenu({ user }: { user: SupabaseUser }) {
   const router      = useRouter()
   const [open, setOpen]     = useState(false)
   const [faceUrl, setFaceUrl] = useState<string | null>(null)
+  const [badgeCount, setBadgeCount] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -108,6 +112,22 @@ function UserMenu({ user }: { user: SupabaseUser }) {
         }
       })
       .catch(() => {})
+    getAllActivities()
+      .then(acts => {
+        const badges = computeBadges(acts, computeStreaks(acts))
+        setBadgeCount(badges.filter(b => b.unlocked).length)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Pick up avatar/name changes saved from /profilo without needing a reload
+  useEffect(() => {
+    const onProfileUpdated = () => {
+      const updated = getProfile().hikerFaceDataUrl
+      if (updated !== undefined) setFaceUrl(updated ?? null)
+    }
+    window.addEventListener('dtrek:profile-updated', onProfileUpdated)
+    return () => window.removeEventListener('dtrek:profile-updated', onProfileUpdated)
   }, [])
 
   // Close on outside click
@@ -134,13 +154,18 @@ function UserMenu({ user }: { user: SupabaseUser }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border-2 border-stone-200 hover:border-forest-400 transition-all focus:outline-none"
+        className="relative flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border-2 border-stone-200 hover:border-forest-400 transition-all focus:outline-none"
         title={displayName ?? user.email}
       >
         {faceUrl
           ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
           : <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
         }
+        {badgeCount > 0 && (
+          <span className="absolute -bottom-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-amber-500 border border-white text-white text-[9px] font-bold flex items-center justify-center leading-none">
+            {badgeCount}
+          </span>
+        )}
       </button>
 
       {open && (
@@ -150,6 +175,14 @@ function UserMenu({ user }: { user: SupabaseUser }) {
             <p className="text-xs font-semibold text-stone-800 truncate">{displayName ?? 'Utente'}</p>
             <p className="text-xs text-stone-400 truncate mt-0.5">{user.email}</p>
           </div>
+          <Link
+            href="/statistiche/traguardi"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+          >
+            <Trophy className="w-4 h-4 text-amber-500" />
+            {badgeCount} traguardi sbloccati
+          </Link>
           <Link
             href="/profilo"
             onClick={() => setOpen(false)}

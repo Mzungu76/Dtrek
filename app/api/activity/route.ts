@@ -53,6 +53,7 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     trackPoints:     (row.track_points as TrackPoint[]) ?? [],
     fileName:        row.file_name as string | undefined,
     userNotes:       row.user_notes as string | undefined,
+    hikeNotes:       row.hike_notes as StoredActivity['hikeNotes'] | undefined,
     tags:            row.tags as string[] | undefined,
     userRating:      row.user_rating as number | undefined,
     userRatingNote:  row.user_rating_note as string | undefined,
@@ -91,6 +92,7 @@ function activityToRow(a: StoredActivity) {
     elevation_loss:       a.elevationLoss,
     file_name:            a.fileName ?? null,
     user_notes:           a.userNotes ?? null,
+    hike_notes:           a.hikeNotes ?? [],
     tags:                 a.tags ?? null,
     user_rating:          a.userRating ?? null,
     user_rating_note:     a.userRatingNote ?? null,
@@ -163,6 +165,7 @@ export async function PATCH(req: NextRequest) {
       id: string
       title?: string
       userNotes?: string
+      hikeNotes?: StoredActivity['hikeNotes']
       tags?: string[]
       userRating?: number
       userRatingNote?: string
@@ -177,6 +180,7 @@ export async function PATCH(req: NextRequest) {
     const dbPatch: Record<string, unknown> = {}
     if (patch.title                !== undefined) dbPatch.title                  = patch.title
     if (patch.userNotes            !== undefined) dbPatch.user_notes             = patch.userNotes
+    if (patch.hikeNotes            !== undefined) dbPatch.hike_notes             = patch.hikeNotes
     if (patch.tags                 !== undefined) dbPatch.tags                   = patch.tags
     if (patch.userRating           !== undefined) dbPatch.user_rating            = patch.userRating
     if (patch.userRatingNote       !== undefined) dbPatch.user_rating_note       = patch.userRatingNote

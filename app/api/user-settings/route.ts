@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
     displayName:              (data?.display_name               as string) ?? null,
     personalDelta:            (data?.personal_delta             as number) ?? null,
     hrHikeCount:              (data?.hr_hike_count              as number) ?? 0,
-    hrRest:                   (data?.hr_rest                    as number) ?? 55,
+    hrRest:                   (data?.hr_rest                    as number) ?? null,
     hrMax:                    (data?.hr_max                     as number) ?? null,
   })
 }

@@ -80,11 +80,13 @@ function ActivityUploader() {
     try {
       // ── Resolve linked planned hike track points ──────────────────
       let linkedPlannedTrackPoints: import('@/lib/tcxParser').TrackPoint[] | undefined
+      let linkedPlannedNotes: import('@/lib/blobStore').HikeNote[] | undefined
       if (selectedPlanned) {
         try {
           const full = await getPlannedById(selectedPlanned.id)
           const validPts = (full?.trackPoints ?? []).filter(p => p.lat && p.lon)
           if (validPts.length >= 2) linkedPlannedTrackPoints = validPts
+          if (full?.hikeNotes?.length) linkedPlannedNotes = full.hikeNotes
         } catch {}
       }
 
@@ -173,6 +175,7 @@ function ActivityUploader() {
         fileName,
         linkedPlannedId:          selectedPlanned?.id,
         linkedPlannedTrackPoints,
+        hikeNotes:                linkedPlannedNotes,
         linkedBeautyScore,
         trailScore,
         weatherAtHike,

@@ -13,13 +13,13 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, ComposedChart, Scatter,
 } from 'recharts'
-import { Heart, TrendingUp, Zap, Activity, AlertCircle, ArrowUp, ArrowDown, Minus } from 'lucide-react'
+import { Heart, TrendingUp, Zap, Activity, AlertCircle, ArrowUp, ArrowDown, Minus, Loader2 } from 'lucide-react'
 import InfoButton from './InfoButton'
 
 interface UserSettings {
   hrMax?: number
   derivedFCmax?: number
-  hrRest?: number
+  hrRest?: number | null
   userWeightKg?: number
   userAge?: number
 }
@@ -36,7 +36,7 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
       .then((data: any) => setUserSettings({
         hrMax:       data.hrMax ?? null,
         derivedFCmax: data.derivedFCmax ?? 0,
-        hrRest:      data.hrRest ?? 55,
+        hrRest:      data.hrRest ?? null,
         userWeightKg: data.userWeightKg ?? 0,
         userAge:     data.userAge ?? 0,
       }))
@@ -165,7 +165,11 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
             <Heart className="w-3.5 h-3.5" /> VO₂max Stimato
             <InfoButton section="vo2max" onGuideLink={onGuideLink} />
           </p>
-          {vo2max > 0 ? (
+          {loadingSettings ? (
+            <div className="flex items-center gap-2 text-stone-400 text-sm py-3">
+              <Loader2 className="w-4 h-4 animate-spin" /> Caricamento…
+            </div>
+          ) : vo2max > 0 ? (
             <>
               <div className="flex items-end gap-2 mb-1">
                 <p className="text-3xl font-bold font-display text-sky-700">{vo2max}</p>
@@ -177,7 +181,7 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
                  vo2max >= 35 ? 'Nella media' : 'Margine di miglioramento'}
               </p>
               <p className="text-xs text-stone-400 mt-2">Formula Uth-Sørensen: FC max / FC riposo × 15,3</p>
-              {!userSettings.hrRest || userSettings.hrRest === 55 && (
+              {userSettings.hrRest == null && (
                 <p className="text-xs text-amber-600 mt-1">Imposta la tua FC a riposo nel profilo per una stima più precisa.</p>
               )}
             </>
