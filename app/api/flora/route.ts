@@ -19,6 +19,7 @@ export interface FloraItem {
   gbifUrl: string
   lat: number
   lon: number
+  description: string | null
 }
 
 interface GbifMedia {
@@ -88,6 +89,28 @@ async function fetchVernacularIta(usageKey: number): Promise<string | null> {
   }
 }
 
+async function fetchWikiSummary(title: string, lang: 'it' | 'en'): Promise<string | null> {
+  try {
+    const slug = encodeURIComponent(title.replace(/ /g, '_'))
+    const res = await fetchWithTimeout(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${slug}`, 2500)
+    if (!res.ok) return null
+    const data = await res.json() as { extract?: string; type?: string }
+    if (!data.extract || data.extract.length < 30 || data.type === 'disambiguation') return null
+    return data.extract
+  } catch {
+    return null
+  }
+}
+
+// Best-effort short description: Italian Wikipedia article for the scientific
+// name first (botanical species names are also valid Wikipedia titles in most
+// languages), falling back to English Wikipedia if no Italian article exists.
+async function fetchSpeciesDescription(scientificName: string): Promise<string | null> {
+  const it = await fetchWikiSummary(scientificName, 'it')
+  if (it) return it
+  return fetchWikiSummary(scientificName, 'en')
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const bboxRaw = searchParams.get('bbox')
@@ -146,15 +169,21 @@ export async function GET(req: Request) {
 
   const deduped = Array.from(bySpecies.values()).slice(0, 20)
 
-  const vernacularResults = await Promise.allSettled(
-    deduped.map(occ => occ.usageKey ? fetchVernacularIta(occ.usageKey) : Promise.resolve(null)),
-  )
+  const [vernacularResults, descriptionResults] = await Promise.all([
+    Promise.allSettled(
+      deduped.map(occ => occ.usageKey ? fetchVernacularIta(occ.usageKey) : Promise.resolve(null)),
+    ),
+    Promise.allSettled(
+      deduped.map(occ => occ.scientificName ? fetchSpeciesDescription(occ.scientificName) : Promise.resolve(null)),
+    ),
+  ])
 
   const items: FloraItem[] = deduped.map((occ, i) => {
     const media = occ.media![0]
     const identifier = media.identifier ?? ''
     const attributionName = media.rightsHolder ?? media.creator ?? null
     const vernacular = vernacularResults[i]
+    const description = descriptionResults[i]
     return {
       gbifKey: occ.key,
       speciesKey: occ.speciesKey!,
@@ -169,6 +198,7 @@ export async function GET(req: Request) {
       gbifUrl: `https://www.gbif.org/occurrence/${occ.key}`,
       lat: occ.decimalLatitude!,
       lon: occ.decimalLongitude!,
+      description: description.status === 'fulfilled' ? description.value : null,
     }
   })
 
