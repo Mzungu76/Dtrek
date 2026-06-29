@@ -135,29 +135,37 @@ export default function EscursionePage() {
   }, [activity, allActivities])
 
   useEffect(() => {
-    getActivityById(id).then(a => {
+    const loadPoisFor = (a: StoredActivity) => {
+      const gps = a.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined).map(p => [p.lat!, p.lon!] as [number, number])
+      if (gps.length === 0) return
+      const bbox = computeBbox(gps)
+      fetch(`/api/pois?bbox=${bbox}`)
+        .then(r => r.json())
+        .then((all: PoiItem[]) => {
+          const nearby = all
+            .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
+            .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
+          setPois(nearby)
+          fetchWikiForNamedPois(nearby)
+            .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
+            .catch(() => { setPoisFullyLoaded(true) })
+        })
+        .catch(() => { setPoisFullyLoaded(true) })
+    }
+
+    getActivityById(id, (fresh) => {
+      // Background revalidation: a stale local copy cached before a data/calc fix shipped
+      // would otherwise keep showing broken state (e.g. empty GPS-derived UI) indefinitely.
+      setActivity(fresh)
+      loadPoisFor(fresh)
+    }).then(a => {
       if (!a) { router.push('/'); return }
       setActivity(a)
       setTitleVal(a.title ?? a.notes ?? '')
       setNotesVal(a.userNotes ?? '')
       setRatingVal(a.userRating ?? 0)
       setRatingNote(a.userRatingNote ?? '')
-      const gps = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-      if (gps.length > 0) {
-        const bbox = computeBbox(gps)
-        fetch(`/api/pois?bbox=${bbox}`)
-          .then(r => r.json())
-          .then((all: PoiItem[]) => {
-            const nearby = all
-              .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
-              .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
-            setPois(nearby)
-            fetchWikiForNamedPois(nearby)
-              .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
-              .catch(() => { setPoisFullyLoaded(true) })
-          })
-          .catch(() => { setPoisFullyLoaded(true) })
-      }
+      loadPoisFor(a)
     }).finally(() => setLoading(false))
   }, [id, router])
 

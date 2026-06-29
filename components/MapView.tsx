@@ -67,6 +67,8 @@ export default function MapView({
   const mapInstance     = useRef<any>(null)
   const poiLayer        = useRef<any[]>([])
   const wikiLayer       = useRef<any[]>([])
+  const dtmProfileRef   = useRef(dtmProfile)
+  dtmProfileRef.current = dtmProfile
   const difficultyLayer = useRef<any[]>([])
   const [mapReady, setMapReady] = useState(false)
 
@@ -95,6 +97,7 @@ export default function MapView({
         maxZoom: 19,
       }).addTo(map)
 
+      const dtmProfile = dtmProfileRef.current
       const baseColor = planned ? '#0ea5e9' : '#378d44'
       const dtmActive = dtmProfile?.source === 'dtm'
       const latLons = coords.map(([lat, lon]) => ({ lat, lon }))
@@ -209,7 +212,7 @@ export default function MapView({
         setMapReady(false)
       }
     }
-  }, [trackPoints, showGradient, showAspect, dtmProfile, planned])
+  }, [trackPoints, showGradient, showAspect, planned]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
 
   // POI layer — re-runs when pois arrive OR when map finishes initializing
   useEffect(() => {

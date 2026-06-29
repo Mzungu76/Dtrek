@@ -123,11 +123,14 @@ export async function getAllActivities(onRefresh?: (data: ActivityMeta[]) => voi
 }
 
 /** Returns cached full activity immediately; refreshes from API in background. */
-export async function getActivityById(id: string): Promise<StoredActivity | null> {
+export async function getActivityById(
+  id: string,
+  onRefresh?: (data: StoredActivity) => void,
+): Promise<StoredActivity | null> {
   const local = await lsGet<StoredActivity>(LS_KEYS.activity(id))
 
   const netFetch = apiFetch<StoredActivity>(`/api/activity?id=${encodeURIComponent(id)}`)
-    .then((data) => { bgRefreshActivity(data); return data })
+    .then((data) => { bgRefreshActivity(data); onRefresh?.(data); return data })
     .catch((): null => null)
 
   if (local) {
