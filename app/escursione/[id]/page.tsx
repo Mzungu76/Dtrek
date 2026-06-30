@@ -751,9 +751,10 @@ export default function EscursionePage() {
           </button>
         )}
 
-        {/* Map + Charts (shared parent so the sticky map has room to stick on mobile) */}
+        {/* Map + Charts: sticky map and charts share this parent directly (not nested
+            in separate <section>s) so the sticky element has room to stick on mobile —
+            sticky's scroll range is bounded by its immediate parent's height. */}
         <div className="space-y-6 sm:space-y-8">
-        <section>
           <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
             <h2 className="font-display text-xl font-semibold text-stone-700">Tracciato GPS</h2>
             <div className="flex items-center gap-2 flex-wrap">
@@ -817,7 +818,6 @@ export default function EscursionePage() {
             <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} activeIndex={activeChartIndex} />
           </div>
           {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
-        </section>
 
         {/* Charts */}
         {(() => {

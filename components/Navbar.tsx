@@ -9,7 +9,7 @@ import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import { getAllActivities } from '@/lib/blobStore'
 import { computeStreaks } from '@/lib/stats'
-import { computeBadges } from '@/lib/badges'
+import { computeCurrentBadges, type ComputedBadge } from '@/lib/badges'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 const NAV_LINKS = [
@@ -95,7 +95,8 @@ function UserMenu({ user }: { user: SupabaseUser }) {
   const router      = useRouter()
   const [open, setOpen]     = useState(false)
   const [faceUrl, setFaceUrl] = useState<string | null>(null)
-  const [badgeCount, setBadgeCount] = useState(0)
+  const [currentBadges, setCurrentBadges] = useState<ComputedBadge[]>([])
+  const badgeCount = currentBadges.length
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -113,10 +114,7 @@ function UserMenu({ user }: { user: SupabaseUser }) {
       })
       .catch(() => {})
     getAllActivities()
-      .then(acts => {
-        const badges = computeBadges(acts, computeStreaks(acts))
-        setBadgeCount(badges.filter(b => b.unlocked).length)
-      })
+      .then(acts => setCurrentBadges(computeCurrentBadges(acts, computeStreaks(acts))))
       .catch(() => {})
   }, [])
 
@@ -151,7 +149,24 @@ function UserMenu({ user }: { user: SupabaseUser }) {
   const initials    = (displayName ?? user.email ?? '?')[0].toUpperCase()
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="flex items-center gap-1 min-w-0" ref={ref}>
+      {currentBadges.length > 0 && (
+        <Link
+          href="/statistiche?tab=traguardi"
+          title={`${badgeCount} traguard${badgeCount === 1 ? 'o' : 'i'} sbloccat${badgeCount === 1 ? 'o' : 'i'}`}
+          className="flex items-center gap-1 max-w-[52px] sm:max-w-[160px] overflow-x-auto"
+        >
+          {currentBadges.map(b => (
+            <span key={b.id}
+              className="shrink-0 w-6 h-6 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-[12px] leading-none"
+              title={b.name}
+            >
+              {b.icon}
+            </span>
+          ))}
+        </Link>
+      )}
+      <div className="relative">
       <button
         onClick={() => setOpen(v => !v)}
         className="relative flex items-center justify-center w-8 h-8 rounded-full border-2 border-stone-200 hover:border-forest-400 transition-all focus:outline-none"
@@ -178,7 +193,7 @@ function UserMenu({ user }: { user: SupabaseUser }) {
             <p className="text-xs text-stone-400 truncate mt-0.5">{user.email}</p>
           </div>
           <Link
-            href="/statistiche/traguardi"
+            href="/statistiche?tab=traguardi"
             onClick={() => setOpen(false)}
             className="flex items-center gap-2.5 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
           >
@@ -202,6 +217,7 @@ function UserMenu({ user }: { user: SupabaseUser }) {
           </button>
         </div>
       )}
+      </div>
     </div>
   )
 }
