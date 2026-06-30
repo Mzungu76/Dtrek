@@ -94,6 +94,7 @@ function InstallButton({ compact = false }: { compact?: boolean }) {
 function UserMenu({ user }: { user: SupabaseUser }) {
   const router      = useRouter()
   const [open, setOpen]     = useState(false)
+  const [badgesOpen, setBadgesOpen] = useState(false)
   const [faceUrl, setFaceUrl] = useState<string | null>(null)
   const [currentBadges, setCurrentBadges] = useState<ComputedBadge[]>([])
   const badgeCount = currentBadges.length
@@ -131,7 +132,7 @@ function UserMenu({ user }: { user: SupabaseUser }) {
   // Close on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setBadgesOpen(false) }
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
@@ -149,22 +150,38 @@ function UserMenu({ user }: { user: SupabaseUser }) {
   const initials    = (displayName ?? user.email ?? '?')[0].toUpperCase()
 
   return (
-    <div className="flex items-center gap-1 min-w-0" ref={ref}>
-      {currentBadges.length > 0 && (
-        <Link
-          href="/statistiche?tab=traguardi"
-          title={`${badgeCount} traguard${badgeCount === 1 ? 'o' : 'i'} sbloccat${badgeCount === 1 ? 'o' : 'i'}`}
-          className="flex items-center gap-1 max-w-[52px] sm:max-w-[160px] overflow-x-auto"
-        >
-          {currentBadges.map(b => (
-            <span key={b.id}
-              className="shrink-0 w-6 h-6 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-[12px] leading-none"
-              title={b.name}
-            >
-              {b.icon}
-            </span>
-          ))}
-        </Link>
+    <div className="flex items-center gap-1.5 min-w-0" ref={ref}>
+      {badgeCount > 0 && (
+        <div className="relative">
+          <button
+            onClick={() => setBadgesOpen(v => !v)}
+            title={`${badgeCount} traguard${badgeCount === 1 ? 'o' : 'i'} sbloccat${badgeCount === 1 ? 'o' : 'i'}`}
+            className="min-w-[26px] h-[26px] px-1.5 rounded-full bg-forest-600 hover:bg-forest-700 text-white text-xs font-bold flex items-center justify-center gap-0.5 shadow-sm transition-colors"
+          >
+            <Trophy className="w-3.5 h-3.5" />{badgeCount}
+          </button>
+          {badgesOpen && (
+            <div className="absolute right-0 top-9 w-56 bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3">
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {currentBadges.map(b => (
+                  <span key={b.id}
+                    className="shrink-0 w-7 h-7 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-[13px] leading-none"
+                    title={b.name}
+                  >
+                    {b.icon}
+                  </span>
+                ))}
+              </div>
+              <Link
+                href="/statistiche?tab=traguardi"
+                onClick={() => setBadgesOpen(false)}
+                className="block text-center text-xs font-medium text-forest-700 hover:text-forest-800 py-1.5 border-t border-stone-100 pt-2"
+              >
+                Vedi tutti i traguardi
+              </Link>
+            </div>
+          )}
+        </div>
       )}
       <div className="relative">
       <button
@@ -178,11 +195,6 @@ function UserMenu({ user }: { user: SupabaseUser }) {
             : <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
           }
         </span>
-        {badgeCount > 0 && (
-          <span className="absolute -bottom-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-amber-500 border border-white text-white text-[9px] font-bold flex items-center justify-center leading-none shadow-sm">
-            {badgeCount}
-          </span>
-        )}
       </button>
 
       {open && (

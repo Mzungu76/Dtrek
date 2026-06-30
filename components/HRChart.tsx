@@ -57,7 +57,7 @@ export default function HRChart({ trackPoints, avgHR, maxHR, syncId, onHover }: 
   return (
     <div className="relative h-56">
       <button onClick={toggleAlt} title="Mostra/nascondi profilo altimetrico"
-        className={`absolute top-0 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-colors ${
+        className={`absolute top-0 right-2 z-[1] flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-colors ${
           showAlt ? 'bg-stone-100 text-stone-600' : 'bg-stone-50 text-stone-400'
         }`}>
         <Layers className="w-3 h-3" /> Quota
