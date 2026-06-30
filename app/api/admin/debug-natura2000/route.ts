@@ -1,6 +1,6 @@
 /** Diagnostica temporanea — vedi commit history per dettagli. Da rimuovere a fix completato. */
 import { NATURA2000_DATASET } from '@/lib/geo/datasetConfig'
-import { wfsGetFeatureGml } from '@/lib/geo/wfsClient'
+import { wfsGetFeatureGml, wfsGetCapabilities } from '@/lib/geo/wfsClient'
 import { fetchNatura2000Polygons } from '@/lib/natura2000/natura2000Client'
 
 export async function GET(req: Request) {
@@ -9,6 +9,16 @@ export async function GET(req: Request) {
   const provided = searchParams.get('secret') ?? ''
   if (!anonKey || provided !== anonKey.slice(0, 32)) {
     return new Response('Unauthorized', { status: 401 })
+  }
+
+  if (searchParams.get('caps') === 'true') {
+    try {
+      const xml = await wfsGetCapabilities(NATURA2000_DATASET.baseUrl!, '1.1.0', 8000)
+      const idx = xml.indexOf('SIC_ZSC_ZPS')
+      return Response.json({ caps_length: xml.length, caps_around_layer: xml.slice(Math.max(0, idx - 200), idx + 1500) })
+    } catch (e) {
+      return Response.json({ error: String(e) }, { status: 500 })
+    }
   }
 
   const bbox = searchParams.get('bbox') ?? '42.30,12.10,42.45,12.30'
