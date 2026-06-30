@@ -92,8 +92,12 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
 
   const serviceKey = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-  const expected = serviceKey.slice(0, 32)
-  if (!expected || searchParams.get('secret') !== expected) {
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+  const provided = searchParams.get('secret') ?? ''
+  const authorized =
+    (serviceKey && provided === serviceKey.slice(0, 32)) ||
+    (anonKey && provided === anonKey.slice(0, 32))
+  if (!authorized) {
     return new Response('Unauthorized', { status: 401 })
   }
 
