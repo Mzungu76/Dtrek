@@ -751,7 +751,8 @@ export default function EscursionePage() {
           </button>
         )}
 
-        {/* Map */}
+        {/* Map + Charts (shared parent so the sticky map has room to stick on mobile) */}
+        <div className="space-y-6 sm:space-y-8">
         <section>
           <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
             <h2 className="font-display text-xl font-semibold text-stone-700">Tracciato GPS</h2>
@@ -818,45 +819,6 @@ export default function EscursionePage() {
           {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
         </section>
 
-        {/* Fenologia */}
-        {hasGps && heroPolyline.length > 1 && (
-          <section>
-            <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
-          </section>
-        )}
-
-        {/* Percorsi simili */}
-        {similarActivities.length > 0 && (
-          <section>
-            <h2 className="font-display text-xl font-semibold text-stone-700 mb-2">Percorsi simili</h2>
-            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide">
-                    <th className="text-left px-4 py-2 font-semibold">Data</th>
-                    <th className="text-left px-4 py-2 font-semibold">Distanza</th>
-                    <th className="text-left px-4 py-2 font-semibold">Dislivello</th>
-                    <th className="text-left px-4 py-2 font-semibold">Durata</th>
-                    <th className="text-left px-4 py-2 font-semibold">Partenza a</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {similarActivities.map(({ activity: a, startDistanceM }) => (
-                    <tr key={a.id} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer"
-                      onClick={() => router.push(`/escursione/${a.id}`)}>
-                      <td className="px-4 py-2 text-stone-700">{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
-                      <td className="px-4 py-2 text-stone-700">{(a.distanceMeters / 1000).toFixed(1)} km</td>
-                      <td className="px-4 py-2 text-stone-700">{a.elevationGain.toFixed(0)} m</td>
-                      <td className="px-4 py-2 text-stone-700">{formatDuration(a.totalTimeSeconds)}</td>
-                      <td className="px-4 py-2 text-stone-400">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
         {/* Charts */}
         {(() => {
           const hasHRData = activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0)
@@ -904,6 +866,46 @@ export default function EscursionePage() {
             </div>
           )
         })()}
+        </div>
+
+        {/* Fenologia */}
+        {hasGps && heroPolyline.length > 1 && (
+          <section>
+            <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+          </section>
+        )}
+
+        {/* Percorsi simili */}
+        {similarActivities.length > 0 && (
+          <section>
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-2">Percorsi simili</h2>
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide">
+                    <th className="text-left px-4 py-2 font-semibold">Data</th>
+                    <th className="text-left px-4 py-2 font-semibold">Distanza</th>
+                    <th className="text-left px-4 py-2 font-semibold">Dislivello</th>
+                    <th className="text-left px-4 py-2 font-semibold">Durata</th>
+                    <th className="text-left px-4 py-2 font-semibold">Partenza a</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {similarActivities.map(({ activity: a, startDistanceM }) => (
+                    <tr key={a.id} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer"
+                      onClick={() => router.push(`/escursione/${a.id}`)}>
+                      <td className="px-4 py-2 text-stone-700">{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
+                      <td className="px-4 py-2 text-stone-700">{(a.distanceMeters / 1000).toFixed(1)} km</td>
+                      <td className="px-4 py-2 text-stone-700">{a.elevationGain.toFixed(0)} m</td>
+                      <td className="px-4 py-2 text-stone-700">{formatDuration(a.totalTimeSeconds)}</td>
+                      <td className="px-4 py-2 text-stone-400">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* Comfort TrailScore */}
         {hasGps && (
