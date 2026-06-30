@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
@@ -27,10 +28,24 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'guida',      label: '📖 Guida'   },
 ]
 
+const TAB_IDS = TABS.map(t => t.id)
+
 export default function StatistichePage() {
+  return (
+    <Suspense>
+      <StatisticheContent />
+    </Suspense>
+  )
+}
+
+function StatisticheContent() {
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const initialTab: Tab = (tabParam && (TAB_IDS as string[]).includes(tabParam)) ? tabParam as Tab : 'panoramica'
+
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [loading,    setLoading]    = useState(true)
-  const [tab,        setTab]        = useState<Tab>('panoramica')
+  const [tab,        setTab]        = useState<Tab>(initialTab)
   const [shareStats, setShareStats] = useState(false)
   const [guideAnchor, setGuideAnchor] = useState<string | null>(null)
 

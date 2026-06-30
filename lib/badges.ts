@@ -183,3 +183,39 @@ export function computeBadges(activities: ActivityMeta[], streaks: Streaks): Com
     }
   })
 }
+
+// Badge id chains ordered from lowest to highest tier — only the highest
+// unlocked tier in each chain represents the user's "current" achievement
+// (e.g. unlocking "Centurione" supersedes "Explorer").
+const BADGE_CHAINS: string[][] = [
+  ['km_50', 'km_100', 'km_500', 'km_1000'],
+  ['gain_1000', 'gain_2000'],
+  ['gain_5000_total', 'gain_50000_total'],
+  ['alt_2000', 'alt_3000', 'alt_4000'],
+  ['count_10', 'count_50', 'count_100'],
+  ['streak_4w', 'streak_8w', 'streak_26w'],
+]
+
+/**
+ * Unlocked badges representing the user's current state: for each chain of
+ * progressive badges (e.g. km_50 → km_100 → km_500), only the highest tier
+ * reached is included; standalone (non-chained) unlocked badges pass through.
+ */
+export function computeCurrentBadges(activities: ActivityMeta[], streaks: Streaks): ComputedBadge[] {
+  const all = computeBadges(activities, streaks)
+  const unlocked = all.filter(b => b.unlocked)
+  const byId = new Map(unlocked.map(b => [b.id, b]))
+  const chained = new Set(BADGE_CHAINS.flat())
+
+  const result: ComputedBadge[] = []
+  for (const chain of BADGE_CHAINS) {
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const b = byId.get(chain[i])
+      if (b) { result.push(b); break }
+    }
+  }
+  for (const b of unlocked) {
+    if (!chained.has(b.id)) result.push(b)
+  }
+  return result
+}

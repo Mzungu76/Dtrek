@@ -14,7 +14,7 @@ import { type PoiItem } from '@/lib/overpass'
 import { computeBbox } from '@/lib/geoUtils'
 import { batchUpdate, fetchPoisForGps, recalcAllCts, recalcAllSafety, recalcAllCL, recalcAllSentinel2 } from '@/lib/recalcScores'
 import { computeStreaks } from '@/lib/stats'
-import { computeBadges, type ComputedBadge } from '@/lib/badges'
+import { computeBadges, computeCurrentBadges, type ComputedBadge } from '@/lib/badges'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
   Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers, Trophy,
@@ -844,8 +844,9 @@ export default function ProfiloPage() {
       .catch(() => {})
     getAllActivities()
       .then(acts => {
-        const badges = computeBadges(acts, computeStreaks(acts))
-        setBadgeCount(badges.filter(b => b.unlocked).length)
+        const streaks = computeStreaks(acts)
+        const badges = computeBadges(acts, streaks)
+        setBadgeCount(computeCurrentBadges(acts, streaks).length)
         const closest = badges
           .filter(b => !b.unlocked && b.progressPct !== undefined)
           .sort((a, b) => (b.progressPct ?? 0) - (a.progressPct ?? 0))[0]
@@ -930,7 +931,7 @@ export default function ProfiloPage() {
                 <Camera className="w-4 h-4" />
               </button>
               {badgeCount > 0 && (
-                <a href="/statistiche/traguardi" title={`${badgeCount} traguardi sbloccati`}
+                <a href="/statistiche?tab=traguardi" title={`${badgeCount} traguardi sbloccati`}
                   className="absolute -top-2 -left-2 z-10 min-w-[26px] h-[26px] px-1.5 rounded-full bg-forest-600 hover:bg-forest-700 border-2 border-white text-white text-xs font-bold flex items-center justify-center gap-0.5 shadow-lg transition-colors hover:scale-105">
                   <Trophy className="w-3.5 h-3.5" />{badgeCount}
                 </a>
@@ -955,7 +956,7 @@ export default function ProfiloPage() {
 
         {/* Traguardi: riepilogo sbloccati + prossimo obiettivo */}
         {(badgeCount > 0 || nextBadge) && (
-          <a href="/statistiche/traguardi"
+          <a href="/statistiche?tab=traguardi"
             className="block bg-white rounded-2xl border border-stone-200 shadow-sm p-6 hover:border-forest-300 transition-colors group">
             <div className="flex items-center justify-between gap-3 mb-1">
               <p className="text-sm font-semibold text-stone-700 flex items-center gap-2">
