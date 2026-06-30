@@ -154,15 +154,17 @@ function UserMenu({ user }: { user: SupabaseUser }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="relative flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border-2 border-stone-200 hover:border-forest-400 transition-all focus:outline-none"
+        className="relative flex items-center justify-center w-8 h-8 rounded-full border-2 border-stone-200 hover:border-forest-400 transition-all focus:outline-none"
         title={displayName ?? user.email}
       >
-        {faceUrl
-          ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
-          : <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
-        }
+        <span className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
+          {faceUrl
+            ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
+            : <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
+          }
+        </span>
         {badgeCount > 0 && (
-          <span className="absolute -bottom-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-amber-500 border border-white text-white text-[9px] font-bold flex items-center justify-center leading-none">
+          <span className="absolute -bottom-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-amber-500 border border-white text-white text-[9px] font-bold flex items-center justify-center leading-none shadow-sm">
             {badgeCount}
           </span>
         )}

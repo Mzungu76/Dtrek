@@ -14,7 +14,7 @@ import { type PoiItem } from '@/lib/overpass'
 import { computeBbox } from '@/lib/geoUtils'
 import { batchUpdate, fetchPoisForGps, recalcAllCts, recalcAllSafety, recalcAllCL, recalcAllSentinel2 } from '@/lib/recalcScores'
 import { computeStreaks } from '@/lib/stats'
-import { computeBadges } from '@/lib/badges'
+import { computeBadges, type ComputedBadge } from '@/lib/badges'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
   Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers, Trophy,
@@ -826,6 +826,7 @@ export default function ProfiloPage() {
   const [saving,     setSaving]     = useState(false)
   const [saveError,  setSaveError]  = useState<string | null>(null)
   const [badgeCount, setBadgeCount] = useState(0)
+  const [nextBadge,  setNextBadge]  = useState<ComputedBadge | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -842,7 +843,14 @@ export default function ProfiloPage() {
       })
       .catch(() => {})
     getAllActivities()
-      .then(acts => setBadgeCount(computeBadges(acts, computeStreaks(acts)).filter(b => b.unlocked).length))
+      .then(acts => {
+        const badges = computeBadges(acts, computeStreaks(acts))
+        setBadgeCount(badges.filter(b => b.unlocked).length)
+        const closest = badges
+          .filter(b => !b.unlocked && b.progressPct !== undefined)
+          .sort((a, b) => (b.progressPct ?? 0) - (a.progressPct ?? 0))[0]
+        setNextBadge(closest ?? null)
+      })
       .catch(() => {})
   }, [])
 
@@ -923,8 +931,8 @@ export default function ProfiloPage() {
               </button>
               {badgeCount > 0 && (
                 <a href="/statistiche/traguardi" title={`${badgeCount} traguardi sbloccati`}
-                  className="absolute -top-1 -left-1 min-w-[22px] h-[22px] px-1 rounded-full bg-forest-600 hover:bg-forest-700 border-2 border-white text-white text-[10px] font-bold flex items-center justify-center gap-0.5 shadow-md transition-colors">
-                  <Trophy className="w-3 h-3" />{badgeCount}
+                  className="absolute -top-2 -left-2 z-10 min-w-[26px] h-[26px] px-1.5 rounded-full bg-forest-600 hover:bg-forest-700 border-2 border-white text-white text-xs font-bold flex items-center justify-center gap-0.5 shadow-lg transition-colors hover:scale-105">
+                  <Trophy className="w-3.5 h-3.5" />{badgeCount}
                 </a>
               )}
               <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
@@ -944,6 +952,39 @@ export default function ProfiloPage() {
             </div>
           </div>
         </div>
+
+        {/* Traguardi: riepilogo sbloccati + prossimo obiettivo */}
+        {(badgeCount > 0 || nextBadge) && (
+          <a href="/statistiche/traguardi"
+            className="block bg-white rounded-2xl border border-stone-200 shadow-sm p-6 hover:border-forest-300 transition-colors group">
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <p className="text-sm font-semibold text-stone-700 flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-forest-600" /> Traguardi
+              </p>
+              <span className="text-xs font-semibold text-forest-600 group-hover:text-forest-700">
+                {badgeCount} sbloccat{badgeCount === 1 ? 'o' : 'i'} →
+              </span>
+            </div>
+            {nextBadge && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-sm text-stone-600 flex items-center gap-1.5">
+                    <span className="text-base">{nextBadge.icon}</span>
+                    <span className="font-medium text-stone-700">{nextBadge.name}</span>
+                  </span>
+                  <span className="text-xs text-stone-400 font-mono shrink-0">
+                    {nextBadge.progressCurrent}{nextBadge.progressUnit} / {nextBadge.progressTarget}{nextBadge.progressUnit}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-forest-400 to-forest-600 rounded-full transition-all"
+                    style={{ width: `${nextBadge.progressPct}%` }} />
+                </div>
+                <p className="text-xs text-stone-400 mt-1.5">Prossimo traguardo — {nextBadge.progressPct}% completato</p>
+              </div>
+            )}
+          </a>
+        )}
 
         {/* Display name */}
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
