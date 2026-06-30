@@ -184,6 +184,12 @@ export async function fetchNatura2000Polygons(bbox: string): Promise<Natura2000F
     baseUrl: NATURA2000_DATASET.baseUrl,
     typeName: NATURA2000_DATASET.typeName,
     bbox,
+    // This layer's GetCapabilities declares DefaultSRS as the URN form
+    // (urn:ogc:def:crs:EPSG::4326), not the legacy "EPSG:4326" string — they imply opposite
+    // axis orders (lat,lon vs lon,lat) per WFS 1.1.0. Passing the legacy string here matched
+    // a different axis convention than the server's declared default and the server silently
+    // returned an empty (but structurally valid) FeatureCollection for every bbox.
+    srsName: 'urn:ogc:def:crs:EPSG::4326',
     version: '1.1.0',
     timeoutMs: NATURA2000_TIMEOUT_MS,
   })
