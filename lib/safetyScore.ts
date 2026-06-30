@@ -196,6 +196,10 @@ export function computeSafetyScore(params: {
   estimatedTimeSeconds: number
   routePolyline?: [number, number][]
   plannedDate?: string
+  /** Extra wildlife risks from real GBIF observations along the route (Galleria Animali data), merged into the static per-region table. */
+  gbifWildlifeRisks?: WildlifeRisk[]
+  /** Livestock guardian dog risk estimated from OSM pasture/sheepfold tags along the route. */
+  guardianDogRisk?: { present: boolean }
 }): SafetyScore {
   const {
     distanceMeters,
@@ -206,6 +210,8 @@ export function computeSafetyScore(params: {
     estimatedTimeSeconds,
     routePolyline,
     plannedDate,
+    gbifWildlifeRisks,
+    guardianDogRisk,
   } = params
 
   const distKm = distanceMeters / 1000
@@ -332,7 +338,28 @@ export function computeSafetyScore(params: {
   }
 
   // ── Wildlife (15%) ────────────────────────────────────────────────────────
-  const wildlifeRisks = getWildlifeRisks(region, altitudeMax, month)
+  const baseWildlifeRisks = getWildlifeRisks(region, altitudeMax, month)
+
+  // Merge real GBIF observations (Galleria Animali) into the static table, dedup by name.
+  const wildlifeByName = new Map(baseWildlifeRisks.map(w => [w.animal, w]))
+  for (const risk of gbifWildlifeRisks ?? []) {
+    const existing = wildlifeByName.get(risk.animal)
+    if (!existing || (risk.dangerLevel === 'alto' && existing.dangerLevel !== 'alto')) {
+      wildlifeByName.set(risk.animal, risk)
+    }
+  }
+
+  // Guardian dogs (pastore maremmano-abruzzese) at sheep pastures, estimated from OSM.
+  if (guardianDogRisk?.present) {
+    wildlifeByName.set('Cane da guardiania (pastore maremmano)', {
+      animal: 'Cane da guardiania (pastore maremmano)',
+      encounterProbability: 'media',
+      dangerLevel: 'moderato',
+      tip: 'Non avvicinarti al gregge, non correre, allontanati lateralmente con calma, non guardare il cane negli occhi',
+    })
+  }
+
+  const wildlifeRisks = Array.from(wildlifeByName.values())
   let wildlifeScore = 85
   let wildlifeItems: SafetyRiskItem[] = []
 
