@@ -61,7 +61,7 @@ function AnimalCard({ item, onClick }: { item: AnimalItem; onClick: () => void }
       <div className="relative">
         {!imgError ? (
           <img
-            src={item.thumbUrl}
+            src={item.thumbUrl ?? undefined}
             alt={displayName}
             className="w-full aspect-square object-cover rounded-t-xl"
             onError={() => setImgError(true)}
@@ -112,7 +112,7 @@ function AnimalDetailModal({ item, month, onClose }: { item: AnimalItem; month: 
         <div className="relative">
           {!imgError ? (
             <img
-              src={item.imageUrl}
+              src={item.imageUrl ?? undefined}
               alt={displayName}
               className="w-full aspect-[4/3] object-cover"
               onError={() => setImgError(true)}
@@ -144,18 +144,37 @@ function AnimalDetailModal({ item, month, onClose }: { item: AnimalItem; month: 
             Osservato in questa zona nel mese di {MONTHS[month - 1]}.
           </p>
           <p className="text-xs text-stone-400 pt-2">
-            📷 {item.attribution} — {item.license}{' '}
-            <a
-              href={item.gbifUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-amber-700 hover:underline"
-            >
-              Scheda GBIF ↗
-            </a>
+            📷 {item.attribution} — {item.license}
+            {item.gbifUrl && (
+              <>
+                {' '}
+                <a
+                  href={item.gbifUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-700 hover:underline"
+                >
+                  Scheda ↗
+                </a>
+              </>
+            )}
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+const FALLBACK_LEVEL_LABEL: Record<2 | 3, string> = {
+  2: 'Specie osservate nei dintorni (area estesa)',
+  3: 'Specie tipiche dell’area protetta — non osservazione diretta in questo punto',
+}
+
+function FallbackLevelNotice({ level }: { level: 1 | 2 | 3 }) {
+  if (level === 1) return null
+  return (
+    <div className="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+      {FALLBACK_LEVEL_LABEL[level]}
     </div>
   )
 }
@@ -190,6 +209,7 @@ export default function AnimalGallery({ trackPoints, month, loadingTrack, backHr
   const [items, setItems] = useState<AnimalItem[]>([])
   const [loadingAnimals, setLoadingAnimals] = useState(true)
   const [selected, setSelected] = useState<AnimalItem | null>(null)
+  const [fallbackLevel, setFallbackLevel] = useState<1 | 2 | 3>(1)
 
   const gpsPoints = useMemo(
     () => trackPoints.filter((p): p is TrackPoint & { lat: number; lon: number } => p.lat !== undefined && p.lon !== undefined),
@@ -197,7 +217,9 @@ export default function AnimalGallery({ trackPoints, month, loadingTrack, backHr
   )
 
   const animalMarkers = useMemo(
-    () => items.map(i => ({ lat: i.lat, lon: i.lon, label: i.vernacularIta ?? i.scientificName })),
+    () => items
+      .filter((i): i is AnimalItem & { lat: number; lon: number } => i.lat !== null && i.lon !== null)
+      .map(i => ({ lat: i.lat, lon: i.lon, label: i.vernacularIta ?? i.scientificName })),
     [items],
   )
 
@@ -214,8 +236,9 @@ export default function AnimalGallery({ trackPoints, month, loadingTrack, backHr
     setLoadingAnimals(true)
     fetch(`/api/animals?bbox=${encodeURIComponent(bbox)}&month=${month}`)
       .then(res => res.json())
-      .then((data: { items: AnimalItem[]; error?: string }) => {
+      .then((data: { items: AnimalItem[]; fallbackLevel?: 1 | 2 | 3; error?: string }) => {
         setItems(data.items ?? [])
+        setFallbackLevel(data.fallbackLevel ?? 1)
       })
       .catch(() => setItems([]))
       .finally(() => setLoadingAnimals(false))
@@ -272,21 +295,22 @@ export default function AnimalGallery({ trackPoints, month, loadingTrack, backHr
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {items.map(item => (
-              <AnimalCard key={item.gbifKey} item={item} onClick={() => setSelected(item)} />
-            ))}
-          </div>
+          <>
+            <FallbackLevelNotice level={fallbackLevel} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {items.map(item => (
+                <AnimalCard key={item.scientificName} item={item} onClick={() => setSelected(item)} />
+              ))}
+            </div>
+          </>
         )}
 
         <div className="text-xs text-stone-400 text-center py-4 mt-6">
-          Dati e immagini:{' '}
-          <a href="https://www.gbif.org" target="_blank" rel="noopener noreferrer" className="hover:underline">
-            GBIF.org
-          </a>{' '}
-          — Global Biodiversity Information Facility (include dati ISPRA e altri publisher
-          italiani). Licenze: CC0 e CC BY. Attribution per immagine nelle singole schede.
-          Descrizioni: Wikipedia (CC BY-SA).
+          Dati e immagini: GBIF.org, iNaturalist, Wikidata/Commons, EEA Natura 2000.
+          Licenze CC0/CC BY. Attribution per immagine nelle singole schede.{' '}
+          <a href="/fonti-e-crediti" className="hover:underline text-amber-700">
+            Dettaglio fonti e licenze ↗
+          </a>
         </div>
       </div>
 

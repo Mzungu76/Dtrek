@@ -3,26 +3,111 @@ import {
   fetchVernacularIta, fetchSpeciesDescription,
   type GbifOccurrence, type GbifSearchResponse,
 } from '@/lib/gbifShared'
+import { fetchInatObservations, inatPhotoUrl, inatLicenseLabel } from '@/lib/inatShared'
+import { runGalleryCascade, type CascadeItem, type BboxBounds } from '@/lib/galleryCascade'
 import { classifyDanger, type DangerLevel } from '@/lib/dangerousTaxa'
 
-export const revalidate = 86400 // cache edge Next.js 24h — zero Supabase
+export const revalidate = 86400 // cache edge Next.js 24h — zero Supabase per il livello 1
 
 export interface AnimalItem {
-  gbifKey: number
-  speciesKey: number
   scientificName: string
   family: string | null
   vernacularIta: string | null
   vernacularEn: string | null
-  thumbUrl: string
-  imageUrl: string
+  thumbUrl: string | null
+  imageUrl: string | null
   attribution: string
   license: string
-  gbifUrl: string
-  lat: number
-  lon: number
+  gbifUrl: string | null
+  lat: number | null
+  lon: number | null
   description: string | null
   dangerLevel: DangerLevel | null
+  /** 1 = osservazione diretta, 2 = buffer esteso, 3 = specie tipiche dell'area protetta (Natura 2000) */
+  fallbackLevel: 1 | 2 | 3
+}
+
+async function fetchGbifAnimals(b: BboxBounds, month: number): Promise<GbifOccurrence[]> {
+  const params = new URLSearchParams()
+  params.set('decimalLatitude', `${b.minLat},${b.maxLat}`)
+  params.set('decimalLongitude', `${b.minLon},${b.maxLon}`)
+  params.set('kingdomKey', '1') // Animalia
+  params.set('phylumKey', '44') // Chordata — esclude insetti/invertebrati rumorosi
+  params.set('month', String(month))
+  params.set('mediaType', 'StillImage')
+  params.set('hasCoordinate', 'true')
+  params.append('license', 'CC0_1_0')
+  params.append('license', 'CC_BY_4_0')
+  params.set('limit', '40')
+
+  try {
+    const res = await fetchWithTimeout(`${GBIF_BASE}/occurrence/search?${params.toString()}`, 8000)
+    if (!res.ok) return []
+    const data = await res.json() as GbifSearchResponse
+    return (data.results ?? []).filter(r =>
+      r.media && r.media.length > 0 && r.decimalLatitude !== undefined && r.decimalLongitude !== undefined,
+    )
+  } catch {
+    return []
+  }
+}
+
+function gbifToCascadeItem(occ: GbifOccurrence): CascadeItem {
+  const media = occ.media![0]
+  const identifier = media.identifier ?? ''
+  const attributionName = media.rightsHolder ?? media.creator ?? null
+  return {
+    scientificName: canonicalSpeciesName(occ) ?? occ.scientificName ?? 'Specie non identificata',
+    vernacularNameIt: null,
+    imageUrl: imageApiUrl(occ.key, identifier, '400x'),
+    thumbUrl: imageApiUrl(occ.key, identifier, '400x'),
+    attribution: attributionName ? `© ${attributionName}` : 'Autore sconosciuto',
+    license: licenseLabel(media.license ?? occ.license),
+    lat: occ.decimalLatitude!,
+    lon: occ.decimalLongitude!,
+    sourceUrl: `https://www.gbif.org/occurrence/${occ.key}`,
+    description: null,
+    family: occ.family ?? null,
+    source: 'gbif',
+    gbifUsageKey: occ.usageKey ?? null,
+    taxonClass: occ.class ?? null,
+    taxonOrder: occ.order ?? null,
+  }
+}
+
+function makeFetchDirect(month: number) {
+  return async function fetchDirect(b: BboxBounds): Promise<CascadeItem[]> {
+    const [gbifResults, inatResults] = await Promise.all([
+      fetchGbifAnimals(b, month),
+      fetchInatObservations({ ...b, month, iconicTaxa: ['Mammalia', 'Aves', 'Reptilia', 'Amphibia'] }),
+    ])
+
+    const gbifItems = gbifResults.map(gbifToCascadeItem)
+    const inatItems: CascadeItem[] = inatResults
+      .filter(o => o.photos && o.photos.length > 0 && o.taxon?.name && o.geojson?.coordinates)
+      .map(o => {
+        const photo = o.photos![0]
+        return {
+          scientificName: o.taxon!.name!,
+          vernacularNameIt: o.taxon!.preferred_common_name ?? null,
+          imageUrl: inatPhotoUrl(photo, 'medium'),
+          thumbUrl: inatPhotoUrl(photo, 'square'),
+          attribution: photo.attribution ?? 'Osservatore iNaturalist',
+          license: inatLicenseLabel(photo.license_code),
+          lat: o.geojson!.coordinates![1],
+          lon: o.geojson!.coordinates![0],
+          sourceUrl: `https://www.inaturalist.org/observations/${o.id}`,
+          description: null,
+          family: null,
+          source: 'inaturalist' as const,
+          gbifUsageKey: null,
+          taxonClass: o.taxon!.iconic_taxon_name ?? null,
+          taxonOrder: null,
+        }
+      })
+
+    return [...gbifItems, ...inatItems]
+  }
 }
 
 export async function GET(req: Request) {
@@ -45,86 +130,55 @@ export async function GET(req: Request) {
     return new Response(JSON.stringify({ error: 'invalid month' }), { status: 400 })
   }
 
-  const params = new URLSearchParams()
-  params.set('decimalLatitude', `${minLat},${maxLat}`)
-  params.set('decimalLongitude', `${minLon},${maxLon}`)
-  params.set('kingdomKey', '1') // Animalia
-  params.set('phylumKey', '44') // Chordata — excludes insects/invertebrates noise
-  params.set('month', String(month))
-  params.set('mediaType', 'StillImage')
-  params.set('hasCoordinate', 'true')
-  params.append('license', 'CC0_1_0')
-  params.append('license', 'CC_BY_4_0')
-  params.set('limit', '40')
-
-  let data: GbifSearchResponse
+  let cascade
   try {
-    const res = await fetchWithTimeout(`${GBIF_BASE}/occurrence/search?${params.toString()}`, 8000)
-    if (!res.ok) {
-      return Response.json({ items: [], total: 0, error: 'gbif_unavailable' })
-    }
-    data = await res.json() as GbifSearchResponse
+    cascade = await runGalleryCascade({
+      galleryType: 'fauna',
+      bounds: { minLat, maxLat, minLon, maxLon },
+      month,
+      fetchDirect: makeFetchDirect(month),
+      n2000TaxonGroups: ['Mammals', 'Birds', 'Reptiles', 'Amphibians'],
+    })
   } catch {
-    return Response.json({ items: [], total: 0, error: 'gbif_unavailable' })
+    return Response.json({ items: [], total: 0, error: 'gallery_unavailable' })
   }
 
-  const withMedia = (data.results ?? []).filter(r =>
-    r.media && r.media.length > 0 && r.decimalLatitude !== undefined && r.decimalLongitude !== undefined,
-  )
-
-  // dedupe by speciesKey, keeping the record with the most media
-  const bySpecies = new Map<number, GbifOccurrence>()
-  for (const occ of withMedia) {
-    if (occ.speciesKey === undefined) continue
-    const existing = bySpecies.get(occ.speciesKey)
-    if (!existing || (occ.media?.length ?? 0) > (existing.media?.length ?? 0)) {
-      bySpecies.set(occ.speciesKey, occ)
-    }
-  }
-
-  const deduped = Array.from(bySpecies.values()).slice(0, 20)
+  const deduped = cascade.items.slice(0, 20)
 
   const [vernacularResults, descriptionResults] = await Promise.all([
-    Promise.allSettled(
-      deduped.map(occ => occ.usageKey ? fetchVernacularIta(occ.usageKey) : Promise.resolve(null)),
-    ),
-    Promise.allSettled(
-      deduped.map(occ => {
-        const name = canonicalSpeciesName(occ)
-        return name ? fetchSpeciesDescription(name) : Promise.resolve(null)
-      }),
-    ),
+    Promise.allSettled(deduped.map(item =>
+      item.vernacularNameIt
+        ? Promise.resolve(item.vernacularNameIt)
+        : item.gbifUsageKey ? fetchVernacularIta(item.gbifUsageKey) : Promise.resolve(null),
+    )),
+    Promise.allSettled(deduped.map(item => item.description ? Promise.resolve(item.description) : fetchSpeciesDescription(item.scientificName))),
   ])
 
-  const items: AnimalItem[] = deduped.map((occ, i) => {
-    const media = occ.media![0]
-    const identifier = media.identifier ?? ''
-    const attributionName = media.rightsHolder ?? media.creator ?? null
+  const items: AnimalItem[] = deduped.map((item, i) => {
     const vernacular = vernacularResults[i]
     const description = descriptionResults[i]
     return {
-      gbifKey: occ.key,
-      speciesKey: occ.speciesKey!,
-      scientificName: occ.scientificName ?? 'Specie non identificata',
-      family: occ.family ?? null,
+      scientificName: item.scientificName,
+      family: item.family,
       vernacularIta: vernacular.status === 'fulfilled' ? vernacular.value : null,
       vernacularEn: null,
-      thumbUrl: imageApiUrl(occ.key, identifier, '400x'),
-      imageUrl: imageApiUrl(occ.key, identifier, '400x'),
-      attribution: attributionName ? `© ${attributionName}` : 'Autore sconosciuto',
-      license: licenseLabel(media.license ?? occ.license),
-      gbifUrl: `https://www.gbif.org/occurrence/${occ.key}`,
-      lat: occ.decimalLatitude!,
-      lon: occ.decimalLongitude!,
+      thumbUrl: item.thumbUrl,
+      imageUrl: item.imageUrl,
+      attribution: item.attribution,
+      license: item.license,
+      gbifUrl: item.sourceUrl,
+      lat: item.lat,
+      lon: item.lon,
       description: description.status === 'fulfilled' ? description.value : null,
       dangerLevel: classifyDanger({
-        scientificName: occ.scientificName,
-        family: occ.family,
-        order: occ.order,
-        class: occ.class,
+        scientificName: item.scientificName,
+        family: item.family,
+        order: item.taxonOrder,
+        class: item.taxonClass,
       }),
+      fallbackLevel: cascade.fallbackLevel,
     }
   })
 
-  return Response.json({ items, total: data.count ?? 0 })
+  return Response.json({ items, total: items.length, fallbackLevel: cascade.fallbackLevel })
 }
