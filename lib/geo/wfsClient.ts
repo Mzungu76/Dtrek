@@ -80,12 +80,19 @@ export async function wfsGetFeatureGml(opts: WfsGetFeatureOptions): Promise<stri
   } = opts
 
   const [s, w, n, e] = bbox.split(',')
+  // URN-style CRS identifiers (urn:ogc:def:crs:EPSG::4326) carry EPSG's official axis order
+  // (lat,lon for 4326) per WFS 1.1.0/ISO 19111 — opposite of the legacy "EPSG:4326" string's
+  // conventional GIS x,y (lon,lat) order. bbox input here is already "s,w,n,e" (lat,lon), so
+  // URN mode passes it through as-is instead of swapping to w,s,e,n.
+  const bboxValue = srsName.toLowerCase().startsWith('urn:')
+    ? `${s},${w},${n},${e},${srsName}`
+    : `${w},${s},${e},${n},${srsName}`
   const params = new URLSearchParams({
     service: 'WFS',
     version,
     request: 'GetFeature',
     typeName,
-    bbox: `${w},${s},${e},${n},${srsName}`,
+    bbox: bboxValue,
     outputFormat,
   })
   // WFS 1.1.0/1.0.0 paginate via maxFeatures; count is a 2.0.0-ism — same per-version
