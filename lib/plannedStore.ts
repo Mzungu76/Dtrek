@@ -100,10 +100,13 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(hike),
   })
-  // Update local cache
-  lsSet(LS_KEYS.planned(hike.id), hike).catch(() => {})
+  // Update local cache — merge in the server-computed assessment so the cache
+  // isn't stale on the very first read (cache-first getPlannedById would
+  // otherwise return the assessment-less object sent to the API).
+  const cached = result.assessment ? { ...hike, assessment: result.assessment } : hike
+  lsSet(LS_KEYS.planned(hike.id), cached).catch(() => {})
   lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList).then((list) => {
-    const meta    = toPlannedMeta(hike)
+    const meta    = toPlannedMeta(cached)
     const updated = [meta, ...(list ?? []).filter((h) => h.id !== hike.id)]
     lsSet(LS_KEYS.plannedList, updated).catch(() => {})
   }).catch(() => {})

@@ -5,7 +5,11 @@ import {
 } from 'recharts'
 import type { TrackPoint } from '@/lib/tcxParser'
 
-interface Props { trackPoints: TrackPoint[] }
+interface Props {
+  trackPoints: TrackPoint[]
+  syncId?: string
+  onHover?: (index: number | null) => void
+}
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
@@ -17,22 +21,24 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-export default function ElevationProfileChart({ trackPoints }: Props) {
+export default function ElevationProfileChart({ trackPoints, syncId, onHover }: Props) {
   // Subsample to 300 points max
   const step = Math.max(1, Math.floor(trackPoints.length / 300))
-  const pts  = trackPoints.filter((_, i) => i % step === 0)
+  const pts  = trackPoints
+    .map((p, i) => ({ p, i }))
+    .filter((_, i) => i % step === 0)
 
   // Compute cumulative distance for x-axis
   let cumDist = 0
-  const data: { km: string; alt: number }[] = []
+  const data: { km: string; alt: number; idx: number }[] = []
   for (let i = 0; i < pts.length; i++) {
     if (i > 0) {
-      const p = pts[i - 1], c = pts[i]
+      const { p } = pts[i - 1], { p: c } = pts[i]
       if (p.lat && p.lon && c.lat && c.lon)
         cumDist += haversineM(p.lat, p.lon, c.lat, c.lon)
     }
-    if (pts[i].altitudeMeters !== undefined)
-      data.push({ km: (cumDist / 1000).toFixed(1), alt: Math.round(pts[i].altitudeMeters!) })
+    if (pts[i].p.altitudeMeters !== undefined)
+      data.push({ km: (cumDist / 1000).toFixed(1), alt: Math.round(pts[i].p.altitudeMeters!), idx: pts[i].i })
   }
 
   if (data.length === 0) {
@@ -46,7 +52,9 @@ export default function ElevationProfileChart({ trackPoints }: Props) {
   return (
     <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }} syncId={syncId}
+          onMouseMove={(e: any) => { const idx = e?.activePayload?.[0]?.payload?.idx; if (idx != null) onHover?.(idx) }}
+          onMouseLeave={() => onHover?.(null)}>
           <defs>
             <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%"  stopColor="#0284c7" stopOpacity={0.3} />
