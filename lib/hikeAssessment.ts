@@ -6,6 +6,7 @@ export interface AssessmentItem {
 }
 
 export interface HikeAssessment {
+  summary:          string
   difficulty:       'facile' | 'moderata' | 'impegnativa' | 'estrema'
   suitabilityScore: number   // 0–100
   risks:            AssessmentItem[]
@@ -129,7 +130,19 @@ export function assessHike(
   const vsAvgDistPct = avgDistKm  > 0 ? Math.round((distKm       / avgDistKm)  * 100) : 0
   const vsAvgElevPct = avgElevGain > 0 ? Math.round((elevationGain / avgElevGain) * 100) : 0
 
+  // ── Synthetic standardized summary sentence ─────────────────────────────────
+  const mainRisk = risks.find(r => r.type === 'danger') ?? risks.find(r => r.type === 'warning')
+  let summary: string
+  if (n === 0) {
+    summary = `Percorso ${difficulty}. Nessuno storico personale disponibile: la valutazione si basa solo sui parametri assoluti del percorso.`
+  } else if (mainRisk) {
+    summary = `Percorso ${difficulty}, adatto al ${suitabilityScore}% al tuo profilo. ${risks.length} ${risks.length === 1 ? 'rischio rilevato' : 'rischi rilevati'}, principale: ${mainRisk.text.charAt(0).toLowerCase()}${mainRisk.text.slice(1)}.`
+  } else {
+    summary = `Percorso ${difficulty}, adatto al ${suitabilityScore}% al tuo profilo. Nessun rischio rilevante rispetto al tuo storico.`
+  }
+
   return {
+    summary,
     difficulty,
     suitabilityScore,
     risks,

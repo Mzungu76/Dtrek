@@ -11,6 +11,7 @@ import { ShadeWaterTile } from '@/components/ShadeWaterTile'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
+import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { interpolateElevations } from '@/lib/trailStats'
 import {
   Compass, MapPin, Route, TrendingUp, Clock,
@@ -140,6 +141,9 @@ export default function EsploraPage() {
 
       await savePlanned(hike)
       setAdded(prev => new Set(prev).add(t.id))
+      // Fire-and-forget: CTS needs several slow fetches (POI/OSM/DTM), so it
+      // runs in the background instead of blocking the "added" confirmation.
+      computeCtsForHike(hike).catch(() => {})
     } catch {
       alert('Errore nel salvataggio. Riprova.')
     } finally {

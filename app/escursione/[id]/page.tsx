@@ -45,6 +45,9 @@ import {
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
+import { PhenologyPanel } from '@/components/PhenologyPanel'
+import { useSentinel2 } from '@/lib/cl/useCL'
+import { useFlora } from '@/lib/useFlora'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -123,6 +126,9 @@ export default function EscursionePage() {
     const step = Math.max(1, Math.ceil(pts.length / 100))
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [activity])
+
+  const s2    = useSentinel2({ polyline: heroPolyline })
+  const flora = useFlora(heroPolyline, activity?.altitudeMax)
 
 
   useEffect(() => {
@@ -402,10 +408,10 @@ export default function EscursionePage() {
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-forest-900/60 to-transparent pointer-events-none" />
 
         <div className="relative max-w-6xl mx-auto px-4">
-          <div className="flex items-center justify-between pt-4 pb-3 border-b border-white/10">
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
             <BackButton fallbackHref="/" label="Diario"
               className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors" />
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               {([
                 { icon: <FileSpreadsheet className="w-3.5 h-3.5" />, title: 'Excel', fn: () => exportActivityToExcel(activity) },
                 { icon: <FileText className="w-3.5 h-3.5" />, title: 'Word', fn: () => exportActivityToDoc(activity) },
@@ -747,9 +753,9 @@ export default function EscursionePage() {
 
         {/* Map */}
         <section>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
             <h2 className="font-display text-xl font-semibold text-stone-700">Tracciato GPS</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {hasGps && activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
                 <button onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
@@ -780,13 +786,44 @@ export default function EscursionePage() {
                   <Film className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Crea video</span>
                 </button>
               )}
+              <div className="relative">
+                <button
+                  title="Galleria Verde"
+                  onClick={() => {
+                    if (heroPolyline.length > 1) {
+                      router.push(`/escursione/${encodeURIComponent(id)}/flora`)
+                    } else {
+                      setShowFloraNotice(v => !v)
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                    heroPolyline.length > 1
+                      ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                      : 'border-stone-200 text-stone-300 cursor-not-allowed'
+                  }`}
+                >
+                  <Leaf className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Galleria Verde</span>
+                </button>
+                {showFloraNotice && heroPolyline.length <= 1 && (
+                  <div className="absolute right-0 top-full mt-2 w-56 p-3 rounded-lg bg-stone-800 text-white text-xs shadow-xl z-20">
+                    Traccia GPS non disponibile per questa escursione: la Galleria Verde richiede una traccia GPS valida.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
+          <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm sticky top-2 z-10 lg:static lg:z-auto">
             <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} activeIndex={activeChartIndex} />
           </div>
           {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
         </section>
+
+        {/* Fenologia */}
+        {hasGps && heroPolyline.length > 1 && (
+          <section>
+            <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+          </section>
+        )}
 
         {/* Percorsi simili */}
         {similarActivities.length > 0 && (

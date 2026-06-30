@@ -2127,7 +2127,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
       {/* Top bar */}
       <div className="absolute top-0 inset-x-0 pointer-events-none">
-        <div className="flex items-start justify-between p-3 bg-gradient-to-b from-black/65 to-transparent">
+        <div className="flex items-start justify-between flex-wrap gap-y-2 p-3 bg-gradient-to-b from-black/65 to-transparent">
           <div className="flex flex-col gap-2 pointer-events-auto">
             <div className="flex gap-1 bg-black/45 backdrop-blur-md rounded-xl p-1 w-fit">
               {STYLES.map((s,i)=>(
@@ -2139,7 +2139,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             </div>
             {title&&<p className="text-white text-sm font-semibold drop-shadow-md ml-1 max-w-[280px] truncate">{title}</p>}
           </div>
-          <div className="flex items-center gap-2 pointer-events-auto mt-0.5">
+          <div className="flex items-center flex-wrap justify-end gap-2 pointer-events-auto mt-0.5">
             <button onClick={handleStreetViewHere} title="Foto della zona"
               className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/75 flex items-center justify-center text-white transition-colors shadow-lg">
               <Images style={{width:'1.1rem',height:'1.1rem'}}/>
@@ -2204,8 +2204,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         </div>
       </div>
 
-      {/* Elevation profile */}
-      <div className="absolute left-3 right-3" style={{bottom:'92px'}}>
+      {/* Elevation profile + bottom controls — grouped in one flex column so spacing
+          stays correct even if the controls below wrap/grow on narrow screens. */}
+      <div className="absolute bottom-0 inset-x-0 flex flex-col">
+      <div className="px-3 mb-2">
         <div className="relative">
           {altitudeSeries.length>1?(()=>{
             const minA=Math.min(...altitudeSeries),maxA=Math.max(...altitudeSeries),range=maxA-minA||1,H=56
@@ -2237,7 +2239,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       </div>
 
       {/* Bottom controls */}
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-8 pb-5 px-4">
+      <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-8 pb-5 px-4">
         <div className="max-w-sm mx-auto flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <button onClick={reset} className="w-11 h-11 rounded-full bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-colors border border-white/10">
@@ -2262,6 +2264,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <span className="text-[11px] text-white font-bold w-8 text-right">{exaggeration.toFixed(1)}×</span>
           </div>
         </div>
+      </div>
       </div>
 
       {/* Loading */}

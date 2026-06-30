@@ -83,8 +83,17 @@ function RiskItem({ type, text }: { type: 'danger' | 'warning' | 'info'; text: s
 
 function AssessmentPanel({ a }: { a: HikeAssessment }) {
   const suit = a.suitabilityScore
+  const hasDanger  = a.risks.some(r => r.type === 'danger')
+  const hasWarning = a.risks.some(r => r.type === 'warning')
+  const summaryBorder = hasDanger ? 'border-red-400' : hasWarning ? 'border-amber-400' : 'border-emerald-400'
   return (
     <div className="space-y-5">
+      {a.summary && (
+        <div className={`border-l-4 ${summaryBorder} bg-stone-50 rounded-r-lg px-4 py-3 text-sm font-medium text-stone-700`}>
+          {a.summary}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-3 items-start">
         <div className={`px-3 py-1.5 rounded-full border text-sm font-semibold ${DIFFICULTY_COLORS[a.difficulty]}`}>
           {DIFFICULTY_LABEL[a.difficulty]}
@@ -158,6 +167,7 @@ export default function PlannedHikePage() {
   const id = decodeURIComponent(params.id as string)
 
   const [hike,           setHike]          = useState<PlannedHike | null>(null)
+  const [activeChartIndex, setActiveChartIndex] = useState<number | null>(null)
   const [loading,        setLoading]       = useState(true)
   const [saving,         setSaving]        = useState(false)
   const [editTitle,      setEditTitle]     = useState(false)
@@ -300,7 +310,7 @@ export default function PlannedHikePage() {
       prefDurata,
     })
     setCtsResult({ ...computed, ts: (hike as { cachedTrailScore?: number }).cachedTrailScore ?? computed.ts })
-  }, [hike?.id, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Compute Safety Score — saves if not cached
   useEffect(() => {
@@ -467,12 +477,12 @@ export default function PlannedHikePage() {
 
         <div className="relative max-w-[1200px] mx-auto px-4">
           {/* Top nav */}
-          <div className="flex items-center justify-between pt-4 pb-3 border-b border-white/10">
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
             <button onClick={() => router.push('/')}
               className="flex items-center gap-1.5 text-sky-300 hover:text-white text-sm transition-colors">
               <ArrowLeft className="w-4 h-4" /> Tutte le pianificate
             </button>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 onClick={() => router.push(`/guida/${encodeURIComponent(id)}`)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-amber-900 rounded-lg text-xs font-semibold transition-colors"
@@ -670,10 +680,10 @@ export default function PlannedHikePage() {
 
         {/* Map + Elevation */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm sticky top-2 z-10 lg:static lg:z-auto">
+            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between gap-2 flex-wrap">
               <p className="text-sm font-semibold text-stone-700">Tracciato</p>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {hasGps && hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
                   <button
                     onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
@@ -710,7 +720,7 @@ export default function PlannedHikePage() {
             </div>
             <div className="h-80">
               {polyline && polyline.length > 1 ? (
-                <MapView trackPoints={hike.trackPoints ?? []} showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned />
+                <MapView trackPoints={hike.trackPoints ?? []} showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} activeIndex={activeChartIndex} planned />
               ) : (
                 <div className="h-full flex items-center justify-center text-stone-400 text-sm gap-2">
                   <Mountain className="w-8 h-8 text-stone-200" /> Tracciato non disponibile
@@ -726,7 +736,7 @@ export default function PlannedHikePage() {
             </div>
             <div className="p-4">
               {hike.trackPoints && hike.trackPoints.length > 0 ? (
-                <ElevationProfileChart trackPoints={hike.trackPoints} />
+                <ElevationProfileChart trackPoints={hike.trackPoints} syncId="programma-elevation" onHover={setActiveChartIndex} />
               ) : (
                 <div className="h-48 flex items-center justify-center text-stone-400 text-sm gap-2">
                   <BarChart2 className="w-8 h-8 text-stone-200" /> Dati non disponibili

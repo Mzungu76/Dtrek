@@ -81,6 +81,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
   const leafletRef        = useRef<any>(null)
   const [mapReady, setMapReady]           = useState(false)
   const [candidates, setCandidates]       = useState<WmtCandidate[]>([])
+  const [selectingId, setSelectingId]     = useState<number | null>(null)
   const [briefs, setBriefs]               = useState<Record<number, CandidateBrief>>({})
   const [queryLoading, setQueryLoading]   = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -153,7 +154,8 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
 
   async function handleMapClick(lat: number, lon: number, zoom: number) {
     setQueryError(null)
-    setCandidates([])
+    // Keep the previous candidate list visible while the new query runs —
+    // only replace/clear it once we know what to show instead.
     setQueryLoading(true)
     try {
       // Smaller bbox at high zoom (precise click), wider at low zoom (sparse network visible)
@@ -163,6 +165,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
       const json = await res.json()
       const results: WmtCandidate[] = json.results ?? []
       if (results.length === 0) {
+        setCandidates([])
         setQueryError('Nessun sentiero trovato qui. Prova a cliccare più vicino a una linea colorata.')
       } else if (results.length === 1) {
         await selectTrail(results[0].id)
@@ -171,6 +174,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
         loadBriefs(results)
       }
     } catch {
+      setCandidates([])
       setQueryError('Errore nella ricerca dei sentieri.')
     } finally {
       setQueryLoading(false)
@@ -202,8 +206,9 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
   }
 
   async function selectTrail(id: number) {
-    setCandidates([])
-    setBriefs({})
+    // Keep the candidate list (and its briefs) visible until the trail detail
+    // is actually ready — only the clicked item shows a spinner meanwhile.
+    setSelectingId(id)
     setDetailLoading(true)
     setQueryError(null)
     currentTrailId.current = id
@@ -239,6 +244,9 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
         elevationProfile: det.elevationProfile,
       }
       onTrailSelected(trail)
+      // Trail detail is now showing — the candidate list is no longer needed.
+      setCandidates([])
+      setBriefs({})
 
       // Cache miss + incomplete OSM tags: distance is already final, but elevation
       // needs the slower OpenTopoData round trip — finish it in the background so
@@ -247,8 +255,10 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
         finishTrailStats(trail, det.geometrySimplified ?? [], det.bbox, det.operator)
       }
     } catch {
+      // Keep the candidate list visible so the user can retry a different one.
       setQueryError('Errore nel caricamento del sentiero selezionato.')
     } finally {
+      setSelectingId(null)
       setDetailLoading(false)
     }
   }
@@ -349,13 +359,22 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
           {candidates.map(c => {
             const b = briefs[c.id]
             const dur = b?.estimatedTimeMin != null ? b.estimatedTimeMin * 60 : 0
+            const isSelecting = selectingId === c.id
+            const disabled = selectingId !== null
             return (
               <button
                 key={c.id}
                 onClick={() => selectTrail(c.id)}
-                className="w-full text-left px-4 py-3 hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-center gap-3"
+                disabled={disabled}
+                className={`w-full text-left px-4 py-3 border-b border-stone-100 last:border-0 flex items-center gap-3 transition-opacity ${
+                  isSelecting ? 'bg-sky-50' : disabled ? 'opacity-40' : 'hover:bg-stone-50'
+                }`}
               >
-                <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
+                {isSelecting ? (
+                  <Loader2 className="w-4 h-4 text-sky-500 shrink-0 animate-spin" />
+                ) : (
+                  <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-stone-800 font-medium truncate">{c.name}</span>
@@ -364,7 +383,9 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-stone-500">
-                    {b?.loading ? (
+                    {isSelecting ? (
+                      <span className="flex items-center gap-1 text-sky-500">caricamento sentiero…</span>
+                    ) : b?.loading ? (
                       <span className="flex items-center gap-1 text-stone-400">
                         <Loader2 className="w-3 h-3 animate-spin" /> calcolo dati…
                       </span>
