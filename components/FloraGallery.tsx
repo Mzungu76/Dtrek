@@ -32,7 +32,7 @@ function FloraCard({ item, onClick }: { item: FloraItem; onClick: () => void }) 
     >
       {!imgError ? (
         <img
-          src={item.thumbUrl}
+          src={item.thumbUrl ?? undefined}
           alt={displayName}
           className="w-full aspect-square object-cover rounded-t-xl"
           onError={() => setImgError(true)}
@@ -78,7 +78,7 @@ function FloraDetailModal({ item, month, onClose }: { item: FloraItem; month: nu
         </button>
         {!imgError ? (
           <img
-            src={item.imageUrl}
+            src={item.imageUrl ?? undefined}
             alt={displayName}
             className="w-full aspect-[4/3] object-cover"
             onError={() => setImgError(true)}
@@ -101,18 +101,37 @@ function FloraDetailModal({ item, month, onClose }: { item: FloraItem; month: nu
             Osservata in questa zona nel mese di {MONTHS[month - 1]}.
           </p>
           <p className="text-xs text-stone-400 pt-2">
-            📷 {item.attribution} — {item.license}{' '}
-            <a
-              href={item.gbifUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-green-700 hover:underline"
-            >
-              Scheda GBIF ↗
-            </a>
+            📷 {item.attribution} — {item.license}
+            {item.gbifUrl && (
+              <>
+                {' '}
+                <a
+                  href={item.gbifUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-green-700 hover:underline"
+                >
+                  Scheda ↗
+                </a>
+              </>
+            )}
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+const FALLBACK_LEVEL_LABEL: Record<2 | 3, string> = {
+  2: 'Specie osservate nei dintorni (area estesa)',
+  3: 'Specie tipiche dell’area protetta — non osservazione diretta in questo punto',
+}
+
+function FallbackLevelNotice({ level }: { level: 1 | 2 | 3 }) {
+  if (level === 1) return null
+  return (
+    <div className="mb-4 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+      {FALLBACK_LEVEL_LABEL[level]}
     </div>
   )
 }
@@ -147,6 +166,7 @@ export default function FloraGallery({ trackPoints, month, loadingTrack, backHre
   const [items, setItems] = useState<FloraItem[]>([])
   const [loadingFlora, setLoadingFlora] = useState(true)
   const [selected, setSelected] = useState<FloraItem | null>(null)
+  const [fallbackLevel, setFallbackLevel] = useState<1 | 2 | 3>(1)
 
   const gpsPoints = useMemo(
     () => trackPoints.filter((p): p is TrackPoint & { lat: number; lon: number } => p.lat !== undefined && p.lon !== undefined),
@@ -154,7 +174,9 @@ export default function FloraGallery({ trackPoints, month, loadingTrack, backHre
   )
 
   const floraMarkers = useMemo(
-    () => items.map(i => ({ lat: i.lat, lon: i.lon, label: i.vernacularIta ?? i.scientificName })),
+    () => items
+      .filter((i): i is FloraItem & { lat: number; lon: number } => i.lat !== null && i.lon !== null)
+      .map(i => ({ lat: i.lat, lon: i.lon, label: i.vernacularIta ?? i.scientificName })),
     [items],
   )
 
@@ -171,8 +193,9 @@ export default function FloraGallery({ trackPoints, month, loadingTrack, backHre
     setLoadingFlora(true)
     fetch(`/api/flora?bbox=${encodeURIComponent(bbox)}&month=${month}`)
       .then(res => res.json())
-      .then((data: { items: FloraItem[]; error?: string }) => {
+      .then((data: { items: FloraItem[]; fallbackLevel?: 1 | 2 | 3; error?: string }) => {
         setItems(data.items ?? [])
+        setFallbackLevel(data.fallbackLevel ?? 1)
       })
       .catch(() => setItems([]))
       .finally(() => setLoadingFlora(false))
@@ -228,20 +251,22 @@ export default function FloraGallery({ trackPoints, month, loadingTrack, backHre
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {items.map(item => (
-              <FloraCard key={item.gbifKey} item={item} onClick={() => setSelected(item)} />
-            ))}
-          </div>
+          <>
+            <FallbackLevelNotice level={fallbackLevel} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {items.map(item => (
+                <FloraCard key={item.scientificName} item={item} onClick={() => setSelected(item)} />
+              ))}
+            </div>
+          </>
         )}
 
         <div className="text-xs text-stone-400 text-center py-4 mt-6">
-          Dati e immagini:{' '}
-          <a href="https://www.gbif.org" target="_blank" rel="noopener noreferrer" className="hover:underline">
-            GBIF.org
-          </a>{' '}
-          — Global Biodiversity Information Facility. Licenze: CC0 e CC BY. Attribution per immagine
-          nelle singole schede. Descrizioni: Wikipedia (CC BY-SA).
+          Dati e immagini: GBIF.org, iNaturalist, Wikidata/Commons, EEA Natura 2000.
+          Licenze CC0/CC BY. Attribution per immagine nelle singole schede.{' '}
+          <a href="/fonti-e-crediti" className="hover:underline text-green-700">
+            Dettaglio fonti e licenze ↗
+          </a>
         </div>
       </div>
 

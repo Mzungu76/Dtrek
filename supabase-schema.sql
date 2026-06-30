@@ -504,6 +504,49 @@ CREATE TABLE IF NOT EXISTS natura2000_cache (
 
 CREATE INDEX IF NOT EXISTS idx_natura2000_cache_expires_at ON natura2000_cache (expires_at);
 
+-- ═══════════════════════════════════════════════════════════
+-- Galleria Verde / Galleria Selvatica — fallback multi-fonte (licenze commerciali)
+-- Stesso blocco è anche presente in supabase/migrations/add_species_gallery_tables.sql.
+-- ═══════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS species_image_fallback (
+  id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  scientific_name text NOT NULL UNIQUE,
+  wikidata_qid    text,
+  image_url       text,
+  license         text NOT NULL DEFAULT 'CC0',
+  fetched_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS n2000_site_species (
+  id                  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  site_code           text NOT NULL,
+  scientific_name     text NOT NULL,
+  vernacular_name_it  text,
+  taxon_group         text,
+  annex_code          text,
+  source              text NOT NULL DEFAULT 'eea',
+  license             text NOT NULL DEFAULT 'CC-BY-4.0',
+  imported_at         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (site_code, scientific_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_n2000_species_site ON n2000_site_species (site_code);
+
+CREATE TABLE IF NOT EXISTS gallery_cascade_cache (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  bbox_key      text NOT NULL,
+  gallery_type  text NOT NULL,
+  month         smallint NOT NULL,
+  fallback_level smallint NOT NULL,
+  items         jsonb NOT NULL,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL,
+  UNIQUE (bbox_key, gallery_type, month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gallery_cascade_cache_expires_at ON gallery_cascade_cache (expires_at);
+
 
 -- ── Foto delle escursioni (persistenza server, sostituisce localStorage) ──────
 -- Le immagini vivono nel bucket Storage 'dtrek-photos' (path ${userId}/${activityId}/${photoId}.jpg);
