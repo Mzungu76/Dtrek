@@ -14,8 +14,12 @@ export async function GET(req: Request) {
   if (searchParams.get('caps') === 'true') {
     try {
       const xml = await wfsGetCapabilities(NATURA2000_DATASET.baseUrl!, '1.1.0', 8000)
-      const idx = xml.indexOf('SIC_ZSC_ZPS')
-      return Response.json({ caps_length: xml.length, caps_around_layer: xml.slice(Math.max(0, idx - 200), idx + 1500) })
+      const idx = xml.search(/BoundingBox|FeatureTypeList/i)
+      return Response.json({
+        caps_length: xml.length,
+        caps_full: xml,
+        caps_around_bbox: idx >= 0 ? xml.slice(Math.max(0, idx - 100), idx + 1500) : null,
+      })
     } catch (e) {
       return Response.json({ error: String(e) }, { status: 500 })
     }
