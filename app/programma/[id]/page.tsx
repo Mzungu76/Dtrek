@@ -17,7 +17,8 @@ import {
   getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type HikeAssessment,
 } from '@/lib/plannedStore'
-import { computeSafetyScore, type SafetyScore } from '@/lib/safetyScore'
+import { computeSafetyScore, type SafetyScore, type WildlifeRisk } from '@/lib/safetyScore'
+import { fetchWildlifeRiskFromGbif } from '@/lib/wildlifeRiskFromGbif'
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/lib/trailScore'
@@ -33,7 +34,7 @@ import { it } from 'date-fns/locale'
 import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
-  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass, Leaf,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass, Leaf, PawPrint,
 } from 'lucide-react'
 
 import PdfExportButton from '@/components/PdfExportButton'
@@ -320,18 +321,48 @@ export default function PlannedHikePage() {
       setSafetyScore(cached)
       return
     }
-    const safety = computeSafetyScore({
-      distanceMeters: hike.distanceMeters,
-      elevationGain:  hike.elevationGain,
-      elevationLoss:  hike.elevationLoss,
-      altitudeMax:    hike.altitudeMax,
-      altitudeMin:    hike.altitudeMin,
-      estimatedTimeSeconds: hike.estimatedTimeSeconds,
-      routePolyline: hike.routePolyline,
-      plannedDate: hike.plannedDate,
-    })
-    setSafetyScore(safety)
-    updatePlannedMeta(hike.id, { cachedSafetyScore: safety }).catch(() => {})
+    let cancelled = false
+
+    async function run() {
+      const poly = hike!.routePolyline
+      let gbifWildlifeRisks: WildlifeRisk[] = []
+      let guardianDogRisk: { present: boolean } | undefined
+
+      if (poly && poly.length >= 2) {
+        const bbox = computeBbox(poly, 0.005) // minLat,minLon,maxLat,maxLon
+        const [minLat, minLon, maxLat, maxLon] = bbox.split(',').map(Number)
+        const animalsBbox = `${minLat},${maxLat},${minLon},${maxLon}` // /api/animals expects minLat,maxLat,minLon,maxLon
+        const month = hike!.plannedDate ? new Date(hike!.plannedDate).getMonth() + 1 : new Date().getMonth() + 1
+
+        const [gbifResult, guardianResult] = await Promise.allSettled([
+          fetchWildlifeRiskFromGbif(animalsBbox, month),
+          fetch(`/api/trails/guardian-dogs?bbox=${encodeURIComponent(bbox)}`, { signal: AbortSignal.timeout(20000) })
+            .then(r => r.json()) as Promise<{ present: boolean }>,
+        ])
+        if (gbifResult.status === 'fulfilled') gbifWildlifeRisks = gbifResult.value
+        if (guardianResult.status === 'fulfilled') guardianDogRisk = guardianResult.value
+      }
+
+      if (cancelled) return
+
+      const safety = computeSafetyScore({
+        distanceMeters: hike!.distanceMeters,
+        elevationGain:  hike!.elevationGain,
+        elevationLoss:  hike!.elevationLoss,
+        altitudeMax:    hike!.altitudeMax,
+        altitudeMin:    hike!.altitudeMin,
+        estimatedTimeSeconds: hike!.estimatedTimeSeconds,
+        routePolyline: hike!.routePolyline,
+        plannedDate: hike!.plannedDate,
+        gbifWildlifeRisks,
+        guardianDogRisk,
+      })
+      setSafetyScore(safety)
+      updatePlannedMeta(hike!.id, { cachedSafetyScore: safety }).catch(() => {})
+    }
+
+    run()
+    return () => { cancelled = true }
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load route photos from Wikimedia Commons for hero + mosaic
@@ -520,6 +551,25 @@ export default function PlannedHikePage() {
                     Percorso GPS non disponibile per questo programma: la Galleria Verde richiede una traccia GPS valida.
                   </div>
                 )}
+              </div>
+              <div className="relative">
+                <button
+                  title="Galleria Animali"
+                  onClick={() => {
+                    if (heroPolyline.length > 1) {
+                      router.push(`/programma/${encodeURIComponent(id)}/animali`)
+                    } else {
+                      setShowFloraNotice(v => !v)
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-semibold transition-colors ${
+                    heroPolyline.length > 1
+                      ? 'border-amber-400/40 text-amber-300 hover:bg-amber-500/15'
+                      : 'border-white/15 text-white/30 cursor-not-allowed'
+                  }`}
+                >
+                  <PawPrint className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Galleria Animali</span>
+                </button>
               </div>
               <button onClick={handleDelete} disabled={saving}
                 className="flex items-center gap-1.5 text-sm text-red-300 hover:text-white transition-colors">
@@ -750,12 +800,20 @@ export default function PlannedHikePage() {
         {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
           <div className="space-y-3">
             <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
-            <button
-              onClick={() => router.push(`/programma/${encodeURIComponent(id)}/flora`)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold transition-colors"
-            >
-              <Leaf className="w-4 h-4" /> Galleria Verde — flora osservata in zona
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => router.push(`/programma/${encodeURIComponent(id)}/flora`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold transition-colors"
+              >
+                <Leaf className="w-4 h-4" /> Galleria Verde — flora osservata in zona
+              </button>
+              <button
+                onClick={() => router.push(`/programma/${encodeURIComponent(id)}/animali`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 text-sm font-semibold transition-colors"
+              >
+                <PawPrint className="w-4 h-4" /> Galleria Animali — fauna osservata in zona
+              </button>
+            </div>
           </div>
         )}
 

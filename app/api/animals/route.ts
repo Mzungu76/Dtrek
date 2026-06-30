@@ -3,10 +3,11 @@ import {
   fetchVernacularIta, fetchSpeciesDescription,
   type GbifOccurrence, type GbifSearchResponse,
 } from '@/lib/gbifShared'
+import { classifyDanger, type DangerLevel } from '@/lib/dangerousTaxa'
 
 export const revalidate = 86400 // cache edge Next.js 24h — zero Supabase
 
-export interface FloraItem {
+export interface AnimalItem {
   gbifKey: number
   speciesKey: number
   scientificName: string
@@ -21,6 +22,7 @@ export interface FloraItem {
   lat: number
   lon: number
   description: string | null
+  dangerLevel: DangerLevel | null
 }
 
 export async function GET(req: Request) {
@@ -46,7 +48,8 @@ export async function GET(req: Request) {
   const params = new URLSearchParams()
   params.set('decimalLatitude', `${minLat},${maxLat}`)
   params.set('decimalLongitude', `${minLon},${maxLon}`)
-  params.set('kingdomKey', '6') // Plantae
+  params.set('kingdomKey', '1') // Animalia
+  params.set('phylumKey', '44') // Chordata — excludes insects/invertebrates noise
   params.set('month', String(month))
   params.set('mediaType', 'StillImage')
   params.set('hasCoordinate', 'true')
@@ -93,7 +96,7 @@ export async function GET(req: Request) {
     ),
   ])
 
-  const items: FloraItem[] = deduped.map((occ, i) => {
+  const items: AnimalItem[] = deduped.map((occ, i) => {
     const media = occ.media![0]
     const identifier = media.identifier ?? ''
     const attributionName = media.rightsHolder ?? media.creator ?? null
@@ -114,6 +117,12 @@ export async function GET(req: Request) {
       lat: occ.decimalLatitude!,
       lon: occ.decimalLongitude!,
       description: description.status === 'fulfilled' ? description.value : null,
+      dangerLevel: classifyDanger({
+        scientificName: occ.scientificName,
+        family: occ.family,
+        order: occ.order,
+        class: occ.class,
+      }),
     }
   })
 

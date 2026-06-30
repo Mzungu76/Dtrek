@@ -40,7 +40,7 @@ import { it } from 'date-fns/locale'
 import {
   FileSpreadsheet, FileText, Map,
   Heart, Zap, Mountain, Clock, Route, Flame,
-  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -453,6 +453,24 @@ export default function EscursionePage() {
                   </div>
                 )}
               </div>
+              <div className="relative">
+                <button
+                  title="Galleria Animali"
+                  onClick={() => {
+                    if (heroPolyline.length > 1) {
+                      router.push(`/escursione/${encodeURIComponent(id)}/animali`)
+                    } else {
+                      setShowFloraNotice(v => !v)
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-barlow font-bold uppercase tracking-wide transition-colors ${
+                    heroPolyline.length > 1
+                      ? 'border-amber-400/40 text-amber-300 hover:bg-amber-500/15'
+                      : 'border-white/15 text-white/30 cursor-not-allowed'
+                  }`}>
+                  <PawPrint className="w-3.5 h-3.5" /> Galleria Animali
+                </button>
+              </div>
               <PdfExportButton variant="activity" data={activity} iconOnly
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors" />
               <button title="Elimina" onClick={handleDelete} disabled={saving}
@@ -811,6 +829,25 @@ export default function EscursionePage() {
                     Traccia GPS non disponibile per questa escursione: la Galleria Verde richiede una traccia GPS valida.
                   </div>
                 )}
+              </div>
+              <div className="relative">
+                <button
+                  title="Galleria Animali"
+                  onClick={() => {
+                    if (heroPolyline.length > 1) {
+                      router.push(`/escursione/${encodeURIComponent(id)}/animali`)
+                    } else {
+                      setShowFloraNotice(v => !v)
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                    heroPolyline.length > 1
+                      ? 'border-amber-300 text-amber-700 hover:bg-amber-50'
+                      : 'border-stone-200 text-stone-300 cursor-not-allowed'
+                  }`}
+                >
+                  <PawPrint className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Galleria Animali</span>
+                </button>
               </div>
             </div>
           </div>

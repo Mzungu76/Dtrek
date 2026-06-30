@@ -12,7 +12,8 @@ import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { type PoiItem } from '@/lib/overpass'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
-import { computeSafetyScore } from '@/lib/safetyScore'
+import { computeSafetyScore, type WildlifeRisk } from '@/lib/safetyScore'
+import { fetchWildlifeRiskFromGbif } from '@/lib/wildlifeRiskFromGbif'
 
 export async function batchUpdate<T>(
   items: T[],
@@ -208,6 +209,28 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
   let idx = 0
   const { ok } = await batchUpdate(hikes, async meta => {
     onProgress?.(`${++idx}/${hikes.length} — ${meta.title ?? 'Pianificata'}`)
+    const deadline = new Promise<null>(r => setTimeout(() => r(null), 15000))
+
+    let gbifWildlifeRisks: WildlifeRisk[] = []
+    let guardianDogRisk: { present: boolean } | undefined
+    const poly = meta.routePolyline
+    if (poly && poly.length >= 2) {
+      const bbox = computeBbox(poly, 0.005) // minLat,minLon,maxLat,maxLon
+      const [minLat, minLon, maxLat, maxLon] = bbox.split(',').map(Number)
+      const animalsBbox = `${minLat},${maxLat},${minLon},${maxLon}` // /api/animals expects minLat,maxLat,minLon,maxLon
+      const month = meta.plannedDate ? new Date(meta.plannedDate).getMonth() + 1 : new Date().getMonth() + 1
+
+      const [gbifResult, guardianResult] = await Promise.allSettled([
+        Promise.race([fetchWildlifeRiskFromGbif(animalsBbox, month), deadline]),
+        Promise.race([
+          fetch(`/api/trails/guardian-dogs?bbox=${encodeURIComponent(bbox)}`).then(r => r.json()) as Promise<{ present: boolean }>,
+          deadline,
+        ]),
+      ])
+      if (gbifResult.status === 'fulfilled' && gbifResult.value) gbifWildlifeRisks = gbifResult.value
+      if (guardianResult.status === 'fulfilled' && guardianResult.value) guardianDogRisk = guardianResult.value
+    }
+
     const safety = computeSafetyScore({
       distanceMeters: meta.distanceMeters,
       elevationGain: meta.elevationGain,
@@ -217,6 +240,8 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
       estimatedTimeSeconds: meta.estimatedTimeSeconds,
       routePolyline: meta.routePolyline,
       plannedDate: meta.plannedDate,
+      gbifWildlifeRisks,
+      guardianDogRisk,
     })
     await updatePlannedMeta(meta.id, { cachedSafetyScore: safety })
   })
