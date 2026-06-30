@@ -40,9 +40,18 @@ export class Natura2000UnavailableError extends Error {}
 // kept tight anyway since it does run inside computeTEI's client-side fetch path.
 const NATURA2000_TIMEOUT_MS = 4000
 
-const SITE_CODE_FIELDS = ['sitecode', 'SITECODE', 'SITE_CODE', 'codice', 'CODICE', 'cod_sito', 'COD_SITO']
-const SITE_NAME_FIELDS = ['sitename', 'SITENAME', 'SITE_NAME', 'nome', 'NOME', 'denominazione', 'DENOMINAZIONE']
+// 'site_code'/'denominazi' confirmed from this endpoint's real GetFeature response (DBF-style
+// truncated field name for "denominazione", max 10 chars) — added alongside the original
+// guessed variants rather than replacing them, in case a future server revision uses those.
+const SITE_CODE_FIELDS = ['site_code', 'sitecode', 'SITECODE', 'SITE_CODE', 'codice', 'CODICE', 'cod_sito', 'COD_SITO']
+const SITE_NAME_FIELDS = ['denominazi', 'sitename', 'SITENAME', 'SITE_NAME', 'nome', 'NOME', 'denominazione', 'DENOMINAZIONE']
 const DESIGNATION_FIELDS = ['sitetype', 'SITETYPE', 'tipo', 'TIPO', 'designazione', 'DESIGNAZIONE', 'tipologia', 'TIPOLOGIA']
+// This endpoint exposes 'sic_zsc'/'zps' as separate fields whose *value* is already the literal
+// designation string ("ZSC"/"ZPS") rather than a single combined field — checked in addition to
+// DESIGNATION_FIELDS, preferring sic_zsc when both are present (a 'C'-type site overlaps both,
+// see tipo_sito A/B/C note below; SIC/ZSC takes precedence as the more specific habitat regime).
+const SIC_ZSC_FIELD = 'sic_zsc'
+const ZPS_FIELD = 'zps'
 const HABITAT_FIELDS = ['habitat', 'HABITAT', 'habitat_principali', 'note', 'NOTE']
 
 function firstStringField(props: Record<string, unknown>, fields: string[]): string | null {
@@ -58,6 +67,15 @@ function firstStringField(props: Record<string, unknown>, fields: string[]): str
 // that letter-mapping wrong would silently mislabel every site. Revisit once a real endpoint's
 // actual field values are inspected via scripts/probe-natura2000.ts.
 function extractDesignation(props: Record<string, unknown>): Natura2000Designation {
+  const sicZsc = firstStringField(props, [SIC_ZSC_FIELD])
+  if (sicZsc) {
+    const upper = sicZsc.toUpperCase()
+    if (upper.includes('ZSC')) return 'ZSC'
+    if (upper.includes('SIC')) return 'SIC'
+  }
+  const zps = firstStringField(props, [ZPS_FIELD])
+  if (zps && zps.toUpperCase().includes('ZPS')) return 'ZPS'
+
   const raw = firstStringField(props, DESIGNATION_FIELDS)
   if (!raw) return 'unknown'
   const upper = raw.toUpperCase()
