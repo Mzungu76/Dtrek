@@ -46,7 +46,7 @@ export async function wfsGetFeature(opts: WfsGetFeatureOptions): Promise<GeoJson
   })
   if (cqlFilter) params.set('cql_filter', cqlFilter)
 
-  const url = `${baseUrl}?${params.toString()}`
+  const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${params.toString()}`
 
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT },
@@ -93,7 +93,7 @@ export async function wfsGetFeatureGml(opts: WfsGetFeatureOptions): Promise<stri
   params.set(version === '2.0.0' ? 'count' : 'maxFeatures', String(count))
   if (cqlFilter) params.set('cql_filter', cqlFilter)
 
-  const url = `${baseUrl}?${params.toString()}`
+  const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${params.toString()}`
 
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT },
@@ -110,7 +110,7 @@ export async function wfsGetFeatureGml(opts: WfsGetFeatureOptions): Promise<stri
 
 /** Raw GetCapabilities XML, for probe scripts inspecting an endpoint's real typeNames/attributes. */
 export async function wfsGetCapabilities(baseUrl: string, version = '2.0.0', timeoutMs = 20000): Promise<string> {
-  const url = `${baseUrl}?service=WFS&version=${version}&request=GetCapabilities`
+  const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}service=WFS&version=${version}&request=GetCapabilities`
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT },
     signal: AbortSignal.timeout(timeoutMs),
