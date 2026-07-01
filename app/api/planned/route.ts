@@ -58,6 +58,10 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedTrailScore:             row.cached_trail_score             as number | undefined,
     cachedTrailScoreConfidence:   row.cached_trail_score_confidence  as PlannedHike['cachedTrailScoreConfidence'] | undefined,
     cachedSafetyScore:            row.cached_safety_score            as SafetyScore | undefined,
+    cachedDrivingDistanceMeters:  row.cached_driving_distance_m      as number | undefined,
+    cachedDrivingDurationSeconds: row.cached_driving_duration_s      as number | undefined,
+    cachedDrivingOriginLat:       row.cached_driving_origin_lat      as number | undefined,
+    cachedDrivingOriginLon:       row.cached_driving_origin_lon      as number | undefined,
   }
 }
 
@@ -88,6 +92,10 @@ function hikeToRow(h: PlannedHike) {
     cached_trail_score:               h.cachedTrailScore ?? null,
     cached_trail_score_confidence:    h.cachedTrailScoreConfidence ?? null,
     cached_safety_score:              h.cachedSafetyScore ?? null,
+    cached_driving_distance_m:        h.cachedDrivingDistanceMeters ?? null,
+    cached_driving_duration_s:        h.cachedDrivingDurationSeconds ?? null,
+    cached_driving_origin_lat:        h.cachedDrivingOriginLat ?? null,
+    cached_driving_origin_lon:        h.cachedDrivingOriginLon ?? null,
   }
 }
 
@@ -99,6 +107,8 @@ const META_COLS = [
   'route_polyline', 'assessment', 'cached_guide', 'osm_relation_id',
   'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence',
   'cached_safety_score',
+  'cached_driving_distance_m', 'cached_driving_duration_s',
+  'cached_driving_origin_lat', 'cached_driving_origin_lon',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
@@ -269,6 +279,10 @@ export async function PATCH(req: NextRequest) {
       cachedTrailScore?: number
       cachedTrailScoreConfidence?: string
       cachedSafetyScore?: SafetyScore
+      cachedDrivingDistanceMeters?: number
+      cachedDrivingDurationSeconds?: number
+      cachedDrivingOriginLat?: number
+      cachedDrivingOriginLon?: number
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -284,6 +298,10 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedTrailScore             !== undefined) dbPatch.cached_trail_score             = patch.cachedTrailScore
     if (patch.cachedTrailScoreConfidence   !== undefined) dbPatch.cached_trail_score_confidence  = patch.cachedTrailScoreConfidence
     if (patch.cachedSafetyScore            !== undefined) dbPatch.cached_safety_score            = patch.cachedSafetyScore
+    if (patch.cachedDrivingDistanceMeters  !== undefined) dbPatch.cached_driving_distance_m      = patch.cachedDrivingDistanceMeters
+    if (patch.cachedDrivingDurationSeconds !== undefined) dbPatch.cached_driving_duration_s      = patch.cachedDrivingDurationSeconds
+    if (patch.cachedDrivingOriginLat       !== undefined) dbPatch.cached_driving_origin_lat      = patch.cachedDrivingOriginLat
+    if (patch.cachedDrivingOriginLon       !== undefined) dbPatch.cached_driving_origin_lon      = patch.cachedDrivingOriginLon
 
     const { error } = await supabase
       .from('planned_hikes')
