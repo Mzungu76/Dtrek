@@ -74,13 +74,16 @@ export async function downloadOfflinePackage(
   const bbox = computeBboxFromTrack(routePolyline)
   const allTiles = enumerateTiles(bbox)
 
-  let manifest = await loadManifest(hikeId)
-  const isResume = manifest && manifest.status === 'paused' && manifest.tileCount === allTiles.length
+  const existing = await loadManifest(hikeId)
+  const isResume = existing != null && existing.status === 'paused' && existing.tileCount === allTiles.length
+
+  // Non-null by construction: either isResume is true (so `existing` was truthy) or the branch
+  // below creates one — asserted once here instead of scattering `!` through the rest of the function.
+  const manifest: OfflinePackageManifest = isResume ? existing! : {
+    hikeId, version: 1, status: 'queued', bbox, zoomLevels: Array.from({ length: MAX_ZOOM - MIN_ZOOM + 1 }, (_, i) => MIN_ZOOM + i),
+    tileCount: allTiles.length, downloadedCount: 0, sizeBytes: 0, createdAt: Date.now(), updatedAt: Date.now(),
+  }
   if (!isResume) {
-    manifest = {
-      hikeId, version: 1, status: 'queued', bbox, zoomLevels: Array.from({ length: MAX_ZOOM - MIN_ZOOM + 1 }, (_, i) => MIN_ZOOM + i),
-      tileCount: allTiles.length, downloadedCount: 0, sizeBytes: 0, createdAt: Date.now(), updatedAt: Date.now(),
-    }
     await saveManifest(manifest)
     // Fresh download: clear any earlier partial cache for this hike so we never mix versions/zoom ranges.
     if ('caches' in window) await caches.delete(tileCacheName(hikeId))
@@ -109,9 +112,9 @@ export async function downloadOfflinePackage(
     alreadyDone.add(`${tile.z}/${tile.x}/${tile.y}`)
     tileSizes.push(size)
     totalBytes += size
-    manifest!.downloadedCount = alreadyDone.size
-    manifest!.sizeBytes = totalBytes
-    onProgress?.({ status: 'downloading', downloadedCount: manifest!.downloadedCount, tileCount: manifest!.tileCount })
+    manifest.downloadedCount = alreadyDone.size
+    manifest.sizeBytes = totalBytes
+    onProgress?.({ status: 'downloading', downloadedCount: manifest.downloadedCount, tileCount: manifest.tileCount })
   })
 
   await lsSet(doneKey, Array.from(alreadyDone))
