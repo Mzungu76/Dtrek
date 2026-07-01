@@ -59,7 +59,7 @@ export default function OfflinePackageDownloader({ hikeId, routePolyline }: Prop
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
         <CheckCircle2 className="w-3.5 h-3.5" />
-        Disponibile offline ({formatMB(manifest.sizeBytes)})
+        Disponibile offline ({formatMB(manifest!.sizeBytes)})
         <button onClick={handleDelete} className="ml-2 text-emerald-600 hover:text-emerald-900" title="Rimuovi pacchetto offline">
           <Trash2 className="w-3.5 h-3.5" />
         </button>

@@ -46,8 +46,14 @@ export function computeChecksum(tileSizes: number[]): string {
   return acc.toString(16)
 }
 
-/** A manifest is trustworthy for offline use only if it's fully downloaded and internally consistent. */
-export function isManifestValid(manifest: OfflinePackageManifest | null): manifest is OfflinePackageManifest {
+/**
+ * A manifest is trustworthy for offline use only if it's fully downloaded
+ * and internally consistent. Deliberately a plain boolean, not a `manifest
+ * is OfflinePackageManifest` type predicate: TS collapses the negative
+ * branch of such a predicate on a `T | null` parameter to `never` instead of
+ * `null`, breaking later `manifest?.status` narrowing at call sites.
+ */
+export function isManifestValid(manifest: OfflinePackageManifest | null): boolean {
   if (!manifest) return false
   return manifest.status === 'ready' && manifest.downloadedCount === manifest.tileCount && manifest.tileCount > 0
 }
