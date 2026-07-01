@@ -10,6 +10,7 @@ import WikiCards from '@/components/WikiCards'
 import RouteThumb from '@/components/RouteThumb'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { ScoresSection } from '@/components/ScoresSection'
+import OfflinePackageDownloader from '@/components/navigation/OfflinePackageDownloader'
 import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
@@ -558,6 +559,19 @@ export default function PlannedHikePage() {
               <ArrowLeft className="w-4 h-4" /> Tutte le pianificate
             </button>
             <div className="flex items-center gap-1.5 flex-wrap">
+              {heroPolyline.length > 1 && (
+                <>
+                  <button
+                    onClick={() => router.push(`/programma/${encodeURIComponent(id)}/naviga`)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white rounded-lg text-xs font-semibold transition-colors"
+                    title="Avvia navigazione GPS in tempo reale"
+                  >
+                    <Navigation className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Avvia navigazione</span>
+                  </button>
+                  <OfflinePackageDownloader hikeId={id} routePolyline={heroPolyline} />
+                </>
+              )}
               <button
                 onClick={() => router.push(`/guida/${encodeURIComponent(id)}`)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-amber-900 rounded-lg text-xs font-semibold transition-colors"
