@@ -53,7 +53,15 @@ export interface NavInstruction {
 }
 
 export type NavEventMap = {
-  positionUpdated: { raw: GeoFix; smoothed: GeoFix; progress: RouteProgress }
+  positionUpdated: {
+    raw: GeoFix
+    smoothed: GeoFix
+    progress: RouteProgress
+    /** Cumulative actual distance walked (sum of consecutive smoothed fixes, jump-clamped) — NOT the same as progress.distanceAlongRouteM, which is a projection onto the planned route and can swing wildly while off-route. Use this for a "distance so far" stat. */
+    traveledDistanceM: number
+    /** Best-effort instantaneous speed: the device's own reading when it looks sane, otherwise derived from consecutive fixes. */
+    instantSpeedMs: number | null
+  }
   bearingUpdated: { bearingDeg: number; source: 'sensor' | 'gps' }
   enteredPoi: { poi: NavPoi }
   leftPoi: { poi: NavPoi }

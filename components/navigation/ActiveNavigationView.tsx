@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, AlertTriangle, WifiOff, Navigation as NavigationIcon } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
@@ -14,6 +14,8 @@ import {
 } from '@/lib/navigation/navigationStore'
 import type { NavInstruction, NavPoi, NavState, RouteMoment } from '@/lib/navigation/types'
 import NavigationMap from './NavigationMap'
+import NavigationMapLibre from './NavigationMapLibre'
+import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
 import PoiCalloutSheet from './PoiCalloutSheet'
 import InstructionBanner from './InstructionBanner'
 import NavStatsPanel from './NavStatsPanel'
@@ -32,19 +34,25 @@ export default function ActiveNavigationView({ hike }: Props) {
   const remoteSessionId = useRef<string | null>(null)
   const pendingEvents = useRef<{ type: string; payload?: Record<string, unknown>; createdAt: string }[]>([])
   const speechEnabledRef = useRef(true)
+  const timerRunningRef = useRef(true)
   const lastFixAtRef = useRef<number | null>(null)
 
   const [state, setState] = useState<NavState>('idle')
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
   const [bearing, setBearing] = useState<number | null>(null)
   const [progress, setProgress] = useState<{ distanceAlongRouteM: number; totalRouteM: number } | null>(null)
+  const [traveledDistanceM, setTraveledDistanceM] = useState(0)
   const [currentSpeedMs, setCurrentSpeedMs] = useState<number | null>(null)
   const [movingTimeMs, setMovingTimeMs] = useState(0)
+  const [timerRunning, setTimerRunning] = useState(true)
+  const [statsExpanded, setStatsExpanded] = useState(true)
   const [instruction, setInstruction] = useState<{ current: NavInstruction; next: NavInstruction | null; distanceToNextM: number | null } | null>(null)
   const [callout, setCallout] = useState<{ title: string; extract?: string; imageUrl?: string } | null>(null)
   const [compassEnabled, setCompassEnabled] = useState(false)
   const [speechEnabled, setSpeechEnabled] = useState(true)
   const [isOnline, setIsOnline] = useState(true)
+  const [mapMode, setMapMode] = useState<MapMode>('offline')
+  const [is3D, setIs3D] = useState(false)
 
   const pois = useMemo<NavPoi[]>(() => {
     const raw = (hike.cachedPois ?? []) as PoiItem[]
@@ -102,12 +110,18 @@ export default function ActiveNavigationView({ hike }: Props) {
       engineRef.current = engine
 
       engine.on('stateChanged', ({ to }) => { if (!cancelled) setState(to) })
-      engine.on('positionUpdated', ({ raw, smoothed, progress }) => {
+      engine.on('positionUpdated', ({ raw, smoothed, progress, traveledDistanceM, instantSpeedMs }) => {
         if (cancelled) return
         lastFixAtRef.current = Date.now()
         setPosition({ lat: smoothed.lat, lon: smoothed.lon })
-        setProgress({ distanceAlongRouteM: progress.distanceAlongRouteM, totalRouteM: progress.totalRouteM })
-        setCurrentSpeedMs(raw.speedMs ?? null)
+        // Position keeps updating even while the stats timer is paused (the
+        // hiker still wants to see themselves on the map) — only the
+        // recorded distance/speed stats freeze.
+        if (timerRunningRef.current) {
+          setProgress({ distanceAlongRouteM: progress.distanceAlongRouteM, totalRouteM: progress.totalRouteM })
+          setTraveledDistanceM(traveledDistanceM)
+          setCurrentSpeedMs(instantSpeedMs)
+        }
         queueTrackFix(snapshot.sessionId, { ts: raw.ts, lat: raw.lat, lon: raw.lon, altitudeM: raw.altitudeM, speedMs: raw.speedMs, accuracyM: raw.accuracyM })
       })
       engine.on('bearingUpdated', ({ bearingDeg }) => { if (!cancelled) setBearing(bearingDeg) })
@@ -139,11 +153,11 @@ export default function ActiveNavigationView({ hike }: Props) {
     setIsOnline(navigator.onLine)
 
     const flushInterval = setInterval(() => { if (navigator.onLine) flushToServer() }, 30000)
-    // "Moving time" ticks once a second while fixes keep arriving — a rough
-    // stand-in for Komoot's moving-vs-stopped distinction without needing a
-    // separate speed-threshold state machine for the first version.
+    // "Moving time" ticks once a second while fixes keep arriving and the
+    // timer isn't paused — a rough stand-in for Komoot's moving-vs-stopped
+    // distinction without needing a separate speed-threshold state machine.
     const movingTimeInterval = setInterval(() => {
-      if (lastFixAtRef.current != null && Date.now() - lastFixAtRef.current < FIX_STALE_MS) {
+      if (timerRunningRef.current && lastFixAtRef.current != null && Date.now() - lastFixAtRef.current < FIX_STALE_MS) {
         setMovingTimeMs((prev) => prev + 1000)
       }
     }, 1000)
@@ -161,6 +175,11 @@ export default function ActiveNavigationView({ hike }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hike.id])
 
+  // The MapTiler-backed 3D styles need connectivity — fall back to the offline-safe map the moment the network drops.
+  useEffect(() => {
+    if (!isOnline && mapMode !== 'offline') setMapMode('offline')
+  }, [isOnline, mapMode])
+
   const handleEnableCompass = async () => {
     const granted = await requestOrientationPermission()
     setCompassEnabled(granted)
@@ -169,6 +188,11 @@ export default function ActiveNavigationView({ hike }: Props) {
   const handleToggleSpeech = () => {
     speechEnabledRef.current = !speechEnabledRef.current
     setSpeechEnabled(speechEnabledRef.current)
+  }
+
+  const handleTogglePlayPause = () => {
+    timerRunningRef.current = !timerRunningRef.current
+    setTimerRunning(timerRunningRef.current)
   }
 
   const handleEnd = async () => {
@@ -183,13 +207,18 @@ export default function ActiveNavigationView({ hike }: Props) {
     router.push(`/programma/${hike.id}`)
   }
 
-  const distanceCoveredM = progress?.distanceAlongRouteM ?? 0
   const distanceRemainingM = progress ? Math.max(0, progress.totalRouteM - progress.distanceAlongRouteM) : 0
-  const avgSpeedMs = movingTimeMs > 0 ? distanceCoveredM / (movingTimeMs / 1000) : null
+  const avgSpeedMs = movingTimeMs > 0 ? traveledDistanceM / (movingTimeMs / 1000) : null
 
   return (
     <div className="fixed inset-0 z-[2000] bg-slate-900">
-      <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} />
+      {mapMode === 'offline' ? (
+        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} />
+      ) : (
+        <NavigationMapLibre routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} styleId={mapMode} is3D={is3D} />
+      )}
+
+      <MapModeSwitcher mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline} />
 
       <InstructionBanner
         current={instruction?.current ?? null}
@@ -197,40 +226,35 @@ export default function ActiveNavigationView({ hike }: Props) {
         distanceToNextM={instruction?.distanceToNextM ?? null}
         speechEnabled={speechEnabled}
         onToggleSpeech={handleToggleSpeech}
+        onClose={handleEnd}
+        isOnline={isOnline}
+        compassSupported={isOrientationSupported()}
+        compassEnabled={compassEnabled}
+        onEnableCompass={handleEnableCompass}
       />
 
-      {/* Close / connectivity / compass controls */}
-      <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
-        {!isOnline && (
-          <span className="w-11 h-11 rounded-full bg-amber-500/90 text-white flex items-center justify-center shadow-lg" title="Offline"><WifiOff size={18} /></span>
-        )}
-        {isOrientationSupported() && !compassEnabled && (
-          <button onClick={handleEnableCompass} className="w-11 h-11 rounded-full bg-white/90 text-slate-800 flex items-center justify-center shadow-lg" aria-label="Attiva bussola">
-            <NavigationIcon size={18} />
-          </button>
-        )}
-      </div>
-      <button onClick={handleEnd} className="absolute top-3 left-3 z-10 w-11 h-11 rounded-full bg-white/90 text-slate-800 flex items-center justify-center shadow-lg" aria-label="Termina navigazione">
-        <X size={20} />
-      </button>
-
       {state === 'off_route' && (
-        <div className="absolute bottom-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-amber-500 text-white text-sm font-semibold shadow-lg flex items-center gap-2 z-10">
+        <div className="absolute bottom-[280px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-amber-500 text-white text-sm font-semibold shadow-lg flex items-center gap-2 z-10">
           <AlertTriangle size={16} /> Sei fuori dal percorso pianificato
         </div>
       )}
       {state === 'gps_lost' && (
-        <div className="absolute bottom-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500 text-white text-sm font-semibold shadow-lg flex items-center gap-2 z-10">
+        <div className="absolute bottom-[280px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500 text-white text-sm font-semibold shadow-lg flex items-center gap-2 z-10">
           <AlertTriangle size={16} /> Segnale GPS assente
         </div>
       )}
 
       <NavStatsPanel
-        distanceCoveredM={distanceCoveredM}
+        distanceCoveredM={traveledDistanceM}
         distanceRemainingM={distanceRemainingM}
         currentSpeedMs={currentSpeedMs}
         avgSpeedMs={avgSpeedMs}
         movingTimeMs={movingTimeMs}
+        timerRunning={timerRunning}
+        onTogglePlayPause={handleTogglePlayPause}
+        onStop={handleEnd}
+        expanded={statsExpanded}
+        onToggleExpanded={() => setStatsExpanded((v) => !v)}
       />
 
       {callout && (

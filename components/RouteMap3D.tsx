@@ -16,8 +16,7 @@ import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActiv
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
-
-const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
+import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY } from '@/lib/mapStyles'
 
 const SPEEDS = [
   { label: '½×', v: 0.5 },
@@ -33,11 +32,6 @@ const VIDEO_PRESETS = {
   snappy: { duration: 15, styleIdx: 1, orientation: '9:16'   as const, label: 'Snappy',   desc: '9:16 · social-ready', grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
 } as const
 
-const STYLES = [
-  { label: 'Outdoor',   url: () => `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${KEY}` },
-  { label: 'Satellite', url: () => `https://api.maptiler.com/maps/hybrid/style.json?key=${KEY}` },
-  { label: 'Winter',    url: () => `https://api.maptiler.com/maps/winter-v2/style.json?key=${KEY}` },
-]
 
 const VIDEO_DIMS: Record<string, [number, number]> = {
   '9:16':   [1080, 1920],

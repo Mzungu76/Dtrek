@@ -12,6 +12,7 @@ const GPS_LOST_MS = 15000
 const OFF_ROUTE_HYSTERESIS_FIXES = 3
 const COMPASS_STALE_MS = 3000 // fall back to GPS-derived bearing if no sensor event this recently
 const MOMENT_TRIGGER_RADIUS_M = 60
+const MAX_PLAUSIBLE_HIKING_SPEED_MS = 8 // ~29 km/h — generous even for trail running; beyond this a fix jump is treated as GPS noise, not real movement
 
 type Listener<K extends NavEventName> = (payload: NavEventMap[K]) => void
 
@@ -50,6 +51,8 @@ export class NavigationEngine {
   private offRouteStreak = 0
   private onRouteStreak = 0
   private recentBearings: number[] = []
+  private traveledDistanceM = 0
+  private lastAcceptedFix: GeoFix | null = null
 
   constructor(opts: NavigationEngineOptions) {
     this.tracker = new RouteTracker(opts.routePolyline)
@@ -121,7 +124,8 @@ export class NavigationEngine {
 
     const smoothed = this.smoother.push(raw)
     const progress = this.tracker.update(smoothed.lat, smoothed.lon)
-    this.emit('positionUpdated', { raw, smoothed, progress })
+    const instantSpeedMs = this.updateTraveledDistance(smoothed)
+    this.emit('positionUpdated', { raw, smoothed, progress, traveledDistanceM: this.traveledDistanceM, instantSpeedMs })
 
     this.updateBearingFallback(smoothed)
     this.updateRouteDeviation(progress.distanceToRouteM, raw.accuracyM)
@@ -141,6 +145,36 @@ export class NavigationEngine {
     const next = this.instructions[idx + 1] ?? null
     const distanceToNextM = next ? Math.max(0, next.distanceAlongRouteM - distanceAlongRouteM) : null
     this.emit('instructionUpdated', { current, next, distanceToNextM })
+  }
+
+  /**
+   * Adds to the cumulative traveled-distance total, rejecting the distance
+   * contribution of any single fix-to-fix jump that implies an implausible
+   * hiking speed (a well-known GPS artifact: the first fix(es) after
+   * acquiring/reacquiring a signal can land far from the real position).
+   * The baseline still advances to the new fix either way, so a genuine
+   * relocation (e.g. actually starting the hike somewhere else) doesn't
+   * leave traveled distance permanently stuck rejecting every update.
+   */
+  private updateTraveledDistance(fix: GeoFix): number | null {
+    if (!this.lastAcceptedFix) {
+      this.lastAcceptedFix = fix
+      return this.sanitizeSpeed(fix.speedMs)
+    }
+    const dtSeconds = (fix.ts - this.lastAcceptedFix.ts) / 1000
+    const distanceM = haversineM(this.lastAcceptedFix.lat, this.lastAcceptedFix.lon, fix.lat, fix.lon)
+    const impliedSpeedMs = dtSeconds > 0 ? distanceM / dtSeconds : 0
+    this.lastAcceptedFix = fix
+
+    if (impliedSpeedMs > MAX_PLAUSIBLE_HIKING_SPEED_MS) return this.sanitizeSpeed(fix.speedMs)
+
+    this.traveledDistanceM += distanceM
+    return this.sanitizeSpeed(fix.speedMs) ?? impliedSpeedMs
+  }
+
+  private sanitizeSpeed(speedMs: number | null | undefined): number | null {
+    if (speedMs == null || !Number.isFinite(speedMs) || speedMs < 0 || speedMs > MAX_PLAUSIBLE_HIKING_SPEED_MS) return null
+    return speedMs
   }
 
   /** GPS-derived bearing, used only when no fresh compass sensor reading has arrived. */
