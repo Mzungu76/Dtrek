@@ -36,6 +36,13 @@ export interface PlannedHike {
   cachedTrailScore?:             number
   cachedTrailScoreConfidence?:   CtsConfidence
   cachedSafetyScore?:            SafetyScore
+  // Distanza/tempo di guida (auto) dal punto di partenza dell'utente, con le coordinate
+  // di origine usate per il calcolo — permette di invalidare la cache se l'utente
+  // cambia il proprio indirizzo di partenza senza dover ricalcolare ad ogni apertura.
+  cachedDrivingDistanceMeters?:  number
+  cachedDrivingDurationSeconds?: number
+  cachedDrivingOriginLat?:       number
+  cachedDrivingOriginLon?:       number
   // Tratti difficili estratti dai waypoint/commenti del GPX importato
   // (Komoot/AllTrails) — vedi lib/difficultyMarkers.ts. Persistiti su
   // trail_difficulty_markers, non su questa riga.
@@ -116,7 +123,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon'>>,
 ): Promise<void> {
   // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {

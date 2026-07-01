@@ -197,6 +197,15 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS starting_address TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS starting_lat     DOUBLE PRECISION;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS starting_lon     DOUBLE PRECISION;
 
+-- Cache di distanza/tempo di guida (auto) dal punto di partenza dell'utente al punto di
+-- inizio del percorso pianificato — evita di richiamare il servizio di routing (OSRM) ad
+-- ogni apertura della scheda. cached_driving_origin_lat/lon registrano da quale indirizzo
+-- di partenza è stata calcolata la cache, per invalidarla se l'utente lo cambia.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_driving_distance_m   DOUBLE PRECISION;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_driving_duration_s   DOUBLE PRECISION;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_driving_origin_lat   DOUBLE PRECISION;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_driving_origin_lon   DOUBLE PRECISION;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

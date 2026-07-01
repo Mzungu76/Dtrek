@@ -37,6 +37,12 @@ export function googleMapsDirectionsUrl(fromLat: number, fromLon: number, toLat:
   return `https://www.google.com/maps/dir/?api=1&origin=${fromLat},${fromLon}&destination=${toLat},${toLon}&travelmode=driving`
 }
 
+/** True if two coordinate pairs are close enough (~11 m) to be considered the same origin. */
+export function originMatches(aLat?: number | null, aLon?: number | null, bLat?: number | null, bLon?: number | null): boolean {
+  if (aLat == null || aLon == null || bLat == null || bLon == null) return false
+  return Math.abs(aLat - bLat) < 1e-4 && Math.abs(aLon - bLon) < 1e-4
+}
+
 /** Returns the [lat, lon] of a planned hike's trail start, or null if unavailable. */
 export function getTrailStartPoint(hike: { routePolyline?: [number, number][] }): [number, number] | null {
   const p = hike.routePolyline?.[0]

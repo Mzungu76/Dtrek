@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
-import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, updatePlannedMeta, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { findAnniversaries } from '@/lib/stats'
@@ -16,7 +16,7 @@ import {
   ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, PartyPopper,
   Car, Navigation,
 } from 'lucide-react'
-import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
+import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl, originMatches } from '@/lib/drivingInfo'
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
 function getLeadingEmpty(year: number, month: number): number {
@@ -210,8 +210,16 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
   const ctsData    = ctsScore != null ? ctsLabel(ctsScore) : null
 
   const trailStart = getTrailStartPoint(hike)
-  const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
-  const [origin,  setOrigin]  = useState<{ lat: number; lon: number } | null>(null)
+  const cachedOriginLat = (hike as PlannedHikeMeta & { cachedDrivingOriginLat?: number }).cachedDrivingOriginLat
+  const cachedOriginLon = (hike as PlannedHikeMeta & { cachedDrivingOriginLon?: number }).cachedDrivingOriginLon
+  const cachedDistance  = (hike as PlannedHikeMeta & { cachedDrivingDistanceMeters?: number }).cachedDrivingDistanceMeters
+  const cachedDuration  = (hike as PlannedHikeMeta & { cachedDrivingDurationSeconds?: number }).cachedDrivingDurationSeconds
+  const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(
+    cachedDistance != null && cachedDuration != null ? { distanceMeters: cachedDistance, durationSeconds: cachedDuration } : null,
+  )
+  const [origin,  setOrigin]  = useState<{ lat: number; lon: number } | null>(
+    cachedOriginLat != null && cachedOriginLon != null ? { lat: cachedOriginLat, lon: cachedOriginLon } : null,
+  )
 
   useEffect(() => {
     if (!trailStart) return
@@ -219,12 +227,28 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
     getUserStartingPoint().then(pt => {
       if (cancelled || !pt) return
       setOrigin(pt)
+      // Reuse the Supabase-cached value if it was computed from the same starting point —
+      // avoids re-hitting the OSRM routing service on every card render/page load.
+      if (originMatches(cachedOriginLat, cachedOriginLon, pt.lat, pt.lon) && cachedDistance != null && cachedDuration != null) {
+        setDriving({ distanceMeters: cachedDistance, durationSeconds: cachedDuration })
+        return
+      }
       fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
-        if (!cancelled) setDriving(info)
+        if (cancelled) return
+        setDriving(info)
+        if (info) {
+          updatePlannedMeta(hike.id, {
+            cachedDrivingDistanceMeters: info.distanceMeters,
+            cachedDrivingDurationSeconds: info.durationSeconds,
+            cachedDrivingOriginLat: pt.lat,
+            cachedDrivingOriginLon: pt.lon,
+          }).catch(() => {})
+        }
       })
     })
     return () => { cancelled = true }
-  }, [trailStart?.[0], trailStart?.[1]]) // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trailStart?.[0], trailStart?.[1], hike.id, cachedOriginLat, cachedOriginLon, cachedDistance, cachedDuration])
 
   return (
     <Link

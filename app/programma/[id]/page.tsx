@@ -37,7 +37,7 @@ import {
   ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass, Leaf, PawPrint,
   Car, Navigation, MapPin,
 } from 'lucide-react'
-import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
+import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl, originMatches } from '@/lib/drivingInfo'
 
 import PdfExportButton from '@/components/PdfExportButton'
 
@@ -303,19 +303,40 @@ export default function PlannedHikePage() {
       .finally(() => setPrefsLoaded(true))
   }, [])
 
-  // Driving distance/time from the user's starting address to the trailhead
+  // Driving distance/time from the user's starting address to the trailhead — reuses the
+  // Supabase-cached value (saved alongside the hike) when it matches the current starting
+  // point, so the OSRM routing service isn't re-queried on every page open.
   useEffect(() => {
     if (!hike) return
     const trailStart = getTrailStartPoint(hike)
     if (!trailStart) return
+    const cachedLat  = (hike as { cachedDrivingOriginLat?: number }).cachedDrivingOriginLat
+    const cachedLon  = (hike as { cachedDrivingOriginLon?: number }).cachedDrivingOriginLon
+    const cachedDist = (hike as { cachedDrivingDistanceMeters?: number }).cachedDrivingDistanceMeters
+    const cachedDur  = (hike as { cachedDrivingDurationSeconds?: number }).cachedDrivingDurationSeconds
     let cancelled = false
     setDrivingLoading(true)
     getUserStartingPoint().then(pt => {
       if (cancelled) return
       if (!pt) { setDrivingLoading(false); return }
       setOrigin(pt)
+      if (originMatches(cachedLat, cachedLon, pt.lat, pt.lon) && cachedDist != null && cachedDur != null) {
+        setDriving({ distanceMeters: cachedDist, durationSeconds: cachedDur })
+        setDrivingLoading(false)
+        return
+      }
       fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
-        if (!cancelled) { setDriving(info); setDrivingLoading(false) }
+        if (cancelled) return
+        setDriving(info)
+        setDrivingLoading(false)
+        if (info) {
+          updatePlannedMeta(hike.id, {
+            cachedDrivingDistanceMeters: info.distanceMeters,
+            cachedDrivingDurationSeconds: info.durationSeconds,
+            cachedDrivingOriginLat: pt.lat,
+            cachedDrivingOriginLon: pt.lon,
+          }).catch(() => {})
+        }
       })
     })
     return () => { cancelled = true }
