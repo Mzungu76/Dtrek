@@ -309,8 +309,8 @@ export default function EsploraPage() {
     }
   }
 
-  // Floating search bar rendered on top of the map by ExploreMap — keeps the
-  // map itself as the page's focal point instead of stacking chrome above it.
+  // Rendered inside ExploreResultsPanel's filter grid (not floated over the
+  // map) so it doesn't add another independently-positioned map overlay.
   const searchBar = (
     <div className="relative">
       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
@@ -372,7 +372,6 @@ export default function EsploraPage() {
               onTrailSelected={setPreview}
               onViewportChanged={handleViewportChanged}
               height="clamp(440px, 72vh, 760px)"
-              searchSlot={searchBar}
             />
           }
           panel={
@@ -390,6 +389,7 @@ export default function EsploraPage() {
               selectingId={panelSelectingId}
               onSearchThisArea={handleSearchThisArea}
               canSearchThisArea={searchDirty}
+              locationSearchSlot={searchBar}
             />
           }
         />

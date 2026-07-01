@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, X, MapPin } from 'lucide-react'
 import type { TrailResult } from '@/lib/trailResult'
 import { fetchTrailDetail, finishTrailStats } from '@/lib/fetchTrailDetail'
@@ -31,9 +31,6 @@ interface Props {
   center?: { lat: number; lon: number } | null
   onTrailSelected: (trail: TrailResult) => void
   height?: string
-  // Rendered as a floating overlay anchored to the top of the map (search bar) —
-  // keeps the map itself as the visual focus instead of stacking chrome above it.
-  searchSlot?: ReactNode
   // Fired on pan/zoom so the parent page can drive the "Cerca in quest'area"
   // button's enabled/dirty state without ExploreMap knowing anything about it.
   onViewportChanged?: (viewport: MapViewport) => void
@@ -43,7 +40,7 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
 }
 
-export default function ExploreMap({ center, onTrailSelected, height = '480px', searchSlot, onViewportChanged }: Props) {
+export default function ExploreMap({ center, onTrailSelected, height = '480px', onViewportChanged }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstance      = useRef<any>(null)
@@ -244,12 +241,6 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
     <div>
       <div className="relative">
         <div ref={mapRef} style={{ height }} className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm" />
-
-        {searchSlot && (
-          <div className="absolute top-3 left-3 right-3 z-[1000]">
-            {searchSlot}
-          </div>
-        )}
 
         {statusMessage ? (
           <div className="absolute bottom-3 left-3 bg-white/95 rounded-xl shadow-md px-3 py-2 flex items-center gap-2 text-xs text-stone-600 z-[1000]">
