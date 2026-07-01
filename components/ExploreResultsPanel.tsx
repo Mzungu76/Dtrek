@@ -1,4 +1,5 @@
 'use client'
+import type { ReactNode } from 'react'
 import {
   Search, Loader2, MapPin, Route, TrendingUp, Clock, Sparkles, AlertCircle,
 } from 'lucide-react'
@@ -26,6 +27,9 @@ interface Props {
   selectingId: number | null
   onSearchThisArea: () => void
   canSearchThisArea: boolean
+  // Geocode search-by-place input — lives here (top of the filter grid)
+  // instead of floating over the map, alongside the other search controls.
+  locationSearchSlot?: ReactNode
 }
 
 function isRouteTypeActive(filters: SearchFilters, rt: RouteType): boolean {
@@ -83,7 +87,7 @@ function RangeField({
 export default function ExploreResultsPanel({
   results, pendingCandidates, loading, error, truncated, hasSearched,
   filters, onFiltersChange, onUsePreferences, onSelectTrail, selectingId,
-  onSearchThisArea, canSearchThisArea,
+  onSearchThisArea, canSearchThisArea, locationSearchSlot,
 }: Props) {
   function toggleRouteType(rt: RouteType) {
     const active = ALL_ROUTE_TYPES.filter(t => isRouteTypeActive(filters, t))
@@ -120,6 +124,8 @@ export default function ExploreResultsPanel({
 
       {/* Filtri */}
       <div className="p-3 border-b border-stone-100 space-y-3">
+        {locationSearchSlot}
+
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-stone-400 uppercase tracking-wide">Filtri</span>
           {onUsePreferences && (
