@@ -35,7 +35,9 @@ import {
   ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
   ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass, Leaf, PawPrint,
+  Car, Navigation, MapPin,
 } from 'lucide-react'
+import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
 
 import PdfExportButton from '@/components/PdfExportButton'
 
@@ -196,6 +198,9 @@ export default function PlannedHikePage() {
   const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
   const [routePhotos,    setRoutePhotos]   = useState<string[]>([])
   const [showFloraNotice, setShowFloraNotice] = useState(false)
+  const [origin,   setOrigin]   = useState<{ lat: number; lon: number } | null>(null)
+  const [driving,  setDriving]  = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
+  const [drivingLoading, setDrivingLoading] = useState(false)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -297,6 +302,24 @@ export default function PlannedHikePage() {
       .catch(() => {})
       .finally(() => setPrefsLoaded(true))
   }, [])
+
+  // Driving distance/time from the user's starting address to the trailhead
+  useEffect(() => {
+    if (!hike) return
+    const trailStart = getTrailStartPoint(hike)
+    if (!trailStart) return
+    let cancelled = false
+    setDrivingLoading(true)
+    getUserStartingPoint().then(pt => {
+      if (cancelled) return
+      if (!pt) { setDrivingLoading(false); return }
+      setOrigin(pt)
+      fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
+        if (!cancelled) { setDriving(info); setDrivingLoading(false) }
+      })
+    })
+    return () => { cancelled = true }
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Compute CTS for breakdown display — NEVER saves
   useEffect(() => {
@@ -696,6 +719,48 @@ export default function PlannedHikePage() {
             </div>
           ))}
         </div>
+
+        {/* Come arrivare — distanza/tempo di guida dal punto di partenza dell'utente */}
+        {hasGps && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-4 flex items-center gap-2">
+              <Car className="w-5 h-5 text-sky-500" /> Come arrivare
+            </h2>
+            {drivingLoading ? (
+              <div className="flex items-center gap-2 text-stone-400 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" /> Calcolo distanza…
+              </div>
+            ) : driving && origin ? (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-xs text-stone-400 font-medium">Distanza</p>
+                    <p className="text-lg font-bold text-stone-800">{(driving.distanceMeters / 1000).toFixed(0)} km</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-stone-400 font-medium">Tempo in auto</p>
+                    <p className="text-lg font-bold text-stone-800">{formatDrivingDuration(driving.durationSeconds)}</p>
+                  </div>
+                </div>
+                <a
+                  href={googleMapsDirectionsUrl(origin.lat, origin.lon, gpsPoints[0].lat!, gpsPoints[0].lon!)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors"
+                >
+                  <Navigation className="w-4 h-4" /> Naviga con Google Maps
+                </a>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-stone-400">
+                <MapPin className="w-4 h-4 shrink-0" />
+                Imposta il tuo{' '}
+                <a href="/profilo" className="text-sky-600 hover:text-sky-700 font-medium underline">indirizzo di partenza</a>
+                {' '}nel profilo per vedere distanza e tempo di guida fino a qui.
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Weather forecast — planned mode when a date is set */}
         {hasGps && (

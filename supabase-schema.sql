@@ -191,6 +191,12 @@ CREATE INDEX IF NOT EXISTS idx_user_settings_diary_token ON user_settings (diary
 -- Sesso dell'utente, usato dalla AI per l'accordo grammaticale di genere nella guida
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_gender TEXT CHECK (user_gender IN ('maschio','femmina','altro','non_specificato'));
 
+-- Indirizzo di partenza dell'utente (punto da cui parte per le escursioni), usato per
+-- calcolare distanza/tempo di guida fino al punto di inizio dei percorsi pianificati
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS starting_address TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS starting_lat     DOUBLE PRECISION;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS starting_lon     DOUBLE PRECISION;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

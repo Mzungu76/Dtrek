@@ -17,7 +17,7 @@ import { computeStreaks } from '@/lib/stats'
 import { computeBadges, computeCurrentBadges, type ComputedBadge } from '@/lib/badges'
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
-  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers, Trophy,
+  Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers, Trophy, MapPin, Search,
 } from 'lucide-react'
 
 // ── Claude API key section ─────────────────────────────────────────────────
@@ -817,6 +817,174 @@ function BiometricSettingsSection() {
   )
 }
 
+// ── Starting address ──────────────────────────────────────────────────────
+
+interface GeocodeResult {
+  display_name: string
+  lat: string
+  lon: string
+}
+
+function StartingAddressSection() {
+  const [address,   setAddress]   = useState('')
+  const [savedAddr, setSavedAddr] = useState<string | null>(null)
+  const [coords,    setCoords]    = useState<{ lat: number; lon: number } | null>(null)
+  const [results,   setResults]   = useState<GeocodeResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [loading,   setLoading]   = useState(true)
+  const [saving,    setSaving]    = useState(false)
+  const [status,    setStatus]    = useState<{ ok: boolean; msg: string } | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.startingAddress) { setAddress(d.startingAddress); setSavedAddr(d.startingAddress) }
+        if (d.startingLat != null && d.startingLon != null) setCoords({ lat: d.startingLat, lon: d.startingLon })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  function handleInput(v: string) {
+    setAddress(v)
+    setStatus(null)
+    setCoords(null)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (v.trim().length < 3) { setResults([]); return }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await fetch(`/api/geocode?q=${encodeURIComponent(v.trim())}`)
+        const data = await res.json()
+        setResults(Array.isArray(data) ? data : [])
+      } catch {
+        setResults([])
+      } finally {
+        setSearching(false)
+      }
+    }, 400)
+  }
+
+  function selectResult(r: GeocodeResult) {
+    setAddress(r.display_name)
+    setCoords({ lat: parseFloat(r.lat), lon: parseFloat(r.lon) })
+    setResults([])
+  }
+
+  async function handleSave() {
+    if (!coords) {
+      setStatus({ ok: false, msg: 'Seleziona un indirizzo dai suggerimenti prima di salvare.' })
+      return
+    }
+    setSaving(true); setStatus(null)
+    const res = await fetch('/api/user-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startingAddress: address, startingLat: coords.lat, startingLon: coords.lon }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setSaving(false)
+    if (!res.ok) {
+      setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
+    } else {
+      setSavedAddr(address)
+      setStatus({ ok: true, msg: 'Indirizzo di partenza salvato.' })
+    }
+  }
+
+  async function handleClear() {
+    setSaving(true); setStatus(null)
+    const res = await fetch('/api/user-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startingAddress: null, startingLat: null, startingLon: null }),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setAddress(''); setSavedAddr(null); setCoords(null)
+      setStatus({ ok: true, msg: 'Indirizzo rimosso.' })
+    } else {
+      setStatus({ ok: false, msg: 'Errore durante la rimozione.' })
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-3">
+      <div className="flex items-center gap-2.5">
+        <MapPin className="w-5 h-5 text-forest-600 shrink-0" />
+        <div>
+          <h2 className="text-sm font-semibold text-stone-800">Indirizzo di partenza</h2>
+          <p className="text-xs text-stone-400">Da dove parti di solito per le tue escursioni (in auto)</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-stone-400 text-xs">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <div className="relative">
+              <input
+                type="text"
+                value={address}
+                onChange={e => handleInput(e.target.value)}
+                placeholder="es. Via Roma 1, Milano"
+                className="w-full rounded-lg border border-stone-300 pl-3 pr-9 py-2.5 text-sm outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+              </span>
+            </div>
+            {results.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full bg-white rounded-lg border border-stone-200 shadow-lg overflow-hidden">
+                {results.map((r, i) => (
+                  <button
+                    key={i}
+                    onClick={() => selectResult(r)}
+                    className="w-full text-left px-3 py-2 text-xs text-stone-600 hover:bg-forest-50 transition-colors border-b border-stone-100 last:border-0"
+                  >
+                    {r.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving || !coords}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition"
+            >
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Salva indirizzo
+            </button>
+            {savedAddr && (
+              <button
+                onClick={handleClear}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Rimuovi
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {status && (
+        <p className={`text-xs font-medium ${status.ok ? 'text-forest-600' : 'text-red-600'}`}>
+          {status.ok ? '✓ ' : '✗ '}{status.msg}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Profile page ───────────────────────────────────────────────────────────
 
 export default function ProfiloPage() {
@@ -1013,6 +1181,12 @@ export default function ProfiloPage() {
         {saveError && (
           <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{saveError}</p>
         )}
+
+        {/* Starting address */}
+        <div className="pt-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-3">Punto di partenza</p>
+          <StartingAddressSection />
+        </div>
 
         {/* Biometric settings */}
         <div className="pt-2">
