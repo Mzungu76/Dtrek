@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
@@ -18,7 +19,10 @@ import { computeBadges, computeCurrentBadges, type ComputedBadge } from '@/lib/b
 import {
   User, Camera, Check, Trash2, Key, Eye, EyeOff,
   Loader2, ShieldCheck, Sparkles, Lock, PersonStanding, Gauge, RefreshCw, Layers, Trophy, MapPin, Search,
+  Crosshair, AlertTriangle,
 } from 'lucide-react'
+
+const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), { ssr: false })
 
 // ── Claude API key section ─────────────────────────────────────────────────
 
@@ -825,6 +829,20 @@ interface GeocodeResult {
   lon: string
 }
 
+async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+      { headers: { 'Accept': 'application/json' } },
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.display_name ?? null
+  } catch {
+    return null
+  }
+}
+
 async function geocodeAddress(q: string): Promise<GeocodeResult[]> {
   // Query Nominatim directly from the browser first — more reliable than routing through
   // our server, since Nominatim's usage policy throttles/blocks many cloud/server IPs
@@ -860,6 +878,8 @@ function StartingAddressSection() {
   const [loading,   setLoading]   = useState(true)
   const [saving,    setSaving]    = useState(false)
   const [status,    setStatus]    = useState<{ ok: boolean; msg: string } | null>(null)
+  const [showMap,   setShowMap]   = useState(false)
+  const [reverseLoading, setReverseLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -897,18 +917,37 @@ function StartingAddressSection() {
     setCoords({ lat: parseFloat(r.lat), lon: parseFloat(r.lon) })
     setResults([])
     setSearched(false)
+    setShowMap(false)
+  }
+
+  async function handleMapPick(lat: number, lon: number) {
+    setCoords({ lat, lon })
+    setStatus(null)
+    // Best-effort: se il campo indirizzo è vuoto, prova a compilarlo automaticamente
+    // col nome del luogo selezionato (reverse geocoding); se fallisce non blocca nulla,
+    // le coordinate sono comunque già salvate e sufficienti per i calcoli.
+    if (!address.trim()) {
+      setReverseLoading(true)
+      const name = await reverseGeocode(lat, lon)
+      setReverseLoading(false)
+      if (name) setAddress(name)
+    }
   }
 
   async function handleSave() {
-    if (!coords) {
-      setStatus({ ok: false, msg: 'Seleziona un indirizzo dai suggerimenti prima di salvare.' })
+    if (!address.trim() && !coords) {
+      setStatus({ ok: false, msg: 'Inserisci un indirizzo o seleziona un punto sulla mappa.' })
       return
     }
     setSaving(true); setStatus(null)
     const res = await fetch('/api/user-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startingAddress: address, startingLat: coords.lat, startingLon: coords.lon }),
+      body: JSON.stringify({
+        startingAddress: address.trim() || null,
+        startingLat: coords?.lat ?? null,
+        startingLon: coords?.lon ?? null,
+      }),
     })
     const json = await res.json().catch(() => ({}))
     setSaving(false)
@@ -916,7 +955,12 @@ function StartingAddressSection() {
       setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
     } else {
       setSavedAddr(address)
-      setStatus({ ok: true, msg: 'Indirizzo di partenza salvato.' })
+      setStatus({
+        ok: true,
+        msg: coords
+          ? 'Indirizzo di partenza salvato.'
+          : 'Indirizzo salvato, ma senza posizione geografica: distanza e tempo di guida non saranno calcolati finché non selezioni un punto sulla mappa.',
+      })
     }
   }
 
@@ -929,7 +973,7 @@ function StartingAddressSection() {
     })
     setSaving(false)
     if (res.ok) {
-      setAddress(''); setSavedAddr(null); setCoords(null)
+      setAddress(''); setSavedAddr(null); setCoords(null); setShowMap(false)
       setStatus({ ok: true, msg: 'Indirizzo rimosso.' })
     } else {
       setStatus({ ok: false, msg: 'Errore durante la rimozione.' })
@@ -991,16 +1035,61 @@ function StartingAddressSection() {
             )}
             {!searching && searched && results.length === 0 && (
               <p className="mt-1.5 text-xs text-amber-600">
-                Nessun indirizzo trovato. Prova con un formato più semplice (es. solo via e città, senza numero civico), oppure controlla eventuali errori di battitura.
+                Nessun indirizzo trovato. Prova con un formato più semplice (es. solo via e città, senza numero civico), oppure{' '}
+                <button type="button" onClick={() => setShowMap(true)} className="underline font-medium hover:text-amber-700">
+                  indica il punto direttamente sulla mappa
+                </button>.
               </p>
             )}
           </div>
 
+          {!showMap && (
+            <button
+              type="button"
+              onClick={() => setShowMap(true)}
+              className="flex items-center gap-1.5 text-xs text-forest-600 hover:text-forest-700 font-medium"
+            >
+              <Crosshair className="w-3.5 h-3.5" />
+              {coords ? 'Correggi il punto sulla mappa' : 'Non trovi il tuo indirizzo? Selezionalo sulla mappa'}
+            </button>
+          )}
+
+          {showMap && (
+            <div className="space-y-2">
+              <p className="text-xs text-stone-500">
+                Clicca sulla mappa (o trascina il segnaposto) nel punto esatto da cui parti di solito.
+              </p>
+              <LocationPickerMap
+                lat={coords?.lat}
+                lon={coords?.lon}
+                onPick={handleMapPick}
+              />
+              <div className="flex items-center justify-between">
+                {reverseLoading ? (
+                  <span className="flex items-center gap-1.5 text-xs text-stone-400">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Recupero nome del luogo…
+                  </span>
+                ) : coords ? (
+                  <span className="text-xs text-forest-600 font-medium">✓ Punto selezionato ({coords.lat.toFixed(5)}, {coords.lon.toFixed(5)})</span>
+                ) : <span />}
+                <button type="button" onClick={() => setShowMap(false)} className="text-xs text-stone-400 hover:text-stone-600">
+                  Chiudi mappa
+                </button>
+              </div>
+            </div>
+          )}
+
+          {address.trim() && !coords && !showMap && (
+            <p className="flex items-start gap-1.5 text-xs text-amber-600">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              Nessuna posizione geografica associata a questo indirizzo: distanza e tempo di guida non verranno calcolati finché non selezioni un punto sulla mappa o un suggerimento dalla ricerca.
+            </p>
+          )}
+
           <div className="flex gap-2">
             <button
               onClick={handleSave}
-              disabled={saving || !coords}
-              title={!coords ? 'Seleziona un indirizzo dai suggerimenti prima di salvare' : undefined}
+              disabled={saving || (!address.trim() && !coords)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition"
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
