@@ -27,9 +27,13 @@ self.addEventListener('install', (event) => {
 // ── Activate: clean up old caches ────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
   const VALID = [STATIC_CACHE, API_CACHE];
+  // Offline navigation tile packages ('dtrek-tiles-<hikeId>-v1' and the
+  // shared fallback bucket) are versioned and managed explicitly by
+  // lib/offline/packageManager.ts (deleteOfflinePackage, or a version bump
+  // here forcing a clean re-download) — never swept by this generic cleanup.
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => !VALID.includes(k)).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => !VALID.includes(k) && !k.startsWith('dtrek-tiles-')).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -41,6 +45,31 @@ self.addEventListener('fetch', (event) => {
 
   // Only intercept GET requests from this origin
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  // ── Map tiles: cache-first against any downloaded offline package ─────────
+  // Offline navigation packages are written directly into per-hike
+  // 'dtrek-tiles-<hikeId>-v1' caches by lib/offline/packageManager.ts, not by
+  // this fetch handler. caches.match() with no cacheName searches every
+  // cache bucket, so a tile downloaded for hike A is served here even while
+  // browsing hike B. Tiles not part of any package fall through to a shared
+  // best-effort cache, same network-first pattern as the API routes below.
+  if (url.pathname.startsWith('/api/tile')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const clone = response.clone();
+              caches.open('dtrek-tiles-shared-v1').then((cache) => cache.put(request, clone));
+            }
+            return response;
+          })
+          .catch(() => new Response(null, { status: 503 }));
+      })
+    );
+    return;
+  }
 
   // ── API GET routes: network-first with cache fallback ──────────────────────
   // This enables full offline reading: if the network is unavailable, the SW
