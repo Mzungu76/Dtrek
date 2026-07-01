@@ -88,9 +88,15 @@ export default function NavStatsPanel({
           <div className="text-xs text-slate-500">Tempo in movimento</div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={onTogglePlayPause} className="w-10 h-10 rounded-full bg-sky-500 text-white flex items-center justify-center shadow" aria-label={timerRunning ? 'Pausa' : 'Riprendi'}>
-            {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          </button>
+          {!timerRunning && movingTimeMs === 0 ? (
+            <button onClick={onTogglePlayPause} className="flex items-center gap-1.5 px-4 h-10 rounded-full bg-sky-500 text-white text-sm font-semibold shadow" aria-label="Avvia">
+              <Play className="w-4 h-4" /> Avvia
+            </button>
+          ) : (
+            <button onClick={onTogglePlayPause} className="w-10 h-10 rounded-full bg-sky-500 text-white flex items-center justify-center shadow" aria-label={timerRunning ? 'Pausa' : 'Riprendi'}>
+              {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            </button>
+          )}
           <button onClick={onStop} className="w-10 h-10 rounded-full bg-red-500 text-white flex items-center justify-center shadow" aria-label="Termina">
             <Square className="w-4 h-4" />
           </button>
