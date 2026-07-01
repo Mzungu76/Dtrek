@@ -32,6 +32,57 @@ export async function fetchOverpass<T = unknown>(query: string, timeoutMs = 20_0
   }
 }
 
+export interface HikingRouteCandidate {
+  id: number
+  name: string
+  // false when `name` was synthesized from ref/from-to/id — lets callers
+  // rank real named routes above these without dropping them entirely.
+  hasName: boolean
+  ref?: string
+  network?: string
+}
+
+const NETWORK_RANK: Record<string, number> = { iwn: 4, nwn: 3, rwn: 2, lwn: 1 }
+
+function displayName(tags: Record<string, string> | undefined, id: number): { name: string; hasName: boolean } {
+  if (tags?.name) return { name: tags.name, hasName: true }
+  if (tags?.ref) return { name: `Sentiero ${tags.ref}`, hasName: false }
+  if (tags?.from && tags?.to) return { name: `${tags.from} → ${tags.to}`, hasName: false }
+  return { name: `Percorso ${id}`, hasName: false }
+}
+
+// Shared by /api/waymarked-trails/list (click + area search) and
+// /api/waymarked-trails/search (area search with filters) so both routes
+// build the exact same Overpass query and naming/sorting rules.
+//
+// Deliberately does NOT require a `name` tag — many real, maintained CAI/
+// regional hiking relations carry only a `ref` (e.g. "CAI 302"), and
+// excluding them was the main cause of too-few-results in an area.
+export async function queryHikingRelationsInBbox(
+  minLat: number, minLon: number, maxLat: number, maxLon: number, limit: number,
+): Promise<HikingRouteCandidate[]> {
+  const query = `[out:json][timeout:25][maxsize:8388608];
+relation["type"="route"]["route"="hiking"](${minLat},${minLon},${maxLat},${maxLon});
+out tags ${limit};`
+
+  const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
+  const candidates: HikingRouteCandidate[] = (json.elements ?? [])
+    .filter((e): e is OsmRelation => e.type === 'relation')
+    .map(e => {
+      const { name, hasName } = displayName(e.tags, e.id)
+      return { id: e.id, name, hasName, ref: e.tags?.ref, network: e.tags?.network }
+    })
+
+  // Named trails first (more likely to be well-known, recognizable routes),
+  // then by network rank — cheap in-memory sort, no extra Overpass calls.
+  candidates.sort((a, b) => {
+    if (a.hasName !== b.hasName) return a.hasName ? -1 : 1
+    return (NETWORK_RANK[b.network ?? ''] ?? 0) - (NETWORK_RANK[a.network ?? ''] ?? 0)
+  })
+
+  return candidates
+}
+
 export function parseOsmDistance(s?: string): number | null {
   if (!s) return null
   const n = parseFloat(s)

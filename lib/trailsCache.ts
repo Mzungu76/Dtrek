@@ -27,14 +27,8 @@ export interface TrailCacheRow {
   caiScale?: string | null
 }
 
-export async function getCachedTrail(osmRelationId: number): Promise<TrailCacheRow | null> {
-  const { data } = await supabase
-    .from('trails')
-    .select('*')
-    .eq('osm_relation_id', osmRelationId)
-    .maybeSingle()
-
-  if (!data) return null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapCacheRow(data: any): TrailCacheRow {
   return {
     osmRelationId: data.osm_relation_id,
     name: data.name,
@@ -55,6 +49,31 @@ export async function getCachedTrail(osmRelationId: number): Promise<TrailCacheR
     ref: data.ref,
     caiScale: data.cai_scale,
   }
+}
+
+export async function getCachedTrail(osmRelationId: number): Promise<TrailCacheRow | null> {
+  const { data } = await supabase
+    .from('trails')
+    .select('*')
+    .eq('osm_relation_id', osmRelationId)
+    .maybeSingle()
+
+  return data ? mapCacheRow(data) : null
+}
+
+// Read-through lookup for area search: fetches every already-cached row among a
+// candidate id list (already bbox-filtered upstream by Overpass) in a single
+// query. Filtering by exact id list — rather than a bbox comparison — sidesteps
+// needing PostGIS or a geospatial index: the existing unique index on
+// osm_relation_id already makes an `IN (...)` lookup on ~150 ids fast.
+export async function getCachedTrailsInBbox(osmRelationIds: number[]): Promise<Map<number, TrailCacheRow>> {
+  if (osmRelationIds.length === 0) return new Map()
+  const { data } = await supabase
+    .from('trails')
+    .select('*')
+    .in('osm_relation_id', osmRelationIds)
+
+  return new Map((data ?? []).map(row => [row.osm_relation_id, mapCacheRow(row)]))
 }
 
 export async function upsertTrailCache(row: TrailCacheRow): Promise<void> {

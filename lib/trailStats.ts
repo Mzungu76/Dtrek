@@ -179,6 +179,15 @@ export async function getElevationProfile(points: [number, number][]): Promise<{
   }
 }
 
+export function formatDurationSecs(secs: number): string {
+  if (secs <= 0) return ''
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h${String(m).padStart(2, '0')}`
+}
+
 // Naismith's rule adapted for hiking: base walking pace + 10min per 100m of climb.
 export function estimateTimeMinutes(distanceKm: number, elevationGain: number): number {
   const walkingSpeedKmh = 4

@@ -1,35 +1,12 @@
 'use client'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Loader2, X, MapPin } from 'lucide-react'
+import type { TrailResult } from '@/lib/trailResult'
+import { fetchTrailDetail, finishTrailStats } from '@/lib/fetchTrailDetail'
+import { formatDurationSecs } from '@/lib/trailStats'
+import { NETWORK_LABEL } from '@/lib/networkLabels'
 
-export interface TrailResult {
-  id: string          // "wmt-{relationId}"
-  osmId: number        // same numeric value as the OSM relation id
-  name: string
-  from?: string
-  to?: string
-  distanceKm: number | null
-  elevationGain: number | null
-  elevationLoss: number | null
-  altitudeMax: number | null
-  altitudeMin: number | null
-  sacScale?: string
-  caiScale?: string
-  ref?: string
-  description?: string
-  network?: string
-  geometryPolyline?: [number, number][]
-  estimatedTimeMin?: number | null
-  dataQuality?: 'osm_tags' | 'calculated' | 'estimated' | null
-  routeType?: 'loop' | 'out_and_back' | 'point_to_point'
-  // Sparse (~200m) lat/lon/elevation samples along the route — real SRTM data when
-  // available, otherwise a synthesized plausible profile. Used to give the saved
-  // hike's trackPoints a real altitudeMeters per point instead of none at all.
-  elevationProfile?: { lat: number; lon: number; ele: number }[]
-  // true while elevation/duration are still being computed server-side (cache
-  // miss + incomplete OSM tags) — distance is always resolved by this point.
-  statsPending?: boolean
-}
+export type { TrailResult }
 
 interface WmtCandidate {
   id: number
@@ -45,13 +22,9 @@ interface CandidateBrief {
   loading: boolean
 }
 
-function formatDur(secs: number): string {
-  if (secs <= 0) return ''
-  const h = Math.floor(secs / 3600)
-  const m = Math.floor((secs % 3600) / 60)
-  if (h === 0) return `${m}min`
-  if (m === 0) return `${h}h`
-  return `${h}h${String(m).padStart(2, '0')}`
+export interface MapViewport {
+  bbox: { minLon: number; minLat: number; maxLon: number; maxLat: number }
+  zoom: number
 }
 
 interface Props {
@@ -61,17 +34,16 @@ interface Props {
   // Rendered as a floating overlay anchored to the top of the map (search bar) —
   // keeps the map itself as the visual focus instead of stacking chrome above it.
   searchSlot?: ReactNode
-}
-
-const NETWORK_LABEL: Record<string, string> = {
-  lwn: 'Locale', rwn: 'Regionale', nwn: 'Nazionale', iwn: 'Internazionale',
+  // Fired on pan/zoom so the parent page can drive the "Cerca in quest'area"
+  // button's enabled/dirty state without ExploreMap knowing anything about it.
+  onViewportChanged?: (viewport: MapViewport) => void
 }
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
 }
 
-export default function ExploreMap({ center, onTrailSelected, height = '480px', searchSlot }: Props) {
+export default function ExploreMap({ center, onTrailSelected, height = '480px', searchSlot, onViewportChanged }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstance      = useRef<any>(null)
@@ -126,6 +98,18 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
       map.on('click', (e: any) => {
         handleMapClick(e.latlng.lat, e.latlng.lng, map.getZoom())
       })
+
+      const emitViewport = () => {
+        if (!onViewportChanged) return
+        const b = map.getBounds()
+        onViewportChanged({
+          bbox: { minLon: b.getWest(), minLat: b.getSouth(), maxLon: b.getEast(), maxLat: b.getNorth() },
+          zoom: map.getZoom(),
+        })
+      }
+      map.on('moveend', emitViewport)
+      map.on('zoomend', emitViewport)
+      emitViewport()
     })
 
     if (!document.querySelector('#leaflet-css')) {
@@ -213,36 +197,8 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
     setQueryError(null)
     currentTrailId.current = id
     try {
-      const detRes = await fetch(`/api/waymarked-trails/details?id=${id}`)
-      const det = await detRes.json()
-      if (!detRes.ok) throw new Error(det.error ?? 'Errore dettagli')
-
-      const polyline: [number, number][] = det.polyline ?? []
-      drawHighlight(polyline)
-
-      const trail: TrailResult = {
-        id: `wmt-${id}`,
-        osmId: id,
-        name: det.name ?? `Percorso ${id}`,
-        from: det.from,
-        to: det.to,
-        distanceKm: det.distanceKm,
-        elevationGain: det.elevationGain ?? null,
-        elevationLoss: det.elevationLoss ?? null,
-        altitudeMax: det.altitudeMax,
-        altitudeMin: det.altitudeMin,
-        sacScale: det.sacScale,
-        caiScale: det.caiScale,
-        ref: det.ref,
-        description: det.description,
-        network: det.network,
-        geometryPolyline: polyline,
-        estimatedTimeMin: det.estimatedTimeMin ?? null,
-        dataQuality: det.dataQuality ?? null,
-        routeType: det.routeType,
-        statsPending: !!det.statsPending,
-        elevationProfile: det.elevationProfile,
-      }
+      const { trail, statsPending, geometrySimplified, bbox, operator } = await fetchTrailDetail(id)
+      drawHighlight(trail.geometryPolyline ?? [])
       onTrailSelected(trail)
       // Trail detail is now showing — the candidate list is no longer needed.
       setCandidates([])
@@ -251,8 +207,10 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
       // Cache miss + incomplete OSM tags: distance is already final, but elevation
       // needs the slower OpenTopoData round trip — finish it in the background so
       // the panel can open right away instead of blocking on it.
-      if (det.statsPending) {
-        finishTrailStats(trail, det.geometrySimplified ?? [], det.bbox, det.operator)
+      if (statsPending && bbox) {
+        finishTrailStats(trail, geometrySimplified, bbox, operator).then(updated => {
+          if (updated && currentTrailId.current === trail.osmId) onTrailSelected(updated)
+        })
       }
     } catch {
       // Keep the candidate list visible so the user can retry a different one.
@@ -260,54 +218,6 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
     } finally {
       setSelectingId(null)
       setDetailLoading(false)
-    }
-  }
-
-  async function finishTrailStats(
-    trail: TrailResult,
-    geometrySimplified: [number, number][],
-    bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number },
-    operator?: string,
-  ) {
-    try {
-      const res = await fetch('/api/waymarked-trails/stats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          osmId: trail.osmId,
-          name: trail.name,
-          ref: trail.ref,
-          network: trail.network,
-          sacScale: trail.sacScale,
-          caiScale: trail.caiScale,
-          description: trail.description,
-          from: trail.from,
-          to: trail.to,
-          operator,
-          distanceKm: trail.distanceKm,
-          routeType: trail.routeType,
-          bbox,
-          geometrySimplified,
-        }),
-      })
-      const stats = await res.json()
-      if (!res.ok || currentTrailId.current !== trail.osmId) return
-
-      onTrailSelected({
-        ...trail,
-        elevationGain: stats.elevationGain,
-        elevationLoss: stats.elevationLoss,
-        // OSM relation tags (rare but authoritative when present) win over the
-        // SRTM-derived estimate computed here.
-        altitudeMax: trail.altitudeMax ?? stats.altitudeMax,
-        altitudeMin: trail.altitudeMin ?? stats.altitudeMin,
-        estimatedTimeMin: stats.estimatedTimeMin,
-        dataQuality: stats.dataQuality,
-        statsPending: false,
-        elevationProfile: stats.profile,
-      })
-    } catch {
-      // Phase-1 data stays on screen; stats simply remain pending.
     }
   }
 
@@ -323,6 +233,13 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
     mapInstance.current.fitBounds(line.getBounds(), { padding: [30, 30] })
   }
 
+  // Single consolidated status slot — at most one message shown at a time
+  // (loading takes priority over error) instead of two/three independently
+  // absolute-positioned overlays that could previously overlap each other.
+  const statusMessage = queryLoading || detailLoading
+    ? (detailLoading ? 'Caricamento sentiero…' : 'Ricerca sentieri…')
+    : null
+
   return (
     <div>
       <div className="relative">
@@ -334,14 +251,12 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
           </div>
         )}
 
-        {(queryLoading || detailLoading) && (
+        {statusMessage ? (
           <div className="absolute bottom-3 left-3 bg-white/95 rounded-xl shadow-md px-3 py-2 flex items-center gap-2 text-xs text-stone-600 z-[1000]">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
-            {detailLoading ? 'Caricamento sentiero…' : 'Ricerca sentieri…'}
+            {statusMessage}
           </div>
-        )}
-
-        {queryError && (
+        ) : queryError && (
           <div className="absolute bottom-3 left-3 right-3 bg-white rounded-xl shadow-md px-3 py-2.5 flex items-start gap-2 text-xs text-stone-600 z-[1000]">
             <span className="flex-1">{queryError}</span>
             <button onClick={() => setQueryError(null)} className="text-stone-400 hover:text-stone-600 shrink-0">
@@ -393,7 +308,7 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
                       <>
                         <span>{b?.distanceKm != null ? `${b.distanceKm.toFixed(1)} km` : 'N/D'}</span>
                         <span>{b?.elevationGain != null ? `+${b.elevationGain} m` : 'N/D'}</span>
-                        <span>{dur > 0 ? formatDur(dur) : 'N/D'}</span>
+                        <span>{dur > 0 ? formatDurationSecs(dur) : 'N/D'}</span>
                       </>
                     )}
                   </div>

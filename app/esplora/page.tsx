@@ -2,7 +2,9 @@
 import { useState, useRef } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
-import ExploreMap, { type TrailResult } from '@/components/ExploreMap'
+import ExploreMap, { type TrailResult, type MapViewport } from '@/components/ExploreMap'
+import ExploreLayout from '@/components/ExploreLayout'
+import ExploreResultsPanel from '@/components/ExploreResultsPanel'
 import TrailMiniMap from '@/components/TrailMiniMap'
 import { CLBadge } from '@/components/CLBadge'
 import { CurrentConditionsNotice } from '@/components/CurrentConditionsNotice'
@@ -12,7 +14,14 @@ import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
-import { interpolateElevations } from '@/lib/trailStats'
+import { interpolateElevations, formatDurationSecs } from '@/lib/trailStats'
+import { ROUTE_TYPE_LABEL, ROUTE_TYPE_ICON } from '@/lib/routeTypeLabels'
+import { sacCodesForTiers } from '@/lib/difficultyTiers'
+import { NETWORK_LABEL } from '@/lib/networkLabels'
+import { fetchTrailDetail, finishTrailStats } from '@/lib/fetchTrailDetail'
+import { runWithConcurrency } from '@/lib/promisePool'
+import { matchesFilters, type SearchFilters } from '@/lib/trailFilters'
+import type { TrailSearchResult, TrailSearchCandidate, SearchResponseBody } from '@/lib/trailSearch'
 import {
   Compass, MapPin, Route, TrendingUp, Clock,
   Plus, Loader2, X, ChevronLeft, Info,
@@ -30,19 +39,6 @@ interface GeoResult {
 
 function naisimithSecs(distKm: number | null, gainM: number | null): number {
   return ((distKm ?? 0) / 4.5 + (gainM ?? 0) / 600) * 3600
-}
-
-function formatDur(secs: number): string {
-  if (secs <= 0) return ''
-  const h = Math.floor(secs / 3600)
-  const m = Math.floor((secs % 3600) / 60)
-  if (h === 0) return `${m}min`
-  if (m === 0) return `${h}h`
-  return `${h}h${String(m).padStart(2, '0')}`
-}
-
-const NETWORK_LABEL: Record<string, string> = {
-  lwn: 'Locale', rwn: 'Regionale', nwn: 'Nazionale', iwn: 'Internazionale',
 }
 
 const SAC_LABEL: Record<string, string> = {
@@ -66,6 +62,168 @@ export default function EsploraPage() {
   const si                            = useCL({ osmId: preview?.osmId })
   const s2                            = useSentinel2({ osmId: preview?.osmId })
   const flora                         = useFlora(preview?.geometryPolyline, preview?.altitudeMax ?? undefined)
+
+  // ── "Cerca in quest'area" state ──
+  const [viewport, setViewport]                 = useState<MapViewport | null>(null)
+  const [filters, setFilters]                   = useState<SearchFilters>({})
+  const [searchResults, setSearchResults]       = useState<TrailSearchResult[]>([])
+  const [pendingCandidates, setPendingCandidates] = useState<TrailSearchCandidate[]>([])
+  const [searchLoading, setSearchLoading]       = useState(false)
+  const [searchError, setSearchError]           = useState<string | null>(null)
+  const [truncated, setTruncated]               = useState(false)
+  const [hasSearched, setHasSearched]           = useState(false)
+  // True whenever the viewport or filters changed since the last search — drives
+  // the button's "you should press this again" highlight (Google Maps-style).
+  const [searchDirty, setSearchDirty]           = useState(true)
+  const [panelSelectingId, setPanelSelectingId] = useState<number | null>(null)
+  // Bumped on every search start — tells ExploreLayout's mobile sheet to
+  // auto-expand from collapsed to half so progress is visible.
+  const [searchTrigger, setSearchTrigger]       = useState(0)
+  // Fetched lazily on first "Usa le mie preferenze" click, cached for the rest
+  // of the session so re-clicking doesn't re-hit the API.
+  const preferencesCache = useRef<{ prefSforzo: number; prefDurata: number } | null>(null)
+  // Lets a superseded enrichment pass (from a previous search) recognize it's
+  // stale and stop touching state once a newer search has started.
+  const enrichTokenRef                          = useRef<symbol | null>(null)
+
+  function handleViewportChanged(v: MapViewport) {
+    setViewport(v)
+    setSearchDirty(true)
+  }
+
+  function handleFiltersChange(f: SearchFilters) {
+    setFilters(f)
+    setSearchDirty(true)
+  }
+
+  // Precompiles the manual filters from the user's saved effort/duration
+  // preferences (user_settings.pref_sforzo/pref_durata) — a starting point,
+  // not a lock: the controls stay fully editable afterwards. Effort sets a
+  // difficulty tier + an elevation-gain ceiling (not a floor, a short easy
+  // walk still matches a low-effort preference); duration becomes a ±90min
+  // tolerance band around the stored value so it doesn't over-constrain results.
+  async function handleUsePreferences() {
+    try {
+      let prefs = preferencesCache.current
+      if (!prefs) {
+        const res = await fetch('/api/user-settings')
+        if (!res.ok) {
+          setSearchError(res.status === 401
+            ? 'Accedi per usare le tue preferenze salvate.'
+            : 'Errore nel caricamento delle preferenze.')
+          return
+        }
+        const json = await res.json()
+        prefs = { prefSforzo: json.prefSforzo ?? 50, prefDurata: json.prefDurata ?? 270 }
+        preferencesCache.current = prefs
+      }
+
+      const { prefSforzo, prefDurata } = prefs
+      const difficulty = prefSforzo <= 33
+        ? sacCodesForTiers(['facile'])
+        : prefSforzo <= 66
+          ? sacCodesForTiers(['facile', 'moderato'])
+          : sacCodesForTiers(['moderato', 'impegnativo'])
+      const elevationGainMax = prefSforzo <= 33 ? 400 : prefSforzo <= 66 ? 900 : undefined
+
+      setFilters(f => ({
+        ...f,
+        difficulty,
+        elevationGainMax,
+        durationMinMin: Math.max(30, prefDurata - 90),
+        durationMinMax: prefDurata + 90,
+      }))
+      setSearchDirty(true)
+    } catch {
+      setSearchError('Errore nel caricamento delle preferenze.')
+    }
+  }
+
+  async function handleSearchThisArea() {
+    if (!viewport) return
+    setSearchLoading(true)
+    setSearchError(null)
+    setSearchTrigger(n => n + 1)
+    const token = Symbol('search')
+    enrichTokenRef.current = token
+    try {
+      const res = await fetch('/api/waymarked-trails/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bbox: viewport.bbox, filters }),
+      })
+      const json: SearchResponseBody & { error?: string } = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Errore ricerca')
+      setSearchResults(json.results)
+      setPendingCandidates(json.pendingCandidates)
+      setTruncated(json.truncated)
+      setHasSearched(true)
+      setSearchDirty(false)
+      enrichPendingCandidates(json.pendingCandidates, token)
+    } catch {
+      setSearchError("Errore nella ricerca dei sentieri in quest'area.")
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  // Progressively fetches full details for cache-miss candidates (limited
+  // concurrency so a 40+ result area search doesn't fire 40 parallel requests),
+  // then filters and promotes each into the rendered results list as it resolves
+  // — the initial response never blocks on this. Note: a candidate whose
+  // elevation is still statsPending at this point (rare — only true cache misses
+  // without full OSM tags) is evaluated with elevationGain still null, so an
+  // active elevation/duration filter can drop it even though the real value
+  // might have matched; re-running the phase-2 stats call for every pending
+  // candidate here would reintroduce the "N slow external calls" problem this
+  // design avoids, so this is an accepted trade-off.
+  async function enrichPendingCandidates(candidates: TrailSearchCandidate[], token: symbol) {
+    await runWithConcurrency(candidates, 5, c => fetchTrailDetail(c.id), (c, detail) => {
+      if (enrichTokenRef.current !== token) return
+      const { trail } = detail
+      const result: TrailSearchResult = {
+        id: c.id,
+        name: trail.name,
+        ref: trail.ref ?? c.ref,
+        network: trail.network ?? c.network,
+        distanceKm: trail.distanceKm,
+        elevationGain: trail.elevationGain,
+        elevationLoss: trail.elevationLoss,
+        estimatedTimeMin: trail.estimatedTimeMin ?? null,
+        sacScale: trail.sacScale,
+        caiScale: trail.caiScale,
+        routeType: trail.routeType,
+        dataQuality: trail.dataQuality,
+        description: trail.description,
+        from: trail.from,
+        to: trail.to,
+      }
+      setPendingCandidates(prev => prev.filter(p => p.id !== c.id))
+      if (matchesFilters(result, filters)) {
+        setSearchResults(prev => [...prev, result])
+      }
+    })
+  }
+
+  // Opens the preview modal for a card in the results panel — reuses the exact
+  // same fetch/transform/statsPending flow as ExploreMap's click-on-line
+  // shortcut (via lib/fetchTrailDetail.ts) so both entry points behave identically.
+  async function handleSelectTrailFromPanel(id: number) {
+    setPanelSelectingId(id)
+    try {
+      const { trail, statsPending, geometrySimplified, bbox, operator } = await fetchTrailDetail(id)
+      setPreview(trail)
+      if (statsPending && bbox) {
+        finishTrailStats(trail, geometrySimplified, bbox, operator).then(updated => {
+          if (updated) setPreview(prev => (prev && prev.osmId === trail.osmId ? updated : prev))
+        })
+      }
+    } catch {
+      setSearchError('Errore nel caricamento del sentiero selezionato.')
+    } finally {
+      setPanelSelectingId(null)
+    }
+  }
 
   // ── Geocoding ──
   function handleQueryChange(v: string) {
@@ -185,7 +343,7 @@ export default function EsploraPage() {
   return (
     <div className="min-h-screen bg-stone-50 pb-24 md:pb-8">
       <Navbar />
-      <div className="max-w-5xl mx-auto px-4 py-4">
+      <div className="max-w-6xl mx-auto px-4 py-4">
 
         {/* Back + compact header */}
         <div className="flex items-center justify-between gap-3 mb-3">
@@ -203,12 +361,37 @@ export default function EsploraPage() {
           </div>
         </div>
 
-        {/* Map (focal point of the page) + results below it */}
-        <ExploreMap
-          center={mapCenter}
-          onTrailSelected={setPreview}
-          height="clamp(440px, 72vh, 760px)"
-          searchSlot={searchBar}
+        {/* Map + results panel, coexisting side by side (desktop) or map +
+            bottom sheet (mobile) instead of a list stacked below a tall map. */}
+        <ExploreLayout
+          resultsCount={searchResults.length + pendingCandidates.length}
+          searchTrigger={searchTrigger}
+          map={
+            <ExploreMap
+              center={mapCenter}
+              onTrailSelected={setPreview}
+              onViewportChanged={handleViewportChanged}
+              height="clamp(440px, 72vh, 760px)"
+              searchSlot={searchBar}
+            />
+          }
+          panel={
+            <ExploreResultsPanel
+              results={searchResults}
+              pendingCandidates={pendingCandidates}
+              loading={searchLoading}
+              error={searchError}
+              truncated={truncated}
+              hasSearched={hasSearched}
+              filters={filters}
+              onFiltersChange={handleFiltersChange}
+              onUsePreferences={handleUsePreferences}
+              onSelectTrail={handleSelectTrailFromPanel}
+              selectingId={panelSelectingId}
+              onSearchThisArea={handleSearchThisArea}
+              canSearchThisArea={searchDirty}
+            />
+          }
         />
       </div>
 
@@ -298,7 +481,7 @@ export default function EsploraPage() {
                       <span className="flex items-center justify-center gap-1 text-xs font-normal text-gray-400">
                         <Loader2 className="w-3 h-3 animate-spin" /> calcolo…
                       </span>
-                    ) : dur > 0 ? formatDur(dur) : 'N/D'}
+                    ) : dur > 0 ? formatDurationSecs(dur) : 'N/D'}
                   </div>
                   <div className="text-[10px] text-stone-400">Durata</div>
                 </div>
@@ -306,6 +489,18 @@ export default function EsploraPage() {
 
               {/* Details */}
               <div className="px-5 py-4 space-y-2.5">
+                {t.routeType && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-stone-500 w-24 shrink-0">Tipo percorso</span>
+                    <span className="text-xs text-stone-700 flex items-center gap-1.5">
+                      {(() => {
+                        const Icon = ROUTE_TYPE_ICON[t.routeType!]
+                        return <Icon className="w-3.5 h-3.5 text-stone-400" />
+                      })()}
+                      {ROUTE_TYPE_LABEL[t.routeType]}
+                    </span>
+                  </div>
+                )}
                 {t.sacScale && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-stone-500 w-24 shrink-0">Difficoltà</span>
