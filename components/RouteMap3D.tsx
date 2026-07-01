@@ -15,6 +15,7 @@ import { type PoiItem, type PoiType, POI_META, buildPoiPopupHtml } from '@/lib/o
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
+import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 
 const KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? ''
 
@@ -77,24 +78,8 @@ function distM(la1: number, lo1: number, la2: number, lo2: number): number {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
 }
 
-function bearingDeg(la1: number, lo1: number, la2: number, lo2: number): number {
-  const dl = rad(lo2-lo1), y = Math.sin(dl)*Math.cos(rad(la2))
-  const x = Math.cos(rad(la1))*Math.sin(rad(la2)) - Math.sin(rad(la1))*Math.cos(rad(la2))*Math.cos(dl)
-  return (Math.atan2(y,x)*180/Math.PI+360)%360
-}
-
 function smoothArray(arr: number[], half = 4): number[] {
   return arr.map((_,i) => { const s=arr.slice(Math.max(0,i-half),Math.min(arr.length,i+half+1)); return s.reduce((a,b)=>a+b,0)/s.length })
-}
-
-// Circular mean for bearings — avoids the 350°/10° → 180° bug at north crossings
-function circularMeanBearings(bearings: number[], half: number): number[] {
-  return bearings.map((_,i)=>{
-    const s=bearings.slice(Math.max(0,i-half),Math.min(bearings.length,i+half+1))
-    const x=s.reduce((sum,b)=>sum+Math.cos(b*Math.PI/180),0)/s.length
-    const y=s.reduce((sum,b)=>sum+Math.sin(b*Math.PI/180),0)/s.length
-    return (Math.atan2(y,x)*180/Math.PI+360)%360
-  })
 }
 
 function lerp(a: number, b: number, t: number) { return a + (b-a)*t }
