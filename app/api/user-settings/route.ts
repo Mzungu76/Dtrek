@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon')
     .eq('user_id', user.id)
     .single()
 
@@ -68,6 +68,9 @@ export async function GET(req: NextRequest) {
     hrHikeCount:              (data?.hr_hike_count              as number) ?? 0,
     hrRest:                   (data?.hr_rest                    as number) ?? null,
     hrMax:                    (data?.hr_max                     as number) ?? null,
+    startingAddress:          (data?.starting_address           as string) ?? null,
+    startingLat:              (data?.starting_lat               as number) ?? null,
+    startingLon:              (data?.starting_lon               as number) ?? null,
   })
 }
 
@@ -96,6 +99,9 @@ export async function POST(req: NextRequest) {
     displayName?: string | null
     hrRest?: number
     hrMax?: number | null
+    startingAddress?: string | null
+    startingLat?: number | null
+    startingLon?: number | null
   }
 
   const upsertData: Record<string, unknown> = {
@@ -199,6 +205,17 @@ export async function POST(req: NextRequest) {
     upsertData.display_name = (body.displayName ?? '').trim() || null
   }
 
+  // Starting address (indirizzo di partenza per calcolo distanza/tempo di guida)
+  if (body.startingAddress !== undefined) {
+    upsertData.starting_address = (body.startingAddress ?? '').trim() || null
+  }
+  if (body.startingLat !== undefined) {
+    upsertData.starting_lat = body.startingLat
+  }
+  if (body.startingLon !== undefined) {
+    upsertData.starting_lon = body.startingLon
+  }
+
   let { error } = await supabase
     .from('user_settings')
     .upsert(upsertData, { onConflict: 'user_id' })
@@ -220,6 +237,9 @@ export async function POST(req: NextRequest) {
     delete safe.hr_hike_count
     delete safe.hr_rest
     delete safe.hr_max
+    delete safe.starting_address
+    delete safe.starting_lat
+    delete safe.starting_lon
     const { error: e2 } = await supabase
       .from('user_settings')
       .upsert(safe, { onConflict: 'user_id' })

@@ -14,7 +14,9 @@ import { it } from 'date-fns/locale'
 import {
   Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
   ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, PartyPopper,
+  Car, Navigation,
 } from 'lucide-react'
+import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
 function getLeadingEmpty(year: number, month: number): number {
@@ -206,6 +208,24 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
   const ctsConf    = (hike as PlannedHikeMeta & { cachedTrailScoreConfidence?: string }).cachedTrailScoreConfidence
   const ctsSuffix  = ctsConf === 'default' ? '≈' : ctsConf === 'estimated' ? '~' : ''
   const ctsData    = ctsScore != null ? ctsLabel(ctsScore) : null
+
+  const trailStart = getTrailStartPoint(hike)
+  const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
+  const [origin,  setOrigin]  = useState<{ lat: number; lon: number } | null>(null)
+
+  useEffect(() => {
+    if (!trailStart) return
+    let cancelled = false
+    getUserStartingPoint().then(pt => {
+      if (cancelled || !pt) return
+      setOrigin(pt)
+      fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
+        if (!cancelled) setDriving(info)
+      })
+    })
+    return () => { cancelled = true }
+  }, [trailStart?.[0], trailStart?.[1]]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <Link
       href={`/programma/${encodeURIComponent(hike.id)}`}
@@ -266,6 +286,24 @@ function PlannedCard({ hike, date, showFullDate = false, compact = false }: Plan
           <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-sky-400">
             <Clock className="w-2.5 h-2.5" />{formatDuration(hike.estimatedTimeSeconds)} stim.
           </div>
+          {driving && origin && trailStart && (
+            <div className="flex items-center justify-between gap-1 mt-1 pt-1 border-t border-sky-50">
+              <span className="flex items-center gap-0.5 text-[9px] text-stone-400 truncate">
+                <Car className="w-2.5 h-2.5 shrink-0" />
+                {(driving.distanceMeters / 1000).toFixed(0)} km · {formatDrivingDuration(driving.durationSeconds)}
+              </span>
+              <a
+                href={googleMapsDirectionsUrl(origin.lat, origin.lon, trailStart[0], trailStart[1])}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                title="Naviga fino al punto di partenza"
+                className="shrink-0 w-4 h-4 rounded-full bg-sky-100 hover:bg-sky-200 flex items-center justify-center text-sky-600 transition-colors"
+              >
+                <Navigation className="w-2.5 h-2.5" />
+              </a>
+            </div>
+          )}
         </div>
       </div>
     </Link>
