@@ -334,6 +334,14 @@ ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_phenology_peak_month int;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_computed_at timestamptz;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_available boolean DEFAULT false;
 
+-- ── Indici per la ricerca "Cerca in quest'area" (sezione Esplora) ────────────
+-- Stesso blocco anche in supabase/migrations/add_trails_search_indexes.sql.
+-- Il percorso principale filtra per lista esatta di osm_relation_id (già
+-- coperto da idx_trails_osm_relation_id, nessun PostGIS necessario); questi
+-- due indici servono solo per future interrogazioni dirette della cache.
+CREATE INDEX IF NOT EXISTS idx_trails_route_type  ON trails (route_type);
+CREATE INDEX IF NOT EXISTS idx_trails_distance_km ON trails (distance_km);
+
 
 -- ═══════════════════════════════════════════════════════════
 -- Geoportale Nazionale MASE/ISPRA — Fase 1 (PAI)
