@@ -42,12 +42,23 @@ export interface RouteProgress {
   totalRouteM: number
 }
 
+export type TurnType = 'start' | 'straight' | 'slight-left' | 'left' | 'sharp-left' | 'slight-right' | 'right' | 'sharp-right' | 'arrive'
+
+/** A geometric turn-by-turn cue derived from the route polyline itself (bearing changes), independent of POIs/moments — the hiking equivalent of a driving nav's "turn right in 200m". */
+export interface NavInstruction {
+  id: string
+  distanceAlongRouteM: number
+  turn: TurnType
+  text: string
+}
+
 export type NavEventMap = {
   positionUpdated: { raw: GeoFix; smoothed: GeoFix; progress: RouteProgress }
   bearingUpdated: { bearingDeg: number; source: 'sensor' | 'gps' }
   enteredPoi: { poi: NavPoi }
   leftPoi: { poi: NavPoi }
   momentReached: { moment: RouteMoment }
+  instructionUpdated: { current: NavInstruction; next: NavInstruction | null; distanceToNextM: number | null }
   offRoute: { distanceToRouteM: number }
   backOnRoute: {}
   gpsLost: {}

@@ -5,7 +5,8 @@ import { RouteTracker, offRouteThresholdM } from './routeDeviation'
 import { PoiSpatialIndex } from './poiProximity'
 import { watchDeviceCompass, bearingDeg, circularMeanBearings } from './orientation'
 import { NavStateMachine } from './stateMachine'
-import type { GeoFix, NavEventMap, NavEventName, NavPoi, RouteMoment } from './types'
+import { buildRouteInstructions } from './routeInstructions'
+import type { GeoFix, NavEventMap, NavEventName, NavInstruction, NavPoi, RouteMoment } from './types'
 
 const GPS_LOST_MS = 15000
 const OFF_ROUTE_HYSTERESIS_FIXES = 3
@@ -33,6 +34,8 @@ export class NavigationEngine {
   private readonly tracker: RouteTracker
   private readonly poiIndex: PoiSpatialIndex
   private readonly moments: RouteMoment[]
+  private readonly instructions: NavInstruction[]
+  private lastInstructionIndex = -1
   private readonly smoother = new GpsSmoother()
   private readonly stateMachine = new NavStateMachine()
   private readonly gps: AdaptiveGpsTracker
@@ -52,6 +55,7 @@ export class NavigationEngine {
     this.tracker = new RouteTracker(opts.routePolyline)
     this.poiIndex = new PoiSpatialIndex(opts.pois)
     this.moments = opts.moments ?? []
+    this.instructions = buildRouteInstructions(opts.routePolyline)
     this.gps = new AdaptiveGpsTracker(
       (fix) => this.handleFix(fix),
       () => this.handleGpsError(),
@@ -123,6 +127,20 @@ export class NavigationEngine {
     this.updateRouteDeviation(progress.distanceToRouteM, raw.accuracyM)
     this.updatePois(smoothed)
     this.updateMoments(progress.distanceAlongRouteM, smoothed)
+    this.updateInstructions(progress.distanceAlongRouteM)
+  }
+
+  /** Finds the instruction the hiker is currently past, and how far to the next one — emitted every fix so the UI can show a live "in 150m: turn right" countdown, Komoot-style. */
+  private updateInstructions(distanceAlongRouteM: number): void {
+    if (this.instructions.length === 0) return
+    let idx = this.lastInstructionIndex < 0 ? 0 : this.lastInstructionIndex
+    while (idx + 1 < this.instructions.length && this.instructions[idx + 1].distanceAlongRouteM <= distanceAlongRouteM) idx++
+    this.lastInstructionIndex = idx
+
+    const current = this.instructions[idx]
+    const next = this.instructions[idx + 1] ?? null
+    const distanceToNextM = next ? Math.max(0, next.distanceAlongRouteM - distanceAlongRouteM) : null
+    this.emit('instructionUpdated', { current, next, distanceToNextM })
   }
 
   /** GPS-derived bearing, used only when no fresh compass sensor reading has arrived. */
