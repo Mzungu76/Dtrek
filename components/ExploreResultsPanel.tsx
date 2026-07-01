@@ -1,7 +1,7 @@
 'use client'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
-  Search, Loader2, MapPin, Route, TrendingUp, Clock, Sparkles, AlertCircle,
+  Search, Loader2, MapPin, Route, TrendingUp, Clock, Sparkles, AlertCircle, ChevronDown,
 } from 'lucide-react'
 import type { TrailSearchResult, TrailSearchCandidate } from '@/lib/trailSearch'
 import type { SearchFilters } from '@/lib/trailFilters'
@@ -89,6 +89,19 @@ export default function ExploreResultsPanel({
   filters, onFiltersChange, onUsePreferences, onSelectTrail, selectingId,
   onSearchThisArea, canSearchThisArea, locationSearchSlot,
 }: Props) {
+  // Collapsed by default: chips + 3 range fields are tall enough to bury the
+  // results list below the fold on the mobile bottom sheet (the actual
+  // complaint this fixes) — collapsing them behind a toggle keeps the list
+  // visible right after a search, on both mobile and desktop.
+  const [filtersOpen, setFiltersOpen] = useState(false)
+
+  const hasActiveFilters = !!(
+    filters.routeType || filters.difficulty ||
+    filters.distanceKmMin != null || filters.distanceKmMax != null ||
+    filters.elevationGainMin != null || filters.elevationGainMax != null ||
+    filters.durationMinMin != null || filters.durationMinMax != null
+  )
+
   function toggleRouteType(rt: RouteType) {
     const active = ALL_ROUTE_TYPES.filter(t => isRouteTypeActive(filters, t))
     const next = isRouteTypeActive(filters, rt) ? active.filter(t => t !== rt) : [...active, rt]
@@ -127,7 +140,14 @@ export default function ExploreResultsPanel({
         {locationSearchSlot}
 
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-stone-400 uppercase tracking-wide">Filtri</span>
+          <button
+            onClick={() => setFiltersOpen(v => !v)}
+            className="flex items-center gap-1.5 text-[11px] font-medium text-stone-400 uppercase tracking-wide"
+          >
+            Filtri
+            {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
+          </button>
           {onUsePreferences && (
             <button
               onClick={onUsePreferences}
@@ -138,39 +158,43 @@ export default function ExploreResultsPanel({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          {ALL_ROUTE_TYPES.map(rt => {
-            const Icon = ROUTE_TYPE_ICON[rt]
-            return (
-              <button key={rt} onClick={() => toggleRouteType(rt)} className={chipClass(isRouteTypeActive(filters, rt))}>
-                <span className="flex items-center gap-1"><Icon className="w-3 h-3" />{ROUTE_TYPE_LABEL[rt]}</span>
-              </button>
-            )
-          })}
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {ALL_TIERS.map(tier => (
-            <button key={tier} onClick={() => toggleTier(tier)} className={chipClass(isTierActive(filters, tier))}>
-              {DIFFICULTY_TIER_LABEL[tier]}
-            </button>
-          ))}
-        </div>
+        {filtersOpen && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_ROUTE_TYPES.map(rt => {
+                const Icon = ROUTE_TYPE_ICON[rt]
+                return (
+                  <button key={rt} onClick={() => toggleRouteType(rt)} className={chipClass(isRouteTypeActive(filters, rt))}>
+                    <span className="flex items-center gap-1"><Icon className="w-3 h-3" />{ROUTE_TYPE_LABEL[rt]}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_TIERS.map(tier => (
+                <button key={tier} onClick={() => toggleTier(tier)} className={chipClass(isTierActive(filters, tier))}>
+                  {DIFFICULTY_TIER_LABEL[tier]}
+                </button>
+              ))}
+            </div>
 
-        <RangeField
-          label="Distanza" unit="km" step={1}
-          min={filters.distanceKmMin} max={filters.distanceKmMax}
-          onChange={(min, max) => onFiltersChange({ ...filters, distanceKmMin: min, distanceKmMax: max })}
-        />
-        <RangeField
-          label="Dislivello" unit="m" step={50}
-          min={filters.elevationGainMin} max={filters.elevationGainMax}
-          onChange={(min, max) => onFiltersChange({ ...filters, elevationGainMin: min, elevationGainMax: max })}
-        />
-        <RangeField
-          label="Durata" unit="min" step={30}
-          min={filters.durationMinMin} max={filters.durationMinMax}
-          onChange={(min, max) => onFiltersChange({ ...filters, durationMinMin: min, durationMinMax: max })}
-        />
+            <RangeField
+              label="Distanza" unit="km" step={1}
+              min={filters.distanceKmMin} max={filters.distanceKmMax}
+              onChange={(min, max) => onFiltersChange({ ...filters, distanceKmMin: min, distanceKmMax: max })}
+            />
+            <RangeField
+              label="Dislivello" unit="m" step={50}
+              min={filters.elevationGainMin} max={filters.elevationGainMax}
+              onChange={(min, max) => onFiltersChange({ ...filters, elevationGainMin: min, elevationGainMax: max })}
+            />
+            <RangeField
+              label="Durata" unit="min" step={30}
+              min={filters.durationMinMin} max={filters.durationMinMax}
+              onChange={(min, max) => onFiltersChange({ ...filters, durationMinMin: min, durationMinMax: max })}
+            />
+          </div>
+        )}
       </div>
 
       {/* Risultati */}
