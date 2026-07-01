@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { Locate, Layers } from 'lucide-react'
+import { Locate } from 'lucide-react'
 import type { NavState } from '@/lib/navigation/types'
 
 interface Props {
@@ -20,36 +20,49 @@ const STATE_COLOR: Record<NavState, string> = {
   finished: '#22c55e',
 }
 
-// Raster styles served by /api/tile (CartoDB/OSM proxy) — deliberately not
-// MapLibre/MapTiler vector styles here, see the offline-tile licensing note
-// in the plan: this map must also work from the offline package.
-const MAP_STYLES = ['voyager', 'light', 'dark'] as const
+// Always the 'voyager' raster style from /api/tile (CartoDB/OSM proxy) —
+// this is the offline-safe map (see the offline-tile licensing note in the
+// plan), so it deliberately doesn't offer the satellite/3D styles that live
+// in NavigationMapLibre; those require network/MapTiler and aren't part of
+// the downloaded offline package.
+const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
 
 /**
  * Leaflet-based full-screen navigation map with a live rotating arrow for
  * position/bearing. Auto-follows the hiker by default (Komoot-style); if the
  * hiker manually pans/zooms the map, follow mode turns off so their gesture
- * isn't fought, and a "recenter" button (right-side toolbar, like Komoot's
- * crosshair icon) brings it back. A second button cycles the raster style.
+ * isn't fought, and a "recenter" button brings it back.
  */
 export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
-  const tileLayer = useRef<any>(null)
   const userMarker = useRef<any>(null)
   const hasCentered = useRef(false)
   const [followMode, setFollowMode] = useState(true)
-  const [styleIndex, setStyleIndex] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+
+    // Leaflet ships its layout/positioning CSS separately from the JS bundle
+    // — every other Leaflet map in this app injects it manually (see
+    // components/MapView.tsx) because there's no global <link> for it.
+    // Without this, .leaflet-container has no defined size and the map
+    // collapses to a tiny, broken tile block instead of filling the screen.
+    if (!document.querySelector('#leaflet-css')) {
+      const link = document.createElement('link')
+      link.id = 'leaflet-css'
+      link.rel = 'stylesheet'
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      document.head.appendChild(link)
+    }
+
     import('leaflet').then((L) => {
       if (cancelled || !mapRef.current || mapInstance.current) return
       const map = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView(
         routePolyline[0] ? [routePolyline[0][0], routePolyline[0][1]] : [41.9, 12.5],
         16,
       )
-      tileLayer.current = L.tileLayer(`/api/tile?z={z}&x={x}&y={y}&style=${MAP_STYLES[0]}`, { maxZoom: 18 }).addTo(map)
+      L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
 
       if (routePolyline.length > 1) {
         L.polyline(routePolyline, { color: '#0ea5e9', weight: 4, opacity: 0.8 }).addTo(map)
@@ -62,6 +75,8 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       map.on('dragstart zoomstart', () => setFollowMode(false))
 
       mapInstance.current = map
+      // The container may still have been zero-sized while CSS was loading — force a relayout once mounted.
+      setTimeout(() => map.invalidateSize(), 0)
     })
     return () => { cancelled = true; mapInstance.current?.remove(); mapInstance.current = null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,27 +113,16 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
     if (position && mapInstance.current) mapInstance.current.panTo([position.lat, position.lon], { animate: true })
   }
 
-  const handleCycleStyle = () => {
-    const nextIndex = (styleIndex + 1) % MAP_STYLES.length
-    setStyleIndex(nextIndex)
-    if (tileLayer.current) tileLayer.current.setUrl(`/api/tile?z={z}&x={x}&y={y}&style=${MAP_STYLES[nextIndex]}`)
-  }
-
   return (
     <div className="absolute inset-0">
       <div ref={mapRef} className="absolute inset-0" />
-      <div className="absolute right-3 bottom-40 flex flex-col gap-2 z-10">
-        <button
-          onClick={handleRecenter}
-          className={`w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-sky-500 text-white' : 'bg-white text-slate-700'}`}
-          aria-label="Centra sulla mia posizione"
-        >
-          <Locate className="w-5 h-5" />
-        </button>
-        <button onClick={handleCycleStyle} className="w-11 h-11 rounded-full bg-white text-slate-700 shadow-lg flex items-center justify-center" aria-label="Cambia stile mappa">
-          <Layers className="w-5 h-5" />
-        </button>
-      </div>
+      <button
+        onClick={handleRecenter}
+        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-sky-500 text-white' : 'bg-white text-slate-700'}`}
+        aria-label="Centra sulla mia posizione"
+      >
+        <Locate className="w-5 h-5" />
+      </button>
     </div>
   )
 }
