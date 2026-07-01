@@ -21,8 +21,8 @@ const STYLE_LOAD_TIMEOUT_MS = 6000
 
 const STATE_COLOR: Record<NavState, string> = {
   idle: '#64748b',
-  navigating: '#0ea5e9',
-  poi_near: '#a855f7',
+  navigating: '#277134',
+  poi_near: '#d97220',
   off_route: '#f59e0b',
   gps_lost: '#ef4444',
   finished: '#22c55e',
@@ -73,7 +73,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       map.getSource(ROUTE_SOURCE_ID).setData(geojson)
     } else {
       map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson })
-      map.addLayer({ id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID, paint: { 'line-color': '#0ea5e9', 'line-width': 4, 'line-opacity': 0.85 } })
+      map.addLayer({ id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID, paint: { 'line-color': '#277134', 'line-width': 4, 'line-opacity': 0.85 } })
     }
   }
 
@@ -165,7 +165,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       <div ref={containerRef} className="absolute inset-0" />
       <button
         onClick={handleRecenter}
-        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-sky-500 text-white' : 'bg-white text-slate-700'}`}
+        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'}`}
         aria-label="Centra sulla mia posizione"
       >
         <Locate className="w-5 h-5" />

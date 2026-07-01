@@ -36,19 +36,19 @@ export default function MapModeSwitcher({ mode, onModeChange, is3D, onToggle3D, 
     <div className="absolute right-3 z-10" style={{ top: 'calc(50% + 64px)' }}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-11 h-11 rounded-full bg-white text-slate-700 shadow-lg flex items-center justify-center"
+        className="w-11 h-11 rounded-full bg-white text-stone-700 shadow-lg flex items-center justify-center"
         aria-label="Cambia mappa"
       >
         <Layers className="w-5 h-5" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-14 w-48 rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="absolute right-0 top-14 w-48 rounded-xl bg-white shadow-2xl border border-stone-200 overflow-hidden">
           {options.map((opt) => (
             <button
               key={opt.id}
               onClick={() => { onModeChange(opt.id); setOpen(false) }}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left hover:bg-slate-50 ${mode === opt.id ? 'font-semibold text-sky-600' : 'text-slate-700'}`}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left hover:bg-stone-50 ${mode === opt.id ? 'font-semibold text-terra-600' : 'text-stone-700'}`}
             >
               <MapIcon className="w-4 h-4 flex-shrink-0" /> {opt.label}
             </button>
@@ -56,7 +56,7 @@ export default function MapModeSwitcher({ mode, onModeChange, is3D, onToggle3D, 
           {is3DEligible && (
             <button
               onClick={onToggle3D}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left border-t border-slate-100 hover:bg-slate-50 ${is3D ? 'font-semibold text-sky-600' : 'text-slate-700'}`}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left border-t border-stone-100 hover:bg-stone-50 ${is3D ? 'font-semibold text-terra-600' : 'text-stone-700'}`}
             >
               <Box className="w-4 h-4 flex-shrink-0" /> Vista 3D {is3D ? '(attiva)' : ''}
             </button>

@@ -8,6 +8,8 @@ import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
 import { requestOrientationPermission, isOrientationSupported } from '@/lib/navigation/orientation'
+import { haversineM } from '@/lib/geoUtils'
+import { extractCuriosita } from '@/lib/guideText'
 import {
   loadNavigationSession, saveNavigationSession, newSessionSnapshot,
   queueTrackFix, drainTrackQueue, type NavigationSessionSnapshot,
@@ -18,7 +20,7 @@ import NavigationMapLibre from './NavigationMapLibre'
 import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
 import PoiCalloutSheet from './PoiCalloutSheet'
 import InstructionBanner from './InstructionBanner'
-import NavStatsPanel from './NavStatsPanel'
+import NavBottomSheet from './NavBottomSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import { speak } from '@/lib/navigation/speech'
 
@@ -47,7 +49,6 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [currentSpeedMs, setCurrentSpeedMs] = useState<number | null>(null)
   const [movingTimeMs, setMovingTimeMs] = useState(0)
   const [timerRunning, setTimerRunning] = useState(false)
-  const [statsExpanded, setStatsExpanded] = useState(true)
   const [showConfirmEnd, setShowConfirmEnd] = useState(false)
   const [mapFallbackNotice, setMapFallbackNotice] = useState(false)
   const [instruction, setInstruction] = useState<{ current: NavInstruction; next: NavInstruction | null; distanceToNextM: number | null } | null>(null)
@@ -72,6 +73,14 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const moments = useMemo<RouteMoment[]>(() => detectRouteMoments(hike.trackPoints ?? []), [hike.trackPoints])
   const routePolyline = hike.routePolyline ?? []
+  const guideExcerpts = useMemo(() => extractCuriosita(hike.cachedGuide ?? ''), [hike.cachedGuide])
+
+  const remainingPois = useMemo(() => {
+    if (!position) return pois.map((p) => ({ id: p.id, name: p.name, distanceM: 0 }))
+    return pois
+      .map((p) => ({ id: p.id, name: p.name, distanceM: haversineM(position.lat, position.lon, p.lat, p.lon) }))
+      .sort((a, b) => a.distanceM - b.distanceM)
+  }, [pois, position])
 
   const logEvent = (type: string, payload?: Record<string, unknown>) => {
     pendingEvents.current.push({ type, payload, createdAt: new Date().toISOString() })
@@ -255,7 +264,7 @@ export default function ActiveNavigationView({ hike }: Props) {
   const avgSpeedMs = movingTimeMs > 0 ? traveledDistanceM / (movingTimeMs / 1000) : null
 
   return (
-    <div className="fixed inset-0 z-[2000] bg-slate-900">
+    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
         <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} />
       ) : (
@@ -263,7 +272,7 @@ export default function ActiveNavigationView({ hike }: Props) {
       )}
 
       {mapFallbackNotice && (
-        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-slate-800 text-white text-xs font-semibold shadow-lg z-10">
+        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg z-10 font-body">
           Mappa online non disponibile, uso la mappa offline
         </div>
       )}
@@ -284,17 +293,17 @@ export default function ActiveNavigationView({ hike }: Props) {
       />
 
       {state === 'off_route' && (
-        <div className="absolute bottom-[280px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-amber-500 text-white text-sm font-semibold shadow-lg flex items-center gap-2 z-10">
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-terra-500 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10">
           <AlertTriangle size={16} /> Sei fuori dal percorso pianificato
         </div>
       )}
       {state === 'gps_lost' && (
-        <div className="absolute bottom-[280px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500 text-white text-sm font-semibold shadow-lg flex items-center gap-2 z-10">
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10">
           <AlertTriangle size={16} /> Segnale GPS assente
         </div>
       )}
 
-      <NavStatsPanel
+      <NavBottomSheet
         distanceCoveredM={traveledDistanceM}
         distanceRemainingM={distanceRemainingM}
         currentSpeedMs={currentSpeedMs}
@@ -303,8 +312,10 @@ export default function ActiveNavigationView({ hike }: Props) {
         timerRunning={timerRunning}
         onTogglePlayPause={handleTogglePlayPause}
         onStop={requestEnd}
-        expanded={statsExpanded}
-        onToggleExpanded={() => setStatsExpanded((v) => !v)}
+        trackPoints={hike.trackPoints ?? []}
+        currentDistanceM={progress?.distanceAlongRouteM ?? 0}
+        remainingPois={remainingPois}
+        guideExcerpts={guideExcerpts}
       />
 
       {callout && (

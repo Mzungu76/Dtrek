@@ -1,7 +1,7 @@
 'use client'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer, ReferenceDot,
 } from 'recharts'
 import type { TrackPoint } from '@/lib/tcxParser'
 
@@ -9,6 +9,8 @@ interface Props {
   trackPoints: TrackPoint[]
   syncId?: string
   onHover?: (index: number | null) => void
+  /** Distance in meters along the track — when provided, draws a "sei qui" marker at that point on the profile (used during live navigation). */
+  currentDistanceM?: number
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -21,7 +23,7 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-export default function ElevationProfileChart({ trackPoints, syncId, onHover }: Props) {
+export default function ElevationProfileChart({ trackPoints, syncId, onHover, currentDistanceM }: Props) {
   // Subsample to 300 points max
   const step = Math.max(1, Math.floor(trackPoints.length / 300))
   const pts  = trackPoints
@@ -30,7 +32,7 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover }: 
 
   // Compute cumulative distance for x-axis
   let cumDist = 0
-  const data: { km: string; alt: number; idx: number }[] = []
+  const data: { km: string; kmNum: number; alt: number; idx: number }[] = []
   for (let i = 0; i < pts.length; i++) {
     if (i > 0) {
       const { p } = pts[i - 1], { p: c } = pts[i]
@@ -38,7 +40,7 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover }: 
         cumDist += haversineM(p.lat, p.lon, c.lat, c.lon)
     }
     if (pts[i].p.altitudeMeters !== undefined)
-      data.push({ km: (cumDist / 1000).toFixed(1), alt: Math.round(pts[i].p.altitudeMeters!), idx: pts[i].i })
+      data.push({ km: (cumDist / 1000).toFixed(1), kmNum: cumDist / 1000, alt: Math.round(pts[i].p.altitudeMeters!), idx: pts[i].i })
   }
 
   if (data.length === 0) {
@@ -49,6 +51,11 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover }: 
     )
   }
 
+  // Find the profile sample closest to the live position, for the "sei qui" marker.
+  const currentPoint = currentDistanceM != null
+    ? data.reduce((best, d) => Math.abs(d.kmNum - currentDistanceM / 1000) < Math.abs(best.kmNum - currentDistanceM / 1000) ? d : best, data[0])
+    : null
+
   return (
     <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
@@ -57,8 +64,8 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover }: 
           onMouseLeave={() => onHover?.(null)}>
           <defs>
             <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#0284c7" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#0284c7" stopOpacity={0.03} />
+              <stop offset="5%"  stopColor="#378d44" stopOpacity={0.28} />
+              <stop offset="95%" stopColor="#378d44" stopOpacity={0.03} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -77,9 +84,17 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover }: 
           />
           <Area
             type="monotone" dataKey="alt"
-            stroke="#0284c7" strokeWidth={2}
-            fill="url(#elevGrad)" dot={false} activeDot={{ r: 4 }}
+            stroke="#277134" strokeWidth={2} strokeLinecap="round"
+            fill="url(#elevGrad)" dot={false} activeDot={{ r: 4, fill: '#277134' }}
           />
+          {currentPoint && (
+            <ReferenceDot
+              x={currentPoint.km} y={currentPoint.alt}
+              r={6} fill="#d97220" stroke="#fff" strokeWidth={2}
+              isFront
+              label={{ value: 'Sei qui', position: 'top', fontSize: 11, fontFamily: 'DM Sans', fontWeight: 600, fill: '#c05a17' }}
+            />
+          )}
         </AreaChart>
       </ResponsiveContainer>
     </div>

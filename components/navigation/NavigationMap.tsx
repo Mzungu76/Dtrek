@@ -13,8 +13,8 @@ interface Props {
 
 const STATE_COLOR: Record<NavState, string> = {
   idle: '#64748b',
-  navigating: '#0ea5e9',
-  poi_near: '#a855f7',
+  navigating: '#277134',
+  poi_near: '#d97220',
   off_route: '#f59e0b',
   gps_lost: '#ef4444',
   finished: '#22c55e',
@@ -65,7 +65,7 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
 
       if (routePolyline.length > 1) {
-        L.polyline(routePolyline, { color: '#0ea5e9', weight: 4, opacity: 0.8 }).addTo(map)
+        L.polyline(routePolyline, { color: '#277134', weight: 4, opacity: 0.8 }).addTo(map)
       }
       for (const poi of pois) {
         L.marker([poi.lat, poi.lon], { title: poi.name }).addTo(map)
@@ -118,7 +118,7 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       <div ref={mapRef} className="absolute inset-0" />
       <button
         onClick={handleRecenter}
-        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-sky-500 text-white' : 'bg-white text-slate-700'}`}
+        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'}`}
         aria-label="Centra sulla mia posizione"
       >
         <Locate className="w-5 h-5" />
