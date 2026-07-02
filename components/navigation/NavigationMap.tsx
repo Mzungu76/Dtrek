@@ -67,8 +67,19 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       if (routePolyline.length > 1) {
         L.polyline(routePolyline, { color: '#277134', weight: 4, opacity: 0.8 }).addTo(map)
       }
+      // Leaflet's built-in default marker icon resolves its image path
+      // relative to leaflet.css's own URL, which breaks when the CSS is
+      // injected via a plain <link> (see above) instead of bundled — every
+      // L.marker() without an explicit icon 404s on marker-icon.png. A
+      // small divIcon sidesteps that entirely instead of patching L.Icon.Default's path.
+      const poiIcon = L.divIcon({
+        className: '',
+        html: '<div style="width:22px;height:22px;border-radius:50%;background:#d97220;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      })
       for (const poi of pois) {
-        L.marker([poi.lat, poi.lon], { title: poi.name }).addTo(map)
+        L.marker([poi.lat, poi.lon], { title: poi.name, icon: poiIcon }).addTo(map)
       }
 
       // A manual pan/zoom means the hiker wants to look around — stop fighting them with auto-recenter.
