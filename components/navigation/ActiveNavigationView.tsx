@@ -10,6 +10,9 @@ import { detectRouteMoments } from '@/lib/navigation/routeMoments'
 import { requestOrientationPermission, isOrientationSupported } from '@/lib/navigation/orientation'
 import { haversineM } from '@/lib/geoUtils'
 import { extractCuriosita } from '@/lib/guideText'
+import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
+import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
+import { saveActivityWithEnrichment } from '@/lib/activitySave'
 import {
   loadNavigationSession, saveNavigationSession, newSessionSnapshot,
   queueTrackFix, drainTrackQueue, type NavigationSessionSnapshot,
@@ -22,6 +25,7 @@ import PoiCalloutSheet from './PoiCalloutSheet'
 import InstructionBanner from './InstructionBanner'
 import NavBottomSheet from './NavBottomSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
+import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
 
 interface Props {
@@ -40,6 +44,10 @@ export default function ActiveNavigationView({ hike }: Props) {
   const timerRunningRef = useRef(false)
   const lastFixAtRef = useRef<number | null>(null)
   const endConfirmedRef = useRef(false)
+  // Raw fixes recorded while the timer is running (paused stretches are
+  // excluded, same gate as the displayed distance/time stats) — the source
+  // for the optional "save as a completed activity" step when navigation ends.
+  const recordedTrackRef = useRef<TrackPoint[]>([])
 
   const [state, setState] = useState<NavState>('idle')
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
@@ -58,6 +66,7 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [isOnline, setIsOnline] = useState(true)
   const [mapMode, setMapMode] = useState<MapMode>('offline')
   const [is3D, setIs3D] = useState(false)
+  const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
 
   const pois = useMemo<NavPoi[]>(() => {
     const raw = (hike.cachedPois ?? []) as PoiItem[]
@@ -134,6 +143,13 @@ export default function ActiveNavigationView({ hike }: Props) {
           setProgress({ distanceAlongRouteM: progress.distanceAlongRouteM, totalRouteM: progress.totalRouteM })
           setTraveledDistanceM(traveledDistanceM)
           setCurrentSpeedMs(instantSpeedMs)
+          recordedTrackRef.current.push({
+            time: new Date(raw.ts).toISOString(),
+            lat: raw.lat,
+            lon: raw.lon,
+            altitudeMeters: raw.altitudeM ?? undefined,
+            speedMs: raw.speedMs ?? undefined,
+          })
         }
         queueTrackFix(snapshot.sessionId, { ts: raw.ts, lat: raw.lat, lon: raw.lon, altitudeM: raw.altitudeM, speedMs: raw.speedMs, accuracyM: raw.accuracyM })
       })
@@ -249,6 +265,8 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const requestEnd = () => setShowConfirmEnd(true)
 
+  const goToPlannedHike = () => router.push(`/programma/${hike.id}`)
+
   const confirmEnd = async () => {
     endConfirmedRef.current = true
     setShowConfirmEnd(false)
@@ -260,10 +278,39 @@ export default function ActiveNavigationView({ hike }: Props) {
       }).catch(() => {})
     }
     engineRef.current?.stop()
-    router.push(`/programma/${hike.id}`)
+
+    // Enough of a recorded track to be worth offering a save — same review
+    // step as importing an external GPX/FIT/TCX, instead of silently
+    // discarding what was just walked.
+    if (recordedTrackRef.current.length >= 2) {
+      try {
+        setPendingActivity(buildActivityFromTrack(recordedTrackRef.current))
+        return
+      } catch {
+        // fall through to the original close behavior if the track can't be turned into an activity
+      }
+    }
+    goToPlannedHike()
   }
 
   const cancelEnd = () => setShowConfirmEnd(false)
+
+  const handleSaveRecordedActivity = async (title: string) => {
+    if (!pendingActivity) return
+    const saved = await saveActivityWithEnrichment(pendingActivity, {
+      title,
+      linkedPlannedId: hike.id,
+      linkedPlannedTrackPoints: (hike.trackPoints ?? []).filter((p) => p.lat && p.lon),
+      hikeNotes: hike.hikeNotes,
+      deleteLinkedPlanned: true,
+    })
+    router.push(`/escursione/${encodeURIComponent(saved.id)}`)
+  }
+
+  const handleDiscardRecordedActivity = () => {
+    setPendingActivity(null)
+    goToPlannedHike()
+  }
 
   const distanceRemainingM = progress ? Math.max(0, progress.totalRouteM - progress.distanceAlongRouteM) : 0
   const avgSpeedMs = movingTimeMs > 0 ? traveledDistanceM / (movingTimeMs / 1000) : null
@@ -328,6 +375,15 @@ export default function ActiveNavigationView({ hike }: Props) {
       )}
 
       {showConfirmEnd && <ConfirmEndDialog onConfirm={confirmEnd} onCancel={cancelEnd} />}
+
+      {pendingActivity && (
+        <EndHikeReviewDialog
+          activity={pendingActivity}
+          defaultTitle={hike.title}
+          onSave={handleSaveRecordedActivity}
+          onDiscard={handleDiscardRecordedActivity}
+        />
+      )}
     </div>
   )
 }
