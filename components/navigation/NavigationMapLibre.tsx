@@ -30,6 +30,8 @@ const STATE_COLOR: Record<NavState, string> = {
 
 const ROUTE_SOURCE_ID = 'nav-route'
 const ROUTE_LAYER_ID = 'nav-route-line'
+const TERRAIN_SOURCE_ID = 'nav-terrain'
+const TERRAIN_EXAGGERATION = 1.4 // matches RouteMap3D's flythrough for a consistent look
 
 /**
  * MapLibre GL variant of the navigation map: online only (needs MapTiler
@@ -50,6 +52,11 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   const hasCentered = useRef(false)
   const styleWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
   const resizeObserver = useRef<ResizeObserver | null>(null)
+  // Event listeners registered once at mount close over stale props — this
+  // ref lets setupTerrain() (called from 'load'/'style.load') always read
+  // the current is3D value instead of whatever it was when first attached.
+  const is3DRef = useRef(is3D)
+  is3DRef.current = is3D
   const [followMode, setFollowMode] = useState(true)
 
   const reportFailure = (reason: string) => {
@@ -92,6 +99,26 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     }
   }
 
+  // "3D" was just a pitch on a flat map — real relief needs an elevation
+  // source too. Same terrain-rgb-v2 dataset and setTerrain() call as
+  // RouteMap3D's flythrough. Independent of whichever base style is active
+  // (Outdoor/Satellite/Winter each have their own sources, but none of that
+  // matters here — this is our own additional source), and re-added after
+  // every style.load since setStyle() wipes custom sources/layers.
+  const setupTerrain = (map: any) => {
+    if (!map.getSource(TERRAIN_SOURCE_ID)) {
+      map.addSource(TERRAIN_SOURCE_ID, {
+        type: 'raster-dem',
+        url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`,
+        tileSize: 512,
+      })
+    }
+    map.setTerrain(is3DRef.current ? { source: TERRAIN_SOURCE_ID, exaggeration: TERRAIN_EXAGGERATION } : null)
+    if (is3DRef.current && !map.getLayer('nav-sky')) {
+      try { map.addLayer({ id: 'nav-sky', type: 'sky', paint: { 'sky-type': 'atmosphere', 'sky-atmosphere-sun-intensity': 15 } }) } catch {}
+    }
+  }
+
   useEffect(() => {
     if (!MAPTILER_KEY) {
       console.error('[NavigationMapLibre] NEXT_PUBLIC_MAPTILER_KEY is empty at runtime — the online map styles will fail to load and fall back to offline. If this is a Vercel Preview/branch deployment, check that the env var is enabled for that environment, not just Production.')
@@ -124,13 +151,14 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
 
       map.on('load', () => {
         setupRouteLayer(maplibregl)
+        setupTerrain(map)
         for (const poi of pois) {
           const marker = new maplibregl.Marker().setLngLat([poi.lon, poi.lat]).addTo(map)
           markersRef.current.push(marker)
         }
       })
-      // setStyle() wipes custom sources/layers — re-add the route after every style switch.
-      map.on('style.load', () => setupRouteLayer(maplibregl))
+      // setStyle() wipes custom sources/layers — re-add the route and terrain after every style switch.
+      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map) })
       map.on('dragstart zoomstart', () => setFollowMode(false))
     })
     return () => {
@@ -155,7 +183,14 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   }, [styleId])
 
   useEffect(() => {
-    mapRef.current?.easeTo({ pitch: is3D ? 55 : 0, duration: 400 })
+    const map = mapRef.current
+    if (!map) return
+    map.easeTo({ pitch: is3D ? 55 : 0, duration: 400 })
+    // Style may still be mid-load right after a style switch — setTerrain()
+    // throws if called before the style is ready, so defer to 'idle' in that case.
+    if (map.isStyleLoaded()) setupTerrain(map)
+    else map.once('idle', () => setupTerrain(map))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [is3D])
 
   useEffect(() => {
