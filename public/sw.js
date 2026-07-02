@@ -5,7 +5,7 @@ const API_CACHE    = 'dtrek-api-v1';
 const PRECACHE_URLS = [
   '/',
   '/statistiche',
-  '/mappa',
+  '/esplora',
   '/programma',
   '/upload',
   '/profilo',
@@ -16,10 +16,16 @@ const PRECACHE_URLS = [
 ];
 
 // ── Install: pre-cache shell ──────────────────────────────────────────────────
+// cache.addAll() is all-or-nothing: a single 404 (a stale route removed from
+// the app but left in this list — exactly what happened with the old
+// '/mappa' route) rejects the whole call, which rejects this event's
+// waitUntil(), which can leave the service worker stuck failing to install/
+// activate. Add each URL independently and swallow individual failures so a
+// future stale entry degrades gracefully instead of breaking the whole SW.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then((cache) => Promise.all(PRECACHE_URLS.map((url) => cache.add(url).catch(() => {}))))
       .then(() => self.skipWaiting())
   );
 });
