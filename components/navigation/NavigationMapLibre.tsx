@@ -33,6 +33,17 @@ const ROUTE_LAYER_ID = 'nav-route-line'
 const TERRAIN_SOURCE_ID = 'nav-terrain'
 const TERRAIN_EXAGGERATION = 1.4 // matches RouteMap3D's flythrough for a consistent look
 
+// At a steep pitch, the same zoom level shows much less ground in the
+// foreground than a flat view (perspective foreshortening), and combined
+// with terrain exaggeration the near-camera tiles get oversampled/blocky —
+// exactly the reported "sgranatura". A pitched view needs a noticeably
+// lower zoom to show a comparable amount of terrain at a readable
+// resolution. These are used both for the initial center and for the
+// live-follow re-center, so switching 3D on/off doesn't leave the map stuck
+// at the wrong zoom for its current pitch.
+function initialZoomFor(is3D: boolean): number { return is3D ? 13 : 15 }
+function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
+
 /**
  * MapLibre GL variant of the navigation map: online only (needs MapTiler
  * vector tiles/styles, not part of the offline package — see
@@ -163,7 +174,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       const map = new maplibregl.Map({
         container: containerRef.current,
         style: styleUrl,
-        center: start, zoom: 15, pitch: is3D ? 55 : 0, bearing: 0,
+        center: start, zoom: initialZoomFor(is3D), pitch: is3D ? 55 : 0, bearing: 0,
       })
       mapRef.current = map
       armStyleWatchdog(map, styleUrl)
@@ -190,7 +201,19 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       })
       // setStyle() wipes custom sources/layers — re-add the route and terrain after every style switch.
       map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map) })
-      map.on('dragstart zoomstart', () => setFollowMode(false))
+      // MapLibre GL, unlike Leaflet, does NOT support space-separated event
+      // names in on() — `map.on('dragstart zoomstart', ...)` silently
+      // registers a listener for a nonexistent event and never fires, so
+      // followMode never turned false on a manual pan/zoom. Every next GPS
+      // fix (a few seconds later) then called easeTo() back to the live
+      // position, making the map feel impossible to move — exactly the
+      // reported symptom. Two separate listeners, the way MapLibre expects.
+      // 'zoomstart' (unlike 'dragstart') also fires for OUR OWN programmatic
+      // jumpTo/easeTo zoom changes (the initial auto-center below); guard on
+      // originalEvent, only set on genuine user mouse/touch/wheel input, so
+      // our own camera moves don't self-disable follow mode immediately.
+      map.on('dragstart', () => setFollowMode(false))
+      map.on('zoomstart', (e: any) => { if (e.originalEvent) setFollowMode(false) })
     })
     return () => {
       cancelled = true
@@ -216,7 +239,12 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    map.easeTo({ pitch: is3D ? 55 : 0, duration: 400 })
+    // Re-zoom together with the pitch change, not just at the initial
+    // center: switching 3D on/off mid-hike should also fix the "too close/
+    // blocky at this pitch" mismatch immediately, not only the next time
+    // the map re-centers on the hiker.
+    const zoom = followMode ? followZoomFor(is3D) : undefined
+    map.easeTo({ pitch: is3D ? 55 : 0, ...(zoom != null ? { zoom } : {}), duration: 400 })
     // Style may still be mid-load right after a style switch — setTerrain()
     // throws if called before the style is ready, so defer to 'idle' in that case.
     if (map.isStyleLoaded()) setupTerrain(map)
@@ -247,7 +275,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         userMarkerArrow.current = arrow
         userMarker.current = new maplibregl.Marker({ element: el }).setLngLat([position.lon, position.lat]).addTo(map)
       }
-      if (!hasCentered.current) { map.jumpTo({ center: [position.lon, position.lat], zoom: 16 }); hasCentered.current = true }
+      if (!hasCentered.current) { map.jumpTo({ center: [position.lon, position.lat], zoom: followZoomFor(is3DRef.current) }); hasCentered.current = true }
       else if (followMode) map.easeTo({ center: [position.lon, position.lat], duration: 500 })
     })
   }, [position, bearingDeg, state, followMode])
