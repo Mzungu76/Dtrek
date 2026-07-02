@@ -75,11 +75,19 @@ export default function InstructionBanner({
         {showRightButton && (
           <button
             onClick={isOnline ? onEnableCompass : undefined}
-            className="w-12 h-12 rounded-full bg-white text-terra-600 border border-stone-200 flex items-center justify-center shadow-lg flex-shrink-0"
+            disabled={!isOnline}
+            // isOnline false means this is purely an offline status indicator,
+            // not an actionable button — it used to render with the exact
+            // same enabled look as the compass button despite onClick being
+            // undefined, a real affordance mismatch (tap does nothing but
+            // looks like it should).
+            className={`w-12 h-12 rounded-full border flex items-center justify-center shadow-lg flex-shrink-0 ${
+              isOnline ? 'bg-white text-terra-600 border-stone-200' : 'bg-stone-100 text-stone-400 border-stone-200 cursor-default'
+            }`}
             aria-label={isOnline ? 'Attiva bussola' : 'Offline'}
             title={isOnline ? 'Attiva bussola' : 'Sei offline: uso i dati scaricati'}
           >
-            {isOnline ? <NavigationIcon className="w-5 h-5" /> : <WifiOff className="w-5 h-5 text-stone-500" />}
+            {isOnline ? <NavigationIcon className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
           </button>
         )}
       </div>

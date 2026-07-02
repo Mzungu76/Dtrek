@@ -3,6 +3,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
 import { maptilerStyleUrl, MAPTILER_KEY, type MapTilerStyleId } from '@/lib/mapStyles'
+import { circlePolygonLonLat } from '@/lib/geoUtils'
 import type { NavState } from '@/lib/navigation/types'
 
 interface Props {
@@ -13,6 +14,8 @@ interface Props {
   state: NavState
   styleId: MapTilerStyleId
   is3D: boolean
+  /** Current GPS fix accuracy in meters, drawn as a translucent circle around the position marker — same trust signal as NavigationMap.tsx's Leaflet version. */
+  accuracyM?: number | null
   /** Called if the MapTiler style hasn't finished loading within a few seconds, or errors out (missing/invalid key, no connectivity, domain-restricted key...) — the caller should fall back to the offline-safe map. `reason` is a short diagnostic string, always logged to the console regardless of environment so this is debuggable in production. */
   onStyleFailed?: (reason: string) => void
 }
@@ -36,6 +39,8 @@ const STATE_COLOR: Record<NavState, string> = {
 
 const ROUTE_SOURCE_ID = 'nav-route'
 const ROUTE_LAYER_ID = 'nav-route-line'
+const ACCURACY_SOURCE_ID = 'nav-accuracy'
+const ACCURACY_LAYER_ID = 'nav-accuracy-fill'
 const TERRAIN_SOURCE_ID = 'nav-terrain'
 const TERRAIN_EXAGGERATION = 1.4 // matches RouteMap3D's flythrough for a consistent look
 
@@ -60,7 +65,7 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed }: Props) {
+export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
@@ -75,6 +80,12 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   // the current is3D value instead of whatever it was when first attached.
   const is3DRef = useRef(is3D)
   is3DRef.current = is3D
+  // Same stale-closure concern as is3DRef — updateAccuracyCircle() is called
+  // from the 'load'/'style.load' listeners registered once at mount.
+  const accuracyMRef = useRef(accuracyM)
+  accuracyMRef.current = accuracyM
+  const positionRef = useRef(position)
+  positionRef.current = position
   const dataListener = useRef<(() => void) | null>(null)
   const [followMode, setFollowMode] = useState(true)
   const [styleLoading, setStyleLoading] = useState(true)
@@ -151,6 +162,26 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     }
   }
 
+  /** Same trust-signal circle as NavigationMap.tsx's Leaflet L.circle, approximated as a filled polygon since MapLibre has no native meter-radius circle. Re-added after every style.load like the route/terrain layers. */
+  const updateAccuracyCircle = (map: any) => {
+    const pos = positionRef.current
+    const accM = accuracyMRef.current
+    if (!pos || accM == null || !Number.isFinite(accM) || accM <= 0) {
+      if (map.getSource(ACCURACY_SOURCE_ID)) {
+        map.getSource(ACCURACY_SOURCE_ID).setData({ type: 'FeatureCollection', features: [] })
+      }
+      return
+    }
+    const ring = circlePolygonLonLat(pos.lat, pos.lon, accM)
+    const geojson = { type: 'Feature' as const, geometry: { type: 'Polygon' as const, coordinates: [ring] }, properties: {} }
+    if (map.getSource(ACCURACY_SOURCE_ID)) {
+      map.getSource(ACCURACY_SOURCE_ID).setData(geojson)
+    } else {
+      map.addSource(ACCURACY_SOURCE_ID, { type: 'geojson', data: geojson })
+      map.addLayer({ id: ACCURACY_LAYER_ID, type: 'fill', source: ACCURACY_SOURCE_ID, paint: { 'fill-color': '#277134', 'fill-opacity': 0.12 } })
+    }
+  }
+
   // "3D" was just a pitch on a flat map — real relief needs an elevation
   // source too. Same terrain-rgb-v2 dataset and setTerrain() call as
   // RouteMap3D's flythrough. Independent of whichever base style is active
@@ -216,13 +247,14 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       map.on('load', () => {
         setupRouteLayer(maplibregl)
         setupTerrain(map)
+        updateAccuracyCircle(map)
         for (const poi of pois) {
           const marker = new maplibregl.Marker().setLngLat([poi.lon, poi.lat]).addTo(map)
           markersRef.current.push(marker)
         }
       })
-      // setStyle() wipes custom sources/layers — re-add the route and terrain after every style switch.
-      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map) })
+      // setStyle() wipes custom sources/layers — re-add the route, terrain and accuracy circle after every style switch.
+      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map) })
       // MapLibre GL, unlike Leaflet, does NOT support space-separated event
       // names in on() — `map.on('dragstart zoomstart', ...)` silently
       // registers a listener for a nonexistent event and never fires, so
@@ -299,8 +331,10 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       }
       if (!hasCentered.current) { map.jumpTo({ center: [position.lon, position.lat], zoom: followZoomFor(is3DRef.current) }); hasCentered.current = true }
       else if (followMode) map.easeTo({ center: [position.lon, position.lat], duration: 500 })
+
+      if (map.isStyleLoaded()) updateAccuracyCircle(map)
     })
-  }, [position, bearingDeg, state, followMode])
+  }, [position, bearingDeg, state, followMode, accuracyM])
 
   const handleRecenter = () => {
     setFollowMode(true)

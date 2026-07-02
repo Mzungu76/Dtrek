@@ -19,6 +19,8 @@ interface Props {
   currentSpeedMs: number | null
   avgSpeedMs: number | null
   movingTimeMs: number
+  /** Estimated arrival time, derived from remaining distance / average speed — null until there's a meaningful average speed to project from. */
+  etaDate: Date | null
   timerRunning: boolean
   onTogglePlayPause: () => void
   onStop: () => void
@@ -58,6 +60,9 @@ function formatDuration(ms: number): string {
 function formatDistM(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`
 }
+function formatEta(d: Date): string {
+  return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+}
 
 /**
  * Trail-log style bottom sheet — collapsed by default so the map/route stays
@@ -66,7 +71,7 @@ function formatDistM(m: number): string {
  * (pointer-capture drag, 3 discrete snap heights) rather than reinventing it.
  */
 export default function NavBottomSheet({
-  distanceCoveredM, distanceRemainingM, currentSpeedMs, avgSpeedMs, movingTimeMs,
+  distanceCoveredM, distanceRemainingM, currentSpeedMs, avgSpeedMs, movingTimeMs, etaDate,
   timerRunning, onTogglePlayPause, onStop, trackPoints, currentDistanceM, remainingPois, guideExcerpts,
 }: Props) {
   const [sheetState, setSheetState] = useState<SheetState>('collapsed')
@@ -118,6 +123,7 @@ export default function NavBottomSheet({
         <span className="w-10 h-1 rounded-full bg-stone-300" />
         <span className="flex items-center gap-2 text-xs font-semibold text-stone-600 font-mono">
           {formatKm(distanceRemainingM)} km rimanenti · {formatDuration(movingTimeMs)}
+          {etaDate && <> · arrivo {formatEta(etaDate)}</>}
           <ChevronUp className={`w-3.5 h-3.5 transition-transform ${sheetState === 'collapsed' ? '' : 'rotate-180'}`} />
         </span>
       </div>
@@ -167,6 +173,9 @@ export default function NavBottomSheet({
                   <div>
                     <div className="text-xl font-bold text-stone-900 font-mono">{formatDuration(movingTimeMs)}</div>
                     <div className="text-xs text-stone-500 font-body">Tempo in movimento</div>
+                    {etaDate && (
+                      <div className="text-xs text-terra-600 font-body font-semibold mt-0.5">Arrivo stimato {formatEta(etaDate)}</div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {!timerRunning && movingTimeMs === 0 ? (

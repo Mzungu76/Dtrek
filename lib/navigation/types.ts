@@ -40,6 +40,9 @@ export interface RouteProgress {
   distanceToRouteM: number
   distanceAlongRouteM: number
   totalRouteM: number
+  /** Closest point on the route polyline to the fix that produced this progress — used to derive a "head this way" bearing when off-route. */
+  nearestPointLat: number
+  nearestPointLon: number
 }
 
 export type TurnType = 'start' | 'straight' | 'slight-left' | 'left' | 'sharp-left' | 'slight-right' | 'right' | 'sharp-right' | 'arrive'
@@ -67,9 +70,11 @@ export type NavEventMap = {
   leftPoi: { poi: NavPoi }
   momentReached: { moment: RouteMoment }
   instructionUpdated: { current: NavInstruction; next: NavInstruction | null; distanceToNextM: number | null }
-  offRoute: { distanceToRouteM: number }
+  /** bearingToRouteDeg is the absolute compass bearing (0-360, north-up) from the current fix to the nearest point on the planned route, for a "head this way to get back on track" indicator. */
+  offRoute: { distanceToRouteM: number; bearingToRouteDeg: number | null }
   backOnRoute: {}
-  gpsLost: {}
+  /** permissionDenied distinguishes "the user denied the location permission" (unrecoverable without a settings change) from an ordinary temporary signal loss (weak signal, tunnel, timeout). */
+  gpsLost: { permissionDenied: boolean }
   gpsRecovered: {}
   stateChanged: { from: NavState; to: NavState }
 }
