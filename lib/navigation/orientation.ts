@@ -58,3 +58,18 @@ export function watchDeviceCompass(onChange: CompassListener): () => void {
 export function isOrientationSupported(): boolean {
   return typeof window !== 'undefined' && ('DeviceOrientationEvent' in window)
 }
+
+/**
+ * True only on platforms that gate the compass behind an explicit tap
+ * (iOS 13+ Safari) — everywhere else requestOrientationPermission()
+ * resolves true with no native prompt at all, so a persistent "enable
+ * compass" button has nothing to do there and just reads as a dead,
+ * confusing control (reported as "pulsante inutile"). Callers should only
+ * show that button when this is true, and can silently call
+ * requestOrientationPermission() on mount otherwise.
+ */
+export function needsOrientationPermissionGesture(): boolean {
+  if (typeof window === 'undefined') return false
+  const DOE = (window as any).DeviceOrientationEvent
+  return !!DOE && typeof DOE.requestPermission === 'function'
+}

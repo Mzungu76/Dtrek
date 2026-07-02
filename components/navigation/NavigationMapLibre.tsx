@@ -17,7 +17,13 @@ interface Props {
   onStyleFailed?: (reason: string) => void
 }
 
-const STYLE_LOAD_TIMEOUT_MS = 6000
+// Not a fixed deadline from the start — reset on every 'data' event (tile/
+// glyph/sprite arriving), so a slow-but-progressing connection isn't
+// falsely treated as failed ("a volte le mappe online non sono disponibili
+// anche se connesso" — a real timeout on a real key/network, not a bug, was
+// often just a fixed 6s clock racing a slow but legitimate load). Only a
+// genuine stall — no data of any kind for this long — counts as a failure.
+const STYLE_IDLE_TIMEOUT_MS = 12000
 
 const STATE_COLOR: Record<NavState, string> = {
   idle: '#64748b',
@@ -69,7 +75,9 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   // the current is3D value instead of whatever it was when first attached.
   const is3DRef = useRef(is3D)
   is3DRef.current = is3D
+  const dataListener = useRef<(() => void) | null>(null)
   const [followMode, setFollowMode] = useState(true)
+  const [styleLoading, setStyleLoading] = useState(true)
 
   const reportFailure = (reason: string) => {
     // Always logged (not gated by NODE_ENV) — this is the one place that can
@@ -81,36 +89,50 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   }
 
   /**
-   * Arms a timeout that reports style-load failure unless 'load'/'style.load'
-   * fires first — MapTiler gives no explicit signal for "key missing/
-   * invalid", it just never finishes loading. The 'error' listener is
-   * deliberately torn down the moment the style finishes loading, not left
-   * attached for the map's whole lifetime: MapLibre fires 'error' for
-   * ordinary recoverable hiccups too (a DEM tile missing at the edge of
-   * terrain coverage, a transient fetch failure on one of many tiles), and
-   * treating any later one of those as "the whole style failed" was
-   * observed — via a HAR capture — to abort in-flight requests and fall
-   * back to the offline map over what should have been a shrug-and-continue.
+   * Arms an idle timeout that reports style-load failure if no progress
+   * ('data' events — tiles/glyphs/sprite arriving) happens for
+   * STYLE_IDLE_TIMEOUT_MS, reset on every one instead of a fixed deadline
+   * from the start — MapTiler gives no explicit signal for "key missing/
+   * invalid", it just never finishes loading, but a real key on a slow
+   * connection can legitimately take longer than a short fixed window
+   * without actually being broken. The 'error' listener is deliberately
+   * torn down the moment the style finishes loading, not left attached for
+   * the map's whole lifetime: MapLibre fires 'error' for ordinary
+   * recoverable hiccups too (a DEM tile missing at the edge of terrain
+   * coverage, a transient fetch failure on one of many tiles), and treating
+   * any later one of those as "the whole style failed" was observed — via a
+   * HAR capture — to abort in-flight requests and fall back to the offline
+   * map over what should have been a shrug-and-continue.
    */
   const armStyleWatchdog = (map: any, styleUrl: string) => {
+    setStyleLoading(true)
     if (styleWatchdog.current) clearTimeout(styleWatchdog.current)
     if (errorListener.current) { map.off('error', errorListener.current); errorListener.current = null }
+    if (dataListener.current) { map.off('data', dataListener.current); dataListener.current = null }
 
-    styleWatchdog.current = setTimeout(() => {
-      // Diagnostic fetch, best-effort: pinpoints 401/403 (invalid or domain-restricted key) vs. a network failure.
-      fetch(styleUrl).then((res) => {
-        reportFailure(res.ok ? `timeout after ${STYLE_LOAD_TIMEOUT_MS}ms despite style.json responding ${res.status} — check network/CSP` : `style.json responded ${res.status} ${res.statusText} — check the MapTiler key and its domain allowlist`)
-      }).catch((err) => reportFailure(`timeout after ${STYLE_LOAD_TIMEOUT_MS}ms, style.json fetch also failed: ${err}`))
-    }, STYLE_LOAD_TIMEOUT_MS)
+    const armTimeout = () => {
+      if (styleWatchdog.current) clearTimeout(styleWatchdog.current)
+      styleWatchdog.current = setTimeout(() => {
+        // Diagnostic fetch, best-effort: pinpoints 401/403 (invalid or domain-restricted key) vs. a network failure.
+        fetch(styleUrl).then((res) => {
+          reportFailure(res.ok ? `no progress for ${STYLE_IDLE_TIMEOUT_MS}ms despite style.json responding ${res.status} — check network/CSP` : `style.json responded ${res.status} ${res.statusText} — check the MapTiler key and its domain allowlist`)
+        }).catch((err) => reportFailure(`no progress for ${STYLE_IDLE_TIMEOUT_MS}ms, style.json fetch also failed: ${err}`))
+      }, STYLE_IDLE_TIMEOUT_MS)
+    }
+    armTimeout()
 
     const stopWatching = () => {
+      setStyleLoading(false)
       if (styleWatchdog.current) { clearTimeout(styleWatchdog.current); styleWatchdog.current = null }
       if (errorListener.current) { map.off('error', errorListener.current); errorListener.current = null }
+      if (dataListener.current) { map.off('data', dataListener.current); dataListener.current = null }
     }
     errorListener.current = (e: any) => { stopWatching(); reportFailure(e?.error?.message ?? String(e)) }
+    dataListener.current = () => armTimeout() // any progress pushes the deadline back out instead of racing a fixed clock
     map.once('load', stopWatching)
     map.once('style.load', stopWatching)
     map.on('error', errorListener.current)
+    map.on('data', dataListener.current)
   }
 
   const setupRouteLayer = (maplibregl: any) => {
@@ -282,7 +304,15 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
 
   const handleRecenter = () => {
     setFollowMode(true)
-    if (position && mapRef.current) mapRef.current.easeTo({ center: [position.lon, position.lat], duration: 400 })
+    // jumpTo (instant), not easeTo: recenter felt "very slow" when it
+    // eased toward a target that itself keeps moving with each new GPS fix
+    // — chasing a moving point never quite catches up. A tap on this button
+    // is also the one moment it makes sense to reset zoom back to the
+    // follow level, since panning/pinching away is exactly what disengaged
+    // follow mode in the first place.
+    if (position && mapRef.current) {
+      mapRef.current.jumpTo({ center: [position.lon, position.lat], zoom: followZoomFor(is3DRef.current) })
+    }
   }
 
   return (
@@ -303,6 +333,14 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         it can't be silently overridden this way.
       */}
       <div ref={containerRef} className="absolute inset-0" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
+
+      {styleLoading && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 px-4 py-3 rounded-xl bg-black/60 text-white pointer-events-none">
+          <div className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+          <span className="text-xs font-semibold font-body">Caricamento mappa…</span>
+        </div>
+      )}
+
       <button
         onClick={handleRecenter}
         className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'}`}
