@@ -49,6 +49,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   const userMarkerArrow = useRef<HTMLDivElement | null>(null)
   const hasCentered = useRef(false)
   const styleWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const resizeObserver = useRef<ResizeObserver | null>(null)
   const [followMode, setFollowMode] = useState(true)
 
   const reportFailure = (reason: string) => {
@@ -109,6 +110,18 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       mapRef.current = map
       armStyleWatchdog(map, styleUrl)
 
+      // Unlike Leaflet, MapLibre GL sizes its WebGL canvas from the
+      // container's bounding rect at construction time and never revisits
+      // it on its own. If the container was still zero-sized at that exact
+      // moment (a real, observed failure mode: the network tab shows every
+      // tile/style/font request succeeding with 200 yet nothing paints), the
+      // map stays permanently invisible until something calls resize(). A
+      // ResizeObserver — not a one-shot timeout — keeps it correct across
+      // later layout changes too (orientation change, sheet expanding...).
+      resizeObserver.current = new ResizeObserver(() => map.resize())
+      resizeObserver.current.observe(containerRef.current!)
+      setTimeout(() => map.resize(), 0)
+
       map.on('load', () => {
         setupRouteLayer(maplibregl)
         for (const poi of pois) {
@@ -123,6 +136,8 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     return () => {
       cancelled = true
       if (styleWatchdog.current) clearTimeout(styleWatchdog.current)
+      resizeObserver.current?.disconnect()
+      resizeObserver.current = null
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
       mapRef.current?.remove()
