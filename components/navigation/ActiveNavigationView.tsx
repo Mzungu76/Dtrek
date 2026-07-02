@@ -3,11 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
-import type { PoiItem } from '@/lib/overpass'
+import { fetchNearbyTrailPaths, type PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
-import { requestOrientationPermission, isOrientationSupported } from '@/lib/navigation/orientation'
+import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
 import { haversineM } from '@/lib/geoUtils'
 import { extractCuriosita } from '@/lib/guideText'
 import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
@@ -66,6 +66,7 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [isOnline, setIsOnline] = useState(true)
   const [mapMode, setMapMode] = useState<MapMode>('offline')
   const [is3D, setIs3D] = useState(false)
+  const [nearbyTrails, setNearbyTrails] = useState<[number, number][][]>([])
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
 
   const pois = useMemo<NavPoi[]>(() => {
@@ -83,6 +84,17 @@ export default function ActiveNavigationView({ hike }: Props) {
   const moments = useMemo<RouteMoment[]>(() => detectRouteMoments(hike.trackPoints ?? []), [hike.trackPoints])
   const routePolyline = hike.routePolyline ?? []
   const guideExcerpts = useMemo(() => extractCuriosita(hike.cachedGuide ?? ''), [hike.cachedGuide])
+
+  // Best-effort, non-blocking: gives the offline basemap some sense of
+  // "what other paths pass near here" instead of just a bare tile layer
+  // with one highlighted line — an explicit complaint ("la mappa offline
+  // mi sembra troppo generica"). Silently does nothing if offline or if
+  // Overpass is unreachable; the route/POIs already on the map still work.
+  useEffect(() => {
+    if (routePolyline.length < 2) return
+    fetchNearbyTrailPaths(routePolyline).then(setNearbyTrails).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hike.id])
 
   const remainingPois = useMemo(() => {
     if (!position) return pois.map((p) => ({ id: p.id, name: p.name, distanceM: 0 }))
@@ -248,6 +260,17 @@ export default function ActiveNavigationView({ hike }: Props) {
     }
   }, [])
 
+  // Only iOS Safari gates the compass behind an explicit tap. Everywhere
+  // else, requestOrientationPermission() resolves true with no native
+  // prompt at all — silently enable it on mount instead of showing a button
+  // that, on those platforms, does nothing visible when tapped (reported
+  // as a confusing/"useless" control).
+  useEffect(() => {
+    if (isOrientationSupported() && !needsOrientationPermissionGesture()) {
+      requestOrientationPermission().then(setCompassEnabled)
+    }
+  }, [])
+
   const handleEnableCompass = async () => {
     const granted = await requestOrientationPermission()
     setCompassEnabled(granted)
@@ -318,7 +341,7 @@ export default function ActiveNavigationView({ hike }: Props) {
   return (
     <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
-        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} />
+        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} />
       ) : (
         <NavigationMapLibre routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} />
       )}
@@ -329,7 +352,9 @@ export default function ActiveNavigationView({ hike }: Props) {
         </div>
       )}
 
-      <MapModeSwitcher mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline} />
+      <div className="absolute right-3 z-10" style={{ top: 'calc(50% + 60px)' }}>
+        <MapModeSwitcher mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline} />
+      </div>
 
       <InstructionBanner
         current={instruction?.current ?? null}
@@ -339,7 +364,7 @@ export default function ActiveNavigationView({ hike }: Props) {
         onToggleSpeech={handleToggleSpeech}
         onClose={requestEnd}
         isOnline={isOnline}
-        compassSupported={isOrientationSupported()}
+        compassSupported={isOrientationSupported() && needsOrientationPermissionGesture()}
         compassEnabled={compassEnabled}
         onEnableCompass={handleEnableCompass}
       />

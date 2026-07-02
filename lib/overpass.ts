@@ -101,6 +101,39 @@ export function trackBbox(track: [number, number][], pad = 0.006): string {
   return `${Math.min(...lats) - pad},${Math.min(...lons) - pad},${Math.max(...lats) + pad},${Math.max(...lons) + pad}`
 }
 
+/**
+ * Nearby hiking/foot paths and tracks around a route, for context on the
+ * navigation map — an offline raster basemap alone shows generic roads/
+ * land cover but no sense of "which other paths pass near here", which
+ * matters for orientation on foot. Returns simple polylines, not full POI
+ * objects: this is background context, not something to tap/click.
+ */
+export async function fetchNearbyTrailPaths(track: [number, number][], padDeg = 0.01): Promise<[number, number][][]> {
+  if (track.length === 0) return []
+  const bbox = trackBbox(track, padDeg)
+
+  const query = `[out:json][timeout:25];
+(
+  way["highway"~"^(path|footway|track|bridleway)$"](${bbox});
+  way["route"="hiking"](${bbox});
+);
+out geom;`
+
+  const res = await fetch('/api/overpass', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `data=${encodeURIComponent(query)}`,
+  })
+  if (!res.ok) return []
+  const data = await res.json().catch(() => null)
+  const elements = data?.elements as { geometry?: { lat: number; lon: number }[] }[] | undefined
+  if (!elements) return []
+
+  return elements
+    .map((el) => (el.geometry ?? []).map((pt) => [pt.lat, pt.lon] as [number, number]))
+    .filter((line) => line.length >= 2)
+}
+
 export interface TerrainContext {
   hasForest:      boolean
   hasRiver:       boolean   // waterway=river

@@ -9,7 +9,11 @@ interface Props {
   position: { lat: number; lon: number } | null
   bearingDeg: number | null
   state: NavState
+  /** Nearby hiking paths/tracks (from OSM), drawn as thin context lines — the offline basemap alone has no sense of "what other paths pass near here", which matters for orientation on foot. */
+  nearbyTrails?: [number, number][][]
 }
+
+const FOLLOW_ZOOM = 17
 
 const STATE_COLOR: Record<NavState, string> = {
   idle: '#64748b',
@@ -33,7 +37,7 @@ const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
  * hiker manually pans/zooms the map, follow mode turns off so their gesture
  * isn't fought, and a "recenter" button brings it back.
  */
-export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state }: Props) {
+export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
   const userMarker = useRef<any>(null)
@@ -63,6 +67,13 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
         16,
       )
       L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
+
+      // Context layer, drawn under the main route: other nearby paths give a
+      // hiker something to orient by (a fork, a shortcut, a parallel trail)
+      // instead of just a blank basemap with one highlighted line on it.
+      for (const line of nearbyTrails ?? []) {
+        L.polyline(line, { color: '#8a7f6e', weight: 2, opacity: 0.55, dashArray: '1 6' }).addTo(map)
+      }
 
       if (routePolyline.length > 1) {
         L.polyline(routePolyline, { color: '#277134', weight: 4, opacity: 0.8 }).addTo(map)
@@ -114,14 +125,18 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       } else {
         userMarker.current = L.marker([position.lat, position.lon], { icon, zIndexOffset: 1000 }).addTo(map)
       }
-      if (!hasCentered.current) { map.setView([position.lat, position.lon], 17); hasCentered.current = true }
+      if (!hasCentered.current) { map.setView([position.lat, position.lon], FOLLOW_ZOOM); hasCentered.current = true }
       else if (followMode) map.panTo([position.lat, position.lon], { animate: true, duration: 0.5 })
     })
   }, [position, bearingDeg, state, followMode])
 
   const handleRecenter = () => {
     setFollowMode(true)
-    if (position && mapInstance.current) mapInstance.current.panTo([position.lat, position.lon], { animate: true })
+    // Instant, not animated: consistent with the online map's fix for the
+    // same "recenter feels slow" report, and also resets zoom back to the
+    // follow level (panning/pinching away is exactly what disengaged follow
+    // mode in the first place).
+    if (position && mapInstance.current) mapInstance.current.setView([position.lat, position.lon], FOLLOW_ZOOM)
   }
 
   return (
