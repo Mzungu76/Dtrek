@@ -2,7 +2,7 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
-import { maptilerStyleUrl, type MapTilerStyleId } from '@/lib/mapStyles'
+import { maptilerStyleUrl, MAPTILER_KEY, type MapTilerStyleId } from '@/lib/mapStyles'
 import type { NavState } from '@/lib/navigation/types'
 
 interface Props {
@@ -13,12 +13,16 @@ interface Props {
   state: NavState
   styleId: MapTilerStyleId
   is3D: boolean
+  /** Called if the MapTiler style hasn't finished loading within a few seconds, or errors out (missing/invalid key, no connectivity) — the caller should fall back to the offline-safe map. */
+  onStyleFailed?: () => void
 }
+
+const STYLE_LOAD_TIMEOUT_MS = 6000
 
 const STATE_COLOR: Record<NavState, string> = {
   idle: '#64748b',
-  navigating: '#0ea5e9',
-  poi_near: '#a855f7',
+  navigating: '#277134',
+  poi_near: '#d97220',
   off_route: '#f59e0b',
   gps_lost: '#ef4444',
   finished: '#22c55e',
@@ -37,14 +41,25 @@ const ROUTE_LAYER_ID = 'nav-route-line'
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D }: Props) {
+export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
   const userMarker = useRef<any>(null)
   const userMarkerArrow = useRef<HTMLDivElement | null>(null)
   const hasCentered = useRef(false)
+  const styleWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [followMode, setFollowMode] = useState(true)
+
+  /** Arms a timeout that reports style-load failure unless 'load'/'style.load' fires first — MapTiler gives no explicit signal for "key missing/invalid", it just never finishes loading. */
+  const armStyleWatchdog = (map: any) => {
+    if (styleWatchdog.current) clearTimeout(styleWatchdog.current)
+    styleWatchdog.current = setTimeout(() => onStyleFailed?.(), STYLE_LOAD_TIMEOUT_MS)
+    const clear = () => { if (styleWatchdog.current) { clearTimeout(styleWatchdog.current); styleWatchdog.current = null } }
+    map.once('load', clear)
+    map.once('style.load', clear)
+    map.once('error', () => { clear(); onStyleFailed?.() })
+  }
 
   const setupRouteLayer = (maplibregl: any) => {
     const map = mapRef.current
@@ -58,11 +73,14 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       map.getSource(ROUTE_SOURCE_ID).setData(geojson)
     } else {
       map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson })
-      map.addLayer({ id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID, paint: { 'line-color': '#0ea5e9', 'line-width': 4, 'line-opacity': 0.85 } })
+      map.addLayer({ id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID, paint: { 'line-color': '#277134', 'line-width': 4, 'line-opacity': 0.85 } })
     }
   }
 
   useEffect(() => {
+    if (!MAPTILER_KEY && process.env.NODE_ENV !== 'production') {
+      console.warn('NavigationMapLibre: NEXT_PUBLIC_MAPTILER_KEY is empty — the online map styles will fail to load and fall back to offline.')
+    }
     let cancelled = false
     import('maplibre-gl').then((mod) => {
       if (cancelled || !containerRef.current || mapRef.current) return
@@ -74,6 +92,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         center: start, zoom: 15, pitch: is3D ? 55 : 0, bearing: 0,
       })
       mapRef.current = map
+      armStyleWatchdog(map)
 
       map.on('load', () => {
         setupRouteLayer(maplibregl)
@@ -88,6 +107,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     })
     return () => {
       cancelled = true
+      if (styleWatchdog.current) clearTimeout(styleWatchdog.current)
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
       mapRef.current?.remove()
@@ -98,7 +118,9 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
 
   useEffect(() => {
     if (!mapRef.current) return
+    armStyleWatchdog(mapRef.current)
     mapRef.current.setStyle(maptilerStyleUrl(styleId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [styleId])
 
   useEffect(() => {
@@ -143,7 +165,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       <div ref={containerRef} className="absolute inset-0" />
       <button
         onClick={handleRecenter}
-        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-sky-500 text-white' : 'bg-white text-slate-700'}`}
+        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'}`}
         aria-label="Centra sulla mia posizione"
       >
         <Locate className="w-5 h-5" />

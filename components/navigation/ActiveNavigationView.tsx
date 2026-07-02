@@ -8,6 +8,8 @@ import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
 import { requestOrientationPermission, isOrientationSupported } from '@/lib/navigation/orientation'
+import { haversineM } from '@/lib/geoUtils'
+import { extractCuriosita } from '@/lib/guideText'
 import {
   loadNavigationSession, saveNavigationSession, newSessionSnapshot,
   queueTrackFix, drainTrackQueue, type NavigationSessionSnapshot,
@@ -18,7 +20,8 @@ import NavigationMapLibre from './NavigationMapLibre'
 import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
 import PoiCalloutSheet from './PoiCalloutSheet'
 import InstructionBanner from './InstructionBanner'
-import NavStatsPanel from './NavStatsPanel'
+import NavBottomSheet from './NavBottomSheet'
+import ConfirmEndDialog from './ConfirmEndDialog'
 import { speak } from '@/lib/navigation/speech'
 
 interface Props {
@@ -34,8 +37,9 @@ export default function ActiveNavigationView({ hike }: Props) {
   const remoteSessionId = useRef<string | null>(null)
   const pendingEvents = useRef<{ type: string; payload?: Record<string, unknown>; createdAt: string }[]>([])
   const speechEnabledRef = useRef(true)
-  const timerRunningRef = useRef(true)
+  const timerRunningRef = useRef(false)
   const lastFixAtRef = useRef<number | null>(null)
+  const endConfirmedRef = useRef(false)
 
   const [state, setState] = useState<NavState>('idle')
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
@@ -44,8 +48,9 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [traveledDistanceM, setTraveledDistanceM] = useState(0)
   const [currentSpeedMs, setCurrentSpeedMs] = useState<number | null>(null)
   const [movingTimeMs, setMovingTimeMs] = useState(0)
-  const [timerRunning, setTimerRunning] = useState(true)
-  const [statsExpanded, setStatsExpanded] = useState(true)
+  const [timerRunning, setTimerRunning] = useState(false)
+  const [showConfirmEnd, setShowConfirmEnd] = useState(false)
+  const [mapFallbackNotice, setMapFallbackNotice] = useState(false)
   const [instruction, setInstruction] = useState<{ current: NavInstruction; next: NavInstruction | null; distanceToNextM: number | null } | null>(null)
   const [callout, setCallout] = useState<{ title: string; extract?: string; imageUrl?: string } | null>(null)
   const [compassEnabled, setCompassEnabled] = useState(false)
@@ -68,6 +73,14 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const moments = useMemo<RouteMoment[]>(() => detectRouteMoments(hike.trackPoints ?? []), [hike.trackPoints])
   const routePolyline = hike.routePolyline ?? []
+  const guideExcerpts = useMemo(() => extractCuriosita(hike.cachedGuide ?? ''), [hike.cachedGuide])
+
+  const remainingPois = useMemo(() => {
+    if (!position) return pois.map((p) => ({ id: p.id, name: p.name, distanceM: 0 }))
+    return pois
+      .map((p) => ({ id: p.id, name: p.name, distanceM: haversineM(position.lat, position.lon, p.lat, p.lon) }))
+      .sort((a, b) => a.distanceM - b.distanceM)
+  }, [pois, position])
 
   const logEvent = (type: string, payload?: Record<string, unknown>) => {
     pendingEvents.current.push({ type, payload, createdAt: new Date().toISOString() })
@@ -180,6 +193,40 @@ export default function ActiveNavigationView({ hike }: Props) {
     if (!isOnline && mapMode !== 'offline') setMapMode('offline')
   }, [isOnline, mapMode])
 
+  const handleMapStyleFailed = () => {
+    setMapMode('offline')
+    setMapFallbackNotice(true)
+    setTimeout(() => setMapFallbackNotice(false), 5000)
+  }
+
+  // Ending navigation must be a deliberate action: a stray tap on the close
+  // button, the browser/phone back gesture, or an accidental tab close
+  // should never silently drop a session mid-hike. We push a guard history
+  // entry so a back-navigation is caught by popstate instead of leaving the
+  // page, and warn on tab close/refresh via beforeunload (best-effort only —
+  // iOS Safari ignores the custom message and sometimes the prompt itself).
+  useEffect(() => {
+    history.pushState({ dtrekNavGuard: true }, '')
+
+    const onPopState = () => {
+      if (endConfirmedRef.current) return
+      history.pushState({ dtrekNavGuard: true }, '')
+      setShowConfirmEnd(true)
+    }
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (endConfirmedRef.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+
+    window.addEventListener('popstate', onPopState)
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
+  }, [])
+
   const handleEnableCompass = async () => {
     const granted = await requestOrientationPermission()
     setCompassEnabled(granted)
@@ -195,7 +242,11 @@ export default function ActiveNavigationView({ hike }: Props) {
     setTimerRunning(timerRunningRef.current)
   }
 
-  const handleEnd = async () => {
+  const requestEnd = () => setShowConfirmEnd(true)
+
+  const confirmEnd = async () => {
+    endConfirmedRef.current = true
+    setShowConfirmEnd(false)
     if (remoteSessionId.current) {
       fetch('/api/navigation/session', {
         method: 'PATCH',
@@ -207,15 +258,23 @@ export default function ActiveNavigationView({ hike }: Props) {
     router.push(`/programma/${hike.id}`)
   }
 
+  const cancelEnd = () => setShowConfirmEnd(false)
+
   const distanceRemainingM = progress ? Math.max(0, progress.totalRouteM - progress.distanceAlongRouteM) : 0
   const avgSpeedMs = movingTimeMs > 0 ? traveledDistanceM / (movingTimeMs / 1000) : null
 
   return (
-    <div className="fixed inset-0 z-[2000] bg-slate-900">
+    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
         <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} />
       ) : (
-        <NavigationMapLibre routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} styleId={mapMode} is3D={is3D} />
+        <NavigationMapLibre routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} />
+      )}
+
+      {mapFallbackNotice && (
+        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg z-10 font-body">
+          Mappa online non disponibile, uso la mappa offline
+        </div>
       )}
 
       <MapModeSwitcher mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline} />
@@ -226,7 +285,7 @@ export default function ActiveNavigationView({ hike }: Props) {
         distanceToNextM={instruction?.distanceToNextM ?? null}
         speechEnabled={speechEnabled}
         onToggleSpeech={handleToggleSpeech}
-        onClose={handleEnd}
+        onClose={requestEnd}
         isOnline={isOnline}
         compassSupported={isOrientationSupported()}
         compassEnabled={compassEnabled}
@@ -234,17 +293,17 @@ export default function ActiveNavigationView({ hike }: Props) {
       />
 
       {state === 'off_route' && (
-        <div className="absolute bottom-[280px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-amber-500 text-white text-sm font-semibold shadow-lg flex items-center gap-2 z-10">
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-terra-500 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10">
           <AlertTriangle size={16} /> Sei fuori dal percorso pianificato
         </div>
       )}
       {state === 'gps_lost' && (
-        <div className="absolute bottom-[280px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-red-500 text-white text-sm font-semibold shadow-lg flex items-center gap-2 z-10">
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10">
           <AlertTriangle size={16} /> Segnale GPS assente
         </div>
       )}
 
-      <NavStatsPanel
+      <NavBottomSheet
         distanceCoveredM={traveledDistanceM}
         distanceRemainingM={distanceRemainingM}
         currentSpeedMs={currentSpeedMs}
@@ -252,14 +311,18 @@ export default function ActiveNavigationView({ hike }: Props) {
         movingTimeMs={movingTimeMs}
         timerRunning={timerRunning}
         onTogglePlayPause={handleTogglePlayPause}
-        onStop={handleEnd}
-        expanded={statsExpanded}
-        onToggleExpanded={() => setStatsExpanded((v) => !v)}
+        onStop={requestEnd}
+        trackPoints={hike.trackPoints ?? []}
+        currentDistanceM={progress?.distanceAlongRouteM ?? 0}
+        remainingPois={remainingPois}
+        guideExcerpts={guideExcerpts}
       />
 
       {callout && (
         <PoiCalloutSheet title={callout.title} extract={callout.extract} imageUrl={callout.imageUrl} onClose={() => setCallout(null)} />
       )}
+
+      {showConfirmEnd && <ConfirmEndDialog onConfirm={confirmEnd} onCancel={cancelEnd} />}
     </div>
   )
 }
