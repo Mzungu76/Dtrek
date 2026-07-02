@@ -11,6 +11,8 @@ interface Props {
   state: NavState
   /** Nearby hiking paths/tracks (from OSM), drawn as thin context lines — the offline basemap alone has no sense of "what other paths pass near here", which matters for orientation on foot. */
   nearbyTrails?: [number, number][][]
+  /** Current GPS fix accuracy in meters, drawn as a translucent circle around the position marker so the hiker can tell a trustworthy fix (few meters) from a noisy one (tens of meters, e.g. under tree cover). */
+  accuracyM?: number | null
 }
 
 const FOLLOW_ZOOM = 17
@@ -37,10 +39,11 @@ const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
  * hiker manually pans/zooms the map, follow mode turns off so their gesture
  * isn't fought, and a "recenter" button brings it back.
  */
-export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails }: Props) {
+export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
   const userMarker = useRef<any>(null)
+  const accuracyCircle = useRef<any>(null)
   const hasCentered = useRef(false)
   const [followMode, setFollowMode] = useState(true)
 
@@ -125,10 +128,29 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       } else {
         userMarker.current = L.marker([position.lat, position.lon], { icon, zIndexOffset: 1000 }).addTo(map)
       }
+
+      // Leaflet's L.circle takes its radius directly in meters (unlike
+      // MapLibre, no manual polygon math needed) — a quick trust signal for
+      // the fix: a wide translucent ring means "don't trust this dot too
+      // precisely" (weak signal / tree cover / canyon multipath).
+      if (accuracyM != null && Number.isFinite(accuracyM) && accuracyM > 0) {
+        if (accuracyCircle.current) {
+          accuracyCircle.current.setLatLng([position.lat, position.lon])
+          accuracyCircle.current.setRadius(accuracyM)
+        } else {
+          accuracyCircle.current = L.circle([position.lat, position.lon], {
+            radius: accuracyM, color: '#277134', weight: 1, fillColor: '#277134', fillOpacity: 0.12, interactive: false,
+          }).addTo(map)
+        }
+      } else if (accuracyCircle.current) {
+        accuracyCircle.current.remove()
+        accuracyCircle.current = null
+      }
+
       if (!hasCentered.current) { map.setView([position.lat, position.lon], FOLLOW_ZOOM); hasCentered.current = true }
       else if (followMode) map.panTo([position.lat, position.lon], { animate: true, duration: 0.5 })
     })
-  }, [position, bearingDeg, state, followMode])
+  }, [position, bearingDeg, state, followMode, accuracyM])
 
   const handleRecenter = () => {
     setFollowMode(true)

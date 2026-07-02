@@ -61,7 +61,7 @@ export class NavigationEngine {
     this.instructions = buildRouteInstructions(opts.routePolyline)
     this.gps = new AdaptiveGpsTracker(
       (fix) => this.handleFix(fix),
-      () => this.handleGpsError(),
+      (err) => this.handleGpsError(err),
     )
   }
 
@@ -103,14 +103,15 @@ export class NavigationEngine {
     this.gpsLostTimer = setTimeout(() => {
       if (Date.now() - this.lastFixAt >= GPS_LOST_MS) {
         this.setState('gps_lost')
-        this.emit('gpsLost', {})
+        this.emit('gpsLost', { permissionDenied: false })
       }
     }, GPS_LOST_MS)
   }
 
-  private handleGpsError(): void {
+  /** err.code === 1 (PERMISSION_DENIED) means the browser/OS location permission was denied — unrecoverable until the user changes it in settings, unlike a plain signal loss (code 2/3), so the UI needs to tell the two apart. */
+  private handleGpsError(err?: GeolocationPositionError): void {
     this.setState('gps_lost')
-    this.emit('gpsLost', {})
+    this.emit('gpsLost', { permissionDenied: err?.code === 1 })
   }
 
   private handleFix(raw: GeoFix): void {
@@ -128,7 +129,7 @@ export class NavigationEngine {
     this.emit('positionUpdated', { raw, smoothed, progress, traveledDistanceM: this.traveledDistanceM, instantSpeedMs })
 
     this.updateBearingFallback(smoothed)
-    this.updateRouteDeviation(progress.distanceToRouteM, raw.accuracyM)
+    this.updateRouteDeviation(smoothed, progress, raw.accuracyM)
     this.updatePois(smoothed)
     this.updateMoments(progress.distanceAlongRouteM, smoothed)
     this.updateInstructions(progress.distanceAlongRouteM)
@@ -189,7 +190,8 @@ export class NavigationEngine {
     this.emit('bearingUpdated', { bearingDeg: smoothed[smoothed.length - 1], source: 'gps' })
   }
 
-  private updateRouteDeviation(distanceToRouteM: number, accuracyM: number | null | undefined): void {
+  private updateRouteDeviation(fix: GeoFix, progress: import('./types').RouteProgress, accuracyM: number | null | undefined): void {
+    const distanceToRouteM = progress.distanceToRouteM
     // A very poor fix (weak/multipath signal) can't be trusted to judge deviation — skip this check for it.
     if (accuracyM != null && accuracyM > 100) return
 
@@ -199,7 +201,8 @@ export class NavigationEngine {
       this.onRouteStreak = 0
       if (this.offRouteStreak >= OFF_ROUTE_HYSTERESIS_FIXES && this.stateMachine.state !== 'off_route') {
         this.setState('off_route')
-        this.emit('offRoute', { distanceToRouteM })
+        const bearingToRouteDeg = bearingDeg(fix.lat, fix.lon, progress.nearestPointLat, progress.nearestPointLon)
+        this.emit('offRoute', { distanceToRouteM, bearingToRouteDeg })
       }
     } else {
       this.onRouteStreak++

@@ -1,3 +1,18 @@
+/** Approximates a circle of `radiusM` around (lat, lon) as a closed GeoJSON-style [lon, lat] polygon ring, for map layers (e.g. MapLibre GL, which has no native meter-radius circle unlike Leaflet's L.circle). */
+export function circlePolygonLonLat(lat: number, lon: number, radiusM: number, points = 32): [number, number][] {
+  const ring: [number, number][] = []
+  const latRad = lat * Math.PI / 180
+  const metersPerDegLat = 111320
+  const metersPerDegLon = 111320 * Math.cos(latRad)
+  for (let i = 0; i <= points; i++) {
+    const theta = (i / points) * 2 * Math.PI
+    const dLat = (radiusM * Math.sin(theta)) / metersPerDegLat
+    const dLon = metersPerDegLon > 0 ? (radiusM * Math.cos(theta)) / metersPerDegLon : 0
+    ring.push([lon + dLon, lat + dLat])
+  }
+  return ring
+}
+
 export function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
   const f1 = lat1 * Math.PI / 180, f2 = lat2 * Math.PI / 180

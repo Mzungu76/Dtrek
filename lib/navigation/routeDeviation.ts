@@ -56,7 +56,7 @@ export class RouteTracker {
 
   update(lat: number, lon: number): RouteProgress {
     if (this.track.length < 2) {
-      return { nearestSegmentIndex: 0, distanceToRouteM: Infinity, distanceAlongRouteM: 0, totalRouteM: 0 }
+      return { nearestSegmentIndex: 0, distanceToRouteM: Infinity, distanceAlongRouteM: 0, totalRouteM: 0, nearestPointLat: lat, nearestPointLon: lon }
     }
     const lo = Math.max(1, this.lastSegmentIndex - this.searchWindow)
     const hi = Math.min(this.track.length - 1, this.lastSegmentIndex + this.searchWindow)
@@ -71,11 +71,20 @@ export class RouteTracker {
     const distanceAlongRouteM = this.cumulativeM[bestIdx - 1] +
       bestHit.t * (this.cumulativeM[bestIdx] - this.cumulativeM[bestIdx - 1])
 
+    // Linear interpolation in lat/lon space along [a, b] by t — consistent
+    // with distToSegment's own local-projection approximation, and accurate
+    // enough at the short segment lengths a route polyline is made of.
+    const [a, b] = [this.track[bestIdx - 1], this.track[bestIdx]]
+    const nearestPointLat = a[0] + bestHit.t * (b[0] - a[0])
+    const nearestPointLon = a[1] + bestHit.t * (b[1] - a[1])
+
     return {
       nearestSegmentIndex: bestIdx,
       distanceToRouteM: bestHit.distM,
       distanceAlongRouteM,
       totalRouteM: this.totalRouteM,
+      nearestPointLat,
+      nearestPointLon,
     }
   }
 }

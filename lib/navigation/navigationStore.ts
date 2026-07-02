@@ -7,6 +7,7 @@
  */
 import { lsGet, lsSet, lsDel } from '@/lib/localStore'
 import type { GeoFix, NavState } from './types'
+import type { TrackPoint } from '@/lib/tcxParser'
 
 export interface NavigationSessionSnapshot {
   hikeId: string
@@ -69,4 +70,32 @@ export async function drainTrackQueue(sessionId: string): Promise<QueuedTrackFix
   const existing = (await lsGet<QueuedTrackFix[]>(TRACK_QUEUE_KEY(sessionId))) ?? []
   await lsDel(TRACK_QUEUE_KEY(sessionId))
   return existing
+}
+
+/** Puts previously-drained fixes back at the front of the queue — used when a flush to the server fails after draining, so nothing already sent-and-lost is silently dropped. */
+export async function requeueTrackFixes(sessionId: string, fixes: QueuedTrackFix[]): Promise<void> {
+  if (fixes.length === 0) return
+  const existing = (await lsGet<QueuedTrackFix[]>(TRACK_QUEUE_KEY(sessionId))) ?? []
+  await lsSet(TRACK_QUEUE_KEY(sessionId), [...fixes, ...existing])
+}
+
+// ── Recorded track: the raw points used to build a post-hike "save as activity" ──
+// Kept in IndexedDB (not just a React ref) so a tab crash/OS-kill before the
+// end-of-hike review step doesn't lose the opportunity to save the completed
+// activity, matching the durability the offline track-sync queue already has.
+
+const RECORDED_TRACK_KEY = (hikeId: string) => `nav-recorded-track:${hikeId}`
+
+export async function appendRecordedTrackPoint(hikeId: string, point: TrackPoint): Promise<void> {
+  const existing = (await lsGet<TrackPoint[]>(RECORDED_TRACK_KEY(hikeId))) ?? []
+  existing.push(point)
+  await lsSet(RECORDED_TRACK_KEY(hikeId), existing)
+}
+
+export async function loadRecordedTrack(hikeId: string): Promise<TrackPoint[]> {
+  return (await lsGet<TrackPoint[]>(RECORDED_TRACK_KEY(hikeId))) ?? []
+}
+
+export async function clearRecordedTrack(hikeId: string): Promise<void> {
+  await lsDel(RECORDED_TRACK_KEY(hikeId))
 }

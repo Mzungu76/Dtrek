@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { fetchNearbyTrailPaths, type PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
@@ -15,8 +15,12 @@ import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
 import {
   loadNavigationSession, saveNavigationSession, newSessionSnapshot,
-  queueTrackFix, drainTrackQueue, type NavigationSessionSnapshot,
+  queueTrackFix, drainTrackQueue, requeueTrackFixes, type NavigationSessionSnapshot,
+  appendRecordedTrackPoint, loadRecordedTrack, clearRecordedTrack,
 } from '@/lib/navigation/navigationStore'
+import { loadManifest } from '@/lib/offline/packageManifest'
+import { watchBattery } from '@/lib/navigation/battery'
+import { haptics } from '@/lib/navigation/haptics'
 import type { NavInstruction, NavPoi, NavState, RouteMoment } from '@/lib/navigation/types'
 import NavigationMap from './NavigationMap'
 import NavigationMapLibre from './NavigationMapLibre'
@@ -51,6 +55,7 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const [state, setState] = useState<NavState>('idle')
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
+  const [accuracyM, setAccuracyM] = useState<number | null>(null)
   const [bearing, setBearing] = useState<number | null>(null)
   const [progress, setProgress] = useState<{ distanceAlongRouteM: number; totalRouteM: number } | null>(null)
   const [traveledDistanceM, setTraveledDistanceM] = useState(0)
@@ -68,6 +73,10 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [is3D, setIs3D] = useState(false)
   const [nearbyTrails, setNearbyTrails] = useState<[number, number][][]>([])
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
+  const [gpsLostPermissionDenied, setGpsLostPermissionDenied] = useState(false)
+  const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
+  const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
+  const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
 
   const pois = useMemo<NavPoi[]>(() => {
     const raw = (hike.cachedPois ?? []) as PoiItem[]
@@ -115,14 +124,23 @@ export default function ActiveNavigationView({ hike }: Props) {
     const events = pendingEvents.current.splice(0, pendingEvents.current.length)
     if (!track.length && !events.length) return
     try {
-      await fetch('/api/navigation/events', {
+      const res = await fetch('/api/navigation/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: remoteSessionId.current, events, track }),
       })
+      // A non-throwing non-OK response (401 expired session, 500, 413 batch
+      // too large...) used to be treated as delivered and the batch was
+      // dropped for good — only a fetch() that itself threw got requeued.
+      // Put both events and track fixes back so the next flush retries them.
+      if (!res.ok) {
+        pendingEvents.current.unshift(...events)
+        await requeueTrackFixes(sessionRef.current!.sessionId, track)
+      }
     } catch {
       // best-effort: keep the events for the next flush attempt if the request itself throws before sending
       pendingEvents.current.unshift(...events)
+      await requeueTrackFixes(sessionRef.current!.sessionId, track)
     }
   }
 
@@ -133,6 +151,13 @@ export default function ActiveNavigationView({ hike }: Props) {
       const restored = await loadNavigationSession(hike.id)
       const snapshot = restored ?? newSessionSnapshot(hike.id, crypto.randomUUID())
       sessionRef.current = snapshot
+
+      // Restore any recorded points from a previous run that crashed/was
+      // killed before confirmEnd() got to run — otherwise a tab crash right
+      // before the end-of-hike review step silently loses the chance to
+      // save the completed activity, even though the raw fixes made it into
+      // the offline sync queue.
+      recordedTrackRef.current = await loadRecordedTrack(hike.id)
 
       fetch('/api/navigation/session', {
         method: 'POST',
@@ -148,6 +173,7 @@ export default function ActiveNavigationView({ hike }: Props) {
         if (cancelled) return
         lastFixAtRef.current = Date.now()
         setPosition({ lat: smoothed.lat, lon: smoothed.lon })
+        setAccuracyM(raw.accuracyM ?? null)
         // Position keeps updating even while the stats timer is paused (the
         // hiker still wants to see themselves on the map) — only the
         // recorded distance/speed stats freeze.
@@ -155,13 +181,15 @@ export default function ActiveNavigationView({ hike }: Props) {
           setProgress({ distanceAlongRouteM: progress.distanceAlongRouteM, totalRouteM: progress.totalRouteM })
           setTraveledDistanceM(traveledDistanceM)
           setCurrentSpeedMs(instantSpeedMs)
-          recordedTrackRef.current.push({
+          const point: TrackPoint = {
             time: new Date(raw.ts).toISOString(),
             lat: raw.lat,
             lon: raw.lon,
             altitudeMeters: raw.altitudeM ?? undefined,
             speedMs: raw.speedMs ?? undefined,
-          })
+          }
+          recordedTrackRef.current.push(point)
+          appendRecordedTrackPoint(hike.id, point).catch(() => {})
         }
         queueTrackFix(snapshot.sessionId, { ts: raw.ts, lat: raw.lat, lon: raw.lon, altitudeM: raw.altitudeM, speedMs: raw.speedMs, accuracyM: raw.accuracyM })
       })
@@ -173,17 +201,39 @@ export default function ActiveNavigationView({ hike }: Props) {
         const wiki = poiWikiById.get(poi.id)
         setCallout({ title: poi.name ?? 'Punto di interesse', extract: wiki?.extract, imageUrl: wiki?.thumbnail })
         speakIfEnabled(`${poi.name ?? 'Sei vicino a un punto di interesse'}. ${wiki?.extract ?? ''}`.trim())
+        haptics.notify()
       })
       engine.on('momentReached', ({ moment }) => {
         if (cancelled) return
         logEvent('moment_reached', { momentId: moment.id, kind: moment.kind })
         setCallout({ title: 'Giulia', extract: moment.text })
         speakIfEnabled(moment.text)
+        haptics.notify()
       })
-      engine.on('offRoute', ({ distanceToRouteM }) => { if (!cancelled) logEvent('off_route', { distanceToRouteM }) })
-      engine.on('backOnRoute', () => { if (!cancelled) logEvent('on_route_again') })
-      engine.on('gpsLost', () => { if (!cancelled) logEvent('gps_lost') })
-      engine.on('gpsRecovered', () => { if (!cancelled) logEvent('gps_recovered') })
+      engine.on('offRoute', ({ distanceToRouteM, bearingToRouteDeg }) => {
+        if (cancelled) return
+        logEvent('off_route', { distanceToRouteM })
+        setOffRouteBearingDeg(bearingToRouteDeg)
+        speakIfEnabled('Sei fuori dal percorso pianificato')
+        haptics.alert()
+      })
+      engine.on('backOnRoute', () => {
+        if (cancelled) return
+        logEvent('on_route_again')
+        setOffRouteBearingDeg(null)
+      })
+      engine.on('gpsLost', ({ permissionDenied }) => {
+        if (cancelled) return
+        logEvent('gps_lost', { permissionDenied })
+        setGpsLostPermissionDenied(permissionDenied)
+        speakIfEnabled(permissionDenied ? 'Permesso di localizzazione negato' : 'Segnale GPS assente')
+        haptics.alert()
+      })
+      engine.on('gpsRecovered', () => {
+        if (cancelled) return
+        logEvent('gps_recovered')
+        setGpsLostPermissionDenied(false)
+      })
 
       engine.start()
     })()
@@ -192,6 +242,26 @@ export default function ActiveNavigationView({ hike }: Props) {
     window.addEventListener('online', onlineListener)
     window.addEventListener('offline', onlineListener)
     setIsOnline(navigator.onLine)
+
+    // A dead phone mid-hike means no map and no GPS — warn once while
+    // there's still time to react (power bank, screen brightness), and log
+    // it so it shows up alongside the other navigation events.
+    const stopBatteryWatch = watchBattery((level) => {
+      if (cancelled) return
+      setLowBatteryNotice(true)
+      logEvent('low_battery', { level })
+      speakIfEnabled('Batteria del telefono scarica')
+      haptics.alert()
+    })
+
+    // If we're starting offline (or go offline before this resolves) with no
+    // fully-downloaded offline map package for this hike, some areas of the
+    // route may not be covered by cached tiles — worth a one-time heads-up
+    // instead of the hiker discovering blank map tiles mid-trail.
+    loadManifest(hike.id).then((manifest) => {
+      if (cancelled) return
+      if (!navigator.onLine && manifest?.status !== 'ready') setOfflinePackageWarning(true)
+    }).catch(() => {})
 
     const flushInterval = setInterval(() => { if (navigator.onLine) flushToServer() }, 30000)
     // "Moving time" ticks once a second while fixes keep arriving and the
@@ -208,6 +278,7 @@ export default function ActiveNavigationView({ hike }: Props) {
       engineRef.current?.stop()
       window.removeEventListener('online', onlineListener)
       window.removeEventListener('offline', onlineListener)
+      stopBatteryWatch()
       clearInterval(flushInterval)
       clearInterval(movingTimeInterval)
       if (sessionRef.current) saveNavigationSession({ ...sessionRef.current, state, lastFix: null, lastBearingDeg: bearing }).catch(() => {})
@@ -293,6 +364,7 @@ export default function ActiveNavigationView({ hike }: Props) {
   const confirmEnd = async () => {
     endConfirmedRef.current = true
     setShowConfirmEnd(false)
+    haptics.success()
     if (remoteSessionId.current) {
       fetch('/api/navigation/session', {
         method: 'PATCH',
@@ -313,6 +385,7 @@ export default function ActiveNavigationView({ hike }: Props) {
         // fall through to the original close behavior if the track can't be turned into an activity
       }
     }
+    clearRecordedTrack(hike.id).catch(() => {})
     goToPlannedHike()
   }
 
@@ -327,28 +400,41 @@ export default function ActiveNavigationView({ hike }: Props) {
       hikeNotes: hike.hikeNotes,
       deleteLinkedPlanned: true,
     })
+    clearRecordedTrack(hike.id).catch(() => {})
     router.push(`/escursione/${encodeURIComponent(saved.id)}`)
   }
 
   const handleDiscardRecordedActivity = () => {
     setPendingActivity(null)
+    clearRecordedTrack(hike.id).catch(() => {})
     goToPlannedHike()
   }
 
   const distanceRemainingM = progress ? Math.max(0, progress.totalRouteM - progress.distanceAlongRouteM) : 0
   const avgSpeedMs = movingTimeMs > 0 ? traveledDistanceM / (movingTimeMs / 1000) : null
+  const etaDate = avgSpeedMs && avgSpeedMs > 0.05 && distanceRemainingM > 0
+    ? new Date(Date.now() + (distanceRemainingM / avgSpeedMs) * 1000)
+    : null
 
   return (
     <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
-        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} />
+        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} accuracyM={accuracyM} />
       ) : (
-        <NavigationMapLibre routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} />
+        <NavigationMapLibre routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM} />
       )}
 
       {mapFallbackNotice && (
         <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg z-10 font-body">
           Mappa online non disponibile, uso la mappa offline
+        </div>
+      )}
+
+      {offlinePackageWarning && (
+        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg z-10 font-body flex items-center gap-2">
+          <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+          Mappa offline incompleta per questo percorso
+          <button onClick={() => setOfflinePackageWarning(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
         </div>
       )}
 
@@ -371,12 +457,27 @@ export default function ActiveNavigationView({ hike }: Props) {
 
       {state === 'off_route' && (
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-terra-500 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10">
-          <AlertTriangle size={16} /> Sei fuori dal percorso pianificato
+          {offRouteBearingDeg != null && (
+            <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
+          )}
+          <AlertTriangle size={16} className="shrink-0" /> Sei fuori dal percorso{offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}
         </div>
       )}
       {state === 'gps_lost' && (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10">
-          <AlertTriangle size={16} /> Segnale GPS assente
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 max-w-[90%] px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10 text-center">
+          <AlertTriangle size={16} className="shrink-0" />
+          {gpsLostPermissionDenied
+            ? 'Permesso di localizzazione negato — attivalo nelle impostazioni del browser/telefono'
+            : 'Segnale GPS assente'}
+        </div>
+      )}
+      {lowBatteryNotice && (
+        // Stacked above the off-route/gps-lost banners (both mutually
+        // exclusive with each other, but not with a low battery, which can
+        // happen at the same time), so the two never overlap.
+        <div className={`absolute ${state === 'off_route' || state === 'gps_lost' ? 'bottom-40' : 'bottom-24'} left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10`}>
+          <BatteryWarning size={16} className="shrink-0 text-amber-400" /> Batteria scarica
+          <button onClick={() => setLowBatteryNotice(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
         </div>
       )}
 
@@ -386,6 +487,7 @@ export default function ActiveNavigationView({ hike }: Props) {
         currentSpeedMs={currentSpeedMs}
         avgSpeedMs={avgSpeedMs}
         movingTimeMs={movingTimeMs}
+        etaDate={etaDate}
         timerRunning={timerRunning}
         onTogglePlayPause={handleTogglePlayPause}
         onStop={requestEnd}
