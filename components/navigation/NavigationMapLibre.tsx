@@ -13,8 +13,8 @@ interface Props {
   state: NavState
   styleId: MapTilerStyleId
   is3D: boolean
-  /** Called if the MapTiler style hasn't finished loading within a few seconds, or errors out (missing/invalid key, no connectivity) — the caller should fall back to the offline-safe map. */
-  onStyleFailed?: () => void
+  /** Called if the MapTiler style hasn't finished loading within a few seconds, or errors out (missing/invalid key, no connectivity, domain-restricted key...) — the caller should fall back to the offline-safe map. `reason` is a short diagnostic string, always logged to the console regardless of environment so this is debuggable in production. */
+  onStyleFailed?: (reason: string) => void
 }
 
 const STYLE_LOAD_TIMEOUT_MS = 6000
@@ -51,14 +51,28 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   const styleWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [followMode, setFollowMode] = useState(true)
 
+  const reportFailure = (reason: string) => {
+    // Always logged (not gated by NODE_ENV) — this is the one place that can
+    // tell the difference between "no key", "key rejected" (invalid/expired/
+    // domain-restricted in the MapTiler dashboard) and "no network", none of
+    // which are distinguishable from the silent fallback alone.
+    console.error(`[NavigationMapLibre] Online map style failed to load: ${reason}`)
+    onStyleFailed?.(reason)
+  }
+
   /** Arms a timeout that reports style-load failure unless 'load'/'style.load' fires first — MapTiler gives no explicit signal for "key missing/invalid", it just never finishes loading. */
-  const armStyleWatchdog = (map: any) => {
+  const armStyleWatchdog = (map: any, styleUrl: string) => {
     if (styleWatchdog.current) clearTimeout(styleWatchdog.current)
-    styleWatchdog.current = setTimeout(() => onStyleFailed?.(), STYLE_LOAD_TIMEOUT_MS)
+    styleWatchdog.current = setTimeout(() => {
+      // Diagnostic fetch, best-effort: pinpoints 401/403 (invalid or domain-restricted key) vs. a network failure.
+      fetch(styleUrl).then((res) => {
+        reportFailure(res.ok ? `timeout after ${STYLE_LOAD_TIMEOUT_MS}ms despite style.json responding ${res.status} — check network/CSP` : `style.json responded ${res.status} ${res.statusText} — check the MapTiler key and its domain allowlist`)
+      }).catch((err) => reportFailure(`timeout after ${STYLE_LOAD_TIMEOUT_MS}ms, style.json fetch also failed: ${err}`))
+    }, STYLE_LOAD_TIMEOUT_MS)
     const clear = () => { if (styleWatchdog.current) { clearTimeout(styleWatchdog.current); styleWatchdog.current = null } }
     map.once('load', clear)
     map.once('style.load', clear)
-    map.once('error', () => { clear(); onStyleFailed?.() })
+    map.once('error', (e: any) => { clear(); reportFailure(e?.error?.message ?? String(e)) })
   }
 
   const setupRouteLayer = (maplibregl: any) => {
@@ -78,21 +92,22 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   }
 
   useEffect(() => {
-    if (!MAPTILER_KEY && process.env.NODE_ENV !== 'production') {
-      console.warn('NavigationMapLibre: NEXT_PUBLIC_MAPTILER_KEY is empty — the online map styles will fail to load and fall back to offline.')
+    if (!MAPTILER_KEY) {
+      console.error('[NavigationMapLibre] NEXT_PUBLIC_MAPTILER_KEY is empty at runtime — the online map styles will fail to load and fall back to offline. If this is a Vercel Preview/branch deployment, check that the env var is enabled for that environment, not just Production.')
     }
     let cancelled = false
     import('maplibre-gl').then((mod) => {
       if (cancelled || !containerRef.current || mapRef.current) return
       const maplibregl = mod.default ?? mod
       const start: [number, number] = routePolyline[0] ? [routePolyline[0][1], routePolyline[0][0]] : [12.5, 41.9]
+      const styleUrl = maptilerStyleUrl(styleId)
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: maptilerStyleUrl(styleId),
+        style: styleUrl,
         center: start, zoom: 15, pitch: is3D ? 55 : 0, bearing: 0,
       })
       mapRef.current = map
-      armStyleWatchdog(map)
+      armStyleWatchdog(map, styleUrl)
 
       map.on('load', () => {
         setupRouteLayer(maplibregl)
@@ -118,8 +133,9 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
 
   useEffect(() => {
     if (!mapRef.current) return
-    armStyleWatchdog(mapRef.current)
-    mapRef.current.setStyle(maptilerStyleUrl(styleId))
+    const styleUrl = maptilerStyleUrl(styleId)
+    armStyleWatchdog(mapRef.current, styleUrl)
+    mapRef.current.setStyle(styleUrl)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [styleId])
 

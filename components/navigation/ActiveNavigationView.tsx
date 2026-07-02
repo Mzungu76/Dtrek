@@ -193,7 +193,12 @@ export default function ActiveNavigationView({ hike }: Props) {
     if (!isOnline && mapMode !== 'offline') setMapMode('offline')
   }, [isOnline, mapMode])
 
-  const handleMapStyleFailed = () => {
+  const handleMapStyleFailed = (reason: string) => {
+    // NavigationMapLibre already console.error's the detailed reason (key
+    // missing/rejected, network, timeout...) — kept out of this user-facing
+    // notice on purpose, but surfaced here too in case this handler is ever
+    // reached without that log (e.g. future callers).
+    console.error('[ActiveNavigationView] falling back to offline map:', reason)
     setMapMode('offline')
     setMapFallbackNotice(true)
     setTimeout(() => setMapFallbackNotice(false), 5000)
