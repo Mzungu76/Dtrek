@@ -4,10 +4,10 @@ import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
-import { saveActivity } from '@/lib/blobStore'
+import { saveActivityWithEnrichment } from '@/lib/activitySave'
 import { parseGpx } from '@/lib/gpxParser'
 import { classifyMarkers } from '@/lib/difficultyMarkers'
-import { savePlanned, deletePlanned, getAllPlanned, getPlannedById, updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { savePlanned, getAllPlanned, getPlannedById, updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
@@ -16,10 +16,8 @@ import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
-import { type BeautyScore } from '@/lib/beautyScore'
 import { computeTrailScore } from '@/lib/trailScore'
 import { computeBbox } from '@/lib/geoUtils'
-import { fetchWeatherAtHike, type WeatherAtHike } from '@/lib/openmeteo'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
@@ -90,101 +88,18 @@ function ActivityUploader() {
         } catch {}
       }
 
-      // ── CTS analysis (best-effort, 18s deadline) ───────────────────
       setStatus('analyzing')
-      let linkedBeautyScore: BeautyScore | undefined
-      let trailScore: number | undefined
-      try {
-        const gps = (parsedActivity.trackPoints ?? [])
-          .filter(p => p.lat && p.lon)
-          .map(p => [p.lat!, p.lon!] as [number, number])
-        if (gps.length >= 2) {
-          const deadline = new Promise<null>(r => setTimeout(() => r(null), 18000))
-          const dtmPromise = Promise.race([
-            fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined)
-          const terrainPromise = Promise.race([
-            fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined)
-          const protectedAreaPromise = Promise.race([
-            checkProtectedArea(gps).then(r => r.inProtectedArea),
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined)
-          const rawPois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline]).then(r => r ?? [])
-          const pois = rawPois as PoiItem[]
-          const bbox = computeBbox(gps)
-          const elevProfile = (parsedActivity.trackPoints ?? [])
-            .filter(p => p.lat && p.lon)
-            .map(p => p.altitudeMeters ?? 0)
-          const osmData = await Promise.race([
-            fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined)
-          const dtmProfile = await dtmPromise
-          const terrainProfile = await terrainPromise
-          const inProtectedArea = await protectedAreaPromise
-          const tei = computeTEI({
-            track: gps,
-            elevGain: parsedActivity.elevationGain,
-            distanceMeters: parsedActivity.distanceMeters,
-            altitudeMax: parsedActivity.altitudeMax,
-            elevProfile,
-            pois,
-            osmData,
-            dtmProfile,
-            terrainProfile,
-            inProtectedArea,
-          })
-          const bs = teiToBeautyScore(tei)
-          const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-          const { ts } = computeTrailScore(bs, {
-            distanceMeters: parsedActivity.distanceMeters,
-            elevationGain:  parsedActivity.elevationGain,
-            elevationLoss:  parsedActivity.elevationLoss ?? 0,
-            altitudeMax:    parsedActivity.altitudeMax,
-            avgHeartRate:   parsedActivity.avgHeartRate,
-            userAge:        prefs.userAge,
-            personalDelta:  prefs.personalDelta,
-            hrHikeCount:    prefs.hrHikeCount,
-            prefSforzo:     prefs.prefSforzo,
-            prefDurata:     prefs.prefDurata,
-            avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
-          }, prefs.beautyNaturaWeight ?? 50)
-          linkedBeautyScore = bs
-          trailScore = ts
-        }
-      } catch {} // non-blocking — save proceeds regardless
-
-      // ── Historical weather (best-effort) ────────────────────────────
-      let weatherAtHike: WeatherAtHike | undefined
-      try {
-        const gpsPt = (parsedActivity.trackPoints ?? []).find(p => p.lat !== undefined && p.lon !== undefined)
-        if (gpsPt && parsedActivity.startTime) {
-          const date = parsedActivity.startTime.slice(0, 10)
-          weatherAtHike = (await fetchWeatherAtHike(gpsPt.lat!, gpsPt.lon!, date)) ?? undefined
-        }
-      } catch {} // non-blocking — save proceeds regardless
-
-      // ── Save ───────────────────────────────────────────────────────
       setStatus('saving')
-      await saveActivity({
-        ...parsedActivity,
-        title:                    titleVal.trim() || undefined,
+      const saved = await saveActivityWithEnrichment(parsedActivity, {
+        title: titleVal,
         fileName,
-        linkedPlannedId:          selectedPlanned?.id,
+        linkedPlannedId: selectedPlanned?.id,
         linkedPlannedTrackPoints,
-        hikeNotes:                linkedPlannedNotes,
-        linkedBeautyScore,
-        trailScore,
-        weatherAtHike,
+        hikeNotes: linkedPlannedNotes,
+        deleteLinkedPlanned: !!selectedPlanned,
       })
-      if (selectedPlanned) {
-        await deletePlanned(selectedPlanned.id).catch(() => {})
-      }
       setStatus('success')
-      setTimeout(() => router.push(`/escursione/${encodeURIComponent(parsedActivity.id)}`), 1200)
+      setTimeout(() => router.push(`/escursione/${encodeURIComponent(saved.id)}`), 1200)
     } catch (e) {
       console.error(e); setStatus('error')
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
