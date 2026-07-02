@@ -51,6 +51,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   const userMarkerArrow = useRef<HTMLDivElement | null>(null)
   const hasCentered = useRef(false)
   const styleWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const errorListener = useRef<((e: any) => void) | null>(null)
   const resizeObserver = useRef<ResizeObserver | null>(null)
   // Event listeners registered once at mount close over stale props — this
   // ref lets setupTerrain() (called from 'load'/'style.load') always read
@@ -68,19 +69,37 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     onStyleFailed?.(reason)
   }
 
-  /** Arms a timeout that reports style-load failure unless 'load'/'style.load' fires first — MapTiler gives no explicit signal for "key missing/invalid", it just never finishes loading. */
+  /**
+   * Arms a timeout that reports style-load failure unless 'load'/'style.load'
+   * fires first — MapTiler gives no explicit signal for "key missing/
+   * invalid", it just never finishes loading. The 'error' listener is
+   * deliberately torn down the moment the style finishes loading, not left
+   * attached for the map's whole lifetime: MapLibre fires 'error' for
+   * ordinary recoverable hiccups too (a DEM tile missing at the edge of
+   * terrain coverage, a transient fetch failure on one of many tiles), and
+   * treating any later one of those as "the whole style failed" was
+   * observed — via a HAR capture — to abort in-flight requests and fall
+   * back to the offline map over what should have been a shrug-and-continue.
+   */
   const armStyleWatchdog = (map: any, styleUrl: string) => {
     if (styleWatchdog.current) clearTimeout(styleWatchdog.current)
+    if (errorListener.current) { map.off('error', errorListener.current); errorListener.current = null }
+
     styleWatchdog.current = setTimeout(() => {
       // Diagnostic fetch, best-effort: pinpoints 401/403 (invalid or domain-restricted key) vs. a network failure.
       fetch(styleUrl).then((res) => {
         reportFailure(res.ok ? `timeout after ${STYLE_LOAD_TIMEOUT_MS}ms despite style.json responding ${res.status} — check network/CSP` : `style.json responded ${res.status} ${res.statusText} — check the MapTiler key and its domain allowlist`)
       }).catch((err) => reportFailure(`timeout after ${STYLE_LOAD_TIMEOUT_MS}ms, style.json fetch also failed: ${err}`))
     }, STYLE_LOAD_TIMEOUT_MS)
-    const clear = () => { if (styleWatchdog.current) { clearTimeout(styleWatchdog.current); styleWatchdog.current = null } }
-    map.once('load', clear)
-    map.once('style.load', clear)
-    map.once('error', (e: any) => { clear(); reportFailure(e?.error?.message ?? String(e)) })
+
+    const stopWatching = () => {
+      if (styleWatchdog.current) { clearTimeout(styleWatchdog.current); styleWatchdog.current = null }
+      if (errorListener.current) { map.off('error', errorListener.current); errorListener.current = null }
+    }
+    errorListener.current = (e: any) => { stopWatching(); reportFailure(e?.error?.message ?? String(e)) }
+    map.once('load', stopWatching)
+    map.once('style.load', stopWatching)
+    map.on('error', errorListener.current)
   }
 
   const setupRouteLayer = (maplibregl: any) => {
@@ -105,17 +124,29 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   // (Outdoor/Satellite/Winter each have their own sources, but none of that
   // matters here — this is our own additional source), and re-added after
   // every style.load since setStyle() wipes custom sources/layers.
+  // Terrain is an enhancement on top of an already-working map — a failure
+  // here (DEM source rejected, WebGL/GPU can't handle hillshading, a style-
+  // specific quirk...) must never cascade into abandoning the whole online
+  // map and falling back to offline; that fallback is reserved for the style
+  // itself failing to load (armStyleWatchdog/reportFailure above). Observed
+  // in a HAR capture: enabling 3D aborted in-flight tile requests and
+  // triggered the offline fallback — this try/catch, plus keeping this
+  // failure entirely out of reportFailure(), is the fix.
   const setupTerrain = (map: any) => {
-    if (!map.getSource(TERRAIN_SOURCE_ID)) {
-      map.addSource(TERRAIN_SOURCE_ID, {
-        type: 'raster-dem',
-        url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`,
-        tileSize: 512,
-      })
-    }
-    map.setTerrain(is3DRef.current ? { source: TERRAIN_SOURCE_ID, exaggeration: TERRAIN_EXAGGERATION } : null)
-    if (is3DRef.current && !map.getLayer('nav-sky')) {
-      try { map.addLayer({ id: 'nav-sky', type: 'sky', paint: { 'sky-type': 'atmosphere', 'sky-atmosphere-sun-intensity': 15 } }) } catch {}
+    try {
+      if (!map.getSource(TERRAIN_SOURCE_ID)) {
+        map.addSource(TERRAIN_SOURCE_ID, {
+          type: 'raster-dem',
+          url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`,
+          tileSize: 512,
+        })
+      }
+      map.setTerrain(is3DRef.current ? { source: TERRAIN_SOURCE_ID, exaggeration: TERRAIN_EXAGGERATION } : null)
+      if (is3DRef.current && !map.getLayer('nav-sky')) {
+        map.addLayer({ id: 'nav-sky', type: 'sky', paint: { 'sky-type': 'atmosphere', 'sky-atmosphere-sun-intensity': 15 } })
+      }
+    } catch (err) {
+      console.error('[NavigationMapLibre] 3D terrain/sky setup failed, continuing with a flat map:', err)
     }
   }
 
