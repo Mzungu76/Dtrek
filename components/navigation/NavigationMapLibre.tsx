@@ -193,7 +193,22 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
 
   return (
     <div className="absolute inset-0">
-      <div ref={containerRef} className="absolute inset-0" />
+      {/*
+        Inline style, not just the "absolute inset-0" utility classes:
+        MapLibre's constructor adds its own "maplibregl-map" class to this
+        exact element, and maplibre-gl.css sets `.maplibregl-map { position:
+        relative }` on it. If that stylesheet rule ends up later than
+        Tailwind's `.absolute` in the final bundle (order depends on
+        webpack's CSS chunking, not something we control), position flips
+        to relative, `inset-0` becomes a no-op (it only affects absolutely
+        positioned elements), and this div collapses to its content size —
+        near-zero height, since it starts empty. The map object then reports
+        every tile/style/font request succeeding (nothing wrong at the
+        network or JS level) while the canvas stays invisible. An inline
+        style always wins over any stylesheet rule without !important, so
+        it can't be silently overridden this way.
+      */}
+      <div ref={containerRef} className="absolute inset-0" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }} />
       <button
         onClick={handleRecenter}
         className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'}`}
