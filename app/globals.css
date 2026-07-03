@@ -25,6 +25,12 @@ body {
 .font-barlow  { font-family: 'Barlow Condensed', sans-serif; }
 .font-lora    { font-family: 'Lora', serif; }
 
+/* Hairline — filo sottile per separare sezioni in stile editoriale,
+   alternativa ai riquadri pieni colorati */
+.hairline {
+  border-top: 1px solid #dcd8cc;
+}
+
 /* Card hover lift */
 .card-lift {
   transition: transform 0.2s ease, box-shadow 0.2s ease;

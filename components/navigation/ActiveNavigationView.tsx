@@ -104,6 +104,12 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
   const [sunTimes, setSunTimes] = useState<SunTimes | null>(null)
   const [turnBackDismissed, setTurnBackDismissed] = useState(false)
+  // Fino a 3 avvisi "bottom" (off-route/gps-lost, batteria scarica, rientro per
+  // il buio) potevano impilarsi contemporaneamente con offset manuali a pixel
+  // fissi. Ora si mostra solo il più critico, con gli altri dietro un
+  // "+N altri avvisi" — nessun avviso è stato rimosso, solo riordinato per
+  // priorità. Piano di ristrutturazione, Parte 2.8.
+  const [bottomAlertsExpanded, setBottomAlertsExpanded] = useState(false)
   const turnBackAlertedRef = useRef(false)
   const [activeRiddle, setActiveRiddle] = useState<TrailRiddle | null>(null)
   const shownRiddleIdsRef = useRef<Set<string>>(new Set())
@@ -653,30 +659,37 @@ export default function ActiveNavigationView({ hike }: Props) {
         </div>
       )}
 
-      {mapFallbackNotice && (
-        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg z-10 font-body">
-          Mappa online non disponibile, uso la mappa offline
-        </div>
-      )}
-
-      {offlinePackageWarning && (
-        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg z-10 font-body flex items-center gap-2">
-          <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-          Mappa offline incompleta per questo percorso
-          <button onClick={() => setOfflinePackageWarning(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
-        </div>
-      )}
-
-      {state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed && (
-        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm px-4 py-3 rounded-xl bg-stone-800 text-white text-xs shadow-lg z-10 font-body">
-          <div className="flex items-start gap-2">
-            <span className="text-base shrink-0">🐾</span>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold mb-1">Fauna nella zona: {relevantWildlifeRisks.map((w) => w.animal).join(', ')}</p>
-              <p className="text-stone-300 leading-snug">{relevantWildlifeRisks[0].tip}</p>
+      {/* Le tre notice qui sotto puntavano tutte allo stesso top-[210px] senza
+          alcuna logica di stacking: se più di una era attiva si sovrapponevano
+          letteralmente. Un contenitore colonna le impila invece in ordine. */}
+      {(mapFallbackNotice || offlinePackageWarning || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed)) && (
+        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm">
+          {mapFallbackNotice && (
+            <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body">
+              Mappa online non disponibile, uso la mappa offline
             </div>
-            <button onClick={() => setWildlifeAlertDismissed(true)} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
-          </div>
+          )}
+
+          {offlinePackageWarning && (
+            <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body flex items-center gap-2">
+              <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+              Mappa offline incompleta per questo percorso
+              <button onClick={() => setOfflinePackageWarning(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+            </div>
+          )}
+
+          {state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed && (
+            <div className="w-full px-4 py-3 rounded-xl bg-stone-800 text-white text-xs shadow-lg font-body">
+              <div className="flex items-start gap-2">
+                <span className="text-base shrink-0">🐾</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold mb-1">Fauna nella zona: {relevantWildlifeRisks.map((w) => w.animal).join(', ')}</p>
+                  <p className="text-stone-300 leading-snug">{relevantWildlifeRisks[0].tip}</p>
+                </div>
+                <button onClick={() => setWildlifeAlertDismissed(true)} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -728,41 +741,77 @@ export default function ActiveNavigationView({ hike }: Props) {
         onEnableCompass={handleEnableCompass}
       />
 
-      {state === 'off_route' && (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-terra-500 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10">
-          {offRouteBearingDeg != null && (
-            <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
-          )}
-          <AlertTriangle size={16} className="shrink-0" /> Sei fuori dal percorso{offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}
-        </div>
-      )}
-      {state === 'gps_lost' && (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 max-w-[90%] px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10 text-center">
-          <AlertTriangle size={16} className="shrink-0" />
-          {gpsLostPermissionDenied
-            ? 'Permesso di localizzazione negato — attivalo nelle impostazioni del browser/telefono'
-            : 'Segnale GPS assente'}
-        </div>
-      )}
-      {lowBatteryNotice && (
-        // Stacked above the off-route/gps-lost banners (both mutually
-        // exclusive with each other, but not with a low battery, which can
-        // happen at the same time), so the two never overlap.
-        <div className={`absolute ${state === 'off_route' || state === 'gps_lost' ? 'bottom-40' : 'bottom-24'} left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10`}>
-          <BatteryWarning size={16} className="shrink-0 text-amber-400" /> Batteria scarica
-          <button onClick={() => setLowBatteryNotice(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
-        </div>
-      )}
-      {turnBackNow && !turnBackDismissed && (() => {
-        // A 3rd stacked tier: off-route/gps-lost (tier 0) + low battery (its own tier when
-        // either of those is also active) can both coexist with this one.
-        const tierBelow = (state === 'off_route' || state === 'gps_lost' ? 1 : 0) + (lowBatteryNotice ? 1 : 0)
-        const bottomClass = tierBelow >= 2 ? 'bottom-56' : tierBelow === 1 ? 'bottom-40' : 'bottom-24'
+      {(() => {
+        // Priorità (più critico prima): rientro per il buio, GPS perso,
+        // fuori percorso, batteria scarica. Solo il più critico è sempre
+        // visibile; gli altri restano raggiungibili dietro "+N altri avvisi"
+        // invece di impilarsi tutti insieme con offset a pixel fissi.
+        const alerts: { id: string; node: React.ReactNode }[] = []
+
+        if (turnBackNow && !turnBackDismissed) {
+          alerts.push({
+            id: 'turnback',
+            node: (
+              <div className="max-w-[90%] px-4 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 text-center">
+                <AlertTriangle size={16} className="shrink-0" />
+                Luce insufficiente per rientrare — valuta di tornare indietro ora
+                <button onClick={() => setTurnBackDismissed(true)} className="text-red-200 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+              </div>
+            ),
+          })
+        }
+        if (state === 'gps_lost') {
+          alerts.push({
+            id: 'gpslost',
+            node: (
+              <div className="max-w-[90%] px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 text-center">
+                <AlertTriangle size={16} className="shrink-0" />
+                {gpsLostPermissionDenied
+                  ? 'Permesso di localizzazione negato — attivalo nelle impostazioni del browser/telefono'
+                  : 'Segnale GPS assente'}
+              </div>
+            ),
+          })
+        } else if (state === 'off_route') {
+          alerts.push({
+            id: 'offroute',
+            node: (
+              <div className="px-4 py-2 rounded-xl bg-terra-500 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2">
+                {offRouteBearingDeg != null && (
+                  <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
+                )}
+                <AlertTriangle size={16} className="shrink-0" /> Sei fuori dal percorso{offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}
+              </div>
+            ),
+          })
+        }
+        if (lowBatteryNotice) {
+          alerts.push({
+            id: 'battery',
+            node: (
+              <div className="px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2">
+                <BatteryWarning size={16} className="shrink-0 text-amber-400" /> Batteria scarica
+                <button onClick={() => setLowBatteryNotice(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+              </div>
+            ),
+          })
+        }
+
+        if (alerts.length === 0) return null
+        const [primary, ...rest] = alerts
+
         return (
-          <div className={`absolute ${bottomClass} left-1/2 -translate-x-1/2 max-w-[90%] px-4 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10 text-center`}>
-            <AlertTriangle size={16} className="shrink-0" />
-            Luce insufficiente per rientrare — valuta di tornare indietro ora
-            <button onClick={() => setTurnBackDismissed(true)} className="text-red-200 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
+            {primary.node}
+            {rest.length > 0 && (
+              <button
+                onClick={() => setBottomAlertsExpanded(v => !v)}
+                className="px-3 py-1 rounded-full bg-stone-900/80 text-white text-xs font-medium shadow-md"
+              >
+                {bottomAlertsExpanded ? 'Nascondi' : `+${rest.length} altr${rest.length === 1 ? 'o avviso' : 'i avvisi'}`}
+              </button>
+            )}
+            {bottomAlertsExpanded && rest.map(a => <div key={a.id}>{a.node}</div>)}
           </div>
         )
       })()}

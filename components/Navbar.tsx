@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Upload, BarChart2, CalendarDays, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked, Trophy } from 'lucide-react'
+import { Upload, BarChart2, CalendarDays, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked, Trophy, Mountain, Info } from 'lucide-react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
@@ -220,9 +220,25 @@ function UserMenu({ user }: { user: SupabaseUser }) {
             <Settings className="w-4 h-4 text-stone-400" />
             Impostazioni profilo
           </Link>
+          <Link
+            href="/vette"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+          >
+            <Mountain className="w-4 h-4 text-stone-400" />
+            Vette raggiunte
+          </Link>
+          <Link
+            href="/fonti-e-crediti"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+          >
+            <Info className="w-4 h-4 text-stone-400" />
+            Fonti e crediti
+          </Link>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 mt-1 border-t border-stone-100 text-sm text-red-600 hover:bg-red-50 transition-colors"
           >
             <LogOut className="w-4 h-4" />
             Esci

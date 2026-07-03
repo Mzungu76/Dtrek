@@ -42,6 +42,8 @@ import {
 import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl, originMatches } from '@/lib/drivingInfo'
 
 import PdfExportButton from '@/components/PdfExportButton'
+import SectionTabs from '@/components/SectionTabs'
+import PullQuote from '@/components/ui/PullQuote'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -203,6 +205,7 @@ export default function PlannedHikePage() {
   const [origin,   setOrigin]   = useState<{ lat: number; lon: number } | null>(null)
   const [driving,  setDriving]  = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
   const [drivingLoading, setDrivingLoading] = useState(false)
+  const [activeSection, setActiveSection] = useState<'panoramica' | 'percorso' | 'natura' | 'guida'>('panoramica')
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -708,32 +711,21 @@ export default function PlannedHikePage() {
         heightClass="h-32 sm:h-40"
       />
 
+      <SectionTabs
+        tabs={[
+          { id: 'panoramica', label: 'Panoramica' },
+          { id: 'percorso', label: 'Percorso pianificato' },
+          { id: 'natura', label: 'Natura' },
+          { id: 'guida', label: 'Guida pre-escursione' },
+        ]}
+        active={activeSection}
+        onChange={id => setActiveSection(id as typeof activeSection)}
+      />
+
       <main className="max-w-[1200px] mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
 
-        {/* Guida turistica — estratto */}
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-xl font-semibold text-stone-700 flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-amber-500" /> Guida turistica
-            </h2>
-            <button
-              onClick={() => router.push(`/guida/${encodeURIComponent(id)}`)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors shrink-0"
-            >
-              {hike.cachedGuide ? 'Leggi tutto' : 'Genera guida'}
-            </button>
-          </div>
-          {hike.cachedGuide ? (
-            <p className="text-sm text-stone-600 leading-relaxed">
-              {guideExcerpt(hike.cachedGuide)}
-            </p>
-          ) : (
-            <p className="text-sm text-stone-400 italic">
-              Nessuna guida ancora generata per questo percorso. Giulia può raccontarti storia, natura e curiosità lungo il tracciato.
-            </p>
-          )}
-        </div>
-
+        {activeSection === 'panoramica' && (
+          <>
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
@@ -826,7 +818,11 @@ export default function PlannedHikePage() {
             <p className="text-xs text-stone-400 mt-2">Estratte automaticamente dai waypoint/commenti del file GPX importato (Komoot/AllTrails)</p>
           </div>
         )}
+          </>
+        )}
 
+        {activeSection === 'percorso' && (
+          <>
         {/* Map + Elevation */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm sticky top-2 z-10 lg:static lg:z-auto">
@@ -895,35 +891,6 @@ export default function PlannedHikePage() {
           </div>
         </div>
 
-        {/* Fenologia della vegetazione + specie arboree/flora (OSM) */}
-        {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
-          <div className="space-y-3">
-            <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => router.push(`/programma/${encodeURIComponent(id)}/flora`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold transition-colors"
-              >
-                <Leaf className="w-4 h-4" /> Galleria Verde — flora osservata in zona
-              </button>
-              <button
-                onClick={() => router.push(`/programma/${encodeURIComponent(id)}/animali`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 text-sm font-semibold transition-colors"
-              >
-                <PawPrint className="w-4 h-4" /> Galleria Animali — fauna osservata in zona
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Assessment */}
-        {hike.assessment && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
-            <h2 className="font-display text-xl font-semibold text-stone-700 mb-5">Valutazione personalizzata</h2>
-            <AssessmentPanel a={hike.assessment} />
-          </div>
-        )}
-
         {/* Punteggi — SI, Safety Score, Comfort TrailScore, Ombra/acqua */}
         {hasGps && (
           <ScoresSection
@@ -943,6 +910,18 @@ export default function PlannedHikePage() {
             }}
             shadeWater={{ data: s2.data, loading: s2.loading }}
           />
+        )}
+          </>
+        )}
+
+        {activeSection === 'natura' && (
+          <>
+        {/* Fenologia della vegetazione + specie arboree/flora (OSM) */}
+        {/* Galleria Verde/Animali: unico punto d'accesso nell'header (evita duplicazione) */}
+        {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
+          <div className="space-y-3">
+            <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+          </div>
         )}
 
         {/* POI-focused Wikipedia: articles for named elements physically on the route */}
@@ -992,6 +971,40 @@ export default function PlannedHikePage() {
             <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
           </section>
         )}
+          </>
+        )}
+
+        {activeSection === 'guida' && (
+          <>
+        {/* Guida turistica — estratto */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display text-xl font-semibold text-stone-700 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-amber-500" /> Guida turistica
+            </h2>
+            <button
+              onClick={() => router.push(`/guida/${encodeURIComponent(id)}`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors shrink-0"
+            >
+              {hike.cachedGuide ? 'Leggi tutto' : 'Genera guida'}
+            </button>
+          </div>
+          {hike.cachedGuide ? (
+            <PullQuote>{guideExcerpt(hike.cachedGuide)}</PullQuote>
+          ) : (
+            <p className="text-sm text-stone-400 italic">
+              Nessuna guida ancora generata per questo percorso. Giulia può raccontarti storia, natura e curiosità lungo il tracciato.
+            </p>
+          )}
+        </div>
+
+        {/* Assessment */}
+        {hike.assessment && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-5">Valutazione personalizzata</h2>
+            <AssessmentPanel a={hike.assessment} />
+          </div>
+        )}
 
         {/* Notes */}
         <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
@@ -1038,6 +1051,8 @@ export default function PlannedHikePage() {
             onChange={notes => patch({ hikeNotes: notes })}
           />
         </div>
+          </>
+        )}
       </main>
 
       {show3D && hike.trackPoints && (
