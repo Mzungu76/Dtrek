@@ -23,6 +23,7 @@ import { loadManifest } from '@/lib/offline/packageManifest'
 import { watchBattery } from '@/lib/navigation/battery'
 import { haptics } from '@/lib/navigation/haptics'
 import type { NavInstruction, NavPoi, NavState, RouteMoment } from '@/lib/navigation/types'
+import type { WildlifeRisk } from '@/lib/safetyScore'
 import NavigationMap from './NavigationMap'
 import NavigationMapLibre from './NavigationMapLibre'
 import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
@@ -81,6 +82,15 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [showGeologia, setShowGeologia] = useState(false)
   const [natura2000Features, setNatura2000Features] = useState<Natura2000Feature[]>([])
+  const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
+
+  // Already computed and cached pre-trip (region table + real GBIF occurrences + guardian-dog
+  // OSM heuristic merged in lib/safetyScore.ts's getWildlifeRisks) — an area-wide, season/region
+  // signal, not a point sighting feed, so this surfaces once per hike rather than as a
+  // GPS-proximity trigger like POI callouts. Only shown when there's an actual elevated risk.
+  const relevantWildlifeRisks = useMemo<WildlifeRisk[]>(() => {
+    return (hike.cachedSafetyScore?.wildlifeRisks ?? []).filter((w) => w.dangerLevel === 'alto' || w.dangerLevel === 'moderato')
+  }, [hike.cachedSafetyScore])
 
   const pois = useMemo<NavPoi[]>(() => {
     const raw = (hike.cachedPois ?? []) as PoiItem[]
@@ -456,6 +466,19 @@ export default function ActiveNavigationView({ hike }: Props) {
           <AlertTriangle size={14} className="text-amber-400 shrink-0" />
           Mappa offline incompleta per questo percorso
           <button onClick={() => setOfflinePackageWarning(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+        </div>
+      )}
+
+      {state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed && (
+        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm px-4 py-3 rounded-xl bg-stone-800 text-white text-xs shadow-lg z-10 font-body">
+          <div className="flex items-start gap-2">
+            <span className="text-base shrink-0">🐾</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold mb-1">Fauna nella zona: {relevantWildlifeRisks.map((w) => w.animal).join(', ')}</p>
+              <p className="text-stone-300 leading-snug">{relevantWildlifeRisks[0].tip}</p>
+            </div>
+            <button onClick={() => setWildlifeAlertDismissed(true)} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
+          </div>
         </div>
       )}
 
