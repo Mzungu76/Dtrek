@@ -38,6 +38,7 @@ import CivicReportSheet from './CivicReportSheet'
 import SpeciesIdentifySheet from './SpeciesIdentifySheet'
 import { PoiSpatialIndex } from '@/lib/navigation/poiProximity'
 import type { TrailRiddle } from '@/lib/riddles'
+import { EPOCH_LABELS, type Epoch, type EpochPoi } from '@/lib/epochPois'
 import InstructionBanner from './InstructionBanner'
 import NavBottomSheet from './NavBottomSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
@@ -139,6 +140,23 @@ export default function ActiveNavigationView({ hike }: Props) {
     () => new PoiSpatialIndex(riddles.map((r) => ({ id: r.id, lat: r.lat, lon: r.lon, notifyRadiusM: 60 }))),
     [riddles],
   )
+
+  // Stratigrafia temporale: "oggi" means no historical overlay (normal navigation), the
+  // slider only ever offers epochs this specific hike actually has content for — never a
+  // fixed etrusca/romana/medievale set regardless of what was generated for the guide.
+  const epochPois = useMemo<EpochPoi[]>(() => hike.cachedEpochPois ?? [], [hike.cachedEpochPois])
+  const availableEpochs = useMemo<Epoch[]>(() => {
+    const historical = (['etrusca', 'romana', 'medievale'] as const).filter((e) => epochPois.some((p) => p.epoch === e))
+    return historical.length > 0 ? [...historical, 'oggi'] : []
+  }, [epochPois])
+  const [selectedEpoch, setSelectedEpoch] = useState<Epoch>('oggi')
+  const filteredEpochPois = useMemo(() => epochPois.filter((p) => p.epoch === selectedEpoch), [epochPois, selectedEpoch])
+  const epochPoiIndex = useMemo(
+    () => new PoiSpatialIndex(filteredEpochPois.map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, notifyRadiusM: 60 }))),
+    [filteredEpochPois],
+  )
+  const shownEpochPoiIdsRef = useRef<Set<string>>(new Set())
+  const [activeEpochCallout, setActiveEpochCallout] = useState<EpochPoi | null>(null)
   const guideExcerpts = useMemo(() => extractCuriosita(hike.cachedGuide ?? ''), [hike.cachedGuide])
 
   // Best-effort, non-blocking: gives the offline basemap some sense of
@@ -553,6 +571,27 @@ export default function ActiveNavigationView({ hike }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position, activeRiddle, callout])
 
+  // Switching epoch is a deliberate "look back in time" action — re-arm every epoch poi as
+  // unshown so the hiker sees the relevant callouts again for the newly selected period.
+  useEffect(() => {
+    shownEpochPoiIdsRef.current = new Set()
+    setActiveEpochCallout(null)
+  }, [selectedEpoch])
+
+  useEffect(() => {
+    if (!position || selectedEpoch === 'oggi' || filteredEpochPois.length === 0 || activeEpochCallout || callout || activeRiddle) return
+    const nearby = epochPoiIndex.nearby(position.lat, position.lon)
+    const next = nearby.find((n) => !shownEpochPoiIdsRef.current.has(String(n.poi.id)))
+    if (next) {
+      const epochPoi = filteredEpochPois.find((p) => p.id === next.poi.id)
+      if (epochPoi) {
+        shownEpochPoiIdsRef.current.add(epochPoi.id)
+        setActiveEpochCallout(epochPoi)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position, selectedEpoch, activeEpochCallout, callout, activeRiddle])
+
   useEffect(() => {
     if (turnBackNow && !turnBackAlertedRef.current) {
       turnBackAlertedRef.current = true
@@ -576,6 +615,22 @@ export default function ActiveNavigationView({ hike }: Props) {
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000} showGeologia={showGeologia}
         />
+      )}
+
+      {availableEpochs.length > 0 && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-white/95 rounded-full shadow-lg p-1">
+          {availableEpochs.map((epoch) => (
+            <button
+              key={epoch}
+              onClick={() => setSelectedEpoch(epoch)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold font-body transition-colors ${
+                selectedEpoch === epoch ? 'bg-terra-500 text-white' : 'text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              {EPOCH_LABELS[epoch]}
+            </button>
+          ))}
+        </div>
       )}
 
       {mapFallbackNotice && (
@@ -717,6 +772,14 @@ export default function ActiveNavigationView({ hike }: Props) {
 
       {activeRiddle && (
         <RiddleSheet question={activeRiddle.question} answer={activeRiddle.answer} onClose={() => setActiveRiddle(null)} />
+      )}
+
+      {activeEpochCallout && (
+        <PoiCalloutSheet
+          title={`${activeEpochCallout.poiName} — ${EPOCH_LABELS[activeEpochCallout.epoch]}`}
+          extract={activeEpochCallout.text}
+          onClose={() => setActiveEpochCallout(null)}
+        />
       )}
 
       {showConfirmEnd && <ConfirmEndDialog onConfirm={confirmEnd} onCancel={cancelEnd} />}

@@ -5,6 +5,7 @@
 // An unmatched name is silently dropped rather than guessed.
 import type { PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
+import { findPoiByName } from '@/lib/poiNameMatch'
 
 export interface TrailRiddle {
   id: string
@@ -15,15 +16,6 @@ export interface TrailRiddle {
 }
 
 const RIDDLE_BLOCK_RE = /\[indovinello\s+poi="([^"]+)"\]([\s\S]*?)\[\/indovinello\]/g
-
-function findPoiByName(name: string, cachedPois: PoiItem[], cachedPoiWiki: { poi: PoiItem; wiki: WikiPage }[]): { lat: number; lon: number } | null {
-  const target = name.trim().toLowerCase()
-  const wikiMatch = cachedPoiWiki.find((e) => e.wiki?.title?.trim().toLowerCase() === target)
-  if (wikiMatch) return { lat: wikiMatch.poi.lat, lon: wikiMatch.poi.lon }
-  const poiMatch = cachedPois.find((p) => p.name?.trim().toLowerCase() === target)
-  if (poiMatch) return { lat: poiMatch.lat, lon: poiMatch.lon }
-  return null
-}
 
 /**
  * Parses `[indovinello poi="Nome esatto"]Domanda?|Risposta[/indovinello]` blocks out of the
