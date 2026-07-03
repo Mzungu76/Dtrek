@@ -15,27 +15,31 @@ interface RouteEntry {
 }
 
 export const ROUTE_HIERARCHY: RouteEntry[] = [
+  // Calendario is the app's single root: it's the only place where the
+  // hardware/gesture back button is allowed to fall through to native
+  // behavior (minimize/exit). Every other authenticated route's "back"
+  // goes straight there, regardless of how deep it was reached.
   { pattern: '/', parent: null },
-  { pattern: '/statistiche', parent: null },
-  { pattern: '/esplora', parent: null },
-  { pattern: '/diario', parent: null },
 
+  { pattern: '/statistiche', parent: '/' },
+  { pattern: '/esplora', parent: '/' },
+  { pattern: '/diario', parent: '/' },
   { pattern: '/profilo', parent: '/' },
   { pattern: '/upload', parent: '/' },
   { pattern: '/fonti-e-crediti', parent: '/' },
-  { pattern: '/vette', parent: '/statistiche' },
+  { pattern: '/vette', parent: '/' },
 
-  { pattern: '/escursione/[id]', parent: '/diario' },
-  { pattern: '/escursione/[id]/flora', parent: (p) => `/escursione/${p.id}` },
-  { pattern: '/escursione/[id]/animali', parent: (p) => `/escursione/${p.id}` },
-  { pattern: '/resoconto/[id]', parent: (p) => `/escursione/${p.id}` },
-  { pattern: '/resoconto/[id]/racconta', parent: (p) => `/resoconto/${p.id}` },
+  { pattern: '/escursione/[id]', parent: '/' },
+  { pattern: '/escursione/[id]/flora', parent: '/' },
+  { pattern: '/escursione/[id]/animali', parent: '/' },
+  { pattern: '/resoconto/[id]', parent: '/' },
+  { pattern: '/resoconto/[id]/racconta', parent: '/' },
 
   { pattern: '/programma/[id]', parent: '/' },
-  { pattern: '/programma/[id]/flora', parent: (p) => `/programma/${p.id}` },
-  { pattern: '/programma/[id]/animali', parent: (p) => `/programma/${p.id}` },
-  { pattern: '/programma/[id]/naviga', parent: (p) => `/programma/${p.id}` },
-  { pattern: '/guida/[id]', parent: (p) => `/programma/${p.id}` },
+  { pattern: '/programma/[id]/flora', parent: '/' },
+  { pattern: '/programma/[id]/animali', parent: '/' },
+  { pattern: '/programma/[id]/naviga', parent: '/' },
+  { pattern: '/guida/[id]', parent: '/' },
 
   { pattern: '/login', parent: null },
   { pattern: '/signup', parent: null },
