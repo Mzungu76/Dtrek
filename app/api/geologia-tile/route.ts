@@ -43,67 +43,99 @@ export async function GET(req: Request) {
   }
 
   const [minX, minY, maxX, maxY] = tileToBBox3857(zoom, x, y)
-  const params = new URLSearchParams({
+
+  // WMS 1.3.0 GetMap over the WMS compatibility bridge.
+  const wmsParams = new URLSearchParams({
     service: 'WMS', version: '1.3.0', request: 'GetMap',
     layers: GEOLOGIA_DATASET.layerName, styles: '', crs: 'EPSG:3857',
     bbox: `${minX},${minY},${maxX},${maxY}`, width: '256', height: '256',
     format: 'image/png', transparent: 'true',
   })
-  const url = `${GEOLOGIA_DATASET.baseUrl}?${params.toString()}`
+  const wmsUrl = `${GEOLOGIA_DATASET.baseUrl}?${wmsParams.toString()}`
 
-  // Confirmed via a direct probe against this exact endpoint: it returns a genuine
-  // `503 Service Unavailable` ("no server available to handle this request") — a classic
-  // ArcGIS Server instance-pool exhaustion, not a request-parameter problem — whenever many
-  // tiles for this layer are requested in a short burst (a hiker zoomed in close, where
-  // MapLibre needs dozens of small tiles to cover one screen). A 503 from an instance-pool
-  // limit is normally transient (a slot frees up within moments), so a couple of short
-  // retries recovers most of them instead of surfacing every one as a permanently missing
-  // tile. maxzoom on the raster source (NavigationMapLibre.tsx) caps how many distinct tiles
-  // we ever request in the first place; this retry covers the ones that still collide.
+  // Native Esri REST "export" operation — a different code path in ArcGIS Server than the WMS
+  // bridge above (REST lives under /rest/services/, the WMS bridge under plain /services/).
+  // Confirmed via repeated direct probes (isolated single requests, no concurrency, minutes
+  // apart) that the WMS GetMap path consistently returns `503 Service Unavailable — no server
+  // available to handle this request` — not a transient burst-of-concurrent-requests problem
+  // (retries don't help either), which points at the WMS/GetMap capability specifically being
+  // unavailable or disabled on this ArcGIS Server instance, independent of how we call it. The
+  // REST export operation is a distinct, often more reliable capability on the same underlying
+  // service (GetFeatureInfo via WMS already works fine elsewhere in this app — lib/geologia/
+  // geologiaClient.ts — so the service itself is up; only image rendering via WMS seems to be
+  // the problem), so it's tried first here, with the WMS GetMap path kept as a fallback.
+  const restExportUrl = GEOLOGIA_DATASET.baseUrl.replace('/services/', '/rest/services/').replace(/\/WMSServer$/, '/export')
+  const restParams = new URLSearchParams({
+    bbox: `${minX},${minY},${maxX},${maxY}`, bboxSR: '3857', imageSR: '3857',
+    size: '256,256', format: 'png32', transparent: 'true',
+    layers: `show:${GEOLOGIA_DATASET.layerName}`, f: 'image',
+  })
+  const restUrl = `${restExportUrl}?${restParams.toString()}`
+
+  type FetchAttemptResult =
+    | { ok: true; buf: ArrayBuffer }
+    | { ok: false; status: number; contentType: string; body: string }
+
+  // A 503 from an instance-pool limit is normally transient (a slot frees up within moments),
+  // so a couple of short retries recovers it without surfacing every one as a permanently
+  // missing tile — kept from the earlier fix, still useful for genuinely transient blips even
+  // though the sustained 503s observed on the WMS path turned out not to be one.
   const RETRY_DELAYS_MS = [250, 600]
-  let lastStatus = 0
-  let lastBody = ''
-  let lastContentType = ''
 
-  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'DTrek/1.0 (personal trekking diary)', Accept: 'image/png' },
-        // Only the first attempt is cacheable — a retry exists specifically to get past a
-        // transient failure, so it must hit the upstream again, never a cached failed response.
-        ...(attempt === 0 ? { next: { revalidate: 86400 } } : { cache: 'no-store' as const }),
-      })
-      const contentType = res.headers.get('content-type') ?? ''
-      if (res.ok && contentType.startsWith('image/')) {
-        const buf = await res.arrayBuffer()
-        return new Response(buf, {
-          headers: {
-            'Content-Type': 'image/png',
-            'Cache-Control': 'public, max-age=86400',
-            'Access-Control-Allow-Origin': '*',
-          },
+  async function tryFetch(url: string): Promise<FetchAttemptResult> {
+    let status = 0, contentType = '', body = ''
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'DTrek/1.0 (personal trekking diary)', Accept: 'image/png' },
+          // Only the first attempt is cacheable — a retry exists specifically to get past a
+          // transient failure, so it must hit the upstream again, never a cached failed response.
+          ...(attempt === 0 ? { next: { revalidate: 86400 } } : { cache: 'no-store' as const }),
         })
+        contentType = res.headers.get('content-type') ?? ''
+        if (res.ok && contentType.startsWith('image/')) return { ok: true, buf: await res.arrayBuffer() }
+        status = res.status
+        body = await res.text().catch(() => '')
+        if (status !== 503 || attempt === RETRY_DELAYS_MS.length) break
+      } catch (e) {
+        status = 0
+        body = String(e)
+        if (attempt === RETRY_DELAYS_MS.length) break
       }
-      // WMS servers report request-level problems (bad CRS, scale out of range, invalid
-      // bbox...) as a ServiceException — sometimes with a non-2xx HTTP status, sometimes
-      // with a 200 and an XML/text body instead of an image. Only retry a 503 (transient
-      // pool exhaustion); anything else is a real request problem retrying won't fix.
-      lastStatus = res.status
-      lastContentType = contentType
-      lastBody = await res.text().catch(() => '')
-      if (res.status !== 503 || attempt === RETRY_DELAYS_MS.length) break
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
-    } catch (e) {
-      lastStatus = 0
-      lastBody = String(e)
-      if (attempt === RETRY_DELAYS_MS.length) break
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
     }
+    return { ok: false, status, contentType, body }
   }
 
-  console.error(`[geologia-tile] upstream ${lastStatus || 'fetch failed'} for z=${zoom} x=${x} y=${y} (content-type: ${lastContentType}): ${lastBody.slice(0, 500)} — request: ${url}`)
+  const restResult = await tryFetch(restUrl)
+  if (restResult.ok) {
+    return new Response(restResult.buf, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+      },
+    })
+  }
+
+  const wmsResult = await tryFetch(wmsUrl)
+  if (wmsResult.ok) {
+    return new Response(wmsResult.buf, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+      },
+    })
+  }
+
+  console.error(
+    `[geologia-tile] both upstream attempts failed for z=${zoom} x=${x} y=${y} — ` +
+    `REST ${restResult.status || 'fetch failed'} (${restResult.contentType}): ${restResult.body.slice(0, 300)} [${restUrl}] — ` +
+    `WMS ${wmsResult.status || 'fetch failed'} (${wmsResult.contentType}): ${wmsResult.body.slice(0, 300)} [${wmsUrl}]`,
+  )
   return new Response(
-    `Upstream WMS error ${lastStatus || 'fetch failed'} (${lastContentType || 'unknown content-type'}): ${lastBody.slice(0, 500)}`,
+    `Upstream errors — REST ${restResult.status || 'fetch failed'}: ${restResult.body.slice(0, 300)} | WMS ${wmsResult.status || 'fetch failed'}: ${wmsResult.body.slice(0, 300)}`,
     { status: 502 },
   )
 }
