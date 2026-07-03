@@ -6,7 +6,10 @@ import type { TcxActivity } from '@/lib/tcxParser'
 interface Props {
   activity: TcxActivity
   defaultTitle: string
-  onSave: (title: string) => Promise<void>
+  /** mode 'overwrite' consumes the linked planned hike into this activity (same as before);
+   * 'new' saves this as an independent activity and leaves the planned hike untouched, so it
+   * can be hiked again later. */
+  onSave: (title: string, mode: 'overwrite' | 'new') => Promise<void>
   onDiscard: () => void
 }
 
@@ -27,17 +30,17 @@ function formatDuration(seconds: number): string {
  */
 export default function EndHikeReviewDialog({ activity, defaultTitle, onSave, onDiscard }: Props) {
   const [title, setTitle] = useState(defaultTitle)
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving] = useState<'overwrite' | 'new' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSave = async () => {
-    setSaving(true)
+  const handleSave = async (mode: 'overwrite' | 'new') => {
+    setSaving(mode)
     setError(null)
     try {
-      await onSave(title)
+      await onSave(title, mode)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore nel salvataggio')
-      setSaving(false)
+      setSaving(null)
     }
   }
 
@@ -78,21 +81,30 @@ export default function EndHikeReviewDialog({ activity, defaultTitle, onSave, on
 
         {error && <p className="text-sm text-red-600 font-body mb-3">{error}</p>}
 
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-2">
           <button
-            onClick={onDiscard}
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-stone-100 text-stone-700 font-semibold font-body text-sm hover:bg-stone-200 disabled:opacity-50"
+            onClick={() => handleSave('new')}
+            disabled={!!saving}
+            className="w-full py-2.5 rounded-xl bg-forest-500 text-white font-semibold font-body text-sm hover:bg-forest-600 disabled:opacity-70 flex items-center justify-center gap-2"
           >
-            Scarta
+            {saving === 'new' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {saving === 'new' ? 'Salvataggio…' : 'Salva come nuovo percorso'}
           </button>
           <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-forest-500 text-white font-semibold font-body text-sm hover:bg-forest-600 disabled:opacity-70 flex items-center justify-center gap-2"
+            onClick={() => handleSave('overwrite')}
+            disabled={!!saving}
+            title="Il percorso pianificato viene eliminato e sostituito da questa escursione registrata"
+            className="w-full py-2.5 rounded-xl border border-forest-300 text-forest-700 font-semibold font-body text-sm hover:bg-forest-50 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {saving ? 'Salvataggio…' : 'Salva escursione'}
+            {saving === 'overwrite' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {saving === 'overwrite' ? 'Salvataggio…' : 'Sovrascrivi il percorso pianificato'}
+          </button>
+          <button
+            onClick={onDiscard}
+            disabled={!!saving}
+            className="w-full py-2 text-stone-500 font-semibold font-body text-sm hover:text-stone-700 disabled:opacity-50"
+          >
+            Scarta
           </button>
         </div>
       </div>
