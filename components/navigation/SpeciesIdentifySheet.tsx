@@ -16,7 +16,7 @@ const ICONIC_LABELS: Record<string, string> = {
 /**
  * Online-only flora/fauna photo recognition (see app/api/flora-fauna-identify/route.ts for
  * the iNaturalist Computer Vision proxy and its known auth-requirement caveat). Modal capture
- * form, same shape as CivicReportSheet — a deliberate opt-in action, not a passive notification.
+ * form, same shape as FieldNoteSheet — a deliberate opt-in action, not a passive notification.
  */
 export default function SpeciesIdentifySheet({ position, onClose }: Props) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)

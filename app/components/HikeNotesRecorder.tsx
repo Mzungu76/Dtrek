@@ -1,28 +1,8 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Mic, Square, Plus, Trash2, NotebookPen } from 'lucide-react'
 import type { HikeNote } from '@/lib/blobStore'
-
-interface SpeechRecognitionResultLike {
-  isFinal: boolean
-  0: { transcript: string }
-}
-
-interface SpeechRecognitionEventLike extends Event {
-  resultIndex: number
-  results: ArrayLike<SpeechRecognitionResultLike>
-}
-
-interface SpeechRecognitionLike extends EventTarget {
-  lang: string
-  continuous: boolean
-  interimResults: boolean
-  start(): void
-  stop(): void
-  onresult: ((e: SpeechRecognitionEventLike) => void) | null
-  onerror: (() => void) | null
-  onend: (() => void) | null
-}
+import { useSpeechDictation } from '@/lib/useSpeechDictation'
 
 interface Props {
   notes: HikeNote[]
@@ -41,41 +21,8 @@ function getCurrentPosition(): Promise<{ lat: number; lon: number } | null> {
 }
 
 export default function HikeNotesRecorder({ notes, onChange }: Props) {
-  const [draft, setDraft]         = useState('')
-  const [recording, setRecording] = useState(false)
-  const [supported, setSupported] = useState(true)
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
-
-  useEffect(() => {
-    const SR = (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike })
-      .SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition
-    setSupported(!!SR)
-  }, [])
-
-  const toggleRecording = () => {
-    if (recording) {
-      recognitionRef.current?.stop()
-      setRecording(false)
-      return
-    }
-    const SR = (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike })
-      .SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition
-    if (!SR) { setSupported(false); return }
-    const recognition = new SR()
-    recognition.lang = 'it-IT'
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.onresult = (e) => {
-      let text = ''
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript
-      setDraft(text)
-    }
-    recognition.onerror = () => setRecording(false)
-    recognition.onend = () => setRecording(false)
-    recognitionRef.current = recognition
-    recognition.start()
-    setRecording(true)
-  }
+  const [draft, setDraft] = useState('')
+  const { recording, supported, toggleRecording } = useSpeechDictation(setDraft)
 
   const addNote = async () => {
     const text = draft.trim()
@@ -138,8 +85,11 @@ export default function HikeNotesRecorder({ notes, onChange }: Props) {
         <ul className="space-y-1.5">
           {notes.slice().reverse().map(note => (
             <li key={note.id} className="flex items-start justify-between gap-2 px-3 py-2 bg-stone-50 rounded-xl border border-stone-100">
-              <div className="min-w-0">
-                <p className="text-sm text-stone-700 break-words">{note.text}</p>
+              {note.photoUrl && (
+                <img src={note.photoUrl} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+              )}
+              <div className="min-w-0 flex-1">
+                {note.text && <p className="text-sm text-stone-700 break-words">{note.text}</p>}
                 <p className="text-[11px] text-stone-400 mt-0.5">
                   {new Date(note.timestamp).toLocaleString('it-IT')}
                 </p>
