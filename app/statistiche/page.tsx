@@ -10,23 +10,18 @@ import ExportMenu, { type ExportMenuAction } from '@/components/ExportMenu'
 import { Loader2, Mountain, FileSpreadsheet, Share2, BookOpen, FileDown, Map } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import TabPanoramica  from '@/components/stats/TabPanoramica'
-import TabGrafici     from '@/components/stats/TabGrafici'
+import TabAndamento   from '@/components/stats/TabAndamento'
 import TabConfronto   from '@/components/stats/TabConfronto'
-import TabForma       from '@/components/stats/TabForma'
 import TabTraguardi   from '@/components/stats/TabTraguardi'
-import TabFisico      from '@/components/stats/TabFisico'
-import TabGuida       from '@/components/stats/TabGuida'
+import GuideOverlay   from '@/components/stats/GuideOverlay'
 
-type Tab = 'panoramica' | 'grafici' | 'confronta' | 'forma' | 'traguardi' | 'fisico' | 'guida'
+type Tab = 'panoramica' | 'andamento' | 'confronta' | 'traguardi'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'panoramica', label: 'Panoramica' },
-  { id: 'grafici',    label: 'Grafici'    },
+  { id: 'andamento',  label: 'Andamento'  },
   { id: 'confronta',  label: 'Confronto'  },
-  { id: 'forma',      label: 'Forma'      },
   { id: 'traguardi',  label: 'Traguardi'  },
-  { id: 'fisico',     label: 'Fisico'     },
-  { id: 'guida',      label: '📖 Guida'   },
 ]
 
 const TAB_IDS = TABS.map(t => t.id)
@@ -48,6 +43,10 @@ function StatisticheContent() {
   const [loading,    setLoading]    = useState(true)
   const [tab,        setTab]        = useState<Tab>(initialTab)
   const [shareStats, setShareStats] = useState(false)
+  // La Guida non è più un tab: le icone "i" sparse nelle altre tab e il
+  // bottone "Guida" in header aprono questo overlay senza perdere lo
+  // stato del tab attivo sottostante. Piano di ristrutturazione, Parte 2.6.
+  const [guideOpen,   setGuideOpen]   = useState(false)
   const [guideAnchor, setGuideAnchor] = useState<string | null>(null)
 
   useEffect(() => {
@@ -58,9 +57,9 @@ function StatisticheContent() {
   const records = useMemo(() => getPersonalRecords(activities),    [activities])
   const streaks = useMemo(() => computeStreaks(activities),         [activities])
 
-  const goToGuide = useCallback((section: string) => {
-    setGuideAnchor(section)
-    setTab('guida')
+  const openGuide = useCallback((section: string) => {
+    setGuideAnchor(section || null)
+    setGuideOpen(true)
   }, [])
 
   return (
@@ -78,7 +77,7 @@ function StatisticheContent() {
           </div>
           {!loading && activities.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              <button onClick={() => goToGuide('')}
+              <button onClick={() => openGuide('')}
                 className="flex items-center gap-1.5 px-3 py-2 bg-stone-200 text-stone-700 rounded-xl text-sm hover:bg-stone-300 transition-colors">
                 <BookOpen className="w-4 h-4" /> <span className="hidden sm:inline">Guida</span>
               </button>
@@ -110,7 +109,7 @@ function StatisticheContent() {
             {/* Tab bar — scrollable on mobile */}
             <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-6 sm:mb-8 overflow-x-auto">
               {TABS.map(t => (
-                <button key={t.id} onClick={() => { setTab(t.id); if (t.id !== 'guida') setGuideAnchor(null) }}
+                <button key={t.id} onClick={() => setTab(t.id)}
                   className={`flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     tab === t.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-500 hover:text-stone-700'
                   }`}>
@@ -119,19 +118,20 @@ function StatisticheContent() {
               ))}
             </div>
 
-            {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} onGuideLink={goToGuide} />}
-            {tab === 'grafici'    && <TabGrafici     activities={activities} onGuideLink={goToGuide} />}
-            {tab === 'confronta'  && <TabConfronto   activities={activities} onGuideLink={goToGuide} />}
-            {tab === 'forma'      && <TabForma       activities={activities} onGuideLink={goToGuide} />}
-            {tab === 'traguardi'  && <TabTraguardi   activities={activities} streaks={streaks} onGuideLink={goToGuide} />}
-            {tab === 'fisico'     && <TabFisico      activities={activities} onGuideLink={goToGuide} />}
-            {tab === 'guida'      && <TabGuida       initialAnchor={guideAnchor} />}
+            {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} onGuideLink={openGuide} />}
+            {tab === 'andamento'  && <TabAndamento   activities={activities} onGuideLink={openGuide} />}
+            {tab === 'confronta'  && <TabConfronto   activities={activities} onGuideLink={openGuide} />}
+            {tab === 'traguardi'  && <TabTraguardi   activities={activities} streaks={streaks} onGuideLink={openGuide} />}
           </>
         )}
       </main>
 
       {shareStats && (
         <ShareModal kind="stats" activities={activities} onClose={() => setShareStats(false)} />
+      )}
+
+      {guideOpen && (
+        <GuideOverlay anchor={guideAnchor} onClose={() => setGuideOpen(false)} />
       )}
     </div>
   )
