@@ -133,7 +133,7 @@ export default function VettePage() {
 
         <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
           <div>
-            <BackLink label="Statistiche" className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 mb-2 transition-colors" />
+            <BackLink className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 mb-2 transition-colors" />
             <h1 className="font-display text-3xl font-semibold text-stone-800 flex items-center gap-2">
               <Mountain className="w-7 h-7 text-forest-600" /> Vette Conquistate
             </h1>

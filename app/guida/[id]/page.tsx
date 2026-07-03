@@ -559,7 +559,6 @@ export default function GuidaPage() {
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b shadow-sm print:hidden" style={{ borderColor: '#e5e1d8' }}>
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
           <BackLink
-            label="Percorso"
             className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition-colors shrink-0"
           />
 
@@ -855,7 +854,6 @@ export default function GuidaPage() {
         {hasGuide && !generating && (
           <div className="mt-10 mb-16 pt-6 flex flex-wrap items-center justify-between gap-4 print:hidden" style={{ borderTop: '1px solid #e5e1d8' }}>
             <BackLink
-              label="Torna al percorso"
               className="flex items-center gap-1.5 text-stone-400 hover:text-stone-700 text-sm transition-colors"
             />
 
