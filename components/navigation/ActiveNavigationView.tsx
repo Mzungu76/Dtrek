@@ -91,9 +91,12 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
   const [showNatura2000, setShowNatura2000] = useState(false)
-  const [showGeologia, setShowGeologia] = useState(false)
-  const [geologiaUnavailable, setGeologiaUnavailable] = useState(false)
-  const [geologiaUnavailableDismissed, setGeologiaUnavailableDismissed] = useState(false)
+  // Geologia layer intentionally has no UI trigger for now (see NavigationMapLibre.tsx's
+  // showGeologia prop) — the WMS/REST endpoints it depends on (ISPRA's ArcGIS service) were
+  // confirmed down at the infrastructure level (both operations return the same 503,
+  // independent of anything in our request), so the toggle and its error notice were removed
+  // rather than leave a control that can't currently do anything. The map component, the proxy
+  // route, and the wiring all still work — this is a silent, ready-to-re-enable predisposition.
   const [natura2000Features, setNatura2000Features] = useState<Natura2000Feature[]>([])
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
@@ -615,17 +618,8 @@ export default function ActiveNavigationView({ hike }: Props) {
         <NavigationMapLibre
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
-          natura2000Features={natura2000Features} showNatura2000={showNatura2000} showGeologia={showGeologia}
-          onGeologiaUnavailable={() => setGeologiaUnavailable(true)}
+          natura2000Features={natura2000Features} showNatura2000={showNatura2000} showGeologia={false}
         />
-      )}
-
-      {geologiaUnavailable && !geologiaUnavailableDismissed && (
-        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg z-10 font-body flex items-center gap-2">
-          <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-          Layer geologico non disponibile (servizio esterno momentaneamente giù)
-          <button onClick={() => setGeologiaUnavailableDismissed(true)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
-        </div>
       )}
 
       {availableEpochs.length > 0 && (
@@ -675,7 +669,6 @@ export default function ActiveNavigationView({ hike }: Props) {
         <MapModeSwitcher
           mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
           showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
-          showGeologia={showGeologia} onToggleGeologia={() => setShowGeologia((v) => !v)}
         />
       </div>
 

@@ -13,8 +13,6 @@ interface Props {
   isOnline: boolean
   showNatura2000: boolean
   onToggleNatura2000: () => void
-  showGeologia: boolean
-  onToggleGeologia: () => void
 }
 
 const ONLINE_OPTIONS: { id: MapMode; label: string }[] = [
@@ -38,12 +36,12 @@ const ONLINE_OPTIONS: { id: MapMode; label: string }[] = [
  */
 export default function MapModeSwitcher({
   mode, onModeChange, is3D, onToggle3D, isOnline,
-  showNatura2000, onToggleNatura2000, showGeologia, onToggleGeologia,
+  showNatura2000, onToggleNatura2000,
 }: Props) {
   const [open, setOpen] = useState(false)
   const options = isOnline ? ONLINE_OPTIONS : ONLINE_OPTIONS.filter((o) => o.id === 'offline')
-  // Both overlays are fetched/rendered live (GeoJSON fetch, WMS raster tiles) — same
-  // online-only eligibility as the 3D toggle, not part of the downloaded offline package.
+  // Fetched/rendered live (GeoJSON) — same online-only eligibility as the 3D toggle, not part
+  // of the downloaded offline package.
   const is3DEligible = mode !== 'offline'
   const overlaysEligible = mode !== 'offline'
 
@@ -82,22 +80,13 @@ export default function MapModeSwitcher({
               </button>
             )}
             {overlaysEligible && (
-              <>
-                <button
-                  onClick={onToggleNatura2000}
-                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm text-left border-t border-stone-100 hover:bg-stone-50 ${showNatura2000 ? 'font-semibold text-terra-600' : 'text-stone-700'}`}
-                >
-                  <span>Confini Natura 2000</span>
-                  {showNatura2000 && <Check className="w-4 h-4 flex-shrink-0" />}
-                </button>
-                <button
-                  onClick={onToggleGeologia}
-                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm text-left hover:bg-stone-50 ${showGeologia ? 'font-semibold text-terra-600' : 'text-stone-700'}`}
-                >
-                  <span>Layer geologico</span>
-                  {showGeologia && <Check className="w-4 h-4 flex-shrink-0" />}
-                </button>
-              </>
+              <button
+                onClick={onToggleNatura2000}
+                className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm text-left border-t border-stone-100 hover:bg-stone-50 ${showNatura2000 ? 'font-semibold text-terra-600' : 'text-stone-700'}`}
+              >
+                <span>Confini Natura 2000</span>
+                {showNatura2000 && <Check className="w-4 h-4 flex-shrink-0" />}
+              </button>
             )}
           </div>
         </>
