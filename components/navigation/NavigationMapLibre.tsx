@@ -56,20 +56,15 @@ const NATURA2000_LINE_LAYER_ID = 'nav-natura2000-line'
 const GEOLOGIA_SOURCE_ID = 'nav-geologia'
 const GEOLOGIA_LAYER_ID = 'nav-geologia-raster'
 
-// WMS 1.3.0 GetMap over the same ISPRA CARG endpoint lib/geologia/geologiaClient.ts uses for
-// point lookups (GetFeatureInfo) — here we ask for a rendered raster tile instead, which needs
-// no new client/data source, just a different WMS request. MapLibre substitutes
-// {bbox-epsg-3857} itself per tile (documented raster-source template token) — EPSG:3857 needs
-// no axis-order swap in WMS 1.3.0 (that quirk only affects geographic CRSs like EPSG:4326).
+// Proxied through /api/geologia-tile (server-side WMS 1.3.0 GetMap over the same ISPRA CARG
+// endpoint lib/geologia/geologiaClient.ts uses for point lookups) rather than pointed straight
+// at the external host: MapLibre loads raster tiles as cross-origin images to upload as WebGL
+// textures, and this ArcGIS Server doesn't send Access-Control-Allow-Origin — hit directly from
+// the browser, every tile silently fails to load (the layer toggles on but draws nothing). The
+// same-origin proxy sidesteps that, mirroring app/api/tile/route.ts's base-map tile proxy.
 function geologiaWmsTileUrl(): string | null {
   if (!GEOLOGIA_DATASET.baseUrl || !GEOLOGIA_DATASET.layerName) return null
-  const params = new URLSearchParams({
-    service: 'WMS', version: '1.3.0', request: 'GetMap',
-    layers: GEOLOGIA_DATASET.layerName, styles: '', crs: 'EPSG:3857',
-    bbox: '{bbox-epsg-3857}', width: '256', height: '256',
-    format: 'image/png', transparent: 'true',
-  })
-  return `${GEOLOGIA_DATASET.baseUrl}?${params.toString()}`
+  return '/api/geologia-tile?z={z}&x={x}&y={y}'
 }
 
 // At a steep pitch, the same zoom level shows much less ground in the
