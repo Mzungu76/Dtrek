@@ -5,8 +5,9 @@ import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
 import { exportAllActivitiesToExcel } from '@/utils/exportExcel'
-import PdfExportButton from '@/components/PdfExportButton'
-import { Loader2, Mountain, FileSpreadsheet, Share2, BookOpen } from 'lucide-react'
+import { exportStatsPdf, exportMapPdf } from '@/utils/pdfExport'
+import ExportMenu, { type ExportMenuAction } from '@/components/ExportMenu'
+import { Loader2, Mountain, FileSpreadsheet, Share2, BookOpen, FileDown, Map } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import TabPanoramica  from '@/components/stats/TabPanoramica'
 import TabGrafici     from '@/components/stats/TabGrafici'
@@ -81,18 +82,16 @@ function StatisticheContent() {
                 className="flex items-center gap-1.5 px-3 py-2 bg-stone-200 text-stone-700 rounded-xl text-sm hover:bg-stone-300 transition-colors">
                 <BookOpen className="w-4 h-4" /> <span className="hidden sm:inline">Guida</span>
               </button>
-              <button onClick={() => setShareStats(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors">
-                <Share2 className="w-4 h-4" /> <span className="hidden sm:inline">Condividi</span>
-              </button>
-              <button onClick={() => exportAllActivitiesToExcel(activities as any)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors">
-                <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Excel</span>
-              </button>
-              <PdfExportButton variant="stats" data={activities as any} label="PDF"
-                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors" />
-              <PdfExportButton variant="map" data={activities as any} label="PDF Mappa"
-                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors" />
+              <ExportMenu
+                label="Esporta"
+                actions={[
+                  { id: 'share', label: 'Condividi', icon: <Share2 className="w-4 h-4 text-forest-600" />, run: () => setShareStats(true) },
+                  { id: 'excel', label: 'Excel', icon: <FileSpreadsheet className="w-4 h-4 text-forest-600" />, run: () => exportAllActivitiesToExcel(activities as any) },
+                  { id: 'pdf', label: 'PDF statistiche', icon: <FileDown className="w-4 h-4 text-forest-600" />, run: () => exportStatsPdf(activities) },
+                  { id: 'pdf-map', label: 'PDF mappa percorsi', icon: <Map className="w-4 h-4 text-forest-600" />, run: () => exportMapPdf(activities) },
+                ] satisfies ExportMenuAction[]}
+                className="flex items-center gap-1.5 px-3 py-2 bg-forest-700 text-white rounded-xl text-sm hover:bg-forest-600 transition-colors"
+              />
             </div>
           )}
         </div>

@@ -25,7 +25,8 @@ import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
-import PdfExportButton from '@/components/PdfExportButton'
+import { exportActivityPdf } from '@/utils/pdfExport'
+import ExportMenu, { type ExportMenuAction } from '@/components/ExportMenu'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
@@ -38,7 +39,7 @@ import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
-  FileSpreadsheet, FileText, Map,
+  FileSpreadsheet, FileText, Map, FileDown,
   Heart, Zap, Mountain, Clock, Route, Flame,
   Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint,
 } from 'lucide-react'
@@ -410,19 +411,25 @@ export default function EscursionePage() {
         <div className="relative max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
             <BackLink className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors" />
-            <div className="flex gap-1.5 flex-wrap">
-              {([
-                { icon: <FileSpreadsheet className="w-3.5 h-3.5" />, title: 'Excel', fn: () => exportActivityToExcel(activity) },
-                { icon: <FileText className="w-3.5 h-3.5" />, title: 'Word', fn: () => exportActivityToDoc(activity) },
-                { icon: <Map className="w-3.5 h-3.5" />, title: 'GPX', fn: () => exportActivityToGpx(activity) },
-                { icon: <Share2 className="w-3.5 h-3.5" />, title: 'Condividi', fn: () => setShowShare(true) },
-                ...(photos.length > 0 ? [{ icon: <Camera className="w-3.5 h-3.5" />, title: 'Cambia copertina', fn: () => setShowCoverPicker(true) }] : []),
-              ] as const).map(({ icon, title, fn }) => (
-                <button key={title} title={title} onClick={fn}
+            <div className="flex gap-1.5 flex-wrap items-center">
+              {photos.length > 0 && (
+                <button title="Cambia copertina" onClick={() => setShowCoverPicker(true)}
                   className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                  {icon}
+                  <Camera className="w-3.5 h-3.5" />
                 </button>
-              ))}
+              )}
+              <ExportMenu
+                label="Esporta"
+                align="left"
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-barlow font-bold uppercase tracking-wide transition-colors"
+                actions={[
+                  { id: 'share', label: 'Condividi', icon: <Share2 className="w-4 h-4 text-forest-600" />, run: () => setShowShare(true) },
+                  { id: 'excel', label: 'Excel', icon: <FileSpreadsheet className="w-4 h-4 text-forest-600" />, run: () => exportActivityToExcel(activity) },
+                  { id: 'word', label: 'Word', icon: <FileText className="w-4 h-4 text-forest-600" />, run: () => exportActivityToDoc(activity) },
+                  { id: 'gpx', label: 'GPX', icon: <Map className="w-4 h-4 text-forest-600" />, run: () => exportActivityToGpx(activity) },
+                  { id: 'pdf', label: 'PDF escursione', icon: <FileDown className="w-4 h-4 text-forest-600" />, run: () => exportActivityPdf(activity) },
+                ] satisfies ExportMenuAction[]}
+              />
               <button
                 title="Crea Resoconto"
                 onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}`)}
@@ -470,8 +477,6 @@ export default function EscursionePage() {
                   <PawPrint className="w-3.5 h-3.5" /> Galleria Animali
                 </button>
               </div>
-              <PdfExportButton variant="activity" data={activity} iconOnly
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors" />
               <button title="Elimina" onClick={handleDelete} disabled={saving}
                 className="w-8 h-8 rounded-lg bg-red-500/25 hover:bg-red-500/45 flex items-center justify-center transition-colors">
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
