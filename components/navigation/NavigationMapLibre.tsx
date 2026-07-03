@@ -236,13 +236,29 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     }
   }
 
-  /** CARG lithology raster overlay — a plain WMS tile source, independent of the base style (Outdoor/Satellite/Winter each keep their own sources). Only makes sense online, same as the base style itself. */
+  /**
+   * CARG lithology raster overlay — a plain WMS tile source, independent of the base style
+   * (Outdoor/Satellite/Winter each keep their own sources). Only makes sense online, same as
+   * the base style itself.
+   *
+   * maxzoom caps how far in MapLibre requests distinct tiles for this source (it overzooms —
+   * upsamples — the z14 tile for closer views instead of fetching new ones). This isn't a
+   * quality tradeoff: the upstream ISPRA WMS (a 1:25.000-scale dataset, ~9m/pixel at z14 —
+   * already finer than the data's real precision) returned a genuine `503 Service Unavailable`
+   * ("no server available to handle this request", a classic ArcGIS Server instance-pool
+   * exhaustion) when the navigator's real close-in zoom (z15-17) asked it for the dozens of
+   * small, distinct tiles needed to cover one screen — confirmed via a direct request to the
+   * deployed /api/geologia-tile proxy. Capping the zoom this source ever requests tiles at
+   * caps how many concurrent requests we ever put on that external service, regardless of how
+   * far the hiker actually zooms in.
+   */
+  const GEOLOGIA_MAX_TILE_ZOOM = 14
   const setupGeologiaLayer = (map: any) => {
     const tileUrl = geologiaWmsTileUrl()
     if (!tileUrl) return
     const visibility = showGeologiaRef.current ? 'visible' : 'none'
     if (!map.getSource(GEOLOGIA_SOURCE_ID)) {
-      map.addSource(GEOLOGIA_SOURCE_ID, { type: 'raster', tiles: [tileUrl], tileSize: 256 })
+      map.addSource(GEOLOGIA_SOURCE_ID, { type: 'raster', tiles: [tileUrl], tileSize: 256, maxzoom: GEOLOGIA_MAX_TILE_ZOOM })
     }
     if (map.getLayer(GEOLOGIA_LAYER_ID)) {
       map.setLayoutProperty(GEOLOGIA_LAYER_ID, 'visibility', visibility)
