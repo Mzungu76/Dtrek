@@ -33,6 +33,9 @@ import NavigationMap from './NavigationMap'
 import NavigationMapLibre from './NavigationMapLibre'
 import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
 import PoiCalloutSheet from './PoiCalloutSheet'
+import RiddleSheet from './RiddleSheet'
+import { PoiSpatialIndex } from '@/lib/navigation/poiProximity'
+import type { TrailRiddle } from '@/lib/riddles'
 import InstructionBanner from './InstructionBanner'
 import NavBottomSheet from './NavBottomSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
@@ -92,6 +95,8 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [sunTimes, setSunTimes] = useState<SunTimes | null>(null)
   const [turnBackDismissed, setTurnBackDismissed] = useState(false)
   const turnBackAlertedRef = useRef(false)
+  const [activeRiddle, setActiveRiddle] = useState<TrailRiddle | null>(null)
+  const shownRiddleIdsRef = useRef<Set<string>>(new Set())
 
   // Already computed and cached pre-trip (region table + real GBIF occurrences + guardian-dog
   // OSM heuristic merged in lib/safetyScore.ts's getWildlifeRisks) — an area-wide, season/region
@@ -120,6 +125,16 @@ export default function ActiveNavigationView({ hike }: Props) {
   // multiplier defaults to 1 until those fields are cached onto the hike object too.
   const terrainMultiplier = useMemo(() => altitudeTerrainMultiplier(hike.altitudeMax).altPhysioMult, [hike.altitudeMax])
   const routePolyline = hike.routePolyline ?? []
+
+  // Riddles ("indovinelli per tappa") use the same proximity-index mechanism as POIs
+  // (lib/navigation/poiProximity.ts), but kept separate from the engine's own POI index —
+  // they're a content/gamification concern, not a navigation-state one, and don't need to
+  // participate in the poi_near state transition or the enteredPoi/leftPoi event pair.
+  const riddles = useMemo<TrailRiddle[]>(() => hike.cachedRiddles ?? [], [hike.cachedRiddles])
+  const riddleIndex = useMemo(
+    () => new PoiSpatialIndex(riddles.map((r) => ({ id: r.id, lat: r.lat, lon: r.lon, notifyRadiusM: 60 }))),
+    [riddles],
+  )
   const guideExcerpts = useMemo(() => extractCuriosita(hike.cachedGuide ?? ''), [hike.cachedGuide])
 
   // Best-effort, non-blocking: gives the offline basemap some sense of
@@ -521,6 +536,20 @@ export default function ActiveNavigationView({ hike }: Props) {
     (Date.now() + pace.returnTripTimeSec * 1000) > (sunTimes.dusk.getTime() - TURN_BACK_SAFETY_BUFFER_MS))
 
   useEffect(() => {
+    if (!position || riddles.length === 0 || activeRiddle || callout) return
+    const nearby = riddleIndex.nearby(position.lat, position.lon)
+    const next = nearby.find((n) => !shownRiddleIdsRef.current.has(String(n.poi.id)))
+    if (next) {
+      const riddle = riddles.find((r) => r.id === next.poi.id)
+      if (riddle) {
+        shownRiddleIdsRef.current.add(riddle.id)
+        setActiveRiddle(riddle)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position, activeRiddle, callout])
+
+  useEffect(() => {
     if (turnBackNow && !turnBackAlertedRef.current) {
       turnBackAlertedRef.current = true
       logEvent('turnback_warning')
@@ -652,6 +681,10 @@ export default function ActiveNavigationView({ hike }: Props) {
 
       {callout && (
         <PoiCalloutSheet title={callout.title} extract={callout.extract} imageUrl={callout.imageUrl} onClose={() => setCallout(null)} />
+      )}
+
+      {activeRiddle && (
+        <RiddleSheet question={activeRiddle.question} answer={activeRiddle.answer} onClose={() => setActiveRiddle(null)} />
       )}
 
       {showConfirmEnd && <ConfirmEndDialog onConfirm={confirmEnd} onCancel={cancelEnd} />}
