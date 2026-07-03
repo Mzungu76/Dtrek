@@ -1,6 +1,6 @@
 'use client'
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { ChevronUp, Pause, Play, Square, MapPin, BookOpen } from 'lucide-react'
+import { ChevronUp, Pause, Play, MapPin, BookOpen, Camera, NotebookPen, Leaf, Square } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import type { PaceStatus } from '@/lib/navigation/paceAssistant'
@@ -33,6 +33,12 @@ interface Props {
   currentDistanceM: number
   remainingPois: RemainingPoi[]
   guideExcerpts: string[]
+  /** Elevation still to climb to the end of the route, from the current position — null until there's a GPS-matched route profile. */
+  elevationRemainingM: number | null
+  onOpenFoto: () => void
+  onOpenNota: () => void
+  onOpenSpecie: () => void
+  specieAvailable: boolean
 }
 
 const PACE_STATUS_STYLE: Record<PaceStatus, { label: string; className: string }> = {
@@ -42,7 +48,7 @@ const PACE_STATUS_STYLE: Record<PaceStatus, { label: string; className: string }
   behind:     { label: 'In ritardo',  className: 'bg-amber-100 text-amber-700' },
 }
 
-const COLLAPSED_PX = 64
+const COLLAPSED_PX = 172
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
@@ -86,6 +92,7 @@ export default function NavBottomSheet({
   distanceCoveredM, distanceRemainingM, currentSpeedMs, avgSpeedMs, movingTimeMs, etaDate,
   paceStatus, daylightMarginMin,
   timerRunning, onTogglePlayPause, onStop, trackPoints, currentDistanceM, remainingPois, guideExcerpts,
+  elevationRemainingM, onOpenFoto, onOpenNota, onOpenSpecie, specieAvailable,
 }: Props) {
   const [sheetState, setSheetState] = useState<SheetState>('collapsed')
   const [dragHeight, setDragHeight] = useState<number | null>(null)
@@ -125,20 +132,57 @@ export default function NavBottomSheet({
       }`}
       style={{ height: `${currentHeight}px` }}
     >
+      {/* Livello 2: essenziali sempre visibili — 3 numeri chiave + le 4 azioni della
+          navigazione. Tutto il resto (tempi dettagliati, altimetria, percorso/POI/guida)
+          resta dietro il trascina-per-espandere qui sotto. Piano di restyling 2.8/4. */}
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onClick={() => { if (dragHeight === null) toggleSheet() }}
-        className="w-full flex flex-col items-center justify-center gap-1 py-2 touch-none cursor-grab active:cursor-grabbing select-none"
+        className="w-full flex flex-col items-center gap-3 pt-2 pb-3 touch-none cursor-grab active:cursor-grabbing select-none"
       >
-        <span className="w-10 h-1 rounded-full bg-stone-300" />
-        <span className="flex items-center gap-2 text-xs font-semibold text-stone-600 font-mono">
-          {formatKm(distanceRemainingM)} km rimanenti · {formatDuration(movingTimeMs)}
-          {etaDate && <> · arrivo {formatEta(etaDate)}</>}
-          <ChevronUp className={`w-3.5 h-3.5 transition-transform ${sheetState === 'collapsed' ? '' : 'rotate-180'}`} />
-        </span>
+        <span className="w-9 h-1 rounded-full bg-stone-300" />
+
+        <div className="w-full grid grid-cols-3 gap-2 px-5">
+          <div className="text-center">
+            <p className="text-[19px] font-bold text-stone-900 font-mono leading-none">{formatKm(distanceRemainingM)} km</p>
+            <p className="text-[11px] text-stone-400 mt-1">rimanenti</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[19px] font-bold text-stone-900 font-mono leading-none">{etaDate ? formatEta(etaDate) : '—'}</p>
+            <p className="text-[11px] text-stone-400 mt-1">arrivo stimato</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[19px] font-bold text-stone-900 font-mono leading-none">{elevationRemainingM != null ? `${Math.round(elevationRemainingM)} m` : '—'}</p>
+            <p className="text-[11px] text-stone-400 mt-1">D+ residuo</p>
+          </div>
+        </div>
+
+        <div className="w-full flex gap-2 px-4" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+          <button onClick={onOpenFoto} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-[10px] font-semibold">
+            <Camera className="w-[18px] h-[18px]" /> Foto
+          </button>
+          <button onClick={onOpenNota} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-[10px] font-semibold">
+            <NotebookPen className="w-[18px] h-[18px]" /> Nota
+          </button>
+          <button
+            onClick={onOpenSpecie}
+            disabled={!specieAvailable}
+            title={specieAvailable ? undefined : 'Richiede una connessione internet'}
+            className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl text-[10px] font-semibold ${
+              specieAvailable ? 'bg-stone-100 text-stone-600' : 'bg-stone-50 text-stone-300 cursor-not-allowed'
+            }`}
+          >
+            <Leaf className="w-[18px] h-[18px]" /> Specie
+          </button>
+          <button onClick={onStop} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-terra-500 text-white text-[10px] font-bold">
+            <Square className="w-[18px] h-[18px]" /> Termina
+          </button>
+        </div>
+
+        <ChevronUp className={`w-3.5 h-3.5 text-stone-300 transition-transform ${sheetState === 'collapsed' ? '' : 'rotate-180'}`} />
       </div>
 
       {sheetState !== 'collapsed' && (
@@ -161,7 +205,7 @@ export default function NavBottomSheet({
             ))}
           </div>
 
-          <div className="overflow-y-auto px-4 pb-6" style={{ height: `calc(${currentHeight}px - 5.5rem)` }}>
+          <div className="overflow-y-auto px-4 pb-6" style={{ height: `calc(${currentHeight}px - 210px)` }}>
             {tab === 'tempi' && (
               <div>
                 <div className="grid grid-cols-2 gap-y-4 py-2">
@@ -202,20 +246,15 @@ export default function NavBottomSheet({
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {!timerRunning && movingTimeMs === 0 ? (
-                      <button onClick={onTogglePlayPause} className="flex items-center gap-1.5 px-4 h-10 rounded-full bg-forest-500 text-white text-sm font-semibold font-body shadow">
-                        <Play className="w-4 h-4" /> Avvia
-                      </button>
-                    ) : (
-                      <button onClick={onTogglePlayPause} className="w-10 h-10 rounded-full bg-forest-500 text-white flex items-center justify-center shadow" aria-label={timerRunning ? 'Pausa' : 'Riprendi'}>
-                        {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                      </button>
-                    )}
-                    <button onClick={onStop} className="w-10 h-10 rounded-full bg-red-500 text-white flex items-center justify-center shadow" aria-label="Termina">
-                      <Square className="w-4 h-4" />
+                  {!timerRunning && movingTimeMs === 0 ? (
+                    <button onClick={onTogglePlayPause} className="flex items-center gap-1.5 px-4 h-10 rounded-full bg-forest-500 text-white text-sm font-semibold font-body shadow">
+                      <Play className="w-4 h-4" /> Avvia
                     </button>
-                  </div>
+                  ) : (
+                    <button onClick={onTogglePlayPause} className="w-10 h-10 rounded-full bg-forest-500 text-white flex items-center justify-center shadow" aria-label={timerRunning ? 'Pausa' : 'Riprendi'}>
+                      {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    </button>
+                  )}
                 </div>
               </div>
             )}

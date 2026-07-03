@@ -26,9 +26,9 @@ import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import { exportActivityPdf } from '@/utils/pdfExport'
-import ExportMenu, { type ExportMenuAction } from '@/components/ExportMenu'
 import SectionTabs from '@/components/SectionTabs'
 import PullQuote from '@/components/ui/PullQuote'
+import Sheet from '@/components/ui/Sheet'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
@@ -44,6 +44,7 @@ import {
   FileSpreadsheet, FileText, Map, FileDown,
   Heart, Zap, Mountain, Clock, Route, Flame,
   Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint,
+  MoreHorizontal, ChevronDown,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -123,6 +124,8 @@ export default function EscursionePage() {
   const [showCoverPicker, setShowCoverPicker] = useState(false)
   const [activeChartIndex, setActiveChartIndex] = useState<number | null>(null)
   const [activeSection, setActiveSection] = useState<'panoramica' | 'tracciato' | 'natura' | 'note'>('panoramica')
+  const [showAltro,       setShowAltro]        = useState(false)
+  const [showAltriDati,   setShowAltriDati]     = useState(false)
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -414,77 +417,11 @@ export default function EscursionePage() {
         <div className="relative max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
             <BackLink className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors" />
-            <div className="flex gap-1.5 flex-wrap items-center">
-              {photos.length > 0 && (
-                <button title="Cambia copertina" onClick={() => setShowCoverPicker(true)}
-                  className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                  <Camera className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <ExportMenu
-                label="Esporta"
-                align="left"
-                className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-barlow font-bold uppercase tracking-wide transition-colors"
-                actions={[
-                  { id: 'share', label: 'Condividi', icon: <Share2 className="w-4 h-4 text-forest-600" />, run: () => setShowShare(true) },
-                  { id: 'excel', label: 'Excel', icon: <FileSpreadsheet className="w-4 h-4 text-forest-600" />, run: () => exportActivityToExcel(activity) },
-                  { id: 'word', label: 'Word', icon: <FileText className="w-4 h-4 text-forest-600" />, run: () => exportActivityToDoc(activity) },
-                  { id: 'gpx', label: 'GPX', icon: <Map className="w-4 h-4 text-forest-600" />, run: () => exportActivityToGpx(activity) },
-                  { id: 'pdf', label: 'PDF escursione', icon: <FileDown className="w-4 h-4 text-forest-600" />, run: () => exportActivityPdf(activity) },
-                ] satisfies ExportMenuAction[]}
-              />
-              <button
-                title="Crea Resoconto"
-                onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}`)}
-                className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
-                <BookOpen className="w-3.5 h-3.5" /> Resoconto
-              </button>
-              <div className="relative">
-                <button
-                  title="Galleria Verde"
-                  onClick={() => {
-                    if (heroPolyline.length > 1) {
-                      router.push(`/escursione/${encodeURIComponent(id)}/flora`)
-                    } else {
-                      setShowFloraNotice(v => !v)
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-barlow font-bold uppercase tracking-wide transition-colors ${
-                    heroPolyline.length > 1
-                      ? 'border-green-400/40 text-green-300 hover:bg-green-500/15'
-                      : 'border-white/15 text-white/30 cursor-not-allowed'
-                  }`}>
-                  <Leaf className="w-3.5 h-3.5" /> Galleria Verde
-                </button>
-                {showFloraNotice && heroPolyline.length <= 1 && (
-                  <div className="absolute right-0 top-full mt-2 w-56 p-3 rounded-lg bg-stone-900 border border-white/10 text-xs text-stone-300 shadow-xl z-20">
-                    Percorso GPS non disponibile per questa escursione: la Galleria Verde richiede una traccia GPS valida.
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <button
-                  title="Galleria Animali"
-                  onClick={() => {
-                    if (heroPolyline.length > 1) {
-                      router.push(`/escursione/${encodeURIComponent(id)}/animali`)
-                    } else {
-                      setShowFloraNotice(v => !v)
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-barlow font-bold uppercase tracking-wide transition-colors ${
-                    heroPolyline.length > 1
-                      ? 'border-amber-400/40 text-amber-300 hover:bg-amber-500/15'
-                      : 'border-white/15 text-white/30 cursor-not-allowed'
-                  }`}>
-                  <PawPrint className="w-3.5 h-3.5" /> Galleria Animali
-                </button>
-              </div>
-              <button title="Elimina" onClick={handleDelete} disabled={saving}
-                className="w-8 h-8 rounded-lg bg-red-500/25 hover:bg-red-500/45 flex items-center justify-center transition-colors">
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              </button>
-            </div>
+            <button
+              onClick={() => setShowAltro(true)}
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+              <MoreHorizontal className="w-3.5 h-3.5" /> Altro
+            </button>
           </div>
 
           <div className="py-7 flex items-end justify-between gap-6 flex-wrap">
@@ -726,42 +663,123 @@ export default function EscursionePage() {
         return <ShareModal kind="activity" activity={actMeta} onClose={() => setShowShare(false)} />
       })()}
 
+      {/* ══ ALTRO — azioni dell'header raccolte in un unico foglio ══ */}
+      <Sheet open={showAltro} onClose={() => { setShowAltro(false); setShowFloraNotice(false) }} title="Altro">
+        <div className="space-y-1">
+          {photos.length > 0 && (
+            <button onClick={() => { setShowAltro(false); setShowCoverPicker(true) }}
+              className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+              <Camera className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Cambia copertina</span>
+            </button>
+          )}
+          <button onClick={() => { setShowAltro(false); setShowShare(true) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <Share2 className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Condividi</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); exportActivityToExcel(activity) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <FileSpreadsheet className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta Excel</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); exportActivityToDoc(activity) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <FileText className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta Word</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); exportActivityToGpx(activity) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <Map className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta GPX</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); exportActivityPdf(activity) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <FileDown className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta PDF escursione</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); router.push(`/resoconto/${encodeURIComponent(id)}`) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <BookOpen className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Resoconto</span>
+          </button>
+          <button
+            onClick={() => {
+              setShowAltro(false)
+              if (heroPolyline.length > 1) router.push(`/escursione/${encodeURIComponent(id)}/flora`)
+              else setShowFloraNotice(true)
+            }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <Leaf className="w-4 h-4 text-green-600" /> <span className="text-sm font-medium text-stone-700">Galleria Verde</span>
+          </button>
+          <button
+            onClick={() => {
+              setShowAltro(false)
+              if (heroPolyline.length > 1) router.push(`/escursione/${encodeURIComponent(id)}/animali`)
+              else setShowFloraNotice(true)
+            }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <PawPrint className="w-4 h-4 text-amber-600" /> <span className="text-sm font-medium text-stone-700">Galleria Animali</span>
+          </button>
+          {showFloraNotice && (
+            <p className="px-2 py-2 text-xs text-stone-400">
+              Percorso GPS non disponibile per questa escursione: le gallerie richiedono una traccia GPS valida.
+            </p>
+          )}
+          <div className="pt-1 mt-1 border-t border-stone-100">
+            <button onClick={() => { setShowAltro(false); handleDelete() }} disabled={saving}
+              className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              <span className="text-sm font-medium">Elimina escursione</span>
+            </button>
+          </div>
+        </div>
+      </Sheet>
+
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
 
         {activeSection === 'panoramica' && (
           <>
-            {/* Stats */}
+            {/* 3 numeri primari, grandi — il resto dietro l'accordion "Altri dati" (piano di restyling 2.3) */}
             {(() => {
               const hasHR  = (activity.avgHeartRate ?? 0) > 0
               const hasCal = (activity.calories ?? 0) > 0
               const hasNetSpeed = (activity.netSpeedMs ?? 0) > 0 && (activity.pauseTimeSeconds ?? 0) > 0
               const hasIev = (activity.iev ?? 0) > 0
-              const cols   = 5 + (hasHR ? 1 : 0) + (hasCal ? 1 : 0) + (hasNetSpeed ? 1 : 0) + (hasIev ? 1 : 0)
-              const gridCls = cols >= 9
-                ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2 sm:gap-3'
-                : cols === 8
-                ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3'
-                : cols === 7
-                ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3'
-                : cols === 6
-                ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3'
-                : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3'
               const dep = computeDEP(activity.distanceMeters, activity.elevationGain)
               return (
-                <div className={gridCls}>
-                  <StatCard label="Distanza"     value={`${(activity.distanceMeters/1000).toFixed(2)} km`} color="forest" icon={<Route className="w-3.5 h-3.5" />} />
-                  <StatCard label="Durata"       value={formatDuration(activity.totalTimeSeconds)} color="terra" icon={<Clock className="w-3.5 h-3.5" />} />
-                  {hasHR && <StatCard label="FC Media"   value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
-                  <StatCard label="Vel. Media"   value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
-                  {hasNetSpeed && <StatCard label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue"
-                    tooltip="Velocità di crociera netta: distanza / tempo in movimento, escludendo le soste rilevate dalla traccia GPS." />}
-                  <StatCard label="Dislivello ↑" value={`${activity.elevationGain.toFixed(0)} m`} sub={`↓ ${activity.elevationLoss.toFixed(0)} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5" />} />
-                  {hasCal && <StatCard label="Calorie"    value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
-                  <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone"
-                    tooltip="Distanza Equivalente in Piano (formula CAI): km + (dislivello positivo / 100). Stima lo sforzo come se l'escursione fosse interamente in piano." />
-                  {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest"
-                    tooltip="Metri di dislivello guadagnati per minuto durante i tratti in salita. Misura quanto sei efficiente in ascesa." />}
-                </div>
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+                      <p className="font-display text-2xl font-bold text-forest-900">{(activity.distanceMeters / 1000).toFixed(1)}</p>
+                      <p className="text-[11px] text-stone-400 mt-1">km distanza</p>
+                    </div>
+                    <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+                      <p className="font-display text-2xl font-bold text-forest-900">{activity.elevationGain.toFixed(0)}</p>
+                      <p className="text-[11px] text-stone-400 mt-1">m dislivello</p>
+                    </div>
+                    <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+                      <p className="font-display text-2xl font-bold text-forest-900">{formatDuration(activity.totalTimeSeconds)}</p>
+                      <p className="text-[11px] text-stone-400 mt-1">durata</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                    <button
+                      onClick={() => setShowAltriDati(v => !v)}
+                      className="w-full flex items-center justify-between px-5 py-4 text-left"
+                    >
+                      <span className="text-sm font-semibold text-stone-600">Altri dati (FC, calorie, velocità…)</span>
+                      <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showAltriDati ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showAltriDati && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 px-5 pb-5">
+                        {hasHR && <StatCard label="FC Media"   value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
+                        <StatCard label="Vel. Media"   value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
+                        {hasNetSpeed && <StatCard label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue"
+                          tooltip="Velocità di crociera netta: distanza / tempo in movimento, escludendo le soste rilevate dalla traccia GPS." />}
+                        {hasCal && <StatCard label="Calorie"    value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
+                        <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone"
+                          tooltip="Distanza Equivalente in Piano (formula CAI): km + (dislivello positivo / 100). Stima lo sforzo come se l'escursione fosse interamente in piano." />
+                        {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest"
+                          tooltip="Metri di dislivello guadagnati per minuto durante i tratti in salita. Misura quanto sei efficiente in ascesa." />}
+                      </div>
+                    )}
+                  </div>
+                </>
               )
             })()}
 

@@ -37,13 +37,14 @@ import {
   Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
   ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass, Leaf, PawPrint,
-  Car, Navigation, MapPin,
+  Car, Navigation, MapPin, MoreHorizontal, ChevronDown,
 } from 'lucide-react'
 import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl, originMatches } from '@/lib/drivingInfo'
 
 import PdfExportButton from '@/components/PdfExportButton'
 import SectionTabs from '@/components/SectionTabs'
 import PullQuote from '@/components/ui/PullQuote'
+import Sheet from '@/components/ui/Sheet'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -206,6 +207,8 @@ export default function PlannedHikePage() {
   const [driving,  setDriving]  = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
   const [drivingLoading, setDrivingLoading] = useState(false)
   const [activeSection, setActiveSection] = useState<'panoramica' | 'percorso' | 'natura' | 'guida'>('panoramica')
+  const [showAltro,      setShowAltro]      = useState(false)
+  const [showAltriDati,  setShowAltriDati]   = useState(false)
 
   // Must be before early returns
   const heroPolyline = useMemo((): [number, number][] => {
@@ -558,85 +561,13 @@ export default function PlannedHikePage() {
         <div className="relative max-w-[1200px] mx-auto px-4">
           {/* Top nav */}
           <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
-            <BackLink label="Calendario"
+            <BackLink label="Diario"
               className="flex items-center gap-1.5 text-sky-300 hover:text-white text-sm transition-colors" />
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {heroPolyline.length > 1 && (
-                <>
-                  <button
-                    onClick={() => router.push(`/programma/${encodeURIComponent(id)}/naviga`)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white rounded-lg text-xs font-semibold transition-colors"
-                    title="Avvia navigazione GPS in tempo reale"
-                  >
-                    <Navigation className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Avvia navigazione</span>
-                  </button>
-                  <OfflinePackageDownloader hikeId={id} routePolyline={heroPolyline} />
-                </>
-              )}
-              <button
-                onClick={() => router.push(`/guida/${encodeURIComponent(id)}`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-amber-900 rounded-lg text-xs font-semibold transition-colors"
-                title="Guida escursionistica"
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Guida</span>
-              </button>
-              <PdfExportButton
-                variant="planned"
-                data={hike}
-                iconOnly
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-              />
-              <div className="relative">
-                <button
-                  title="Galleria Verde"
-                  onClick={() => {
-                    if (heroPolyline.length > 1) {
-                      router.push(`/programma/${encodeURIComponent(id)}/flora`)
-                    } else {
-                      setShowFloraNotice(v => !v)
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-semibold transition-colors ${
-                    heroPolyline.length > 1
-                      ? 'border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/15'
-                      : 'border-white/15 text-white/30 cursor-not-allowed'
-                  }`}
-                >
-                  <Leaf className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Galleria Verde</span>
-                </button>
-                {showFloraNotice && heroPolyline.length <= 1 && (
-                  <div className="absolute right-0 top-full mt-2 w-56 p-3 rounded-lg bg-stone-900 border border-white/10 text-xs text-stone-300 shadow-xl z-20">
-                    Percorso GPS non disponibile per questo programma: la Galleria Verde richiede una traccia GPS valida.
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <button
-                  title="Galleria Animali"
-                  onClick={() => {
-                    if (heroPolyline.length > 1) {
-                      router.push(`/programma/${encodeURIComponent(id)}/animali`)
-                    } else {
-                      setShowFloraNotice(v => !v)
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-semibold transition-colors ${
-                    heroPolyline.length > 1
-                      ? 'border-amber-400/40 text-amber-300 hover:bg-amber-500/15'
-                      : 'border-white/15 text-white/30 cursor-not-allowed'
-                  }`}
-                >
-                  <PawPrint className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Galleria Animali</span>
-                </button>
-              </div>
-              <button onClick={handleDelete} disabled={saving}
-                className="flex items-center gap-1.5 text-sm text-red-300 hover:text-white transition-colors">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                <span className="hidden sm:inline">Elimina</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setShowAltro(true)}
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold transition-colors">
+              <MoreHorizontal className="w-3.5 h-3.5" /> Altro
+            </button>
           </div>
 
           {/* Hero body */}
@@ -722,28 +653,103 @@ export default function PlannedHikePage() {
         onChange={id => setActiveSection(id as typeof activeSection)}
       />
 
+      {/* ══ ALTRO — azioni dell'header raccolte in un unico foglio ══ */}
+      <Sheet open={showAltro} onClose={() => { setShowAltro(false); setShowFloraNotice(false) }} title="Altro">
+        <div className="space-y-1">
+          {heroPolyline.length > 1 && (
+            <div className="px-2 py-2">
+              <OfflinePackageDownloader hikeId={id} routePolyline={heroPolyline} />
+            </div>
+          )}
+          <button onClick={() => { setShowAltro(false); router.push(`/guida/${encodeURIComponent(id)}`) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <BookOpen className="w-4 h-4 text-amber-500" /> <span className="text-sm font-medium text-stone-700">Guida escursionistica</span>
+          </button>
+          <PdfExportButton
+            variant="planned"
+            data={hike}
+            label="Esporta PDF"
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left text-sm font-medium text-stone-700"
+          />
+          <button
+            onClick={() => {
+              setShowAltro(false)
+              if (heroPolyline.length > 1) router.push(`/programma/${encodeURIComponent(id)}/flora`)
+              else setShowFloraNotice(true)
+            }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <Leaf className="w-4 h-4 text-emerald-600" /> <span className="text-sm font-medium text-stone-700">Galleria Verde</span>
+          </button>
+          <button
+            onClick={() => {
+              setShowAltro(false)
+              if (heroPolyline.length > 1) router.push(`/programma/${encodeURIComponent(id)}/animali`)
+              else setShowFloraNotice(true)
+            }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <PawPrint className="w-4 h-4 text-amber-600" /> <span className="text-sm font-medium text-stone-700">Galleria Animali</span>
+          </button>
+          {showFloraNotice && (
+            <p className="px-2 py-2 text-xs text-stone-400">
+              Percorso GPS non disponibile per questo programma: le gallerie richiedono una traccia GPS valida.
+            </p>
+          )}
+          <div className="pt-1 mt-1 border-t border-stone-100">
+            <button onClick={() => { setShowAltro(false); handleDelete() }} disabled={saving}
+              className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              <span className="text-sm font-medium">Elimina programma</span>
+            </button>
+          </div>
+        </div>
+      </Sheet>
+
       <main className="max-w-[1200px] mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
 
         {activeSection === 'panoramica' && (
           <>
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {[
-            { icon: <Route className="w-5 h-5 text-sky-500" />, label: 'Distanza', value: `${distKm.toFixed(2)} km` },
-            { icon: <TrendingUp className="w-5 h-5 text-sky-500" />, label: 'Dislivello +', value: `${Math.round(hike.elevationGain)} m` },
-            { icon: <TrendingDown className="w-5 h-5 text-sky-500" />, label: 'Dislivello −', value: `${Math.round(hike.elevationLoss)} m` },
-            { icon: <Mountain className="w-5 h-5 text-sky-500" />, label: 'Quota max', value: `${Math.round(hike.altitudeMax)} m`, sub: `Min: ${Math.round(hike.altitudeMin)} m` },
-            { icon: <Clock className="w-5 h-5 text-sky-500" />, label: 'Tempo stimato', value: formatDuration(hike.estimatedTimeSeconds), sub: 'Naismith' },
-          ].map(({ icon, label, value, sub }) => (
-            <div key={label} className="bg-white rounded-2xl border border-stone-200 p-4 flex items-start gap-3 shadow-sm">
-              <div className="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center shrink-0">{icon}</div>
-              <div>
-                <p className="text-xs text-stone-400 font-medium">{label}</p>
-                <p className="text-base font-bold text-stone-800 leading-tight">{value}</p>
-                {sub && <p className="text-xs text-stone-400">{sub}</p>}
+        {/* 3 numeri primari, grandi — mirrorato dalla schermata Escursione (piano di restyling 2.3) */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+            <p className="font-display text-2xl font-bold text-sky-900">{distKm.toFixed(1)}</p>
+            <p className="text-[11px] text-stone-400 mt-1">km stimati</p>
+          </div>
+          <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+            <p className="font-display text-2xl font-bold text-sky-900">{Math.round(hike.elevationGain)}</p>
+            <p className="text-[11px] text-stone-400 mt-1">m dislivello</p>
+          </div>
+          <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+            <p className="font-display text-2xl font-bold text-sky-900">{formatDuration(hike.estimatedTimeSeconds)}</p>
+            <p className="text-[11px] text-stone-400 mt-1">stimata</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <button
+            onClick={() => setShowAltriDati(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left"
+          >
+            <span className="text-sm font-semibold text-stone-600">Altri dati (dislivello −, quota…)</span>
+            <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showAltriDati ? 'rotate-180' : ''}`} />
+          </button>
+          {showAltriDati && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 px-5 pb-5">
+              <div className="bg-stone-50 rounded-xl border border-stone-100 p-3 flex items-start gap-2.5">
+                <TrendingDown className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[11px] text-stone-400 font-medium">Dislivello −</p>
+                  <p className="text-sm font-bold text-stone-800">{Math.round(hike.elevationLoss)} m</p>
+                </div>
+              </div>
+              <div className="bg-stone-50 rounded-xl border border-stone-100 p-3 flex items-start gap-2.5">
+                <Mountain className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[11px] text-stone-400 font-medium">Quota max</p>
+                  <p className="text-sm font-bold text-stone-800">{Math.round(hike.altitudeMax)} m <span className="font-normal text-stone-400">· min {Math.round(hike.altitudeMin)} m</span></p>
+                </div>
               </div>
             </div>
-          ))}
+          )}
         </div>
 
         {/* Come arrivare — distanza/tempo di guida dal punto di partenza dell'utente */}
@@ -784,6 +790,29 @@ export default function PlannedHikePage() {
                 <a href="/profilo" className="text-sky-600 hover:text-sky-700 font-medium underline">indirizzo di partenza</a>
                 {' '}nel profilo per vedere distanza e tempo di guida fino a qui.
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Avvia navigazione — azione primaria resa visibile e prominente
+            invece di essere una piccola icona sepolta nell'header (piano di restyling 2.3) */}
+        {heroPolyline.length > 1 && (
+          <div>
+            <button
+              onClick={() => router.push(`/programma/${encodeURIComponent(id)}/naviga`)}
+              className="w-full flex items-center justify-center gap-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-2xl py-[18px] text-base font-bold shadow-lg shadow-terra-900/20 transition-colors"
+            >
+              <Navigation className="w-5 h-5" /> Avvia navigazione sul sentiero
+            </button>
+            {driving && origin && gpsPoints[0]?.lat && gpsPoints[0]?.lon && (
+              <a
+                href={googleMapsDirectionsUrl(origin.lat, origin.lon, gpsPoints[0].lat!, gpsPoints[0].lon!)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center text-sky-600 hover:text-sky-700 text-sm font-semibold mt-2.5 py-1"
+              >
+                Naviga in auto fino alla partenza →
+              </a>
             )}
           </div>
         )}

@@ -24,7 +24,7 @@ import { matchesFilters, type SearchFilters } from '@/lib/trailFilters'
 import type { TrailSearchResult, TrailSearchCandidate, SearchResponseBody } from '@/lib/trailSearch'
 import {
   Compass, MapPin, Route, TrendingUp, Clock,
-  Plus, Loader2, X, Info,
+  Plus, Loader2, X, Info, SlidersHorizontal,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -76,6 +76,7 @@ export default function EsploraPage() {
   // the button's "you should press this again" highlight (Google Maps-style).
   const [searchDirty, setSearchDirty]           = useState(true)
   const [panelSelectingId, setPanelSelectingId] = useState<number | null>(null)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   // Bumped on every search start — tells ExploreLayout's mobile sheet to
   // auto-expand from collapsed to half so progress is visible.
   const [searchTrigger, setSearchTrigger]       = useState(0)
@@ -309,33 +310,56 @@ export default function EsploraPage() {
     }
   }
 
-  // Rendered inside ExploreResultsPanel's filter grid (not floated over the
-  // map) so it doesn't add another independently-positioned map overlay.
-  const searchBar = (
-    <div className="relative">
-      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-      <input
-        type="text"
-        placeholder="Vai a una città, area o regione..."
-        value={query}
-        onChange={e => handleQueryChange(e.target.value)}
-        className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-stone-200 bg-white/95 backdrop-blur shadow-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
-      />
-      {geoLoading && (
-        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 animate-spin" />
-      )}
+  // Floats over the map (search box + filter icon), like Diario/Escursione's
+  // floating controls — instead of living inside the results panel/sheet.
+  const activeFilterCount =
+    (filters.routeType ? 1 : 0) +
+    (filters.difficulty ? 1 : 0) +
+    (filters.distanceKmMin != null || filters.distanceKmMax != null ? 1 : 0) +
+    (filters.elevationGainMin != null || filters.elevationGainMax != null ? 1 : 0) +
+    (filters.durationMinMin != null || filters.durationMinMax != null ? 1 : 0)
 
-      {geoResults.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-stone-200 shadow-lg overflow-hidden">
-          {geoResults.map((g, i) => (
-            <button key={i} onClick={() => selectGeo(g)}
-              className="w-full text-left px-3 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-start gap-2">
-              <MapPin className="w-3.5 h-3.5 text-stone-400 mt-0.5 shrink-0" />
-              <span className="text-stone-700 line-clamp-1">{g.display_name}</span>
-            </button>
-          ))}
-        </div>
-      )}
+  const searchBar = (
+    <div className="absolute top-3 left-3 right-3 z-[1000] flex gap-2">
+      <div className="relative flex-1">
+        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+        <input
+          type="text"
+          placeholder="Cerca zona o sentiero…"
+          value={query}
+          onChange={e => handleQueryChange(e.target.value)}
+          className="w-full pl-9 pr-9 py-3 rounded-2xl border-0 bg-white/95 backdrop-blur shadow-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+        />
+        {geoLoading && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 animate-spin" />
+        )}
+
+        {geoResults.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-stone-200 shadow-lg overflow-hidden">
+            {geoResults.map((g, i) => (
+              <button key={i} onClick={() => selectGeo(g)}
+                className="w-full text-left px-3 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-100 last:border-0 flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 text-stone-400 mt-0.5 shrink-0" />
+                <span className="text-stone-700 line-clamp-1">{g.display_name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={() => setFiltersOpen(v => !v)}
+        title="Filtri"
+        className={`relative shrink-0 w-[46px] h-[46px] rounded-2xl shadow-lg flex items-center justify-center transition-colors ${
+          filtersOpen ? 'bg-sky-600 text-white' : 'bg-white text-forest-900'
+        }`}
+      >
+        <SlidersHorizontal className="w-[18px] h-[18px]" />
+        {activeFilterCount > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-terra-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
+            {activeFilterCount}
+          </span>
+        )}
+      </button>
     </div>
   )
 
@@ -348,7 +372,7 @@ export default function EsploraPage() {
         {/* Back + compact header */}
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <BackLink label="Calendario" fallbackHref="/" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition" />
+            <BackLink label="Diario" fallbackHref="/" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition" />
           </div>
           <div className="flex items-center gap-2 text-stone-700">
             <Compass className="w-5 h-5 text-sky-600" />
@@ -365,13 +389,16 @@ export default function EsploraPage() {
           resultsCount={searchResults.length + pendingCandidates.length}
           searchTrigger={searchTrigger}
           map={
-            <ExploreMap
-              center={mapCenter}
-              onTrailSelected={setPreview}
-              onViewportChanged={handleViewportChanged}
-              dismissCandidatesSignal={searchTrigger}
-              height="clamp(440px, 72vh, 760px)"
-            />
+            <div className="relative">
+              {searchBar}
+              <ExploreMap
+                center={mapCenter}
+                onTrailSelected={setPreview}
+                onViewportChanged={handleViewportChanged}
+                dismissCandidatesSignal={searchTrigger}
+                height="clamp(440px, 72vh, 760px)"
+              />
+            </div>
           }
           panel={
             <ExploreResultsPanel
@@ -388,7 +415,8 @@ export default function EsploraPage() {
               selectingId={panelSelectingId}
               onSearchThisArea={handleSearchThisArea}
               canSearchThisArea={searchDirty}
-              locationSearchSlot={searchBar}
+              filtersOpen={filtersOpen}
+              onToggleFilters={() => setFiltersOpen(v => !v)}
             />
           }
         />

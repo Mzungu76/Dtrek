@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, Camera, Mic, Square, Check, Loader2, NotebookPen } from 'lucide-react'
 import { useSpeechDictation } from '@/lib/useSpeechDictation'
 import { uploadFieldNotePhoto } from '@/lib/fieldNotePhotos'
@@ -10,6 +10,8 @@ interface Props {
   position: { lat: number; lon: number } | null
   onSave: (note: HikeNote) => void
   onClose: () => void
+  /** True when opened from the "Foto" quick action — jumps straight to the camera picker instead of the blank note form. */
+  autoOpenCamera?: boolean
 }
 
 /**
@@ -18,13 +20,18 @@ interface Props {
  * combination. Not a report to anyone: purely personal documentation, saved into the hike's
  * own notes (same HikeNote list shown later on the planning/activity page).
  */
-export default function FieldNoteSheet({ hikeId, position, onSave, onClose }: Props) {
+export default function FieldNoteSheet({ hikeId, position, onSave, onClose, autoOpenCamera }: Props) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { recording, supported: speechSupported, toggleRecording } = useSpeechDictation(setText)
+
+  useEffect(() => {
+    if (autoOpenCamera) fileRef.current?.click()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function handleFile(file: File) {
     const reader = new FileReader()

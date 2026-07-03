@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 export interface DrivingInfo {
   distanceMeters: number
   durationSeconds: number
@@ -60,4 +62,50 @@ export function getUserStartingPoint(): Promise<{ lat: number; lon: number } | n
       .catch(() => null)
   }
   return startingPointPromise
+}
+
+interface DrivingCacheFields {
+  cachedDrivingOriginLat?:       number
+  cachedDrivingOriginLon?:       number
+  cachedDrivingDistanceMeters?:  number
+  cachedDrivingDurationSeconds?: number
+}
+
+/**
+ * Resolves driving distance/duration from the user's starting point to a planned
+ * hike's trailhead, reusing a Supabase-cached value when the origin hasn't moved
+ * — shared by the Diario feed card and the Programma detail screen so both avoid
+ * re-hitting the OSRM routing service on every render.
+ */
+export function useDrivingInfo(hike: DrivingCacheFields & { routePolyline?: [number, number][] }, onCache?: (info: DrivingInfo & { originLat: number; originLon: number }) => void) {
+  const trailStart = getTrailStartPoint(hike)
+  const { cachedDrivingOriginLat: cachedOriginLat, cachedDrivingOriginLon: cachedOriginLon, cachedDrivingDistanceMeters: cachedDistance, cachedDrivingDurationSeconds: cachedDuration } = hike
+  const [driving, setDriving] = useState<DrivingInfo | null>(
+    cachedDistance != null && cachedDuration != null ? { distanceMeters: cachedDistance, durationSeconds: cachedDuration } : null,
+  )
+  const [origin, setOrigin] = useState<{ lat: number; lon: number } | null>(
+    cachedOriginLat != null && cachedOriginLon != null ? { lat: cachedOriginLat, lon: cachedOriginLon } : null,
+  )
+
+  useEffect(() => {
+    if (!trailStart) return
+    let cancelled = false
+    getUserStartingPoint().then(pt => {
+      if (cancelled || !pt) return
+      setOrigin(pt)
+      if (originMatches(cachedOriginLat, cachedOriginLon, pt.lat, pt.lon) && cachedDistance != null && cachedDuration != null) {
+        setDriving({ distanceMeters: cachedDistance, durationSeconds: cachedDuration })
+        return
+      }
+      fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
+        if (cancelled) return
+        setDriving(info)
+        if (info) onCache?.({ ...info, originLat: pt.lat, originLon: pt.lon })
+      })
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trailStart?.[0], trailStart?.[1], cachedOriginLat, cachedOriginLon, cachedDistance, cachedDuration])
+
+  return { driving, origin, trailStart }
 }

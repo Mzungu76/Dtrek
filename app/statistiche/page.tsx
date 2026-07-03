@@ -70,9 +70,9 @@ function StatisticheContent() {
         {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6 flex-wrap">
           <div>
-            <h1 className="font-display text-2xl sm:text-3xl font-semibold text-stone-800">Statistiche</h1>
-            <p className="text-stone-500 text-sm mt-1">
-              {loading ? 'Caricamento…' : `${stats.totalActivities} escursioni registrate`}
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-forest-900">Statistiche</h1>
+            <p className="text-stone-400 text-sm mt-1">
+              {loading ? 'Caricamento…' : `${stats.totalActivities} escursioni registrate in totale`}
             </p>
           </div>
           {!loading && activities.length > 0 && (

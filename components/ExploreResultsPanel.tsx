@@ -1,5 +1,5 @@
 'use client'
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import {
   Search, Loader2, MapPin, Route, TrendingUp, Clock, Sparkles, AlertCircle, ChevronDown,
 } from 'lucide-react'
@@ -27,9 +27,14 @@ interface Props {
   selectingId: number | null
   onSearchThisArea: () => void
   canSearchThisArea: boolean
-  // Geocode search-by-place input — lives here (top of the filter grid)
-  // instead of floating over the map, alongside the other search controls.
+  // Geocode search-by-place input now floats over the map instead of living
+  // in the filter grid — kept optional so the panel still renders standalone.
   locationSearchSlot?: ReactNode
+  // Lifted up so the floating filter icon next to the map search bar can
+  // open the same filter chips shown here (piano di restyling: "filtri
+  // dietro l'icona a destra della ricerca invece che sempre in vista").
+  filtersOpen: boolean
+  onToggleFilters: () => void
 }
 
 function isRouteTypeActive(filters: SearchFilters, rt: RouteType): boolean {
@@ -87,14 +92,8 @@ function RangeField({
 export default function ExploreResultsPanel({
   results, pendingCandidates, loading, error, truncated, hasSearched,
   filters, onFiltersChange, onUsePreferences, onSelectTrail, selectingId,
-  onSearchThisArea, canSearchThisArea, locationSearchSlot,
+  onSearchThisArea, canSearchThisArea, locationSearchSlot, filtersOpen, onToggleFilters,
 }: Props) {
-  // Collapsed by default: chips + 3 range fields are tall enough to bury the
-  // results list below the fold on the mobile bottom sheet (the actual
-  // complaint this fixes) — collapsing them behind a toggle keeps the list
-  // visible right after a search, on both mobile and desktop.
-  const [filtersOpen, setFiltersOpen] = useState(false)
-
   // Numero di gruppi di filtro attivi (non il numero di valori) — mostrato
   // come badge sul toggle, così l'affordance comunica "quanti filtri" invece
   // di un generico pallino "sì/no". Piano di ristrutturazione, Parte 2.8.
@@ -144,7 +143,7 @@ export default function ExploreResultsPanel({
 
         <div className="flex items-center justify-between">
           <button
-            onClick={() => setFiltersOpen(v => !v)}
+            onClick={onToggleFilters}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-600 border border-stone-200 hover:bg-stone-50 transition-colors"
           >
             Filtri

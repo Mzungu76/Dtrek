@@ -1,260 +1,29 @@
 'use client'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
-import { Upload, BarChart2, CalendarDays, Compass, User, ArrowDownToLine, LogOut, Settings, BookMarked, Trophy, Mountain, Info } from 'lucide-react'
-import { getProfile, saveProfile } from '@/lib/userProfile'
+import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { Upload, BookMarked, CalendarDays, Compass, User, Plus } from 'lucide-react'
+import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
-import { lsClearAll } from '@/lib/localStore'
-import { getAllActivities } from '@/lib/blobStore'
-import { computeStreaks } from '@/lib/stats'
-import { computeCurrentBadges, type ComputedBadge } from '@/lib/badges'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 const NAV_LINKS = [
-  { href: '/',            label: 'Calendario',  icon: CalendarDays },
-  { href: '/statistiche', label: 'Statistiche', icon: BarChart2    },
-  { href: '/esplora',     label: 'Esplora',     icon: Compass      },
-  { href: '/diario',      label: 'Diario',      icon: BookMarked   },
+  { href: '/',          label: 'Diario',    icon: BookMarked  },
+  { href: '/programma', label: 'Programma', icon: CalendarDays },
+  { href: '/esplora',   label: 'Esplora',   icon: Compass      },
+  { href: '/profilo',   label: 'Profilo',   icon: User         },
 ]
 
 function isActive(href: string, path: string) {
   return href === '/' ? path === '/' : path.startsWith(href)
 }
 
-// ── Install button ─────────────────────────────────────────────────────────────
+// ── Avatar (desktop + tab bar icon) ─────────────────────────────────────────────
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
-
-function InstallButton({ compact = false }: { compact?: boolean }) {
-  const [prompt, setPrompt]       = useState<BeforeInstallPromptEvent | null>(null)
-  const [isIOS, setIsIOS]         = useState(false)
-  const [installed, setInstalled] = useState(false)
-  const [showIOSHint, setShowIOSHint] = useState(false)
-
-  useEffect(() => {
-    if (
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as unknown as { standalone: boolean }).standalone === true
-    ) { setInstalled(true); return }
-
-    const ua = navigator.userAgent.toLowerCase()
-    if (/iphone|ipad|ipod/.test(ua) && !(window as unknown as { MSStream: unknown }).MSStream) setIsIOS(true)
-
-    const handler = (e: Event) => { e.preventDefault(); setPrompt(e as BeforeInstallPromptEvent) }
-    window.addEventListener('beforeinstallprompt', handler)
-    window.addEventListener('appinstalled', () => { setInstalled(true); setPrompt(null) })
-    return () => window.removeEventListener('beforeinstallprompt', handler)
-  }, [])
-
-  const handleClick = async () => {
-    if (isIOS) { setShowIOSHint(v => !v); return }
-    if (!prompt) return
-    await prompt.prompt()
-    const { outcome } = await prompt.userChoice
-    if (outcome === 'accepted') setInstalled(true)
-    setPrompt(null)
-  }
-
-  if (installed || (!prompt && !isIOS)) return null
-
-  return (
-    <div className="relative">
-      <button
-        onClick={handleClick}
-        title="Installa l'app"
-        className={
-          compact
-            ? 'flex items-center justify-center w-9 h-9 rounded-xl bg-forest-50 border border-forest-200 text-forest-600 hover:bg-forest-100 transition-colors'
-            : 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-forest-600 bg-forest-50 border border-forest-200 hover:bg-forest-100 transition-colors'
-        }
-      >
-        <ArrowDownToLine className="w-4 h-4 shrink-0" />
-        {!compact && <span>Installa</span>}
-      </button>
-      {showIOSHint && (
-        <div className="absolute right-0 top-12 w-64 bg-stone-900 text-white text-xs rounded-xl p-3 shadow-2xl z-50">
-          <p className="font-semibold mb-1">Aggiungi alla Home Screen</p>
-          <p className="text-stone-300 leading-snug">
-            Tocca <strong>Condividi ⬆️</strong> in Safari, poi seleziona <strong>"Aggiungi a Home"</strong>.
-          </p>
-          <div className="absolute -top-1.5 right-4 w-3 h-3 bg-stone-900 rotate-45" />
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── User menu dropdown ─────────────────────────────────────────────────────────
-
-function UserMenu({ user }: { user: SupabaseUser }) {
-  const router      = useRouter()
-  const [open, setOpen]     = useState(false)
-  const [badgesOpen, setBadgesOpen] = useState(false)
+function useAvatar() {
+  const [user, setUser]       = useState<SupabaseUser | null>(null)
   const [faceUrl, setFaceUrl] = useState<string | null>(null)
-  const [currentBadges, setCurrentBadges] = useState<ComputedBadge[]>([])
-  const badgeCount = currentBadges.length
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    // Fast local read
-    const local = getProfile().hikerFaceDataUrl
-    if (local) setFaceUrl(local)
-    // Cross-device sync from Supabase
-    fetch('/api/user-settings')
-      .then(r => r.json())
-      .then(d => {
-        if (d.hikerFaceDataUrl) {
-          setFaceUrl(d.hikerFaceDataUrl)
-          saveProfile({ hikerFaceDataUrl: d.hikerFaceDataUrl })
-        }
-      })
-      .catch(() => {})
-    getAllActivities()
-      .then(acts => setCurrentBadges(computeCurrentBadges(acts, computeStreaks(acts))))
-      .catch(() => {})
-  }, [])
-
-  // Pick up avatar/name changes saved from /profilo without needing a reload
-  useEffect(() => {
-    const onProfileUpdated = () => {
-      const updated = getProfile().hikerFaceDataUrl
-      if (updated !== undefined) setFaceUrl(updated ?? null)
-    }
-    window.addEventListener('dtrek:profile-updated', onProfileUpdated)
-    return () => window.removeEventListener('dtrek:profile-updated', onProfileUpdated)
-  }, [])
-
-  // Close on outside click
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setBadgesOpen(false) }
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [])
-
-  async function handleLogout() {
-    setOpen(false)
-    await getBrowserSupabase().auth.signOut()
-    await lsClearAll()
-    router.push('/login')
-    router.refresh()
-  }
-
-  const displayName = user.user_metadata?.display_name as string | undefined
-  const initials    = (displayName ?? user.email ?? '?')[0].toUpperCase()
-
-  return (
-    <div className="flex items-center gap-1.5 min-w-0" ref={ref}>
-      {badgeCount > 0 && (
-        <div className="relative">
-          <button
-            onClick={() => setBadgesOpen(v => !v)}
-            title={`${badgeCount} traguard${badgeCount === 1 ? 'o' : 'i'} sbloccat${badgeCount === 1 ? 'o' : 'i'}`}
-            className="min-w-[26px] h-[26px] px-1.5 rounded-full bg-forest-600 hover:bg-forest-700 text-white text-xs font-bold flex items-center justify-center gap-0.5 shadow-sm transition-colors"
-          >
-            <Trophy className="w-3.5 h-3.5" />{badgeCount}
-          </button>
-          {badgesOpen && (
-            <div className="absolute right-0 top-9 w-56 bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3">
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {currentBadges.map(b => (
-                  <span key={b.id}
-                    className="shrink-0 w-7 h-7 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-[13px] leading-none"
-                    title={b.name}
-                  >
-                    {b.icon}
-                  </span>
-                ))}
-              </div>
-              <Link
-                href="/statistiche?tab=traguardi"
-                onClick={() => setBadgesOpen(false)}
-                className="block text-center text-xs font-medium text-forest-700 hover:text-forest-800 py-1.5 border-t border-stone-100 pt-2"
-              >
-                Vedi tutti i traguardi
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-      <div className="relative">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="relative flex items-center justify-center w-8 h-8 rounded-full border-2 border-stone-200 hover:border-forest-400 transition-all focus:outline-none"
-        title={displayName ?? user.email}
-      >
-        <span className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
-          {faceUrl
-            ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
-            : <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
-          }
-        </span>
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-10 w-52 bg-white rounded-xl border border-stone-200 shadow-lg z-50 py-1 overflow-hidden">
-          {/* User info header */}
-          <div className="px-3 py-2.5 border-b border-stone-100">
-            <p className="text-xs font-semibold text-stone-800 truncate">{displayName ?? 'Utente'}</p>
-            <p className="text-xs text-stone-400 truncate mt-0.5">{user.email}</p>
-          </div>
-          <Link
-            href="/statistiche?tab=traguardi"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
-          >
-            <Trophy className="w-4 h-4 text-amber-500" />
-            {badgeCount} traguardi sbloccati
-          </Link>
-          <Link
-            href="/profilo"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
-          >
-            <Settings className="w-4 h-4 text-stone-400" />
-            Impostazioni profilo
-          </Link>
-          <Link
-            href="/vette"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
-          >
-            <Mountain className="w-4 h-4 text-stone-400" />
-            Vette raggiunte
-          </Link>
-          <Link
-            href="/fonti-e-crediti"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
-          >
-            <Info className="w-4 h-4 text-stone-400" />
-            Fonti e crediti
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-3 py-2 mt-1 border-t border-stone-100 text-sm text-red-600 hover:bg-red-50 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Esci
-          </button>
-        </div>
-      )}
-      </div>
-    </div>
-  )
-}
-
-// ── Navbar ─────────────────────────────────────────────────────────────────────
-
-export default function Navbar() {
-  const path = usePathname()
-  const [user, setUser] = useState<SupabaseUser | null>(null)
 
   useEffect(() => {
     const supabase = getBrowserSupabase()
@@ -265,106 +34,139 @@ export default function Navbar() {
     return () => subscription.unsubscribe()
   }, [])
 
+  useEffect(() => {
+    const local = getProfile().hikerFaceDataUrl
+    if (local) setFaceUrl(local)
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => { if (d.hikerFaceDataUrl) setFaceUrl(d.hikerFaceDataUrl) })
+      .catch(() => {})
+    const onProfileUpdated = () => {
+      const updated = getProfile().hikerFaceDataUrl
+      if (updated !== undefined) setFaceUrl(updated ?? null)
+    }
+    window.addEventListener('dtrek:profile-updated', onProfileUpdated)
+    return () => window.removeEventListener('dtrek:profile-updated', onProfileUpdated)
+  }, [])
+
+  return { user, faceUrl }
+}
+
+// ── Desktop top bar ──────────────────────────────────────────────────────────
+
+function DesktopNav() {
+  const path = usePathname()
+  const { user, faceUrl } = useAvatar()
+  const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
+
   return (
-    <>
-      {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
-        <div className="max-w-[1400px] mx-auto px-4 flex items-center justify-between h-14">
+    <nav className="hidden md:block sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
+      <div className="max-w-[1400px] mx-auto px-4 flex items-center justify-between h-14">
+        <Link href="/" className="flex items-center gap-2 group shrink-0">
+          <Image src="/icon-192.png" alt="DTrek" width={28} height={28} className="rounded-md" />
+          <span className="font-display font-semibold text-lg text-stone-800 tracking-tight">
+            Diario Trekking
+          </span>
+        </Link>
 
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group shrink-0">
-            <Image src="/icon-192.png" alt="DTrek" width={28} height={28} className="rounded-md" />
-            <span className="font-display font-semibold text-lg text-stone-800 tracking-tight">
-              Diario Trekking
-            </span>
-          </Link>
-
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-1">
-            {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-              const active = isActive(href, path)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    active ? 'bg-forest-50 text-forest-700' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{label}</span>
-                </Link>
-              )
-            })}
-            <div className="w-px h-5 bg-stone-200 mx-1" />
-            <InstallButton />
-            {user ? (
-              <UserMenu user={user} />
-            ) : (
-              <Link href="/profilo" className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-stone-200 hover:border-amber-300 transition-all">
-                <User className="w-4 h-4 text-stone-400" />
-              </Link>
-            )}
-            <Link
-              href="/upload"
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ml-1 ${
-                path === '/upload' ? 'bg-terra-600 text-white' : 'bg-terra-500 hover:bg-terra-400 text-white shadow-sm'
-              }`}
-            >
-              <Upload className="w-4 h-4" />
-              <span>Carica</span>
-            </Link>
-          </div>
-
-          {/* Mobile: install + user + upload */}
-          <div className="md:hidden flex items-center gap-1.5">
-            <InstallButton compact />
-            {user
-              ? <UserMenu user={user} />
-              : <Link href="/profilo" className="flex items-center justify-center w-9 h-9 rounded-full border-2 border-stone-200 hover:border-amber-300 transition-all">
-                  <User className="w-4 h-4 text-stone-400" />
-                </Link>
-            }
-            <Link
-              href="/upload"
-              className={`flex items-center justify-center w-9 h-9 rounded-xl text-sm font-semibold transition-all ${
-                path === '/upload' ? 'bg-terra-600 text-white' : 'bg-terra-500 text-white shadow-sm'
-              }`}
-              aria-label="Carica file"
-            >
-              <Upload className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* ── Mobile bottom tab bar ─────────────────────────────────────── */}
-      <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-t border-stone-200 shadow-[0_-1px_4px_rgba(0,0,0,0.06)]"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-      >
-        <div className="flex items-stretch h-16">
+        <div className="flex items-center gap-1">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href, path)
             return (
               <Link
                 key={href}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-w-0 px-1
-                  ${active ? 'text-forest-600' : 'text-stone-400'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  active ? 'bg-forest-50 text-forest-700' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+                }`}
               >
-                <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-forest-600' : 'text-stone-400'}`} />
-                <span className="text-[9px] font-medium leading-none truncate w-full text-center">
-                  {label}
-                </span>
-                {active && (
-                  <span className="absolute top-0 w-6 h-0.5 bg-forest-500 rounded-full -translate-y-px" />
-                )}
+                <Icon className="w-4 h-4" />
+                <span>{label}</span>
               </Link>
             )
           })}
+          <div className="w-px h-5 bg-stone-200 mx-1" />
+          <Link
+            href="/profilo"
+            className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-stone-200 hover:border-forest-400 transition-all overflow-hidden"
+            title="Profilo"
+          >
+            {faceUrl
+              ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
+              : user
+                ? <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
+                : <User className="w-4 h-4 text-stone-400" />
+            }
+          </Link>
+          <Link
+            href="/upload"
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ml-1 ${
+              path === '/upload' ? 'bg-terra-600 text-white' : 'bg-terra-500 hover:bg-terra-400 text-white shadow-sm'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            <span>Carica</span>
+          </Link>
         </div>
-      </nav>
+      </div>
+    </nav>
+  )
+}
+
+// ── Mobile: discreet floating "Carica" quick action ─────────────────────────────
+
+function CaricaFab() {
+  return (
+    <Link
+      href="/upload"
+      aria-label="Carica un'escursione"
+      title="Carica"
+      className="md:hidden fixed z-40 flex items-center justify-center w-9 h-9 rounded-full bg-terra-500 text-white shadow-lg shadow-terra-900/20 active:scale-95 transition-transform"
+      style={{ right: 16, top: 'calc(env(safe-area-inset-top, 0px) + 14px)' }}
+    >
+      <Plus className="w-[18px] h-[18px]" strokeWidth={2.5} />
+    </Link>
+  )
+}
+
+// ── Mobile: floating pill tab bar ────────────────────────────────────────────────
+
+function MobileTabBar() {
+  const path = usePathname()
+  return (
+    <nav
+      className="md:hidden fixed z-40 left-4 right-4 bottom-0"
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}
+    >
+      <div className="flex items-center justify-around bg-forest-900/95 backdrop-blur-md rounded-[28px] px-2 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
+        {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+          const active = isActive(href, path)
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl transition-colors ${
+                active ? 'text-white' : 'text-forest-300'
+              }`}
+            >
+              <Icon className="w-[19px] h-[19px]" strokeWidth={2} />
+              <span className="text-[9px] font-bold leading-none">{label}</span>
+            </Link>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}
+
+// ── Navbar ─────────────────────────────────────────────────────────────────────
+
+export default function Navbar() {
+  return (
+    <>
+      <DesktopNav />
+      <CaricaFab />
+      <MobileTabBar />
     </>
   )
 }

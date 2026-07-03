@@ -23,11 +23,15 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
 
   { pattern: '/statistiche', parent: '/' },
   { pattern: '/esplora', parent: '/' },
-  { pattern: '/diario', parent: '/' },
+  { pattern: '/programma', parent: '/' },
+  { pattern: '/diario-stampato', parent: '/profilo' },
   { pattern: '/profilo', parent: '/' },
+  { pattern: '/profilo/impostazioni', parent: '/profilo' },
+  { pattern: '/profilo/ai', parent: '/profilo' },
+  { pattern: '/profilo/cronologia-navigazione', parent: '/profilo' },
   { pattern: '/upload', parent: '/' },
-  { pattern: '/fonti-e-crediti', parent: '/' },
-  { pattern: '/vette', parent: '/' },
+  { pattern: '/fonti-e-crediti', parent: '/profilo' },
+  { pattern: '/vette', parent: '/profilo' },
 
   { pattern: '/escursione/[id]', parent: '/' },
   { pattern: '/escursione/[id]/flora', parent: '/' },
@@ -50,10 +54,11 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
 ]
 
 export const ROUTE_LABELS: Record<string, string> = {
-  '/': 'Calendario',
+  '/': 'Diario',
   '/statistiche': 'Statistiche',
   '/esplora': 'Esplora',
-  '/diario': 'Diario',
+  '/diario-stampato': 'Diario stampato',
+  '/profilo': 'Profilo',
   '/login': 'Accedi',
 }
 
