@@ -2,9 +2,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   fetchHistoricalWeather, fetchForecastWeather, fetchDayHourly,
-  clothingSuggestions, wmoInfo, windDirLabel,
+  clothingSuggestions, wmoInfo, windDirLabel, findGoodWeatherWindows,
 } from '@/lib/openmeteo'
 import type { HourlyWeather, HourlyWeatherFull, DailyWeather, ClothingItem } from '@/lib/openmeteo'
+
+function formatHour(iso: string): string {
+  return iso.slice(11, 16)
+}
 
 interface HistoricalProps {
   mode: 'historical'
@@ -211,6 +215,9 @@ export default function WeatherWidget(props: Props) {
   const summitTempMin = displayTMin !== null ? Math.round(displayTMin - altCorr) : null
   const summitTempMax = displayTMax !== null ? Math.round(displayTMax - altCorr) : null
 
+  // Good-weather windows within the hiking hours, for planning a start time around them
+  const goodWindows = hasDetail ? findGoodWeatherWindows(hikeHours) : []
+
   // Mountain alerts
   const isHighAlt     = altitudeMax > 2000
   const stormRisk     = hikeHours.some(h => [82, 95, 96, 99].includes(h.weathercode))
@@ -306,6 +313,16 @@ export default function WeatherWidget(props: Props) {
               </p>
             </div>
             <p className="text-[10px] text-stone-400 text-right shrink-0">−{altCorr.toFixed(1)}°C</p>
+          </div>
+        )}
+
+        {/* Good-weather windows */}
+        {goodWindows.length > 0 && (
+          <div className="mx-4 mb-3 bg-white/60 rounded-lg px-3 py-2 border border-sky-100">
+            <p className="text-xs text-stone-500 mb-1">☀️ Finestre di bel tempo</p>
+            <p className="text-sm font-semibold text-stone-800">
+              {goodWindows.map(w => `${formatHour(w.startTime)}–${formatHour(w.endTime)}`).join(' · ')}
+            </p>
           </div>
         )}
 
