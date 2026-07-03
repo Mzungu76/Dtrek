@@ -521,8 +521,19 @@ export default function GuidaPage() {
 
   // ── PDF export ────────────────────────────────────────────────────────────
 
-  function exportPdf() {
-    window.print()
+  const [exportingPdf, setExportingPdf] = useState(false)
+
+  async function exportPdf() {
+    if (!hike || exportingPdf) return
+    setExportingPdf(true)
+    try {
+      const { exportGuidePdf } = await import('@/utils/pdfExport')
+      await exportGuidePdf(hike, guideText)
+    } catch (err) {
+      console.error('Export PDF guida fallito:', err)
+    } finally {
+      setExportingPdf(false)
+    }
   }
 
   // ── Loading / not found ───────────────────────────────────────────────────
@@ -884,11 +895,13 @@ export default function GuidaPage() {
                 </span>
               )}
 
-              <button onClick={exportPdf}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+              <button onClick={exportPdf} disabled={exportingPdf}
+                className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
               >
-                <FileDown className="w-3.5 h-3.5" />
-                Stampa PDF
+                {exportingPdf
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <FileDown className="w-3.5 h-3.5" />}
+                {exportingPdf ? 'Genero PDF…' : 'Scarica PDF'}
               </button>
             </div>
           </div>
