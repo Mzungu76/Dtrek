@@ -805,49 +805,7 @@ export default function EscursionePage() {
                   <Film className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Crea video</span>
                 </button>
               )}
-              <div className="relative">
-                <button
-                  title="Galleria Verde"
-                  onClick={() => {
-                    if (heroPolyline.length > 1) {
-                      router.push(`/escursione/${encodeURIComponent(id)}/flora`)
-                    } else {
-                      setShowFloraNotice(v => !v)
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                    heroPolyline.length > 1
-                      ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
-                      : 'border-stone-200 text-stone-300 cursor-not-allowed'
-                  }`}
-                >
-                  <Leaf className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Galleria Verde</span>
-                </button>
-                {showFloraNotice && heroPolyline.length <= 1 && (
-                  <div className="absolute right-0 top-full mt-2 w-56 p-3 rounded-lg bg-stone-800 text-white text-xs shadow-xl z-20">
-                    Traccia GPS non disponibile per questa escursione: la Galleria Verde richiede una traccia GPS valida.
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <button
-                  title="Galleria Animali"
-                  onClick={() => {
-                    if (heroPolyline.length > 1) {
-                      router.push(`/escursione/${encodeURIComponent(id)}/animali`)
-                    } else {
-                      setShowFloraNotice(v => !v)
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                    heroPolyline.length > 1
-                      ? 'border-amber-300 text-amber-700 hover:bg-amber-50'
-                      : 'border-stone-200 text-stone-300 cursor-not-allowed'
-                  }`}
-                >
-                  <PawPrint className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Galleria Animali</span>
-                </button>
-              </div>
+              {/* Galleria Verde/Animali: unico punto d'accesso nell'header (evita duplicazione) */}
             </div>
           </div>
           <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm sticky top-2 z-10 lg:static lg:z-auto">

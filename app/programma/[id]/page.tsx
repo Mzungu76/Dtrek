@@ -896,23 +896,10 @@ export default function PlannedHikePage() {
         </div>
 
         {/* Fenologia della vegetazione + specie arboree/flora (OSM) */}
+        {/* Galleria Verde/Animali: unico punto d'accesso nell'header (evita duplicazione) */}
         {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
           <div className="space-y-3">
             <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => router.push(`/programma/${encodeURIComponent(id)}/flora`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold transition-colors"
-              >
-                <Leaf className="w-4 h-4" /> Galleria Verde — flora osservata in zona
-              </button>
-              <button
-                onClick={() => router.push(`/programma/${encodeURIComponent(id)}/animali`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 text-sm font-semibold transition-colors"
-              >
-                <PawPrint className="w-4 h-4" /> Galleria Animali — fauna osservata in zona
-              </button>
-            </div>
           </div>
         )}
 
