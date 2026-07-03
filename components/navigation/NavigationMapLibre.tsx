@@ -409,9 +409,18 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
-    setupNatura2000Layer(map)
-    setupGeologiaLayer(map)
+    if (!map) return
+    // addSource/addLayer throw if called before the style has loaded at least once, so the
+    // isStyleLoaded() check itself isn't wrong — the bug was having NO retry when it reports
+    // false. isStyleLoaded() reports false very often during ordinary map use (any tile still
+    // in flight for the current viewport, not just during the very first load), and this
+    // effect only ever fires once per toggle click / fetch resolving — a bare early return
+    // with no retry meant most clicks landed on a false isStyleLoaded() and were silently
+    // dropped for good. The layer only ever appeared after a style switch, because that's
+    // the other place these setup functions run unconditionally (the style.load handler
+    // above). Same "retry once idle" idiom as the is3D effect below, for the same reason.
+    if (map.isStyleLoaded()) { setupNatura2000Layer(map); setupGeologiaLayer(map) }
+    else map.once('idle', () => { setupNatura2000Layer(map); setupGeologiaLayer(map) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [natura2000Features, showNatura2000, showGeologia])
 

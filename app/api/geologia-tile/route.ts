@@ -56,7 +56,21 @@ export async function GET(req: Request) {
       headers: { 'User-Agent': 'DTrek/1.0 (personal trekking diary)', Accept: 'image/png' },
       next: { revalidate: 86400 },
     })
-    if (!res.ok) return new Response('Tile not found', { status: 404 })
+    // WMS servers report request-level problems (bad CRS, scale out of range, invalid bbox...)
+    // as a ServiceException — sometimes with a non-2xx HTTP status, sometimes with a 200 and
+    // an XML/text body instead of an image. Collapsing every non-image response into a bare
+    // 404 (as this used to do) hides that reason entirely — surface both the real upstream
+    // status and its body (there's nothing sensitive in a WMS error message) so the actual
+    // cause is visible in the browser's Network tab instead of requiring more guesswork.
+    const contentType = res.headers.get('content-type') ?? ''
+    if (!res.ok || !contentType.startsWith('image/')) {
+      const body = await res.text().catch(() => '')
+      console.error(`[geologia-tile] upstream ${res.status} for z=${zoom} x=${x} y=${y} (content-type: ${contentType}): ${body.slice(0, 500)} — request: ${url}`)
+      return new Response(
+        `Upstream WMS error ${res.status} (${contentType || 'unknown content-type'}): ${body.slice(0, 500)}`,
+        { status: 502 },
+      )
+    }
     const buf = await res.arrayBuffer()
     return new Response(buf, {
       headers: {
@@ -65,7 +79,8 @@ export async function GET(req: Request) {
         'Access-Control-Allow-Origin': '*',
       },
     })
-  } catch {
+  } catch (e) {
+    console.error(`[geologia-tile] fetch failed for z=${zoom} x=${x} y=${y}: ${e} — request: ${url}`)
     return new Response('Failed to fetch tile', { status: 502 })
   }
 }
