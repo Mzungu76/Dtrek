@@ -34,13 +34,18 @@ interface Props {
   // Fired on pan/zoom so the parent page can drive the "Cerca in quest'area"
   // button's enabled/dirty state without ExploreMap knowing anything about it.
   onViewportChanged?: (viewport: MapViewport) => void
+  // Incrementato dal genitore quando parte una nuova ricerca "in quest'area":
+  // chiude un eventuale elenco di candidati aperto da un click precedente
+  // sulla mappa, così i due flussi di scoperta non restano aperti insieme
+  // senza una priorità chiara. Piano di ristrutturazione, Parte 2.8.
+  dismissCandidatesSignal?: number
 }
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
 }
 
-export default function ExploreMap({ center, onTrailSelected, height = '480px', onViewportChanged }: Props) {
+export default function ExploreMap({ center, onTrailSelected, height = '480px', onViewportChanged, dismissCandidatesSignal }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstance      = useRef<any>(null)
@@ -58,6 +63,14 @@ export default function ExploreMap({ center, onTrailSelected, height = '480px', 
   // Tracks the most recently selected trail so a slow phase-2 stats response
   // can't clobber the panel if the user picks a different trail in the meantime.
   const currentTrailId = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (dismissCandidatesSignal === undefined) return
+    setCandidates([])
+    setSelectingId(null)
+    setQueryError(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dismissCandidatesSignal])
 
   // Init map once
   useEffect(() => {

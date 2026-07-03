@@ -369,6 +369,7 @@ export default function EsploraPage() {
               center={mapCenter}
               onTrailSelected={setPreview}
               onViewportChanged={handleViewportChanged}
+              dismissCandidatesSignal={searchTrigger}
               height="clamp(440px, 72vh, 760px)"
             />
           }

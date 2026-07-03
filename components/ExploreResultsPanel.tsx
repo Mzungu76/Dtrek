@@ -95,12 +95,15 @@ export default function ExploreResultsPanel({
   // visible right after a search, on both mobile and desktop.
   const [filtersOpen, setFiltersOpen] = useState(false)
 
-  const hasActiveFilters = !!(
-    filters.routeType || filters.difficulty ||
-    filters.distanceKmMin != null || filters.distanceKmMax != null ||
-    filters.elevationGainMin != null || filters.elevationGainMax != null ||
-    filters.durationMinMin != null || filters.durationMinMax != null
-  )
+  // Numero di gruppi di filtro attivi (non il numero di valori) — mostrato
+  // come badge sul toggle, così l'affordance comunica "quanti filtri" invece
+  // di un generico pallino "sì/no". Piano di ristrutturazione, Parte 2.8.
+  const activeFilterCount =
+    (filters.routeType ? 1 : 0) +
+    (filters.difficulty ? 1 : 0) +
+    (filters.distanceKmMin != null || filters.distanceKmMax != null ? 1 : 0) +
+    (filters.elevationGainMin != null || filters.elevationGainMax != null ? 1 : 0) +
+    (filters.durationMinMin != null || filters.durationMinMax != null ? 1 : 0)
 
   function toggleRouteType(rt: RouteType) {
     const active = ALL_ROUTE_TYPES.filter(t => isRouteTypeActive(filters, t))
@@ -142,10 +145,14 @@ export default function ExploreResultsPanel({
         <div className="flex items-center justify-between">
           <button
             onClick={() => setFiltersOpen(v => !v)}
-            className="flex items-center gap-1.5 text-[11px] font-medium text-stone-400 uppercase tracking-wide"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-600 border border-stone-200 hover:bg-stone-50 transition-colors"
           >
             Filtri
-            {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />}
+            {activeFilterCount > 0 && (
+              <span className="min-w-[16px] h-4 px-1 rounded-full bg-sky-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
           </button>
           {onUsePreferences && (
