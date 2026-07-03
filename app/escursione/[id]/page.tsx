@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
-import BackButton from '@/app/components/BackButton'
+import BackLink from '@/app/components/BackLink'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
@@ -409,8 +409,7 @@ export default function EscursionePage() {
 
         <div className="relative max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
-            <BackButton fallbackHref="/" label="Diario"
-              className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors" />
+            <BackLink className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors" />
             <div className="flex gap-1.5 flex-wrap">
               {([
                 { icon: <FileSpreadsheet className="w-3.5 h-3.5" />, title: 'Excel', fn: () => exportActivityToExcel(activity) },

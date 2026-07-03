@@ -4,7 +4,7 @@ import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
 import InstallPWA from '@/components/InstallPWA'
 import OfflineBanner from '@/components/OfflineBanner'
 import OfflineSync from '@/components/OfflineSync'
-import NavigationTracker from '@/app/components/NavigationTracker'
+import GlobalBackInterceptor from '@/app/components/GlobalBackInterceptor'
 
 export const metadata: Metadata = {
   title: 'Diario Trekking',
@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="it">
       <body className="antialiased">
-        <NavigationTracker />
+        <GlobalBackInterceptor />
         {children}
         <OfflineBanner />
         <ServiceWorkerRegister />

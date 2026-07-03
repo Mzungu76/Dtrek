@@ -9,11 +9,12 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
-  ArrowLeft, Volume2, VolumeX, Play, Pause, Square,
+  Volume2, VolumeX, Play, Pause, Square,
   RefreshCw, Loader2, Mountain, Clock, Route,
   Leaf, Utensils, ShieldCheck, Compass, MapPin,
   FileDown, ExternalLink, BookOpen,
 } from 'lucide-react'
+import BackLink from '@/app/components/BackLink'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractRiddles } from '@/lib/riddles'
@@ -557,13 +558,10 @@ export default function GuidaPage() {
       {/* ── Sticky nav bar ──────────────────────────────────────────────── */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b shadow-sm print:hidden" style={{ borderColor: '#e5e1d8' }}>
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <button
-            onClick={() => router.push(`/programma/${encodeURIComponent(hikeId)}`)}
+          <BackLink
+            label="Percorso"
             className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition-colors shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline font-medium">Percorso</span>
-          </button>
+          />
 
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[9px] font-bold tracking-[3px] text-amber-600 uppercase hidden sm:block">DTrek</span>
@@ -856,13 +854,10 @@ export default function GuidaPage() {
         {/* ── Bottom actions ──────────────────────────────────────────── */}
         {hasGuide && !generating && (
           <div className="mt-10 mb-16 pt-6 flex flex-wrap items-center justify-between gap-4 print:hidden" style={{ borderTop: '1px solid #e5e1d8' }}>
-            <button
-              onClick={() => router.push(`/programma/${encodeURIComponent(hikeId)}`)}
+            <BackLink
+              label="Torna al percorso"
               className="flex items-center gap-1.5 text-stone-400 hover:text-stone-700 text-sm transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Torna al percorso
-            </button>
+            />
 
             <div className="flex items-center gap-3 flex-wrap">
               {/* Regenerate controls */}
