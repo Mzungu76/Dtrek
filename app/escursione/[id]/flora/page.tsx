@@ -32,7 +32,6 @@ export default function ActivityFloraPage() {
       trackPoints={trackPoints}
       month={month}
       loadingTrack={loadingActivity}
-      backHref={`/escursione/${encodeURIComponent(id)}`}
       backLabel={title}
     />
   )

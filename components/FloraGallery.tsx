@@ -1,9 +1,9 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
-import { Leaf, ArrowLeft, X, Loader2 } from 'lucide-react'
+import BackLink from '@/app/components/BackLink'
+import { Leaf, X, Loader2 } from 'lucide-react'
 import type { FloraItem } from '@/app/api/flora/route'
 import type { TrackPoint } from '@/lib/tcxParser'
 
@@ -157,12 +157,11 @@ interface FloraGalleryProps {
   /** 1-12 — month to use for the seasonal GBIF query. */
   month: number
   loadingTrack: boolean
-  backHref: string
-  backLabel: string
+  /** Overrides the default back-link label (e.g. the hike/activity title). */
+  backLabel?: string
 }
 
-export default function FloraGallery({ trackPoints, month, loadingTrack, backHref, backLabel }: FloraGalleryProps) {
-  const router = useRouter()
+export default function FloraGallery({ trackPoints, month, loadingTrack, backLabel }: FloraGalleryProps) {
   const [items, setItems] = useState<FloraItem[]>([])
   const [loadingFlora, setLoadingFlora] = useState(true)
   const [selected, setSelected] = useState<FloraItem | null>(null)
@@ -205,12 +204,10 @@ export default function FloraGallery({ trackPoints, month, loadingTrack, backHre
     <div className="min-h-screen bg-stone-50">
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <button
-          onClick={() => router.push(backHref)}
+        <BackLink
+          label={backLabel}
           className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" /> {backLabel}
-        </button>
+        />
 
         <h1 className="font-lora text-2xl text-stone-800 flex items-center gap-2 mb-1">
           🌿 Galleria Verde

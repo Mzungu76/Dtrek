@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
+import BackLink from '@/app/components/BackLink'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
@@ -33,7 +34,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
-  ArrowLeft, Mountain, Route, TrendingUp, TrendingDown,
+  Mountain, Route, TrendingUp, TrendingDown,
   Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
   ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Box, Images, BookOpen, Compass, Leaf, PawPrint,
   Car, Navigation, MapPin,
@@ -554,10 +555,8 @@ export default function PlannedHikePage() {
         <div className="relative max-w-[1200px] mx-auto px-4">
           {/* Top nav */}
           <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
-            <button onClick={() => router.push('/')}
-              className="flex items-center gap-1.5 text-sky-300 hover:text-white text-sm transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Tutte le pianificate
-            </button>
+            <BackLink label="Calendario"
+              className="flex items-center gap-1.5 text-sky-300 hover:text-white text-sm transition-colors" />
             <div className="flex items-center gap-1.5 flex-wrap">
               {heroPolyline.length > 1 && (
                 <>

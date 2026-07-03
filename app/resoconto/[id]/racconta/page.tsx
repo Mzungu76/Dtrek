@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
-import BackButton from '@/app/components/BackButton'
+import BackLink from '@/app/components/BackLink'
 import QuestionnaireWizard from '@/app/components/QuestionnaireWizard'
 import type { RouteTimelinePhoto } from '@/app/components/RouteTimeline'
 import { fetchActivityPhotos } from '@/lib/activityPhotos'
@@ -127,8 +127,7 @@ export default function RacconaPage() {
     <div className="min-h-screen bg-stone-50">
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-stone-200">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-          <BackButton fallbackHref={`/resoconto/${encodeURIComponent(id)}`} label="Resoconto"
-            className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors" />
+          <BackLink className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors" />
           <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
             Racconta il tuo percorso
           </span>

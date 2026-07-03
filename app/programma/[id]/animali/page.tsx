@@ -30,7 +30,6 @@ export default function PlannedAnimalsPage() {
       trackPoints={trackPoints}
       month={month}
       loadingTrack={loadingHike}
-      backHref={`/programma/${encodeURIComponent(id)}`}
       backLabel={hike?.title ?? 'Pianificata'}
     />
   )

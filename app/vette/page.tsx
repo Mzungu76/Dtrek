@@ -2,11 +2,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
+import BackLink from '@/app/components/BackLink'
 import { getAllActivities, getActivityById, type ActivityMeta } from '@/lib/blobStore'
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { ArrowLeft, Mountain, Loader2, Trophy, RefreshCw } from 'lucide-react'
+import { Mountain, Loader2, Trophy, RefreshCw } from 'lucide-react'
 
 interface Peak {
   id: number
@@ -132,9 +133,7 @@ export default function VettePage() {
 
         <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
           <div>
-            <Link href="/statistiche" className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 mb-2 transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Statistiche
-            </Link>
+            <BackLink label="Statistiche" className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 mb-2 transition-colors" />
             <h1 className="font-display text-3xl font-semibold text-stone-800 flex items-center gap-2">
               <Mountain className="w-7 h-7 text-forest-600" /> Vette Conquistate
             </h1>

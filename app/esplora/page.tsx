@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
-import Link from 'next/link'
 import Navbar from '@/components/Navbar'
+import BackLink from '@/app/components/BackLink'
 import ExploreMap, { type TrailResult, type MapViewport } from '@/components/ExploreMap'
 import ExploreLayout from '@/components/ExploreLayout'
 import ExploreResultsPanel from '@/components/ExploreResultsPanel'
@@ -24,7 +24,7 @@ import { matchesFilters, type SearchFilters } from '@/lib/trailFilters'
 import type { TrailSearchResult, TrailSearchCandidate, SearchResponseBody } from '@/lib/trailSearch'
 import {
   Compass, MapPin, Route, TrendingUp, Clock,
-  Plus, Loader2, X, ChevronLeft, Info,
+  Plus, Loader2, X, Info,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -348,9 +348,7 @@ export default function EsploraPage() {
         {/* Back + compact header */}
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <Link href="/" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition">
-              <ChevronLeft className="w-4 h-4" /> Calendario
-            </Link>
+            <BackLink label="Calendario" fallbackHref="/" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition" />
           </div>
           <div className="flex items-center gap-2 text-stone-700">
             <Compass className="w-5 h-5 text-sky-600" />

@@ -32,7 +32,6 @@ export default function ActivityAnimalsPage() {
       trackPoints={trackPoints}
       month={month}
       loadingTrack={loadingActivity}
-      backHref={`/escursione/${encodeURIComponent(id)}`}
       backLabel={title}
     />
   )
