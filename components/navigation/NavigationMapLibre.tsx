@@ -25,6 +25,8 @@ interface Props {
   showNatura2000?: boolean
   /** CARG lithology WMS raster overlay (GEOLOGIA_DATASET), toggled independently of the base style. */
   showGeologia?: boolean
+  /** Called (at most once per mount) if the geologia raster source repeatedly fails to load tiles — e.g. the upstream ISPRA service being down, not a bug in this app. The caller can surface a one-time "servizio non disponibile" notice instead of leaving the toggle looking silently broken. */
+  onGeologiaUnavailable?: () => void
 }
 
 // Not a fixed deadline from the start — reset on every 'data' event (tile/
@@ -88,7 +90,7 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, showGeologia }: Props) {
+export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, showGeologia, onGeologiaUnavailable }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
@@ -115,6 +117,9 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   showNatura2000Ref.current = showNatura2000
   const showGeologiaRef = useRef(showGeologia)
   showGeologiaRef.current = showGeologia
+  const onGeologiaUnavailableRef = useRef(onGeologiaUnavailable)
+  onGeologiaUnavailableRef.current = onGeologiaUnavailable
+  const geologiaUnavailableReportedRef = useRef(false)
   const dataListener = useRef<(() => void) | null>(null)
   const [followMode, setFollowMode] = useState(true)
   const [styleLoading, setStyleLoading] = useState(true)
@@ -342,6 +347,17 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       })
       // setStyle() wipes custom sources/layers — re-add the route, terrain, accuracy circle and overlay layers after every style switch.
       map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map); setupNatura2000Layer(map); setupGeologiaLayer(map) })
+      // Permanent, independent of armStyleWatchdog's own temporary 'error' listener (which is
+      // added/removed around each style load, and treats a stall as "the whole online map
+      // failed" — a source-specific tile error here must never trigger that). Surfaces a
+      // one-time notice when the geologia raster source's tiles keep failing (e.g. the
+      // upstream ISPRA service being down), so the toggle doesn't just look silently broken.
+      map.on('error', (e: any) => {
+        if (e?.sourceId === GEOLOGIA_SOURCE_ID && !geologiaUnavailableReportedRef.current) {
+          geologiaUnavailableReportedRef.current = true
+          onGeologiaUnavailableRef.current?.()
+        }
+      })
       // MapLibre GL, unlike Leaflet, does NOT support space-separated event
       // names in on() — `map.on('dragstart zoomstart', ...)` silently
       // registers a listener for a nonexistent event and never fires, so

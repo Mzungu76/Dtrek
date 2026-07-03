@@ -92,6 +92,8 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [showGeologia, setShowGeologia] = useState(false)
+  const [geologiaUnavailable, setGeologiaUnavailable] = useState(false)
+  const [geologiaUnavailableDismissed, setGeologiaUnavailableDismissed] = useState(false)
   const [natura2000Features, setNatura2000Features] = useState<Natura2000Feature[]>([])
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
@@ -614,7 +616,16 @@ export default function ActiveNavigationView({ hike }: Props) {
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000} showGeologia={showGeologia}
+          onGeologiaUnavailable={() => setGeologiaUnavailable(true)}
         />
+      )}
+
+      {geologiaUnavailable && !geologiaUnavailableDismissed && (
+        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg z-10 font-body flex items-center gap-2">
+          <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+          Layer geologico non disponibile (servizio esterno momentaneamente giù)
+          <button onClick={() => setGeologiaUnavailableDismissed(true)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+        </div>
       )}
 
       {availableEpochs.length > 0 && (
