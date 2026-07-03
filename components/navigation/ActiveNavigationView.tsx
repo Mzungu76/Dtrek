@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, BatteryWarning, ArrowUp } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp, Flag } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { fetchNearbyTrailPaths, type PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
@@ -34,6 +34,7 @@ import NavigationMapLibre from './NavigationMapLibre'
 import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
 import PoiCalloutSheet from './PoiCalloutSheet'
 import RiddleSheet from './RiddleSheet'
+import CivicReportSheet from './CivicReportSheet'
 import { PoiSpatialIndex } from '@/lib/navigation/poiProximity'
 import type { TrailRiddle } from '@/lib/riddles'
 import InstructionBanner from './InstructionBanner'
@@ -97,6 +98,7 @@ export default function ActiveNavigationView({ hike }: Props) {
   const turnBackAlertedRef = useRef(false)
   const [activeRiddle, setActiveRiddle] = useState<TrailRiddle | null>(null)
   const shownRiddleIdsRef = useRef<Set<string>>(new Set())
+  const [showCivicReport, setShowCivicReport] = useState(false)
 
   // Already computed and cached pre-trip (region table + real GBIF occurrences + guardian-dog
   // OSM heuristic merged in lib/safetyScore.ts's getWildlifeRisks) — an area-wide, season/region
@@ -608,6 +610,19 @@ export default function ActiveNavigationView({ hike }: Props) {
           showGeologia={showGeologia} onToggleGeologia={() => setShowGeologia((v) => !v)}
         />
       </div>
+
+      <button
+        onClick={() => setShowCivicReport(true)}
+        className="absolute right-3 z-10 w-11 h-11 rounded-full bg-white text-stone-700 shadow-lg flex items-center justify-center"
+        style={{ top: 'calc(50% + 118px)' }}
+        aria-label="Segnala qualcosa lungo il percorso"
+      >
+        <Flag className="w-5 h-5" />
+      </button>
+
+      {showCivicReport && (
+        <CivicReportSheet position={position} plannedHikeId={hike.id} onClose={() => setShowCivicReport(false)} />
+      )}
 
       <InstructionBanner
         current={instruction?.current ?? null}
