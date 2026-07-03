@@ -24,6 +24,40 @@ function getLeadingEmpty(year: number, month: number): number {
   return dow === 0 ? 6 : dow - 1
 }
 
+// ── Unified sort (Calendario/Lista) ─────────────────────────────────────────────
+// Un solo insieme di opzioni invece dei due gruppi separati (Registrate/Pianificate)
+// che c'erano prima — le opzioni disponibili si adattano al filtro tipo attivo.
+
+type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating' | 'suitability'
+type TypeFilter = 'all' | 'done' | 'planned'
+
+const SORT_OPTIONS: Record<TypeFilter, { id: SortKey; label: string }[]> = {
+  all:     [{ id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'CTS' }],
+  done:    [{ id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'rating', label: 'Voto' }, { id: 'cts', label: 'CTS' }],
+  planned: [{ id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'suitability', label: 'Adatta' }, { id: 'cts', label: 'CTS' }],
+}
+
+// ── Shared month navigation — una sola implementazione per Calendario e Lista ──
+
+function MonthNav({ label, canPrev, canNext, onPrev, onNext, compact = false }: {
+  label: string; canPrev: boolean; canNext: boolean; onPrev: () => void; onNext: () => void; compact?: boolean
+}) {
+  const btnSize = compact ? 'px-2.5 py-1.5 text-sm' : 'px-3 py-2 text-sm'
+  return (
+    <div className={`flex items-center justify-between ${compact ? '' : 'mb-4'}`}>
+      <button onClick={onPrev} disabled={!canPrev}
+        className={`flex items-center gap-1 ${btnSize} rounded-xl bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 font-medium`}>
+        <ChevronLeft className="w-4 h-4" /> {!compact && <span className="hidden sm:inline">Prec.</span>}
+      </button>
+      <p className={`font-semibold text-stone-800 capitalize ${compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'}`}>{label}</p>
+      <button onClick={onNext} disabled={!canNext}
+        className={`flex items-center gap-1 ${btnSize} rounded-xl bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 font-medium`}>
+        {!compact && <span className="hidden sm:inline">Succ.</span>} <ChevronRight className="w-4 h-4" />
+      </button>
+    </div>
+  )
+}
+
 // ── Completed activity card ───────────────────────────────────────────────────
 
 interface CardProps {
@@ -343,9 +377,8 @@ export default function HomePage() {
   const [monthIdx,   setMonthIdx]   = useState(-1)
   const [view,       setView]       = useState<'calendar' | 'list'>('list')
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
-  const [sortBy,     setSortBy]     = useState<'date' | 'km' | 'dplus' | 'rating' | 'cts'>('date')
-  const [planSortBy, setPlanSortBy] = useState<'date' | 'km' | 'dplus' | 'suitability' | 'cts'>('date')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'done' | 'planned'>('all')
+  const [sortBy,     setSortBy]     = useState<SortKey>('date')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [reportStatus, setReportStatus] = useState<Record<string, ResocontoStatus>>({})
   const monthBarRef = useRef<HTMLDivElement>(null)
@@ -460,31 +493,37 @@ export default function HomePage() {
     })
   }, [planned, year, month, showAllHistory])
 
-  const sortedActivities = useMemo(() => {
-    const arr = [...monthActivities]
-    switch (sortBy) {
-      case 'km':     return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
-      case 'dplus':  return arr.sort((a, b) => b.elevationGain - a.elevationGain)
-      case 'rating': return arr.sort((a, b) => (b.userRating ?? 0) - (a.userRating ?? 0))
-      case 'cts':    return arr.sort((a, b) => ((b as ActivityMeta & { trailScore?: number }).trailScore ?? -1) - ((a as ActivityMeta & { trailScore?: number }).trailScore ?? -1))
-      default:       return arr.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
-    }
-  }, [monthActivities, sortBy])
+  // Feed unico per la vista Lista: sostituisce le due liste separate
+  // (Registrate/Pianificate) con ognuna il proprio gruppo di ordinamento.
+  // Il filtro tipo seleziona quali elementi entrano nel feed; l'ordinamento
+  // è un solo menu, con opzioni che si adattano al filtro (SORT_OPTIONS).
+  type FeedItem = { kind: 'activity'; data: ActivityMeta } | { kind: 'planned'; data: PlannedHikeMeta }
 
-  const sortedPlanned = useMemo(() => {
-    const arr = [...monthPlanned]
-    switch (planSortBy) {
-      case 'km':          return arr.sort((a, b) => b.distanceMeters - a.distanceMeters)
-      case 'dplus':       return arr.sort((a, b) => b.elevationGain - a.elevationGain)
-      case 'suitability': return arr.sort((a, b) => (b.assessment?.suitabilityScore ?? 0) - (a.assessment?.suitabilityScore ?? 0))
-      case 'cts':         return arr.sort((a, b) => ((b as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore ?? -1) - ((a as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore ?? -1))
-      default:            return arr.sort((a, b) => {
-        const da = a.plannedDate ? new Date(a.plannedDate).getTime() : 0
-        const db = b.plannedDate ? new Date(b.plannedDate).getTime() : 0
-        return db - da
-      })
+  const feed = useMemo((): FeedItem[] => {
+    const items: FeedItem[] = []
+    if (typeFilter !== 'planned') for (const a of monthActivities) items.push({ kind: 'activity', data: a })
+    if (typeFilter !== 'done')    for (const h of monthPlanned)    items.push({ kind: 'planned', data: h })
+
+    const dateOf  = (it: FeedItem) => it.kind === 'activity' ? new Date(it.data.startTime).getTime() : (it.data.plannedDate ? new Date(it.data.plannedDate).getTime() : 0)
+    const ctsOf   = (it: FeedItem) => it.kind === 'activity'
+      ? (it.data as ActivityMeta & { trailScore?: number }).trailScore ?? -1
+      : (it.data as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore ?? -1
+    const cmp: Record<SortKey, (a: FeedItem, b: FeedItem) => number> = {
+      date:        (a, b) => dateOf(b) - dateOf(a),
+      km:          (a, b) => b.data.distanceMeters - a.data.distanceMeters,
+      dplus:       (a, b) => b.data.elevationGain - a.data.elevationGain,
+      cts:         (a, b) => ctsOf(b) - ctsOf(a),
+      rating:      (a, b) => (a.kind === 'activity' ? a.data.userRating ?? 0 : -1) < (b.kind === 'activity' ? b.data.userRating ?? 0 : -1) ? 1 : -1,
+      suitability: (a, b) => (a.kind === 'planned' ? a.data.assessment?.suitabilityScore ?? 0 : -1) < (b.kind === 'planned' ? b.data.assessment?.suitabilityScore ?? 0 : -1) ? 1 : -1,
     }
-  }, [monthPlanned, planSortBy])
+    return [...items].sort(cmp[sortBy] ?? cmp.date)
+  }, [monthActivities, monthPlanned, typeFilter, sortBy])
+
+  function changeTypeFilter(next: TypeFilter) {
+    setTypeFilter(next)
+    const validIds = SORT_OPTIONS[next].map(o => o.id) as string[]
+    setSortBy(prev => (validIds.includes(prev) ? prev : 'date'))
+  }
 
   const cells: (number | null)[] = useMemo(() => {
     const daysInMonth = getDaysInMonth(new Date(year, month))
@@ -525,30 +564,6 @@ export default function HomePage() {
 
             {!loading && totalItems > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center bg-forest-700/50 rounded-xl p-1 gap-0.5">
-                  <button
-                    onClick={() => setTypeFilter('all')}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                      ${typeFilter === 'all' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
-                  >
-                    Tutte
-                  </button>
-                  <button
-                    onClick={() => setTypeFilter('done')}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                      ${typeFilter === 'done' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
-                  >
-                    Fatte
-                  </button>
-                  <button
-                    onClick={() => setTypeFilter('planned')}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                      ${typeFilter === 'planned' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
-                  >
-                    Programmate
-                  </button>
-                </div>
-
                 <div className="flex items-center bg-forest-700/50 rounded-xl p-1 gap-0.5">
                   <button
                     onClick={() => setView('calendar')}
@@ -699,25 +714,13 @@ export default function HomePage() {
             )}
 
             {/* Month navigation */}
-            <div className="flex items-center justify-between mb-4">
-              <button
-                onClick={() => setMonthIdx(i => Math.max(0, i - 1))}
-                disabled={safeIdx === 0}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 text-sm font-medium"
-              >
-                <ChevronLeft className="w-4 h-4" /> <span className="hidden sm:inline">Prec.</span>
-              </button>
-
-              <p className="font-semibold text-stone-800 capitalize text-base sm:text-lg">{monthLabel}</p>
-
-              <button
-                onClick={() => setMonthIdx(i => Math.min(months.length - 1, i + 1))}
-                disabled={safeIdx === months.length - 1}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 text-sm font-medium"
-              >
-                <span className="hidden sm:inline">Succ.</span> <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+            <MonthNav
+              label={monthLabel}
+              canPrev={safeIdx > 0}
+              canNext={safeIdx < months.length - 1}
+              onPrev={() => setMonthIdx(i => Math.max(0, (i < 0 ? months.length - 1 : i) - 1))}
+              onNext={() => setMonthIdx(i => Math.min(months.length - 1, (i < 0 ? months.length - 1 : i) + 1))}
+            />
 
             {/* Day-of-week headers */}
             <div className="grid grid-cols-7 gap-1 sm:gap-1.5 mb-1 sm:mb-1.5">
@@ -734,10 +737,10 @@ export default function HomePage() {
                 if (dayNum === null) return <div key={`e-${i}`} className="aspect-square" />
                 const date      = new Date(year, month, dayNum)
                 const key       = format(date, 'yyyy-MM-dd')
-                const acts      = typeFilter === 'planned' ? [] : actsByDate.get(key) ?? []
+                const acts      = actsByDate.get(key) ?? []
                 const curIdx    = Math.min(dayIdx[key] ?? 0, acts.length - 1)
                 const act       = acts[curIdx]
-                const planItems = typeFilter === 'done' ? [] : plannedByDate.get(key) ?? []
+                const planItems = plannedByDate.get(key) ?? []
                 const planHike  = planItems[0]
                 const isToday   = isSameDay(date, new Date())
 
@@ -775,12 +778,12 @@ export default function HomePage() {
 
         ) : (
           /* ────────── LIST VIEW ────────── */
-          <div className="fade-up space-y-6">
+          <div className="fade-up space-y-4">
             {showAllHistory ? (
               <div className="flex items-center justify-between gap-2 -mt-1">
                 <p className="font-semibold text-stone-700 text-sm sm:text-base">Tutto lo storico</p>
                 <button
-                  onClick={() => { setShowAllHistory(false); setTypeFilter('all') }}
+                  onClick={() => setShowAllHistory(false)}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-forest-400 transition-all shadow-sm text-forest-700 text-sm font-medium"
                 >
                   <CalendarDays className="w-4 h-4" /> Torna al mese
@@ -788,101 +791,75 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="flex items-center justify-between gap-2 -mt-1">
-                <button
-                  onClick={() => setMonthIdx(i => Math.max(0, (i < 0 ? months.length - 1 : i) - 1))}
-                  disabled={safeIdx === 0}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 text-sm"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <p className="font-semibold text-stone-700 capitalize text-sm sm:text-base">{monthLabel}</p>
-                <button
-                  onClick={() => setMonthIdx(i => Math.min(months.length - 1, (i < 0 ? months.length - 1 : i) + 1))}
-                  disabled={safeIdx === months.length - 1}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-forest-400 disabled:opacity-30 transition-all shadow-sm text-stone-600 text-sm"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-            {typeFilter !== 'planned' && sortedActivities.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider flex-1">Registrate</p>
-                  <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5">
-                    <ArrowUpDown className="w-3 h-3 text-stone-400 ml-1" />
-                    {([
-                      { id: 'date',   label: 'Data' },
-                      { id: 'km',     label: 'Km' },
-                      { id: 'dplus',  label: 'D+' },
-                      { id: 'rating', label: 'Voto' },
-                      { id: 'cts',    label: 'CTS' },
-                    ] as const).map(s => (
-                      <button key={s.id} onClick={() => setSortBy(s.id)}
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
-                          ${sortBy === s.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-400 hover:text-stone-600'}`}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => { setShowAllHistory(true); setTypeFilter('done') }}
-                    className="flex items-center gap-1 text-xs text-forest-600 hover:text-forest-700 font-medium ml-1"
-                  >
-                    <CalendarClock className="w-3.5 h-3.5" /> Tutte
-                  </button>
+                <div className="flex-1">
+                  <MonthNav
+                    label={monthLabel}
+                    canPrev={safeIdx > 0}
+                    canNext={safeIdx < months.length - 1}
+                    onPrev={() => setMonthIdx(i => Math.max(0, (i < 0 ? months.length - 1 : i) - 1))}
+                    onNext={() => setMonthIdx(i => Math.min(months.length - 1, (i < 0 ? months.length - 1 : i) + 1))}
+                    compact
+                  />
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                  {sortedActivities.map(activity => (
-                    <ActivityCard
-                      key={activity.id}
-                      activity={activity}
-                      date={new Date(activity.startTime)}
-                      showFullDate
-                      reportStatus={reportStatus[activity.id]}
-                    />
-                  ))}
-                </div>
+                <button
+                  onClick={() => setShowAllHistory(true)}
+                  title="Vedi tutto lo storico"
+                  className="shrink-0 flex items-center gap-1 text-xs text-forest-600 hover:text-forest-700 font-medium"
+                >
+                  <CalendarClock className="w-3.5 h-3.5" /> Tutte
+                </button>
               </div>
             )}
 
-            {typeFilter !== 'done' && sortedPlanned.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider flex-1">Pianificate</p>
-                  <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5">
-                    <ArrowUpDown className="w-3 h-3 text-stone-400 ml-1" />
-                    {([
-                      { id: 'date',        label: 'Data' },
-                      { id: 'km',          label: 'Km' },
-                      { id: 'dplus',       label: 'D+' },
-                      { id: 'suitability', label: 'Adatta' },
-                      { id: 'cts',         label: 'CTS' },
-                    ] as const).map(s => (
-                      <button key={s.id} onClick={() => setPlanSortBy(s.id)}
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
-                          ${planSortBy === s.id ? 'bg-white shadow-sm text-sky-700' : 'text-stone-400 hover:text-stone-600'}`}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => { setShowAllHistory(true); setTypeFilter('planned') }}
-                    className="flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-medium ml-1"
-                  >
-                    <CalendarClock className="w-3.5 h-3.5" /> Tutte
+            {/* Filtro tipo + ordinamento: un solo menu, le opzioni si adattano al filtro attivo */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center bg-stone-100 rounded-lg p-0.5 gap-0.5">
+                {([
+                  { id: 'all',     label: 'Tutte' },
+                  { id: 'done',    label: 'Fatte' },
+                  { id: 'planned', label: 'Programmate' },
+                ] as const).map(f => (
+                  <button key={f.id} onClick={() => changeTypeFilter(f.id)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all
+                      ${typeFilter === f.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-400 hover:text-stone-600'}`}>
+                    {f.label}
                   </button>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                  {sortedPlanned.map(hike => (
-                    <PlannedCard
-                      key={hike.id}
-                      hike={hike}
-                      date={hike.plannedDate ? new Date(hike.plannedDate) : new Date()}
-                      showFullDate
-                    />
-                  ))}
-                </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5 ml-auto">
+                <ArrowUpDown className="w-3 h-3 text-stone-400 ml-1" />
+                {SORT_OPTIONS[typeFilter].map(s => (
+                  <button key={s.id} onClick={() => setSortBy(s.id)}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
+                      ${sortBy === s.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-400 hover:text-stone-600'}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {feed.length === 0 ? (
+              <p className="text-sm text-stone-400 text-center py-12">
+                Nessuna escursione {showAllHistory ? '' : 'in questo mese'}.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                {feed.map(item => item.kind === 'activity' ? (
+                  <ActivityCard
+                    key={`a-${item.data.id}`}
+                    activity={item.data}
+                    date={new Date(item.data.startTime)}
+                    showFullDate
+                    reportStatus={reportStatus[item.data.id]}
+                  />
+                ) : (
+                  <PlannedCard
+                    key={`p-${item.data.id}`}
+                    hike={item.data}
+                    date={item.data.plannedDate ? new Date(item.data.plannedDate) : new Date()}
+                    showFullDate
+                  />
+                ))}
               </div>
             )}
           </div>
