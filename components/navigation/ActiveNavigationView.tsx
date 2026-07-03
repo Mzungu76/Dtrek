@@ -1,14 +1,20 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, BatteryWarning, ArrowUp } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp, Flag, Leaf } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { fetchNearbyTrailPaths, type PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
+import { buildElevationProfile } from '@/lib/navigation/elevationProfile'
+import type { PaceUpdateResult } from '@/lib/navigation/paceAssistant'
+import { altitudeTerrainMultiplier } from '@/lib/trailScore'
+import { getSunTimes, daylightMarginMinutes, type SunTimes } from '@/lib/daylight'
+import { fetchDayHourly } from '@/lib/openmeteo'
 import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
-import { haversineM } from '@/lib/geoUtils'
+import { haversineM, computeBbox } from '@/lib/geoUtils'
+import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
 import { extractCuriosita } from '@/lib/guideText'
 import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
 import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
@@ -22,10 +28,17 @@ import { loadManifest } from '@/lib/offline/packageManifest'
 import { watchBattery } from '@/lib/navigation/battery'
 import { haptics } from '@/lib/navigation/haptics'
 import type { NavInstruction, NavPoi, NavState, RouteMoment } from '@/lib/navigation/types'
+import type { WildlifeRisk } from '@/lib/safetyScore'
 import NavigationMap from './NavigationMap'
 import NavigationMapLibre from './NavigationMapLibre'
 import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
 import PoiCalloutSheet from './PoiCalloutSheet'
+import RiddleSheet from './RiddleSheet'
+import CivicReportSheet from './CivicReportSheet'
+import SpeciesIdentifySheet from './SpeciesIdentifySheet'
+import { PoiSpatialIndex } from '@/lib/navigation/poiProximity'
+import type { TrailRiddle } from '@/lib/riddles'
+import { EPOCH_LABELS, type Epoch, type EpochPoi } from '@/lib/epochPois'
 import InstructionBanner from './InstructionBanner'
 import NavBottomSheet from './NavBottomSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
@@ -77,6 +90,26 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
+  const [showNatura2000, setShowNatura2000] = useState(false)
+  const [showGeologia, setShowGeologia] = useState(false)
+  const [natura2000Features, setNatura2000Features] = useState<Natura2000Feature[]>([])
+  const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
+  const [pace, setPace] = useState<PaceUpdateResult | null>(null)
+  const [sunTimes, setSunTimes] = useState<SunTimes | null>(null)
+  const [turnBackDismissed, setTurnBackDismissed] = useState(false)
+  const turnBackAlertedRef = useRef(false)
+  const [activeRiddle, setActiveRiddle] = useState<TrailRiddle | null>(null)
+  const shownRiddleIdsRef = useRef<Set<string>>(new Set())
+  const [showCivicReport, setShowCivicReport] = useState(false)
+  const [showSpeciesIdentify, setShowSpeciesIdentify] = useState(false)
+
+  // Already computed and cached pre-trip (region table + real GBIF occurrences + guardian-dog
+  // OSM heuristic merged in lib/safetyScore.ts's getWildlifeRisks) — an area-wide, season/region
+  // signal, not a point sighting feed, so this surfaces once per hike rather than as a
+  // GPS-proximity trigger like POI callouts. Only shown when there's an actual elevated risk.
+  const relevantWildlifeRisks = useMemo<WildlifeRisk[]>(() => {
+    return (hike.cachedSafetyScore?.wildlifeRisks ?? []).filter((w) => w.dangerLevel === 'alto' || w.dangerLevel === 'moderato')
+  }, [hike.cachedSafetyScore])
 
   const pois = useMemo<NavPoi[]>(() => {
     const raw = (hike.cachedPois ?? []) as PoiItem[]
@@ -91,7 +124,39 @@ export default function ActiveNavigationView({ hike }: Props) {
   }, [hike.cachedPoiWiki])
 
   const moments = useMemo<RouteMoment[]>(() => detectRouteMoments(hike.trackPoints ?? []), [hike.trackPoints])
+  const elevationProfile = useMemo(() => buildElevationProfile(hike.trackPoints ?? []), [hike.trackPoints])
+  // sacScale/surfaces/avgSlopeDeg aren't available on PlannedHike at navigation time (only
+  // computed at trail-detail time) — only the altitude-physiology term applies live, terrain
+  // multiplier defaults to 1 until those fields are cached onto the hike object too.
+  const terrainMultiplier = useMemo(() => altitudeTerrainMultiplier(hike.altitudeMax).altPhysioMult, [hike.altitudeMax])
   const routePolyline = hike.routePolyline ?? []
+
+  // Riddles ("indovinelli per tappa") use the same proximity-index mechanism as POIs
+  // (lib/navigation/poiProximity.ts), but kept separate from the engine's own POI index —
+  // they're a content/gamification concern, not a navigation-state one, and don't need to
+  // participate in the poi_near state transition or the enteredPoi/leftPoi event pair.
+  const riddles = useMemo<TrailRiddle[]>(() => hike.cachedRiddles ?? [], [hike.cachedRiddles])
+  const riddleIndex = useMemo(
+    () => new PoiSpatialIndex(riddles.map((r) => ({ id: r.id, lat: r.lat, lon: r.lon, notifyRadiusM: 60 }))),
+    [riddles],
+  )
+
+  // Stratigrafia temporale: "oggi" means no historical overlay (normal navigation), the
+  // slider only ever offers epochs this specific hike actually has content for — never a
+  // fixed etrusca/romana/medievale set regardless of what was generated for the guide.
+  const epochPois = useMemo<EpochPoi[]>(() => hike.cachedEpochPois ?? [], [hike.cachedEpochPois])
+  const availableEpochs = useMemo<Epoch[]>(() => {
+    const historical = (['etrusca', 'romana', 'medievale'] as const).filter((e) => epochPois.some((p) => p.epoch === e))
+    return historical.length > 0 ? [...historical, 'oggi'] : []
+  }, [epochPois])
+  const [selectedEpoch, setSelectedEpoch] = useState<Epoch>('oggi')
+  const filteredEpochPois = useMemo(() => epochPois.filter((p) => p.epoch === selectedEpoch), [epochPois, selectedEpoch])
+  const epochPoiIndex = useMemo(
+    () => new PoiSpatialIndex(filteredEpochPois.map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, notifyRadiusM: 60 }))),
+    [filteredEpochPois],
+  )
+  const shownEpochPoiIdsRef = useRef<Set<string>>(new Set())
+  const [activeEpochCallout, setActiveEpochCallout] = useState<EpochPoi | null>(null)
   const guideExcerpts = useMemo(() => extractCuriosita(hike.cachedGuide ?? ''), [hike.cachedGuide])
 
   // Best-effort, non-blocking: gives the offline basemap some sense of
@@ -102,6 +167,68 @@ export default function ActiveNavigationView({ hike }: Props) {
   useEffect(() => {
     if (routePolyline.length < 2) return
     fetchNearbyTrailPaths(routePolyline).then(setNearbyTrails).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hike.id])
+
+  // Same "fetch once for the route's bbox" pattern as lib/natura2000/checkProtectedArea.ts,
+  // minus the point-in-polygon step — the raw polygons are drawn as a map overlay here, not
+  // reduced to a boolean. Best-effort: an empty/failed fetch just means the toggle shows nothing.
+  useEffect(() => {
+    if (routePolyline.length < 2) return
+    const bbox = computeBbox(routePolyline)
+    fetch(`/api/natura2000?bbox=${bbox}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((features) => setNatura2000Features(Array.isArray(features) ? features : []))
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hike.id])
+
+  const positionRef = useRef(position)
+  positionRef.current = position
+
+  // Feeds PaceAssistant's weather correction (lib/navigation/paceAssistant.ts) — the engine
+  // itself makes no network calls, so this owns the periodic Open-Meteo refresh and pushes
+  // the result in. Refreshed every 20min, not per GPS fix: hourly weather doesn't need
+  // finer granularity, and re-fetching on every fix would hammer the API for no benefit.
+  useEffect(() => {
+    if (routePolyline.length === 0) return
+    let cancelled = false
+    const WEATHER_REFRESH_MS = 20 * 60 * 1000
+
+    function refreshWeather() {
+      const [lat, lon] = positionRef.current ? [positionRef.current.lat, positionRef.current.lon] : routePolyline[0]
+      const today = new Date().toISOString().slice(0, 10)
+      fetchDayHourly(lat, lon, today).then((hours) => {
+        if (cancelled || !hours.length) return
+        const nowMs = Date.now()
+        const closest = hours.reduce((best, h) =>
+          Math.abs(new Date(h.time).getTime() - nowMs) < Math.abs(new Date(best.time).getTime() - nowMs) ? h : best)
+        engineRef.current?.setWeatherConditions({ tempC: closest.temperature, windKmh: closest.windspeed, precipMm: closest.precipitation })
+      }).catch(() => {})
+    }
+
+    refreshWeather()
+    const id = setInterval(refreshWeather, WEATHER_REFRESH_MS)
+    return () => { cancelled = true; clearInterval(id) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hike.id])
+
+  // Sunset/dusk for the daylight countdown + turn-back advisory — recomputed every 10min
+  // (stable to the minute over small position deltas, no need for per-fix precision).
+  useEffect(() => {
+    if (routePolyline.length === 0) return
+    let cancelled = false
+    const SUN_REFRESH_MS = 10 * 60 * 1000
+
+    function refreshSunTimes() {
+      const [lat, lon] = positionRef.current ? [positionRef.current.lat, positionRef.current.lon] : routePolyline[0]
+      const times = getSunTimes(lat, lon, new Date())
+      if (!cancelled) setSunTimes(times)
+    }
+
+    refreshSunTimes()
+    const id = setInterval(refreshSunTimes, SUN_REFRESH_MS)
+    return () => { cancelled = true; clearInterval(id) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hike.id])
 
@@ -165,10 +292,11 @@ export default function ActiveNavigationView({ hike }: Props) {
         body: JSON.stringify({ plannedHikeId: hike.id }),
       }).then((r) => r.ok ? r.json() : null).then((data) => { if (data?.sessionId) remoteSessionId.current = data.sessionId }).catch(() => {})
 
-      const engine = new NavigationEngine({ routePolyline, pois, moments })
+      const engine = new NavigationEngine({ routePolyline, pois, moments, elevationProfile, terrainMultiplier })
       engineRef.current = engine
 
       engine.on('stateChanged', ({ to }) => { if (!cancelled) setState(to) })
+      engine.on('paceUpdated', (result) => { if (!cancelled) setPace(result) })
       engine.on('positionUpdated', ({ raw, smoothed, progress, traveledDistanceM, instantSpeedMs }) => {
         if (cancelled) return
         lastFixAtRef.current = Date.now()
@@ -412,16 +540,97 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const distanceRemainingM = progress ? Math.max(0, progress.totalRouteM - progress.distanceAlongRouteM) : 0
   const avgSpeedMs = movingTimeMs > 0 ? traveledDistanceM / (movingTimeMs / 1000) : null
-  const etaDate = avgSpeedMs && avgSpeedMs > 0.05 && distanceRemainingM > 0
+  const legacyEtaDate = avgSpeedMs && avgSpeedMs > 0.05 && distanceRemainingM > 0
     ? new Date(Date.now() + (distanceRemainingM / avgSpeedMs) * 1000)
     : null
+  // PaceAssistant's live estimate (Naismith + weather + observed-pace blend) once it has
+  // enough signal; falls back to the flat average-speed formula for the first stretch of
+  // the hike (low confidence) rather than showing nothing.
+  const etaDate = pace?.liveEtaDate ?? legacyEtaDate
+
+  const daylightMarginMin = sunTimes?.sunset && etaDate ? daylightMarginMinutes(etaDate, sunTimes.sunset) : null
+
+  // Turn-back advisory: even retracing the already-hiked portion starting right now, would
+  // the hiker beat usable light (civil twilight end, minus a safety buffer)? Warning-only —
+  // no alternate route is computed, matching the "avviso tempo insufficiente" scope.
+  const TURN_BACK_SAFETY_BUFFER_MS = 30 * 60 * 1000
+  const turnBackNow = !!(pace?.returnTripTimeSec != null && sunTimes?.dusk &&
+    (Date.now() + pace.returnTripTimeSec * 1000) > (sunTimes.dusk.getTime() - TURN_BACK_SAFETY_BUFFER_MS))
+
+  useEffect(() => {
+    if (!position || riddles.length === 0 || activeRiddle || callout) return
+    const nearby = riddleIndex.nearby(position.lat, position.lon)
+    const next = nearby.find((n) => !shownRiddleIdsRef.current.has(String(n.poi.id)))
+    if (next) {
+      const riddle = riddles.find((r) => r.id === next.poi.id)
+      if (riddle) {
+        shownRiddleIdsRef.current.add(riddle.id)
+        setActiveRiddle(riddle)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position, activeRiddle, callout])
+
+  // Switching epoch is a deliberate "look back in time" action — re-arm every epoch poi as
+  // unshown so the hiker sees the relevant callouts again for the newly selected period.
+  useEffect(() => {
+    shownEpochPoiIdsRef.current = new Set()
+    setActiveEpochCallout(null)
+  }, [selectedEpoch])
+
+  useEffect(() => {
+    if (!position || selectedEpoch === 'oggi' || filteredEpochPois.length === 0 || activeEpochCallout || callout || activeRiddle) return
+    const nearby = epochPoiIndex.nearby(position.lat, position.lon)
+    const next = nearby.find((n) => !shownEpochPoiIdsRef.current.has(String(n.poi.id)))
+    if (next) {
+      const epochPoi = filteredEpochPois.find((p) => p.id === next.poi.id)
+      if (epochPoi) {
+        shownEpochPoiIdsRef.current.add(epochPoi.id)
+        setActiveEpochCallout(epochPoi)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position, selectedEpoch, activeEpochCallout, callout, activeRiddle])
+
+  useEffect(() => {
+    if (turnBackNow && !turnBackAlertedRef.current) {
+      turnBackAlertedRef.current = true
+      logEvent('turnback_warning')
+      if (speechEnabledRef.current) speak('Attenzione: potresti non avere abbastanza luce per rientrare. Valuta di tornare indietro ora.')
+      haptics.alert()
+    } else if (!turnBackNow) {
+      turnBackAlertedRef.current = false
+      setTurnBackDismissed(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnBackNow])
 
   return (
     <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
         <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} accuracyM={accuracyM} />
       ) : (
-        <NavigationMapLibre routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM} />
+        <NavigationMapLibre
+          routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
+          styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
+          natura2000Features={natura2000Features} showNatura2000={showNatura2000} showGeologia={showGeologia}
+        />
+      )}
+
+      {availableEpochs.length > 0 && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-white/95 rounded-full shadow-lg p-1">
+          {availableEpochs.map((epoch) => (
+            <button
+              key={epoch}
+              onClick={() => setSelectedEpoch(epoch)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold font-body transition-colors ${
+                selectedEpoch === epoch ? 'bg-terra-500 text-white' : 'text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              {EPOCH_LABELS[epoch]}
+            </button>
+          ))}
+        </div>
       )}
 
       {mapFallbackNotice && (
@@ -438,9 +647,54 @@ export default function ActiveNavigationView({ hike }: Props) {
         </div>
       )}
 
+      {state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed && (
+        <div className="absolute top-[210px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm px-4 py-3 rounded-xl bg-stone-800 text-white text-xs shadow-lg z-10 font-body">
+          <div className="flex items-start gap-2">
+            <span className="text-base shrink-0">🐾</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold mb-1">Fauna nella zona: {relevantWildlifeRisks.map((w) => w.animal).join(', ')}</p>
+              <p className="text-stone-300 leading-snug">{relevantWildlifeRisks[0].tip}</p>
+            </div>
+            <button onClick={() => setWildlifeAlertDismissed(true)} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
+          </div>
+        </div>
+      )}
+
       <div className="absolute right-3 z-10" style={{ top: 'calc(50% + 60px)' }}>
-        <MapModeSwitcher mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline} />
+        <MapModeSwitcher
+          mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
+          showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
+          showGeologia={showGeologia} onToggleGeologia={() => setShowGeologia((v) => !v)}
+        />
       </div>
+
+      <button
+        onClick={() => setShowCivicReport(true)}
+        className="absolute right-3 z-10 w-11 h-11 rounded-full bg-white text-stone-700 shadow-lg flex items-center justify-center"
+        style={{ top: 'calc(50% + 118px)' }}
+        aria-label="Segnala qualcosa lungo il percorso"
+      >
+        <Flag className="w-5 h-5" />
+      </button>
+
+      {isOnline && (
+        <button
+          onClick={() => setShowSpeciesIdentify(true)}
+          className="absolute right-3 z-10 w-11 h-11 rounded-full bg-white text-stone-700 shadow-lg flex items-center justify-center"
+          style={{ top: 'calc(50% + 176px)' }}
+          aria-label="Riconosci pianta o animale da una foto"
+        >
+          <Leaf className="w-5 h-5" />
+        </button>
+      )}
+
+      {showCivicReport && (
+        <CivicReportSheet position={position} plannedHikeId={hike.id} onClose={() => setShowCivicReport(false)} />
+      )}
+
+      {showSpeciesIdentify && (
+        <SpeciesIdentifySheet position={position} onClose={() => setShowSpeciesIdentify(false)} />
+      )}
 
       <InstructionBanner
         current={instruction?.current ?? null}
@@ -480,6 +734,19 @@ export default function ActiveNavigationView({ hike }: Props) {
           <button onClick={() => setLowBatteryNotice(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
         </div>
       )}
+      {turnBackNow && !turnBackDismissed && (() => {
+        // A 3rd stacked tier: off-route/gps-lost (tier 0) + low battery (its own tier when
+        // either of those is also active) can both coexist with this one.
+        const tierBelow = (state === 'off_route' || state === 'gps_lost' ? 1 : 0) + (lowBatteryNotice ? 1 : 0)
+        const bottomClass = tierBelow >= 2 ? 'bottom-56' : tierBelow === 1 ? 'bottom-40' : 'bottom-24'
+        return (
+          <div className={`absolute ${bottomClass} left-1/2 -translate-x-1/2 max-w-[90%] px-4 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 z-10 text-center`}>
+            <AlertTriangle size={16} className="shrink-0" />
+            Luce insufficiente per rientrare — valuta di tornare indietro ora
+            <button onClick={() => setTurnBackDismissed(true)} className="text-red-200 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+          </div>
+        )
+      })()}
 
       <NavBottomSheet
         distanceCoveredM={traveledDistanceM}
@@ -488,6 +755,8 @@ export default function ActiveNavigationView({ hike }: Props) {
         avgSpeedMs={avgSpeedMs}
         movingTimeMs={movingTimeMs}
         etaDate={etaDate}
+        paceStatus={pace?.paceStatus ?? 'estimating'}
+        daylightMarginMin={daylightMarginMin}
         timerRunning={timerRunning}
         onTogglePlayPause={handleTogglePlayPause}
         onStop={requestEnd}
@@ -499,6 +768,18 @@ export default function ActiveNavigationView({ hike }: Props) {
 
       {callout && (
         <PoiCalloutSheet title={callout.title} extract={callout.extract} imageUrl={callout.imageUrl} onClose={() => setCallout(null)} />
+      )}
+
+      {activeRiddle && (
+        <RiddleSheet question={activeRiddle.question} answer={activeRiddle.answer} onClose={() => setActiveRiddle(null)} />
+      )}
+
+      {activeEpochCallout && (
+        <PoiCalloutSheet
+          title={`${activeEpochCallout.poiName} — ${EPOCH_LABELS[activeEpochCallout.epoch]}`}
+          extract={activeEpochCallout.text}
+          onClose={() => setActiveEpochCallout(null)}
+        />
       )}
 
       {showConfirmEnd && <ConfirmEndDialog onConfirm={confirmEnd} onCancel={cancelEnd} />}

@@ -3,6 +3,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { ChevronUp, Pause, Play, Square, MapPin, BookOpen } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
+import type { PaceStatus } from '@/lib/navigation/paceAssistant'
 
 type SheetState = 'collapsed' | 'half' | 'full'
 type Tab = 'tempi' | 'altimetria' | 'percorso'
@@ -19,8 +20,12 @@ interface Props {
   currentSpeedMs: number | null
   avgSpeedMs: number | null
   movingTimeMs: number
-  /** Estimated arrival time, derived from remaining distance / average speed — null until there's a meaningful average speed to project from. */
+  /** Estimated arrival time — PaceAssistant's live Naismith+weather+observed-pace estimate once available, otherwise a flat average-speed fallback. Null until there's enough signal to project from. */
   etaDate: Date | null
+  /** 'estimating' until the live pace assistant has enough distance/time signal to compare planned vs. observed pace. */
+  paceStatus: PaceStatus
+  /** Minutes between etaDate and sunset at the current position — null without a live ETA or sun-times fix. Negative means arriving after sunset. */
+  daylightMarginMin: number | null
   timerRunning: boolean
   onTogglePlayPause: () => void
   onStop: () => void
@@ -28,6 +33,13 @@ interface Props {
   currentDistanceM: number
   remainingPois: RemainingPoi[]
   guideExcerpts: string[]
+}
+
+const PACE_STATUS_STYLE: Record<PaceStatus, { label: string; className: string }> = {
+  estimating: { label: 'In stima',    className: 'bg-stone-100 text-stone-500' },
+  ahead:      { label: 'In anticipo', className: 'bg-forest-100 text-forest-700' },
+  on_pace:    { label: 'A ritmo',     className: 'bg-sky-100 text-sky-700' },
+  behind:     { label: 'In ritardo',  className: 'bg-amber-100 text-amber-700' },
 }
 
 const COLLAPSED_PX = 64
@@ -72,6 +84,7 @@ function formatEta(d: Date): string {
  */
 export default function NavBottomSheet({
   distanceCoveredM, distanceRemainingM, currentSpeedMs, avgSpeedMs, movingTimeMs, etaDate,
+  paceStatus, daylightMarginMin,
   timerRunning, onTogglePlayPause, onStop, trackPoints, currentDistanceM, remainingPois, guideExcerpts,
 }: Props) {
   const [sheetState, setSheetState] = useState<SheetState>('collapsed')
@@ -174,7 +187,19 @@ export default function NavBottomSheet({
                     <div className="text-xl font-bold text-stone-900 font-mono">{formatDuration(movingTimeMs)}</div>
                     <div className="text-xs text-stone-500 font-body">Tempo in movimento</div>
                     {etaDate && (
-                      <div className="text-xs text-terra-600 font-body font-semibold mt-0.5">Arrivo stimato {formatEta(etaDate)}</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs text-terra-600 font-body font-semibold">Arrivo stimato {formatEta(etaDate)}</span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full font-body ${PACE_STATUS_STYLE[paceStatus].className}`}>
+                          {PACE_STATUS_STYLE[paceStatus].label}
+                        </span>
+                      </div>
+                    )}
+                    {daylightMarginMin != null && (
+                      <div className={`text-xs font-body mt-0.5 ${daylightMarginMin < 0 ? 'text-red-600 font-semibold' : daylightMarginMin < 60 ? 'text-amber-600' : 'text-stone-400'}`}>
+                        {daylightMarginMin < 0
+                          ? `Arrivo ${Math.round(-daylightMarginMin)} min dopo il tramonto`
+                          : `Tramonto tra ${Math.round(daylightMarginMin)} min dall'arrivo`}
+                      </div>
                     )}
                   </div>
                   <div className="flex items-center gap-2">

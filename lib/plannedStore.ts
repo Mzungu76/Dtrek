@@ -6,6 +6,8 @@ import type { CtsConfidence } from './trailScore'
 import type { SafetyScore } from './safetyScore'
 import type { ClassifiedDifficultyMarker } from './difficultyMarkers'
 import type { HikeNote } from './blobStore'
+import type { TrailRiddle } from './riddles'
+import type { EpochPoi } from './epochPois'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -36,6 +38,8 @@ export interface PlannedHike {
   cachedTrailScore?:             number
   cachedTrailScoreConfidence?:   CtsConfidence
   cachedSafetyScore?:            SafetyScore
+  cachedRiddles?:                TrailRiddle[]
+  cachedEpochPois?:              EpochPoi[]
   // Distanza/tempo di guida (auto) dal punto di partenza dell'utente, con le coordinate
   // di origine usate per il calcolo — permette di invalidare la cache se l'utente
   // cambia il proprio indirizzo di partenza senza dover ricalcolare ad ogni apertura.
@@ -123,7 +127,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon'>>,
 ): Promise<void> {
   // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {

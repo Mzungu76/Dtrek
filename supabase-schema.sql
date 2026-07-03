@@ -148,6 +148,18 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score_confidence
 -- SafetyScore cache for planned hikes
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_safety_score JSONB;
 
+-- Trail riddles ("indovinelli per tappa") extracted from the generated guide text —
+-- see lib/riddles.ts. Each entry carries its own lat/lon (matched against cached_pois/
+-- cached_poi_wiki at extraction time), so the navigator can trigger them with the same
+-- proximity mechanism as POIs without depending on the guide text at runtime.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_riddles JSONB;
+
+-- Stratigrafia temporale ("cosa vedresti da qui" per epoca) — stesso principio dei riddle,
+-- vedi lib/epochPois.ts. Ogni voce porta la propria epoca (etrusca/romana/medievale/oggi)
+-- e coordinate reali già note, così lo slider epoca del navigatore filtra e mostra i testi
+-- senza bisogno di generazione in tempo reale (funziona offline).
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_epoch_pois JSONB;
+
 CREATE INDEX IF NOT EXISTS idx_planned_trail_score ON planned_hikes (cached_trail_score DESC NULLS LAST);
 
 -- ── Link pubblici condivisibili ───────────────────────────────────────────────
@@ -630,6 +642,34 @@ CREATE POLICY "activity_photos_owner"
 -- DROP POLICY IF EXISTS "public_read_photos" ON storage.objects;
 -- CREATE POLICY "public_read_photos" ON storage.objects
 --   FOR SELECT USING (bucket_id = 'dtrek-photos');
+
+
+-- ── Sentinella civica: segnalazioni utente foto+GPS ───────────────────────────
+-- Flusso di segnalazione (pattern morfologici insoliti, frane, alberi caduti, ecc.),
+-- non rilevamento automatico. Riusa lo stesso bucket Storage 'dtrek-photos' (path
+-- ${userId}/civic-reports/${reportId}.jpg) e le sue policy già esistenti sopra —
+-- il primo segmento del path resta lo userId, quindi nessuna nuova policy Storage serve.
+CREATE TABLE IF NOT EXISTS civic_reports (
+  id              TEXT PRIMARY KEY,
+  user_id         UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  planned_hike_id TEXT,
+  url             TEXT NOT NULL,
+  storage_path    TEXT NOT NULL,
+  note            TEXT NOT NULL DEFAULT '',
+  lat             DOUBLE PRECISION NOT NULL,
+  lon             DOUBLE PRECISION NOT NULL,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_civic_reports_user_id ON civic_reports (user_id);
+
+ALTER TABLE civic_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "civic_reports_owner" ON civic_reports;
+CREATE POLICY "civic_reports_owner"
+  ON civic_reports FOR ALL
+  USING     (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 
 -- ═══════════════════════════════════════════════════════════

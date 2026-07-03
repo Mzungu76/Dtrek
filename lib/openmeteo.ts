@@ -206,6 +206,54 @@ export async function fetchDayHourly(
   }))
 }
 
+export interface GoodWeatherWindow {
+  startTime: string // ISO hour, e.g. '2026-07-03T09:00'
+  endTime:   string // ISO hour of the last good hour in the window
+  hours:     number
+}
+
+// Same cutoffs clothingSuggestions() already uses for "needs a rain shell"/"needs a windbreaker" —
+// reused here instead of inventing a second threshold set, so the two features never disagree
+// about what counts as bad weather.
+const STORM_CODES = [82, 86, 95, 96, 99]
+
+function isGoodHour(h: HourlyWeatherFull): boolean {
+  return h.precipitation < 1 && h.windspeed < 25 && !STORM_CODES.includes(h.weathercode)
+}
+
+/**
+ * Contiguous stretches of "good enough to hike" hours within a day's hourly forecast —
+ * an escursionista-facing summary on top of the raw hourly strip WeatherWidget already shows,
+ * not a new data source. Windows shorter than 2h are dropped: a single clear hour between two
+ * rainy ones isn't a usable planning window.
+ */
+export function findGoodWeatherWindows(hourly: HourlyWeatherFull[]): GoodWeatherWindow[] {
+  const windows: GoodWeatherWindow[] = []
+  let windowStart: HourlyWeatherFull | null = null
+  let windowHours = 0
+
+  function closeWindow(last: HourlyWeatherFull) {
+    if (windowStart && windowHours >= 2) {
+      windows.push({ startTime: windowStart.time, endTime: last.time, hours: windowHours })
+    }
+    windowStart = null
+    windowHours = 0
+  }
+
+  for (const h of hourly) {
+    if (isGoodHour(h)) {
+      if (!windowStart) windowStart = h
+      windowHours++
+    } else if (windowStart) {
+      const prevIndex = hourly.indexOf(h) - 1
+      closeWindow(hourly[prevIndex])
+    }
+  }
+  if (windowStart) closeWindow(hourly[hourly.length - 1])
+
+  return windows
+}
+
 const WIND_DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
 export function windDirLabel(deg: number): string {
   return WIND_DIRS[Math.round(deg / 45) % 8]

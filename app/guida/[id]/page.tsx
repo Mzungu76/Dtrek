@@ -16,6 +16,8 @@ import {
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
+import { extractRiddles } from '@/lib/riddles'
+import { extractEpochPois } from '@/lib/epochPois'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -411,13 +413,17 @@ export default function GuidaPage() {
         setSections(parseGuide(acc))
       }
 
-      updatePlannedMeta(hikeId, { cachedGuide: acc }).catch(() => {})
+      const cachedPois = (hike?.cachedPois ?? []) as PoiItem[]
+      const cachedPoiWiki = (hike?.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+      const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
+      const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
+      updatePlannedMeta(hikeId, { cachedGuide: acc, cachedRiddles: riddles, cachedEpochPois: epochPois }).catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore durante la generazione')
     } finally {
       setGenerating(false)
     }
-  }, [hikeId])
+  }, [hikeId, hike])
 
   // ── Voice ─────────────────────────────────────────────────────────────────
 
