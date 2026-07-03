@@ -11,6 +11,9 @@ export interface HikeNote {
   timestamp: string
   lat?:      number
   lon?:      number
+  /** Optional photo attached to the note (Supabase Storage public URL) — a note can be text-only, voice-dictated text, a photo, or both. */
+  photoUrl?: string
+  photoStoragePath?: string
 }
 
 export interface StoredActivity extends TcxActivity {

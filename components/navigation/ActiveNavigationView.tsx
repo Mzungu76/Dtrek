@@ -1,8 +1,10 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, BatteryWarning, ArrowUp, Flag, Leaf } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp, NotebookPen, Leaf } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
+import { updatePlannedMeta } from '@/lib/plannedStore'
+import type { HikeNote } from '@/lib/blobStore'
 import { fetchNearbyTrailPaths, type PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
@@ -34,7 +36,7 @@ import NavigationMapLibre from './NavigationMapLibre'
 import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
 import PoiCalloutSheet from './PoiCalloutSheet'
 import RiddleSheet from './RiddleSheet'
-import CivicReportSheet from './CivicReportSheet'
+import FieldNoteSheet from './FieldNoteSheet'
 import SpeciesIdentifySheet from './SpeciesIdentifySheet'
 import { PoiSpatialIndex } from '@/lib/navigation/poiProximity'
 import type { TrailRiddle } from '@/lib/riddles'
@@ -105,7 +107,11 @@ export default function ActiveNavigationView({ hike }: Props) {
   const turnBackAlertedRef = useRef(false)
   const [activeRiddle, setActiveRiddle] = useState<TrailRiddle | null>(null)
   const shownRiddleIdsRef = useRef<Set<string>>(new Set())
-  const [showCivicReport, setShowCivicReport] = useState(false)
+  const [showFieldNote, setShowFieldNote] = useState(false)
+  // Live-editable copy of the hike's notes: appended to as the hiker saves field notes during
+  // navigation, persisted immediately (updatePlannedMeta) so nothing is lost if the app closes,
+  // and read from here (not the stale hike.hikeNotes prop) when the recorded activity is saved.
+  const [hikeNotes, setHikeNotes] = useState<HikeNote[]>(hike.hikeNotes ?? [])
   const [showSpeciesIdentify, setShowSpeciesIdentify] = useState(false)
 
   // Already computed and cached pre-trip (region table + real GBIF occurrences + guardian-dog
@@ -524,14 +530,23 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const cancelEnd = () => setShowConfirmEnd(false)
 
-  const handleSaveRecordedActivity = async (title: string) => {
+  const handleSaveFieldNote = (note: HikeNote) => {
+    const updated = [...hikeNotes, note]
+    setHikeNotes(updated)
+    updatePlannedMeta(hike.id, { hikeNotes: updated }).catch(() => {})
+  }
+
+  const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new') => {
     if (!pendingActivity) return
     const saved = await saveActivityWithEnrichment(pendingActivity, {
       title,
       linkedPlannedId: hike.id,
       linkedPlannedTrackPoints: (hike.trackPoints ?? []).filter((p) => p.lat && p.lon),
-      hikeNotes: hike.hikeNotes,
-      deleteLinkedPlanned: true,
+      hikeNotes,
+      // 'overwrite' consumes the plan into this activity (as before); 'new' keeps the linkage
+      // for reference (comparison chart, "generato da") but leaves the planned hike untouched
+      // so it can be hiked again later instead of being deleted.
+      deleteLinkedPlanned: mode === 'overwrite',
     })
     clearRecordedTrack(hike.id).catch(() => {})
     router.push(`/escursione/${encodeURIComponent(saved.id)}`)
@@ -673,12 +688,12 @@ export default function ActiveNavigationView({ hike }: Props) {
       </div>
 
       <button
-        onClick={() => setShowCivicReport(true)}
+        onClick={() => setShowFieldNote(true)}
         className="absolute right-3 z-10 w-11 h-11 rounded-full bg-white text-stone-700 shadow-lg flex items-center justify-center"
         style={{ top: 'calc(50% + 118px)' }}
-        aria-label="Segnala qualcosa lungo il percorso"
+        aria-label="Aggiungi una nota sul campo"
       >
-        <Flag className="w-5 h-5" />
+        <NotebookPen className="w-5 h-5" />
       </button>
 
       {isOnline && (
@@ -692,8 +707,8 @@ export default function ActiveNavigationView({ hike }: Props) {
         </button>
       )}
 
-      {showCivicReport && (
-        <CivicReportSheet position={position} plannedHikeId={hike.id} onClose={() => setShowCivicReport(false)} />
+      {showFieldNote && (
+        <FieldNoteSheet hikeId={hike.id} position={position} onSave={handleSaveFieldNote} onClose={() => setShowFieldNote(false)} />
       )}
 
       {showSpeciesIdentify && (
