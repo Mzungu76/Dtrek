@@ -98,6 +98,38 @@ function terrainLabel(sacScale?: string, surfaces?: string[]): string {
   return 'Non specificato'
 }
 
+export interface NaismithHours { tFlat: number; tAscent: number; tDescent: number; total: number }
+
+/** Naismith's rule time components (hours) — extracted so lib/navigation/paceAssistant.ts can
+ * reuse the exact same formula for the live in-hike estimate instead of duplicating it. */
+export function naismithHours(distKm: number, elevationGainM: number, elevationLossM: number): NaismithHours {
+  const tFlat    = distKm / 4
+  const tAscent  = elevationGainM / 600
+  const tDescent = Math.max(0, elevationLossM - elevationGainM * 0.5) / 1000
+  return { tFlat, tAscent, tDescent, total: tFlat + tAscent + tDescent }
+}
+
+export interface AltitudeTerrainMultiplier { altPhysioMult: number; terrainMult: number; combined: number }
+
+/** Altitude-physiology + terrain multipliers — same extraction reasoning as naismithHours. */
+export function altitudeTerrainMultiplier(altitudeMax: number, sacScale?: string, surfaces?: string[], avgSlopeDeg?: number): AltitudeTerrainMultiplier {
+  let altPhysioMult: number
+  if (altitudeMax < 2000) {
+    altPhysioMult = 1.0
+  } else if (altitudeMax < 3500) {
+    altPhysioMult = 1 + ((altitudeMax - 2000) / 1500) * 0.08
+  } else {
+    altPhysioMult = 1.08 + ((altitudeMax - 3500) / 1500) * 0.04
+  }
+
+  const sacMult   = sacTerrainMult(sacScale)
+  const surfMult  = surfaceTerrainMult(surfaces)
+  const slopeMult = slopeTerrainMult(avgSlopeDeg)
+  const terrainMult = Math.max(sacMult, surfMult, slopeMult)
+
+  return { altPhysioMult, terrainMult, combined: altPhysioMult * terrainMult }
+}
+
 // Karvonen Heart Rate Intensity Index — range [0, 1]
 function computeHII(avgHr: number, hrRest: number, hrMax: number): number {
   const reserve = hrMax - hrRest
@@ -136,31 +168,16 @@ export function computeTrailScore(
     hrRest, hrMax, avgSlopeDeg,
   } = inputs
 
-  const distKm = distanceMeters / 1000
-
   // Naismith time components (hours)
-  const tNaismith = distKm / 4
-  const tDesa     = elevationGain / 600
-  const tDescRaw  = Math.max(0, elevationLoss - elevationGain * 0.5) / 1000
+  const { tFlat, tAscent, tDescent: tDescRaw, total: naismithTotal } = naismithHours(distanceMeters / 1000, elevationGain, elevationLoss)
+  const tNaismith = tFlat
+  const tDesa     = tAscent
 
-  // Altitude physiology multiplier
-  let altPhysioMult: number
-  if (altitudeMax < 2000) {
-    altPhysioMult = 1.0
-  } else if (altitudeMax < 3500) {
-    altPhysioMult = 1 + ((altitudeMax - 2000) / 1500) * 0.08
-  } else {
-    altPhysioMult = 1.08 + ((altitudeMax - 3500) / 1500) * 0.04
-  }
+  // Altitude physiology + terrain multipliers
+  const { altPhysioMult, terrainMult: terrMult } = altitudeTerrainMultiplier(altitudeMax, sacScale, surfaces, avgSlopeDeg)
+  const tLabel = terrainLabel(sacScale, surfaces)
 
-  // Terrain multiplier
-  const sacMult   = sacTerrainMult(sacScale)
-  const surfMult  = surfaceTerrainMult(surfaces)
-  const slopeMult = slopeTerrainMult(avgSlopeDeg)
-  const terrMult  = Math.max(sacMult, surfMult, slopeMult)
-  const tLabel    = terrainLabel(sacScale, surfaces)
-
-  const tTot = (tNaismith + tDesa + tDescRaw) * altPhysioMult * terrMult
+  const tTot = naismithTotal * altPhysioMult * terrMult
   const fStd = clamp(tTot * 2, 0, 10)
 
   // Delta (personal effort correction)

@@ -77,6 +77,7 @@ export type NavEventMap = {
   gpsLost: { permissionDenied: boolean }
   gpsRecovered: {}
   stateChanged: { from: NavState; to: NavState }
+  paceUpdated: import('./paceAssistant').PaceUpdateResult
 }
 
 export type NavEventName = keyof NavEventMap

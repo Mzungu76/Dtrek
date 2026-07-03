@@ -6,6 +6,8 @@ import { PoiSpatialIndex } from './poiProximity'
 import { watchDeviceCompass, bearingDeg, circularMeanBearings } from './orientation'
 import { NavStateMachine } from './stateMachine'
 import { buildRouteInstructions } from './routeInstructions'
+import { PaceAssistant, type WeatherConditions } from './paceAssistant'
+import type { ElevationProfilePoint } from './elevationProfile'
 import type { GeoFix, NavEventMap, NavEventName, NavInstruction, NavPoi, RouteMoment } from './types'
 
 const GPS_LOST_MS = 15000
@@ -20,6 +22,12 @@ export interface NavigationEngineOptions {
   routePolyline: [number, number][]
   pois: NavPoi[]
   moments?: RouteMoment[]
+  /** Cumulative distance/altitude profile (lib/navigation/elevationProfile.ts), for the live pace assistant's remaining/return-trip elevation lookups. Omit to disable elevation-aware pace estimation (falls back to a flat-terrain Naismith estimate). */
+  elevationProfile?: ElevationProfilePoint[]
+  /** Precomputed altitude/terrain multiplier (lib/trailScore.ts's altitudeTerrainMultiplier), applied to the live Naismith estimate. Defaults to 1 (no correction). */
+  terrainMultiplier?: number
+  /** Simplified Tranter-style fitness scalar — see paceAssistant.ts. Defaults to 1 (neutral). */
+  fitnessMult?: number
 }
 
 /**
@@ -35,6 +43,7 @@ export class NavigationEngine {
   private readonly tracker: RouteTracker
   private readonly poiIndex: PoiSpatialIndex
   private readonly moments: RouteMoment[]
+  private readonly pace: PaceAssistant
   private readonly instructions: NavInstruction[]
   private lastInstructionIndex = -1
   private readonly smoother = new GpsSmoother()
@@ -59,10 +68,21 @@ export class NavigationEngine {
     this.poiIndex = new PoiSpatialIndex(opts.pois)
     this.moments = opts.moments ?? []
     this.instructions = buildRouteInstructions(opts.routePolyline)
+    this.pace = new PaceAssistant({
+      totalRouteM: this.tracker.totalRouteM,
+      elevationProfile: opts.elevationProfile ?? [],
+      terrainMultiplier: opts.terrainMultiplier,
+      fitnessMult: opts.fitnessMult,
+    })
     this.gps = new AdaptiveGpsTracker(
       (fix) => this.handleFix(fix),
       (err) => this.handleGpsError(err),
     )
+  }
+
+  /** Pushed in by the caller (e.g. from an Open-Meteo fetch), not fetched by the engine itself — keeps this class free of network calls, same "pure, mockable, replayable" property the rest of it already has. */
+  setWeatherConditions(w: WeatherConditions): void {
+    this.pace.setWeather(w)
   }
 
   on<K extends NavEventName>(event: K, listener: Listener<K>): () => void {
@@ -127,6 +147,7 @@ export class NavigationEngine {
     const progress = this.tracker.update(smoothed.lat, smoothed.lon)
     const instantSpeedMs = this.updateTraveledDistance(smoothed)
     this.emit('positionUpdated', { raw, smoothed, progress, traveledDistanceM: this.traveledDistanceM, instantSpeedMs })
+    this.emit('paceUpdated', this.pace.update(progress.distanceAlongRouteM, this.traveledDistanceM, instantSpeedMs, raw.ts))
 
     this.updateBearingFallback(smoothed)
     this.updateRouteDeviation(smoothed, progress, raw.accuracyM)
