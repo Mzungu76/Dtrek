@@ -8,7 +8,8 @@ import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
 import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
-import { haversineM } from '@/lib/geoUtils'
+import { haversineM, computeBbox } from '@/lib/geoUtils'
+import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
 import { extractCuriosita } from '@/lib/guideText'
 import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
 import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
@@ -77,6 +78,9 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
+  const [showNatura2000, setShowNatura2000] = useState(false)
+  const [showGeologia, setShowGeologia] = useState(false)
+  const [natura2000Features, setNatura2000Features] = useState<Natura2000Feature[]>([])
 
   const pois = useMemo<NavPoi[]>(() => {
     const raw = (hike.cachedPois ?? []) as PoiItem[]
@@ -102,6 +106,19 @@ export default function ActiveNavigationView({ hike }: Props) {
   useEffect(() => {
     if (routePolyline.length < 2) return
     fetchNearbyTrailPaths(routePolyline).then(setNearbyTrails).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hike.id])
+
+  // Same "fetch once for the route's bbox" pattern as lib/natura2000/checkProtectedArea.ts,
+  // minus the point-in-polygon step — the raw polygons are drawn as a map overlay here, not
+  // reduced to a boolean. Best-effort: an empty/failed fetch just means the toggle shows nothing.
+  useEffect(() => {
+    if (routePolyline.length < 2) return
+    const bbox = computeBbox(routePolyline)
+    fetch(`/api/natura2000?bbox=${bbox}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((features) => setNatura2000Features(Array.isArray(features) ? features : []))
+      .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hike.id])
 
@@ -421,7 +438,11 @@ export default function ActiveNavigationView({ hike }: Props) {
       {mapMode === 'offline' ? (
         <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} accuracyM={accuracyM} />
       ) : (
-        <NavigationMapLibre routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM} />
+        <NavigationMapLibre
+          routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
+          styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
+          natura2000Features={natura2000Features} showNatura2000={showNatura2000} showGeologia={showGeologia}
+        />
       )}
 
       {mapFallbackNotice && (
@@ -439,7 +460,11 @@ export default function ActiveNavigationView({ hike }: Props) {
       )}
 
       <div className="absolute right-3 z-10" style={{ top: 'calc(50% + 60px)' }}>
-        <MapModeSwitcher mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline} />
+        <MapModeSwitcher
+          mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
+          showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
+          showGeologia={showGeologia} onToggleGeologia={() => setShowGeologia((v) => !v)}
+        />
       </div>
 
       <InstructionBanner

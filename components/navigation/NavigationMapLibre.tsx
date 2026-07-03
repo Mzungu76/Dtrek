@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
 import { maptilerStyleUrl, MAPTILER_KEY, type MapTilerStyleId } from '@/lib/mapStyles'
 import { circlePolygonLonLat } from '@/lib/geoUtils'
+import { GEOLOGIA_DATASET } from '@/lib/geo/datasetConfig'
 import type { NavState } from '@/lib/navigation/types'
+import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
 
 interface Props {
   routePolyline: [number, number][]
@@ -18,6 +20,11 @@ interface Props {
   accuracyM?: number | null
   /** Called if the MapTiler style hasn't finished loading within a few seconds, or errors out (missing/invalid key, no connectivity, domain-restricted key...) — the caller should fall back to the offline-safe map. `reason` is a short diagnostic string, always logged to the console regardless of environment so this is debuggable in production. */
   onStyleFailed?: (reason: string) => void
+  /** Natura 2000 protected-area polygons for the route's bbox (fetched once by the caller), drawn as a translucent overlay when showNatura2000 is on. */
+  natura2000Features?: Natura2000Feature[] | null
+  showNatura2000?: boolean
+  /** CARG lithology WMS raster overlay (GEOLOGIA_DATASET), toggled independently of the base style. */
+  showGeologia?: boolean
 }
 
 // Not a fixed deadline from the start — reset on every 'data' event (tile/
@@ -43,6 +50,27 @@ const ACCURACY_SOURCE_ID = 'nav-accuracy'
 const ACCURACY_LAYER_ID = 'nav-accuracy-fill'
 const TERRAIN_SOURCE_ID = 'nav-terrain'
 const TERRAIN_EXAGGERATION = 1.4 // matches RouteMap3D's flythrough for a consistent look
+const NATURA2000_SOURCE_ID = 'nav-natura2000'
+const NATURA2000_FILL_LAYER_ID = 'nav-natura2000-fill'
+const NATURA2000_LINE_LAYER_ID = 'nav-natura2000-line'
+const GEOLOGIA_SOURCE_ID = 'nav-geologia'
+const GEOLOGIA_LAYER_ID = 'nav-geologia-raster'
+
+// WMS 1.3.0 GetMap over the same ISPRA CARG endpoint lib/geologia/geologiaClient.ts uses for
+// point lookups (GetFeatureInfo) — here we ask for a rendered raster tile instead, which needs
+// no new client/data source, just a different WMS request. MapLibre substitutes
+// {bbox-epsg-3857} itself per tile (documented raster-source template token) — EPSG:3857 needs
+// no axis-order swap in WMS 1.3.0 (that quirk only affects geographic CRSs like EPSG:4326).
+function geologiaWmsTileUrl(): string | null {
+  if (!GEOLOGIA_DATASET.baseUrl || !GEOLOGIA_DATASET.layerName) return null
+  const params = new URLSearchParams({
+    service: 'WMS', version: '1.3.0', request: 'GetMap',
+    layers: GEOLOGIA_DATASET.layerName, styles: '', crs: 'EPSG:3857',
+    bbox: '{bbox-epsg-3857}', width: '256', height: '256',
+    format: 'image/png', transparent: 'true',
+  })
+  return `${GEOLOGIA_DATASET.baseUrl}?${params.toString()}`
+}
 
 // At a steep pitch, the same zoom level shows much less ground in the
 // foreground than a flat view (perspective foreshortening), and combined
@@ -65,7 +93,7 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM }: Props) {
+export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, showGeologia }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
@@ -86,6 +114,12 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   accuracyMRef.current = accuracyM
   const positionRef = useRef(position)
   positionRef.current = position
+  const natura2000FeaturesRef = useRef(natura2000Features)
+  natura2000FeaturesRef.current = natura2000Features
+  const showNatura2000Ref = useRef(showNatura2000)
+  showNatura2000Ref.current = showNatura2000
+  const showGeologiaRef = useRef(showGeologia)
+  showGeologiaRef.current = showGeologia
   const dataListener = useRef<(() => void) | null>(null)
   const [followMode, setFollowMode] = useState(true)
   const [styleLoading, setStyleLoading] = useState(true)
@@ -182,6 +216,46 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     }
   }
 
+  /** Natura 2000 GeoJSON overlay — data comes from the caller (fetched once for the route's bbox), this only (re)creates the source/layers and keeps them in sync with the latest features/visibility. */
+  const setupNatura2000Layer = (map: any) => {
+    const features = natura2000FeaturesRef.current ?? []
+    const geojson = {
+      type: 'FeatureCollection' as const,
+      features: features.map((f) => ({ type: 'Feature' as const, geometry: f.geometry, properties: { siteName: f.siteName ?? '', designation: f.designation } })),
+    }
+    const visibility = showNatura2000Ref.current ? 'visible' : 'none'
+    if (map.getSource(NATURA2000_SOURCE_ID)) {
+      map.getSource(NATURA2000_SOURCE_ID).setData(geojson)
+      map.setLayoutProperty(NATURA2000_FILL_LAYER_ID, 'visibility', visibility)
+      map.setLayoutProperty(NATURA2000_LINE_LAYER_ID, 'visibility', visibility)
+    } else {
+      map.addSource(NATURA2000_SOURCE_ID, { type: 'geojson', data: geojson })
+      map.addLayer({
+        id: NATURA2000_FILL_LAYER_ID, type: 'fill', source: NATURA2000_SOURCE_ID,
+        layout: { visibility }, paint: { 'fill-color': '#16a34a', 'fill-opacity': 0.15 },
+      })
+      map.addLayer({
+        id: NATURA2000_LINE_LAYER_ID, type: 'line', source: NATURA2000_SOURCE_ID,
+        layout: { visibility }, paint: { 'line-color': '#16a34a', 'line-width': 1.5, 'line-dasharray': [2, 2] },
+      })
+    }
+  }
+
+  /** CARG lithology raster overlay — a plain WMS tile source, independent of the base style (Outdoor/Satellite/Winter each keep their own sources). Only makes sense online, same as the base style itself. */
+  const setupGeologiaLayer = (map: any) => {
+    const tileUrl = geologiaWmsTileUrl()
+    if (!tileUrl) return
+    const visibility = showGeologiaRef.current ? 'visible' : 'none'
+    if (!map.getSource(GEOLOGIA_SOURCE_ID)) {
+      map.addSource(GEOLOGIA_SOURCE_ID, { type: 'raster', tiles: [tileUrl], tileSize: 256 })
+    }
+    if (map.getLayer(GEOLOGIA_LAYER_ID)) {
+      map.setLayoutProperty(GEOLOGIA_LAYER_ID, 'visibility', visibility)
+    } else {
+      map.addLayer({ id: GEOLOGIA_LAYER_ID, type: 'raster', source: GEOLOGIA_SOURCE_ID, layout: { visibility }, paint: { 'raster-opacity': 0.55 } })
+    }
+  }
+
   // "3D" was just a pitch on a flat map — real relief needs an elevation
   // source too. Same terrain-rgb-v2 dataset and setTerrain() call as
   // RouteMap3D's flythrough. Independent of whichever base style is active
@@ -248,13 +322,15 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         setupRouteLayer(maplibregl)
         setupTerrain(map)
         updateAccuracyCircle(map)
+        setupNatura2000Layer(map)
+        setupGeologiaLayer(map)
         for (const poi of pois) {
           const marker = new maplibregl.Marker().setLngLat([poi.lon, poi.lat]).addTo(map)
           markersRef.current.push(marker)
         }
       })
-      // setStyle() wipes custom sources/layers — re-add the route, terrain and accuracy circle after every style switch.
-      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map) })
+      // setStyle() wipes custom sources/layers — re-add the route, terrain, accuracy circle and overlay layers after every style switch.
+      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map); setupNatura2000Layer(map); setupGeologiaLayer(map) })
       // MapLibre GL, unlike Leaflet, does NOT support space-separated event
       // names in on() — `map.on('dragstart zoomstart', ...)` silently
       // registers a listener for a nonexistent event and never fires, so
@@ -335,6 +411,14 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       if (map.isStyleLoaded()) updateAccuracyCircle(map)
     })
   }, [position, bearingDeg, state, followMode, accuracyM])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+    setupNatura2000Layer(map)
+    setupGeologiaLayer(map)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [natura2000Features, showNatura2000, showGeologia])
 
   const handleRecenter = () => {
     setFollowMode(true)
