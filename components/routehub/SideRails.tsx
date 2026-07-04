@@ -1,7 +1,7 @@
 'use client'
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { BarChart2, Leaf, Mountain, MapPin, ShieldAlert, Wrench, Lock, Unlock, Navigation, Star } from 'lucide-react'
+import { BarChart2, Leaf, Mountain, MapPin, ShieldAlert, Wrench, Map, Navigation, Star, Box } from 'lucide-react'
 import type { HubMode, SectionKind } from './types'
 
 interface Props {
@@ -16,6 +16,7 @@ interface Props {
   featuredLabel: string
   featuredIcon: LucideIcon
   onOpenFeatured: () => void
+  onOpenMap3D?: () => void
 }
 
 const RAIL_VARIANTS = {
@@ -43,15 +44,20 @@ function RailButton({ onClick, title, children, variant = 'glass', badge }: { on
 
 export default function SideRails({
   mode, locked, onToggleLock, onOpenSection, datiBadge, onNavigate, ratingBadge, onOpenRating,
-  featuredLabel, featuredIcon: FeaturedIcon, onOpenFeatured,
+  featuredLabel, featuredIcon: FeaturedIcon, onOpenFeatured, onOpenMap3D,
 }: Props) {
   if (!locked) {
-    // Sbloccata: immersione totale — solo il lucchetto (ora aperto) resta, per ribloccare.
+    // Sbloccata: immersione totale — resta solo il toggle mappa (per ribloccare) e l'accesso 3D.
     return (
-      <div className="fixed top-[calc(env(safe-area-inset-top,0px)+16px)] right-3 md:right-5 z-30">
+      <div className="fixed top-[calc(env(safe-area-inset-top,0px)+16px)] right-3 md:right-5 z-30 flex flex-col gap-3">
         <RailButton onClick={onToggleLock} title="Blocca mappa">
-          <Unlock className="w-[18px] h-[18px] text-terra-400" />
+          <Map className="w-[18px] h-[18px] text-terra-400" />
         </RailButton>
+        {onOpenMap3D && (
+          <RailButton onClick={onOpenMap3D} title="Vista 3D">
+            <Box className="w-[18px] h-[18px] text-sky-300" />
+          </RailButton>
+        )}
       </div>
     )
   }
@@ -94,7 +100,7 @@ export default function SideRails({
           <Wrench className="w-5 h-5 text-stone-100" />
         </RailButton>
         <RailButton onClick={onToggleLock} title="Sblocca mappa">
-          <Lock className="w-[18px] h-[18px] text-stone-100" />
+          <Map className="w-[18px] h-[18px] text-stone-100" />
         </RailButton>
       </div>
     </>

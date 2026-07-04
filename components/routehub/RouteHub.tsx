@@ -10,7 +10,8 @@ import type { RouteHubProps } from './types'
 
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, renderStageMap, renderSection,
-  onNavigate, ratingBadge, onOpenRating, datiBadge, featuredLabel, featuredIcon, onOpenFeatured, onOpenList,
+  onNavigate, ratingBadge, onOpenRating, datiBadge, featuredLabel, featuredIcon, onOpenFeatured,
+  summaryBanner, weatherIcon, onOpenMap3D, onOpenList,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
 
@@ -36,6 +37,7 @@ export default function RouteHub({
   }
 
   const item = items[state.index]
+  const summary = state.locked ? summaryBanner?.(item) : null
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none" style={{ touchAction: 'pan-y' }}>
@@ -77,7 +79,10 @@ export default function RouteHub({
           )}
 
           {state.locked && (
-            <TopOverlay title={item.title} statPills={item.statPills} onOpenList={onOpenList} />
+            <TopOverlay
+              title={item.title} statPills={item.statPills} onOpenList={onOpenList}
+              weatherIcon={weatherIcon?.(item)} onOpenWeather={() => dispatch({ type: 'OPEN_SECTION', section: 'meteo' })}
+            />
           )}
 
           <SideRails
@@ -92,7 +97,16 @@ export default function RouteHub({
             featuredLabel={featuredLabel}
             featuredIcon={featuredIcon}
             onOpenFeatured={() => onOpenFeatured(item)}
+            onOpenMap3D={onOpenMap3D ? () => onOpenMap3D(item) : undefined}
           />
+
+          {state.locked && summary && (
+            <div className="absolute inset-x-3 z-20 pointer-events-none" style={{ bottom: 'calc(env(safe-area-inset-bottom,0px) + 96px)' }}>
+              <p className="pointer-events-auto bg-black/50 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-2.5 text-white text-[13px] leading-snug max-w-xl mx-auto text-center">
+                {summary}
+              </p>
+            </div>
+          )}
 
           {state.locked && (
             <BottomGallery mode={mode} items={items} currentId={item.id} onSelect={index => dispatch({ type: 'JUMP_TO', index })} />

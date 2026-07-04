@@ -202,9 +202,11 @@ interface AnimalGalleryProps {
   loadingTrack: boolean
   /** Overrides the default back-link label (e.g. the hike/activity title). */
   backLabel?: string
+  /** When provided, renders as a closable popup (X button, no Navbar) instead of a standalone page. */
+  onClose?: () => void
 }
 
-export default function AnimalGallery({ trackPoints, month, loadingTrack, backLabel }: AnimalGalleryProps) {
+export default function AnimalGallery({ trackPoints, month, loadingTrack, backLabel, onClose }: AnimalGalleryProps) {
   const [items, setItems] = useState<AnimalItem[]>([])
   const [loadingAnimals, setLoadingAnimals] = useState(true)
   const [selected, setSelected] = useState<AnimalItem | null>(null)
@@ -244,13 +246,19 @@ export default function AnimalGallery({ trackPoints, month, loadingTrack, backLa
   }, [loadingTrack, gpsPoints, month])
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <Navbar />
+    <div className={onClose ? 'fixed inset-0 z-50 bg-stone-50 overflow-y-auto' : 'min-h-screen bg-stone-50'}>
+      {!onClose && <Navbar />}
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <BackLink
-          label={backLabel}
-          className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors mb-4"
-        />
+        {onClose ? (
+          <button onClick={onClose} className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors mb-4">
+            <X className="w-4 h-4" /> Chiudi
+          </button>
+        ) : (
+          <BackLink
+            label={backLabel}
+            className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors mb-4"
+          />
+        )}
 
         <h1 className="font-lora text-2xl text-stone-800 flex items-center gap-2 mb-1">
           🐾 Galleria Animali
