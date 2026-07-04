@@ -34,15 +34,20 @@ import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
+import { fetchForecastWeather, wmoInfo } from '@/lib/openmeteo'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2, BookOpen, Leaf, PawPrint,
   Car, Navigation, MapPin, Layers, Compass, Images, Trash2, Pencil, Check,
+  Maximize2, Minimize2, X,
 } from 'lucide-react'
 import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl, originMatches } from '@/lib/drivingInfo'
 import PdfExportButton from '@/components/PdfExportButton'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
+const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
+const FloraGallery     = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
+const AnimalGallery    = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
 
 function metaToItem(h: PlannedHikeMeta): RouteHubItem {
   return {
@@ -89,12 +94,44 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [drivingLoading, setDrivingLoading] = useState(false)
   const [altActiveIndex, setAltActiveIndex] = useState<number | null>(null)
   const [showGuideSection, setShowGuideSection] = useState(false)
+  const [guideExpanded, setGuideExpanded] = useState(false)
+  const [show3D, setShow3D] = useState(false)
+  const [showFloraGallery, setShowFloraGallery] = useState(false)
+  const [showAnimalGallery, setShowAnimalGallery] = useState(false)
+  const [weatherIcon, setWeatherIcon] = useState<{ emoji: string; label: string } | null>(null)
 
   const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
   const poiCenter = useCenteredItem(pois.length)
   const sicurezzaCenter = useCenteredItem(hike?.difficultyMarkers?.length ?? 0)
+
+  const guideParagraphs = useMemo(() => {
+    if (!hike?.cachedGuide) return []
+    return hike.cachedGuide
+      .split(/\n{2,}/)
+      .map(p => p.replace(/^#{1,6}\s+/, '').replace(/\[\/?curiosita\]/g, '').trim())
+      .filter(p => p.length > 20)
+  }, [hike?.cachedGuide])
+  const guideCenter = useCenteredItem(guideParagraphs.length)
+
+  // Approximates where in the track the paragraph currently being read corresponds to — the
+  // guide text has no real per-paragraph geo-tags, so paragraphs are assumed evenly spread
+  // along the route (paragraph i/N ≈ i/N of the way along the trail).
+  const guideActiveTrackIndex = useMemo(() => {
+    const points = hike?.trackPoints
+    if (!points?.length || guideCenter.centeredIndex == null || guideParagraphs.length < 2) return null
+    const frac = guideCenter.centeredIndex / (guideParagraphs.length - 1)
+    return Math.round(frac * (points.length - 1))
+  }, [hike?.trackPoints, guideCenter.centeredIndex, guideParagraphs.length])
+
+  // A POI mentioned by name in the paragraph currently being read — highlighted on the map.
+  const guideActivePoiIndex = useMemo(() => {
+    if (guideCenter.centeredIndex == null) return null
+    const text = guideParagraphs[guideCenter.centeredIndex]?.toLowerCase() ?? ''
+    const idx = pois.findIndex(p => p.name && text.includes(p.name.toLowerCase()))
+    return idx >= 0 ? idx : null
+  }, [guideCenter.centeredIndex, guideParagraphs, pois])
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
   // order (most recent first) — backs the carousel/gallery. Resolves the bare
@@ -166,6 +203,22 @@ export default function GuidaHub({ id }: { id?: string }) {
     if (gps.length < 2) return
     checkProtectedArea(gps).then(r => setInProtectedArea(r.inProtectedArea)).catch(() => {})
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Weather icon for the top overlay — matches the forecast for the planned date (or today).
+  useEffect(() => {
+    if (!hike) { setWeatherIcon(null); return }
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
+    const mid = gps[Math.floor(gps.length / 2)]
+    if (!mid?.lat || !mid?.lon) { setWeatherIcon(null); return }
+    let cancelled = false
+    fetchForecastWeather(mid.lat, mid.lon, 7).then(days => {
+      if (cancelled || !days.length) return
+      const target = hike.plannedDate ? (days.find(d => d.date === hike.plannedDate) ?? days[0]) : days[0]
+      const info = wmoInfo(target.weathercode)
+      setWeatherIcon({ emoji: info.emoji, label: info.label })
+    }).catch(() => setWeatherIcon(null))
+    return () => { cancelled = true }
+  }, [hike?.id, hike?.plannedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!poisFullyLoaded || !hike || (hike.cachedPois?.length ?? 0) > 0 || !pois.length) return
@@ -385,15 +438,11 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
   }
 
-  // Passive map (no interaction) — used by sections that don't have a natural map interaction.
-  const passiveMap = () => hasGps && hike
-    ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} planned />
+  // Default section map — real, interactive/navigable, no per-section highlight.
+  const sectionMap = () => hasGps && hike
+    ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive pois={pois} planned />
     : <div className="absolute inset-0 bg-[#0b1a24]" />
-
-  const guideExcerpt = (markdown: string, maxLen = 320): string => {
-    const plain = markdown.replace(/^#{1,6}\s+/gm, '').replace(/\[\/?curiosita\]/g, '').replace(/\s+/g, ' ').trim()
-    return plain.length > maxLen ? `${plain.slice(0, maxLen).trim()} […]` : plain
-  }
+  const open3D = (closeSection: () => void) => hasGps ? () => { closeSection(); setShow3D(true) } : undefined
 
   const renderSection = (section: SectionKind, item: RouteHubItem, onClose: () => void) => {
     if (!hike || item.id !== hike.id) {
@@ -406,9 +455,10 @@ export default function GuidaHub({ id }: { id?: string }) {
       <SectionSplit
         title="Dati & punteggi"
         onClose={onClose}
+        on3D={open3D(onClose)}
         mapContent={
           <div className="absolute inset-0">
-            {passiveMap()}
+            {sectionMap()}
             <div className="absolute bottom-3 inset-x-3 flex flex-wrap gap-1.5 justify-center pointer-events-none">
               {hike.cachedTrailScore != null && (
                 <span className="px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md text-white text-[11px] font-bold border border-white/15">CTS {Math.round(hike.cachedTrailScore)}</span>
@@ -489,13 +539,22 @@ export default function GuidaHub({ id }: { id?: string }) {
             </div>
           )}
 
-          {hasGps && <WeatherWidget mode={hike.plannedDate ? 'planned' : 'forecast'} lat={centerPt.lat!} lon={centerPt.lon!} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />}
+        </div>
+      </SectionSplit>
+    )
+
+    if (section === 'meteo') return (
+      <SectionSplit title="Meteo" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
+        <div className="h-full overflow-y-auto px-4 py-4">
+          {hasGps
+            ? <WeatherWidget mode={hike.plannedDate ? 'planned' : 'forecast'} lat={centerPt.lat!} lon={centerPt.lon!} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />
+            : <p className="text-sm text-stone-400 italic text-center py-8">Meteo non disponibile senza un tracciato GPS.</p>}
         </div>
       </SectionSplit>
     )
 
     if (section === 'natura') return (
-      <SectionSplit title="Natura" onClose={onClose} mapContent={passiveMap()}>
+      <SectionSplit title="Natura" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
         <div className="h-full overflow-y-auto px-4 py-4 space-y-5">
           {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
             <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
@@ -505,10 +564,10 @@ export default function GuidaHub({ id }: { id?: string }) {
           )}
           {hasGps && <ShadeWaterTile data={s2.data} loading={s2.loading} />}
           <div className="flex gap-2">
-            <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/flora`)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
+            <button onClick={() => setShowFloraGallery(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
               <Leaf className="w-4 h-4 text-emerald-600" /> Galleria Verde
             </button>
-            <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/animali`)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
+            <button onClick={() => setShowAnimalGallery(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
               <PawPrint className="w-4 h-4 text-amber-600" /> Galleria Animali
             </button>
           </div>
@@ -520,8 +579,9 @@ export default function GuidaHub({ id }: { id?: string }) {
       <SectionSplit
         title="Punti di interesse"
         onClose={onClose}
+        on3D={open3D(onClose)}
         mapContent={hasGps
-          ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} pois={pois} highlightedPoiIndex={poiCenter.centeredIndex} planned />
+          ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive pois={pois} highlightedPoiIndex={poiCenter.centeredIndex} planned />
           : <div className="absolute inset-0 bg-[#0b1a24]" />}
       >
         <div ref={poiCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-3">
@@ -564,8 +624,9 @@ export default function GuidaHub({ id }: { id?: string }) {
         <SectionSplit
           title="Sicurezza & segnalazioni"
           onClose={onClose}
+          on3D={open3D(onClose)}
           mapContent={hasGps
-            ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} difficultyMarkers={markers} highlightedDifficultyIndex={sicurezzaCenter.centeredIndex} planned />
+            ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive difficultyMarkers={markers} highlightedDifficultyIndex={sicurezzaCenter.centeredIndex} planned />
             : <div className="absolute inset-0 bg-[#0b1a24]" />}
         >
           <div ref={sicurezzaCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-5">
@@ -593,9 +654,9 @@ export default function GuidaHub({ id }: { id?: string }) {
     }
 
     if (section === 'altimetria') return (
-      <SectionSplit title={item.title} onClose={onClose} mapContent={
+      <SectionSplit title={item.title} onClose={onClose} on3D={open3D(onClose)} mapContent={
         hasGps
-          ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} activeIndex={altActiveIndex} planned />
+          ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive activeIndex={altActiveIndex} planned />
           : <div className="absolute inset-0 bg-[#0b1a24]" />
       }>
         <div className="h-full flex flex-col px-3 pt-3.5 pb-5">
@@ -613,7 +674,7 @@ export default function GuidaHub({ id }: { id?: string }) {
 
     // strumenti
     return (
-      <SectionSplit title="Strumenti" onClose={onClose} mapContent={passiveMap()}>
+      <SectionSplit title="Strumenti" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
         <div className="h-full overflow-y-auto px-4 py-4 space-y-1">
           {hasGps && <div className="px-2 py-2"><OfflinePackageDownloader hikeId={hike.id} routePolyline={hike.routePolyline ?? []} /></div>}
           <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left text-sm font-medium text-stone-700" />
@@ -664,24 +725,94 @@ export default function GuidaHub({ id }: { id?: string }) {
         featuredLabel="Guida Turistica"
         featuredIcon={BookOpen}
         onOpenFeatured={() => setShowGuideSection(true)}
+        summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
+        weatherIcon={(routeItem) => hike && routeItem.id === hike.id ? weatherIcon : undefined}
+        onOpenMap3D={() => setShow3D(true)}
         onOpenList={() => router.push('/guida/elenco')}
       />
+
       {showGuideSection && hike && (
-        <SectionSplit title="Guida Turistica" onClose={() => setShowGuideSection(false)} mapContent={passiveMap()}>
-          <div className="h-full overflow-y-auto px-4 py-4 space-y-4">
-            {hike.cachedGuide ? (
-              <blockquote className="font-lora italic text-stone-700 leading-relaxed border-l-4 border-amber-300 pl-4">
-                {guideExcerpt(hike.cachedGuide)}
-              </blockquote>
-            ) : (
-              <p className="text-sm text-stone-400 italic">Nessuna guida ancora generata per questo percorso. Giulia può raccontarti storia, natura e curiosità lungo il tracciato.</p>
-            )}
-            <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/leggi`)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors">
-              <BookOpen className="w-4 h-4" /> {hike.cachedGuide ? 'Leggi tutto' : 'Genera guida'}
-            </button>
+        guideExpanded ? (
+          <div className="fixed inset-0 z-40 bg-white flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100 shrink-0">
+              <p className="font-display text-lg font-bold text-stone-800 truncate">Guida Turistica</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => setGuideExpanded(false)} title="Comprimi" className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-500">
+                  <Minimize2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => { setGuideExpanded(false); setShowGuideSection(false) }} title="Chiudi" className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-500">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-6">
+              <div className="max-w-2xl mx-auto space-y-4">
+                {guideParagraphs.map((p, i) => (
+                  <p key={i} className="font-lora text-stone-700 leading-relaxed">{p}</p>
+                ))}
+              </div>
+            </div>
           </div>
-        </SectionSplit>
+        ) : (
+          <SectionSplit
+            title="Guida Turistica"
+            onClose={() => setShowGuideSection(false)}
+            on3D={hasGps ? () => { setShowGuideSection(false); setShow3D(true) } : undefined}
+            mapContent={hasGps
+              ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive pois={pois} activeIndex={guideActiveTrackIndex} highlightedPoiIndex={guideActivePoiIndex} planned />
+              : <div className="absolute inset-0 bg-[#0b1a24]" />}
+          >
+            <div className="h-full flex flex-col">
+              {guideParagraphs.length > 0 && (
+                <div className="flex items-center justify-end px-4 pt-3 shrink-0">
+                  <button onClick={() => setGuideExpanded(true)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+                    <Maximize2 className="w-3.5 h-3.5" /> Schermo intero
+                  </button>
+                </div>
+              )}
+              <div ref={guideCenter.containerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                {guideParagraphs.length > 0 ? (
+                  guideParagraphs.map((p, i) => (
+                    <p key={i} ref={guideCenter.setItemRef(i)} className={`font-lora leading-relaxed transition-colors ${i === guideCenter.centeredIndex ? 'text-stone-900' : 'text-stone-500'}`}>
+                      {p}
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-sm text-stone-400 italic">Nessuna guida ancora generata per questo percorso. Giulia può raccontarti storia, natura e curiosità lungo il tracciato.</p>
+                )}
+                <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/leggi`)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors">
+                  <BookOpen className="w-4 h-4" /> {hike.cachedGuide ? 'Genera di nuovo' : 'Genera guida'}
+                </button>
+              </div>
+            </div>
+          </SectionSplit>
+        )
+      )}
+
+      {showFloraGallery && hike && (
+        <FloraGallery
+          trackPoints={hike.trackPoints ?? []}
+          month={hike.plannedDate ? new Date(hike.plannedDate).getMonth() + 1 : new Date().getMonth() + 1}
+          loadingTrack={false}
+          onClose={() => setShowFloraGallery(false)}
+        />
+      )}
+      {showAnimalGallery && hike && (
+        <AnimalGallery
+          trackPoints={hike.trackPoints ?? []}
+          month={hike.plannedDate ? new Date(hike.plannedDate).getMonth() + 1 : new Date().getMonth() + 1}
+          loadingTrack={false}
+          onClose={() => setShowAnimalGallery(false)}
+        />
+      )}
+
+      {show3D && hike && hasGps && (
+        <RouteMap3D
+          trackPoints={hike.trackPoints ?? []} title={hike.title} onClose={() => setShow3D(false)}
+          plannedDate={hike.plannedDate} pois={pois} dtmProfile={dtmProfile}
+          distanceMeters={hike.distanceMeters} elevationGain={hike.elevationGain}
+        />
       )}
       {showStreetView && centerPt?.lat && centerPt?.lon && (
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={hike?.title} onClose={() => setShowStreetView(false)} />

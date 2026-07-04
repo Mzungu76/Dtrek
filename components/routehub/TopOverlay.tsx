@@ -2,16 +2,18 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { List } from 'lucide-react'
-import { NAV_LINKS, isActive } from '@/components/Navbar'
-import type { StatPill } from './types'
+import { NAV_LINKS, isActive, ProfileAvatar } from '@/components/Navbar'
+import type { StatPill, WeatherIcon } from './types'
 
 interface Props {
   title: string
   statPills: StatPill[]
   onOpenList: () => void
+  weatherIcon?: WeatherIcon | null
+  onOpenWeather?: () => void
 }
 
-export default function TopOverlay({ title, statPills, onOpenList }: Props) {
+export default function TopOverlay({ title, statPills, onOpenList, weatherIcon, onOpenWeather }: Props) {
   const path = usePathname()
 
   return (
@@ -34,18 +36,31 @@ export default function TopOverlay({ title, statPills, onOpenList }: Props) {
           <button
             onClick={onOpenList}
             title="Vedi elenco"
-            className="pointer-events-auto shrink-0 w-9 h-9 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-stone-100"
+            className="pointer-events-auto shrink-0 w-8 h-8 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-stone-100"
           >
-            <List className="w-4 h-4" />
+            <List className="w-3.5 h-3.5" />
           </button>
+          <div className="pointer-events-auto shrink-0 rounded-full ring-2 ring-black/30">
+            <ProfileAvatar size={36} iconSize={16} />
+          </div>
         </div>
 
-        <div className="mt-3 flex flex-nowrap gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <div className="mt-3 flex flex-nowrap items-center gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {statPills.map(({ icon: Icon, label }) => (
             <span key={label} className="pointer-events-auto shrink-0 flex items-center gap-1.5 bg-black/45 backdrop-blur-md text-white text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full border border-white/10">
               <Icon className="w-3 h-3" /> {label}
             </span>
           ))}
+          {weatherIcon && onOpenWeather && (
+            <button
+              onClick={onOpenWeather}
+              title={weatherIcon.label}
+              className="pointer-events-auto shrink-0 flex items-center gap-1 text-xl leading-none ml-1"
+              style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
+            >
+              {weatherIcon.emoji}
+            </button>
+          )}
         </div>
 
         <p className="mt-3 font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>

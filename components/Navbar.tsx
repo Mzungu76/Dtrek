@@ -54,7 +54,7 @@ function useAvatar() {
   return { user, faceUrl }
 }
 
-function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; iconSize?: number }) {
+export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; iconSize?: number }) {
   const path = usePathname()
   const { user, faceUrl } = useAvatar()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()

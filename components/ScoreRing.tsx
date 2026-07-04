@@ -62,10 +62,10 @@ function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: nu
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`
 }
 
-const GAP_DEG = 4
-const SIZE    = 176
-const R       = 72
-const STROKE  = 22
+const GAP_DEG = 5
+const SIZE    = 184
+const R       = 74
+const STROKE  = 19
 const CX      = SIZE / 2
 const CY      = SIZE / 2
 
@@ -106,6 +106,7 @@ export function ScoreRing({
     <div className="rounded-2xl border border-stone-200 shadow-sm bg-white p-5">
       <div className="flex items-center gap-6 flex-wrap">
         <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
+          <div className="absolute inset-3 rounded-full bg-gradient-to-br from-stone-50 to-stone-100" />
           <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
             {segments.map((s, i) => {
               const start = i * 90 + GAP_DEG / 2
@@ -114,13 +115,13 @@ export function ScoreRing({
                 <g key={s.key}>
                   <path
                     d={arcPath(CX, CY, R, start, start + span)}
-                    stroke="#f1efe9" strokeWidth={STROKE} strokeLinecap="round" fill="none"
+                    stroke="#eae7df" strokeWidth={STROKE} strokeLinecap="round" fill="none"
                   />
                   {s.value != null && (
                     <path
                       d={arcPath(CX, CY, R, start, start + span * pct)}
                       stroke={s.color} strokeWidth={STROKE} strokeLinecap="round" fill="none"
-                      style={{ transition: 'stroke-dasharray 300ms ease' }}
+                      style={{ transition: 'stroke-dasharray 300ms ease', filter: `drop-shadow(0 2px 3px ${s.color}55)` }}
                     />
                   )}
                   <path
@@ -134,22 +135,24 @@ export function ScoreRing({
             })}
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="font-black text-2xl text-stone-800 leading-none">{Math.round(total)}</span>
+            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Punteggio</span>
+            <span className="font-black text-[28px] text-stone-800 leading-none mt-0.5">{Math.round(total)}</span>
             <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {known * 100 || 400}</span>
           </div>
         </div>
 
-        <div className="flex-1 min-w-[160px] space-y-2">
+        <div className="flex-1 min-w-[170px] space-y-1.5">
           {segments.map(s => (
             <button
               key={s.key}
               onClick={() => s.value != null && setActiveKey(s.key)}
               disabled={s.value == null}
-              className="w-full flex items-center gap-2.5 text-left disabled:opacity-40"
+              className="w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-xl transition-colors disabled:opacity-40 hover:bg-stone-50"
+              style={s.value != null ? { backgroundColor: `${s.color}0d` } : undefined}
             >
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color }} />
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 0 3px ${s.color}22` }} />
               <span className="flex-1 text-xs text-stone-600 truncate">{s.title}</span>
-              <span className="text-xs font-bold text-stone-800">{s.value != null ? Math.round(s.value) : '—'}</span>
+              <span className="text-sm font-bold" style={{ color: s.value != null ? s.color : '#a8a29e' }}>{s.value != null ? Math.round(s.value) : '—'}</span>
             </button>
           ))}
         </div>

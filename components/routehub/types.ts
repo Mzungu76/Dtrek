@@ -3,10 +3,15 @@ import type { LucideIcon } from 'lucide-react'
 
 export type HubMode = 'guida' | 'resoconto'
 
-export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'altimetria'
+export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'altimetria' | 'meteo'
 
 export interface StatPill {
   icon: LucideIcon
+  label: string
+}
+
+export interface WeatherIcon {
+  emoji: string
   label: string
 }
 
@@ -46,6 +51,15 @@ export interface RouteHubProps {
   featuredLabel: string
   featuredIcon: LucideIcon
   onOpenFeatured: (item: RouteHubItem) => void
+  /** Sentence from the personalized assessment, shown floating over the map just above the
+   *  bottom gallery (locked mode only). Undefined/null when there's nothing to show. */
+  summaryBanner?: (item: RouteHubItem) => string | null | undefined
+  /** Today's/relevant weather icon — shown borderless (no glass-pill background) in the top
+   *  overlay; clicking it opens the "meteo" section. Undefined while unknown/unavailable. */
+  weatherIcon?: (item: RouteHubItem) => WeatherIcon | null | undefined
+  /** Opens the fullscreen 3D map view for the current route — available whenever the map is
+   *  interactive (unlocked stage, and from within every section's map half). */
+  onOpenMap3D?: (item: RouteHubItem) => void
   /** "Vedi elenco" — links back to the classic grid/calendar index page. */
   onOpenList: () => void
 }

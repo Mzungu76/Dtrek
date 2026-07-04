@@ -7,6 +7,7 @@ import RouteHub from '@/components/routehub/RouteHub'
 import SectionSplit from '@/components/routehub/SectionSplit'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import type { RouteHubItem, SectionKind } from '@/components/routehub/types'
+import { wmoInfo } from '@/lib/openmeteo'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
@@ -48,6 +49,8 @@ import { useFlora } from '@/lib/useFlora'
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
+const FloraGallery    = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
+const AnimalGallery   = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
 
 function ratingColor(n: number) {
   return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
@@ -115,6 +118,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const flora = useFlora(heroPolyline, activity?.altitudeMax)
   const poiCenter = useCenteredItem(pois.length)
   const [altActiveIndex, setAltActiveIndex] = useState<number | null>(null)
+  const [showFloraGallery, setShowFloraGallery] = useState(false)
+  const [showAnimalGallery, setShowAnimalGallery] = useState(false)
 
   // Lightweight list of all completed hikes, most recent first — backs the carousel/gallery.
   useEffect(() => {
@@ -221,6 +226,12 @@ export default function ResocontoHub({ id }: { id?: string }) {
       rawActivities,
     )
   }, [activity, rawActivities])
+
+  const weatherIcon = useMemo(() => {
+    if (!activity?.weatherAtHike) return null
+    const info = wmoInfo(activity.weatherAtHike.weathercode)
+    return { emoji: info.emoji, label: info.label }
+  }, [activity])
 
   const displayItems = useMemo(() => {
     const pillsFor = (a: StoredActivity) => [
@@ -348,10 +359,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
 
-  // Passive map (no interaction) — used by sections that don't have a natural map interaction.
-  const passiveMap = () => hasGps && activity
-    ? <MapView trackPoints={activity.trackPoints} height="100%" interactive={false} />
+  // Default section map — real, interactive/navigable, no per-section highlight.
+  const sectionMap = () => hasGps && activity
+    ? <MapView trackPoints={activity.trackPoints} height="100%" interactive pois={pois} />
     : <div className="absolute inset-0 bg-[#0b1a24]" />
+  const open3D = (closeSection: () => void) => hasGps ? () => { closeSection(); setShow3D(true) } : undefined
 
   const ratingBadge = (item: RouteHubItem) => {
     if (!activity || item.id !== activity.id || !rated) return null
@@ -374,9 +386,10 @@ export default function ResocontoHub({ id }: { id?: string }) {
       <SectionSplit
         title="Dati & punteggi"
         onClose={onClose}
+        on3D={open3D(onClose)}
         mapContent={
           <div className="absolute inset-0">
-            {passiveMap()}
+            {sectionMap()}
             <div className="absolute bottom-3 inset-x-3 flex flex-wrap gap-1.5 justify-center pointer-events-none">
               {activity.trailScore != null && (
                 <span className="px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md text-white text-[11px] font-bold border border-white/15">CTS {Math.round(activity.trailScore)}</span>
@@ -467,8 +480,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
             )
           })()}
 
-          {hasGps && dateISO && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
-
           {similarActivities.length > 0 && (
             <div>
               <p className="text-sm font-semibold text-stone-700 mb-2">Percorsi simili</p>
@@ -491,15 +502,25 @@ export default function ResocontoHub({ id }: { id?: string }) {
       </SectionSplit>
     )
 
+    if (section === 'meteo') return (
+      <SectionSplit title="Meteo" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
+        <div className="h-full overflow-y-auto px-4 py-4">
+          {hasGps && dateISO
+            ? <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />
+            : <p className="text-sm text-stone-400 italic text-center py-8">Meteo non disponibile senza un tracciato GPS.</p>}
+        </div>
+      </SectionSplit>
+    )
+
     if (section === 'natura') return (
-      <SectionSplit title="Natura" onClose={onClose} mapContent={passiveMap()}>
+      <SectionSplit title="Natura" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
         <div className="h-full overflow-y-auto px-4 py-4 space-y-5">
           {hasGps && heroPolyline.length > 1 && <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />}
           <div className="flex gap-2">
-            <button onClick={() => router.push(`/resoconto/${encodeURIComponent(activity.id)}/flora`)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
+            <button onClick={() => setShowFloraGallery(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
               <Leaf className="w-4 h-4 text-emerald-600" /> Galleria Verde
             </button>
-            <button onClick={() => router.push(`/resoconto/${encodeURIComponent(activity.id)}/animali`)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
+            <button onClick={() => setShowAnimalGallery(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
               <PawPrint className="w-4 h-4 text-amber-600" /> Galleria Animali
             </button>
           </div>
@@ -511,8 +532,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
       <SectionSplit
         title="Punti di interesse"
         onClose={onClose}
+        on3D={open3D(onClose)}
         mapContent={hasGps
-          ? <MapView trackPoints={activity.trackPoints} height="100%" interactive={false} pois={pois} highlightedPoiIndex={poiCenter.centeredIndex} />
+          ? <MapView trackPoints={activity.trackPoints} height="100%" interactive pois={pois} highlightedPoiIndex={poiCenter.centeredIndex} />
           : <div className="absolute inset-0 bg-[#0b1a24]" />}
       >
         <div ref={poiCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-3">
@@ -547,7 +569,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
 
     if (section === 'sicurezza') return (
-      <SectionSplit title="Sicurezza & segnalazioni" onClose={onClose} mapContent={passiveMap()}>
+      <SectionSplit title="Sicurezza & segnalazioni" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
         <div className="h-full flex items-center justify-center px-6">
           <p className="text-sm text-stone-400 italic text-center">
             Il punteggio sicurezza è disponibile solo per le guide pre-escursione, non per le escursioni concluse.
@@ -557,9 +579,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
 
     if (section === 'altimetria') return (
-      <SectionSplit title={item.title} onClose={onClose} mapContent={
+      <SectionSplit title={item.title} onClose={onClose} on3D={open3D(onClose)} mapContent={
         hasGps
-          ? <MapView trackPoints={activity.trackPoints} height="100%" interactive={false} activeIndex={altActiveIndex} />
+          ? <MapView trackPoints={activity.trackPoints} height="100%" interactive activeIndex={altActiveIndex} />
           : <div className="absolute inset-0 bg-[#0b1a24]" />
       }>
         <div className="h-full flex flex-col px-3 pt-3.5 pb-5">
@@ -577,7 +599,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
     // strumenti
     return (
-      <SectionSplit title="Strumenti" onClose={onClose} mapContent={passiveMap()}>
+      <SectionSplit title="Strumenti" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
         <div className="h-full overflow-y-auto px-4 py-4 space-y-1">
           <ActivityPhotoManager
             activityId={activity.id} trackPoints={activity.trackPoints}
@@ -665,6 +687,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
         featuredLabel="Racconto"
         featuredIcon={BookOpen}
         onOpenFeatured={(routeItem) => router.push(`/resoconto/${encodeURIComponent(routeItem.id)}/leggi`)}
+        weatherIcon={(routeItem) => activity && routeItem.id === activity.id ? weatherIcon : undefined}
+        onOpenMap3D={() => setShow3D(true)}
         onOpenList={() => router.push('/resoconto/elenco')}
       />
 
@@ -753,6 +777,23 @@ export default function ResocontoHub({ id }: { id?: string }) {
       )}
       {showStreetView && centerPt?.lat && centerPt?.lon && (
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity?.title ?? undefined} onClose={() => setShowStreetView(false)} />
+      )}
+
+      {showFloraGallery && activity && (
+        <FloraGallery
+          trackPoints={activity.trackPoints}
+          month={new Date(activity.startTime).getMonth() + 1}
+          loadingTrack={false}
+          onClose={() => setShowFloraGallery(false)}
+        />
+      )}
+      {showAnimalGallery && activity && (
+        <AnimalGallery
+          trackPoints={activity.trackPoints}
+          month={new Date(activity.startTime).getMonth() + 1}
+          loadingTrack={false}
+          onClose={() => setShowAnimalGallery(false)}
+        />
       )}
     </>
   )
