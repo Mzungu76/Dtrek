@@ -1,9 +1,9 @@
 'use client'
 import { useParams } from 'next/navigation'
-import GuidaHub from '../GuidaHub'
+import RacconContent from '../RacconContent'
 
-export default function PlannedHikePage() {
+export default function LeggiRacconto() {
   const params = useParams()
   const id = decodeURIComponent(params.id as string)
-  return <GuidaHub id={id} />
+  return <RacconContent activityId={id} />
 }

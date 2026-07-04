@@ -11,13 +11,13 @@ import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/s
 // 3 tab principali del nuovo posizionamento: Guida (import GPX → guida turistica
 // AI), Resoconto (escursioni concluse: dati + racconto), Diario (libro impaginato).
 // Il Profilo non è un tab alla pari ma un'icona persistente (vedi ProfileAvatar).
-const NAV_LINKS = [
+export const NAV_LINKS = [
   { href: '/guida',     label: 'Guida',     icon: Compass    },
   { href: '/resoconto', label: 'Resoconto', icon: BookOpen   },
   { href: '/',          label: 'Diario',    icon: BookMarked },
 ]
 
-function isActive(href: string, path: string) {
+export function isActive(href: string, path: string) {
   return href === '/' ? path === '/' : path.startsWith(href)
 }
 

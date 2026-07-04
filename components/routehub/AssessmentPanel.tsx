@@ -1,0 +1,112 @@
+import { ShieldAlert, AlertTriangle, Info } from 'lucide-react'
+import type { HikeAssessment } from '@/lib/plannedStore'
+
+const DIFFICULTY_LABEL: Record<string, string> = {
+  facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
+}
+const DIFFICULTY_COLORS: Record<string, string> = {
+  facile:      'bg-emerald-100 text-emerald-700 border-emerald-200',
+  moderata:    'bg-amber-100 text-amber-700 border-amber-200',
+  impegnativa: 'bg-orange-100 text-orange-700 border-orange-200',
+  estrema:     'bg-red-100 text-red-700 border-red-200',
+}
+const SUIT_LABEL = (s: number) =>
+  s >= 75 ? 'Ben preparato' : s >= 50 ? 'Fattibile con impegno' :
+  s >= 30 ? 'Al limite delle capacità' : 'Molto sfidante'
+const SUIT_COLOR = (s: number) =>
+  s >= 75 ? 'bg-emerald-500' : s >= 50 ? 'bg-amber-500' : s >= 30 ? 'bg-orange-500' : 'bg-red-500'
+
+function RiskItem({ type, text }: { type: 'danger' | 'warning' | 'info'; text: string }) {
+  const colors = {
+    danger:  'bg-red-50 border-red-200 text-red-700',
+    warning: 'bg-amber-50 border-amber-200 text-amber-700',
+    info:    'bg-sky-50 border-sky-200 text-sky-700',
+  }
+  const Icon = type === 'danger' ? ShieldAlert : type === 'warning' ? AlertTriangle : Info
+  return (
+    <div className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${colors[type]}`}>
+      <Icon className="w-4 h-4 shrink-0 mt-0.5" />
+      <span>{text}</span>
+    </div>
+  )
+}
+
+export function AssessmentPanel({ a }: { a: HikeAssessment }) {
+  const suit = a.suitabilityScore
+  const hasDanger  = a.risks.some(r => r.type === 'danger')
+  const hasWarning = a.risks.some(r => r.type === 'warning')
+  const summaryBorder = hasDanger ? 'border-red-400' : hasWarning ? 'border-amber-400' : 'border-emerald-400'
+  return (
+    <div className="space-y-5">
+      {a.summary && (
+        <div className={`border-l-4 ${summaryBorder} bg-stone-50 rounded-r-lg px-4 py-3 text-sm font-medium text-stone-700`}>
+          {a.summary}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-3 items-start">
+        <div className={`px-3 py-1.5 rounded-full border text-sm font-semibold ${DIFFICULTY_COLORS[a.difficulty]}`}>
+          {DIFFICULTY_LABEL[a.difficulty]}
+        </div>
+        <div className="flex-1 min-w-[180px] space-y-1">
+          <div className="flex justify-between text-xs font-medium text-stone-600">
+            <span>Adatta a te</span>
+            <span>{suit}% · {SUIT_LABEL(suit)}</span>
+          </div>
+          <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${SUIT_COLOR(suit)}`} style={{ width: `${suit}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {a.userContext.activityCount > 0 && (
+        <div className="bg-stone-50 rounded-xl border border-stone-200 p-4 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-stone-400 mb-0.5">vs. media distanza</p>
+            <p className="font-semibold text-stone-800">
+              {a.userContext.vsAvgDistPct}%
+              <span className="text-xs font-normal text-stone-400 ml-1">(media {a.userContext.avgDistanceKm.toFixed(1)} km)</span>
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-stone-400 mb-0.5">vs. media dislivello</p>
+            <p className="font-semibold text-stone-800">
+              {a.userContext.vsAvgElevPct}%
+              <span className="text-xs font-normal text-stone-400 ml-1">(media {a.userContext.avgElevationM} m D+)</span>
+            </p>
+          </div>
+          {a.userContext.maxDistanceKm > 0 && (
+            <div>
+              <p className="text-xs text-stone-400 mb-0.5">record distanza</p>
+              <p className="font-semibold text-stone-800">{a.userContext.maxDistanceKm.toFixed(1)} km</p>
+            </div>
+          )}
+          {a.userContext.maxElevationM > 0 && (
+            <div>
+              <p className="text-xs text-stone-400 mb-0.5">record dislivello</p>
+              <p className="font-semibold text-stone-800">{a.userContext.maxElevationM} m D+</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {a.risks.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Fattori di rischio</p>
+          <div className="space-y-2">
+            {a.risks.map((r, i) => <RiskItem key={i} type={r.type} text={r.text} />)}
+          </div>
+        </div>
+      )}
+
+      {a.suggestions.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Consigli pratici</p>
+          <div className="space-y-2">
+            {a.suggestions.map((s, i) => <RiskItem key={i} type={s.type} text={s.text} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -11,6 +11,8 @@ interface Props {
   onHover?: (index: number | null) => void
   /** Distance in meters along the track — when provided, draws a "sei qui" marker at that point on the profile (used during live navigation). */
   currentDistanceM?: number
+  /** Fired alongside onHover with the hovered point's altitude/distance, for callers that need the numeric readout without recomputing cumulative distance themselves (e.g. the route hub's altimetry split view). */
+  onActivePoint?: (d: { alt: number; kmNum: number } | null) => void
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -23,7 +25,7 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-export default function ElevationProfileChart({ trackPoints, syncId, onHover, currentDistanceM }: Props) {
+export default function ElevationProfileChart({ trackPoints, syncId, onHover, currentDistanceM, onActivePoint }: Props) {
   // Subsample to 300 points max
   const step = Math.max(1, Math.floor(trackPoints.length / 300))
   const pts  = trackPoints
@@ -60,8 +62,12 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
     <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }} syncId={syncId}
-          onMouseMove={(e: any) => { const idx = e?.activePayload?.[0]?.payload?.idx; if (idx != null) onHover?.(idx) }}
-          onMouseLeave={() => onHover?.(null)}>
+          onMouseMove={(e: any) => {
+            const point = e?.activePayload?.[0]?.payload
+            if (point?.idx != null) onHover?.(point.idx)
+            if (point) onActivePoint?.({ alt: point.alt, kmNum: point.kmNum })
+          }}
+          onMouseLeave={() => { onHover?.(null); onActivePoint?.(null) }}>
           <defs>
             <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%"  stopColor="#378d44" stopOpacity={0.28} />
