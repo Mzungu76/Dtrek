@@ -16,10 +16,15 @@ export default function RouteHub({
   const [state, dispatch] = useRouteHubState(initialIndex)
 
   // Debounced URL sync — settles ~150ms after the index stops changing so a fast
-  // multi-swipe doesn't spam router.replace calls.
+  // multi-swipe doesn't spam router.replace calls. Skips the very first run: on mount
+  // state.index already equals initialIndex (the caller derived it from the same item), so
+  // notifying then would just re-run the caller's data fetch for no reason — which briefly
+  // produced a new `trackPoints` reference and a visible second map re-fit.
   const indexChangeTimer = useRef<ReturnType<typeof setTimeout>>()
+  const skippedFirstRun = useRef(false)
   useEffect(() => {
     if (!onIndexChange || items.length === 0) return
+    if (!skippedFirstRun.current) { skippedFirstRun.current = true; return }
     clearTimeout(indexChangeTimer.current)
     indexChangeTimer.current = setTimeout(() => {
       const item = items[state.index]
@@ -103,16 +108,17 @@ export default function RouteHub({
             unlockedControls={renderUnlockedControls?.(item)}
           />
 
-          {state.locked && summary && (
-            <div className="absolute inset-x-4 z-20 pointer-events-none" style={{ bottom: 'calc(env(safe-area-inset-bottom,0px) + 96px)' }}>
-              <p className="pointer-events-auto font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
-                {summary}
-              </p>
-            </div>
-          )}
-
           {state.locked && (
-            <BottomGallery mode={mode} items={items} currentId={item.id} onSelect={index => dispatch({ type: 'JUMP_TO', index })} />
+            <div
+              className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]"
+            >
+              {summary && (
+                <p className="mx-4 font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+                  {summary}
+                </p>
+              )}
+              <BottomGallery mode={mode} items={items} currentId={item.id} onSelect={index => dispatch({ type: 'JUMP_TO', index })} />
+            </div>
           )}
         </>
       )}

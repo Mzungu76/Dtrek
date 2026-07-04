@@ -49,7 +49,9 @@ export default function SectionSplit({ title, onClose, mapContent, children, on3
           <div className="w-10 h-1.5 rounded-full bg-stone-300" />
         </div>
         <div className="h-full overflow-hidden pt-4">
-          {children}
+          <div className="h-full md:max-w-2xl md:mx-auto">
+            {children}
+          </div>
         </div>
       </div>
     </div>
