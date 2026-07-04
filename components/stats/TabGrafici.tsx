@@ -373,7 +373,7 @@ export default function TabGrafici({ activities, onGuideLink }: Props) {
                   )
                 }} />
               <Scatter data={scatterData} fill="#378d44" fillOpacity={0.75}
-                onClick={(d: any) => window.location.href = `/escursione/${encodeURIComponent(d.id)}`}
+                onClick={(d: any) => window.location.href = `/resoconto/${encodeURIComponent(d.id)}`}
                 style={{ cursor: 'pointer' }} />
             </ScatterChart>
           </ResponsiveContainer>

@@ -218,6 +218,15 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_driving_duration_s   D
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_driving_origin_lat   DOUBLE PRECISION;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_driving_origin_lon   DOUBLE PRECISION;
 
+-- Scadenza dei percorsi "in attesa" nel tab Guida — calcolata all'import da
+-- guide_pending_days (user_settings), prorogabile o archiviabile manualmente.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS pending_expires_at TIMESTAMPTZ;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS archived_at        TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_planned_pending_expires ON planned_hikes (pending_expires_at ASC NULLS LAST);
+
+-- Scadenza predefinita (in giorni) applicata ai nuovi percorsi importati in Guida
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_pending_days SMALLINT DEFAULT 30;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

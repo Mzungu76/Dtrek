@@ -153,8 +153,8 @@ function RisksLegend({ risks }: { risks: SafetyRiskItem[] }) {
   )
 }
 
-export function SafetyScoreWidget({ safety }: { safety: SafetyScore | null }) {
-  const [open, setOpen] = useState(false)
+export function SafetyScoreWidget({ safety, defaultOpen }: { safety: SafetyScore | null; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(!!defaultOpen)
 
   if (!safety) return null
 

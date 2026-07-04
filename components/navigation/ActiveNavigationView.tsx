@@ -505,7 +505,7 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const requestEnd = () => setShowConfirmEnd(true)
 
-  const goToPlannedHike = () => router.push(`/programma/${hike.id}`)
+  const goToPlannedHike = () => router.push(`/guida/${hike.id}`)
 
   const confirmEnd = async () => {
     endConfirmedRef.current = true
@@ -556,7 +556,7 @@ export default function ActiveNavigationView({ hike }: Props) {
       deleteLinkedPlanned: mode === 'overwrite',
     })
     clearRecordedTrack(hike.id).catch(() => {})
-    router.push(`/escursione/${encodeURIComponent(saved.id)}`)
+    router.push(`/resoconto/${encodeURIComponent(saved.id)}`)
   }
 
   const handleDiscardRecordedActivity = () => {

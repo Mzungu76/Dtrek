@@ -204,7 +204,7 @@ export default function VettePage() {
               {sorted.map((peak, idx) => (
                 <Link
                   key={peak.id}
-                  href={`/escursione/${encodeURIComponent(peak.activityId)}`}
+                  href={`/resoconto/${encodeURIComponent(peak.activityId)}`}
                   className="flex items-center gap-4 bg-white rounded-xl border border-stone-200 px-4 py-3 hover:border-forest-300 hover:bg-forest-50 transition-all group"
                 >
                   <span className="text-stone-300 font-mono text-xs w-5 text-right shrink-0">

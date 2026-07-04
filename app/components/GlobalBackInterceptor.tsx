@@ -9,7 +9,7 @@ import { useLogicalBack } from '@/lib/navHierarchy/useLogicalBack'
 // touched here. Today that's only the live GPS navigation session, which
 // intercepts back to confirm before ending a hike in progress
 // (components/navigation/ActiveNavigationView.tsx).
-const EXCLUDED_PATTERNS = [/^\/programma\/[^/]+\/naviga$/]
+const EXCLUDED_PATTERNS = [/^\/guida\/[^/]+\/naviga$/]
 
 export default function GlobalBackInterceptor() {
   const pathname = usePathname()

@@ -1,6 +1,6 @@
 'use client'
-import { useState, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useCallback, useRef, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { parseTcx, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
@@ -8,6 +8,8 @@ import { saveActivityWithEnrichment } from '@/lib/activitySave'
 import { parseGpx } from '@/lib/gpxParser'
 import { classifyMarkers } from '@/lib/difficultyMarkers'
 import { savePlanned, getAllPlanned, getPlannedById, updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllActivities, getActivityById, type ActivityMeta } from '@/lib/blobStore'
+import { plannedFromActivity } from '@/lib/plannedFromActivity'
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
@@ -18,7 +20,15 @@ import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeTrailScore } from '@/lib/trailScore'
 import { computeBbox } from '@/lib/geoUtils'
-import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
+import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info, PencilLine, History, Loader2 } from 'lucide-react'
+
+async function defaultPendingExpiresAt(): Promise<string> {
+  const days = await fetch('/api/user-settings')
+    .then(r => r.json())
+    .then(d => d.guidePendingDays ?? 30)
+    .catch(() => 30)
+  return new Date(Date.now() + days * 86400000).toISOString()
+}
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
 type GpxStatus = 'idle' | 'parsed' | 'saving' | 'success' | 'error'
@@ -99,7 +109,7 @@ function ActivityUploader() {
         deleteLinkedPlanned: !!selectedPlanned,
       })
       setStatus('success')
-      setTimeout(() => router.push(`/escursione/${encodeURIComponent(saved.id)}`), 1200)
+      setTimeout(() => router.push(`/resoconto/${encodeURIComponent(saved.id)}`), 1200)
     } catch (e) {
       console.error(e); setStatus('error')
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
@@ -369,6 +379,11 @@ function GpxUploader() {
     if (!parsed) return
     setStatus('saving')
     try {
+      const pendingDays = await fetch('/api/user-settings')
+        .then(r => r.json())
+        .then(d => d.guidePendingDays ?? 30)
+        .catch(() => 30)
+
       const hike: PlannedHike = {
         ...parsed,
         title:        title.trim() || parsed.title,
@@ -376,6 +391,7 @@ function GpxUploader() {
         fileName:     fileName,
         createdAt:    new Date().toISOString(),
         difficultyMarkers: classifyMarkers(parsed.difficultyMarkerCandidates ?? []),
+        pendingExpiresAt: new Date(Date.now() + pendingDays * 86400000).toISOString(),
       }
 
       // Prefetch POIs during save so the detail page shows them immediately.
@@ -446,7 +462,7 @@ function GpxUploader() {
       }
 
       setStatus('success')
-      setTimeout(() => router.push(`/programma/${encodeURIComponent(parsed.id)}`), 1200)
+      setTimeout(() => router.push(`/guida/${encodeURIComponent(parsed.id)}`), 1200)
     } catch (e) {
       console.error(e); setStatus('error')
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
@@ -594,10 +610,184 @@ function GpxUploader() {
   )
 }
 
+// ── Manuale (senza file) ──────────────────────────────────────────────────────
+
+function ManualPlanUploader() {
+  const router = useRouter()
+  const [title,     setTitle]     = useState('')
+  const [distanceKm, setDistanceKm] = useState('')
+  const [elevGain,  setElevGain]  = useState('')
+  const [durationH, setDurationH] = useState('')
+  const [durationM, setDurationM] = useState('')
+  const [date,      setDate]      = useState('')
+  const [saving,    setSaving]    = useState(false)
+  const [errorMsg,  setErrorMsg]  = useState('')
+
+  const valid = title.trim().length > 0 && parseFloat(distanceKm) > 0
+
+  const handleSave = async () => {
+    if (!valid) return
+    setSaving(true); setErrorMsg('')
+    try {
+      const pendingExpiresAt = await defaultPendingExpiresAt()
+      const hike: PlannedHike = {
+        id: 'manual_' + Date.now().toString(36),
+        title: title.trim(),
+        plannedDate: date || undefined,
+        createdAt: new Date().toISOString(),
+        distanceMeters: parseFloat(distanceKm) * 1000,
+        elevationGain: parseFloat(elevGain) || 0,
+        elevationLoss: 0,
+        altitudeMax: 0,
+        altitudeMin: 0,
+        estimatedTimeSeconds: (parseInt(durationH) || 0) * 3600 + (parseInt(durationM) || 0) * 60,
+        pendingExpiresAt,
+      }
+      await savePlanned(hike)
+      router.push(`/guida/${encodeURIComponent(hike.id)}`)
+    } catch (e) {
+      setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-stone-600 mb-1">Nome del percorso</label>
+        <input value={title} onChange={e => setTitle(e.target.value)}
+          placeholder="es. Anello del Monte Amiata"
+          className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-sky-400 focus:bg-white" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-stone-600 mb-1">Distanza (km)</label>
+          <input value={distanceKm} onChange={e => setDistanceKm(e.target.value)} type="number" min="0" step="0.1"
+            className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-sky-400 focus:bg-white" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-stone-600 mb-1">Dislivello + (m)</label>
+          <input value={elevGain} onChange={e => setElevGain(e.target.value)} type="number" min="0"
+            className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-sky-400 focus:bg-white" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-stone-600 mb-1">Durata stimata</label>
+          <div className="flex gap-2">
+            <input value={durationH} onChange={e => setDurationH(e.target.value)} type="number" min="0" placeholder="h"
+              className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-sky-400 focus:bg-white" />
+            <input value={durationM} onChange={e => setDurationM(e.target.value)} type="number" min="0" max="59" placeholder="min"
+              className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-sky-400 focus:bg-white" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-stone-600 mb-1">
+            Data <span className="font-normal text-stone-400">(opzionale)</span>
+          </label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-700 bg-stone-50 outline-none focus:border-sky-400 focus:bg-white" />
+        </div>
+      </div>
+      {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
+      <button onClick={handleSave} disabled={!valid || saving}
+        className="w-full flex items-center justify-center gap-2 py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
+        {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />} Crea guida
+      </button>
+      <p className="text-xs text-stone-400">
+        Senza traccia GPS la guida non avrà mappa o profilo altimetrico, ma verrà comunque generata.
+      </p>
+    </div>
+  )
+}
+
+// ── Da diario esistente (clona un'attività conclusa) ──────────────────────────
+
+function FromActivityUploader() {
+  const router = useRouter()
+  const [activities, setActivities] = useState<ActivityMeta[] | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [saving,      setSaving]     = useState(false)
+  const [errorMsg,    setErrorMsg]   = useState('')
+
+  useEffect(() => { getAllActivities().then(setActivities).catch(() => setActivities([])) }, [])
+
+  const handleSave = async () => {
+    if (!selectedId) return
+    setSaving(true); setErrorMsg('')
+    try {
+      const activity = await getActivityById(selectedId)
+      if (!activity) throw new Error('Attività non trovata')
+      const pendingExpiresAt = await defaultPendingExpiresAt()
+      const hike = plannedFromActivity(activity, pendingExpiresAt)
+      await savePlanned(hike)
+      router.push(`/guida/${encodeURIComponent(hike.id)}`)
+    } catch (e) {
+      setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
+      setSaving(false)
+    }
+  }
+
+  if (activities === null) return (
+    <div className="flex items-center justify-center py-12 text-stone-400 gap-2">
+      <Loader2 className="w-5 h-5 animate-spin" /> Caricamento resoconti…
+    </div>
+  )
+
+  if (activities.length === 0) return (
+    <p className="text-sm text-stone-400 text-center py-12">
+      Non hai ancora resoconti conclusi da cui ripartire.
+    </p>
+  )
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+        {activities.map(a => (
+          <button
+            key={a.id}
+            onClick={() => setSelectedId(a.id)}
+            className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-all
+              ${selectedId === a.id ? 'border-sky-400 bg-sky-50 shadow-sm' : 'border-stone-200 bg-white hover:border-sky-300'}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-stone-800 truncate">{a.title ?? 'Escursione'}</span>
+              <span className="text-[10px] text-stone-400 shrink-0">
+                {new Date(a.startTime).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </span>
+            </div>
+            <div className="flex gap-3 text-[10px] text-stone-400 mt-0.5">
+              <span>{(a.distanceMeters / 1000).toFixed(1)} km</span>
+              <span>{Math.round(a.elevationGain)} m D+</span>
+            </div>
+          </button>
+        ))}
+      </div>
+      {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
+      <button onClick={handleSave} disabled={!selectedId || saving}
+        className="w-full flex items-center justify-center gap-2 py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
+        {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />} Rifai questo percorso
+      </button>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function UploadPage() {
-  const [tab, setTab] = useState<'activity' | 'gpx'>('activity')
+  return (
+    <Suspense fallback={null}>
+      <UploadPageInner />
+    </Suspense>
+  )
+}
+
+function UploadPageInner() {
+  const searchParams = useSearchParams()
+  const [tab, setTab] = useState<'activity' | 'gpx'>(
+    searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity',
+  )
+  const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>('file')
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
@@ -608,12 +798,12 @@ export default function UploadPage() {
             <Mountain className="w-8 h-8 text-forest-600" />
           </div>
           <h1 className="font-display text-3xl font-semibold text-stone-800 mb-2">
-            {tab === 'activity' ? 'Carica una nuova escursione' : 'Pianifica un\'escursione'}
+            {tab === 'activity' ? 'Carica un resoconto' : 'Importa un percorso per la Guida'}
           </h1>
           <p className="text-stone-500 text-sm">
             {tab === 'activity'
-              ? 'Importa il file dal tuo GPS o orologio sportivo'
-              : <>Trascina il tuo file <span className="font-mono font-medium text-stone-700">.gpx</span> del percorso futuro</>
+              ? 'Un\'escursione già conclusa, dal tuo GPS o orologio sportivo'
+              : 'Un percorso trovato altrove, da trasformare in guida turistica'
             }
           </p>
         </div>
@@ -621,22 +811,51 @@ export default function UploadPage() {
         {/* Tab switcher */}
         <div className="flex bg-stone-100 rounded-xl p-1 mb-6">
           <button
-            onClick={() => setTab('activity')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all
-              ${tab === 'activity' ? 'bg-white text-forest-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-          >
-            <Upload className="w-4 h-4" /> Escursione completata
-          </button>
-          <button
             onClick={() => setTab('gpx')}
             className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all
               ${tab === 'gpx' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
           >
-            <MapPin className="w-4 h-4" /> Pianificata (GPX)
+            <MapPin className="w-4 h-4" /> Per la Guida
+          </button>
+          <button
+            onClick={() => setTab('activity')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all
+              ${tab === 'activity' ? 'bg-white text-forest-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+          >
+            <Upload className="w-4 h-4" /> Per il Resoconto
           </button>
         </div>
 
-        {tab === 'activity' ? <ActivityUploader /> : <GpxUploader />}
+        {tab === 'gpx' && (
+          <div className="flex bg-stone-100 rounded-xl p-1 mb-6 text-xs">
+            <button
+              onClick={() => setGpxSource('file')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all
+                ${gpxSource === 'file' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+            >
+              <MapPin className="w-3.5 h-3.5" /> File GPX
+            </button>
+            <button
+              onClick={() => setGpxSource('manual')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all
+                ${gpxSource === 'manual' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+            >
+              <PencilLine className="w-3.5 h-3.5" /> Manuale
+            </button>
+            <button
+              onClick={() => setGpxSource('from-activity')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all
+                ${gpxSource === 'from-activity' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+            >
+              <History className="w-3.5 h-3.5" /> Da diario esistente
+            </button>
+          </div>
+        )}
+
+        {tab === 'activity' && <ActivityUploader />}
+        {tab === 'gpx' && gpxSource === 'file' && <GpxUploader />}
+        {tab === 'gpx' && gpxSource === 'manual' && <ManualPlanUploader />}
+        {tab === 'gpx' && gpxSource === 'from-activity' && <FromActivityUploader />}
       </main>
     </div>
   )

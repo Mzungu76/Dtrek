@@ -24,7 +24,7 @@ export default function NavigaPage() {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900 text-white p-6 text-center">
         <p>Impossibile avviare la navigazione: percorso non disponibile offline.</p>
-        <button onClick={() => router.push(`/programma/${id}`)} className="px-4 py-2 rounded-lg bg-sky-600">Torna al percorso</button>
+        <button onClick={() => router.push(`/guida/${id}`)} className="px-4 py-2 rounded-lg bg-sky-600">Torna al percorso</button>
       </div>
     )
   }

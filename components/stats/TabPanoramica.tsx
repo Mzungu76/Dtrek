@@ -219,7 +219,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
               value={`${(records.longestKm.distanceMeters/1000).toFixed(2)} km`}
               sub={records.longestKm.title ?? 'Escursione'}
               polyline={records.longestKm.routePolyline}
-              href={`/escursione/${encodeURIComponent(records.longestKm.id)}`}
+              href={`/resoconto/${encodeURIComponent(records.longestKm.id)}`}
             />
           )}
           {records.highestGain && (
@@ -227,7 +227,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
               value={`${Math.round(records.highestGain.elevationGain)} m D+`}
               sub={records.highestGain.title ?? 'Escursione'}
               polyline={records.highestGain.routePolyline}
-              href={`/escursione/${encodeURIComponent(records.highestGain.id)}`}
+              href={`/resoconto/${encodeURIComponent(records.highestGain.id)}`}
             />
           )}
           {records.fastestPace && (
@@ -235,7 +235,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
               value={formatPaceMinkm(records.fastestPace.distanceMeters, records.fastestPace.totalTimeSeconds)}
               sub={records.fastestPace.title ?? 'Escursione'}
               polyline={records.fastestPace.routePolyline}
-              href={`/escursione/${encodeURIComponent(records.fastestPace.id)}`}
+              href={`/resoconto/${encodeURIComponent(records.fastestPace.id)}`}
             />
           )}
           {records.mostCalories && (
@@ -243,7 +243,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
               value={`${records.mostCalories.calories} kcal`}
               sub={records.mostCalories.title ?? 'Escursione'}
               polyline={records.mostCalories.routePolyline}
-              href={`/escursione/${encodeURIComponent(records.mostCalories.id)}`}
+              href={`/resoconto/${encodeURIComponent(records.mostCalories.id)}`}
             />
           )}
           {records.highestAlt && (
@@ -251,7 +251,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
               value={`${Math.round(records.highestAlt.altitudeMax)} m slm`}
               sub={records.highestAlt.title ?? 'Escursione'}
               polyline={records.highestAlt.routePolyline}
-              href={`/escursione/${encodeURIComponent(records.highestAlt.id)}`}
+              href={`/resoconto/${encodeURIComponent(records.highestAlt.id)}`}
             />
           )}
           {records.longestDuration && (
@@ -259,7 +259,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
               value={formatDuration(records.longestDuration.totalTimeSeconds)}
               sub={records.longestDuration.title ?? 'Escursione'}
               polyline={records.longestDuration.routePolyline}
-              href={`/escursione/${encodeURIComponent(records.longestDuration.id)}`}
+              href={`/resoconto/${encodeURIComponent(records.longestDuration.id)}`}
             />
           )}
           {records.highestHR && (
@@ -267,7 +267,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
               value={`${records.highestHR.maxHeartRate} bpm`}
               sub={records.highestHR.title ?? 'Escursione'}
               polyline={records.highestHR.routePolyline}
-              href={`/escursione/${encodeURIComponent(records.highestHR.id)}`}
+              href={`/resoconto/${encodeURIComponent(records.highestHR.id)}`}
             />
           )}
           {records.highestDifficulty && (
@@ -275,7 +275,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
               value={`${difficultyIndex(records.highestDifficulty.elevationGain, records.highestDifficulty.distanceMeters)} m/km`}
               sub={records.highestDifficulty.title ?? 'Escursione'}
               polyline={records.highestDifficulty.routePolyline}
-              href={`/escursione/${encodeURIComponent(records.highestDifficulty.id)}`}
+              href={`/resoconto/${encodeURIComponent(records.highestDifficulty.id)}`}
             />
           )}
         </div>
@@ -323,7 +323,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
             <tbody className="divide-y divide-stone-100">
               {sortedActivities.map(a => (
                 <tr key={a.id} className="hover:bg-stone-50 cursor-pointer transition-colors"
-                  onClick={() => window.location.href = `/escursione/${encodeURIComponent(a.id)}`}>
+                  onClick={() => window.location.href = `/resoconto/${encodeURIComponent(a.id)}`}>
                   <td className="px-4 py-3 text-stone-500 whitespace-nowrap">{format(new Date(a.startTime), 'dd/MM/yy')}</td>
                   <td className="px-4 py-3 font-medium text-stone-700 max-w-[180px] truncate">{a.title ?? 'Escursione'}</td>
                   <td className="px-4 py-3 font-mono text-stone-600">{(a.distanceMeters/1000).toFixed(2)} km</td>

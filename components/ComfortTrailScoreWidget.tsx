@@ -176,13 +176,14 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
 // ── Main widget ───────────────────────────────────────────────────────────────
 
 export function ComfortTrailScoreWidget({
-  result, cached, beautyScore,
+  result, cached, beautyScore, defaultOpen,
 }: {
   result: TrailScoreResult | null
   cached?: number
   beautyScore?: BeautyScore
+  defaultOpen?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(!!defaultOpen)
   const ts = result?.ts ?? cached
   if (ts === undefined) return null
   const { label, color } = result ?? ctsLabel(ts)
