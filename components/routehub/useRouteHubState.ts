@@ -1,13 +1,12 @@
 import { useReducer } from 'react'
-import type { PopupKind } from './types'
+import type { SectionKind } from './types'
 
 export interface RouteHubState {
   index: number
   locked: boolean
   dragging: boolean
   dragDeltaPx: number
-  openPopup: PopupKind | null
-  altimetryOpen: boolean
+  openSection: SectionKind | null
 }
 
 export type RouteHubAction =
@@ -16,10 +15,8 @@ export type RouteHubAction =
   | { type: 'DRAG_END'; count: number }
   | { type: 'JUMP_TO'; index: number }
   | { type: 'TOGGLE_LOCK' }
-  | { type: 'OPEN_POPUP'; popup: PopupKind }
-  | { type: 'CLOSE_POPUP' }
-  | { type: 'OPEN_ALTIMETRY' }
-  | { type: 'CLOSE_ALTIMETRY' }
+  | { type: 'OPEN_SECTION'; section: SectionKind }
+  | { type: 'CLOSE_SECTION' }
 
 function clampIndex(i: number, count: number): number {
   return Math.max(0, Math.min(count - 1, i))
@@ -39,21 +36,15 @@ function reducer(state: RouteHubState, action: RouteHubAction): RouteHubState {
       return { ...state, dragging: false, dragDeltaPx: 0, index: next }
     }
     case 'JUMP_TO':
-      return { ...state, index: action.index, locked: true, openPopup: null, altimetryOpen: false }
+      return { ...state, index: action.index, locked: true, openSection: null }
     case 'TOGGLE_LOCK': {
       const locked = !state.locked
-      return locked
-        ? { ...state, locked }
-        : { ...state, locked, openPopup: null, altimetryOpen: false }
+      return locked ? { ...state, locked } : { ...state, locked, openSection: null }
     }
-    case 'OPEN_POPUP':
-      return { ...state, openPopup: action.popup }
-    case 'CLOSE_POPUP':
-      return { ...state, openPopup: null }
-    case 'OPEN_ALTIMETRY':
-      return state.locked ? { ...state, openPopup: null, altimetryOpen: true } : state
-    case 'CLOSE_ALTIMETRY':
-      return { ...state, altimetryOpen: false }
+    case 'OPEN_SECTION':
+      return state.locked ? { ...state, openSection: action.section } : state
+    case 'CLOSE_SECTION':
+      return { ...state, openSection: null }
     default:
       return state
   }
@@ -65,7 +56,6 @@ export function useRouteHubState(initialIndex: number) {
     locked: true,
     dragging: false,
     dragDeltaPx: 0,
-    openPopup: null,
-    altimetryOpen: false,
+    openSection: null,
   })
 }

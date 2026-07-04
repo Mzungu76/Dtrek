@@ -3,8 +3,11 @@ import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import RouteHub from '@/components/routehub/RouteHub'
+import SectionSplit from '@/components/routehub/SectionSplit'
+import RouteThumb from '@/components/RouteThumb'
+import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import { AssessmentPanel } from '@/components/routehub/AssessmentPanel'
-import type { RouteHubItem, PopupKind } from '@/components/routehub/types'
+import type { RouteHubItem, SectionKind } from '@/components/routehub/types'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
@@ -84,10 +87,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [origin,  setOrigin]  = useState<{ lat: number; lon: number } | null>(null)
   const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
   const [drivingLoading, setDrivingLoading] = useState(false)
+  const [altActiveIndex, setAltActiveIndex] = useState<number | null>(null)
+  const [showGuideSection, setShowGuideSection] = useState(false)
 
   const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
+  const poiCenter = useCenteredItem(pois.length)
+  const sicurezzaCenter = useCenteredItem(hike?.difficultyMarkers?.length ?? 0)
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
   // order (most recent first) — backs the carousel/gallery. Resolves the bare
@@ -360,200 +367,282 @@ export default function GuidaHub({ id }: { id?: string }) {
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
 
-  const renderStageMap = (item: RouteHubItem) => {
-    if (!hike || item.id !== hike.id) return <div className="absolute inset-0 bg-gradient-to-br from-[#123448] to-[#071824]" />
+  const renderStageMap = (item: RouteHubItem, interactive: boolean) => {
+    if (!hike || item.id !== hike.id) return (
+      <div className="absolute inset-0 bg-gradient-to-br from-[#123448] via-[#0b2333] to-[#071824]">
+        {item.polyline && item.polyline.length > 1 && (
+          <div className="absolute inset-[10%]"><RouteThumb polyline={item.polyline} color="#38bdf8" strokeWidth={2} /></div>
+        )}
+      </div>
+    )
     if (!hasGps) return <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-sm">Tracciato non disponibile</div>
     return (
       <MapView
-        trackPoints={hike.trackPoints ?? []} height="100%" interactive
+        trackPoints={hike.trackPoints ?? []} height="100%" interactive={interactive}
         showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
         pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned
       />
     )
   }
 
-  const renderAltimetryMap = (item: RouteHubItem, activeIndex: number | null) => {
-    if (!hike || item.id !== hike.id || !hasGps) return <div className="absolute inset-0 bg-[#0b1a24]" />
-    return <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} activeIndex={activeIndex} planned />
+  // Passive map (no interaction) — used by sections that don't have a natural map interaction.
+  const passiveMap = () => hasGps && hike
+    ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} planned />
+    : <div className="absolute inset-0 bg-[#0b1a24]" />
+
+  const guideExcerpt = (markdown: string, maxLen = 320): string => {
+    const plain = markdown.replace(/^#{1,6}\s+/gm, '').replace(/\[\/?curiosita\]/g, '').replace(/\s+/g, ' ').trim()
+    return plain.length > maxLen ? `${plain.slice(0, maxLen).trim()} […]` : plain
   }
 
-  const renderAltimetryChart = (item: RouteHubItem, onHover: (i: number | null) => void, onActivePoint: (d: { alt: number; kmNum: number } | null) => void) => {
-    if (!hike || item.id !== hike.id || !hike.trackPoints?.length) {
-      return <div className="h-full flex items-center justify-center text-stone-400 text-sm">Dati altimetrici non disponibili</div>
+  const renderSection = (section: SectionKind, item: RouteHubItem, onClose: () => void) => {
+    if (!hike || item.id !== hike.id) {
+      return <SectionSplit title="…" onClose={onClose} mapContent={<div className="absolute inset-0 bg-[#0b1a24]" />}>
+        <div className="py-10 text-center text-sm text-stone-400">Caricamento…</div>
+      </SectionSplit>
     }
-    return <ElevationProfileChart trackPoints={hike.trackPoints} onHover={onHover} onActivePoint={onActivePoint} />
-  }
 
-  const renderPopup = (popup: PopupKind, item: RouteHubItem) => {
-    if (!hike || item.id !== hike.id) return <div className="py-10 text-center text-sm text-stone-400">Caricamento…</div>
-
-    if (popup === 'dati') return (
-      <div className="space-y-5">
-        {hike.pendingExpiresAt && !hike.archivedAt && (() => {
-          const expired = new Date(hike.pendingExpiresAt!).getTime() < Date.now()
-          const daysLeft = Math.ceil((new Date(hike.pendingExpiresAt!).getTime() - Date.now()) / 86400000)
-          return (
-            <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${expired ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
-              <p className={`text-sm font-medium ${expired ? 'text-amber-700' : 'text-sky-700'}`}>
-                {expired ? 'Questa guida è scaduta: la proroghi o la archivi?' : `In attesa — scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}`}
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={handleExtendPending} className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold transition-colors">Proroga</button>
-                {expired && <button onClick={handleArchive} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:border-amber-400 text-amber-700 text-xs font-semibold transition-colors">Archivia</button>}
-              </div>
+    if (section === 'dati') return (
+      <SectionSplit
+        title="Dati & punteggi"
+        onClose={onClose}
+        mapContent={
+          <div className="absolute inset-0">
+            {passiveMap()}
+            <div className="absolute bottom-3 inset-x-3 flex flex-wrap gap-1.5 justify-center pointer-events-none">
+              {hike.cachedTrailScore != null && (
+                <span className="px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md text-white text-[11px] font-bold border border-white/15">CTS {Math.round(hike.cachedTrailScore)}</span>
+              )}
+              {safetyScore && (
+                <span className="px-2.5 py-1 rounded-full text-white text-[11px] font-bold border border-white/15" style={{ backgroundColor: safetyScore.color }}>Sicurezza {safetyScore.label}</span>
+              )}
+              {hike.cachedBeautyScore && (
+                <span className="px-2.5 py-1 rounded-full text-white text-[11px] font-bold border border-white/15" style={{ backgroundColor: hike.cachedBeautyScore.color }}>Bellezza {hike.cachedBeautyScore.gradeLabel}</span>
+              )}
             </div>
-          )
-        })()}
-
-        {hasGps && (
-          <ScoreRing
-            cl={{ si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError }}
-            safety={safetyScore}
-            cts={{ result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts }}
-          />
-        )}
-
-        {hasGps && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
-              <button onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
-                <Layers className="w-3 h-3" /> Pendenza
-              </button>
-            )}
-            {dtmProfile?.source === 'dtm' && (
-              <button onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
-                <Compass className="w-3 h-3" /> Esposizione
-              </button>
-            )}
           </div>
-        )}
-
-        {hasGps && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-5">
-            <h3 className="font-display text-lg font-semibold text-stone-700 mb-3 flex items-center gap-2"><Car className="w-4 h-4 text-sky-500" /> Come arrivare</h3>
-            {drivingLoading ? (
-              <div className="flex items-center gap-2 text-stone-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Calcolo distanza…</div>
-            ) : driving && origin ? (
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-6">
-                  <div><p className="text-xs text-stone-400 font-medium">Distanza</p><p className="text-lg font-bold text-stone-800">{(driving.distanceMeters / 1000).toFixed(0)} km</p></div>
-                  <div><p className="text-xs text-stone-400 font-medium">Tempo in auto</p><p className="text-lg font-bold text-stone-800">{formatDrivingDuration(driving.durationSeconds)}</p></div>
+        }
+      >
+        <div className="h-full overflow-y-auto px-4 py-4 space-y-5">
+          {hike.pendingExpiresAt && !hike.archivedAt && (() => {
+            const expired = new Date(hike.pendingExpiresAt!).getTime() < Date.now()
+            const daysLeft = Math.ceil((new Date(hike.pendingExpiresAt!).getTime() - Date.now()) / 86400000)
+            return (
+              <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${expired ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
+                <p className={`text-sm font-medium ${expired ? 'text-amber-700' : 'text-sky-700'}`}>
+                  {expired ? 'Questa guida è scaduta: la proroghi o la archivi?' : `In attesa — scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}`}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleExtendPending} className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold transition-colors">Proroga</button>
+                  {expired && <button onClick={handleArchive} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:border-amber-400 text-amber-700 text-xs font-semibold transition-colors">Archivia</button>}
                 </div>
-                <a href={googleMapsDirectionsUrl(origin.lat, origin.lon, gpsPoints[0].lat!, gpsPoints[0].lon!)} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors">
-                  <Navigation className="w-4 h-4" /> Naviga con Google Maps
-                </a>
               </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-stone-400">
-                <MapPin className="w-4 h-4 shrink-0" /> Imposta il tuo <a href="/profilo" className="text-sky-600 hover:text-sky-700 font-medium underline">indirizzo di partenza</a> nel profilo.
-              </div>
-            )}
-          </div>
-        )}
+            )
+          })()}
 
-        {hasGps && <WeatherWidget mode={hike.plannedDate ? 'planned' : 'forecast'} lat={centerPt.lat!} lon={centerPt.lon!} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />}
-      </div>
-    )
+          {hasGps && (
+            <ScoreRing
+              cl={{ si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError }}
+              safety={safetyScore}
+              cts={{ result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts }}
+            />
+          )}
 
-    if (popup === 'natura') return (
-      <div className="space-y-5">
-        {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
-          <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
-        )}
-        {hasGps && !si.notMatched && (
-          <CurrentConditionsNotice osmId={hike.osmId} polyline={hike.routePolyline} plannedId={hike.id} signals={si.result?.signals} />
-        )}
-        {hasGps && <ShadeWaterTile data={s2.data} loading={s2.loading} />}
-        <div className="flex gap-2">
-          <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/flora`)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
-            <Leaf className="w-4 h-4 text-emerald-600" /> Galleria Verde
-          </button>
-          <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/animali`)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
-            <PawPrint className="w-4 h-4 text-amber-600" /> Galleria Animali
-          </button>
-        </div>
-        {hike.difficultyMarkers && hike.difficultyMarkers.length > 0 && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-4">
-            <p className="text-sm font-semibold text-stone-700 mb-3">Segnalazioni dal tracciato</p>
-            <ul className="space-y-2">
-              {hike.difficultyMarkers.map((m, i) => <li key={i} className="text-sm text-stone-600">{m.text}</li>)}
-            </ul>
-          </div>
-        )}
-      </div>
-    )
+          {hasGps && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
+                <button onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
+                  <Layers className="w-3 h-3" /> Pendenza
+                </button>
+              )}
+              {dtmProfile?.source === 'dtm' && (
+                <button onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
+                  <Compass className="w-3 h-3" /> Esposizione
+                </button>
+              )}
+            </div>
+          )}
 
-    if (popup === 'poi') return (
-      <div className="space-y-5">
-        {poiWikiEntries.length > 0 && (
-          <div className="space-y-3">
-            {poiWikiEntries.map(({ poi, wiki }) => {
-              const meta = POI_META[poi.type]
-              return (
-                <div key={poi.id} className="bg-white rounded-2xl border border-stone-200 p-4 flex gap-3">
-                  {wiki.thumbnail && <img src={wiki.thumbnail} alt={wiki.title} className="w-16 h-16 object-cover rounded-xl shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-1"><span className="text-base leading-none">{meta.emoji}</span><span className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">{meta.label}</span></div>
-                    <p className="text-sm font-semibold text-stone-800 leading-tight mb-1">{wiki.title}</p>
-                    <p className="text-xs text-stone-500 leading-relaxed line-clamp-3">{wiki.extract.slice(0, 160)}{wiki.extract.length > 160 ? '…' : ''}</p>
+          {hasGps && (
+            <div className="bg-white rounded-2xl border border-stone-200 p-5">
+              <h3 className="font-display text-lg font-semibold text-stone-700 mb-3 flex items-center gap-2"><Car className="w-4 h-4 text-sky-500" /> Come arrivare</h3>
+              {drivingLoading ? (
+                <div className="flex items-center gap-2 text-stone-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Calcolo distanza…</div>
+              ) : driving && origin ? (
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-6">
+                    <div><p className="text-xs text-stone-400 font-medium">Distanza</p><p className="text-lg font-bold text-stone-800">{(driving.distanceMeters / 1000).toFixed(0)} km</p></div>
+                    <div><p className="text-xs text-stone-400 font-medium">Tempo in auto</p><p className="text-lg font-bold text-stone-800">{formatDrivingDuration(driving.durationSeconds)}</p></div>
                   </div>
+                  <a href={googleMapsDirectionsUrl(origin.lat, origin.lon, gpsPoints[0].lat!, gpsPoints[0].lon!)} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors">
+                    <Navigation className="w-4 h-4" /> Naviga con Google Maps
+                  </a>
                 </div>
-              )
-            })}
-          </div>
-        )}
-        {hasGps && <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />}
-        {hasGps && (
-          <button onClick={() => setShowStreetView(true)} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
-            <Images className="w-4 h-4" /> Foto zona (street view)
-          </button>
-        )}
-      </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-stone-400">
+                  <MapPin className="w-4 h-4 shrink-0" /> Imposta il tuo <a href="/profilo" className="text-sky-600 hover:text-sky-700 font-medium underline">indirizzo di partenza</a> nel profilo.
+                </div>
+              )}
+            </div>
+          )}
+
+          {hasGps && <WeatherWidget mode={hike.plannedDate ? 'planned' : 'forecast'} lat={centerPt.lat!} lon={centerPt.lon!} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />}
+        </div>
+      </SectionSplit>
     )
 
-    if (popup === 'sicurezza') return (
-      <div className="space-y-5">
-        {hike.assessment && <AssessmentPanel a={hike.assessment} />}
-        {!hike.assessment && !safetyScore && <p className="text-sm text-stone-400 italic">Nessuna valutazione disponibile per questo percorso.</p>}
-      </div>
+    if (section === 'natura') return (
+      <SectionSplit title="Natura" onClose={onClose} mapContent={passiveMap()}>
+        <div className="h-full overflow-y-auto px-4 py-4 space-y-5">
+          {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
+            <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+          )}
+          {hasGps && !si.notMatched && (
+            <CurrentConditionsNotice osmId={hike.osmId} polyline={hike.routePolyline} plannedId={hike.id} signals={si.result?.signals} />
+          )}
+          {hasGps && <ShadeWaterTile data={s2.data} loading={s2.loading} />}
+          <div className="flex gap-2">
+            <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/flora`)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
+              <Leaf className="w-4 h-4 text-emerald-600" /> Galleria Verde
+            </button>
+            <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/animali`)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
+              <PawPrint className="w-4 h-4 text-amber-600" /> Galleria Animali
+            </button>
+          </div>
+        </div>
+      </SectionSplit>
+    )
+
+    if (section === 'poi') return (
+      <SectionSplit
+        title="Punti di interesse"
+        onClose={onClose}
+        mapContent={hasGps
+          ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} pois={pois} highlightedPoiIndex={poiCenter.centeredIndex} planned />
+          : <div className="absolute inset-0 bg-[#0b1a24]" />}
+      >
+        <div ref={poiCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-3">
+          {pois.length === 0 && (
+            <p className="text-sm text-stone-400 italic text-center py-8">Nessun punto di interesse trovato lungo il tracciato.</p>
+          )}
+          {pois.map((poi, i) => {
+            const meta = POI_META[poi.type]
+            const wiki = poiWikiEntries.find(e => e.poi.id === poi.id)?.wiki
+            const highlighted = i === poiCenter.centeredIndex
+            return (
+              <div key={poi.id} ref={poiCenter.setItemRef(i)}
+                className={`rounded-2xl border p-4 flex gap-3 transition-colors ${highlighted ? 'bg-sky-50 border-sky-300' : 'bg-white border-stone-200'}`}>
+                {wiki?.thumbnail
+                  ? <img src={wiki.thumbnail} alt={wiki.title} className="w-16 h-16 object-cover rounded-xl shrink-0" />
+                  : <span className="w-16 h-16 rounded-xl bg-stone-50 flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1"><span className="text-base leading-none">{meta.emoji}</span><span className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">{meta.label}</span>
+                    <span className="text-[10px] text-stone-300 ml-auto shrink-0">{poi.distFromTrack === 0 ? 'sul tracciato' : `${poi.distFromTrack} m`}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-stone-800 leading-tight mb-1">{wiki?.title ?? poi.name ?? meta.label}</p>
+                  {wiki && <p className="text-xs text-stone-500 leading-relaxed line-clamp-3">{wiki.extract.slice(0, 160)}{wiki.extract.length > 160 ? '…' : ''}</p>}
+                </div>
+              </div>
+            )
+          })}
+          {hasGps && <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />}
+          {hasGps && (
+            <button onClick={() => setShowStreetView(true)} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
+              <Images className="w-4 h-4" /> Foto zona (street view)
+            </button>
+          )}
+        </div>
+      </SectionSplit>
+    )
+
+    if (section === 'sicurezza') {
+      const markers = hike.difficultyMarkers ?? []
+      return (
+        <SectionSplit
+          title="Sicurezza & segnalazioni"
+          onClose={onClose}
+          mapContent={hasGps
+            ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} difficultyMarkers={markers} highlightedDifficultyIndex={sicurezzaCenter.centeredIndex} planned />
+            : <div className="absolute inset-0 bg-[#0b1a24]" />}
+        >
+          <div ref={sicurezzaCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-5">
+            {hike.assessment && <AssessmentPanel a={hike.assessment} />}
+            {markers.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Segnalazioni dal tracciato</p>
+                {markers.map((m, i) => {
+                  const highlighted = i === sicurezzaCenter.centeredIndex
+                  const colors = m.severity === 'danger' ? 'bg-red-50 border-red-200 text-red-700' : m.severity === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-sky-50 border-sky-200 text-sky-700'
+                  return (
+                    <div key={i} ref={sicurezzaCenter.setItemRef(i)} className={`rounded-xl border px-3 py-2.5 text-sm transition-colors ${colors} ${highlighted ? 'ring-2 ring-offset-1 ring-current' : ''}`}>
+                      {m.text}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {!hike.assessment && markers.length === 0 && (
+              <p className="text-sm text-stone-400 italic">Nessuna valutazione disponibile per questo percorso.</p>
+            )}
+          </div>
+        </SectionSplit>
+      )
+    }
+
+    if (section === 'altimetria') return (
+      <SectionSplit title={item.title} onClose={onClose} mapContent={
+        hasGps
+          ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive={false} activeIndex={altActiveIndex} planned />
+          : <div className="absolute inset-0 bg-[#0b1a24]" />
+      }>
+        <div className="h-full flex flex-col px-3 pt-3.5 pb-5">
+          <div className="flex items-baseline justify-between px-1.5 pb-2 shrink-0">
+            <span className="text-[12px] font-semibold text-stone-300">Profilo altimetrico</span>
+          </div>
+          <div className="flex-1 min-h-0">
+            {hike.trackPoints?.length
+              ? <ElevationProfileChart trackPoints={hike.trackPoints} onHover={setAltActiveIndex} />
+              : <div className="h-full flex items-center justify-center text-stone-400 text-sm">Dati altimetrici non disponibili</div>}
+          </div>
+        </div>
+      </SectionSplit>
     )
 
     // strumenti
     return (
-      <div className="space-y-1">
-        {hasGps && <div className="px-2 py-2"><OfflinePackageDownloader hikeId={hike.id} routePolyline={hike.routePolyline ?? []} /></div>}
-        <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/leggi`)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-          <BookOpen className="w-4 h-4 text-amber-500" /> <span className="text-sm font-medium text-stone-700">{hike.cachedGuide ? 'Leggi guida completa' : 'Genera guida'}</span>
-        </button>
-        <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left text-sm font-medium text-stone-700" />
-        <div>
-          {editNotes ? (
-            <div className="px-2 py-2 space-y-2">
-              <textarea autoFocus value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={4} placeholder="Aggiungi note, equipaggiamento, punti di interesse…"
-                className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm text-stone-700 bg-stone-50 resize-none outline-none focus:border-sky-400 focus:bg-white" />
-              <div className="flex gap-2">
-                <button onClick={saveNotes} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 transition-colors">
-                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salva
-                </button>
-                <button onClick={() => { setNotesVal(hike.userNotes ?? ''); setEditNotes(false) }} className="px-3 py-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">Annulla</button>
+      <SectionSplit title="Strumenti" onClose={onClose} mapContent={passiveMap()}>
+        <div className="h-full overflow-y-auto px-4 py-4 space-y-1">
+          {hasGps && <div className="px-2 py-2"><OfflinePackageDownloader hikeId={hike.id} routePolyline={hike.routePolyline ?? []} /></div>}
+          <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left text-sm font-medium text-stone-700" />
+          <div>
+            {editNotes ? (
+              <div className="px-2 py-2 space-y-2">
+                <textarea autoFocus value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={4} placeholder="Aggiungi note, equipaggiamento, punti di interesse…"
+                  className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm text-stone-700 bg-stone-50 resize-none outline-none focus:border-sky-400 focus:bg-white" />
+                <div className="flex gap-2">
+                  <button onClick={saveNotes} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 transition-colors">
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salva
+                  </button>
+                  <button onClick={() => { setNotesVal(hike.userNotes ?? ''); setEditNotes(false) }} className="px-3 py-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">Annulla</button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <button onClick={() => setEditNotes(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-              <Pencil className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Note personali{hike.userNotes ? '' : ' (vuote)'}</span>
+            ) : (
+              <button onClick={() => setEditNotes(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+                <Pencil className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Note personali{hike.userNotes ? '' : ' (vuote)'}</span>
+              </button>
+            )}
+          </div>
+          <div className="pt-1 mt-1 border-t border-stone-100">
+            <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              <span className="text-sm font-medium">Elimina guida</span>
             </button>
-          )}
+          </div>
         </div>
-        <div className="pt-1 mt-1 border-t border-stone-100">
-          <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            <span className="text-sm font-medium">Elimina guida</span>
-          </button>
-        </div>
-      </div>
+      </SectionSplit>
     )
   }
 
@@ -567,13 +656,33 @@ export default function GuidaHub({ id }: { id?: string }) {
         items={displayItems}
         initialIndex={initialIndex}
         onIndexChange={(item) => { setCurrentId(item.id); router.replace(`/guida/${encodeURIComponent(item.id)}`, { scroll: false }) }}
-        renderPopup={renderPopup}
-        renderAltimetryMap={renderAltimetryMap}
-        renderAltimetryChart={renderAltimetryChart}
         renderStageMap={renderStageMap}
+        renderSection={renderSection}
         onNavigate={(item) => router.push(`/guida/${encodeURIComponent(item.id)}/naviga`)}
+        datiBadge={(routeItem) => hike && routeItem.id === hike.id && hike.cachedTrailScore != null
+          ? Math.round(hike.cachedTrailScore) : undefined}
+        featuredLabel="Guida Turistica"
+        featuredIcon={BookOpen}
+        onOpenFeatured={() => setShowGuideSection(true)}
         onOpenList={() => router.push('/guida/elenco')}
       />
+      {showGuideSection && hike && (
+        <SectionSplit title="Guida Turistica" onClose={() => setShowGuideSection(false)} mapContent={passiveMap()}>
+          <div className="h-full overflow-y-auto px-4 py-4 space-y-4">
+            {hike.cachedGuide ? (
+              <blockquote className="font-lora italic text-stone-700 leading-relaxed border-l-4 border-amber-300 pl-4">
+                {guideExcerpt(hike.cachedGuide)}
+              </blockquote>
+            ) : (
+              <p className="text-sm text-stone-400 italic">Nessuna guida ancora generata per questo percorso. Giulia può raccontarti storia, natura e curiosità lungo il tracciato.</p>
+            )}
+            <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/leggi`)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors">
+              <BookOpen className="w-4 h-4" /> {hike.cachedGuide ? 'Leggi tutto' : 'Genera guida'}
+            </button>
+          </div>
+        </SectionSplit>
+      )}
       {showStreetView && centerPt?.lat && centerPt?.lon && (
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={hike?.title} onClose={() => setShowStreetView(false)} />
       )}

@@ -1,27 +1,16 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import Sheet from '@/components/ui/Sheet'
-import RouteThumb from '@/components/RouteThumb'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RouteStage from './RouteStage'
 import TopOverlay from './TopOverlay'
 import SideRails from './SideRails'
 import BottomGallery from './BottomGallery'
-import AltimetrySplit from './AltimetrySplit'
-import type { PopupKind, RouteHubProps } from './types'
-
-const POPUP_TITLE: Record<PopupKind, string> = {
-  dati: 'Dati & punteggi',
-  natura: 'Natura lungo il percorso',
-  poi: 'Punti di interesse',
-  sicurezza: 'Sicurezza & segnalazioni',
-  strumenti: 'Strumenti',
-}
+import type { RouteHubProps } from './types'
 
 export default function RouteHub({
-  mode, items, initialIndex, onIndexChange, renderPopup, renderAltimetryMap, renderAltimetryChart,
-  renderStageMap, onNavigate, ratingBadge, onOpenRating, onOpenList,
+  mode, items, initialIndex, onIndexChange, renderStageMap, renderSection,
+  onNavigate, ratingBadge, onOpenRating, datiBadge, featuredLabel, featuredIcon, onOpenFeatured, onOpenList,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
 
@@ -50,7 +39,7 @@ export default function RouteHub({
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none" style={{ touchAction: 'pan-y' }}>
-      {!state.altimetryOpen && (
+      {!state.openSection && (
         <>
           <div className="absolute inset-0">
             {state.locked ? (
@@ -64,13 +53,7 @@ export default function RouteHub({
                 onDragEnd={() => dispatch({ type: 'DRAG_END', count: items.length })}
                 renderSlide={(slideItem, _i, inWindow) => (
                   mode === 'guida' ? (
-                    <div className="absolute inset-0 bg-gradient-to-br from-[#123448] via-[#0b2333] to-[#071824]">
-                      {slideItem.polyline && slideItem.polyline.length > 1 && (
-                        <div className="absolute inset-[10%]">
-                          <RouteThumb polyline={slideItem.polyline} color="#38bdf8" strokeWidth={2} />
-                        </div>
-                      )}
-                    </div>
+                    <div className="absolute inset-0">{renderStageMap(slideItem, false)}</div>
                   ) : slideItem.coverPhotoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={slideItem.coverPhotoUrl} alt={slideItem.title} className="absolute inset-0 w-full h-full object-cover" draggable={false} loading={inWindow ? 'eager' : 'lazy'} />
@@ -80,23 +63,35 @@ export default function RouteHub({
                 )}
               />
             ) : (
-              <RouteStage mode={mode} item={item} renderStageMap={renderStageMap} />
+              <RouteStage mode={mode} item={item} renderStageMap={i => renderStageMap(i, true)} />
             )}
+            {/* "Congelata" tint — only while locked; removed the instant the map unfreezes. */}
+            <div
+              className="absolute inset-0 pointer-events-none transition-opacity duration-300"
+              style={{ background: 'rgba(4,10,16,0.35)', opacity: state.locked ? 1 : 0 }}
+            />
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
+          {state.locked && (
+            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
+          )}
 
-          <TopOverlay title={item.title} statPills={item.statPills} onOpenList={onOpenList} />
+          {state.locked && (
+            <TopOverlay title={item.title} statPills={item.statPills} onOpenList={onOpenList} />
+          )}
 
           <SideRails
             mode={mode}
             locked={state.locked}
             onToggleLock={() => dispatch({ type: 'TOGGLE_LOCK' })}
-            onOpenPopup={popup => dispatch({ type: 'OPEN_POPUP', popup })}
-            onOpenAltimetria={() => dispatch({ type: 'OPEN_ALTIMETRY' })}
+            onOpenSection={section => dispatch({ type: 'OPEN_SECTION', section })}
+            datiBadge={datiBadge?.(item)}
             onNavigate={mode === 'guida' && onNavigate ? () => onNavigate(item) : undefined}
             ratingBadge={mode === 'resoconto' ? ratingBadge?.(item) : undefined}
             onOpenRating={mode === 'resoconto' && onOpenRating ? () => onOpenRating(item) : undefined}
+            featuredLabel={featuredLabel}
+            featuredIcon={featuredIcon}
+            onOpenFeatured={() => onOpenFeatured(item)}
           />
 
           {state.locked && (
@@ -105,18 +100,7 @@ export default function RouteHub({
         </>
       )}
 
-      {state.altimetryOpen && (
-        <AltimetrySplit
-          item={item}
-          onClose={() => dispatch({ type: 'CLOSE_ALTIMETRY' })}
-          renderMap={renderAltimetryMap}
-          renderChart={renderAltimetryChart}
-        />
-      )}
-
-      <Sheet open={!!state.openPopup} onClose={() => dispatch({ type: 'CLOSE_POPUP' })} title={state.openPopup ? POPUP_TITLE[state.openPopup] : undefined}>
-        {state.openPopup && renderPopup(state.openPopup, item)}
-      </Sheet>
+      {state.openSection && renderSection(state.openSection, item, () => dispatch({ type: 'CLOSE_SECTION' }))}
     </div>
   )
 }
