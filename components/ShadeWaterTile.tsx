@@ -89,8 +89,8 @@ function WaterSourcesSection({ data }: { data: Sentinel2Data }) {
   )
 }
 
-export function ShadeWaterTile({ data, loading }: { data: Sentinel2Data | null; loading?: boolean }) {
-  const [open, setOpen] = useState(false)
+export function ShadeWaterTile({ data, loading, defaultOpen }: { data: Sentinel2Data | null; loading?: boolean; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(!!defaultOpen)
 
   if (loading) {
     return (

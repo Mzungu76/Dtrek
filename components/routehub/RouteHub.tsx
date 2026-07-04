@@ -10,8 +10,8 @@ import type { RouteHubProps } from './types'
 
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, renderStageMap, renderSection,
-  onNavigate, onOpenOffline, ratingBadge, onOpenRating, datiBadge, featuredLabel, featuredIcon, onOpenFeatured,
-  summaryBanner, weatherIcon, drivingIcon, onOpenMap3D, renderUnlockedControls,
+  onNavigate, ratingBadge, onOpenRating, datiBadge, featuredLabel, featuredIcon, onOpenFeatured,
+  summaryBanner, weatherIcon, onOpenMap3D, renderUnlockedControls,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
 
@@ -87,7 +87,6 @@ export default function RouteHub({
             <TopOverlay
               title={item.title} statPills={item.statPills}
               weatherIcon={weatherIcon?.(item)} onOpenWeather={() => dispatch({ type: 'OPEN_SECTION', section: 'meteo' })}
-              drivingIcon={drivingIcon?.(item)} onOpenDriving={() => dispatch({ type: 'OPEN_SECTION', section: 'dati' })}
             />
           )}
 
@@ -98,7 +97,6 @@ export default function RouteHub({
             onOpenSection={section => dispatch({ type: 'OPEN_SECTION', section })}
             datiBadge={datiBadge?.(item)}
             onNavigate={mode === 'guida' && onNavigate ? () => onNavigate(item) : undefined}
-            onOpenOffline={mode === 'guida' && onOpenOffline ? () => onOpenOffline(item) : undefined}
             ratingBadge={mode === 'resoconto' ? ratingBadge?.(item) : undefined}
             onOpenRating={mode === 'resoconto' && onOpenRating ? () => onOpenRating(item) : undefined}
             featuredLabel={featuredLabel}

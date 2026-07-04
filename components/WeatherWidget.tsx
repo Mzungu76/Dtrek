@@ -218,13 +218,6 @@ export default function WeatherWidget(props: Props) {
   // Good-weather windows within the hiking hours, for planning a start time around them
   const goodWindows = hasDetail ? findGoodWeatherWindows(hikeHours) : []
 
-  // Mountain alerts
-  const isHighAlt     = altitudeMax > 2000
-  const stormRisk     = hikeHours.some(h => [82, 95, 96, 99].includes(h.weathercode))
-  const freezeRisk    = isHighAlt && (summitTempMin ?? 99) < 2
-  const windRisk      = (maxWind ?? 0) > 50
-  const hasAlert      = stormRisk || freezeRisk || windRisk || (displayRain ?? 0) > 15
-
   // Date label
   const dateLabel = plannedDate
     ? new Date(plannedDate + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -232,23 +225,6 @@ export default function WeatherWidget(props: Props) {
 
   return (
     <div className="space-y-3">
-
-      {/* ── Alert banner ── */}
-      {hasAlert && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2.5">
-          <span className="text-xl shrink-0 mt-0.5">⚠️</span>
-          <div>
-            <p className="text-sm font-semibold text-red-700 mb-0.5">Condizioni critiche in quota</p>
-            <p className="text-sm text-red-600 leading-relaxed">
-              {stormRisk && 'Temporali previsti. '}
-              {freezeRisk && `Temperature sotto 0° in quota (cima ~${summitTempMin}°C). `}
-              {windRisk && `Vento forte (${maxWind} km/h). `}
-              {(displayRain ?? 0) > 15 && `Precipitazioni abbondanti (${displayRain?.toFixed(0)} mm). `}
-              Valuta attentamente prima di partire.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* ── Main weather card ── */}
       <div className="rounded-xl border border-sky-100 bg-sky-50 overflow-hidden">
