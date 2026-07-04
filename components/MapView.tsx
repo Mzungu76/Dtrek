@@ -20,6 +20,8 @@ interface Props {
   floraMarkers?: { lat: number; lon: number; label: string }[]
   planned?: boolean
   activeIndex?: number | null
+  /** When false, disables all native pan/zoom gestures (used by the fullscreen route hub's "locked" mode). Default true. */
+  interactive?: boolean
 }
 
 const DTM_MATCH_RADIUS_M = 25
@@ -66,6 +68,7 @@ export default function MapView({
   floraMarkers = [],
   planned = false,
   activeIndex = null,
+  interactive = true,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<any>(null)
@@ -219,6 +222,15 @@ export default function MapView({
       }
     }
   }, [trackPoints, showGradient, showAspect, planned]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
+
+  // Lock/unlock native gestures — toggled independently of the init effect above so
+  // flipping "interactive" never remounts (and re-fits bounds on) the existing map instance.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    const map = mapInstance.current
+    const handlers = [map.dragging, map.scrollWheelZoom, map.touchZoom, map.doubleClickZoom]
+    handlers.forEach(h => { if (h) interactive ? h.enable() : h.disable() })
+  }, [interactive, mapReady])
 
   // POI layer — re-runs when pois arrive OR when map finishes initializing
   useEffect(() => {
