@@ -21,7 +21,7 @@ interface Props {
 export default function SectionSplit({ title, onClose, mapContent, children, on3D }: Props) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-stone-50">
-      <div className="relative h-1/2 overflow-hidden shrink-0 bg-[#0b1a24]">
+      <div className="relative h-[calc(50%+16px)] overflow-hidden shrink-0 bg-[#0b1a24]">
         {mapContent}
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
         <div className="absolute top-[calc(env(safe-area-inset-top,0px)+16px)] inset-x-4 flex items-center justify-between gap-2 pointer-events-none">
@@ -38,14 +38,19 @@ export default function SectionSplit({ title, onClose, mapContent, children, on3
           <button
             onClick={on3D}
             title="Vista 3D"
-            className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-white text-xs font-semibold"
+            className="absolute bottom-6 right-3 flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-white text-xs font-semibold"
           >
             <Box className="w-3.5 h-3.5 shrink-0" /> 3D
           </button>
         )}
       </div>
-      <div className="h-1/2 bg-stone-50 overflow-hidden">
-        {children}
+      <div className="relative flex-1 min-h-0 -mt-4 rounded-t-[28px] bg-stone-50 shadow-[0_-8px_24px_rgba(0,0,0,0.18)] overflow-hidden">
+        <div className="absolute top-2 inset-x-0 flex justify-center pointer-events-none">
+          <div className="w-10 h-1.5 rounded-full bg-stone-300" />
+        </div>
+        <div className="h-full overflow-hidden pt-4">
+          {children}
+        </div>
       </div>
     </div>
   )
