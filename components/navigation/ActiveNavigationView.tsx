@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, BatteryWarning, ArrowUp, NotebookPen, Leaf } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
 import type { HikeNote } from '@/lib/blobStore'
@@ -9,7 +9,7 @@ import { fetchNearbyTrailPaths, type PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
-import { buildElevationProfile } from '@/lib/navigation/elevationProfile'
+import { buildElevationProfile, remainingElevation } from '@/lib/navigation/elevationProfile'
 import type { PaceUpdateResult } from '@/lib/navigation/paceAssistant'
 import { altitudeTerrainMultiplier } from '@/lib/trailScore'
 import { getSunTimes, daylightMarginMinutes, type SunTimes } from '@/lib/daylight'
@@ -119,6 +119,7 @@ export default function ActiveNavigationView({ hike }: Props) {
   // and read from here (not the stale hike.hikeNotes prop) when the recorded activity is saved.
   const [hikeNotes, setHikeNotes] = useState<HikeNote[]>(hike.hikeNotes ?? [])
   const [showSpeciesIdentify, setShowSpeciesIdentify] = useState(false)
+  const [fieldNoteAutoCamera, setFieldNoteAutoCamera] = useState(false)
 
   // Already computed and cached pre-trip (region table + real GBIF occurrences + guardian-dog
   // OSM heuristic merged in lib/safetyScore.ts's getWildlifeRisks) — an area-wide, season/region
@@ -700,28 +701,12 @@ export default function ActiveNavigationView({ hike }: Props) {
         />
       </div>
 
-      <button
-        onClick={() => setShowFieldNote(true)}
-        className="absolute right-3 z-10 w-11 h-11 rounded-full bg-white text-stone-700 shadow-lg flex items-center justify-center"
-        style={{ top: 'calc(50% + 118px)' }}
-        aria-label="Aggiungi una nota sul campo"
-      >
-        <NotebookPen className="w-5 h-5" />
-      </button>
-
-      {isOnline && (
-        <button
-          onClick={() => setShowSpeciesIdentify(true)}
-          className="absolute right-3 z-10 w-11 h-11 rounded-full bg-white text-stone-700 shadow-lg flex items-center justify-center"
-          style={{ top: 'calc(50% + 176px)' }}
-          aria-label="Riconosci pianta o animale da una foto"
-        >
-          <Leaf className="w-5 h-5" />
-        </button>
-      )}
-
       {showFieldNote && (
-        <FieldNoteSheet hikeId={hike.id} position={position} onSave={handleSaveFieldNote} onClose={() => setShowFieldNote(false)} />
+        <FieldNoteSheet
+          hikeId={hike.id} position={position} onSave={handleSaveFieldNote}
+          onClose={() => { setShowFieldNote(false); setFieldNoteAutoCamera(false) }}
+          autoOpenCamera={fieldNoteAutoCamera}
+        />
       )}
 
       {showSpeciesIdentify && (
@@ -832,6 +817,11 @@ export default function ActiveNavigationView({ hike }: Props) {
         currentDistanceM={progress?.distanceAlongRouteM ?? 0}
         remainingPois={remainingPois}
         guideExcerpts={guideExcerpts}
+        elevationRemainingM={elevationProfile.length > 1 ? remainingElevation(elevationProfile, progress?.distanceAlongRouteM ?? 0).gainM : null}
+        onOpenFoto={() => { setFieldNoteAutoCamera(true); setShowFieldNote(true) }}
+        onOpenNota={() => { setFieldNoteAutoCamera(false); setShowFieldNote(true) }}
+        onOpenSpecie={() => { if (isOnline) setShowSpeciesIdentify(true) }}
+        specieAvailable={isOnline}
       />
 
       {callout && (

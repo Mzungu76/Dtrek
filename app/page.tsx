@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
+import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, updatePlannedMeta, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { ctsLabel } from '@/lib/trailScore'
@@ -12,11 +13,12 @@ import type { ResocontoStatus } from '@/app/api/resoconto-status/route'
 import { format, isSameDay, getDaysInMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
-  Mountain, Upload, Heart, Route, Clock, Flame, TrendingUp,
-  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutGrid, CalendarClock, ArrowUpDown, PartyPopper,
-  Car, Navigation,
+  Mountain, Upload,
+  ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutList, ArrowUpDown, PartyPopper,
+  Car, Navigation, SlidersHorizontal,
 } from 'lucide-react'
-import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl, originMatches } from '@/lib/drivingInfo'
+import { useDrivingInfo, formatDrivingDuration, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
+
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
 function getLeadingEmpty(year: number, month: number): number {
@@ -37,8 +39,6 @@ const SORT_OPTIONS: Record<TypeFilter, { id: SortKey; label: string }[]> = {
   planned: [{ id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'suitability', label: 'Adatta' }, { id: 'cts', label: 'CTS' }],
 }
 
-// ── Shared month navigation — una sola implementazione per Calendario e Lista ──
-
 function MonthNav({ label, canPrev, canNext, onPrev, onNext, compact = false }: {
   label: string; canPrev: boolean; canNext: boolean; onPrev: () => void; onNext: () => void; compact?: boolean
 }) {
@@ -58,15 +58,12 @@ function MonthNav({ label, canPrev, canNext, onPrev, onNext, compact = false }: 
   )
 }
 
-// ── Completed activity card ───────────────────────────────────────────────────
+// ── Compact card — used only in the calendar grid cells ────────────────────────
 
 interface CardProps {
   activity: ActivityMeta
   date: Date
   extra?: number
-  showFullDate?: boolean
-  compact?: boolean   // true in the 7-col calendar → shows dot on mobile
-  // multi-hike navigation
   dotCount?: number
   dotActive?: number
   onDotClick?: (idx: number) => void
@@ -85,284 +82,172 @@ function ratingColor(n: number): string {
   if (n >= 5) return '#f97316'
   return '#ef4444'
 }
-function ratingLabel(n: number): string {
-  if (n >= 9) return 'Eccellente'
-  if (n >= 8) return 'Ottimo'
-  if (n >= 7) return 'Buono'
-  if (n >= 6) return 'Discreto'
-  if (n >= 5) return 'Sufficiente'
-  return 'Mediocre'
-}
 
-function ActivityCard({ activity, date, extra = 0, showFullDate = false, compact = false, dotCount, dotActive, onDotClick, reportStatus }: CardProps) {
-  const badge = reportBadge(reportStatus)
-  const isToday   = isSameDay(date, new Date())
-  const dateLabel = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
-  const showDots  = dotCount && dotCount > 1
-  const rating    = activity.userRating
-  const rColor    = rating ? ratingColor(rating) : null
-  const trailScore   = (activity as ActivityMeta & { trailScore?: number }).trailScore
-  const ctsConf      = (activity as ActivityMeta & { trailScoreConfidence?: string }).trailScoreConfidence
-  const ctsSuffix    = ctsConf === 'default' ? '≈' : ctsConf === 'estimated' ? '~' : ''
-  const ctsData      = trailScore != null ? ctsLabel(trailScore) : null
+function CalendarActivityCell({ activity, date, extra = 0, dotCount, dotActive, onDotClick }: CardProps) {
+  const isToday = isSameDay(date, new Date())
+  const rating  = activity.userRating
+  const rColor  = rating ? ratingColor(rating) : null
+  const showDots = dotCount && dotCount > 1
 
   return (
     <Link
       href={`/escursione/${encodeURIComponent(activity.id)}`}
-      className="aspect-square bg-white rounded-2xl border border-stone-200 shadow-sm hover:border-forest-400 hover:shadow-md transition-all overflow-hidden flex flex-col group"
+      className="aspect-square rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 transition-all hover:scale-[1.03]"
+      style={{ background: isToday ? '#fdf6ee' : '#f1f8f2' }}
     >
-      {/* Mobile compact (only when used in calendar grid) */}
-      {compact && (
-        <div className={`sm:hidden w-full h-full flex flex-col items-center justify-center gap-1
-          ${isToday ? 'bg-terra-50' : 'bg-forest-50'}`}>
-          <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center
-            ${isToday ? 'bg-terra-500 text-white' : 'text-forest-800'}`}>
-            {format(date, 'd')}
-          </span>
-          {rating
-            ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: rColor! }}>★{rating}</span>
-            : <div className="w-2 h-2 rounded-full bg-forest-500" />
-          }
-          {showDots && (
-            <div className="flex gap-0.5">
-              {Array.from({ length: dotCount }).map((_, i) => (
-                <div key={i} role="button"
-                  onClick={e => { e.preventDefault(); e.stopPropagation(); onDotClick?.(i) }}
-                  className={`w-1 h-1 rounded-full ${i === dotActive ? 'bg-forest-700' : 'bg-forest-300'}`}
-                />
-              ))}
-            </div>
-          )}
-          {!showDots && extra > 0 && <span className="text-[8px] font-bold text-forest-600">+{extra}</span>}
+      <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${isToday ? 'bg-terra-500 text-white' : 'text-forest-800'}`}>
+        {format(date, 'd')}
+      </span>
+      {rating
+        ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: rColor! }}>★{rating}</span>
+        : <div className="w-2 h-2 rounded-full bg-forest-500" />
+      }
+      {showDots && (
+        <div className="flex gap-0.5">
+          {Array.from({ length: dotCount }).map((_, i) => (
+            <div key={i} role="button"
+              onClick={e => { e.preventDefault(); e.stopPropagation(); onDotClick?.(i) }}
+              className={`w-1 h-1 rounded-full ${i === dotActive ? 'bg-forest-700' : 'bg-forest-300'}`}
+            />
+          ))}
         </div>
       )}
+      {!showDots && extra > 0 && <span className="text-[8px] font-bold text-forest-600">+{extra}</span>}
+    </Link>
+  )
+}
 
-      {/* Full card (always on desktop; on mobile only if not compact) */}
-      <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
+function CalendarPlannedCell({ hike, date }: { hike: PlannedHikeMeta; date: Date }) {
+  return (
+    <Link
+      href={`/programma/${encodeURIComponent(hike.id)}`}
+      className="aspect-square rounded-xl overflow-hidden bg-sky-50 border border-dashed border-sky-300 flex flex-col items-center justify-center gap-1 transition-all hover:scale-[1.03]"
+    >
+      <span className="text-xs font-bold text-sky-700 w-6 h-6 rounded-full flex items-center justify-center">{format(date, 'd')}</span>
+      <div className="w-2 h-2 rounded-full bg-sky-500" />
+    </Link>
+  )
+}
 
-        {/* ── Score banner — top of card, visible at first glance ── */}
-        {(rating || ctsData) ? (
-          <div className="flex items-center justify-between px-2.5 py-1.5 shrink-0"
-            style={{ backgroundColor: (rColor ?? ctsData!.color) + '22', borderBottom: `1.5px solid ${(rColor ?? ctsData!.color)}40` }}>
-            {rating && rColor
-              ? <span className="text-sm font-bold leading-none" style={{ color: rColor }}>★ {rating}<span className="text-[10px] font-normal text-stone-400 ml-1">/10</span></span>
-              : <span />
-            }
-            {ctsData && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
-                CTS {Math.round(trailScore!)}{ctsSuffix}
-              </span>
-            )}
+// ── Feed card — full-width, photo-forward, the app's default view ──────────────
+
+function FeedActivityCard({ activity, showFullDate, reportStatus }: {
+  activity: ActivityMeta; showFullDate?: boolean; reportStatus?: ResocontoStatus
+}) {
+  const badge     = reportBadge(reportStatus)
+  const rating    = activity.userRating
+  const rColor    = rating ? ratingColor(rating) : null
+  const date      = new Date(activity.startTime)
+  const dateLabel = format(date, 'd MMM', { locale: it })
+
+  return (
+    <Link
+      href={`/escursione/${encodeURIComponent(activity.id)}`}
+      className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+    >
+      <div className="relative h-[160px] sm:h-[180px] bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
+        {activity.routePolyline && activity.routePolyline.length > 1 ? (
+          <div className="absolute inset-3">
+            <RouteThumb polyline={activity.routePolyline} color="#2d7a3d" strokeWidth={3} />
           </div>
         ) : (
-          <div className="h-1 shrink-0 bg-forest-100" />
+          <div className="w-full h-full flex items-center justify-center">
+            <Mountain className="w-10 h-10 text-forest-200" />
+          </div>
         )}
-
-        {/* Thumbnail */}
-        <div className="flex-1 relative bg-gradient-to-b from-forest-50 to-stone-50 min-h-0 overflow-hidden">
-          <div className="absolute inset-2">
-            {activity.routePolyline && activity.routePolyline.length > 1 ? (
-              <RouteThumb polyline={activity.routePolyline} color="#2d7a3d" strokeWidth={3} />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Mountain className="w-8 h-8 text-forest-200" />
-              </div>
-            )}
-          </div>
-          <span className={`absolute top-2 right-2 text-[10px] font-bold rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap
-            ${isToday ? 'bg-terra-500 text-white' : 'bg-white/90 text-stone-600'}`}>
-            {dateLabel}
+        {rating && rColor ? (
+          <span className="absolute top-3 left-3 text-[11px] font-bold text-white px-2.5 py-1 rounded-full shadow-sm" style={{ backgroundColor: rColor }}>
+            Voto {rating}
           </span>
-          {badge && (
-            <span className={`absolute top-2 left-2 text-[9px] font-bold rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap ${badge.className}`}>
-              {badge.label}
-            </span>
-          )}
-          {/* Navigation dots */}
-          {showDots && (
-            <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1">
-              {Array.from({ length: dotCount }).map((_, i) => (
-                <div key={i} role="button"
-                  onClick={e => { e.preventDefault(); e.stopPropagation(); onDotClick?.(i) }}
-                  className={`w-2 h-2 rounded-full border border-white/50 shadow-sm transition-colors cursor-pointer
-                    ${i === dotActive ? 'bg-forest-700' : 'bg-white/80 hover:bg-forest-200'}`}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Stats */}
-        <div className="shrink-0 px-2.5 pb-2.5 pt-1.5 border-t border-stone-100">
-          <p className="text-xs font-semibold text-stone-800 truncate leading-tight mb-1">
-            {activity.title ?? 'Escursione'}
-          </p>
-          <div className="flex items-center gap-2 text-[10px] flex-wrap">
-            <span className="flex items-center gap-0.5 text-forest-700 font-medium">
-              <Route className="w-2.5 h-2.5" />{(activity.distanceMeters / 1000).toFixed(1)} km
-            </span>
-            <span className="flex items-center gap-0.5 text-forest-600">
-              <TrendingUp className="w-2.5 h-2.5" />{activity.elevationGain.toFixed(0)} m
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-[10px] mt-0.5">
-            <span className="flex items-center gap-0.5 text-stone-400">
-              <Clock className="w-2.5 h-2.5" />{formatDuration(activity.totalTimeSeconds)}
-            </span>
-            {activity.avgHeartRate > 0 && (
-              <span className="flex items-center gap-0.5 text-red-400">
-                <Heart className="w-2.5 h-2.5" />{activity.avgHeartRate} bpm
-              </span>
-            )}
-          </div>
-          {activity.calories > 0 && (
-            <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-terra-500">
-              <Flame className="w-2.5 h-2.5" />{activity.calories} kcal
-            </div>
-          )}
+        ) : badge ? (
+          <span className={`absolute top-3 left-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm ${badge.className}`}>{badge.label}</span>
+        ) : null}
+        <span className="absolute top-3 right-3 text-[11px] font-bold bg-white/92 text-stone-700 px-2.5 py-1 rounded-full shadow-sm">
+          {showFullDate ? dateLabel : format(date, 'd')}
+        </span>
+      </div>
+      <div className="px-[18px] pt-4 pb-[18px]">
+        <p className="text-[16px] font-bold text-forest-900 mb-2 truncate">{activity.title ?? 'Escursione'}</p>
+        <div className="flex items-center gap-4 text-[13px] text-stone-500">
+          <span>{(activity.distanceMeters / 1000).toFixed(1)} km</span>
+          <span>{Math.round(activity.elevationGain)} m D+</span>
+          <span>{formatDuration(activity.totalTimeSeconds)}</span>
         </div>
       </div>
     </Link>
   )
 }
 
-// ── Planned hike card ─────────────────────────────────────────────────────────
+function FeedPlannedCard({ hike, showFullDate }: { hike: PlannedHikeMeta; showFullDate?: boolean }) {
+  const date      = hike.plannedDate ? new Date(hike.plannedDate) : new Date()
+  const isFuture  = date > new Date()
+  const dateLabel = format(date, 'd MMM', { locale: it })
+  const ctsScore  = hike.cachedTrailScore
+  const ctsConf   = hike.cachedTrailScoreConfidence
+  const ctsSuffix = ctsConf === 'default' ? '≈' : ctsConf === 'estimated' ? '~' : ''
+  const ctsData   = ctsScore != null ? ctsLabel(ctsScore) : null
 
-interface PlannedCardProps {
-  hike: PlannedHikeMeta
-  date: Date
-  showFullDate?: boolean
-  compact?: boolean
-}
-
-function PlannedCard({ hike, date, showFullDate = false, compact = false }: PlannedCardProps) {
-  const isFuture   = date > new Date()
-  const dateLabel  = showFullDate ? format(date, 'd MMM', { locale: it }) : format(date, 'd')
-  const ctsScore   = (hike as PlannedHikeMeta & { cachedTrailScore?: number }).cachedTrailScore
-  const ctsConf    = (hike as PlannedHikeMeta & { cachedTrailScoreConfidence?: string }).cachedTrailScoreConfidence
-  const ctsSuffix  = ctsConf === 'default' ? '≈' : ctsConf === 'estimated' ? '~' : ''
-  const ctsData    = ctsScore != null ? ctsLabel(ctsScore) : null
-
-  const trailStart = getTrailStartPoint(hike)
-  const cachedOriginLat = (hike as PlannedHikeMeta & { cachedDrivingOriginLat?: number }).cachedDrivingOriginLat
-  const cachedOriginLon = (hike as PlannedHikeMeta & { cachedDrivingOriginLon?: number }).cachedDrivingOriginLon
-  const cachedDistance  = (hike as PlannedHikeMeta & { cachedDrivingDistanceMeters?: number }).cachedDrivingDistanceMeters
-  const cachedDuration  = (hike as PlannedHikeMeta & { cachedDrivingDurationSeconds?: number }).cachedDrivingDurationSeconds
-  const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(
-    cachedDistance != null && cachedDuration != null ? { distanceMeters: cachedDistance, durationSeconds: cachedDuration } : null,
-  )
-  const [origin,  setOrigin]  = useState<{ lat: number; lon: number } | null>(
-    cachedOriginLat != null && cachedOriginLon != null ? { lat: cachedOriginLat, lon: cachedOriginLon } : null,
-  )
-
-  useEffect(() => {
-    if (!trailStart) return
-    let cancelled = false
-    getUserStartingPoint().then(pt => {
-      if (cancelled || !pt) return
-      setOrigin(pt)
-      // Reuse the Supabase-cached value if it was computed from the same starting point —
-      // avoids re-hitting the OSRM routing service on every card render/page load.
-      if (originMatches(cachedOriginLat, cachedOriginLon, pt.lat, pt.lon) && cachedDistance != null && cachedDuration != null) {
-        setDriving({ distanceMeters: cachedDistance, durationSeconds: cachedDuration })
-        return
-      }
-      fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
-        if (cancelled) return
-        setDriving(info)
-        if (info) {
-          updatePlannedMeta(hike.id, {
-            cachedDrivingDistanceMeters: info.distanceMeters,
-            cachedDrivingDurationSeconds: info.durationSeconds,
-            cachedDrivingOriginLat: pt.lat,
-            cachedDrivingOriginLon: pt.lon,
-          }).catch(() => {})
-        }
-      })
-    })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailStart?.[0], trailStart?.[1], hike.id, cachedOriginLat, cachedOriginLon, cachedDistance, cachedDuration])
+  const { driving, origin, trailStart } = useDrivingInfo(hike, info => {
+    updatePlannedMeta(hike.id, {
+      cachedDrivingDistanceMeters: info.distanceMeters,
+      cachedDrivingDurationSeconds: info.durationSeconds,
+      cachedDrivingOriginLat: info.originLat,
+      cachedDrivingOriginLon: info.originLon,
+    }).catch(() => {})
+  })
 
   return (
     <Link
       href={`/programma/${encodeURIComponent(hike.id)}`}
-      className="aspect-square bg-white rounded-2xl border border-dashed border-sky-300 shadow-sm hover:border-sky-500 hover:shadow-md transition-all overflow-hidden flex flex-col group"
+      className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-dashed border-sky-200"
     >
-      {/* Mobile compact */}
-      {compact && (
-        <div className="sm:hidden w-full h-full bg-sky-50 flex flex-col items-center justify-center gap-1">
-          <span className="text-xs font-bold text-sky-700 w-6 h-6 rounded-full flex items-center justify-center">
-            {format(date, 'd')}
-          </span>
-          <div className="w-2 h-2 rounded-full bg-sky-500" />
-        </div>
-      )}
-
-      {/* Full card */}
-      <div className={`${compact ? 'hidden sm:flex' : 'flex'} flex-col flex-1 min-h-0`}>
-
-        {/* Top bar — CTS badge if available, otherwise thin sky bar */}
-        {ctsData ? (
-          <div className="flex items-center justify-end px-2.5 py-1.5 shrink-0"
-            style={{ backgroundColor: ctsData.color + '22', borderBottom: `1.5px solid ${ctsData.color}40` }}>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
-              CTS {Math.round(ctsScore!)}{ctsSuffix}
-            </span>
+      <div className="relative h-[160px] sm:h-[180px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
+        {hike.routePolyline && hike.routePolyline.length > 1 ? (
+          <div className="absolute inset-3">
+            <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
           </div>
         ) : (
-          <div className="h-1 shrink-0 bg-sky-100" />
+          <div className="w-full h-full flex items-center justify-center">
+            <Mountain className="w-10 h-10 text-sky-200" />
+          </div>
         )}
-
-        <div className="flex-1 relative bg-gradient-to-b from-sky-50 to-stone-50 min-h-0 overflow-hidden">
-          <div className="absolute inset-2">
-            {hike.routePolyline && hike.routePolyline.length > 1 ? (
-              <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Mountain className="w-8 h-8 text-sky-200" />
-              </div>
-            )}
-          </div>
-          <span className="absolute top-2 right-2 text-[10px] font-bold bg-white/90 text-sky-700 rounded-full px-1.5 py-0.5 shadow-sm whitespace-nowrap">
-            {dateLabel}
-          </span>
-          <span className="absolute top-2 left-2 text-[8px] font-bold bg-sky-600 text-white rounded-full px-1.5 py-0.5 uppercase tracking-wide">
-            {isFuture ? 'Pianif.' : 'Prog.'}
-          </span>
-        </div>
-        <div className="shrink-0 px-2.5 pb-2.5 pt-1.5 border-t border-sky-50">
-          <p className="text-xs font-semibold text-sky-900 truncate leading-tight mb-1">{hike.title}</p>
-          <div className="flex items-center gap-2 text-[10px] flex-wrap">
-            <span className="flex items-center gap-0.5 text-sky-700 font-medium">
-              <Route className="w-2.5 h-2.5" />{(hike.distanceMeters / 1000).toFixed(1)} km
+        <span className="absolute top-3 left-3 text-[11px] font-bold text-white px-2.5 py-1 rounded-full shadow-sm bg-sky-600 uppercase tracking-wide">
+          {isFuture ? 'Pianificata' : 'Programmata'}
+        </span>
+        <span className="absolute top-3 right-3 text-[11px] font-bold bg-white/92 text-sky-700 px-2.5 py-1 rounded-full shadow-sm">
+          {showFullDate ? dateLabel : format(date, 'd')}
+        </span>
+      </div>
+      <div className="px-[18px] pt-4 pb-[18px]">
+        <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
+        <div className="flex items-center gap-4 text-[13px] text-stone-500 flex-wrap">
+          <span>{(hike.distanceMeters / 1000).toFixed(1)} km</span>
+          <span>{Math.round(hike.elevationGain)} m D+</span>
+          <span>{formatDuration(hike.estimatedTimeSeconds)} stim.</span>
+          {ctsData && (
+            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
+              CTS {Math.round(ctsScore!)}{ctsSuffix}
             </span>
-            <span className="flex items-center gap-0.5 text-sky-600">
-              <TrendingUp className="w-2.5 h-2.5" />{Math.round(hike.elevationGain)} m
-            </span>
-          </div>
-          <div className="flex items-center gap-0.5 text-[10px] mt-0.5 text-sky-400">
-            <Clock className="w-2.5 h-2.5" />{formatDuration(hike.estimatedTimeSeconds)} stim.
-          </div>
-          {driving && origin && trailStart && (
-            <div className="flex items-center justify-between gap-1 mt-1 pt-1 border-t border-sky-50">
-              <span className="flex items-center gap-0.5 text-[9px] text-stone-400 truncate">
-                <Car className="w-2.5 h-2.5 shrink-0" />
-                {(driving.distanceMeters / 1000).toFixed(0)} km · {formatDrivingDuration(driving.durationSeconds)}
-              </span>
-              <a
-                href={googleMapsDirectionsUrl(origin.lat, origin.lon, trailStart[0], trailStart[1])}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                title="Naviga fino al punto di partenza"
-                className="shrink-0 w-4 h-4 rounded-full bg-sky-100 hover:bg-sky-200 flex items-center justify-center text-sky-600 transition-colors"
-              >
-                <Navigation className="w-2.5 h-2.5" />
-              </a>
-            </div>
           )}
         </div>
+        {driving && origin && trailStart && (
+          <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-sky-50">
+            <span className="flex items-center gap-1 text-[12px] text-stone-400">
+              <Car className="w-3.5 h-3.5 shrink-0" />
+              {(driving.distanceMeters / 1000).toFixed(0)} km · {formatDrivingDuration(driving.durationSeconds)} d&#39;auto
+            </span>
+            <a
+              href={googleMapsDirectionsUrl(origin.lat, origin.lon, trailStart[0], trailStart[1])}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              title="Naviga fino al punto di partenza"
+              className="shrink-0 flex items-center gap-1 text-[12px] font-semibold text-sky-600 hover:text-sky-700"
+            >
+              <Navigation className="w-3.5 h-3.5" /> Naviga
+            </a>
+          </div>
+        )}
       </div>
     </Link>
   )
@@ -375,11 +260,12 @@ export default function HomePage() {
   const [planned,    setPlanned]    = useState<PlannedHikeMeta[]>([])
   const [loading,    setLoading]    = useState(true)
   const [monthIdx,   setMonthIdx]   = useState(-1)
-  const [view,       setView]       = useState<'calendar' | 'list'>('list')
+  const [view,       setView]       = useState<'feed' | 'calendar'>('feed')
   const [dayIdx,     setDayIdx]     = useState<Record<string, number>>({})
   const [sortBy,     setSortBy]     = useState<SortKey>('date')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [showAllHistory, setShowAllHistory] = useState(false)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
   const [reportStatus, setReportStatus] = useState<Record<string, ResocontoStatus>>({})
   const monthBarRef = useRef<HTMLDivElement>(null)
 
@@ -493,10 +379,6 @@ export default function HomePage() {
     })
   }, [planned, year, month, showAllHistory])
 
-  // Feed unico per la vista Lista: sostituisce le due liste separate
-  // (Registrate/Pianificate) con ognuna il proprio gruppo di ordinamento.
-  // Il filtro tipo seleziona quali elementi entrano nel feed; l'ordinamento
-  // è un solo menu, con opzioni che si adattano al filtro (SORT_OPTIONS).
   type FeedItem = { kind: 'activity'; data: ActivityMeta } | { kind: 'planned'; data: PlannedHikeMeta }
 
   const feed = useMemo((): FeedItem[] => {
@@ -535,61 +417,43 @@ export default function HomePage() {
     })
   }, [year, month])
 
-  const monthLabel  = format(new Date(year, month, 1), 'MMMM yyyy', { locale: it })
-  const totalItems  = activities.length + planned.filter(h => h.plannedDate).length
+  const monthLabel   = format(new Date(year, month, 1), 'MMMM yyyy', { locale: it })
+  const totalItems   = activities.length + planned.filter(h => h.plannedDate).length
   const hasPlanDates = planned.some(h => h.plannedDate)
+  const heroActivity = activities[0]
+
+  // Most recent hike's route, used as the hero backdrop — a large photographic/
+  // topographic moment instead of a small thumbnail. Piano di restyling 2.7.
+  const heroRoute = heroActivity?.routePolyline && heroActivity.routePolyline.length > 1 ? heroActivity.routePolyline : null
 
   return (
-    // pb-20: space for mobile bottom nav; md:pb-0: hidden on desktop
-    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
+    <div className="min-h-screen bg-stone-50 pb-28 md:pb-0">
       <Navbar />
 
-      {/* ── Header ── */}
-      <div className="bg-gradient-to-br from-forest-800 to-forest-900 text-white">
-        <div className="max-w-[1400px] mx-auto px-4 py-6 sm:py-8">
-          <div className="flex items-end justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="font-display text-3xl sm:text-4xl font-semibold leading-tight">
-                Il mio diario<br />
-                <span className="text-forest-300">di trekking</span>
-              </h1>
-              <p className="text-forest-400 text-sm mt-2">
-                {loading ? 'Caricamento…' :
-                  activities.length > 0
-                    ? `${activities.length} escursion${activities.length === 1 ? 'e' : 'i'} registrat${activities.length === 1 ? 'a' : 'e'}${planned.length > 0 ? ` · ${planned.length} pianificat${planned.length === 1 ? 'a' : 'e'}` : ''}`
-                    : 'Nessuna escursione ancora'
-                }
-              </p>
-            </div>
-
-            {!loading && totalItems > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center bg-forest-700/50 rounded-xl p-1 gap-0.5">
-                  <button
-                    onClick={() => setView('calendar')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                      ${view === 'calendar' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
-                  >
-                    <CalendarDays className="w-4 h-4" />
-                    <span className="hidden sm:inline">Calendario</span>
-                  </button>
-                  <button
-                    onClick={() => setView('list')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                      ${view === 'list' ? 'bg-white text-forest-800 shadow-sm' : 'text-forest-300 hover:text-white'}`}
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                    <span className="hidden sm:inline">Lista</span>
-                  </button>
-                </div>
-              </div>
-            )}
+      {/* ── Hero ── */}
+      <div className="relative h-[240px] sm:h-[300px] overflow-hidden bg-gradient-to-br from-forest-800 to-forest-900 bg-topography">
+        {heroRoute && (
+          <div className="absolute inset-0 opacity-80">
+            <RouteThumb polyline={heroRoute} color="#8cc894" strokeWidth={3} />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-forest-900/15 to-forest-900/85" />
+        <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8 max-w-[1400px] mx-auto sm:static sm:px-0">
+          <div className="max-w-[1400px] mx-auto px-0 sm:px-4">
+            <p className="text-forest-300 text-[13px] font-semibold mb-1.5">Il tuo diario</p>
+            <h1 className="font-display text-[26px] sm:text-4xl font-bold text-white leading-tight">
+              {loading ? 'Caricamento…' :
+                activities.length > 0
+                  ? `${activities.length} escursion${activities.length === 1 ? 'e' : 'i'}${planned.length > 0 ? ` · ${planned.length} pianificat${planned.length === 1 ? 'a' : 'e'}` : ''}`
+                  : 'Inizia il tuo diario'
+              }
+            </h1>
           </div>
         </div>
       </div>
 
       {/* ── Main ── */}
-      <main className="max-w-[1400px] mx-auto px-3 sm:px-4 py-5 sm:py-8">
+      <main className="max-w-[1400px] mx-auto px-4 py-5 sm:py-8">
         {!loading && anniversaries.length > 0 && (
           <div className="mb-5 sm:mb-6 flex flex-col gap-2">
             {anniversaries.map(({ activity, yearsAgo }) => (
@@ -608,6 +472,7 @@ export default function HomePage() {
             ))}
           </div>
         )}
+
         {loading ? (
           <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -631,240 +496,224 @@ export default function HomePage() {
             </Link>
           </div>
 
-        ) : view === 'calendar' ? (
-          /* ────────── CALENDAR VIEW ────────── */
-          <div className="fade-up">
+        ) : (
+          <div className="fade-up space-y-4">
 
-            {/* Legend — mobile only shows it if there are planned hikes */}
-            {hasPlanDates && (
-              <div className="flex items-center gap-4 mb-3 text-xs text-stone-500">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded bg-forest-100 border border-forest-300" />
-                  <span>Registrata</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded bg-sky-50 border border-dashed border-sky-300" />
-                  <span>Pianificata</span>
-                </div>
+            {/* ── Filter row: month label · view toggle · Filtra e ordina ── */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[13px] font-bold text-stone-700 capitalize truncate">
+                {showAllHistory ? 'Tutto lo storico' : monthLabel}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setView(v => v === 'feed' ? 'calendar' : 'feed')}
+                  title={view === 'feed' ? 'Vedi calendario' : 'Vedi elenco'}
+                  className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-stone-200 hover:border-forest-400 text-forest-700 transition-all shadow-sm"
+                >
+                  {view === 'feed' ? <CalendarDays className="w-4 h-4" /> : <LayoutList className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => setFilterSheetOpen(true)}
+                  className="flex items-center gap-1.5 border border-stone-200 bg-white rounded-full px-3.5 py-2 text-xs font-bold text-forest-700 shadow-sm hover:border-forest-400 transition-all"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" /> Filtra e ordina
+                </button>
               </div>
-            )}
-
-            {/* Month histogram bar */}
-            {months.length > 1 && (
-              <div
-                ref={monthBarRef}
-                className="flex gap-1 overflow-x-auto mb-4 pb-1"
-                style={{ scrollbarWidth: 'none' }}
-              >
-                {months.map(({ year: y, month: m }, i) => {
-                  const count    = countPerMonth[i]
-                  const isActive = i === safeIdx
-                  const showYear = i === 0 || months[i - 1].year !== y
-                  const barH = count > 0 ? Math.max(4, Math.round((count / maxCount) * 22)) : 0
-                  const hasPlan = planned.some(h => {
-                    if (!h.plannedDate) return false
-                    const d = new Date(h.plannedDate)
-                    return d.getFullYear() === y && d.getMonth() === m
-                  })
-
-                  return (
-                    <button
-                      key={`${y}-${m}`}
-                      onClick={() => setMonthIdx(i)}
-                      title={`${format(new Date(y, m, 1), 'MMMM yyyy', { locale: it })}: ${count} escursion${count !== 1 ? 'i' : 'e'}`}
-                      className={`flex flex-col items-center gap-0.5 px-2 pt-1 pb-1.5 rounded-xl shrink-0 transition-all min-w-[40px]
-                        ${isActive
-                          ? 'bg-forest-600 text-white shadow-sm'
-                          : count > 0
-                            ? 'bg-white border border-stone-200 text-stone-600 hover:border-forest-300'
-                            : hasPlan
-                              ? 'bg-sky-50 border border-dashed border-sky-300 text-sky-600'
-                              : 'bg-stone-50 border border-stone-100 text-stone-300'}`}
-                    >
-                      <div className="flex items-end h-6 w-full justify-center gap-0.5">
-                        {barH > 0 ? (
-                          <div
-                            className={`w-2.5 rounded-t-sm ${isActive ? 'bg-forest-300' : 'bg-forest-400'}`}
-                            style={{ height: `${barH}px` }}
-                          />
-                        ) : (
-                          <div className={`w-2.5 h-px ${isActive ? 'bg-forest-400/40' : 'bg-stone-200'}`} />
-                        )}
-                        {hasPlan && !isActive && (
-                          <div className="w-1.5 rounded-t-sm bg-sky-400" style={{ height: '8px' }} />
-                        )}
-                      </div>
-                      <span className="text-[10px] font-semibold leading-none whitespace-nowrap capitalize">
-                        {format(new Date(y, m, 1), 'MMM', { locale: it })}
-                        {showYear && (
-                          <span className={`ml-0.5 text-[9px] font-normal ${isActive ? 'text-forest-200' : 'text-stone-400'}`}>
-                            &apos;{String(y).slice(-2)}
-                          </span>
-                        )}
-                      </span>
-                      {count > 0 && (
-                        <span className={`text-[9px] font-bold leading-none ${isActive ? 'text-forest-200' : 'text-forest-500'}`}>
-                          {count}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Month navigation */}
-            <MonthNav
-              label={monthLabel}
-              canPrev={safeIdx > 0}
-              canNext={safeIdx < months.length - 1}
-              onPrev={() => setMonthIdx(i => Math.max(0, (i < 0 ? months.length - 1 : i) - 1))}
-              onNext={() => setMonthIdx(i => Math.min(months.length - 1, (i < 0 ? months.length - 1 : i) + 1))}
-            />
-
-            {/* Day-of-week headers */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 mb-1 sm:mb-1.5">
-              {DAY_LABELS.map(d => (
-                <div key={d} className="text-center text-[9px] sm:text-xs font-semibold text-stone-400 uppercase tracking-widest py-1">
-                  {d}
-                </div>
-              ))}
             </div>
 
-            {/* Month grid */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
-              {cells.map((dayNum, i) => {
-                if (dayNum === null) return <div key={`e-${i}`} className="aspect-square" />
-                const date      = new Date(year, month, dayNum)
-                const key       = format(date, 'yyyy-MM-dd')
-                const acts      = actsByDate.get(key) ?? []
-                const curIdx    = Math.min(dayIdx[key] ?? 0, acts.length - 1)
-                const act       = acts[curIdx]
-                const planItems = plannedByDate.get(key) ?? []
-                const planHike  = planItems[0]
-                const isToday   = isSameDay(date, new Date())
-
-                if (acts.length > 0) return (
-                  <ActivityCard
-                    key={key}
-                    activity={act}
-                    date={date}
-                    compact
-                    dotCount={acts.length}
-                    dotActive={curIdx}
-                    onDotClick={idx => setDayIdx(prev => ({ ...prev, [key]: idx }))}
-                    reportStatus={reportStatus[act.id]}
-                  />
-                )
-                if (planHike) return <PlannedCard key={key} hike={planHike} date={date} compact />
-
-                return (
-                  <div
-                    key={key}
-                    className={`aspect-square rounded-xl border flex flex-col
-                      ${isToday ? 'border-terra-200 bg-terra-50/40' : 'border-stone-100 bg-stone-50/60'}`}
-                  >
-                    <div className="flex justify-end p-1 sm:p-1.5">
-                      <span className={`text-[10px] sm:text-xs font-medium rounded-full w-5 h-5 flex items-center justify-center
-                        ${isToday ? 'bg-terra-500 text-white font-bold' : 'text-stone-300'}`}>
-                        {dayNum}
-                      </span>
+            {view === 'calendar' ? (
+              /* ────────── CALENDAR VIEW (secondary) ────────── */
+              <div>
+                {hasPlanDates && (
+                  <div className="flex items-center gap-4 mb-3 text-xs text-stone-500">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded bg-forest-100 border border-forest-300" />
+                      <span>Registrata</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded bg-sky-50 border border-dashed border-sky-300" />
+                      <span>Pianificata</span>
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          </div>
+                )}
 
-        ) : (
-          /* ────────── LIST VIEW ────────── */
-          <div className="fade-up space-y-4">
-            {showAllHistory ? (
-              <div className="flex items-center justify-between gap-2 -mt-1">
-                <p className="font-semibold text-stone-700 text-sm sm:text-base">Tutto lo storico</p>
-                <button
-                  onClick={() => setShowAllHistory(false)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-forest-400 transition-all shadow-sm text-forest-700 text-sm font-medium"
-                >
-                  <CalendarDays className="w-4 h-4" /> Torna al mese
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between gap-2 -mt-1">
-                <div className="flex-1">
-                  <MonthNav
-                    label={monthLabel}
-                    canPrev={safeIdx > 0}
-                    canNext={safeIdx < months.length - 1}
-                    onPrev={() => setMonthIdx(i => Math.max(0, (i < 0 ? months.length - 1 : i) - 1))}
-                    onNext={() => setMonthIdx(i => Math.min(months.length - 1, (i < 0 ? months.length - 1 : i) + 1))}
-                    compact
-                  />
+                {months.length > 1 && (
+                  <div ref={monthBarRef} className="flex gap-1 overflow-x-auto mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+                    {months.map(({ year: y, month: m }, i) => {
+                      const count    = countPerMonth[i]
+                      const isActive = i === safeIdx
+                      const showYear = i === 0 || months[i - 1].year !== y
+                      const barH = count > 0 ? Math.max(4, Math.round((count / maxCount) * 22)) : 0
+                      const hasPlan = planned.some(h => {
+                        if (!h.plannedDate) return false
+                        const d = new Date(h.plannedDate)
+                        return d.getFullYear() === y && d.getMonth() === m
+                      })
+
+                      return (
+                        <button
+                          key={`${y}-${m}`}
+                          onClick={() => setMonthIdx(i)}
+                          title={`${format(new Date(y, m, 1), 'MMMM yyyy', { locale: it })}: ${count} escursion${count !== 1 ? 'i' : 'e'}`}
+                          className={`flex flex-col items-center gap-0.5 px-2 pt-1 pb-1.5 rounded-xl shrink-0 transition-all min-w-[40px]
+                            ${isActive
+                              ? 'bg-forest-600 text-white shadow-sm'
+                              : count > 0
+                                ? 'bg-white border border-stone-200 text-stone-600 hover:border-forest-300'
+                                : hasPlan
+                                  ? 'bg-sky-50 border border-dashed border-sky-300 text-sky-600'
+                                  : 'bg-stone-50 border border-stone-100 text-stone-300'}`}
+                        >
+                          <div className="flex items-end h-6 w-full justify-center gap-0.5">
+                            {barH > 0 ? (
+                              <div className={`w-2.5 rounded-t-sm ${isActive ? 'bg-forest-300' : 'bg-forest-400'}`} style={{ height: `${barH}px` }} />
+                            ) : (
+                              <div className={`w-2.5 h-px ${isActive ? 'bg-forest-400/40' : 'bg-stone-200'}`} />
+                            )}
+                            {hasPlan && !isActive && <div className="w-1.5 rounded-t-sm bg-sky-400" style={{ height: '8px' }} />}
+                          </div>
+                          <span className="text-[10px] font-semibold leading-none whitespace-nowrap capitalize">
+                            {format(new Date(y, m, 1), 'MMM', { locale: it })}
+                            {showYear && <span className={`ml-0.5 text-[9px] font-normal ${isActive ? 'text-forest-200' : 'text-stone-400'}`}>&apos;{String(y).slice(-2)}</span>}
+                          </span>
+                          {count > 0 && <span className={`text-[9px] font-bold leading-none ${isActive ? 'text-forest-200' : 'text-forest-500'}`}>{count}</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <MonthNav
+                  label={monthLabel}
+                  canPrev={safeIdx > 0}
+                  canNext={safeIdx < months.length - 1}
+                  onPrev={() => setMonthIdx(i => Math.max(0, (i < 0 ? months.length - 1 : i) - 1))}
+                  onNext={() => setMonthIdx(i => Math.min(months.length - 1, (i < 0 ? months.length - 1 : i) + 1))}
+                />
+
+                <div className="grid grid-cols-7 gap-1 sm:gap-1.5 mb-1 sm:mb-1.5">
+                  {DAY_LABELS.map(d => (
+                    <div key={d} className="text-center text-[9px] sm:text-xs font-semibold text-stone-400 uppercase tracking-widest py-1">{d}</div>
+                  ))}
                 </div>
-                <button
-                  onClick={() => setShowAllHistory(true)}
-                  title="Vedi tutto lo storico"
-                  className="shrink-0 flex items-center gap-1 text-xs text-forest-600 hover:text-forest-700 font-medium"
-                >
-                  <CalendarClock className="w-3.5 h-3.5" /> Tutte
-                </button>
-              </div>
-            )}
 
-            {/* Filtro tipo + ordinamento: un solo menu, le opzioni si adattano al filtro attivo */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center bg-stone-100 rounded-lg p-0.5 gap-0.5">
-                {([
-                  { id: 'all',     label: 'Tutte' },
-                  { id: 'done',    label: 'Fatte' },
-                  { id: 'planned', label: 'Programmate' },
-                ] as const).map(f => (
-                  <button key={f.id} onClick={() => changeTypeFilter(f.id)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all
-                      ${typeFilter === f.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-400 hover:text-stone-600'}`}>
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5 ml-auto">
-                <ArrowUpDown className="w-3 h-3 text-stone-400 ml-1" />
-                {SORT_OPTIONS[typeFilter].map(s => (
-                  <button key={s.id} onClick={() => setSortBy(s.id)}
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all
-                      ${sortBy === s.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-400 hover:text-stone-600'}`}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+                <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+                  {cells.map((dayNum, i) => {
+                    if (dayNum === null) return <div key={`e-${i}`} className="aspect-square" />
+                    const date      = new Date(year, month, dayNum)
+                    const key       = format(date, 'yyyy-MM-dd')
+                    const acts      = actsByDate.get(key) ?? []
+                    const curIdx    = Math.min(dayIdx[key] ?? 0, acts.length - 1)
+                    const act       = acts[curIdx]
+                    const planItems = plannedByDate.get(key) ?? []
+                    const planHike  = planItems[0]
+                    const isToday   = isSameDay(date, new Date())
 
-            {feed.length === 0 ? (
-              <p className="text-sm text-stone-400 text-center py-12">
-                Nessuna escursione {showAllHistory ? '' : 'in questo mese'}.
-              </p>
+                    if (acts.length > 0) return (
+                      <CalendarActivityCell
+                        key={key}
+                        activity={act}
+                        date={date}
+                        dotCount={acts.length}
+                        dotActive={curIdx}
+                        onDotClick={idx => setDayIdx(prev => ({ ...prev, [key]: idx }))}
+                        reportStatus={reportStatus[act.id]}
+                      />
+                    )
+                    if (planHike) return <CalendarPlannedCell key={key} hike={planHike} date={date} />
+
+                    return (
+                      <div key={key} className={`aspect-square rounded-xl border flex flex-col ${isToday ? 'border-terra-200 bg-terra-50/40' : 'border-stone-100 bg-stone-50/60'}`}>
+                        <div className="flex justify-end p-1 sm:p-1.5">
+                          <span className={`text-[10px] sm:text-xs font-medium rounded-full w-5 h-5 flex items-center justify-center ${isToday ? 'bg-terra-500 text-white font-bold' : 'text-stone-300'}`}>
+                            {dayNum}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                {feed.map(item => item.kind === 'activity' ? (
-                  <ActivityCard
-                    key={`a-${item.data.id}`}
-                    activity={item.data}
-                    date={new Date(item.data.startTime)}
-                    showFullDate
-                    reportStatus={reportStatus[item.data.id]}
-                  />
+              /* ────────── FEED VIEW (default) ────────── */
+              <div>
+                {showAllHistory && (
+                  <button
+                    onClick={() => setShowAllHistory(false)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 mb-3 rounded-lg bg-white border border-stone-200 hover:border-forest-400 transition-all shadow-sm text-forest-700 text-sm font-medium"
+                  >
+                    <CalendarDays className="w-4 h-4" /> Torna al mese
+                  </button>
+                )}
+
+                {feed.length === 0 ? (
+                  <p className="text-sm text-stone-400 text-center py-12">
+                    Nessuna escursione {showAllHistory ? '' : 'in questo mese'}.
+                  </p>
                 ) : (
-                  <PlannedCard
-                    key={`p-${item.data.id}`}
-                    hike={item.data}
-                    date={item.data.plannedDate ? new Date(item.data.plannedDate) : new Date()}
-                    showFullDate
-                  />
-                ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {feed.map(item => item.kind === 'activity' ? (
+                      <FeedActivityCard
+                        key={`a-${item.data.id}`}
+                        activity={item.data}
+                        showFullDate={showAllHistory}
+                        reportStatus={reportStatus[item.data.id]}
+                      />
+                    ) : (
+                      <FeedPlannedCard key={`p-${item.data.id}`} hike={item.data} showFullDate={showAllHistory} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
       </main>
+
+      {/* ── Filtra e ordina ── */}
+      <Sheet open={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filtra e ordina">
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs font-bold text-stone-400 uppercase tracking-wide mb-2">Mostra</p>
+            <div className="flex items-center bg-stone-100 rounded-xl p-1 gap-1">
+              {([
+                { id: 'all',     label: 'Tutte' },
+                { id: 'done',    label: 'Fatte' },
+                { id: 'planned', label: 'Programmate' },
+              ] as const).map(f => (
+                <button key={f.id} onClick={() => changeTypeFilter(f.id)}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all
+                    ${typeFilter === f.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-400 hover:text-stone-600'}`}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-stone-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+              <ArrowUpDown className="w-3 h-3" /> Ordina per
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {SORT_OPTIONS[typeFilter].map(s => (
+                <button key={s.id} onClick={() => setSortBy(s.id)}
+                  className={`px-3.5 py-2 rounded-full text-sm font-semibold transition-all border
+                    ${sortBy === s.id ? 'bg-forest-600 border-forest-600 text-white' : 'bg-white border-stone-200 text-stone-500 hover:border-forest-300'}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {!showAllHistory && (
+            <button
+              onClick={() => { setShowAllHistory(true); setFilterSheetOpen(false) }}
+              className="w-full text-center text-sm font-semibold text-forest-600 hover:text-forest-700 py-2"
+            >
+              Vedi tutto lo storico →
+            </button>
+          )}
+        </div>
+      </Sheet>
     </div>
   )
 }

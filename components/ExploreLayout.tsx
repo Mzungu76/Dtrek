@@ -25,10 +25,10 @@ function clamp(v: number, min: number, max: number): number {
 // - Mobile: results live in a draggable 3-state bottom sheet (collapsed/half/
 //   full) that overlays the map instead of following it.
 export default function ExploreLayout({ map, panel, resultsCount, searchTrigger }: Props) {
-  // Defaults to 'half' (not 'collapsed') so the panel — search button, filters,
-  // results — is immediately visible and usable on load, instead of being
-  // clipped behind a 56px peek bar that's easy to miss entirely.
-  const [sheetState, setSheetState] = useState<SheetState>('half')
+  // Defaults to 'collapsed' (peek) — search now floats over the map, so the
+  // sheet only needs to hold results, matching the "risultati come foglio in
+  // stato di anteprima" direction (piano di restyling 2.9).
+  const [sheetState, setSheetState] = useState<SheetState>('collapsed')
   // Live drag height in px while the handle is being dragged; null once released
   // (snapped back to one of the 3 discrete states, transition animates it).
   const [dragHeight, setDragHeight] = useState<number | null>(null)
