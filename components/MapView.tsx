@@ -22,6 +22,10 @@ interface Props {
   activeIndex?: number | null
   /** When false, disables all native pan/zoom gestures (used by the fullscreen route hub's "locked" mode). Default true. */
   interactive?: boolean
+  /** Index into `pois` to draw larger/highlighted and pan the map to (used by the route hub's POI section, synced to scroll position). */
+  highlightedPoiIndex?: number | null
+  /** Index into `difficultyMarkers` to draw larger/highlighted and pan the map to (used by the route hub's Sicurezza section). */
+  highlightedDifficultyIndex?: number | null
 }
 
 const DTM_MATCH_RADIUS_M = 25
@@ -69,6 +73,8 @@ export default function MapView({
   planned = false,
   activeIndex = null,
   interactive = true,
+  highlightedPoiIndex = null,
+  highlightedDifficultyIndex = null,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<any>(null)
@@ -241,21 +247,27 @@ export default function MapView({
       poiLayer.current.forEach((m: any) => m.remove())
       poiLayer.current = []
 
-      for (const poi of pois) {
+      pois.forEach((poi, i) => {
         const meta = POI_META[poi.type]
+        const isHighlighted = i === highlightedPoiIndex
+        const size = isHighlighted ? 40 : 28
         const icon = L.divIcon({
-          html: `<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">${meta.emoji}</div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+          html: `<div style="font-size:${isHighlighted ? 30 : 22}px;line-height:1;filter:drop-shadow(0 1px ${isHighlighted ? 4 : 2}px rgba(0,0,0,0.5));transition:font-size .2s">${meta.emoji}</div>`,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
           className: '',
         })
         const popup = buildPoiPopupHtml(poi)
 
-        const m = L.marker([poi.lat, poi.lon], { icon }).addTo(mapInstance.current).bindPopup(popup, { maxWidth: 250 })
+        const m = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 }).addTo(mapInstance.current).bindPopup(popup, { maxWidth: 250 })
         poiLayer.current.push(m)
+      })
+
+      if (highlightedPoiIndex != null && pois[highlightedPoiIndex]) {
+        mapInstance.current.panTo([pois[highlightedPoiIndex].lat, pois[highlightedPoiIndex].lon])
       }
     })
-  }, [pois, mapReady])
+  }, [pois, mapReady, highlightedPoiIndex])
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {
@@ -330,11 +342,13 @@ export default function MapView({
       difficultyLayer.current.forEach((m: any) => m.remove())
       difficultyLayer.current = []
 
-      for (const marker of difficultyMarkers) {
+      difficultyMarkers.forEach((marker, i) => {
         const color = SEVERITY_COLOR[marker.severity]
+        const isHighlighted = i === highlightedDifficultyIndex
+        const size = isHighlighted ? 38 : 26
         const icon = L.divIcon({
-          html: `<div style="background:${color};color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35)">${SEVERITY_EMOJI[marker.severity]}</div>`,
-          iconSize: [26, 26], iconAnchor: [13, 13], className: '',
+          html: `<div style="background:${color};color:white;border-radius:50%;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;font-size:${isHighlighted ? 18 : 13}px;border:2px solid white;box-shadow:0 2px ${isHighlighted ? 8 : 6}px rgba(0,0,0,0.4);transition:width .2s,height .2s">${SEVERITY_EMOJI[marker.severity]}</div>`,
+          iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: '',
         })
         const popup = `
           <div style="max-width:220px;font-size:12px;line-height:1.4">
@@ -342,13 +356,17 @@ export default function MapView({
             <div style="color:#374151;margin-top:4px">${marker.text}</div>
           </div>`
 
-        const m = L.marker([marker.lat, marker.lon], { icon })
+        const m = L.marker([marker.lat, marker.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 })
           .addTo(mapInstance.current)
           .bindPopup(popup, { maxWidth: 240 })
         difficultyLayer.current.push(m)
+      })
+
+      if (highlightedDifficultyIndex != null && difficultyMarkers[highlightedDifficultyIndex]) {
+        mapInstance.current.panTo([difficultyMarkers[highlightedDifficultyIndex].lat, difficultyMarkers[highlightedDifficultyIndex].lon])
       }
     })
-  }, [difficultyMarkers, mapReady])
+  }, [difficultyMarkers, mapReady, highlightedDifficultyIndex])
 
   // Flora-marker layer — GBIF observation positions (Galleria Verde map)
   useEffect(() => {

@@ -1,72 +1,100 @@
 'use client'
 import type { ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { BarChart2, Leaf, Mountain, MapPin, ShieldAlert, Wrench, Lock, Unlock, Navigation, Star } from 'lucide-react'
-import type { HubMode, PopupKind } from './types'
+import type { HubMode, SectionKind } from './types'
 
 interface Props {
   mode: HubMode
   locked: boolean
   onToggleLock: () => void
-  onOpenPopup: (popup: PopupKind) => void
-  onOpenAltimetria: () => void
+  onOpenSection: (section: SectionKind) => void
+  datiBadge?: ReactNode
   onNavigate?: () => void
   ratingBadge?: ReactNode
   onOpenRating?: () => void
+  featuredLabel: string
+  featuredIcon: LucideIcon
+  onOpenFeatured: () => void
 }
 
-function RailButton({ onClick, title, children, primary }: { onClick: () => void; title: string; children: ReactNode; primary?: boolean }) {
+const RAIL_VARIANTS = {
+  glass: 'bg-black/45 border border-white/15',
+  terra: 'bg-terra-500 shadow-terra-900/40',
+  amber: 'bg-amber-500 shadow-amber-900/40',
+} as const
+
+function RailButton({ onClick, title, children, variant = 'glass', badge }: { onClick: () => void; title: string; children: ReactNode; variant?: keyof typeof RAIL_VARIANTS; badge?: ReactNode }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`w-11 h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg backdrop-blur-md transition-transform hover:scale-105 ${
-        primary ? 'bg-terra-500 shadow-terra-900/40' : 'bg-black/45 border border-white/15'
-      }`}
+      className={`relative w-11 h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg backdrop-blur-md transition-transform hover:scale-105 ${RAIL_VARIANTS[variant]}`}
     >
       {children}
+      {badge && (
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-sky-500 border-2 border-[#0b1a24] text-[9px] font-bold text-white flex items-center justify-center leading-none">
+          {badge}
+        </span>
+      )}
     </button>
   )
 }
 
-export default function SideRails({ mode, locked, onToggleLock, onOpenPopup, onOpenAltimetria, onNavigate, ratingBadge, onOpenRating }: Props) {
+export default function SideRails({
+  mode, locked, onToggleLock, onOpenSection, datiBadge, onNavigate, ratingBadge, onOpenRating,
+  featuredLabel, featuredIcon: FeaturedIcon, onOpenFeatured,
+}: Props) {
+  if (!locked) {
+    // Sbloccata: immersione totale — solo il lucchetto (ora aperto) resta, per ribloccare.
+    return (
+      <div className="fixed top-[calc(env(safe-area-inset-top,0px)+16px)] right-3 md:right-5 z-30">
+        <RailButton onClick={onToggleLock} title="Blocca mappa">
+          <Unlock className="w-[18px] h-[18px] text-terra-400" />
+        </RailButton>
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="fixed left-3 md:left-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3">
         {mode === 'guida' && onNavigate && (
-          <RailButton onClick={onNavigate} title="Avvia navigazione sul sentiero" primary>
+          <RailButton onClick={onNavigate} title="Avvia navigazione sul sentiero" variant="terra">
             <Navigation className="w-5 h-5 text-white" fill="white" />
           </RailButton>
         )}
         {mode === 'resoconto' && onOpenRating && (
-          <RailButton onClick={onOpenRating} title="Vota bellezza" primary={!ratingBadge}>
+          <RailButton onClick={onOpenRating} title="Vota bellezza" variant={ratingBadge ? 'glass' : 'terra'}>
             {ratingBadge ?? <Star className="w-5 h-5 text-white" />}
           </RailButton>
         )}
-        <RailButton onClick={() => onOpenPopup('dati')} title="Dati & punteggi">
+        <RailButton onClick={onOpenFeatured} title={featuredLabel} variant="amber">
+          <FeaturedIcon className="w-5 h-5 text-white" />
+        </RailButton>
+        <RailButton onClick={() => onOpenSection('dati')} title="Dati & punteggi" badge={datiBadge}>
           <BarChart2 className="w-5 h-5 text-amber-300" />
         </RailButton>
-        <RailButton onClick={() => onOpenPopup('natura')} title="Natura">
+        <RailButton onClick={() => onOpenSection('natura')} title="Natura">
           <Leaf className="w-5 h-5 text-emerald-300" />
         </RailButton>
-        <RailButton onClick={onOpenAltimetria} title="Altimetria">
+        <RailButton onClick={() => onOpenSection('altimetria')} title="Altimetria">
           <Mountain className="w-5 h-5 text-sky-300" />
         </RailButton>
       </div>
 
       <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3">
-        <RailButton onClick={() => onOpenPopup('poi')} title="Punti di interesse">
+        <RailButton onClick={() => onOpenSection('poi')} title="Punti di interesse">
           <MapPin className="w-5 h-5 text-fuchsia-300" />
         </RailButton>
-        <RailButton onClick={() => onOpenPopup('sicurezza')} title="Sicurezza">
+        <RailButton onClick={() => onOpenSection('sicurezza')} title="Sicurezza">
           <ShieldAlert className="w-5 h-5 text-red-300" />
         </RailButton>
-        <RailButton onClick={() => onOpenPopup('strumenti')} title="Strumenti">
+        <RailButton onClick={() => onOpenSection('strumenti')} title="Strumenti">
           <Wrench className="w-5 h-5 text-stone-100" />
         </RailButton>
-        <RailButton onClick={onToggleLock} title={locked ? 'Sblocca mappa' : 'Blocca mappa'}>
-          {locked
-            ? <Lock className="w-[18px] h-[18px] text-stone-100" />
-            : <Unlock className="w-[18px] h-[18px] text-terra-400" />}
+        <RailButton onClick={onToggleLock} title="Sblocca mappa">
+          <Lock className="w-[18px] h-[18px] text-stone-100" />
         </RailButton>
       </div>
     </>
