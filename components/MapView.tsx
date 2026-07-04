@@ -94,7 +94,15 @@ export default function MapView({
     const points = trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
     if (points.length === 0) return
 
+    // React 18 Strict Mode (dev only) invokes this effect twice in a row (mount → cleanup →
+    // mount) before the async `import('leaflet')` below has a chance to resolve — without this
+    // flag both invocations would race to create a map on the same container, producing two
+    // independent fitBounds calls (the visible "double centering" glitch). The cleanup below
+    // flips this flag so the stale invocation's callback becomes a no-op once it resolves.
+    let cancelled = false
+
     import('leaflet').then(L => {
+      if (cancelled || !mapRef.current || mapInstance.current) return
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -197,12 +205,14 @@ export default function MapView({
           opacity: 0.85,
           smoothFactor: 1.5,
         }).addTo(map)
-        map.fitBounds(polyline.getBounds(), { padding: [20, 20] })
+        map.fitBounds(polyline.getBounds(), { padding: [20, 20], animate: false })
       }
 
-      // Always fit bounds (for gradient/aspect mode, fit after drawing segments)
+      // Always fit bounds (for gradient/aspect mode, fit after drawing segments) — never
+      // animated: this is the map's first-ever view, so an animated pan/zoom here would just
+      // look like a second, redundant "centering" jump right after the map appears.
       if (showGradient || showAspect) {
-        map.fitBounds(L.polyline(coords).getBounds(), { padding: [20, 20] })
+        map.fitBounds(L.polyline(coords).getBounds(), { padding: [20, 20], animate: false })
       }
 
       // Start / end markers (always shown)
@@ -224,6 +234,7 @@ export default function MapView({
     }
 
     return () => {
+      cancelled = true
       if (mapInstance.current) {
         mapInstance.current.remove()
         mapInstance.current = null

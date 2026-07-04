@@ -26,35 +26,23 @@ export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeathe
             {NAV_LINKS.map(({ href, label, icon: Icon }) => {
               const active = isActive(href, path ?? '')
               return (
-                <Link key={href} href={href} className={`flex flex-col items-center gap-1 px-3 py-1 ${active ? 'text-white' : 'text-forest-300'}`}>
+                <Link key={href} href={href} className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1 ${active ? 'text-white' : 'text-forest-300'}`}>
                   <Icon className="w-5 h-5" strokeWidth={2} />
-                  <span className="text-[10px] font-bold leading-none">{label}</span>
+                  <span className="text-[10px] font-bold leading-none whitespace-nowrap">{label}</span>
                 </Link>
               )
             })}
           </div>
 
-          {(weatherIcon || drivingIcon) && (
-            <div className="pointer-events-auto shrink-0 flex items-center gap-1.5">
-              {weatherIcon && onOpenWeather && (
-                <button
-                  onClick={onOpenWeather}
-                  title={weatherIcon.label}
-                  className="w-9 h-9 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-xl leading-none"
-                  style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
-                >
-                  {weatherIcon.emoji}
-                </button>
-              )}
-              {drivingIcon && onOpenDriving && (
-                <button
-                  onClick={onOpenDriving}
-                  title={drivingIcon.label}
-                  className="w-9 h-9 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-stone-100"
-                >
-                  <drivingIcon.icon className="w-4 h-4" />
-                </button>
-              )}
+          {drivingIcon && onOpenDriving && (
+            <div className="pointer-events-auto shrink-0">
+              <button
+                onClick={onOpenDriving}
+                title={drivingIcon.label}
+                className="w-9 h-9 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-stone-100"
+              >
+                <drivingIcon.icon className="w-4 h-4" />
+              </button>
             </div>
           )}
 
@@ -71,9 +59,21 @@ export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeathe
           ))}
         </div>
 
-        <p className="mt-3 font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-          {title}
-        </p>
+        <div className="mt-3 flex items-center gap-2.5">
+          <p className="min-w-0 truncate font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+            {title}
+          </p>
+          {weatherIcon && onOpenWeather && (
+            <button
+              onClick={onOpenWeather}
+              title={weatherIcon.label}
+              className="pointer-events-auto shrink-0 text-2xl leading-none"
+              style={{ textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}
+            >
+              {weatherIcon.emoji}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

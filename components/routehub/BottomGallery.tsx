@@ -95,7 +95,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect }: Prop
   if (others.length === 0) return null
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+    <div>
       {hasSortData && (
         <div className="flex items-center gap-1.5 overflow-x-auto px-4 mb-2" style={{ scrollbarWidth: 'none' }}>
           <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />
