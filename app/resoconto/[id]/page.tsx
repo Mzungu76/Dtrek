@@ -1,394 +1,526 @@
 'use client'
-
-import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import RacconContent from './RacconContent'
 import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
+import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
+import StatCard from '@/components/StatCard'
+import HRChart from '@/components/HRChart'
+import AltimetryChart from '@/components/AltimetryChart'
+import SpeedChart from '@/components/SpeedChart'
+import WeatherWidget from '@/components/WeatherWidget'
+import WikiCards from '@/components/WikiCards'
+import RouteThumb from '@/components/RouteThumb'
 import PhotoMosaic from '@/components/PhotoMosaic'
-import RouteTimeline from '@/app/components/RouteTimeline'
-import { getActivityById, type StoredActivity } from '@/lib/blobStore'
-import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
-import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
+import { ScoreRing } from '@/components/ScoreRing'
+import {
+  getActivityById, updateActivityMeta, deleteActivity, getAllActivities,
+  type StoredActivity, type ActivityMeta,
+} from '@/lib/blobStore'
+import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
+import type { BeautyScore } from '@/lib/beautyScore'
+import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
+import { exportActivityToExcel } from '@/utils/exportExcel'
+import { exportActivityToDoc } from '@/utils/exportDoc'
+import { exportActivityToGpx } from '@/utils/exportGpx'
+import { exportActivityPdf } from '@/utils/pdfExport'
+import SectionTabs from '@/components/SectionTabs'
+import PullQuote from '@/components/ui/PullQuote'
+import Sheet from '@/components/ui/Sheet'
+import { type PoiItem } from '@/lib/overpass'
+import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
+import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
+import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
+import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
+import { computeDEP, depLabel, findSimilarActivities } from '@/lib/stats'
+import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import type { CtsConfidence } from '@/lib/trailScore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
-  parseSections, markdownToSections, sectionsToMarkdown, SCAFFOLD_SECTIONS,
-  type ReportSection, type ReportAuthoredBy,
-} from '@/lib/reportStore'
-import SectionCard from '@/app/components/ResocontoSectionCard'
-import ManualEditor from '@/app/components/ManualEditor'
-import {
-  FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
-  Images, X, BookOpen, Share2, Copy, Link2Off, ExternalLink,
+  FileSpreadsheet, FileText, Map, FileDown,
+  Heart, Zap, Mountain, Clock, Route, Flame,
+  Pencil, Check, X, Trash2, Loader2, Share2, Layers, Star, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint,
+  MoreHorizontal, ChevronDown,
 } from 'lucide-react'
+import ShareModal from '@/components/ShareModal'
+import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
+import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
+import { PhenologyPanel } from '@/components/PhenologyPanel'
+import { useSentinel2 } from '@/lib/cl/useCL'
+import { useFlora } from '@/lib/useFlora'
 
-const RouteMap3D    = dynamic(() => import('@/components/RouteMap3D'),    { ssr: false })
-const RoutePhotoMap = dynamic(() => import('@/app/components/RoutePhotoMap'), { ssr: false })
+const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
+const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
+const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface HikeReport {
-  id: string
-  activity_id: string
-  title: string
-  content: string
-  photos: { caption: string; lat?: number; lon?: number; progress: number }[]
-  sections?: ReportSection[] | null
-  authored_by?: ReportAuthoredBy
-  created_at: string
-  updated_at: string
+function ratingColor(n: number) {
+  return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
+}
+function ratingLabel(n: number) {
+  return n >= 9 ? 'Eccellente' : n >= 7 ? 'Buono' : n >= 5 ? 'Sufficiente' : 'Insufficiente'
 }
 
-type ResocontoLength = 'breve' | 'media' | 'lunga'
-
-// Photo slot is keyed by section title (not array position) so that omitting
-// "Cronaca" (no questionnaire answered) doesn't shift the photos bound to the
-// sections that follow it.
-const SECTION_PHOTO_SLOT: Record<string, number> = {
-  'Il percorso':     0,
-  'Cronaca':         1,
-  'Natura e storia': 2,
-  'In sintesi':      3,
+function stripReportMarkdown(md: string): string {
+  return md
+    .replace(/^##\s+/gm, '')
+    .replace(/\[curiosita\]|\[\/curiosita\]/g, '')
+    .replace(/\n{2,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
-function slotFor(title: string, fallbackIndex: number): number {
-  return SECTION_PHOTO_SLOT[title] ?? fallbackIndex
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)} [...]` : text
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
+// ── Pagina principale ─────────────────────────────────────────────────────────
 
-export default function ResocontoPage() {
+export default function EscursionePage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const id = decodeURIComponent(params.id as string)
+  const [activeTab, setActiveTab] = useState<'dati' | 'racconto'>(
+    searchParams.get('tab') === 'racconto' ? 'racconto' : 'dati',
+  )
 
-  const [activity,    setActivity]    = useState<StoredActivity | null>(null)
-  const [report,      setReport]      = useState<HikeReport | null>(null)
-  const [photos,      setPhotos]      = useState<RoutePhoto[]>([])
-  const [content,     setContent]     = useState('')
-  const [generating,  setGenerating]  = useState(false)
-  const [isEditing,   setIsEditing]   = useState(false)
-  const [saving,      setSaving]      = useState(false)
-  const [saveOk,      setSaveOk]      = useState(false)
-  const [length,      setLength]      = useState<ResocontoLength>('media')
-  const [show3D,      setShow3D]      = useState(false)
-  const [lightbox,    setLightbox]    = useState<RoutePhoto | null>(null)
-  const [loading,     setLoading]     = useState(true)
-  const [apiError,    setApiError]    = useState<string | null>(null)
-  const [photosError, setPhotosError] = useState<string | null>(null)
-  const [coverPhotoId,  setCoverPhotoId]  = useState<string | null>(null)
-  const [sharePdfUrl,   setSharePdfUrl]   = useState<string | null>(null)
-  const [showShare,     setShowShare]     = useState(false)
-  const [copyOk,        setCopyOk]        = useState(false)
-  const [publishing,    setPublishing]    = useState(false)
-  const [publishError,  setPublishError]  = useState<string | null>(null)
-  const [questionnaireStatus, setQuestionnaireStatus] = useState<'none' | 'in_progress' | 'completed' | 'skipped'>('none')
-  const [editorMode,       setEditorMode]       = useState<'view' | 'manual'>('view')
-  const [showAiPanel,      setShowAiPanel]      = useState(true)
-  const [reportSections,   setReportSections]   = useState<ReportSection[]>([])
-  const [reportAuthoredBy, setReportAuthoredBy] = useState<ReportAuthoredBy>('ai')
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [activity,        setActivity]       = useState<StoredActivity | null>(null)
+  const [loading,         setLoading]        = useState(true)
+  const [saving,          setSaving]         = useState(false)
+  const [editTitle,       setEditTitle]      = useState(false)
+  const [editNotes,       setEditNotes]      = useState(false)
+  const [titleVal,        setTitleVal]       = useState('')
+  const [notesVal,        setNotesVal]       = useState('')
+  const [tagInput,        setTagInput]       = useState('')
+  const [showShare,       setShowShare]      = useState(false)
+  const [showGradient,    setShowGradient]   = useState(false)
+  const [showAspect,      setShowAspect]     = useState(false)
+  const [dtmProfile,      setDtmProfile]     = useState<TrailDtmProfile | undefined>(undefined)
+  const [terrainProfile,  setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
+  const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
+  const [pois,            setPois]           = useState<PoiItem[]>([])
+  const [wikiPages,       setWikiPages]      = useState<WikiPage[]>([])
+  const [ratingVal,       setRatingVal]      = useState(0)
+  const [ratingNote,      setRatingNote]     = useState('')
+  const [savingRating,    setSavingRating]   = useState(false)
+  const [showRatingPanel, setShowRatingPanel] = useState(false)
+  const [show3D,          setShow3D]          = useState(false)
+  const [openVideoWizard, setOpenVideoWizard] = useState(false)
+  const [showStreetView,  setShowStreetView]  = useState(false)
+  const [photos,          setPhotos]          = useState<RoutePhoto[]>([])
+  const [photosError,     setPhotosError]     = useState<string | null>(null)
+  const [coverPhotoId,    setCoverPhotoId]    = useState<string | null>(null)
+  const [lightbox,        setLightbox]        = useState<RoutePhoto | null>(null)
+  const [report,          setReport]          = useState<{ content: string } | null>(null)
+  const [poiWikiEntries,  setPoiWikiEntries]  = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
+  const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
+  const [ctsResult,       setCtsResult]       = useState<TrailScoreResult | null>(null)
+  const [ctsComputing,    setCtsComputing]    = useState(false)
+  const [prefsLoaded,     setPrefsLoaded]     = useState(false)
+  const [prefSforzo,      setPrefSforzo]      = useState(50)
+  const [prefDurata,      setPrefDurata]      = useState(270)
+  const [allActivities,   setAllActivities]   = useState<ActivityMeta[]>([])
+  const [showFloraNotice, setShowFloraNotice] = useState(false)
+  const [showCoverPicker, setShowCoverPicker] = useState(false)
+  const [activeChartIndex, setActiveChartIndex] = useState<number | null>(null)
+  const [activeSection, setActiveSection] = useState<'panoramica' | 'tracciato' | 'natura' | 'note'>('panoramica')
+  const [showAltro,       setShowAltro]        = useState(false)
+  const [showAltriDati,   setShowAltriDati]     = useState(false)
 
-  // Load activity + report + photos
+  const heroPolyline = useMemo((): [number, number][] => {
+    const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
+    if (!pts.length) return []
+    const step = Math.max(1, Math.ceil(pts.length / 100))
+    return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
+  }, [activity])
+
+  const s2    = useSentinel2({ polyline: heroPolyline })
+  const flora = useFlora(heroPolyline, activity?.altitudeMax)
+
+
   useEffect(() => {
-    Promise.all([
-      getActivityById(id),
-      fetch(`/api/resoconto?activityId=${encodeURIComponent(id)}`).then(r => r.json()).catch(() => null),
-      fetch(`/api/questionnaire?activityId=${encodeURIComponent(id)}`).then(r => r.json()).catch(() => null),
-    ]).then(([act, rep, questionnaire]) => {
-      if (!act) { router.push('/'); return }
-      setActivity(act)
-      if (rep) {
-        setReport(rep)
-        setContent(rep.content ?? '')
-        if (Array.isArray(rep.sections) && rep.sections.length > 0) setReportSections(rep.sections)
-        setReportAuthoredBy(rep.authored_by ?? 'ai')
-        if (rep.content) setShowAiPanel(false)
-      }
-      setQuestionnaireStatus(questionnaire?.status ?? 'none')
-    }).finally(() => setLoading(false))
+    getAllActivities().then(setAllActivities).catch(() => {})
+  }, [])
 
-    // Load photos (server, sorted start→end by progress; migra automaticamente da localStorage)
+  const similarActivities = useMemo(() => {
+    if (!activity) return []
+    const startPt = activity.trackPoints.find(p => p.lat !== undefined && p.lon !== undefined)
+    if (!startPt) return []
+    return findSimilarActivities(
+      { id: activity.id, distanceMeters: activity.distanceMeters, startLat: startPt.lat!, startLon: startPt.lon! },
+      allActivities,
+    )
+  }, [activity, allActivities])
+
+  useEffect(() => {
+    const loadPoisFor = (a: StoredActivity) => {
+      const gps = a.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined).map(p => [p.lat!, p.lon!] as [number, number])
+      if (gps.length === 0) return
+      const bbox = computeBbox(gps)
+      fetch(`/api/pois?bbox=${bbox}`)
+        .then(r => r.json())
+        .then((all: PoiItem[]) => {
+          const nearby = all
+            .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
+            .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
+          setPois(nearby)
+          fetchWikiForNamedPois(nearby)
+            .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
+            .catch(() => { setPoisFullyLoaded(true) })
+        })
+        .catch(() => { setPoisFullyLoaded(true) })
+    }
+
+    getActivityById(id, (fresh) => {
+      // Background revalidation: a stale local copy cached before a data/calc fix shipped
+      // would otherwise keep showing broken state (e.g. empty GPS-derived UI) indefinitely.
+      setActivity(fresh)
+      loadPoisFor(fresh)
+    }).then(a => {
+      if (!a) { router.push('/resoconto'); return }
+      setActivity(a)
+      setTitleVal(a.title ?? a.notes ?? '')
+      setNotesVal(a.userNotes ?? '')
+      setRatingVal(a.userRating ?? 0)
+      setRatingNote(a.userRatingNote ?? '')
+      loadPoisFor(a)
+    }).finally(() => setLoading(false))
+  }, [id, router])
+
+  // Fetch DTM slope/aspect profile once per activity — shared by the map color toggles
+  // below and by handleComputeCts, so the WCS-backed endpoint is never double-fetched.
+  useEffect(() => {
+    if (!activity) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailDtmProfile) => setDtmProfile(p))
+      .catch(() => {})
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch terrain (geologia/uso-suolo) profile once per activity — same pattern as the DTM
+  // effect above, shared by handleComputeCts so the geologia/uso-suolo endpoint is never
+  // double-fetched.
+  useEffect(() => {
+    if (!activity) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailTerrainProfile) => setTerrainProfile(p))
+      .catch(() => {})
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check Natura2000 protected-area overlap once per activity — same shared-state pattern as
+  // the DTM/terrain effects above, used by handleComputeCts for the TEI V_cult bonus.
+  useEffect(() => {
+    if (!activity) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    checkProtectedArea(gps)
+      .then(r => setInProtectedArea(r.inProtectedArea))
+      .catch(() => {})
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load gallery photos + cover preference + existing report (for hero photo / excerpt)
+  useEffect(() => {
     fetchActivityPhotos(id)
       .then(setPhotos)
       .catch(() => setPhotosError('Impossibile caricare le foto di questa escursione.'))
 
-    // Load cover photo preference
     const savedCover = localStorage.getItem(`dtrek_cover_${id}`)
     if (savedCover) setCoverPhotoId(savedCover)
 
-    // Load existing PDF URL
-    fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`)
+    fetch(`/api/resoconto?activityId=${encodeURIComponent(id)}`)
       .then(r => r.json())
-      .then(d => { if (d.share_pdf_url) setSharePdfUrl(d.share_pdf_url) })
+      .then(d => { if (d?.content) setReport(d) })
       .catch(() => null)
-  }, [id, router])
+  }, [id])
 
-  // Auto-save debounce when editing
+  // Load user prefs for CTS display
   useEffect(() => {
-    if (!isEditing || !content || generating) return
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      saveContent(content)
-    }, 1500)
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
-  }, [content, isEditing, generating]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const saveContent = useCallback(async (text: string) => {
-    if (!text.trim()) return
-    setSaving(true)
-    try {
-      await fetch('/api/resoconto', {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ activityId: id, content: text }),
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefDurata != null) setPrefDurata(d.prefDurata)
       })
-      setSaveOk(true)
-      setTimeout(() => setSaveOk(false), 2000)
-    } finally {
-      setSaving(false)
-    }
-  }, [id])
+      .catch(() => {})
+      .finally(() => setPrefsLoaded(true))
+  }, [])
 
-  const saveSections = useCallback(async (sections: ReportSection[], authoredBy: ReportAuthoredBy) => {
-    const newContent = sectionsToMarkdown(sections)
-    const res = await fetch('/api/resoconto', {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ activityId: id, content: newContent, sections, authoredBy }),
+  // Compute CTS for breakdown display — NEVER saves
+  useEffect(() => {
+    const bs = (activity as (StoredActivity & { linkedBeautyScore?: BeautyScore }) | null)?.linkedBeautyScore
+    if (!bs?.categories?.length || !prefsLoaded) return
+    const computed = computeTrailScore(bs, {
+      distanceMeters: activity!.distanceMeters,
+      elevationGain:  activity!.elevationGain,
+      elevationLoss:  activity!.elevationLoss ?? 0,
+      altitudeMax:    activity!.altitudeMax,
+      avgHeartRate:   activity!.avgHeartRate,
+      prefSforzo,
+      prefDurata,
     })
-    if (!res.ok) { console.error('Salvataggio sezioni fallito', await res.text().catch(() => '')); return }
-    setReportSections(sections)
-    setReportAuthoredBy(authoredBy)
-    setContent(newContent)
-  }, [id])
+    setCtsResult({ ...computed, ts: (activity as StoredActivity & { trailScore?: number }).trailScore ?? computed.ts })
+  }, [activity?.id, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const generateReport = useCallback(async () => {
-    if (!activity) return
-    setGenerating(true)
-    setContent('')
-    setApiError(null)
-    const photoMeta = photos.map(p => ({
-      caption:    p.caption,
-      lat:        p.lat,
-      lon:        p.lon,
-      progress:   p.progress,
-      hasExifGps: p.hasExifGps,
-    }))
-
-    try {
-      const res = await fetch('/api/resoconto', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ activityId: id, length, photos: photoMeta }),
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        if (res.status === 402) {
-          setApiError('Aggiungi la tua chiave API Claude nelle impostazioni per usare questa funzione.')
-        } else {
-          setApiError(err.message ?? 'Errore durante la generazione.')
-        }
-        return
-      }
-
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let full = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        full += decoder.decode(value, { stream: true })
-        setContent(full)
-      }
-    } catch {
-      setApiError('Errore di rete. Riprova.')
-    } finally {
-      setGenerating(false)
-    }
-  }, [activity, id, length, photos])
 
   if (loading) return (
     <div className="min-h-screen bg-stone-50">
       <Navbar />
       <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento resoconto…</span>
+        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento escursione…</span>
       </div>
     </div>
   )
   if (!activity) return null
 
-  const sections  = parseSections(content)
+  const patch = async (data: Parameters<typeof updateActivityMeta>[1]) => {
+    setSaving(true)
+    try {
+      await updateActivityMeta(id, data)
+      setActivity(prev => prev ? { ...prev, ...data } : prev)
+    } finally { setSaving(false) }
+  }
+
+  const saveTitle  = async () => { await patch({ title: titleVal }); setEditTitle(false) }
+  const saveNotes  = async () => { await patch({ userNotes: notesVal }); setEditNotes(false) }
+  const saveRating = async () => {
+    if (!ratingVal) return
+    setSavingRating(true)
+    try {
+      await updateActivityMeta(id, { userRating: ratingVal, userRatingNote: ratingNote.trim() || undefined })
+      setActivity(prev => prev ? { ...prev, userRating: ratingVal, userRatingNote: ratingNote.trim() || undefined } : prev)
+      setShowRatingPanel(false)
+    } finally { setSavingRating(false) }
+  }
+
+  const setCover = (photoId: string | null) => {
+    setCoverPhotoId(photoId)
+    if (photoId) localStorage.setItem(`dtrek_cover_${id}`, photoId)
+    else localStorage.removeItem(`dtrek_cover_${id}`)
+    setShowCoverPicker(false)
+  }
+
+  const addTag    = async () => { if (!tagInput.trim()) return; await patch({ tags: [...(activity.tags ?? []), tagInput.trim()] }); setTagInput('') }
+  const removeTag = async (tag: string) => patch({ tags: (activity.tags ?? []).filter(t => t !== tag) })
+  const handleDelete = async () => {
+    if (!confirm('Eliminare questa escursione dal diario?')) return
+    setSaving(true)
+    await deleteActivity(id)
+    router.push('/resoconto')
+  }
+
+  const handleComputeCts = async () => {
+    const gps = (activity.trackPoints ?? [])
+      .filter(p => p.lat && p.lon)
+      .map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    setCtsComputing(true)
+    try {
+      const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
+      const bbox = computeBbox(gps)
+      // dtmProfile comes from page state (fetched once by the dedicated effect above, shared
+      // with the map color toggles) — not refetched here, to avoid hitting the WCS-backed
+      // endpoint twice for the same track.
+      const [allPoisRes, osmData] = await Promise.all([
+        Promise.race([
+          fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>,
+          deadline,
+        ]).then(r => r ?? []),
+        Promise.race([
+          fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+          deadline,
+        ]).then(r => r ?? undefined).catch(() => undefined),
+      ])
+      const allPois = allPoisRes as PoiItem[]
+      const pois = allPois
+        .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
+        .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
+
+      const elevProfile = (activity.trackPoints ?? [])
+        .filter(p => p.lat && p.lon)
+        .map(p => p.altitudeMeters ?? 0)
+
+      const tei = computeTEI({
+        track: gps,
+        elevGain: activity.elevationGain,
+        distanceMeters: activity.distanceMeters,
+        altitudeMax: activity.altitudeMax,
+        elevProfile,
+        pois,
+        osmData,
+        dtmProfile,
+        terrainProfile,
+        inProtectedArea,
+      })
+      const bs = teiToBeautyScore(tei)
+      const confidence: CtsConfidence = tei.confidence
+
+      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      let { ts } = computeTrailScore(bs, {
+        distanceMeters: activity.distanceMeters,
+        elevationGain:  activity.elevationGain,
+        elevationLoss:  activity.elevationLoss ?? 0,
+        altitudeMax:    activity.altitudeMax,
+        avgHeartRate:   activity.avgHeartRate,
+        prefSforzo:     prefs.prefSforzo,
+        prefDurata:     prefs.prefDurata,
+        hrRest:         prefs.hrRest,
+        hrMax:          prefs.hrMax ?? undefined,
+        avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
+      })
+      if (confidence === 'estimated') ts = Math.round(ts * 0.9)
+
+      await updateActivityMeta(id, { linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence })
+      setActivity(prev => prev ? { ...prev, linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence } : prev)
+    } catch (e) {
+      console.error('CTS computation error:', e)
+    } finally {
+      setCtsComputing(false)
+    }
+  }
+
+  const dateStr   = format(new Date(activity.startTime), "EEEE d MMMM yyyy", { locale: it })
+  const timeStr   = `${format(new Date(activity.startTime), 'HH:mm')} – ${format(new Date(activity.endTime), 'HH:mm')}`
+  const dateISO   = format(new Date(activity.startTime), 'yyyy-MM-dd')
+  const gpsPoints = activity.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
+  const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
+  const hasGps    = gpsPoints.length > 0
+  const rated     = (activity.userRating ?? 0) > 0
   const heroPhoto = photos.find(p => p.id === coverPhotoId) ?? photos[0] ?? null
-  const dateStr   = activity.startTime
-    ? format(new Date(activity.startTime), "d MMMM yyyy", { locale: it })
-    : ''
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
+      <Navbar />
 
-      {/* ── Nav ── */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-stone-200 print:hidden">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-          <BackLink className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors" />
-          <div className="flex items-center gap-2 min-w-0">
-            <BookOpen className="w-4 h-4 text-forest-600 shrink-0" />
-            <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
-              Resoconto
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowShare(s => !s)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showShare ? 'bg-forest-100 text-forest-700' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'}`}>
-              <Share2 className="w-4 h-4" /> Pubblica PDF
-            </button>
-            <button onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm font-medium transition-colors">
-              <FileDown className="w-4 h-4" /> Stampa PDF
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Share panel ── */}
-      {showShare && (
-        <div className="bg-white border-b border-stone-100 print:hidden">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
-            {sharePdfUrl ? (
-              <>
-                <a href={`/leggi/r/${encodeURIComponent(id)}`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
-                  <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
-                </a>
-                <button
-                  onClick={async () => {
-                    const viewerUrl = `${window.location.origin}/leggi/r/${encodeURIComponent(id)}`
-                    await navigator.clipboard.writeText(viewerUrl)
-                    setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
-                  <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
-                </button>
-                <a href={sharePdfUrl} target="_blank" rel="noopener noreferrer" download
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
-                  <ExternalLink className="w-3.5 h-3.5" /> PDF diretto
-                </a>
-                <button
-                  onClick={async () => {
-                    await fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`, { method: 'DELETE' })
-                    setSharePdfUrl(null)
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-red-50 transition-colors">
-                  <Link2Off className="w-3.5 h-3.5" /> Disattiva
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-xs text-stone-500 font-lora italic">
-                  Genera un PDF con le foto e pubblicalo online.
-                </p>
-                {publishError && (
-                  <p className="text-xs text-red-500">{publishError}</p>
-                )}
-                <button
-                  disabled={publishing || !content}
-                  onClick={async () => {
-                    if (!activity) return
-                    setPublishing(true); setPublishError(null)
-                    try {
-                      const { getBrowserSupabase } = await import('@/lib/supabaseBrowser')
-                      const sb = getBrowserSupabase()
-                      const { data: { user } } = await sb.auth.getUser()
-                      if (!user) throw new Error('Non autenticato')
-
-                      const { paginateToPdf, nextLayout } = await import('@/lib/pdfPaginate')
-                      const printRoot = document.getElementById('resoconto-print-root')
-                      if (!printRoot) throw new Error('Layout non trovato')
-
-                      // Clone into an off-screen white host so the paginator can
-                      // measure layout and break at safe section boundaries.
-                      const host = document.createElement('div')
-                      host.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
-                      const clone = printRoot.cloneNode(true) as HTMLElement
-                      clone.style.cssText = 'width:794px;background:#fff;font-family:Georgia,serif'
-                      host.appendChild(clone)
-                      document.body.appendChild(host)
-                      await nextLayout()
-
-                      let blob: Blob
-                      try {
-                        blob = await paginateToPdf([clone])
-                      } finally {
-                        document.body.removeChild(host)
-                      }
-
-                      const { uploadReportPdf } = await import('@/lib/pdfUpload')
-                      const url = await uploadReportPdf(user.id, id, blob)
-
-                      await fetch('/api/share-report', {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ activityId: id, sharePdfUrl: url }),
-                      })
-                      setSharePdfUrl(url)
-                    } catch (e) {
-                      setPublishError(String(e))
-                    } finally {
-                      setPublishing(false)
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
-                  {publishing
-                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione PDF…</>
-                    : <><Share2 className="w-3.5 h-3.5" /> Genera e pubblica</>
-                  }
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Hero ── */}
-      <div className="relative w-full overflow-hidden print:h-[220px]"
-        style={{ height: 'clamp(220px, 38vw, 420px)' }}>
-        {heroPhoto
-          ? <img src={heroPhoto.url} alt=""
+      {/* ══ HERO ══ */}
+      <div className="relative text-white overflow-hidden">
+        {heroPhoto ? (
+          <>
+            <img src={heroPhoto.url} alt=""
               className="absolute inset-0 w-full h-full object-cover" />
-          : <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />
-        }
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-6 max-w-5xl mx-auto">
-          <h1 className="font-barlow text-3xl sm:text-5xl font-black text-white leading-tight uppercase tracking-tight drop-shadow-lg mb-2">
-            {activity.title ?? activity.notes ?? 'Escursione'}
-          </h1>
-          {dateStr && (
-            <p className="font-lora text-sm italic text-white/80">{dateStr}</p>
-          )}
-          <div className="flex flex-wrap gap-2 mt-3">
-            {[
-              { icon: <Route className="w-3 h-3" />, v: `${(activity.distanceMeters / 1000).toFixed(1)} km` },
-              { icon: <Mountain className="w-3 h-3" />, v: `${activity.elevationGain.toFixed(0)} m D+` },
-              { icon: <Clock className="w-3 h-3" />, v: formatDuration(activity.totalTimeSeconds) },
-              ...(activity.calories > 0 ? [{ icon: <Flame className="w-3 h-3" />, v: `${activity.calories} kcal` }] : []),
-            ].map(({ icon, v }) => (
-              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white font-barlow tracking-wide">
-                {icon} {v}
-              </span>
-            ))}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/70 to-black/20" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />
+        )}
+        {!heroPhoto && heroPolyline.length > 1 && (
+          <div className="absolute inset-0 pointer-events-none">
+            <RouteThumb polyline={heroPolyline} color="rgba(255,255,255,0.10)" strokeWidth={7} />
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-forest-900/60 to-transparent pointer-events-none" />
+
+        <div className="relative max-w-6xl mx-auto px-4">
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
+            <BackLink className="flex items-center gap-1.5 text-forest-300 hover:text-white text-sm transition-colors" />
+            <button
+              onClick={() => setShowAltro(true)}
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+              <MoreHorizontal className="w-3.5 h-3.5" /> Altro
+            </button>
+          </div>
+
+          <div className="py-7 flex items-end justify-between gap-6 flex-wrap">
+            <div className="flex-1 min-w-0">
+              {editTitle ? (
+                <div className="flex items-center gap-2 mb-2">
+                  <input value={titleVal} onChange={e => setTitleVal(e.target.value)}
+                    className="font-display text-2xl sm:text-3xl bg-white/10 rounded-lg px-3 py-1 text-white outline-none border border-white/30 w-full max-w-md"
+                    autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditTitle(false) }} />
+                  <button onClick={saveTitle} disabled={saving}>
+                    {saving ? <Loader2 className="w-5 h-5 animate-spin text-forest-300" /> : <Check className="w-5 h-5 text-forest-300 hover:text-white" />}
+                  </button>
+                  <button onClick={() => setEditTitle(false)}><X className="w-5 h-5 text-white/50 hover:text-white" /></button>
+                </div>
+              ) : (
+                <button onClick={() => setEditTitle(true)} className="group flex items-center gap-2.5 text-left mb-2">
+                  <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">
+                    {activity.title ?? activity.notes ?? 'Escursione'}
+                  </h1>
+                  <Pencil className="w-4 h-4 text-white/40 group-hover:text-white/70 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              )}
+
+              <p className="text-forest-300 text-sm capitalize mb-1">{dateStr} · {timeStr}</p>
+              {activity.device && <p className="text-forest-400 text-xs mb-3">📱 {activity.device}</p>}
+
+              <div className="flex flex-wrap gap-2 mt-3">
+                {[
+                  { icon: <Route className="w-3.5 h-3.5" />, v: `${(activity.distanceMeters/1000).toFixed(1)} km` },
+                  { icon: <Mountain className="w-3.5 h-3.5" />, v: `${activity.elevationGain.toFixed(0)} m D+` },
+                  { icon: <Clock className="w-3.5 h-3.5" />, v: formatDuration(activity.totalTimeSeconds) },
+                  ...(activity.calories > 0 ? [{ icon: <Flame className="w-3.5 h-3.5" />, v: `${activity.calories} kcal` }] : []),
+                ].map(({ icon, v }) => (
+                  <span key={v} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 border border-white/15">
+                    {icon} {v}
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                {(activity.tags ?? []).map(tag => (
+                  <span key={tag} className="flex items-center gap-1 bg-white/10 text-forest-200 rounded-full px-3 py-0.5 text-xs">
+                    {tag}
+                    <button onClick={() => removeTag(tag)} className="hover:text-white"><X className="w-3 h-3" /></button>
+                  </span>
+                ))}
+                <input value={tagInput} onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="+ tag"
+                  className="bg-white/10 text-forest-200 placeholder-forest-500 rounded-full px-3 py-0.5 text-xs w-20 outline-none border border-transparent focus:border-white/30" />
+              </div>
+            </div>
+
+            {/* Voto bellezza utente */}
+            <div className="shrink-0 pb-1">
+              {rated ? (
+                <div className="flex flex-col items-end gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-center justify-center rounded-2xl px-5 py-3 shadow-xl"
+                      style={{ backgroundColor: ratingColor(activity.userRating!) }}>
+                      <span className="text-3xl font-bold leading-none text-white">{activity.userRating}</span>
+                      <span className="text-white/60 text-[10px] font-medium mt-0.5">/10</span>
+                    </div>
+                    <button onClick={() => setShowRatingPanel(v => !v)}
+                      className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center transition-colors" title="Modifica voto">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-sm font-semibold text-white/90">{ratingLabel(activity.userRating!)}</p>
+                  <p className="text-[11px] text-forest-400">Voto bellezza</p>
+                  {activity.userRatingNote && (
+                    <p className="text-xs text-forest-300 italic max-w-[160px] text-right leading-snug mt-0.5">
+                      "{activity.userRatingNote}"
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <button onClick={() => setShowRatingPanel(v => !v)}
+                  className="flex items-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-2xl border border-white/20 text-sm font-medium transition-all hover:scale-[1.02]">
+                  <Star className="w-4 h-4 text-amber-300" /> Voto bellezza
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {photosError && (
-        <div className="max-w-5xl mx-auto px-4 pt-4 print:hidden">
+        <div className="max-w-6xl mx-auto px-4 pt-4">
           <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{photosError}</p>
         </div>
       )}
 
-      {/* ── Photo mosaic ── */}
+      {/* ══ PHOTO MOSAIC ══ */}
       {photos.length >= 2 && (
         <PhotoMosaic
           photos={photos.slice(1, 5).map(ph => ({ id: ph.id, url: ph.url, alt: ph.caption }))}
@@ -399,452 +531,554 @@ export default function ResocontoPage() {
         />
       )}
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 print:max-w-full print:px-0">
+      {/* ══ DATI / RACCONTO — le due sotto-tab del Resoconto ══ */}
+      <SectionTabs
+        tabs={[
+          { id: 'dati', label: 'Dati' },
+          { id: 'racconto', label: 'Racconto' },
+        ]}
+        active={activeTab}
+        onChange={tab => setActiveTab(tab as typeof activeTab)}
+      />
 
-        {/* ── Controls ── */}
-        {editorMode === 'view' && content && (
-          <button onClick={() => setShowAiPanel(s => !s)}
-            className="flex items-center gap-1.5 mb-3 text-xs font-barlow font-bold uppercase tracking-wide text-stone-500 hover:text-stone-700 transition-colors print:hidden">
-            Genera / rigenera con AI {showAiPanel ? '▲' : '▼'}
-          </button>
-        )}
-        {editorMode === 'view' && content && showAiPanel && (
-        <div className="mb-6 print:hidden">
-          <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <p className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm mb-1">
-                  {content ? 'Genera nuovo resoconto' : 'Genera il tuo resoconto'}
-                </p>
-                <p className="text-xs text-stone-400 font-lora italic">
-                  {photos.length > 0
-                    ? `${photos.length} foto disponibili · L'AI userà le tue immagini`
-                    : 'Aggiungi foto dalla mappa 3D per un resoconto più ricco'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Length selector */}
-                <div className="flex rounded-xl overflow-hidden border border-stone-200">
-                  {(['breve', 'media', 'lunga'] as const).map(l => (
-                    <button key={l} onClick={() => setLength(l)}
-                      className={`px-3 py-1.5 text-xs font-barlow font-bold uppercase tracking-wide transition-colors
-                        ${length === l
-                          ? 'bg-forest-600 text-white'
-                          : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
+      {activeTab === 'racconto' && <RacconContent activityId={id} />}
 
-                {/* 3D map button */}
-                <button onClick={() => setShow3D(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
-                  <Images className="w-3.5 h-3.5" /> Mappa 3D
-                </button>
-
-                {/* Guided questionnaire entry point */}
-                <button onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}/racconta`)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-forest-200 text-xs font-barlow font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
-                  <Pencil className="w-3.5 h-3.5" />
-                  {questionnaireStatus === 'in_progress' ? 'Riprendi il racconto guidato' : 'Racconta il tuo percorso'}
-                </button>
-
-                {/* Generate button */}
-                <button onClick={generateReport} disabled={generating}
-                  className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
-                  {generating
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</>
-                    : <><BookOpen className="w-4 h-4" /> Genera</>
-                  }
-                </button>
-              </div>
-            </div>
-
-            {apiError && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-                {apiError}
-              </div>
-            )}
-
-            {/* Cover photo picker */}
-            {photos.length > 0 && (
-              <div className="border-t border-stone-100 pt-4 mt-4">
-                <p className="font-barlow text-xs font-bold uppercase tracking-wide text-stone-500 mb-2">
-                  Immagine di copertina
-                </p>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {photos.map(ph => (
-                    <button key={ph.id}
-                      onClick={() => {
-                        setCoverPhotoId(ph.id)
-                        localStorage.setItem(`dtrek_cover_${id}`, ph.id)
-                      }}
-                      className={`shrink-0 rounded-lg overflow-hidden border-2 transition-colors ${
-                        (coverPhotoId ?? photos[0]?.id) === ph.id
-                          ? 'border-amber-400 shadow-md'
-                          : 'border-transparent hover:border-stone-300'
-                      }`}>
-                      <img src={ph.url} alt={ph.caption} className="w-16 h-16 object-cover" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        )}
-
-        {/* ── Empty state ── */}
-        {!content && !generating && editorMode === 'view' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-8 print:hidden">
-            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col items-start">
-              <Pencil className="w-10 h-10 text-stone-400 mb-3" />
-              <p className="font-barlow font-bold uppercase tracking-wide text-stone-700 mb-2">Scrivi tu</p>
-              <p className="text-sm text-stone-500 font-lora italic mb-4">
-                Costruisci il resoconto sezione per sezione, con le tue parole. Puoi richiedere aiuto
-                all&apos;AI su singoli paragrafi e associare le tue foto.
-              </p>
-              <button
-                onClick={() => {
-                  setReportSections(SCAFFOLD_SECTIONS)
-                  setReportAuthoredBy('manual')
-                  setEditorMode('manual')
-                }}
-                className="mt-auto flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
-                Inizia a scrivere
-              </button>
-            </div>
-            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col items-start">
-              <BookOpen className="w-10 h-10 text-forest-400 mb-3" />
-              <p className="font-barlow font-bold uppercase tracking-wide text-stone-700 mb-2">Genera con AI</p>
-              <p className="text-sm text-stone-500 font-lora italic mb-4">
-                L&apos;AI scrive un reportage giornalistico completo basato sui tuoi dati GPS,
-                biometrici e foto.
-              </p>
-              <div className="flex items-center gap-2 mt-auto flex-wrap">
-                <div className="flex rounded-xl overflow-hidden border border-stone-200">
-                  {(['breve', 'media', 'lunga'] as const).map(l => (
-                    <button key={l} onClick={() => setLength(l)}
-                      className={`px-3 py-1.5 text-xs font-barlow font-bold uppercase tracking-wide transition-colors
-                        ${length === l ? 'bg-forest-600 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-                <button onClick={generateReport} disabled={generating}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
-                  {generating
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</>
-                    : <><BookOpen className="w-4 h-4" /> Genera</>
-                  }
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Manual editor ── */}
-        {editorMode === 'manual' && (
-          <ManualEditor
-            activityId={id}
-            activity={activity}
-            photos={photos}
-            onPhotosChange={setPhotos}
-            initialSections={reportSections}
-            initialAuthoredBy={reportAuthoredBy}
-            onSave={saveSections}
-            onCancel={() => setEditorMode('view')}
-            saving={saving}
-          />
-        )}
-
-        {/* ── Streaming indicator ── */}
-        {editorMode === 'view' && generating && !sections.length && (
-          <div className="flex items-center gap-3 py-8 text-stone-500 print:hidden">
-            <Loader2 className="w-5 h-5 animate-spin text-forest-500" />
-            <span className="font-lora italic text-sm">Giulia sta scrivendo il tuo resoconto…</span>
-          </div>
-        )}
-
-        {/* ── Edit / view toggle ── */}
-        {editorMode === 'view' && content && (
-          <div className="flex items-center justify-between mb-5 print:hidden">
-            <div className="flex items-center gap-2">
-              {report?.updated_at && (
-                <span className="font-lora text-xs italic text-stone-400">
-                  Salvato {format(new Date(report.updated_at), "d MMM · HH:mm", { locale: it })}
-                </span>
-              )}
-              {saving && (
-                <span className="flex items-center gap-1 font-lora text-xs italic text-stone-400">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Salvataggio…
-                </span>
-              )}
-              {saveOk && (
-                <span className="flex items-center gap-1 font-lora text-xs text-forest-600">
-                  <Check className="w-3 h-3" /> Salvato
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (reportSections.length > 0) {
-                    setEditorMode('manual')
-                  } else {
-                    setReportSections(markdownToSections(content))
-                    setReportAuthoredBy(reportAuthoredBy === 'ai' ? 'mixed' : reportAuthoredBy)
-                    setEditorMode('manual')
-                  }
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-barlow font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
-                <Pencil className="w-3.5 h-3.5" /> Editor strutturato
-              </button>
-              <button
-                onClick={() => {
-                  if (isEditing) { saveContent(content); setIsEditing(false) }
-                  else setIsEditing(true)
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
-                {isEditing
-                  ? <><Check className="w-3.5 h-3.5" /> Fatto</>
-                  : <><Pencil className="w-3.5 h-3.5" /> Modifica</>
-                }
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Edit textarea ── */}
-        {editorMode === 'view' && isEditing && (
-          <div className="mb-6 print:hidden">
-            <textarea
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              rows={30}
-              className="w-full bg-white border border-stone-200 rounded-2xl p-5 font-mono text-sm text-stone-700 leading-relaxed outline-none focus:border-forest-400 resize-y shadow-sm"
-              placeholder="Scrivi il resoconto in Markdown…"
-            />
-          </div>
-        )}
-
-        {/* ── Rendered sections ── */}
-        {editorMode === 'view' && !isEditing && (() => {
-          const miniMapNode = activity.trackPoints.length > 4 ? (
-            <div className="float-right ml-5 mb-4 w-52 shrink-0 hidden md:block print:block">
-              <div className="bg-stone-50 rounded-xl border border-stone-200 overflow-hidden shadow-sm">
-                <RoutePhotoMap
-                  trackPoints={activity.trackPoints}
-                  photos={photos}
-                  height="170px"
-                />
-                {photos.length > 0 && (
-                  <div className="px-2 pt-1 pb-2 space-y-0.5">
-                    {photos.slice(0, 7).map((ph, i) => (
-                      <div key={ph.id} className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0 font-barlow">
-                          {i + 1}
-                        </span>
-                        <span className="font-lora text-[9px] text-stone-500 truncate">{ph.caption}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : undefined
-
-          return (
+      {activeTab === 'dati' && (
+      <>
+      {/* ══ RESOCONTO EXCERPT ══ */}
+      <div className="bg-white border-b border-stone-200">
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          {report?.content ? (
             <>
-              {sections.map((section, i) => {
-                const slot = slotFor(section.title, i)
+              <h2 className="font-display text-lg font-semibold text-stone-700 mb-3">Resoconto</h2>
+              <PullQuote>{truncate(stripReportMarkdown(report.content), 300)}</PullQuote>
+              <button onClick={() => setActiveTab('racconto')}
+                className="flex items-center gap-1.5 mt-3 text-sm font-medium text-forest-600 hover:text-forest-700 transition-colors">
+                <BookOpen className="w-3.5 h-3.5" /> Leggi tutto
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-sm text-stone-500">Non hai ancora un resoconto per questa escursione.</p>
+              <button onClick={() => setActiveTab('racconto')}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium transition-colors">
+                <BookOpen className="w-3.5 h-3.5" /> Genera resoconto
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <SectionTabs
+        tabs={[
+          { id: 'panoramica', label: 'Panoramica' },
+          { id: 'tracciato', label: 'Tracciato' },
+          { id: 'natura', label: 'Natura' },
+          { id: 'note', label: 'Note' },
+        ]}
+        active={activeSection}
+        onChange={id => setActiveSection(id as typeof activeSection)}
+      />
+
+      {/* ══ RATING MODAL ══ */}
+      {showRatingPanel && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowRatingPanel(false)}>
+          <div className="bg-forest-900 text-white rounded-2xl shadow-2xl w-full max-w-md p-5"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-forest-200">
+                {rated ? `Voto attuale: ${activity.userRating}/10` : 'Dai il tuo voto di bellezza'}
+              </p>
+              <button onClick={() => setShowRatingPanel(false)} className="text-forest-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex gap-2 mb-4">
+              {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
+                const sel = n === ratingVal
                 return (
-                  <SectionCard
-                    key={i}
-                    section={section}
-                    index={i}
-                    photo={slot === 0 ? undefined : photos[slot]}
-                    photoIndex={slot === 0 ? undefined : slot + 1}
-                    floatNode={slot === 0 ? miniMapNode : undefined}
-                  />
+                  <button key={n} onClick={() => setRatingVal(n)}
+                    style={sel ? { backgroundColor: ratingColor(n) } : {}}
+                    className={`flex-1 aspect-square rounded-xl text-sm font-bold transition-all
+                      ${sel ? 'text-white scale-110 shadow-lg' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'}`}>
+                    {n}
+                  </button>
                 )
               })}
-
-              {/* ── Elevation profile with photo markers — end of report ── */}
-              {sections.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-5 print:rounded-none print:shadow-none print:border-0 print:border-t print:border-stone-200">
-                  <h3 className="font-barlow font-bold uppercase tracking-[2px] text-xs text-stone-400 mb-3">
-                    Profilo altimetrico
-                  </h3>
-                  <RouteTimeline trackPoints={activity.trackPoints} photos={photos} />
-                </div>
-              )}
-            </>
-          )
-        })()}
-
-        {/* ── Raw streaming text (before first section parsed) ── */}
-        {editorMode === 'view' && generating && !sections.length && content && (
-          <div className="bg-white rounded-2xl shadow-sm p-6 print:hidden">
-            <p className="font-lora text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{content}</p>
+            </div>
+            <textarea value={ratingNote} onChange={e => setRatingNote(e.target.value)}
+              placeholder="Nota (opzionale)…" rows={2}
+              className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 resize-none outline-none focus:border-white/40 mb-3" />
+            <div className="flex gap-2">
+              <button onClick={saveRating} disabled={savingRating || ratingVal === 0}
+                className="flex items-center gap-2 px-5 py-2 bg-forest-500 hover:bg-forest-400 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-40">
+                {savingRating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {rated ? 'Aggiorna' : 'Salva voto'}
+              </button>
+              <button onClick={() => setShowRatingPanel(false)} className="px-4 py-2 text-sm text-forest-400 hover:text-white">Annulla</button>
+            </div>
           </div>
-        )}
+        </div>,
+        document.body,
+      )}
 
-        {/* ── Photo gallery (screen only) ── */}
-        {editorMode === 'view' && photos.length > 0 && content && (
-          <section className="mt-8 print:hidden">
-            <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
-              Le tue foto
-            </h3>
-            <div className="flex gap-3 overflow-x-auto pb-3">
-              {photos.map((ph, i) => (
-                <button key={ph.id} onClick={() => setLightbox(ph)}
-                  className="shrink-0 w-36 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-                  <div className="relative">
-                    <img src={ph.url} alt={ph.caption}
-                      className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
-                    <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-barlow">
-                      {i + 1}
-                    </span>
-                  </div>
-                  {ph.caption && (
-                    <p className="px-2 py-1.5 font-lora text-[10px] italic text-stone-500 leading-snug bg-white">
-                      {i + 1}. {ph.caption}
-                    </p>
-                  )}
+      {/* ══ COVER PICKER MODAL ══ */}
+      {showCoverPicker && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowCoverPicker(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm">
+                Scegli la copertina
+              </h3>
+              <button onClick={() => setShowCoverPicker(false)} className="text-stone-400 hover:text-stone-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-80 overflow-y-auto">
+              <button onClick={() => setCover(null)}
+                className={`aspect-square rounded-lg border-2 flex items-center justify-center text-xs text-stone-400 font-medium transition-colors ${
+                  !coverPhotoId ? 'border-forest-500 bg-forest-50' : 'border-stone-200 hover:border-forest-300'
+                }`}>
+                Predefinita
+              </button>
+              {photos.map(ph => (
+                <button key={ph.id} onClick={() => setCover(ph.id)}
+                  className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
+                    coverPhotoId === ph.id ? 'border-forest-500' : 'border-stone-200 hover:border-forest-300'
+                  }`}>
+                  <img src={ph.url} alt={ph.caption ?? ''} className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
-          </section>
-        )}
-
-        {/* ── Print-only photo grid ── */}
-        {editorMode === 'view' && photos.length > 0 && content && (
-          <section className="hidden print:block mt-6 pt-4 border-t border-stone-200">
-            <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
-              Documentazione fotografica
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
-              {photos.map((ph, i) => (
-                <div key={ph.id} style={{ breakInside: 'avoid' }}>
-                  <div style={{ position: 'relative' }}>
-                    <img src={ph.url} alt={ph.caption}
-                      style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8 }} />
-                    <span style={{
-                      position: 'absolute', top: 6, left: 6,
-                      width: 18, height: 18, background: '#f59e0b', color: 'white',
-                      borderRadius: '50%', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', fontSize: 8, fontWeight: 'bold',
-                      border: '2px solid white',
-                    }}>
-                      {i + 1}
-                    </span>
-                  </div>
-                  {ph.caption && (
-                    <p style={{ fontSize: 9, color: '#78716c', fontStyle: 'italic',
-                      marginTop: 4, textAlign: 'center', lineHeight: 1.4 }}>
-                      {i + 1}. {ph.caption}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-      </main>
-
-      {/* ── 3D Map overlay ── */}
-      {show3D && (
-        <RouteMap3D
-          trackPoints={activity.trackPoints}
-          title={activity.title ?? activity.notes}
-          onClose={() => setShow3D(false)}
-          activityId={activity.id}
-          distanceMeters={activity.distanceMeters}
-          elevationGain={activity.elevationGain}
-        />
+          </div>
+        </div>,
+        document.body,
       )}
 
-      {/* ── Hidden PDF root (for html2pdf capture) ── */}
-      {content && (
-        <div id="resoconto-print-root"
-          style={{ position: 'fixed', left: '-9999px', top: 0, width: 794, background: 'white', fontFamily: 'Georgia, serif' }}>
-          {/* Hero */}
-          <div className="pdf-block" style={{ position: 'relative', width: '100%', height: 220, overflow: 'hidden', marginBottom: 0 }}>
-            {heroPhoto
-              ? <img src={heroPhoto.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#1b4332,#40916c)' }} />
-            }
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%)' }} />
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '20px 32px' }}>
-              <h1 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 28, fontWeight: 900, color: 'white', margin: 0, textTransform: 'uppercase', letterSpacing: 1 }}>
-                {activity.title ?? activity.notes ?? 'Escursione'}
-              </h1>
-              {dateStr && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', fontStyle: 'italic' }}>{dateStr}</p>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                {[
-                  `${(activity.distanceMeters / 1000).toFixed(1)} km`,
-                  `${activity.elevationGain.toFixed(0)} m D+`,
-                  formatDuration(activity.totalTimeSeconds),
-                ].map(v => (
-                  <span key={v} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontFamily: 'Arial, sans-serif' }}>{v}</span>
-                ))}
-              </div>
-            </div>
+      {showShare && (() => {
+        const polyline = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+        const step = Math.max(1, Math.ceil(polyline.length / 250))
+        // Downsample altitude track to ~140 points for the share-card elevation profile
+        const altPts = activity.trackPoints
+          .filter(p => p.altitudeMeters !== undefined)
+          .map(p => p.altitudeMeters!)
+        const aStep = Math.max(1, Math.ceil(altPts.length / 140))
+        const elevationProfile = altPts.length > 4 ? altPts.filter((_, i) => i % aStep === 0) : undefined
+        const actMeta: ActivityMeta = {
+          id: activity.id, title: activity.title ?? activity.notes ?? 'Escursione',
+          startTime: activity.startTime, distanceMeters: activity.distanceMeters,
+          totalTimeSeconds: activity.totalTimeSeconds, calories: activity.calories,
+          avgHeartRate: activity.avgHeartRate, maxHeartRate: activity.maxHeartRate,
+          elevationGain: activity.elevationGain, elevationLoss: activity.elevationLoss,
+          altitudeMax: activity.altitudeMax, avgSpeedMs: activity.avgSpeedMs,
+          maxSpeedMs: activity.maxSpeedMs, tags: activity.tags,
+          userNotes: activity.userNotes, fileName: activity.fileName,
+          routePolyline: polyline.filter((_, i) => i % step === 0),
+          elevationProfile,
+        }
+        return <ShareModal kind="activity" activity={actMeta} onClose={() => setShowShare(false)} />
+      })()}
+
+      {/* ══ ALTRO — azioni dell'header raccolte in un unico foglio ══ */}
+      <Sheet open={showAltro} onClose={() => { setShowAltro(false); setShowFloraNotice(false) }} title="Altro">
+        <div className="space-y-1">
+          {photos.length > 0 && (
+            <button onClick={() => { setShowAltro(false); setShowCoverPicker(true) }}
+              className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+              <Camera className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Cambia copertina</span>
+            </button>
+          )}
+          <button onClick={() => { setShowAltro(false); setShowShare(true) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <Share2 className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Condividi</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); exportActivityToExcel(activity) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <FileSpreadsheet className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta Excel</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); exportActivityToDoc(activity) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <FileText className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta Word</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); exportActivityToGpx(activity) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <Map className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta GPX</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); exportActivityPdf(activity) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <FileDown className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta PDF escursione</span>
+          </button>
+          <button onClick={() => { setShowAltro(false); setActiveTab('racconto') }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <BookOpen className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Resoconto</span>
+          </button>
+          <button
+            onClick={() => {
+              setShowAltro(false)
+              if (heroPolyline.length > 1) router.push(`/resoconto/${encodeURIComponent(id)}/flora`)
+              else setShowFloraNotice(true)
+            }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <Leaf className="w-4 h-4 text-green-600" /> <span className="text-sm font-medium text-stone-700">Galleria Verde</span>
+          </button>
+          <button
+            onClick={() => {
+              setShowAltro(false)
+              if (heroPolyline.length > 1) router.push(`/resoconto/${encodeURIComponent(id)}/animali`)
+              else setShowFloraNotice(true)
+            }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <PawPrint className="w-4 h-4 text-amber-600" /> <span className="text-sm font-medium text-stone-700">Galleria Animali</span>
+          </button>
+          {showFloraNotice && (
+            <p className="px-2 py-2 text-xs text-stone-400">
+              Percorso GPS non disponibile per questa escursione: le gallerie richiedono una traccia GPS valida.
+            </p>
+          )}
+          <div className="pt-1 mt-1 border-t border-stone-100">
+            <button onClick={() => { setShowAltro(false); handleDelete() }} disabled={saving}
+              className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              <span className="text-sm font-medium">Elimina escursione</span>
+            </button>
           </div>
-          {/* Sections */}
-          <div style={{ padding: '32px 32px 0' }}>
-            {sections.map((section, i) => {
-              const slot = slotFor(section.title, i)
-              const sectionPhoto = photos[slot]
+        </div>
+      </Sheet>
+
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
+
+        {activeSection === 'panoramica' && (
+          <>
+            {/* 3 numeri primari, grandi — il resto dietro l'accordion "Altri dati" (piano di restyling 2.3) */}
+            {(() => {
+              const hasHR  = (activity.avgHeartRate ?? 0) > 0
+              const hasCal = (activity.calories ?? 0) > 0
+              const hasNetSpeed = (activity.netSpeedMs ?? 0) > 0 && (activity.pauseTimeSeconds ?? 0) > 0
+              const hasIev = (activity.iev ?? 0) > 0
+              const dep = computeDEP(activity.distanceMeters, activity.elevationGain)
               return (
-                <div key={i} className="pdf-block" style={{ marginBottom: 24 }}>
-                  <div style={{ background: ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc'][i % 5], padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i+1).padStart(2,'0')}</span>
-                    <span style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>{section.title}</span>
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+                      <p className="font-display text-2xl font-bold text-forest-900">{(activity.distanceMeters / 1000).toFixed(1)}</p>
+                      <p className="text-[11px] text-stone-400 mt-1">km distanza</p>
+                    </div>
+                    <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+                      <p className="font-display text-2xl font-bold text-forest-900">{activity.elevationGain.toFixed(0)}</p>
+                      <p className="text-[11px] text-stone-400 mt-1">m dislivello</p>
+                    </div>
+                    <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+                      <p className="font-display text-2xl font-bold text-forest-900">{formatDuration(activity.totalTimeSeconds)}</p>
+                      <p className="text-[11px] text-stone-400 mt-1">durata</p>
+                    </div>
                   </div>
-                  <div style={{ padding: '12px 16px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
-                    {sectionPhoto && slot > 0 && (
-                      <div style={{ float: 'right', marginLeft: 12, marginBottom: 8, width: 120 }}>
-                        <div style={{ position: 'relative' }}>
-                          <img src={sectionPhoto.url} alt={sectionPhoto.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                          <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{slot+1}</span>
-                        </div>
-                        <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{sectionPhoto.caption}</p>
+
+                  <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                    <button
+                      onClick={() => setShowAltriDati(v => !v)}
+                      className="w-full flex items-center justify-between px-5 py-4 text-left"
+                    >
+                      <span className="text-sm font-semibold text-stone-600">Altri dati (FC, calorie, velocità…)</span>
+                      <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showAltriDati ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showAltriDati && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 px-5 pb-5">
+                        {hasHR && <StatCard label="FC Media"   value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
+                        <StatCard label="Vel. Media"   value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
+                        {hasNetSpeed && <StatCard label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue"
+                          tooltip="Velocità di crociera netta: distanza / tempo in movimento, escludendo le soste rilevate dalla traccia GPS." />}
+                        {hasCal && <StatCard label="Calorie"    value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
+                        <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone"
+                          tooltip="Distanza Equivalente in Piano (formula CAI): km + (dislivello positivo / 100). Stima lo sforzo come se l'escursione fosse interamente in piano." />
+                        {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest"
+                          tooltip="Metri di dislivello guadagnati per minuto durante i tratti in salita. Misura quanto sei efficiente in ascesa." />}
                       </div>
                     )}
-                    {section.body.split(/\n\n+/).map((p, j) => (
-                      <p key={j} style={{ fontSize: 11, lineHeight: 1.7, color: '#374151', margin: '0 0 8px' }}>{p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()}</p>
-                    ))}
+                  </div>
+                </>
+              )
+            })()}
+
+            {/* Weather */}
+            {hasGps && <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />}
+            {hasGps && !activity.weatherAtHike && (
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/activity-weather', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ id: activity.id }),
+                    })
+                    if (res.ok) {
+                      const weather = await res.json()
+                      setActivity(a => a ? { ...a, weatherAtHike: weather } : a)
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="text-xs text-stone-400 hover:text-stone-600 underline transition-colors"
+              >
+                Salva meteo per il diario
+              </button>
+            )}
+
+            {/* Photos */}
+            <ActivityPhotoManager
+              activityId={id}
+              trackPoints={activity.trackPoints}
+              activityTitle={activity.title ?? activity.notes ?? undefined}
+              distanceMeters={activity.distanceMeters}
+              elevationGain={activity.elevationGain}
+            />
+          </>
+        )}
+
+        {activeSection === 'tracciato' && (
+          <>
+            {/* Map + Charts: sticky map and charts share this parent directly (not nested
+                in separate <section>s) so the sticky element has room to stick on mobile —
+                sticky's scroll range is bounded by its immediate parent's height. */}
+            <div className="space-y-6 sm:space-y-8">
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+                <h2 className="font-display text-xl font-semibold text-stone-700">Tracciato GPS</h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {hasGps && activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
+                    <button onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                      <Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Pendenza</span>
+                    </button>
+                  )}
+                  {hasGps && dtmProfile?.source === 'dtm' && (
+                    <button onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showAspect ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                      <Compass className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Esposizione</span>
+                    </button>
+                  )}
+                  {hasGps && (
+                    <button onClick={() => setShowStreetView(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors">
+                      <Images className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Foto zona</span>
+                    </button>
+                  )}
+                  {hasGps && (
+                    <button onClick={() => setShow3D(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border bg-white text-stone-600 border-stone-200 hover:bg-stone-50 transition-colors">
+                      <Box className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Vista 3D</span>
+                    </button>
+                  )}
+                  {hasGps && (
+                    <button onClick={() => { setOpenVideoWizard(true); setShow3D(true) }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-forest-600 text-white hover:bg-forest-700 transition-colors">
+                      <Film className="w-3.5 h-3.5" /><span className="hidden sm:inline ml-1">Crea video</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm sticky top-2 z-10 lg:static lg:z-auto">
+                <MapView trackPoints={activity.trackPoints} height="360px" showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} activeIndex={activeChartIndex} />
+              </div>
+              {pois.length > 0 && <p className="text-xs text-stone-400 mt-2">{pois.length} punti di interesse trovati</p>}
+
+            {/* Charts */}
+            {(() => {
+              const hasHRData = activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0)
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+                  {hasHRData && (
+                    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                      <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                        <Heart className="w-4 h-4 text-red-400" /> Frequenza Cardiaca
+                      </h3>
+                      <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate}
+                        syncId="hike-charts" onHover={setActiveChartIndex} />
+                    </div>
+                  )}
+                  <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                      <Mountain className="w-4 h-4 text-forest-500" /> Profilo Altimetrico
+                    </h3>
+                    <AltimetryChart trackPoints={activity.trackPoints} syncId="hike-charts" onHover={setActiveChartIndex} />
+                  </div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-stone-600 mb-4 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-terra-400" /> Velocità
+                    </h3>
+                    <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} syncId="hike-charts" onHover={setActiveChartIndex} />
+                  </div>
+                  <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-stone-600 mb-4">Dati tecnici</h3>
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {[
+                        ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
+                        ['Quota partenza', `${activity.trackPoints[0]?.altitudeMeters?.toFixed(1) ?? '--'} m`],
+                        ['Quota minima', `${activity.altitudeMin.toFixed(1)} m`],
+                        ['Quota massima', `${activity.altitudeMax.toFixed(1)} m`],
+                        ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
+                        ['Sport', activity.sport],
+                      ].map(([k, v]) => (
+                        <div key={k} className="flex justify-between border-b border-stone-100 py-1">
+                          <dt className="text-stone-400 text-xs">{k}</dt>
+                          <dd className="font-mono text-stone-700 text-xs font-medium">{v}</dd>
+                        </div>
+                      ))}
+                    </dl>
                   </div>
                 </div>
               )
-            })}
-            {/* Photo grid */}
-            {photos.length > 0 && (
-              <div className="pdf-block" style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, marginTop: 8 }}>
-                <h3 style={{ fontFamily: 'Arial, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: '#9ca3af', marginBottom: 12 }}>Documentazione fotografica</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                  {photos.map((ph, i) => (
-                    <div key={ph.id} className="pdf-block">
-                      <div style={{ position: 'relative' }}>
-                        <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
-                      </div>
-                      {ph.caption && <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i+1}. {ph.caption}</p>}
-                    </div>
-                  ))}
-                </div>
-              </div>
+            })()}
+            </div>
+
+            {/* Punteggi — CTS e Bellezza/TEI riuniti nel grafico ad anello (CL e Sicurezza
+                non sono calcolati per le escursioni concluse, restano assenti nell'anello) */}
+            {hasGps && (
+              <section className="space-y-2">
+                <h2 className="font-display text-xl font-semibold text-stone-700">Punteggi</h2>
+                {(ctsResult || (activity as StoredActivity & { trailScore?: number }).trailScore != null) ? (
+                  <ScoreRing
+                    cl={{ notMatched: true }}
+                    safety={null}
+                    cts={{
+                      result: ctsResult,
+                      cached: (activity as StoredActivity & { trailScore?: number }).trailScore,
+                      beautyScore: (activity as StoredActivity & { linkedBeautyScore?: BeautyScore }).linkedBeautyScore,
+                      computing: ctsComputing,
+                      onCompute: handleComputeCts,
+                    }}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 flex items-center justify-between gap-4">
+                    <p className="text-sm text-stone-500">Il punteggio non è ancora stato calcolato per questa escursione.</p>
+                    <button
+                      onClick={handleComputeCts}
+                      disabled={ctsComputing}
+                      className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                    >
+                      {ctsComputing
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Calcolo…</>
+                        : <><RefreshCw className="w-4 h-4" /> Calcola CTS</>
+                      }
+                    </button>
+                  </div>
+                )}
+              </section>
             )}
-          </div>
-        </div>
+          </>
+        )}
+
+        {activeSection === 'natura' && (
+          <>
+            {/* Fenologia */}
+            {hasGps && heroPolyline.length > 1 && (
+              <section>
+                <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+              </section>
+            )}
+
+            {/* Wikipedia */}
+            {hasGps && (
+              <section>
+                <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">Luoghi nelle vicinanze</h2>
+                <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
+              </section>
+            )}
+          </>
+        )}
+
+        {activeSection === 'note' && (
+          <>
+            {/* Percorsi simili */}
+            {similarActivities.length > 0 && (
+              <section>
+                <h2 className="font-display text-xl font-semibold text-stone-700 mb-2">Percorsi simili</h2>
+                <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide">
+                        <th className="text-left px-4 py-2 font-semibold">Data</th>
+                        <th className="text-left px-4 py-2 font-semibold">Distanza</th>
+                        <th className="text-left px-4 py-2 font-semibold">Dislivello</th>
+                        <th className="text-left px-4 py-2 font-semibold">Durata</th>
+                        <th className="text-left px-4 py-2 font-semibold">Partenza a</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {similarActivities.map(({ activity: a, startDistanceM }) => (
+                        <tr key={a.id} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer"
+                          onClick={() => router.push(`/resoconto/${a.id}`)}>
+                          <td className="px-4 py-2 text-stone-700">{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
+                          <td className="px-4 py-2 text-stone-700">{(a.distanceMeters / 1000).toFixed(1)} km</td>
+                          <td className="px-4 py-2 text-stone-700">{a.elevationGain.toFixed(0)} m</td>
+                          <td className="px-4 py-2 text-stone-700">{formatDuration(a.totalTimeSeconds)}</td>
+                          <td className="px-4 py-2 text-stone-400">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* Notes */}
+            <section className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-xl font-semibold text-stone-700">Note personali</h2>
+                {!editNotes && (
+                  <button onClick={() => setEditNotes(true)} className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 transition-colors">
+                    <Pencil className="w-4 h-4" /> Modifica
+                  </button>
+                )}
+              </div>
+              {editNotes ? (
+                <div>
+                  <textarea value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={5}
+                    placeholder="Descrivi l'escursione, i luoghi visitati, le sensazioni…"
+                    className="w-full border border-stone-200 rounded-xl p-3 text-stone-700 text-sm outline-none focus:border-forest-400 resize-none" autoFocus />
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={saveNotes} disabled={saving}
+                      className="flex items-center gap-1.5 px-4 py-1.5 bg-forest-600 text-white rounded-lg text-sm hover:bg-forest-700 transition-colors disabled:opacity-60">
+                      {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salva
+                    </button>
+                    <button onClick={() => setEditNotes(false)}
+                      className="px-4 py-1.5 border border-stone-200 text-stone-500 rounded-lg text-sm hover:bg-stone-50 transition-colors">
+                      Annulla
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className={`text-sm leading-relaxed ${activity.userNotes ? 'text-stone-600' : 'text-stone-400 italic'}`}>
+                  {activity.userNotes || 'Nessuna nota. Clicca "Modifica" per aggiungere appunti.'}
+                </p>
+              )}
+            </section>
+
+            {/* Appunti vocali/testuali */}
+            <section className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+              <HikeNotesRecorder
+                notes={activity.hikeNotes ?? []}
+                onChange={hikeNotes => patch({ hikeNotes })}
+              />
+            </section>
+          </>
+        )}
+      </main>
+      </>
       )}
 
-      {/* ── Lightbox ── */}
+      {show3D && (
+        <RouteMap3D trackPoints={activity.trackPoints} title={activity.title ?? activity.notes}
+          onClose={() => { setShow3D(false); setOpenVideoWizard(false) }} plannedTrackPoints={activity.linkedPlannedTrackPoints}
+          activityId={activity.id} initialVideoState={openVideoWizard ? 'config' : 'idle'}
+          distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain} pois={pois} dtmProfile={dtmProfile} />
+      )}
+      {showStreetView && centerPt?.lat && centerPt?.lon && (
+        <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity.title ?? undefined}
+          onClose={() => setShowStreetView(false)} />
+      )}
+
       {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 print:hidden"
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setLightbox(null)}>
           <button className="absolute top-4 right-4 text-white/70 hover:text-white">
             <X className="w-6 h-6" />
@@ -860,7 +1094,6 @@ export default function ResocontoPage() {
           </div>
         </div>
       )}
-
     </div>
   )
 }

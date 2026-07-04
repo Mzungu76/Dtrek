@@ -1,0 +1,78 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { Loader2, CalendarClock } from 'lucide-react'
+
+const PRESETS = [7, 14, 30, 60, 90]
+
+/** Scadenza predefinita dei percorsi "in attesa" nel tab Guida. */
+export default function SectionGuida() {
+  const [days,    setDays]    = useState(30)
+  const [loading, setLoading] = useState(true)
+  const [saving,  setSaving]  = useState(false)
+  const [status,  setStatus]  = useState<{ ok: boolean; msg: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => { if (d.guidePendingDays) setDays(d.guidePendingDays) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleSave(next: number) {
+    setDays(next)
+    setSaving(true); setStatus(null)
+    const res = await fetch('/api/user-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guidePendingDays: next }),
+    })
+    setSaving(false)
+    setStatus(res.ok
+      ? { ok: true, msg: 'Scadenza predefinita salvata.' }
+      : { ok: false, msg: 'Errore durante il salvataggio.' })
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-3">
+      <div className="flex items-center gap-2.5">
+        <CalendarClock className="w-5 h-5 text-amber-600 shrink-0" />
+        <div>
+          <h2 className="text-sm font-semibold text-stone-800">Scadenza percorsi in attesa</h2>
+          <p className="text-xs text-stone-400">
+            Dopo quanti giorni una Guida importata e non ancora percorsa ti chiede se prorogare o archiviare
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-stone-400 text-xs">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {PRESETS.map(p => (
+            <button
+              key={p}
+              onClick={() => handleSave(p)}
+              disabled={saving}
+              className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors disabled:opacity-50 ${
+                days === p
+                  ? 'bg-amber-500 border-amber-500 text-white'
+                  : 'bg-white border-stone-200 text-stone-600 hover:border-amber-300'
+              }`}
+            >
+              {p} giorni
+            </button>
+          ))}
+        </div>
+      )}
+
+      {status && (
+        <p className={`text-xs font-medium ${status.ok ? 'text-forest-600' : 'text-red-600'}`}>
+          {status.ok ? '✓ ' : '✗ '}{status.msg}
+        </p>
+      )}
+    </div>
+  )
+}

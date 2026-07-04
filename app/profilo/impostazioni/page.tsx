@@ -6,6 +6,7 @@ import SectionIdentita from '@/components/profilo/SectionIdentita'
 import SectionIndirizzo from '@/components/profilo/SectionIndirizzo'
 import SectionBiometria from '@/components/profilo/SectionBiometria'
 import SectionComfortTrailScore from '@/components/profilo/SectionComfortTrailScore'
+import SectionGuida from '@/components/profilo/SectionGuida'
 import SectionAvanzate from '@/components/profilo/SectionAvanzate'
 
 export default function ImpostazioniPage() {
@@ -34,6 +35,11 @@ export default function ImpostazioniPage() {
         <div className="pt-2">
           <Kicker className="mb-3">Comfort TrailScore</Kicker>
           <SectionComfortTrailScore />
+        </div>
+
+        <div className="pt-2">
+          <Kicker className="mb-3">Guida</Kicker>
+          <SectionGuida />
         </div>
 
         <div className="pt-2">

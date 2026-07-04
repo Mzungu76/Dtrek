@@ -12,7 +12,7 @@ import { computeCurrentBadges } from '@/lib/badges'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   BarChart2, Trophy, Mountain, Compass, Settings, Sparkles, ArrowDownToLine,
-  Info, LogOut, ChevronRight, BookMarked, User as UserIcon,
+  Info, LogOut, ChevronRight, User as UserIcon,
 } from 'lucide-react'
 
 interface Row {
@@ -87,7 +87,6 @@ export default function ProfiloPage() {
     { href: '/statistiche?tab=traguardi', icon: <Trophy className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Traguardi', sub: badgeCount > 0 ? `${badgeCount} sbloccati` : 'Nessuno ancora' },
     { href: '/vette', icon: <Mountain className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Vette raggiunte', sub: 'Le cime toccate nelle tue escursioni' },
     { href: '/profilo/cronologia-navigazione', icon: <Compass className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Cronologia navigazione', sub: 'Le tue uscite guidate dal navigatore' },
-    { href: '/diario-stampato', icon: <BookMarked className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Diario stampato', sub: 'Genera il libro PDF delle tue escursioni' },
     { href: '/profilo/impostazioni', icon: <Settings className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Impostazioni', sub: 'Identità, indirizzo, dati biometrici, comfort score' },
     { href: '/profilo/ai', icon: <Sparkles className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Intelligenza artificiale', sub: 'Chiave Claude, abbonamento' },
     ...(installed ? [] : [{ onClick: handleInstall, icon: <ArrowDownToLine className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: "Installa l'app", sub: 'Aggiungi alla schermata Home' }]),

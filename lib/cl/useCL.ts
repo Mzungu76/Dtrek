@@ -1,8 +1,7 @@
 'use client'
 // Shared fetch+state hooks for GET /api/trails/cl and GET /api/trails/sentinel2
-// (lib/cl/types.ts' CLApiResponse/Sentinel2ApiResponse) — used by both
-// app/esplora/page.tsx and app/programma/[id]/page.tsx so neither duplicates
-// the same fetch+useEffect plumbing or the { matched: false } branching.
+// (lib/cl/types.ts' CLApiResponse/Sentinel2ApiResponse) — used by app/guida/[id]/page.tsx
+// so it doesn't duplicate the same fetch+useEffect plumbing or the { matched: false } branching.
 import { useEffect, useState } from 'react'
 import type { CLResult, Sentinel2Data } from '@/lib/cl/types'
 

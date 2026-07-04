@@ -64,6 +64,8 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedDrivingDurationSeconds: row.cached_driving_duration_s      as number | undefined,
     cachedDrivingOriginLat:       row.cached_driving_origin_lat      as number | undefined,
     cachedDrivingOriginLon:       row.cached_driving_origin_lon      as number | undefined,
+    pendingExpiresAt:             row.pending_expires_at             as string | undefined,
+    archivedAt:                   row.archived_at                    as string | undefined,
   }
 }
 
@@ -100,6 +102,8 @@ function hikeToRow(h: PlannedHike) {
     cached_driving_duration_s:        h.cachedDrivingDurationSeconds ?? null,
     cached_driving_origin_lat:        h.cachedDrivingOriginLat ?? null,
     cached_driving_origin_lon:        h.cachedDrivingOriginLon ?? null,
+    pending_expires_at:               h.pendingExpiresAt ?? null,
+    archived_at:                      h.archivedAt ?? null,
   }
 }
 
@@ -113,6 +117,7 @@ const META_COLS = [
   'cached_safety_score', 'cached_riddles', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
+  'pending_expires_at', 'archived_at',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
@@ -289,6 +294,8 @@ export async function PATCH(req: NextRequest) {
       cachedDrivingDurationSeconds?: number
       cachedDrivingOriginLat?: number
       cachedDrivingOriginLon?: number
+      pendingExpiresAt?: string | null
+      archivedAt?: string | null
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -310,6 +317,8 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedDrivingDurationSeconds !== undefined) dbPatch.cached_driving_duration_s      = patch.cachedDrivingDurationSeconds
     if (patch.cachedDrivingOriginLat       !== undefined) dbPatch.cached_driving_origin_lat      = patch.cachedDrivingOriginLat
     if (patch.cachedDrivingOriginLon       !== undefined) dbPatch.cached_driving_origin_lon      = patch.cachedDrivingOriginLon
+    if (patch.pendingExpiresAt             !== undefined) dbPatch.pending_expires_at             = patch.pendingExpiresAt
+    if (patch.archivedAt                   !== undefined) dbPatch.archived_at                    = patch.archivedAt
 
     const { error } = await supabase
       .from('planned_hikes')

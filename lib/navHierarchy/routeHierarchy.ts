@@ -15,16 +15,13 @@ interface RouteEntry {
 }
 
 export const ROUTE_HIERARCHY: RouteEntry[] = [
-  // Calendario is the app's single root: it's the only place where the
-  // hardware/gesture back button is allowed to fall through to native
-  // behavior (minimize/exit). Every other authenticated route's "back"
-  // goes straight there, regardless of how deep it was reached.
+  // Diario (il libro impaginato) è il root dell'app: è l'unico punto in cui il
+  // pulsante back hardware/gesture può ricadere sul comportamento nativo
+  // (minimizza/esci). Il "back" di ogni altra route autenticata torna qui,
+  // indipendentemente da quanto in profondità sia stata raggiunta.
   { pattern: '/', parent: null },
 
   { pattern: '/statistiche', parent: '/' },
-  { pattern: '/esplora', parent: '/' },
-  { pattern: '/programma', parent: '/' },
-  { pattern: '/diario-stampato', parent: '/profilo' },
   { pattern: '/profilo', parent: '/' },
   { pattern: '/profilo/impostazioni', parent: '/profilo' },
   { pattern: '/profilo/ai', parent: '/profilo' },
@@ -33,17 +30,21 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
   { pattern: '/fonti-e-crediti', parent: '/profilo' },
   { pattern: '/vette', parent: '/profilo' },
 
-  { pattern: '/escursione/[id]', parent: '/' },
-  { pattern: '/escursione/[id]/flora', parent: '/' },
-  { pattern: '/escursione/[id]/animali', parent: '/' },
-  { pattern: '/resoconto/[id]', parent: '/' },
-  { pattern: '/resoconto/[id]/racconta', parent: '/' },
+  // ── Guida — percorsi in attesa, guida turistica AI ──────────────────────────
+  { pattern: '/guida', parent: '/' },
+  { pattern: '/guida/[id]', parent: '/guida' },
+  { pattern: '/guida/[id]/leggi', parent: (p) => `/guida/${p.id}` },
+  { pattern: '/guida/[id]/percorso', parent: (p) => `/guida/${p.id}` },
+  { pattern: '/guida/[id]/flora', parent: (p) => `/guida/${p.id}` },
+  { pattern: '/guida/[id]/animali', parent: (p) => `/guida/${p.id}` },
+  { pattern: '/guida/[id]/naviga', parent: (p) => `/guida/${p.id}` },
 
-  { pattern: '/programma/[id]', parent: '/' },
-  { pattern: '/programma/[id]/flora', parent: '/' },
-  { pattern: '/programma/[id]/animali', parent: '/' },
-  { pattern: '/programma/[id]/naviga', parent: '/' },
-  { pattern: '/guida/[id]', parent: '/' },
+  // ── Resoconto — escursioni concluse (dati + racconto) ───────────────────────
+  { pattern: '/resoconto', parent: '/' },
+  { pattern: '/resoconto/[id]', parent: '/resoconto' },
+  { pattern: '/resoconto/[id]/racconta', parent: (p) => `/resoconto/${p.id}` },
+  { pattern: '/resoconto/[id]/flora', parent: (p) => `/resoconto/${p.id}` },
+  { pattern: '/resoconto/[id]/animali', parent: (p) => `/resoconto/${p.id}` },
 
   { pattern: '/login', parent: null },
   { pattern: '/signup', parent: null },
@@ -56,8 +57,8 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
 export const ROUTE_LABELS: Record<string, string> = {
   '/': 'Diario',
   '/statistiche': 'Statistiche',
-  '/esplora': 'Esplora',
-  '/diario-stampato': 'Diario stampato',
+  '/guida': 'Guida',
+  '/resoconto': 'Resoconto',
   '/profilo': 'Profilo',
   '/login': 'Accedi',
 }

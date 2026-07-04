@@ -15,6 +15,7 @@ interface Props {
   loading?: boolean
   compact?: boolean
   expanded?: boolean
+  defaultOpen?: boolean
   onRefresh?: () => void
   refreshing?: boolean
   refreshError?: string | null
@@ -90,8 +91,8 @@ function colorFor(label: CLLabel): string {
   }
 }
 
-export function CLBadge({ si, label, signals, isGhostTrail, partial, loading, compact, expanded, onRefresh, refreshing, refreshError }: Props) {
-  const [open, setOpen] = useState(false)
+export function CLBadge({ si, label, signals, isGhostTrail, partial, loading, compact, expanded, defaultOpen, onRefresh, refreshing, refreshError }: Props) {
+  const [open, setOpen] = useState(!!defaultOpen)
 
   if (loading) {
     return compact

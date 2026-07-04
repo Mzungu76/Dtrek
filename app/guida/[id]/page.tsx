@@ -1,351 +1,427 @@
 'use client'
-import {
-  useEffect, useState, useRef, useCallback, useMemo,
-} from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { getPlannedById, updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
+import dynamic from 'next/dynamic'
+import Navbar from '@/components/Navbar'
+import BackLink from '@/app/components/BackLink'
+import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
+import ElevationProfileChart from '@/components/ElevationProfileChart'
+import WeatherWidget from '@/components/WeatherWidget'
+import WikiCards from '@/components/WikiCards'
+import RouteThumb from '@/components/RouteThumb'
+import PhotoMosaic from '@/components/PhotoMosaic'
+import { ScoreRing } from '@/components/ScoreRing'
+import { CurrentConditionsNotice } from '@/components/CurrentConditionsNotice'
+import { ShadeWaterTile } from '@/components/ShadeWaterTile'
+import OfflinePackageDownloader from '@/components/navigation/OfflinePackageDownloader'
+import { PhenologyPanel } from '@/components/PhenologyPanel'
+import { useCL, useSentinel2 } from '@/lib/cl/useCL'
+import { useFlora } from '@/lib/useFlora'
+import {
+  getPlannedById, updatePlannedMeta, deletePlanned,
+  type PlannedHike, type HikeAssessment,
+} from '@/lib/plannedStore'
+import { computeSafetyScore, type SafetyScore, type WildlifeRisk } from '@/lib/safetyScore'
+import { fetchWildlifeRiskFromGbif } from '@/lib/wildlifeRiskFromGbif'
+import { type PoiItem, POI_META } from '@/lib/overpass'
+import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
+import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/lib/trailScore'
+import { type BeautyScore } from '@/lib/beautyScore'
+import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
+import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
+import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
+import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import type { WikiPage } from '@/lib/wikipedia'
 import {
-  Volume2, VolumeX, Play, Pause, Square,
-  RefreshCw, Loader2, Mountain, Clock, Route,
-  Leaf, Utensils, ShieldCheck, Compass, MapPin,
-  FileDown, ExternalLink, BookOpen,
+  Mountain, Route, TrendingUp, TrendingDown,
+  Clock, CalendarDays, Pencil, Check, X, Trash2, Loader2,
+  ShieldAlert, AlertTriangle, Info, BarChart2, Layers, Images, BookOpen, Compass, Leaf, PawPrint,
+  Car, Navigation, MapPin, MoreHorizontal, ChevronDown,
 } from 'lucide-react'
-import BackLink from '@/app/components/BackLink'
-import type { PoiItem } from '@/lib/overpass'
-import PhotoMosaic from '@/components/PhotoMosaic'
-import { extractRiddles } from '@/lib/riddles'
-import { extractEpochPois } from '@/lib/epochPois'
+import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl, originMatches } from '@/lib/drivingInfo'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+import PdfExportButton from '@/components/PdfExportButton'
+import SectionTabs from '@/components/SectionTabs'
+import PullQuote from '@/components/ui/PullQuote'
+import Sheet from '@/components/ui/Sheet'
 
-interface Section {
-  title: string
-  body:  string
-  icon:  React.ReactNode
-  color: string
+const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
+const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
+
+const DIFFICULTY_LABEL: Record<string, string> = {
+  facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
+}
+const DIFFICULTY_COLORS: Record<string, string> = {
+  facile:      'bg-emerald-100 text-emerald-700 border-emerald-200',
+  moderata:    'bg-amber-100 text-amber-700 border-amber-200',
+  impegnativa: 'bg-orange-100 text-orange-700 border-orange-200',
+  estrema:     'bg-red-100 text-red-700 border-red-200',
+}
+const SUIT_LABEL = (s: number) =>
+  s >= 75 ? 'Ben preparato' : s >= 50 ? 'Fattibile con impegno' :
+  s >= 30 ? 'Al limite delle capacità' : 'Molto sfidante'
+const SUIT_COLOR = (s: number) =>
+  s >= 75 ? 'bg-emerald-500' : s >= 50 ? 'bg-amber-500' : s >= 30 ? 'bg-orange-500' : 'bg-red-500'
+
+function guideExcerpt(markdown: string, maxLen = 300): string {
+  const plain = markdown
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\[\/?curiosita\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return plain.length > maxLen ? `${plain.slice(0, maxLen).trim()} [...]` : plain
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const SECTION_META: Record<string, { icon: React.ReactNode; color: string }> = {
-  'prima di partire': { icon: <Compass    className="w-4 h-4" />, color: '#d97706' },
-  'il percorso':      { icon: <Route      className="w-4 h-4" />, color: '#16a34a' },
-  'i luoghi':         { icon: <MapPin     className="w-4 h-4" />, color: '#7c3aed' },
-  'la natura':        { icon: <Leaf       className="w-4 h-4" />, color: '#0f766e' },
-  'sapori':           { icon: <Utensils   className="w-4 h-4" />, color: '#b45309' },
-  'consigli':         { icon: <ShieldCheck className="w-4 h-4" />, color: '#0369a1' },
-}
-
-function sectionMeta(title: string) {
-  const key = title.toLowerCase()
-  for (const [k, v] of Object.entries(SECTION_META)) {
-    if (key.includes(k)) return v
+function RiskItem({ type, text }: { type: 'danger' | 'warning' | 'info'; text: string }) {
+  const colors = {
+    danger:  'bg-red-50 border-red-200 text-red-700',
+    warning: 'bg-amber-50 border-amber-200 text-amber-700',
+    info:    'bg-sky-50 border-sky-200 text-sky-700',
   }
-  return { icon: <BookOpen className="w-4 h-4" />, color: '#78716c' }
-}
-
-function parseGuide(text: string): Section[] {
-  return text.split(/^## /m).filter(Boolean).map(part => {
-    const nl = part.indexOf('\n')
-    const title = (nl === -1 ? part : part.slice(0, nl)).trim()
-    const body  = nl === -1 ? '' : part.slice(nl + 1).trim()
-    return { title, body, ...sectionMeta(title) }
-  })
-}
-
-// ── Route SVG (instant hero background fallback) ───────────────────────────────
-
-function RouteSvg({ hike }: { hike: PlannedHike }) {
-  const pts = useMemo(() => {
-    const raw = ((hike.trackPoints ?? []).filter(p => p.lat && p.lon) as { lat: number; lon: number }[])
-      .map(p => [p.lat, p.lon] as [number, number])
-    return raw.length > 1 ? raw : (hike.routePolyline ?? []) as [number, number][]
-  }, [hike])
-
-  if (pts.length < 2) return null
-
-  const lats = pts.map(p => p[0]), lons = pts.map(p => p[1])
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-  const W = 1200, H = 420
-  const pad = 40
-  const scLat = (H - 2 * pad) / (maxLat - minLat || 0.001)
-  const scLon = (W - 2 * pad) / (maxLon - minLon || 0.001)
-  const sc = Math.min(scLat, scLon)
-  const offX = pad + ((W - 2 * pad) - (maxLon - minLon) * sc) / 2
-  const offY = pad + ((H - 2 * pad) - (maxLat - minLat) * sc) / 2
-  const px = (lon: number) => offX + (lon - minLon) * sc
-  const py = (lat: number) => offY + (maxLat - lat) * sc
-  const d = pts.map(([lat, lon], i) => `${i === 0 ? 'M' : 'L'} ${px(lon).toFixed(1)} ${py(lat).toFixed(1)}`).join(' ')
-
+  const Icon = type === 'danger' ? ShieldAlert : type === 'warning' ? AlertTriangle : Info
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="absolute inset-0 w-full h-full opacity-20"
-      preserveAspectRatio="xMidYMid slice"
-    >
-      <path d={d} fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={px(pts[0][1]).toFixed(1)} cy={py(pts[0][0]).toFixed(1)} r="6" fill="#4ade80" />
-      <circle cx={px(pts[pts.length-1][1]).toFixed(1)} cy={py(pts[pts.length-1][0]).toFixed(1)} r="6" fill="#f87171" />
-    </svg>
-  )
-}
-
-// ── Magazine section body renderer ────────────────────────────────────────────
-
-function MagazineBody({ body, color, sectionPhoto }: { body: string; color: string; sectionPhoto?: string }) {
-  interface Block { type: 'lead' | 'para' | 'curiosita' | 'subsection'; text: string }
-
-  const blocks = useMemo<Block[]>(() => {
-    const out: Block[] = []
-    const cRe = /\[curiosita\]([\s\S]*?)\[\/curiosita\]/g
-    let last = 0
-    let m: RegExpExecArray | null
-    let paraCount = 0
-
-    const flushText = (chunk: string) => {
-      let buf: string[] = []
-      const flush = () => {
-        const p = buf.join(' ').trim()
-        if (p) {
-          out.push({ type: paraCount === 0 ? 'lead' : 'para', text: p })
-          paraCount++
-          buf = []
-        }
-      }
-      for (const line of chunk.split('\n')) {
-        const t = line.trim()
-        if (t.startsWith('### ')) { flush(); out.push({ type: 'subsection', text: t.slice(4) }) }
-        else if (!t) flush()
-        else buf.push(t)
-      }
-      flush()
-    }
-
-    while ((m = cRe.exec(body)) !== null) {
-      flushText(body.slice(last, m.index))
-      out.push({ type: 'curiosita', text: m[1].trim().replace(/\n/g, ' ') })
-      last = m.index + m[0].length
-    }
-    flushText(body.slice(last))
-    return out
-  }, [body])
-
-  // First paragraph (lead) stands alone full-width; rest flow in columns
-  const lead = blocks.find(b => b.type === 'lead')
-  const rest  = blocks.filter(b => b !== lead)
-
-  return (
-    <div>
-      {lead && (
-        <p className="font-lora text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-700 mb-6">
-          {lead.text}
-        </p>
-      )}
-      <div className="md:columns-2 md:gap-8 print-columns-2">
-        {sectionPhoto && (
-          <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={sectionPhoto} className="w-full h-40 object-cover rounded-sm shadow-sm" alt="" />
-            <p className="text-[9px] italic text-stone-400 mt-1">© Wikimedia Commons</p>
-          </div>
-        )}
-        {rest.map((b, i) => {
-          if (b.type === 'curiosita') {
-            return (
-              <div
-                key={i}
-                className="my-5 rounded-sm overflow-hidden shadow-sm"
-                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
-              >
-                <div className="flex">
-                  <div className="w-1 flex-shrink-0" style={{ background: color }} />
-                  <div className="flex-1 px-4 py-3" style={{ background: color + '12' }}>
-                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5" style={{ color }}>
-                      ◆ Lo sapevi?
-                    </p>
-                    <p className="font-lora italic text-[14px] leading-relaxed text-stone-700">
-                      {b.text}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )
-          }
-          if (b.type === 'subsection') {
-            return (
-              <h3
-                key={i}
-                className="font-barlow text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2"
-                style={{ color, breakAfter: 'avoid' }}
-              >
-                {b.text}
-              </h3>
-            )
-          }
-          return (
-            <p key={i} className="font-lora text-[15px] leading-7 text-stone-600 mb-4">
-              {b.text}
-            </p>
-          )
-        })}
-      </div>
+    <div className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${colors[type]}`}>
+      <Icon className="w-4 h-4 shrink-0 mt-0.5" />
+      <span>{text}</span>
     </div>
   )
 }
 
-// ── POI card ──────────────────────────────────────────────────────────────────
-
-interface PoiPhoto {
-  title: string
-  thumbnail: string
-  url: string
-  description?: string
-}
-
-function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
+function AssessmentPanel({ a }: { a: HikeAssessment }) {
+  const suit = a.suitabilityScore
+  const hasDanger  = a.risks.some(r => r.type === 'danger')
+  const hasWarning = a.risks.some(r => r.type === 'warning')
+  const summaryBorder = hasDanger ? 'border-red-400' : hasWarning ? 'border-amber-400' : 'border-emerald-400'
   return (
-    <a
-      href={photo.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex flex-col rounded-xl overflow-hidden border border-stone-100 hover:border-stone-200 shadow-sm hover:shadow-md transition-all bg-white"
-    >
-      <div className="h-40 overflow-hidden bg-stone-100">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.thumbnail}
-          alt={photo.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-        />
+    <div className="space-y-5">
+      {a.summary && (
+        <div className={`border-l-4 ${summaryBorder} bg-stone-50 rounded-r-lg px-4 py-3 text-sm font-medium text-stone-700`}>
+          {a.summary}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-3 items-start">
+        <div className={`px-3 py-1.5 rounded-full border text-sm font-semibold ${DIFFICULTY_COLORS[a.difficulty]}`}>
+          {DIFFICULTY_LABEL[a.difficulty]}
+        </div>
+        <div className="flex-1 min-w-[180px] space-y-1">
+          <div className="flex justify-between text-xs font-medium text-stone-600">
+            <span>Adatta a te</span>
+            <span>{suit}% · {SUIT_LABEL(suit)}</span>
+          </div>
+          <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${SUIT_COLOR(suit)}`} style={{ width: `${suit}%` }} />
+          </div>
+        </div>
       </div>
-      <div className="p-3">
-        <p className="font-barlow font-semibold text-stone-800 text-[16px] leading-tight line-clamp-1 tracking-wide">
-          {photo.title}
-        </p>
-        {photo.description && (
-          <p className="text-[11px] text-stone-400 mt-0.5 line-clamp-1">{photo.description}</p>
-        )}
-        <span className="flex items-center gap-0.5 text-[10px] mt-1.5" style={{ color }}>
-          <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
-        </span>
-      </div>
-    </a>
+
+      {a.userContext.activityCount > 0 && (
+        <div className="bg-stone-50 rounded-xl border border-stone-200 p-4 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-stone-400 mb-0.5">vs. media distanza</p>
+            <p className="font-semibold text-stone-800">
+              {a.userContext.vsAvgDistPct}%
+              <span className="text-xs font-normal text-stone-400 ml-1">(media {a.userContext.avgDistanceKm.toFixed(1)} km)</span>
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-stone-400 mb-0.5">vs. media dislivello</p>
+            <p className="font-semibold text-stone-800">
+              {a.userContext.vsAvgElevPct}%
+              <span className="text-xs font-normal text-stone-400 ml-1">(media {a.userContext.avgElevationM} m D+)</span>
+            </p>
+          </div>
+          {a.userContext.maxDistanceKm > 0 && (
+            <div>
+              <p className="text-xs text-stone-400 mb-0.5">record distanza</p>
+              <p className="font-semibold text-stone-800">{a.userContext.maxDistanceKm.toFixed(1)} km</p>
+            </div>
+          )}
+          {a.userContext.maxElevationM > 0 && (
+            <div>
+              <p className="text-xs text-stone-400 mb-0.5">record dislivello</p>
+              <p className="font-semibold text-stone-800">{a.userContext.maxElevationM} m D+</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {a.risks.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Fattori di rischio</p>
+          <div className="space-y-2">
+            {a.risks.map((r, i) => <RiskItem key={i} type={r.type} text={r.text} />)}
+          </div>
+        </div>
+      )}
+
+      {a.suggestions.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Consigli pratici</p>
+          <div className="space-y-2">
+            {a.suggestions.map((s, i) => <RiskItem key={i} type={s.type} text={s.text} />)}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
-// ── Chunk-based TTS ───────────────────────────────────────────────────────────
+export default function PlannedHikePage() {
+  const params = useParams()
+  const router = useRouter()
+  const id = decodeURIComponent(params.id as string)
 
-interface ChunkEntry { text: string; sectionIdx: number }
+  const [hike,           setHike]          = useState<PlannedHike | null>(null)
+  const [activeChartIndex, setActiveChartIndex] = useState<number | null>(null)
+  const [loading,        setLoading]       = useState(true)
+  const [saving,         setSaving]        = useState(false)
+  const [editTitle,      setEditTitle]     = useState(false)
+  const [editNotes,      setEditNotes]     = useState(false)
+  const [editDate,       setEditDate]      = useState(false)
+  const [titleVal,       setTitleVal]      = useState('')
+  const [notesVal,       setNotesVal]      = useState('')
+  const [dateVal,        setDateVal]       = useState('')
+  const [showGradient,   setShowGradient]  = useState(false)
+  const [showAspect,     setShowAspect]    = useState(false)
+  const [dtmProfile,     setDtmProfile]    = useState<TrailDtmProfile | undefined>(undefined)
+  const [terrainProfile, setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
+  const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
+  const [showStreetView, setShowStreetView] = useState(false)
+  const [pois,           setPois]          = useState<PoiItem[]>([])
+  const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
+  const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
+  const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
+  const [ctsResult,      setCtsResult]     = useState<TrailScoreResult | null>(null)
+  const [ctsComputing,   setCtsComputing]  = useState(false)
+  const [prefsLoaded,    setPrefsLoaded]   = useState(false)
+  const [prefSforzo,     setPrefSforzo]    = useState(50)
+  const [prefDurata,     setPrefDurata]    = useState(270)
+  const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
+  const [routePhotos,    setRoutePhotos]   = useState<string[]>([])
+  const [showFloraNotice, setShowFloraNotice] = useState(false)
+  const [origin,   setOrigin]   = useState<{ lat: number; lon: number } | null>(null)
+  const [driving,  setDriving]  = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
+  const [drivingLoading, setDrivingLoading] = useState(false)
+  const [activeSection, setActiveSection] = useState<'panoramica' | 'percorso' | 'natura' | 'guida'>('panoramica')
+  const [showAltro,      setShowAltro]      = useState(false)
+  const [showAltriDati,  setShowAltriDati]   = useState(false)
 
-function buildChunks(sections: Section[]): ChunkEntry[] {
-  const chunks: ChunkEntry[] = []
-  sections.forEach((s, sectionIdx) => {
-    const lines = [`${s.title}.`, ...s.body.split(/\n+/).filter(l => l.trim().length > 3)]
-    for (const line of lines) {
-      if (line.length <= 220) {
-        chunks.push({ text: line, sectionIdx })
-      } else {
-        const sentences = line.split(/(?<=[.!?])\s+/).filter(Boolean)
-        let buf = ''
-        for (const sentence of sentences) {
-          if (buf.length + sentence.length > 220 && buf) {
-            chunks.push({ text: buf.trim(), sectionIdx })
-            buf = sentence
-          } else {
-            buf += (buf ? ' ' : '') + sentence
-          }
-        }
-        if (buf.trim()) chunks.push({ text: buf.trim(), sectionIdx })
-      }
-    }
-  })
-  return chunks.filter(c => c.text.trim().length > 0)
-}
+  // Must be before early returns
+  const heroPolyline = useMemo((): [number, number][] => {
+    const pts = (hike?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
+    if (!pts.length) return []
+    const step = Math.max(1, Math.ceil(pts.length / 100))
+    return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
+  }, [hike])
 
-function getItalianVoice(): SpeechSynthesisVoice | null {
-  const voices = window.speechSynthesis.getVoices()
-  return (
-    voices.find(v => v.lang === 'it-IT' && v.localService) ??
-    voices.find(v => v.lang === 'it-IT') ??
-    voices.find(v => v.lang.startsWith('it')) ??
-    null
-  )
-}
+  const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
+  const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
+  const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
 
-const RATES = [0.8, 1, 1.2, 1.5]
-
-type GuideLength = 'breve' | 'media' | 'lunga'
-
-const LENGTH_OPTS: { key: GuideLength; label: string; desc: string }[] = [
-  { key: 'breve', label: 'Breve',  desc: '~5 min' },
-  { key: 'media', label: 'Media',  desc: '~15 min' },
-  { key: 'lunga', label: 'Lunga',  desc: '~30 min' },
-]
-
-// ── Main page ─────────────────────────────────────────────────────────────────
-
-export default function GuidaPage() {
-  const { id }  = useParams() as { id: string }
-  const hikeId  = decodeURIComponent(id)
-  const router  = useRouter()
-
-  const [hike,         setHike]         = useState<PlannedHike | null>(null)
-  const [guideText,    setGuideText]    = useState<string>('')
-  const [sections,     setSections]     = useState<Section[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [generating,   setGenerating]   = useState(false)
-  const [error,        setError]        = useState<string | null>(null)
-  const [guideLength,  setGuideLength]  = useState<GuideLength>('media')
-  const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
-  const [visibleSec,   setVisibleSec]   = useState(0)
-
-  const poiPhotos = useMemo(() => {
-    if (!hike?.cachedPoiWiki) return []
-    return (hike.cachedPoiWiki as Array<{ poi: PoiItem; wiki: WikiPage }>)
-      .filter(w => w.wiki?.thumbnail)
-      .map(w => ({
-        title:       w.wiki.title,
-        thumbnail:   w.wiki.thumbnail!,
-        url:         w.wiki.url,
-        description: w.wiki.description,
-      }))
-  }, [hike?.cachedPoiWiki])
-
-  // Voice state
-  const [isPlaying,     setIsPlaying]     = useState(false)
-  const [isPaused,      setIsPaused]      = useState(false)
-  const [rateIdx,       setRateIdx]       = useState(1)
-  const [activeSection, setActiveSection] = useState<number | null>(null)
-  const [playProgress,  setPlayProgress]  = useState(0)
-
-  const rateRef     = useRef(RATES[1])
-  const chunksRef   = useRef<ChunkEntry[]>([])
-  const chunkIdxRef = useRef(0)
-  const iosTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const sectionRefs = useRef<(HTMLElement | null)[]>([])
-
-  // Load hike + guide
   useEffect(() => {
-    getPlannedById(hikeId).then(h => {
+    getPlannedById(id).then(h => {
+      if (!h) { router.push('/guida'); return }
       setHike(h)
-      if (h?.cachedGuide) {
-        setGuideText(h.cachedGuide)
-        setSections(parseGuide(h.cachedGuide))
+      setTitleVal(h.title)
+      setNotesVal(h.userNotes ?? '')
+      setDateVal(h.plannedDate ?? '')
+      const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+      if (gps.length > 0) {
+        if (h.cachedPois?.length) {
+          // Use cached POIs
+          setPois(h.cachedPois as PoiItem[])
+          if (h.cachedPoiWiki?.length) setPoiWikiEntries(h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[])
+          setPoisFullyLoaded(true)
+        } else {
+          // Fresh fetch
+          const bbox = computeBbox(gps)
+          fetch(`/api/pois?bbox=${bbox}`)
+            .then(r => r.json())
+            .then((all: PoiItem[]) => {
+              const nearby = all
+                .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
+                .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
+              setPois(nearby)
+              fetchWikiForNamedPois(nearby)
+                .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
+                .catch(() => { setPoisFullyLoaded(true) })
+            })
+            .catch(() => { setPoisFullyLoaded(true) })
+        }
       }
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [hikeId])
+    }).finally(() => setLoading(false))
+  }, [id, router])
 
-  // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
+  // Fetch DTM slope/aspect profile once per hike — shared by the map color toggles
+  // below and by handleComputeCts, so the WCS-backed endpoint is never double-fetched.
   useEffect(() => {
     if (!hike) return
-    const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
-    const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map((p: [number, number]) => ({ lat: p[0], lon: p[1] }))
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailDtmProfile) => setDtmProfile(p))
+      .catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch terrain (geologia/uso-suolo) profile once per hike — same pattern as the DTM
+  // effect above, shared by handleComputeCts so the geologia/uso-suolo endpoint is never
+  // double-fetched.
+  useEffect(() => {
+    if (!hike) return
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
+      .then(r => r.json())
+      .then((p: TrailTerrainProfile) => setTerrainProfile(p))
+      .catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check Natura2000 protected-area overlap once per hike — same shared-state pattern as
+  // the DTM/terrain effects above, used by handleComputeCts for the TEI V_cult bonus.
+  useEffect(() => {
+    if (!hike) return
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    checkProtectedArea(gps)
+      .then(r => setInProtectedArea(r.inProtectedArea))
+      .catch(() => {})
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save POI data to DB after first successful fetch
+  useEffect(() => {
+    if (!poisFullyLoaded || !hike || (hike.cachedPois?.length ?? 0) > 0 || !pois.length) return
+    updatePlannedMeta(hike.id, { cachedPois: pois, cachedPoiWiki: poiWikiEntries }).catch(() => {})
+    setHike(prev => prev ? { ...prev, cachedPois: pois, cachedPoiWiki: poiWikiEntries } : prev)
+  }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load user prefs for CTS display
+  useEffect(() => {
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
+        if (d.prefDurata != null) setPrefDurata(d.prefDurata)
+      })
+      .catch(() => {})
+      .finally(() => setPrefsLoaded(true))
+  }, [])
+
+  // Driving distance/time from the user's starting address to the trailhead — reuses the
+  // Supabase-cached value (saved alongside the hike) when it matches the current starting
+  // point, so the OSRM routing service isn't re-queried on every page open.
+  useEffect(() => {
+    if (!hike) return
+    const trailStart = getTrailStartPoint(hike)
+    if (!trailStart) return
+    const cachedLat  = (hike as { cachedDrivingOriginLat?: number }).cachedDrivingOriginLat
+    const cachedLon  = (hike as { cachedDrivingOriginLon?: number }).cachedDrivingOriginLon
+    const cachedDist = (hike as { cachedDrivingDistanceMeters?: number }).cachedDrivingDistanceMeters
+    const cachedDur  = (hike as { cachedDrivingDurationSeconds?: number }).cachedDrivingDurationSeconds
+    let cancelled = false
+    setDrivingLoading(true)
+    getUserStartingPoint().then(pt => {
+      if (cancelled) return
+      if (!pt) { setDrivingLoading(false); return }
+      setOrigin(pt)
+      if (originMatches(cachedLat, cachedLon, pt.lat, pt.lon) && cachedDist != null && cachedDur != null) {
+        setDriving({ distanceMeters: cachedDist, durationSeconds: cachedDur })
+        setDrivingLoading(false)
+        return
+      }
+      fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
+        if (cancelled) return
+        setDriving(info)
+        setDrivingLoading(false)
+        if (info) {
+          updatePlannedMeta(hike.id, {
+            cachedDrivingDistanceMeters: info.distanceMeters,
+            cachedDrivingDurationSeconds: info.durationSeconds,
+            cachedDrivingOriginLat: pt.lat,
+            cachedDrivingOriginLon: pt.lon,
+          }).catch(() => {})
+        }
+      })
+    })
+    return () => { cancelled = true }
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Compute CTS for breakdown display — NEVER saves
+  useEffect(() => {
+    const bs = (hike as { cachedBeautyScore?: BeautyScore } | null)?.cachedBeautyScore
+    if (!bs?.categories?.length || !prefsLoaded) return
+    const computed = computeTrailScore(bs, {
+      distanceMeters: hike!.distanceMeters,
+      elevationGain:  hike!.elevationGain,
+      elevationLoss:  hike!.elevationLoss,
+      altitudeMax:    hike!.altitudeMax,
+      prefSforzo,
+      prefDurata,
+    })
+    setCtsResult({ ...computed, ts: (hike as { cachedTrailScore?: number }).cachedTrailScore ?? computed.ts })
+  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Compute Safety Score — saves if not cached
+  useEffect(() => {
+    if (!hike) return
+    const cached = (hike as { cachedSafetyScore?: SafetyScore }).cachedSafetyScore
+    if (cached) {
+      setSafetyScore(cached)
+      return
+    }
+    let cancelled = false
+
+    async function run() {
+      const poly = hike!.routePolyline
+      let gbifWildlifeRisks: WildlifeRisk[] = []
+      let guardianDogRisk: { present: boolean } | undefined
+
+      if (poly && poly.length >= 2) {
+        const bbox = computeBbox(poly, 0.005) // minLat,minLon,maxLat,maxLon
+        const [minLat, minLon, maxLat, maxLon] = bbox.split(',').map(Number)
+        const animalsBbox = `${minLat},${maxLat},${minLon},${maxLon}` // /api/animals expects minLat,maxLat,minLon,maxLon
+        const month = hike!.plannedDate ? new Date(hike!.plannedDate).getMonth() + 1 : new Date().getMonth() + 1
+
+        const [gbifResult, guardianResult] = await Promise.allSettled([
+          fetchWildlifeRiskFromGbif(animalsBbox, month),
+          fetch(`/api/trails/guardian-dogs?bbox=${encodeURIComponent(bbox)}`, { signal: AbortSignal.timeout(20000) })
+            .then(r => r.json()) as Promise<{ present: boolean }>,
+        ])
+        if (gbifResult.status === 'fulfilled') gbifWildlifeRisks = gbifResult.value
+        if (guardianResult.status === 'fulfilled') guardianDogRisk = guardianResult.value
+      }
+
+      if (cancelled) return
+
+      const safety = computeSafetyScore({
+        distanceMeters: hike!.distanceMeters,
+        elevationGain:  hike!.elevationGain,
+        elevationLoss:  hike!.elevationLoss,
+        altitudeMax:    hike!.altitudeMax,
+        altitudeMin:    hike!.altitudeMin,
+        estimatedTimeSeconds: hike!.estimatedTimeSeconds,
+        routePolyline: hike!.routePolyline,
+        plannedDate: hike!.plannedDate,
+        gbifWildlifeRisks,
+        guardianDogRisk,
+      })
+      setSafetyScore(safety)
+      updatePlannedMeta(hike!.id, { cachedSafetyScore: safety }).catch(() => {})
+    }
+
+    run()
+    return () => { cancelled = true }
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load route photos from Wikimedia Commons for hero + mosaic
+  useEffect(() => {
+    if (!hike) return
+    const pts = (hike.trackPoints ?? []).filter(p => p.lat && p.lon) as { lat: number; lon: number }[]
+    const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map(p => ({ lat: p[0], lon: p[1] }))
     if (!poly.length) return
     const mid = poly[Math.floor(poly.length / 2)]
     import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
@@ -353,560 +429,704 @@ export default function GuidaPage() {
     ).then(photos => {
       setRoutePhotos(photos.map(p => p.url))
     }).catch(() => {})
-  }, [hike])
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // IntersectionObserver: track which section is in view for tab highlighting
-  useEffect(() => {
-    if (!sections.length) return
-    const obs = new IntersectionObserver(
-      entries => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            const idx = sectionRefs.current.indexOf(e.target as HTMLElement)
-            if (idx >= 0) setVisibleSec(idx)
-          }
-        }
-      },
-      { threshold: 0.3, rootMargin: '-56px 0px -40% 0px' },
-    )
-    sectionRefs.current.forEach(el => el && obs.observe(el))
-    return () => obs.disconnect()
-  }, [sections])
 
-  // Rebuild chunks on section change
-  useEffect(() => {
-    chunksRef.current = buildChunks(sections)
-  }, [sections])
+  if (loading) return (
+    <div className="min-h-screen bg-stone-50">
+      <Navbar />
+      <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
+        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
+      </div>
+    </div>
+  )
+  if (!hike) return null
 
-  // ── Generate ──────────────────────────────────────────────────────────────
-
-  const generate = useCallback(async (length: GuideLength) => {
-    setGenerating(true)
-    setError(null)
-    setGuideText('')
-    setSections([])
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-    if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
-    setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(0)
-    chunkIdxRef.current = 0
-
+  const patch = async (data: Parameters<typeof updatePlannedMeta>[1]) => {
+    setSaving(true)
     try {
-      const res = await fetch('/api/guide', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hikeId, length }),
+      await updatePlannedMeta(id, data)
+      setHike(prev => prev ? { ...prev, ...data } : prev)
+    } finally { setSaving(false) }
+  }
+
+  const saveTitle = async () => { await patch({ title: titleVal }); setEditTitle(false) }
+  const saveNotes = async () => { await patch({ userNotes: notesVal }); setEditNotes(false) }
+  const saveDate  = async () => { await patch({ plannedDate: dateVal || undefined }); setEditDate(false) }
+
+  const handleDelete = async () => {
+    if (!confirm('Eliminare questa escursione pianificata?')) return
+    setSaving(true)
+    try { await deletePlanned(id); router.push('/guida') }
+    finally { setSaving(false) }
+  }
+
+  const handleExtendPending = async () => {
+    const days = await fetch('/api/user-settings').then(r => r.json()).then(d => d.guidePendingDays ?? 30).catch(() => 30)
+    const pendingExpiresAt = new Date(Date.now() + days * 86400000).toISOString()
+    await patch({ pendingExpiresAt, archivedAt: undefined })
+  }
+
+  const handleArchive = async () => {
+    await patch({ archivedAt: new Date().toISOString() })
+    router.push('/guida')
+  }
+
+  const handleComputeCts = async () => {
+    const gps = (hike.trackPoints ?? [])
+      .filter(p => p.lat && p.lon)
+      .map(p => [p.lat!, p.lon!] as [number, number])
+    if (gps.length < 2) return
+    setCtsComputing(true)
+    try {
+      const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
+      const bbox = computeBbox(gps)
+      const [allPoisRes, osmData] = await Promise.all([
+        Promise.race([
+          fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>,
+          deadline,
+        ]).then(r => r ?? []),
+        Promise.race([
+          fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
+          deadline,
+        ]).then(r => r ?? undefined).catch(() => undefined),
+      ])
+      const allPois = allPoisRes as PoiItem[]
+      const pois = allPois
+        .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
+        .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
+
+      const elevProfile = (hike.trackPoints ?? [])
+        .filter(p => p.lat && p.lon)
+        .map(p => p.altitudeMeters ?? 0)
+
+      const tei = computeTEI({
+        track: gps,
+        elevGain: hike.elevationGain,
+        distanceMeters: hike.distanceMeters,
+        altitudeMax: hike.altitudeMax,
+        elevProfile,
+        pois,
+        osmData,
+        dtmProfile,
+        terrainProfile,
+        inProtectedArea,
       })
+      const bs = teiToBeautyScore(tei)
+      const confidence: CtsConfidence = tei.confidence
 
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({ error: 'Errore sconosciuto' }))
-        throw new Error(j.error ?? `HTTP ${res.status}`)
-      }
+      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      let { ts } = computeTrailScore(bs, {
+        distanceMeters: hike.distanceMeters,
+        elevationGain:  hike.elevationGain,
+        elevationLoss:  hike.elevationLoss,
+        altitudeMax:    hike.altitudeMax,
+        prefSforzo:     prefs.prefSforzo,
+        prefDurata:     prefs.prefDurata,
+        hrRest:         prefs.hrRest,
+        hrMax:          prefs.hrMax ?? undefined,
+        avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
+      })
+      if (confidence === 'estimated') ts = Math.round(ts * 0.9)
 
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let acc = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        acc += decoder.decode(value, { stream: true })
-        setGuideText(acc)
-        setSections(parseGuide(acc))
-      }
-
-      const cachedPois = (hike?.cachedPois ?? []) as PoiItem[]
-      const cachedPoiWiki = (hike?.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
-      const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
-      const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
-      updatePlannedMeta(hikeId, { cachedGuide: acc, cachedRiddles: riddles, cachedEpochPois: epochPois }).catch(() => {})
+      await updatePlannedMeta(id, { cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence })
+      setHike(prev => prev ? { ...prev, cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence } : prev)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Errore durante la generazione')
+      console.error('CTS computation error:', e)
     } finally {
-      setGenerating(false)
-    }
-  }, [hikeId, hike])
-
-  // ── Voice ─────────────────────────────────────────────────────────────────
-
-  function clearIosTimer() {
-    if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
-  }
-
-  function stopVoice() {
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-    clearIosTimer()
-    setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(0)
-    chunkIdxRef.current = 0
-  }
-
-  function startFrom(startChunk: number) {
-    if (!('speechSynthesis' in window)) return
-    window.speechSynthesis.cancel()
-    clearIosTimer()
-    chunkIdxRef.current = startChunk
-    const chunks = chunksRef.current
-    if (!chunks.length) return
-
-    iosTimerRef.current = setInterval(() => {
-      if (window.speechSynthesis.paused) window.speechSynthesis.resume()
-    }, 14000)
-
-    function playNext() {
-      const idx = chunkIdxRef.current
-      if (idx >= chunks.length) {
-        clearIosTimer()
-        setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(1)
-        return
-      }
-      const { text, sectionIdx } = chunks[idx]
-      setActiveSection(sectionIdx)
-      setPlayProgress(idx / Math.max(chunks.length - 1, 1))
-
-      const utt   = new SpeechSynthesisUtterance(text)
-      utt.lang    = 'it-IT'
-      utt.rate    = rateRef.current
-      utt.pitch   = 1.0
-      const voice = getItalianVoice()
-      if (voice) utt.voice = voice
-      utt.onend = () => { chunkIdxRef.current++; playNext() }
-      utt.onerror = (e) => {
-        if (e.error !== 'interrupted' && e.error !== 'canceled') {
-          clearIosTimer(); setIsPlaying(false); setIsPaused(false)
-        }
-      }
-      window.speechSynthesis.speak(utt)
-    }
-
-    playNext()
-    setIsPlaying(true); setIsPaused(false)
-  }
-
-  function togglePlayPause() {
-    if (!('speechSynthesis' in window)) return
-    if (!isPlaying && !isPaused) { startFrom(0); return }
-    if (isPlaying) {
-      window.speechSynthesis.pause()
-      setIsPlaying(false); setIsPaused(true)
-      return
-    }
-    window.speechSynthesis.resume()
-    setIsPlaying(true); setIsPaused(false)
-  }
-
-  function changeRate(idx: number) {
-    rateRef.current = RATES[idx]
-    setRateIdx(idx)
-    if (isPlaying || isPaused) {
-      const resumeAt = chunkIdxRef.current
-      window.speechSynthesis.cancel()
-      clearIosTimer()
-      setTimeout(() => startFrom(resumeAt), 80)
+      setCtsComputing(false)
     }
   }
 
-  function speakSection(idx: number) {
-    const startChunk = chunksRef.current.findIndex(c => c.sectionIdx === idx)
-    if (startChunk >= 0) startFrom(startChunk)
-  }
-
-  function scrollToSection(idx: number) {
-    sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  useEffect(() => () => {
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-    clearIosTimer()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // ── PDF export ────────────────────────────────────────────────────────────
-
-  const [exportingPdf, setExportingPdf] = useState(false)
-
-  async function exportPdf() {
-    if (!hike || exportingPdf) return
-    setExportingPdf(true)
-    try {
-      const { exportGuidePdf } = await import('@/utils/pdfExport')
-      await exportGuidePdf(hike, guideText)
-    } catch (err) {
-      console.error('Export PDF guida fallito:', err)
-    } finally {
-      setExportingPdf(false)
-    }
-  }
-
-  // ── Loading / not found ───────────────────────────────────────────────────
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f5f3ef' }}>
-        <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
-      </div>
-    )
-  }
-
-  if (!hike) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#f5f3ef' }}>
-        <p className="text-stone-500 text-lg">Percorso non trovato</p>
-        <button onClick={() => router.push('/')} className="text-amber-600 hover:underline">
-          ← Torna alle pianificate
-        </button>
-      </div>
-    )
-  }
-
-  const hasGuide   = guideText.trim().length > 50
-  const hikeTitle  = hike.title
-  const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const distKm    = hike.distanceMeters / 1000
+  const gpsPoints = hike.trackPoints?.filter(p => p.lat && p.lon) ?? []
+  const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
+  const hasGps    = gpsPoints.length > 0
+  const polyline  = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
 
   return (
-    <div className="min-h-screen" style={{ background: '#f5f3ef' }}>
+    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
+      <Navbar />
 
-      {/* ── Sticky nav bar ──────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b shadow-sm print:hidden" style={{ borderColor: '#e5e1d8' }}>
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <BackLink
-            className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition-colors shrink-0"
-          />
-
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[9px] font-bold tracking-[3px] text-amber-600 uppercase hidden sm:block">DTrek</span>
-            <span className="text-stone-300 hidden sm:block">·</span>
-            <span className="text-sm font-semibold text-stone-700 truncate font-display">{hikeTitle}</span>
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            {hasGuide && RATES.map((r, i) => (
-              <button key={r} onClick={() => changeRate(i)}
-                className={`text-xs px-1.5 py-0.5 rounded font-mono transition-colors ${
-                  rateIdx === i ? 'bg-amber-500 text-white' : 'text-stone-400 hover:text-stone-600'
-                }`}
-              >{r}×</button>
-            ))}
-            {hasGuide && (
-              <>
-                <button onClick={togglePlayPause}
-                  className={`ml-1 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                    isPlaying || isPaused
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                  }`}
-                >
-                  {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
-                </button>
-                {(isPlaying || isPaused) && (
-                  <button onClick={stopVoice}
-                    className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors"
-                  ><Square className="w-3 h-3" /></button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Hero ────────────────────────────────────────────────────────── */}
-      <div className="relative w-full overflow-hidden print:h-[220px]" style={{ height: 'clamp(280px, 42vw, 480px)' }}>
-        {/* Background: photo or gradient */}
+      {/* ══ HERO ══ */}
+      <div className="relative text-white overflow-hidden" style={!routePhotos[0] ? { background: 'linear-gradient(to bottom right, #0c4a6e, #075985, #0369a1)' } : undefined}>
         {routePhotos[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={routePhotos[0]}
-            alt={hikeTitle}
+            alt={hike.title}
             className="absolute inset-0 w-full h-full object-cover"
             style={{ objectPosition: 'center 35%' }}
           />
         ) : (
-          <div
-            className="absolute inset-0"
-            style={{ background: 'linear-gradient(135deg, #78350f 0%, #1c4532 50%, #0c1a0f 100%)' }}
-          >
-            <RouteSvg hike={hike} />
-          </div>
+          heroPolyline.length > 1 && (
+            <div className="absolute inset-0 pointer-events-none">
+              <RouteThumb polyline={heroPolyline} color="rgba(255,255,255,0.10)" strokeWidth={7} />
+            </div>
+          )
         )}
+        <div className={`absolute inset-0 pointer-events-none ${routePhotos[0] ? '' : 'bg-gradient-to-t from-sky-900/60 to-transparent'}`}
+          style={routePhotos[0] ? { background: 'linear-gradient(to top, rgba(8,18,32,0.92) 0%, rgba(8,30,48,0.75) 45%, rgba(8,40,60,0.35) 80%, transparent 100%)' } : undefined}
+        />
 
-        {/* Gradient overlay */}
-        <div className="absolute inset-0" style={{
-          background: 'linear-gradient(to top, rgba(5,5,5,0.9) 0%, rgba(5,5,5,0.5) 40%, rgba(0,0,0,0.15) 80%, transparent 100%)',
-        }} />
+        <div className="relative max-w-[1200px] mx-auto px-4">
+          {/* Top nav */}
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-4 pb-3 border-b border-white/10">
+            <BackLink label="Diario"
+              className="flex items-center gap-1.5 text-sky-300 hover:text-white text-sm transition-colors" />
+            <button
+              onClick={() => setShowAltro(true)}
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold transition-colors">
+              <MoreHorizontal className="w-3.5 h-3.5" /> Altro
+            </button>
+          </div>
 
-        {/* Content */}
-        <div className="absolute bottom-0 left-0 right-0 px-6 sm:px-10 pb-7">
-          <span className="inline-block bg-amber-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-3 uppercase">
-            {categoryBadge}
-          </span>
-          <h1 className="font-barlow text-2xl sm:text-4xl font-black text-white leading-tight mb-1.5 max-w-2xl uppercase tracking-tight"
-            style={{ textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}
-          >
-            {hikeTitle}
-          </h1>
-          {hike.plannedDate && (
-            <p className="font-lora text-[13px] italic text-white/70">
-              {format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })}
-            </p>
-          )}
+          {/* Hero body */}
+          <div className="py-7 flex items-end justify-between gap-6 flex-wrap">
+            {/* Left */}
+            <div className="flex-1 min-w-0">
+              {editTitle ? (
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    autoFocus
+                    value={titleVal}
+                    onChange={e => setTitleVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditTitle(false) }}
+                    className="flex-1 font-display text-2xl sm:text-3xl bg-white/10 rounded-lg px-3 py-1 text-white outline-none border border-white/30 max-w-md"
+                  />
+                  <button onClick={saveTitle}><Check className="w-5 h-5 text-sky-300 hover:text-white" /></button>
+                  <button onClick={() => { setTitleVal(hike.title); setEditTitle(false) }}><X className="w-5 h-5 text-white/50 hover:text-white" /></button>
+                </div>
+              ) : (
+                <button onClick={() => setEditTitle(true)} className="group flex items-center gap-2.5 text-left mb-2">
+                  <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">{hike.title}</h1>
+                  <Pencil className="w-4 h-4 text-white/40 group-hover:text-white/70 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              )}
+
+              {/* Planned date */}
+              <div className="flex items-center gap-2 mb-4 text-sm">
+                <CalendarDays className="w-4 h-4 text-sky-300 shrink-0" />
+                {editDate ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={dateVal}
+                      onChange={e => setDateVal(e.target.value)}
+                      className="bg-white/10 border border-white/30 rounded-lg px-2 py-1 text-sm text-white outline-none focus:border-white/50"
+                    />
+                    <button onClick={saveDate}><Check className="w-4 h-4 text-sky-300 hover:text-white" /></button>
+                    <button onClick={() => { setDateVal(hike.plannedDate ?? ''); setEditDate(false) }}><X className="w-4 h-4 text-white/50 hover:text-white" /></button>
+                  </div>
+                ) : (
+                  <button onClick={() => setEditDate(true)} className="text-sky-200 hover:text-white transition-colors">
+                    {hike.plannedDate
+                      ? <span className="capitalize">{format(new Date(hike.plannedDate), 'EEEE d MMMM yyyy', { locale: it })}</span>
+                      : <span className="italic text-sky-400">+ Aggiungi data pianificata</span>
+                    }
+                  </button>
+                )}
+              </div>
+
+              {/* Stat pills */}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { icon: <Route className="w-3.5 h-3.5" />, v: `${distKm.toFixed(1)} km` },
+                  { icon: <TrendingUp className="w-3.5 h-3.5" />, v: `${Math.round(hike.elevationGain)} m D+` },
+                  { icon: <Mountain className="w-3.5 h-3.5" />, v: `${Math.round(hike.altitudeMax)} m s.l.m.` },
+                  { icon: <Clock className="w-3.5 h-3.5" />, v: `${formatDuration(hike.estimatedTimeSeconds)} stim.` },
+                ].map(({ icon, v }) => (
+                  <span key={v} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 border border-white/15">
+                    {icon} {v}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+          </div>
         </div>
       </div>
 
-      {/* ── Stats strip ─────────────────────────────────────────────────── */}
-      <div className="flex" style={{ background: '#1a1a1a' }}>
-        {[
-          { icon: <Route    className="w-3.5 h-3.5" />, value: `${(hike.distanceMeters/1000).toFixed(1)} km`,         label: 'Distanza' },
-          { icon: <Mountain className="w-3.5 h-3.5" />, value: `+${Math.round(hike.elevationGain)} m`,               label: 'Dislivello' },
-          { icon: <Mountain className="w-3.5 h-3.5" />, value: `${Math.round(hike.altitudeMax)} m`,                  label: 'Quota max' },
-          { icon: <Clock    className="w-3.5 h-3.5" />, value: formatDuration(hike.estimatedTimeSeconds),            label: 'Durata' },
-        ].map(({ icon, value, label }, i, arr) => (
-          <div key={label} className="flex-1 flex flex-col items-center justify-center py-4 gap-1"
-            style={{ borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}
-          >
-            <span className="flex items-center gap-1.5 text-[17px] font-bold text-white leading-none">
-              <span className="text-amber-500 hidden sm:block">{icon}</span>
-              {value}
-            </span>
-            <span className="font-barlow text-[8px] font-semibold tracking-[1.8px] uppercase text-amber-500/80">{label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Photo mosaic strip ─────────────────────────────────────────── */}
+      {/* ══ Photo mosaic ══ */}
       <PhotoMosaic
         photos={routePhotos.slice(1, 5).map((url, i) => ({ id: String(i), url }))}
-        heightClass="h-40"
+        heightClass="h-32 sm:h-40"
       />
 
-      {/* ── Main content ────────────────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 print:max-w-full print:px-0">
+      <SectionTabs
+        tabs={[
+          { id: 'panoramica', label: 'Panoramica' },
+          { id: 'percorso', label: 'Percorso pianificato' },
+          { id: 'natura', label: 'Natura' },
+          { id: 'guida', label: 'Guida pre-escursione' },
+        ]}
+        active={activeSection}
+        onChange={id => setActiveSection(id as typeof activeSection)}
+      />
 
-        {/* ── No guide yet ────────────────────────────────────────────── */}
-        {!hasGuide && !generating && (
-          <div className="flex flex-col items-center py-20 gap-8 text-center print:hidden">
-            <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center shadow-inner">
-              <BookOpen className="w-9 h-9 text-amber-500" />
+      {/* ══ ALTRO — azioni dell'header raccolte in un unico foglio ══ */}
+      <Sheet open={showAltro} onClose={() => { setShowAltro(false); setShowFloraNotice(false) }} title="Altro">
+        <div className="space-y-1">
+          {heroPolyline.length > 1 && (
+            <div className="px-2 py-2">
+              <OfflinePackageDownloader hikeId={id} routePolyline={heroPolyline} />
             </div>
-            <div className="max-w-sm">
-              <h2 className="font-display text-2xl font-bold text-stone-800 mb-3">
-                Nessuna guida ancora generata
-              </h2>
-              <p className="text-stone-500 text-[15px] leading-relaxed">
-                Giulia elaborerà una guida personalizzata raccontando storia, natura,
-                curiosità e consigli pratici per questo percorso.
-              </p>
-            </div>
-
-            <div className="w-full max-w-xs">
-              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-[2px] mb-3">
-                Lunghezza della guida
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {LENGTH_OPTS.map(opt => (
-                  <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                    className={`flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 transition-all ${
-                      guideLength === opt.key
-                        ? 'border-amber-500 bg-amber-50 text-amber-800'
-                        : 'border-stone-200 bg-white text-stone-500 hover:border-amber-200'
-                    }`}
-                  >
-                    <span className="font-bold text-sm">{opt.label}</span>
-                    <span className="text-xs opacity-60">{opt.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {error && (
-              <p className="text-red-600 text-sm bg-red-50 border border-red-100 rounded-lg px-4 py-2 max-w-sm">
-                {error}
-              </p>
-            )}
-
-            <button onClick={() => generate(guideLength)}
-              className="flex items-center gap-2 px-7 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
-            >
-              <BookOpen className="w-4 h-4" />
-              Genera la guida con Giulia
+          )}
+          <button onClick={() => { setShowAltro(false); router.push(`/guida/${encodeURIComponent(id)}/leggi`) }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <BookOpen className="w-4 h-4 text-amber-500" /> <span className="text-sm font-medium text-stone-700">Guida escursionistica</span>
+          </button>
+          <PdfExportButton
+            variant="planned"
+            data={hike}
+            label="Esporta PDF"
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left text-sm font-medium text-stone-700"
+          />
+          <button
+            onClick={() => {
+              setShowAltro(false)
+              if (heroPolyline.length > 1) router.push(`/guida/${encodeURIComponent(id)}/flora`)
+              else setShowFloraNotice(true)
+            }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <Leaf className="w-4 h-4 text-emerald-600" /> <span className="text-sm font-medium text-stone-700">Galleria Verde</span>
+          </button>
+          <button
+            onClick={() => {
+              setShowAltro(false)
+              if (heroPolyline.length > 1) router.push(`/guida/${encodeURIComponent(id)}/animali`)
+              else setShowFloraNotice(true)
+            }}
+            className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
+            <PawPrint className="w-4 h-4 text-amber-600" /> <span className="text-sm font-medium text-stone-700">Galleria Animali</span>
+          </button>
+          {showFloraNotice && (
+            <p className="px-2 py-2 text-xs text-stone-400">
+              Percorso GPS non disponibile per questa guida: le gallerie richiedono una traccia GPS valida.
+            </p>
+          )}
+          <div className="pt-1 mt-1 border-t border-stone-100">
+            <button onClick={() => { setShowAltro(false); handleDelete() }} disabled={saving}
+              className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              <span className="text-sm font-medium">Elimina guida</span>
             </button>
           </div>
-        )}
+        </div>
+      </Sheet>
 
-        {/* ── Generating spinner ──────────────────────────────────────── */}
-        {generating && sections.length === 0 && (
-          <div className="flex flex-col items-center gap-4 py-20 text-center print:hidden">
-            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center animate-pulse">
-              <BookOpen className="w-7 h-7 text-amber-500" />
-            </div>
-            <div>
-              <p className="font-display font-semibold text-stone-700 text-lg">Giulia sta scrivendo…</p>
-              <p className="text-stone-400 text-sm mt-1">ci vorranno circa 20–30 secondi</p>
-            </div>
-          </div>
-        )}
+      <main className="max-w-[1200px] mx-auto px-3 sm:px-4 py-6 sm:py-8 fade-up space-y-6 sm:space-y-8">
 
-        {/* ── Voice progress bar (when playing) ──────────────────────── */}
-        {(isPlaying || isPaused) && hasGuide && (
-          <div className="mt-6 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3 print:hidden" style={{ borderColor: '#e5e1d8' }}>
-            <Volume2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-medium text-stone-600 truncate">
-                {isPlaying && activeSection !== null
-                  ? `▶ ${sections[activeSection]?.title ?? '…'}`
-                  : '⏸ In pausa'}
+        {activeSection === 'panoramica' && (
+          <>
+        {/* Stato "in attesa" — scadenza configurabile prima di chiedere proroga/archiviazione */}
+        {hike.pendingExpiresAt && !hike.archivedAt && (() => {
+          const expired = new Date(hike.pendingExpiresAt).getTime() < Date.now()
+          const daysLeft = Math.ceil((new Date(hike.pendingExpiresAt).getTime() - Date.now()) / 86400000)
+          return (
+            <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${
+              expired ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'
+            }`}>
+              <p className={`text-sm font-medium ${expired ? 'text-amber-700' : 'text-sky-700'}`}>
+                {expired
+                  ? 'Questa guida è scaduta: la proroghi o la archivi?'
+                  : `In attesa — scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}`}
               </p>
-              <div className="mt-1 h-0.5 bg-amber-100 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-400 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round(playProgress * 100)}%` }} />
+              <div className="flex items-center gap-2">
+                <button onClick={handleExtendPending} className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold transition-colors">
+                  Proroga
+                </button>
+                {expired && (
+                  <button onClick={handleArchive} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:border-amber-400 text-amber-700 text-xs font-semibold transition-colors">
+                    Archivia
+                  </button>
+                )}
               </div>
             </div>
-            <button onClick={stopVoice}
-              className="text-stone-400 hover:text-stone-700 transition-colors"
-            ><Square className="w-3.5 h-3.5" /></button>
-          </div>
-        )}
+          )
+        })()}
 
-        {/* ── Section tab navigation ──────────────────────────────────── */}
-        {sections.length > 0 && (
-          <div className="sticky z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 bg-white/95 backdrop-blur-sm border-b overflow-x-auto print:hidden"
-            style={{ top: '56px', borderColor: '#e5e1d8', scrollbarWidth: 'none' }}
+        {/* 3 numeri primari, grandi — mirrorato dalla schermata Escursione (piano di restyling 2.3) */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+            <p className="font-display text-2xl font-bold text-sky-900">{distKm.toFixed(1)}</p>
+            <p className="text-[11px] text-stone-400 mt-1">km stimati</p>
+          </div>
+          <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+            <p className="font-display text-2xl font-bold text-sky-900">{Math.round(hike.elevationGain)}</p>
+            <p className="text-[11px] text-stone-400 mt-1">m dislivello</p>
+          </div>
+          <div className="bg-white rounded-2xl px-2 py-5 text-center shadow-sm">
+            <p className="font-display text-2xl font-bold text-sky-900">{formatDuration(hike.estimatedTimeSeconds)}</p>
+            <p className="text-[11px] text-stone-400 mt-1">stimata</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <button
+            onClick={() => setShowAltriDati(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left"
           >
-            <div className="flex gap-1.5 min-w-max">
-              {sections.map((s, i) => (
-                <button key={i} onClick={() => scrollToSection(i)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap"
-                  style={visibleSec === i
-                    ? { background: s.color, color: 'white' }
-                    : { background: '#f5f3ef', color: '#78716c' }
-                  }
-                >
-                  <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
-                  <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
-                </button>
-              ))}
+            <span className="text-sm font-semibold text-stone-600">Altri dati (dislivello −, quota…)</span>
+            <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showAltriDati ? 'rotate-180' : ''}`} />
+          </button>
+          {showAltriDati && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 px-5 pb-5">
+              <div className="bg-stone-50 rounded-xl border border-stone-100 p-3 flex items-start gap-2.5">
+                <TrendingDown className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[11px] text-stone-400 font-medium">Dislivello −</p>
+                  <p className="text-sm font-bold text-stone-800">{Math.round(hike.elevationLoss)} m</p>
+                </div>
+              </div>
+              <div className="bg-stone-50 rounded-xl border border-stone-100 p-3 flex items-start gap-2.5">
+                <Mountain className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[11px] text-stone-400 font-medium">Quota max</p>
+                  <p className="text-sm font-bold text-stone-800">{Math.round(hike.altitudeMax)} m <span className="font-normal text-stone-400">· min {Math.round(hike.altitudeMin)} m</span></p>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* ── Guide sections ──────────────────────────────────────────── */}
-        {sections.length > 0 && (
-          <div className="mt-6 space-y-0">
-            {sections.map((s, i) => {
-              const isLuoghi = s.title.toLowerCase().includes('luoghi')
-              const isVoiceActive = activeSection === i && (isPlaying || isPaused)
-
-              return (
-                <article
-                  key={i}
-                  ref={el => { sectionRefs.current[i] = el }}
-                  className={`scroll-mt-28 bg-white rounded-2xl mb-5 overflow-hidden shadow-sm transition-shadow print:rounded-none print:shadow-none print:overflow-visible print:mb-0 print:border-b print:border-stone-200 ${
-                    isVoiceActive ? 'ring-2 ring-amber-300 shadow-amber-100 shadow-md' : 'hover:shadow-md'
-                  }`}
+        {/* Come arrivare — distanza/tempo di guida dal punto di partenza dell'utente */}
+        {hasGps && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-4 flex items-center gap-2">
+              <Car className="w-5 h-5 text-sky-500" /> Come arrivare
+            </h2>
+            {drivingLoading ? (
+              <div className="flex items-center gap-2 text-stone-400 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" /> Calcolo distanza…
+              </div>
+            ) : driving && origin ? (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-xs text-stone-400 font-medium">Distanza</p>
+                    <p className="text-lg font-bold text-stone-800">{(driving.distanceMeters / 1000).toFixed(0)} km</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-stone-400 font-medium">Tempo in auto</p>
+                    <p className="text-lg font-bold text-stone-800">{formatDrivingDuration(driving.durationSeconds)}</p>
+                  </div>
+                </div>
+                <a
+                  href={googleMapsDirectionsUrl(origin.lat, origin.lon, gpsPoints[0].lat!, gpsPoints[0].lon!)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors"
                 >
-                  {/* Section header band */}
-                  <div
-                    className="flex items-center gap-3 px-6 py-3.5"
-                    style={{ background: s.color }}
-                  >
-                    <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
-                    <div className="flex items-center gap-2 text-white">
-                      <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
-                      <h2 className="font-barlow text-[13px] font-bold tracking-[2px] uppercase">{s.title}</h2>
-                    </div>
-                    <div className="flex-1" />
-                    <button
-                      onClick={() => speakSection(i)}
-                      className="opacity-60 hover:opacity-100 transition-opacity print:hidden"
-                      title="Ascolta questa sezione"
-                    >
-                      <Volume2 className="w-3.5 h-3.5 text-white" />
-                    </button>
-                  </div>
-
-                  {/* Section body */}
-                  <div className="px-6 py-6 sm:px-8">
-                    <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
-
-                    {/* POI photo grid — only in "I luoghi" section */}
-                    {isLuoghi && poiPhotos.length > 0 && (
-                      <div className="mt-8 pt-6 border-t" style={{ borderColor: '#e5e1d8' }}>
-                        <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-4">
-                          Luoghi e siti del percorso
-                        </p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {poiPhotos.map((photo, pi) => (
-                            <PoiCard key={pi} photo={photo} color={s.color} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </article>
-              )
-            })}
-
-            {/* Generating more... */}
-            {generating && (
-              <div className="flex items-center gap-2 px-6 py-4 bg-white rounded-2xl shadow-sm print:hidden">
-                <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
-                <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
+                  <Navigation className="w-4 h-4" /> Naviga con Google Maps
+                </a>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-stone-400">
+                <MapPin className="w-4 h-4 shrink-0" />
+                Imposta il tuo{' '}
+                <a href="/profilo" className="text-sky-600 hover:text-sky-700 font-medium underline">indirizzo di partenza</a>
+                {' '}nel profilo per vedere distanza e tempo di guida fino a qui.
               </div>
             )}
           </div>
         )}
 
-        {error && hasGuide && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600 print:hidden">
-            {error}
+        {/* Avvia navigazione — azione primaria resa visibile e prominente
+            invece di essere una piccola icona sepolta nell'header (piano di restyling 2.3) */}
+        {heroPolyline.length > 1 && (
+          <div>
+            <button
+              onClick={() => router.push(`/guida/${encodeURIComponent(id)}/naviga`)}
+              className="w-full flex items-center justify-center gap-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-2xl py-[18px] text-base font-bold shadow-lg shadow-terra-900/20 transition-colors"
+            >
+              <Navigation className="w-5 h-5" /> Avvia navigazione sul sentiero
+            </button>
+            {driving && origin && gpsPoints[0]?.lat && gpsPoints[0]?.lon && (
+              <a
+                href={googleMapsDirectionsUrl(origin.lat, origin.lon, gpsPoints[0].lat!, gpsPoints[0].lon!)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center text-sky-600 hover:text-sky-700 text-sm font-semibold mt-2.5 py-1"
+              >
+                Naviga in auto fino alla partenza →
+              </a>
+            )}
           </div>
         )}
 
-        {/* ── Bottom actions ──────────────────────────────────────────── */}
-        {hasGuide && !generating && (
-          <div className="mt-10 mb-16 pt-6 flex flex-wrap items-center justify-between gap-4 print:hidden" style={{ borderTop: '1px solid #e5e1d8' }}>
-            <BackLink
-              className="flex items-center gap-1.5 text-stone-400 hover:text-stone-700 text-sm transition-colors"
-            />
+        {/* Weather forecast — planned mode when a date is set */}
+        {hasGps && (
+          <WeatherWidget
+            mode={hike.plannedDate ? 'planned' : 'forecast'}
+            lat={centerPt.lat!}
+            lon={centerPt.lon!}
+            date={hike.plannedDate}
+            altitudeMax={hike.altitudeMax}
+            elevationGain={hike.elevationGain}
+            days={7}
+          />
+        )}
 
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Regenerate controls */}
-              <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#e5e1d8' }}>
-                {LENGTH_OPTS.map(opt => (
-                  <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                    className={`text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
-                      guideLength === opt.key
-                        ? 'bg-amber-500 text-white'
-                        : 'text-stone-400 hover:text-stone-700'
-                    }`}
-                  >{opt.label}</button>
-                ))}
+        {/* Segnalazioni dal tracciato */}
+        {hasGps && hike.difficultyMarkers && hike.difficultyMarkers.length > 0 && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-stone-700 mb-3">Segnalazioni dal tracciato</p>
+            <ul className="space-y-2">
+              {hike.difficultyMarkers.map((m, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  {m.severity === 'danger' ? <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    : m.severity === 'warning' ? <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    : <Info className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />}
+                  <span className="text-stone-600">{m.text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-stone-400 mt-2">Estratte automaticamente dai waypoint/commenti del file GPX importato (Komoot/AllTrails)</p>
+          </div>
+        )}
+          </>
+        )}
+
+        {activeSection === 'percorso' && (
+          <>
+        {/* Map + Elevation */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm sticky top-2 z-10 lg:static lg:z-auto">
+            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-stone-700">Tracciato</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {hasGps && hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
+                  <button
+                    onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
+                  >
+                    <Layers className="w-3 h-3" /> Pendenza
+                  </button>
+                )}
+                {hasGps && dtmProfile?.source === 'dtm' && (
+                  <button
+                    onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
+                  >
+                    <Compass className="w-3 h-3" /> Esposizione
+                  </button>
+                )}
+                {hasGps && (
+                  <button
+                    onClick={() => setShowStreetView(true)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border bg-white text-stone-500 border-stone-200 hover:bg-stone-50 transition-colors"
+                  >
+                    <Images className="w-3 h-3" /> Foto zona
+                  </button>
+                )}
               </div>
-
-              <button onClick={() => generate(guideLength)} disabled={generating}
-                className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-amber-600 transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Rigenera
-              </button>
-
-              {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
-                <span className="flex items-center gap-1 text-xs text-stone-400">
-                  <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
-                </span>
+            </div>
+            <div className="h-80">
+              {polyline && polyline.length > 1 ? (
+                <MapView trackPoints={hike.trackPoints ?? []} showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} activeIndex={activeChartIndex} planned />
+              ) : (
+                <div className="h-full flex items-center justify-center text-stone-400 text-sm gap-2">
+                  <Mountain className="w-8 h-8 text-stone-200" /> Tracciato non disponibile
+                </div>
               )}
+            </div>
+            {pois.length > 0 && <p className="px-4 pb-3 text-xs text-stone-400">{pois.length} punti di interesse lungo il tracciato</p>}
+          </div>
 
-              <button onClick={exportPdf} disabled={exportingPdf}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
-              >
-                {exportingPdf
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <FileDown className="w-3.5 h-3.5" />}
-                {exportingPdf ? 'Genero PDF…' : 'Scarica PDF'}
-              </button>
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
+            <div className="px-4 py-3 border-b border-stone-100">
+              <p className="text-sm font-semibold text-stone-700">Profilo altimetrico</p>
+            </div>
+            <div className="p-4">
+              {hike.trackPoints && hike.trackPoints.length > 0 ? (
+                <ElevationProfileChart trackPoints={hike.trackPoints} syncId="programma-elevation" onHover={setActiveChartIndex} />
+              ) : (
+                <div className="h-48 flex items-center justify-center text-stone-400 text-sm gap-2">
+                  <BarChart2 className="w-8 h-8 text-stone-200" /> Dati non disponibili
+                </div>
+              )}
             </div>
           </div>
+        </div>
+
+        {/* Punteggi — CL, Safety Score, Comfort TrailScore, Bellezza/TEI riuniti in un
+            unico grafico ad anello invece di una dashboard a 4 tile separate */}
+        {hasGps && (
+          <ScoreRing
+            cl={{
+              si: si.result?.si, label: si.result?.label, signals: si.result?.signals,
+              partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched,
+              onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError,
+            }}
+            safety={safetyScore}
+            cts={{
+              result: ctsResult,
+              cached: (hike as { cachedTrailScore?: number }).cachedTrailScore,
+              beautyScore: (hike as { cachedBeautyScore?: BeautyScore }).cachedBeautyScore,
+              computing: ctsComputing,
+              onCompute: handleComputeCts,
+            }}
+          />
         )}
-      </div>
+        {hasGps && !si.notMatched && (
+          <CurrentConditionsNotice
+            osmId={hike.osmId} polyline={hike.routePolyline} plannedId={hike.id} signals={si.result?.signals}
+          />
+        )}
+        {hasGps && <ShadeWaterTile data={s2.data} loading={s2.loading} />}
+          </>
+        )}
+
+        {activeSection === 'natura' && (
+          <>
+        {/* Fenologia della vegetazione + specie arboree/flora (OSM) */}
+        {/* Galleria Verde/Animali: unico punto d'accesso nell'header (evita duplicazione) */}
+        {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
+          <div className="space-y-3">
+            <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
+          </div>
+        )}
+
+        {/* POI-focused Wikipedia: articles for named elements physically on the route */}
+        {poiWikiEntries.length > 0 && (
+          <section>
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">Sul percorso</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {poiWikiEntries.map(({ poi, wiki }) => {
+                const meta = POI_META[poi.type]
+                return (
+                  <div key={poi.id} className="bg-white rounded-2xl border border-stone-200 p-4 flex gap-3 shadow-sm hover:border-sky-200 transition-colors">
+                    {wiki.thumbnail && (
+                      <img
+                        src={wiki.thumbnail}
+                        alt={wiki.title}
+                        className="w-16 h-16 object-cover rounded-xl shrink-0"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-base leading-none">{meta.emoji}</span>
+                        <span className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">{meta.label}</span>
+                        {poi.ele && <span className="text-[10px] text-stone-300 ml-auto shrink-0">{Math.round(poi.ele)} m</span>}
+                      </div>
+                      <p className="text-sm font-semibold text-stone-800 leading-tight mb-1">{wiki.title}</p>
+                      <p className="text-xs text-stone-500 leading-relaxed line-clamp-3">{wiki.extract.slice(0, 160)}{wiki.extract.length > 160 ? '…' : ''}</p>
+                      <a
+                        href={wiki.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-sky-600 font-semibold mt-1.5 inline-block hover:text-sky-700"
+                      >
+                        {wiki.source === 'wikivoyage-it' ? 'Leggi su Wikivoyage →' : wiki.source === 'wikipedia-en' ? 'Leggi su Wikipedia (EN) →' : 'Leggi su Wikipedia →'}
+                      </a>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Wikipedia geo-search: regional context, places near the route area */}
+        {hasGps && (
+          <section>
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-4">Luoghi nelle vicinanze</h2>
+            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
+          </section>
+        )}
+          </>
+        )}
+
+        {activeSection === 'guida' && (
+          <>
+        {/* Guida turistica — estratto */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display text-xl font-semibold text-stone-700 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-amber-500" /> Guida turistica
+            </h2>
+            <button
+              onClick={() => router.push(`/guida/${encodeURIComponent(id)}/leggi`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-semibold transition-colors shrink-0"
+            >
+              {hike.cachedGuide ? 'Leggi tutto' : 'Genera guida'}
+            </button>
+          </div>
+          {hike.cachedGuide ? (
+            <PullQuote>{guideExcerpt(hike.cachedGuide)}</PullQuote>
+          ) : (
+            <p className="text-sm text-stone-400 italic">
+              Nessuna guida ancora generata per questo percorso. Giulia può raccontarti storia, natura e curiosità lungo il tracciato.
+            </p>
+          )}
+        </div>
+
+        {/* Assessment */}
+        {hike.assessment && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+            <h2 className="font-display text-xl font-semibold text-stone-700 mb-5">Valutazione personalizzata</h2>
+            <AssessmentPanel a={hike.assessment} />
+          </div>
+        )}
+
+        {/* Notes */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-xl font-semibold text-stone-700">Note personali</h2>
+            {!editNotes && (
+              <button onClick={() => setEditNotes(true)} className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 transition-colors">
+                <Pencil className="w-4 h-4" /> Modifica
+              </button>
+            )}
+          </div>
+          {editNotes ? (
+            <div className="space-y-2">
+              <textarea
+                autoFocus
+                value={notesVal}
+                onChange={e => setNotesVal(e.target.value)}
+                rows={4}
+                placeholder="Aggiungi note, equipaggiamento, punti di interesse…"
+                className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm text-stone-700 bg-stone-50 resize-none outline-none focus:border-sky-400 focus:bg-white"
+              />
+              <div className="flex gap-2">
+                <button onClick={saveNotes} disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 transition-colors">
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salva
+                </button>
+                <button onClick={() => { setNotesVal(hike.userNotes ?? ''); setEditNotes(false) }}
+                  className="px-3 py-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
+                  Annulla
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className={`text-sm leading-relaxed ${hike.userNotes ? 'text-stone-600 whitespace-pre-wrap' : 'text-stone-400 italic'}`}>
+              {hike.userNotes || 'Nessuna nota — clicca Modifica per aggiungerne una.'}
+            </p>
+          )}
+        </div>
+
+        {/* Appunti vocali/testuali */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+          <HikeNotesRecorder
+            notes={hike.hikeNotes ?? []}
+            onChange={notes => patch({ hikeNotes: notes })}
+          />
+        </div>
+          </>
+        )}
+      </main>
+
+      {showStreetView && centerPt?.lat && centerPt?.lon && (
+        <StreetViewPanel
+          lat={centerPt.lat}
+          lon={centerPt.lon}
+          title={hike.title}
+          onClose={() => setShowStreetView(false)}
+        />
+      )}
     </div>
   )
 }

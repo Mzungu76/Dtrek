@@ -51,6 +51,10 @@ export interface PlannedHike {
   // (Komoot/AllTrails) — vedi lib/difficultyMarkers.ts. Persistiti su
   // trail_difficulty_markers, non su questa riga.
   difficultyMarkers?:            ClassifiedDifficultyMarker[]
+  // Scadenza del percorso "in attesa" nel tab Guida (calcolata all'import da
+  // guide_pending_days) e stato di archiviazione manuale post-scadenza.
+  pendingExpiresAt?:             string
+  archivedAt?:                   string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -127,7 +131,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt'>>,
 ): Promise<void> {
   // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {
