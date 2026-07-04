@@ -15,6 +15,21 @@ export interface WeatherIcon {
   label: string
 }
 
+/** Small fixed (non-scrollable) icon shown next to the weather icon — e.g. driving distance. */
+export interface InfoIcon {
+  icon: LucideIcon
+  label: string
+}
+
+/** Raw sortable metrics for the gallery sort filters — undefined fields just disable that option. */
+export interface SortValues {
+  date: number
+  km: number
+  dplus: number
+  cts?: number
+  rating?: number
+}
+
 /** Mode-agnostic normalized item RouteHub operates on — one per route in the carousel/gallery. */
 export interface RouteHubItem {
   id: string
@@ -24,6 +39,7 @@ export interface RouteHubItem {
   /** Resoconto only: cover photo URL for the fullscreen stage + gallery thumb. */
   coverPhotoUrl?: string
   statPills: StatPill[]
+  sortValues?: SortValues
 }
 
 export interface RouteHubProps {
@@ -54,12 +70,19 @@ export interface RouteHubProps {
   /** Sentence from the personalized assessment, shown floating over the map just above the
    *  bottom gallery (locked mode only). Undefined/null when there's nothing to show. */
   summaryBanner?: (item: RouteHubItem) => string | null | undefined
-  /** Today's/relevant weather icon — shown borderless (no glass-pill background) in the top
-   *  overlay; clicking it opens the "meteo" section. Undefined while unknown/unavailable. */
+  /** Today's/relevant weather icon — shown as a fixed (always-visible, never scrolled away)
+   *  button next to the profile avatar; clicking it opens the "meteo" section. Undefined while
+   *  unknown/unavailable. */
   weatherIcon?: (item: RouteHubItem) => WeatherIcon | null | undefined
+  /** Guida-only: driving distance from the user's address, shown fixed next to the weather icon;
+   *  clicking it opens the "dati" section (full "Come arrivare" card). */
+  drivingIcon?: (item: RouteHubItem) => InfoIcon | null | undefined
   /** Opens the fullscreen 3D map view for the current route — available whenever the map is
    *  interactive (unlocked stage, and from within every section's map half). */
   onOpenMap3D?: (item: RouteHubItem) => void
-  /** "Vedi elenco" — links back to the classic grid/calendar index page. */
-  onOpenList: () => void
+  /** Extra floating buttons shown only while the stage is unlocked (e.g. pendenza/foto-zona
+   *  toggles) — rendered on the opposite side from the lock/3D controls. */
+  renderUnlockedControls?: (item: RouteHubItem) => ReactNode
+  /** Guida-only: secondary action next to "Avvia navigazione" opening the offline-package sheet. */
+  onOpenOffline?: (item: RouteHubItem) => void
 }

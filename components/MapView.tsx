@@ -103,7 +103,10 @@ export default function MapView({
       })
 
       const coords: [number, number][] = points.map(p => [p.lat!, p.lon!])
-      const map = L.map(mapRef.current!).setView(coords[0], 14)
+      // No initial setView here — the map gets its one and only view from fitBounds
+      // below (all branches call it). Setting an initial center first and then
+      // fitBounds right after produced a visible "double centering" jump.
+      const map = L.map(mapRef.current!, { zoomControl: false })
       mapInstance.current = map
       setMapReady(true)
 
@@ -260,6 +263,7 @@ export default function MapView({
         const popup = buildPoiPopupHtml(poi)
 
         const m = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 }).addTo(mapInstance.current).bindPopup(popup, { maxWidth: 250 })
+        m.on('click', () => mapInstance.current.setView([poi.lat, poi.lon], Math.max(mapInstance.current.getZoom(), 16), { animate: true }))
         poiLayer.current.push(m)
       })
 

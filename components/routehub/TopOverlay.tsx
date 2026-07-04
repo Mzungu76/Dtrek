@@ -1,19 +1,19 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { List } from 'lucide-react'
 import { NAV_LINKS, isActive, ProfileAvatar } from '@/components/Navbar'
-import type { StatPill, WeatherIcon } from './types'
+import type { StatPill, WeatherIcon, InfoIcon } from './types'
 
 interface Props {
   title: string
   statPills: StatPill[]
-  onOpenList: () => void
   weatherIcon?: WeatherIcon | null
   onOpenWeather?: () => void
+  drivingIcon?: InfoIcon | null
+  onOpenDriving?: () => void
 }
 
-export default function TopOverlay({ title, statPills, onOpenList, weatherIcon, onOpenWeather }: Props) {
+export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeather, drivingIcon, onOpenDriving }: Props) {
   const path = usePathname()
 
   return (
@@ -22,24 +22,42 @@ export default function TopOverlay({ title, statPills, onOpenList, weatherIcon, 
 
       <div className="relative px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
         <div className="flex items-center gap-2">
-          <div className="pointer-events-auto flex-1 flex items-center justify-around bg-forest-900/90 backdrop-blur-md rounded-full px-2 py-1.5 shadow-lg max-w-xs">
+          <div className="pointer-events-auto flex-1 flex items-center justify-around bg-forest-900/90 backdrop-blur-md rounded-full px-2.5 py-2 shadow-lg max-w-sm">
             {NAV_LINKS.map(({ href, label, icon: Icon }) => {
               const active = isActive(href, path ?? '')
               return (
-                <Link key={href} href={href} className={`flex flex-col items-center gap-0.5 px-2.5 py-0.5 ${active ? 'text-white' : 'text-forest-300'}`}>
-                  <Icon className="w-4 h-4" strokeWidth={2} />
-                  <span className="text-[8px] font-bold leading-none">{label}</span>
+                <Link key={href} href={href} className={`flex flex-col items-center gap-1 px-3 py-1 ${active ? 'text-white' : 'text-forest-300'}`}>
+                  <Icon className="w-5 h-5" strokeWidth={2} />
+                  <span className="text-[10px] font-bold leading-none">{label}</span>
                 </Link>
               )
             })}
           </div>
-          <button
-            onClick={onOpenList}
-            title="Vedi elenco"
-            className="pointer-events-auto shrink-0 w-8 h-8 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-stone-100"
-          >
-            <List className="w-3.5 h-3.5" />
-          </button>
+
+          {(weatherIcon || drivingIcon) && (
+            <div className="pointer-events-auto shrink-0 flex items-center gap-1.5">
+              {weatherIcon && onOpenWeather && (
+                <button
+                  onClick={onOpenWeather}
+                  title={weatherIcon.label}
+                  className="w-9 h-9 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-xl leading-none"
+                  style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
+                >
+                  {weatherIcon.emoji}
+                </button>
+              )}
+              {drivingIcon && onOpenDriving && (
+                <button
+                  onClick={onOpenDriving}
+                  title={drivingIcon.label}
+                  className="w-9 h-9 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-stone-100"
+                >
+                  <drivingIcon.icon className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="pointer-events-auto shrink-0 rounded-full ring-2 ring-black/30">
             <ProfileAvatar size={36} iconSize={16} />
           </div>
@@ -51,16 +69,6 @@ export default function TopOverlay({ title, statPills, onOpenList, weatherIcon, 
               <Icon className="w-3 h-3" /> {label}
             </span>
           ))}
-          {weatherIcon && onOpenWeather && (
-            <button
-              onClick={onOpenWeather}
-              title={weatherIcon.label}
-              className="pointer-events-auto shrink-0 flex items-center gap-1 text-xl leading-none ml-1"
-              style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
-            >
-              {weatherIcon.emoji}
-            </button>
-          )}
         </div>
 
         <p className="mt-3 font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import RouteHub from '@/components/routehub/RouteHub'
 import SectionSplit from '@/components/routehub/SectionSplit'
+import { RailButton } from '@/components/routehub/SideRails'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import type { RouteHubItem, SectionKind } from '@/components/routehub/types'
 import { wmoInfo } from '@/lib/openmeteo'
@@ -68,6 +69,13 @@ function metaToItem(a: ActivityMeta): RouteHubItem {
       { icon: TrendingUp, label: `+${Math.round(a.elevationGain)} m` },
       { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
     ],
+    sortValues: {
+      date: new Date(a.startTime).getTime(),
+      km: a.distanceMeters,
+      dplus: a.elevationGain,
+      cts: a.trailScore,
+      rating: a.userRating,
+    },
   }
 }
 
@@ -240,12 +248,15 @@ export default function ResocontoHub({ id }: { id?: string }) {
       { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
       ...((a.calories ?? 0) > 0 ? [{ icon: Flame, label: `${a.calories} kcal` }] : []),
     ]
+    const sortValuesFor = (a: StoredActivity) => ({
+      date: new Date(a.startTime).getTime(), km: a.distanceMeters, dplus: a.elevationGain, cts: a.trailScore, rating: a.userRating,
+    })
     const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? photos[0]?.url : undefined)
     const mapped = items.map(it => it.id === activity?.id
-      ? { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id) }
+      ? { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity) }
       : (cover(it.id) ? { ...it, coverPhotoUrl: cover(it.id) } : it))
     if (activity && !mapped.some(it => it.id === activity.id)) {
-      return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id) }, ...mapped]
+      return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity) }, ...mapped]
     }
     return mapped
   }, [items, covers, activity, photos, coverPhotoId])
@@ -538,6 +549,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
           : <div className="absolute inset-0 bg-[#0b1a24]" />}
       >
         <div ref={poiCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-3">
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Sul percorso</p>
           {pois.length === 0 && (
             <p className="text-sm text-stone-400 italic text-center py-8">Nessun punto di interesse trovato lungo il tracciato.</p>
           )}
@@ -558,11 +570,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
               </div>
             )
           })}
-          {hasGps && <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />}
           {hasGps && (
-            <button onClick={() => setShowStreetView(true)} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
-              <Images className="w-4 h-4" /> Foto zona (street view)
-            </button>
+            <>
+              <p className="text-xs font-bold text-stone-500 uppercase tracking-wider pt-2">Wikipedia nei dintorni</p>
+              <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
+            </>
           )}
         </div>
       </SectionSplit>
@@ -689,7 +701,18 @@ export default function ResocontoHub({ id }: { id?: string }) {
         onOpenFeatured={(routeItem) => router.push(`/resoconto/${encodeURIComponent(routeItem.id)}/leggi`)}
         weatherIcon={(routeItem) => activity && routeItem.id === activity.id ? weatherIcon : undefined}
         onOpenMap3D={() => setShow3D(true)}
-        onOpenList={() => router.push('/resoconto/elenco')}
+        renderUnlockedControls={(routeItem) => activity && routeItem.id === activity.id && hasGps ? (
+          <>
+            {activity.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
+              <RailButton onClick={() => setShowGradient(g => !g)} title="Pendenza" variant={showGradient ? 'terra' : 'glass'}>
+                <Layers className="w-[18px] h-[18px] text-white" />
+              </RailButton>
+            )}
+            <RailButton onClick={() => setShowStreetView(true)} title="Foto zona (street view)">
+              <Images className="w-[18px] h-[18px] text-white" />
+            </RailButton>
+          </>
+        ) : undefined}
       />
 
       {showRatingPanel && activity && typeof document !== 'undefined' && createPortal(

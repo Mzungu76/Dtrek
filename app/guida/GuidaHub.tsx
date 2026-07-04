@@ -4,7 +4,9 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import RouteHub from '@/components/routehub/RouteHub'
 import SectionSplit from '@/components/routehub/SectionSplit'
+import { RailButton } from '@/components/routehub/SideRails'
 import RouteThumb from '@/components/RouteThumb'
+import Sheet from '@/components/ui/Sheet'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import { AssessmentPanel } from '@/components/routehub/AssessmentPanel'
 import type { RouteHubItem, SectionKind } from '@/components/routehub/types'
@@ -60,6 +62,12 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
       { icon: Mountain,    label: `${Math.round(h.altitudeMax)} m` },
       { icon: Clock,       label: formatDuration(h.estimatedTimeSeconds) },
     ],
+    sortValues: {
+      date: new Date(h.createdAt).getTime(),
+      km: h.distanceMeters,
+      dplus: h.elevationGain,
+      cts: h.cachedTrailScore,
+    },
   }
 }
 
@@ -79,6 +87,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [terrainProfile, setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
   const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [showStreetView, setShowStreetView] = useState(false)
+  const [showOfflineSheet, setShowOfflineSheet] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
@@ -321,16 +330,18 @@ export default function GuidaHub({ id }: { id?: string }) {
       { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
       { icon: Mountain,   label: `${Math.round(h.altitudeMax)} m` },
       { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
-      ...(driving ? [{ icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km auto` }] : []),
     ]
-    const mapped = items.map(it => it.id === hike?.id ? { ...it, statPills: pillsFor(hike) } : it)
+    const sortValuesFor = (h: PlannedHike) => ({
+      date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: h.cachedTrailScore,
+    })
+    const mapped = items.map(it => it.id === hike?.id ? { ...it, statPills: pillsFor(hike), sortValues: sortValuesFor(hike) } : it)
     // Deep link to a hike outside the active list (e.g. archived/expired) — still show it
     // standalone rather than 404, once its full record has loaded.
     if (hike && !mapped.some(it => it.id === hike.id)) {
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike) }, ...mapped]
+      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike), sortValues: sortValuesFor(hike) }, ...mapped]
     }
     return mapped
-  }, [items, hike, driving])
+  }, [items, hike])
 
   if (!listLoaded) {
     return (
@@ -585,6 +596,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           : <div className="absolute inset-0 bg-[#0b1a24]" />}
       >
         <div ref={poiCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-3">
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Sul percorso</p>
           {pois.length === 0 && (
             <p className="text-sm text-stone-400 italic text-center py-8">Nessun punto di interesse trovato lungo il tracciato.</p>
           )}
@@ -592,9 +604,9 @@ export default function GuidaHub({ id }: { id?: string }) {
             const meta = POI_META[poi.type]
             const wiki = poiWikiEntries.find(e => e.poi.id === poi.id)?.wiki
             const highlighted = i === poiCenter.centeredIndex
-            return (
-              <div key={poi.id} ref={poiCenter.setItemRef(i)}
-                className={`rounded-2xl border p-4 flex gap-3 transition-colors ${highlighted ? 'bg-sky-50 border-sky-300' : 'bg-white border-stone-200'}`}>
+            const cardClass = `rounded-2xl border p-4 flex gap-3 transition-colors ${highlighted ? 'bg-sky-50 border-sky-300' : 'bg-white border-stone-200'} ${wiki ? 'hover:border-sky-300' : ''}`
+            const cardContent = (
+              <>
                 {wiki?.thumbnail
                   ? <img src={wiki.thumbnail} alt={wiki.title} className="w-16 h-16 object-cover rounded-xl shrink-0" />
                   : <span className="w-16 h-16 rounded-xl bg-stone-50 flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>}
@@ -605,14 +617,23 @@ export default function GuidaHub({ id }: { id?: string }) {
                   <p className="text-sm font-semibold text-stone-800 leading-tight mb-1">{wiki?.title ?? poi.name ?? meta.label}</p>
                   {wiki && <p className="text-xs text-stone-500 leading-relaxed line-clamp-3">{wiki.extract.slice(0, 160)}{wiki.extract.length > 160 ? '…' : ''}</p>}
                 </div>
+              </>
+            )
+            return wiki ? (
+              <a key={poi.id} ref={poiCenter.setItemRef(i)} href={wiki.url} target="_blank" rel="noopener noreferrer" className={cardClass}>
+                {cardContent}
+              </a>
+            ) : (
+              <div key={poi.id} ref={poiCenter.setItemRef(i)} className={cardClass}>
+                {cardContent}
               </div>
             )
           })}
-          {hasGps && <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />}
           {hasGps && (
-            <button onClick={() => setShowStreetView(true)} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
-              <Images className="w-4 h-4" /> Foto zona (street view)
-            </button>
+            <>
+              <p className="text-xs font-bold text-stone-500 uppercase tracking-wider pt-2">Wikipedia nei dintorni</p>
+              <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
+            </>
           )}
         </div>
       </SectionSplit>
@@ -676,7 +697,6 @@ export default function GuidaHub({ id }: { id?: string }) {
     return (
       <SectionSplit title="Strumenti" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
         <div className="h-full overflow-y-auto px-4 py-4 space-y-1">
-          {hasGps && <div className="px-2 py-2"><OfflinePackageDownloader hikeId={hike.id} routePolyline={hike.routePolyline ?? []} /></div>}
           <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left text-sm font-medium text-stone-700" />
           <div>
             {editNotes ? (
@@ -727,9 +747,27 @@ export default function GuidaHub({ id }: { id?: string }) {
         onOpenFeatured={() => setShowGuideSection(true)}
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
         weatherIcon={(routeItem) => hike && routeItem.id === hike.id ? weatherIcon : undefined}
+        drivingIcon={(routeItem) => hike && routeItem.id === hike.id && driving
+          ? { icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto da casa` } : undefined}
         onOpenMap3D={() => setShow3D(true)}
-        onOpenList={() => router.push('/guida/elenco')}
+        onOpenOffline={(routeItem) => hike && routeItem.id === hike.id ? setShowOfflineSheet(true) : undefined}
+        renderUnlockedControls={(routeItem) => hike && routeItem.id === hike.id && hasGps ? (
+          <>
+            {hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
+              <RailButton onClick={() => setShowGradient(g => !g)} title="Pendenza" variant={showGradient ? 'terra' : 'glass'}>
+                <Layers className="w-[18px] h-[18px] text-white" />
+              </RailButton>
+            )}
+            <RailButton onClick={() => setShowStreetView(true)} title="Foto zona (street view)">
+              <Images className="w-[18px] h-[18px] text-white" />
+            </RailButton>
+          </>
+        ) : undefined}
       />
+
+      <Sheet open={showOfflineSheet} onClose={() => setShowOfflineSheet(false)} title="Scarica per offline">
+        {hike && <OfflinePackageDownloader hikeId={hike.id} routePolyline={hike.routePolyline ?? []} />}
+      </Sheet>
 
       {showGuideSection && hike && (
         guideExpanded ? (

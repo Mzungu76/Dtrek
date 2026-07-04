@@ -10,8 +10,8 @@ import type { RouteHubProps } from './types'
 
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, renderStageMap, renderSection,
-  onNavigate, ratingBadge, onOpenRating, datiBadge, featuredLabel, featuredIcon, onOpenFeatured,
-  summaryBanner, weatherIcon, onOpenMap3D, onOpenList,
+  onNavigate, onOpenOffline, ratingBadge, onOpenRating, datiBadge, featuredLabel, featuredIcon, onOpenFeatured,
+  summaryBanner, weatherIcon, drivingIcon, onOpenMap3D, renderUnlockedControls,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
 
@@ -80,8 +80,9 @@ export default function RouteHub({
 
           {state.locked && (
             <TopOverlay
-              title={item.title} statPills={item.statPills} onOpenList={onOpenList}
+              title={item.title} statPills={item.statPills}
               weatherIcon={weatherIcon?.(item)} onOpenWeather={() => dispatch({ type: 'OPEN_SECTION', section: 'meteo' })}
+              drivingIcon={drivingIcon?.(item)} onOpenDriving={() => dispatch({ type: 'OPEN_SECTION', section: 'dati' })}
             />
           )}
 
@@ -92,17 +93,19 @@ export default function RouteHub({
             onOpenSection={section => dispatch({ type: 'OPEN_SECTION', section })}
             datiBadge={datiBadge?.(item)}
             onNavigate={mode === 'guida' && onNavigate ? () => onNavigate(item) : undefined}
+            onOpenOffline={mode === 'guida' && onOpenOffline ? () => onOpenOffline(item) : undefined}
             ratingBadge={mode === 'resoconto' ? ratingBadge?.(item) : undefined}
             onOpenRating={mode === 'resoconto' && onOpenRating ? () => onOpenRating(item) : undefined}
             featuredLabel={featuredLabel}
             featuredIcon={featuredIcon}
             onOpenFeatured={() => onOpenFeatured(item)}
             onOpenMap3D={onOpenMap3D ? () => onOpenMap3D(item) : undefined}
+            unlockedControls={renderUnlockedControls?.(item)}
           />
 
           {state.locked && summary && (
-            <div className="absolute inset-x-3 z-20 pointer-events-none" style={{ bottom: 'calc(env(safe-area-inset-bottom,0px) + 96px)' }}>
-              <p className="pointer-events-auto bg-black/50 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-2.5 text-white text-[13px] leading-snug max-w-xl mx-auto text-center">
+            <div className="absolute inset-x-4 z-20 pointer-events-none" style={{ bottom: 'calc(env(safe-area-inset-bottom,0px) + 96px)' }}>
+              <p className="pointer-events-auto font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
                 {summary}
               </p>
             </div>
