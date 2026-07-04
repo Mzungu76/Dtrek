@@ -97,7 +97,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect }: Prop
   return (
     <div>
       {hasSortData && (
-        <div className="flex items-center gap-1.5 overflow-x-auto px-4 mb-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex items-center justify-center gap-1.5 overflow-x-auto px-4 mb-2 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
           <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />
           {SORT_OPTIONS.map(s => (
             <button
@@ -112,7 +112,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect }: Prop
           ))}
         </div>
       )}
-      <div className="flex gap-2.5 overflow-x-auto px-4" style={{ scrollSnapType: 'x proximity' }}>
+      <div className="flex gap-2.5 overflow-x-auto px-4 [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}>
         {others.map(({ item, i }) => (
           <button
             key={item.id}

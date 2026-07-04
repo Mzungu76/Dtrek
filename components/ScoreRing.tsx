@@ -1,12 +1,13 @@
 'use client'
 import { useState } from 'react'
-import type { CLLabel, CLSignals } from '@/lib/cl/types'
+import type { CLLabel, CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { TrailScoreResult } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import { CLBadge } from '@/components/CLBadge'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
+import { ShadeWaterTile } from '@/components/ShadeWaterTile'
 import Sheet from '@/components/ui/Sheet'
 
 interface CLProps {
@@ -30,8 +31,13 @@ interface CtsProps {
   onCompute?: () => void
 }
 
+interface ShadeWaterProps {
+  data: Sentinel2Data | null
+  loading?: boolean
+}
+
 interface Segment {
-  key: 'cl' | 'safety' | 'cts' | 'beauty'
+  key: 'cl' | 'safety' | 'cts' | 'beauty' | 'shadewater'
   title: string
   value: number | null
   color: string
@@ -62,26 +68,29 @@ function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: nu
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`
 }
 
-const GAP_DEG = 5
-const SIZE    = 184
-const R       = 74
-const STROKE  = 19
-const CX      = SIZE / 2
-const CY      = SIZE / 2
+const GAP_DEG   = 4
+const SEG_COUNT = 5
+const SEG_DEG   = 360 / SEG_COUNT
+const SIZE      = 208
+const R         = 86
+const STROKE    = 18
+const CX        = SIZE / 2
+const CY        = SIZE / 2
 
 /**
- * Grafico ad anello che sostituisce la griglia a 4 tile di ScoresSection: un solo
+ * Grafico ad anello che sostituisce la griglia a tile di ScoresSection: un solo
  * elemento compatto invece di una dashboard a sé, coerente con l'idea che tutta
- * l'infrastruttura di valutazione (CL, Sicurezza, Comfort TrailScore, Bellezza/TEI)
- * resti consultabile ma non occupi una sezione propria. Click su uno spicchio apre
- * il dettaglio del punteggio corrispondente in un foglio a comparsa.
+ * l'infrastruttura di valutazione (CL, Sicurezza, Comfort TrailScore, Bellezza/TEI,
+ * Ombra e acqua) resti consultabile ma non occupi una sezione propria. Click su
+ * uno spicchio apre il dettaglio del punteggio corrispondente in un foglio a comparsa.
  */
 export function ScoreRing({
-  cl, safety, cts,
+  cl, safety, cts, shadeWater,
 }: {
   cl: CLProps
   safety: SafetyScore | null
   cts: CtsProps
+  shadeWater: ShadeWaterProps
 }) {
   const [activeKey, setActiveKey] = useState<Segment['key'] | null>(null)
 
@@ -89,27 +98,30 @@ export function ScoreRing({
   const beautyValue = cts.result?.b != null
     ? cts.result.b * 10
     : cts.beautyScore?.overall != null ? cts.beautyScore.overall * 10 : null
+  const shadeWaterValue = shadeWater.data?.available && shadeWater.data.shadeScore != null
+    ? shadeWater.data.shadeScore * 100 : null
 
   const segments: Segment[] = [
-    { key: 'cl',     title: 'Livello di affidabilità', value: cl.notMatched || cl.loading ? null : cl.si ?? null, color: colorForCL(cl.label) },
-    { key: 'safety', title: 'Sicurezza',                value: safety?.overall ?? null,                          color: safety?.color ?? '#a8a29e' },
-    { key: 'cts',    title: 'Comfort TrailScore',       value: ctsValue,                                          color: cts.result?.color ?? '#a8a29e' },
-    { key: 'beauty', title: 'Bellezza del percorso',    value: beautyValue,                                       color: cts.beautyScore?.color ?? '#059669' },
+    { key: 'cl',         title: 'Livello di affidabilità', value: cl.notMatched || cl.loading ? null : cl.si ?? null, color: colorForCL(cl.label) },
+    { key: 'safety',     title: 'Sicurezza',                value: safety?.overall ?? null,                          color: safety?.color ?? '#a8a29e' },
+    { key: 'cts',        title: 'Comfort TrailScore',       value: ctsValue,                                          color: cts.result?.color ?? '#a8a29e' },
+    { key: 'beauty',     title: 'Bellezza del percorso',    value: beautyValue,                                       color: cts.beautyScore?.color ?? '#059669' },
+    { key: 'shadewater', title: 'Ombra e acqua',            value: shadeWaterValue,                                   color: '#0ea5e9' },
   ]
 
   const total   = segments.reduce((sum, s) => sum + (s.value ?? 0), 0)
   const known   = segments.filter(s => s.value != null).length
   const active  = segments.find(s => s.key === activeKey) ?? null
-  const span    = 90 - GAP_DEG
+  const span    = SEG_DEG - GAP_DEG
 
   return (
     <div className="rounded-2xl border border-stone-200 shadow-sm bg-white p-5">
-      <div className="flex items-center gap-6 flex-wrap">
-        <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
-          <div className="absolute inset-3 rounded-full bg-gradient-to-br from-stone-50 to-stone-100" />
-          <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+      <div className="flex flex-col items-center gap-5">
+        <div className="relative shrink-0 mx-auto" style={{ width: SIZE, height: SIZE }}>
+          <div className="absolute inset-4 rounded-full bg-gradient-to-br from-stone-50 to-stone-100 shadow-inner" />
+          <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.06))' }}>
             {segments.map((s, i) => {
-              const start = i * 90 + GAP_DEG / 2
+              const start = i * SEG_DEG + GAP_DEG / 2
               const pct   = s.value != null ? Math.max(0, Math.min(100, s.value)) / 100 : 0
               return (
                 <g key={s.key}>
@@ -136,12 +148,12 @@ export function ScoreRing({
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Punteggio</span>
-            <span className="font-black text-[28px] text-stone-800 leading-none mt-0.5">{Math.round(total)}</span>
-            <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {known * 100 || 400}</span>
+            <span className="font-black text-[30px] text-stone-800 leading-none mt-0.5">{Math.round(total)}</span>
+            <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {known * 100 || SEG_COUNT * 100}</span>
           </div>
         </div>
 
-        <div className="flex-1 min-w-[170px] space-y-1.5">
+        <div className="w-full space-y-1.5">
           {segments.map(s => (
             <button
               key={s.key}
@@ -173,6 +185,9 @@ export function ScoreRing({
           )}
           {active?.key === 'beauty' && (
             <ComfortTrailScoreWidget result={cts.result} cached={cts.cached} beautyScore={cts.beautyScore} defaultOpen />
+          )}
+          {active?.key === 'shadewater' && (
+            <ShadeWaterTile data={shadeWater.data} loading={shadeWater.loading} defaultOpen />
           )}
         </div>
       </Sheet>

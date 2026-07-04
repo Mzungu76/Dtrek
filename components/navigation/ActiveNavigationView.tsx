@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, BatteryWarning, ArrowUp } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2 } from 'lucide-react'
+import Sheet from '@/components/ui/Sheet'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
 import type { HikeNote } from '@/lib/blobStore'
@@ -26,7 +27,8 @@ import {
   queueTrackFix, drainTrackQueue, requeueTrackFixes, type NavigationSessionSnapshot,
   appendRecordedTrackPoint, loadRecordedTrack, clearRecordedTrack,
 } from '@/lib/navigation/navigationStore'
-import { loadManifest } from '@/lib/offline/packageManifest'
+import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
+import OfflinePackageDownloader from './OfflinePackageDownloader'
 import { watchBattery } from '@/lib/navigation/battery'
 import { haptics } from '@/lib/navigation/haptics'
 import type { NavInstruction, NavPoi, NavState, RouteMoment } from '@/lib/navigation/types'
@@ -92,6 +94,8 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
+  const [offlineReady, setOfflineReady] = useState(false)
+  const [showOfflineSheet, setShowOfflineSheet] = useState(false)
   const [showNatura2000, setShowNatura2000] = useState(false)
   // Geologia layer intentionally has no UI trigger for now (see NavigationMapLibre.tsx's
   // showGeologia prop) — the WMS/REST endpoints it depends on (ISPRA's ArcGIS service) were
@@ -407,6 +411,7 @@ export default function ActiveNavigationView({ hike }: Props) {
     loadManifest(hike.id).then((manifest) => {
       if (cancelled) return
       if (!navigator.onLine && manifest?.status !== 'ready') setOfflinePackageWarning(true)
+      setOfflineReady(isManifestValid(manifest))
     }).catch(() => {})
 
     const flushInterval = setInterval(() => { if (navigator.onLine) flushToServer() }, 30000)
@@ -700,6 +705,31 @@ export default function ActiveNavigationView({ hike }: Props) {
           showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
         />
       </div>
+
+      {routePolyline.length >= 2 && (
+        <div className="absolute left-3 z-10" style={{ top: 'calc(50% + 60px)' }}>
+          <button
+            onClick={() => setShowOfflineSheet(true)}
+            title={offlineReady ? 'Mappa scaricata per offline' : 'Scarica mappa per offline'}
+            className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
+              offlineReady ? 'bg-emerald-600 border-emerald-400/40' : 'bg-white/95 border-stone-200'
+            }`}
+          >
+            {offlineReady ? <CheckCircle2 className="w-5 h-5 text-white" /> : <Download className="w-5 h-5 text-stone-700" />}
+          </button>
+        </div>
+      )}
+
+      <Sheet
+        open={showOfflineSheet}
+        onClose={() => {
+          setShowOfflineSheet(false)
+          loadManifest(hike.id).then((m) => setOfflineReady(isManifestValid(m))).catch(() => {})
+        }}
+        title="Mappa offline"
+      >
+        <OfflinePackageDownloader hikeId={hike.id} routePolyline={routePolyline} />
+      </Sheet>
 
       {showFieldNote && (
         <FieldNoteSheet

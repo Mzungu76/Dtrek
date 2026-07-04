@@ -1,7 +1,7 @@
 'use client'
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { BarChart2, Leaf, Mountain, MapPin, ShieldAlert, Wrench, Map, Navigation, Star, Box, Download } from 'lucide-react'
+import { BarChart2, Leaf, MapPin, ShieldAlert, Wrench, Map, Navigation, Star, Box } from 'lucide-react'
 import type { HubMode, SectionKind } from './types'
 
 interface Props {
@@ -11,7 +11,6 @@ interface Props {
   onOpenSection: (section: SectionKind) => void
   datiBadge?: ReactNode
   onNavigate?: () => void
-  onOpenOffline?: () => void
   ratingBadge?: ReactNode
   onOpenRating?: () => void
   featuredLabel: string
@@ -45,7 +44,7 @@ export function RailButton({ onClick, title, children, variant = 'glass', badge,
 }
 
 export default function SideRails({
-  mode, locked, onToggleLock, onOpenSection, datiBadge, onNavigate, onOpenOffline, ratingBadge, onOpenRating,
+  mode, locked, onToggleLock, onOpenSection, datiBadge, onNavigate, ratingBadge, onOpenRating,
   featuredLabel, featuredIcon: FeaturedIcon, onOpenFeatured, onOpenMap3D, unlockedControls,
 }: Props) {
   if (!locked) {
@@ -76,16 +75,9 @@ export default function SideRails({
     <>
       <div className="fixed left-3 md:left-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3">
         {mode === 'guida' && onNavigate && (
-          <div className="flex flex-col items-center gap-1.5">
-            <RailButton onClick={onNavigate} title="Avvia navigazione sul sentiero" variant="terra">
-              <Navigation className="w-5 h-5 text-white" fill="white" />
-            </RailButton>
-            {onOpenOffline && (
-              <RailButton onClick={onOpenOffline} title="Scarica per offline" small>
-                <Download className="w-4 h-4 text-sky-200" />
-              </RailButton>
-            )}
-          </div>
+          <RailButton onClick={onNavigate} title="Avvia navigazione sul sentiero" variant="terra">
+            <Navigation className="w-5 h-5 text-white" fill="white" />
+          </RailButton>
         )}
         {mode === 'resoconto' && onOpenRating && (
           <RailButton onClick={onOpenRating} title="Vota bellezza" variant={ratingBadge ? 'glass' : 'terra'}>
@@ -100,9 +92,6 @@ export default function SideRails({
         </RailButton>
         <RailButton onClick={() => onOpenSection('natura')} title="Natura">
           <Leaf className="w-5 h-5 text-emerald-300" />
-        </RailButton>
-        <RailButton onClick={() => onOpenSection('altimetria')} title="Altimetria">
-          <Mountain className="w-5 h-5 text-sky-300" />
         </RailButton>
       </div>
 

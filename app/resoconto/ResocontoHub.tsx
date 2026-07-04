@@ -400,7 +400,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
         on3D={open3D(onClose)}
         mapContent={
           <div className="absolute inset-0">
-            {sectionMap()}
+            {hasGps
+              ? <MapView trackPoints={activity.trackPoints} height="100%" interactive activeIndex={altActiveIndex} />
+              : <div className="absolute inset-0 bg-[#0b1a24]" />}
             <div className="absolute bottom-3 inset-x-3 flex flex-wrap gap-1.5 justify-center pointer-events-none">
               {activity.trailScore != null && (
                 <span className="px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md text-white text-[11px] font-bold border border-white/15">CTS {Math.round(activity.trailScore)}</span>
@@ -418,6 +420,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
               cl={{ notMatched: true }}
               safety={null}
               cts={{ result: ctsResult, cached: activity.trailScore, beautyScore: activity.linkedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts }}
+              shadeWater={{ data: s2.data, loading: s2.loading }}
             />
           ) : (
             <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 flex items-center justify-between gap-4">
@@ -428,22 +431,21 @@ export default function ResocontoHub({ id }: { id?: string }) {
             </div>
           )}
 
-          {hasGps && (
+          {hasGps && dtmProfile?.source === 'dtm' && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              {activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
-                <button onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
-                  <Layers className="w-3 h-3" /> Pendenza
-                </button>
-              )}
-              {dtmProfile?.source === 'dtm' && (
-                <button onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
-                  <Compass className="w-3 h-3" /> Esposizione
-                </button>
-              )}
+              <button onClick={() => setShowAspect(a => !a)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
+                <Compass className="w-3 h-3" /> Esposizione
+              </button>
             </div>
           )}
+
+          {hasGps && activity.trackPoints.length ? (
+            <div className="bg-white rounded-2xl border border-stone-200 p-4">
+              <h3 className="font-display text-lg font-semibold text-stone-700 mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-forest-500" /> Profilo altimetrico</h3>
+              <ElevationProfileChart trackPoints={activity.trackPoints} onHover={setAltActiveIndex} />
+            </div>
+          ) : null}
 
           {(() => {
             const hasHR  = (activity.avgHeartRate ?? 0) > 0
@@ -586,25 +588,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
           <p className="text-sm text-stone-400 italic text-center">
             Il punteggio sicurezza è disponibile solo per le guide pre-escursione, non per le escursioni concluse.
           </p>
-        </div>
-      </SectionSplit>
-    )
-
-    if (section === 'altimetria') return (
-      <SectionSplit title={item.title} onClose={onClose} on3D={open3D(onClose)} mapContent={
-        hasGps
-          ? <MapView trackPoints={activity.trackPoints} height="100%" interactive activeIndex={altActiveIndex} />
-          : <div className="absolute inset-0 bg-[#0b1a24]" />
-      }>
-        <div className="h-full flex flex-col px-3 pt-3.5 pb-5">
-          <div className="flex items-baseline justify-between px-1.5 pb-2 shrink-0">
-            <span className="text-[12px] font-semibold text-stone-300">Profilo altimetrico</span>
-          </div>
-          <div className="flex-1 min-h-0">
-            {activity.trackPoints.length
-              ? <ElevationProfileChart trackPoints={activity.trackPoints} onHover={setAltActiveIndex} />
-              : <div className="h-full flex items-center justify-center text-stone-400 text-sm">Dati altimetrici non disponibili</div>}
-          </div>
         </div>
       </SectionSplit>
     )

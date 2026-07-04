@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 
 export type HubMode = 'guida' | 'resoconto'
 
-export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'altimetria' | 'meteo'
+export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'meteo'
 
 export interface StatPill {
   icon: LucideIcon
@@ -12,12 +12,6 @@ export interface StatPill {
 
 export interface WeatherIcon {
   emoji: string
-  label: string
-}
-
-/** Small fixed (non-scrollable) icon shown next to the weather icon — e.g. driving distance. */
-export interface InfoIcon {
-  icon: LucideIcon
   label: string
 }
 
@@ -70,19 +64,13 @@ export interface RouteHubProps {
   /** Sentence from the personalized assessment, shown floating over the map just above the
    *  bottom gallery (locked mode only). Undefined/null when there's nothing to show. */
   summaryBanner?: (item: RouteHubItem) => string | null | undefined
-  /** Today's/relevant weather icon — shown as a fixed (always-visible, never scrolled away)
-   *  button next to the profile avatar; clicking it opens the "meteo" section. Undefined while
-   *  unknown/unavailable. */
+  /** Today's/relevant weather icon — shown next to the route title; clicking it opens the
+   *  "meteo" section. Undefined while unknown/unavailable. */
   weatherIcon?: (item: RouteHubItem) => WeatherIcon | null | undefined
-  /** Guida-only: driving distance from the user's address, shown fixed next to the weather icon;
-   *  clicking it opens the "dati" section (full "Come arrivare" card). */
-  drivingIcon?: (item: RouteHubItem) => InfoIcon | null | undefined
   /** Opens the fullscreen 3D map view for the current route — available whenever the map is
    *  interactive (unlocked stage, and from within every section's map half). */
   onOpenMap3D?: (item: RouteHubItem) => void
   /** Extra floating buttons shown only while the stage is unlocked (e.g. pendenza/foto-zona
    *  toggles) — rendered on the opposite side from the lock/3D controls. */
   renderUnlockedControls?: (item: RouteHubItem) => ReactNode
-  /** Guida-only: secondary action next to "Avvia navigazione" opening the offline-package sheet. */
-  onOpenOffline?: (item: RouteHubItem) => void
 }

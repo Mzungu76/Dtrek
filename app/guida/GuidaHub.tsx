@@ -6,7 +6,6 @@ import RouteHub from '@/components/routehub/RouteHub'
 import SectionSplit from '@/components/routehub/SectionSplit'
 import { RailButton } from '@/components/routehub/SideRails'
 import RouteThumb from '@/components/RouteThumb'
-import Sheet from '@/components/ui/Sheet'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import { AssessmentPanel } from '@/components/routehub/AssessmentPanel'
 import type { RouteHubItem, SectionKind } from '@/components/routehub/types'
@@ -15,8 +14,6 @@ import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import { ScoreRing } from '@/components/ScoreRing'
 import { CurrentConditionsNotice } from '@/components/CurrentConditionsNotice'
-import { ShadeWaterTile } from '@/components/ShadeWaterTile'
-import OfflinePackageDownloader from '@/components/navigation/OfflinePackageDownloader'
 import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
@@ -39,10 +36,10 @@ import { formatDuration } from '@/lib/tcxParser'
 import { fetchForecastWeather, wmoInfo } from '@/lib/openmeteo'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2, BookOpen, Leaf, PawPrint,
-  Car, Navigation, MapPin, Layers, Compass, Images, Trash2, Pencil, Check,
+  Car, Layers, Compass, Images, Trash2, Pencil, Check,
   Maximize2, Minimize2, X,
 } from 'lucide-react'
-import { fetchDrivingInfo, formatDrivingDuration, getUserStartingPoint, getTrailStartPoint, googleMapsDirectionsUrl, originMatches } from '@/lib/drivingInfo'
+import { fetchDrivingInfo, getUserStartingPoint, getTrailStartPoint, originMatches } from '@/lib/drivingInfo'
 import PdfExportButton from '@/components/PdfExportButton'
 
 const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
@@ -87,7 +84,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [terrainProfile, setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
   const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [showStreetView, setShowStreetView] = useState(false)
-  const [showOfflineSheet, setShowOfflineSheet] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
   const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
@@ -98,9 +94,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [prefSforzo,     setPrefSforzo]    = useState(50)
   const [prefDurata,     setPrefDurata]    = useState(270)
   const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
-  const [origin,  setOrigin]  = useState<{ lat: number; lon: number } | null>(null)
   const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
-  const [drivingLoading, setDrivingLoading] = useState(false)
   const [altActiveIndex, setAltActiveIndex] = useState<number | null>(null)
   const [showGuideSection, setShowGuideSection] = useState(false)
   const [guideExpanded, setGuideExpanded] = useState(false)
@@ -230,9 +224,12 @@ export default function GuidaHub({ id }: { id?: string }) {
   }, [hike?.id, hike?.plannedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // Persists to the backend only — nothing in this component reads hike.cachedPois again
+    // after the initial load (line ~164 always re-fetches the hike fresh from the store), so
+    // mirroring it into the in-memory `hike` state here would just force an extra re-render
+    // of the whole card for no visible effect.
     if (!poisFullyLoaded || !hike || (hike.cachedPois?.length ?? 0) > 0 || !pois.length) return
     updatePlannedMeta(hike.id, { cachedPois: pois, cachedPoiWiki: poiWikiEntries }).catch(() => {})
-    setHike(prev => prev ? { ...prev, cachedPois: pois, cachedPoiWiki: poiWikiEntries } : prev)
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -251,20 +248,15 @@ export default function GuidaHub({ id }: { id?: string }) {
     const cachedDist = hike.cachedDrivingDistanceMeters
     const cachedDur  = hike.cachedDrivingDurationSeconds
     let cancelled = false
-    setDrivingLoading(true)
     getUserStartingPoint().then(pt => {
-      if (cancelled) return
-      if (!pt) { setDrivingLoading(false); return }
-      setOrigin(pt)
+      if (cancelled || !pt) return
       if (originMatches(cachedLat, cachedLon, pt.lat, pt.lon) && cachedDist != null && cachedDur != null) {
         setDriving({ distanceMeters: cachedDist, durationSeconds: cachedDur })
-        setDrivingLoading(false)
         return
       }
       fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
         if (cancelled) return
         setDriving(info)
-        setDrivingLoading(false)
         if (info) {
           updatePlannedMeta(hike.id, {
             cachedDrivingDistanceMeters: info.distanceMeters,
@@ -330,6 +322,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
       { icon: Mountain,   label: `${Math.round(h.altitudeMax)} m` },
       { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
+      ...(driving ? [{ icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }] : []),
     ]
     const sortValuesFor = (h: PlannedHike) => ({
       date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: h.cachedTrailScore,
@@ -341,7 +334,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike), sortValues: sortValuesFor(hike) }, ...mapped]
     }
     return mapped
-  }, [items, hike])
+  }, [items, hike, driving])
 
   if (!listLoaded) {
     return (
@@ -469,7 +462,9 @@ export default function GuidaHub({ id }: { id?: string }) {
         on3D={open3D(onClose)}
         mapContent={
           <div className="absolute inset-0">
-            {sectionMap()}
+            {hasGps
+              ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive pois={pois} activeIndex={altActiveIndex} planned />
+              : <div className="absolute inset-0 bg-[#0b1a24]" />}
             <div className="absolute bottom-3 inset-x-3 flex flex-wrap gap-1.5 justify-center pointer-events-none">
               {hike.cachedTrailScore != null && (
                 <span className="px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md text-white text-[11px] font-bold border border-white/15">CTS {Math.round(hike.cachedTrailScore)}</span>
@@ -506,50 +501,25 @@ export default function GuidaHub({ id }: { id?: string }) {
               cl={{ si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError }}
               safety={safetyScore}
               cts={{ result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts }}
+              shadeWater={{ data: s2.data, loading: s2.loading }}
             />
           )}
 
-          {hasGps && (
+          {hasGps && dtmProfile?.source === 'dtm' && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              {hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
-                <button onClick={() => { setShowGradient(g => !g); setShowAspect(false) }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
-                  <Layers className="w-3 h-3" /> Pendenza
-                </button>
-              )}
-              {dtmProfile?.source === 'dtm' && (
-                <button onClick={() => { setShowAspect(a => !a); setShowGradient(false) }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
-                  <Compass className="w-3 h-3" /> Esposizione
-                </button>
-              )}
+              <button onClick={() => setShowAspect(a => !a)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
+                <Compass className="w-3 h-3" /> Esposizione
+              </button>
             </div>
           )}
 
-          {hasGps && (
-            <div className="bg-white rounded-2xl border border-stone-200 p-5">
-              <h3 className="font-display text-lg font-semibold text-stone-700 mb-3 flex items-center gap-2"><Car className="w-4 h-4 text-sky-500" /> Come arrivare</h3>
-              {drivingLoading ? (
-                <div className="flex items-center gap-2 text-stone-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Calcolo distanza…</div>
-              ) : driving && origin ? (
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-6">
-                    <div><p className="text-xs text-stone-400 font-medium">Distanza</p><p className="text-lg font-bold text-stone-800">{(driving.distanceMeters / 1000).toFixed(0)} km</p></div>
-                    <div><p className="text-xs text-stone-400 font-medium">Tempo in auto</p><p className="text-lg font-bold text-stone-800">{formatDrivingDuration(driving.durationSeconds)}</p></div>
-                  </div>
-                  <a href={googleMapsDirectionsUrl(origin.lat, origin.lon, gpsPoints[0].lat!, gpsPoints[0].lon!)} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors">
-                    <Navigation className="w-4 h-4" /> Naviga con Google Maps
-                  </a>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-stone-400">
-                  <MapPin className="w-4 h-4 shrink-0" /> Imposta il tuo <a href="/profilo" className="text-sky-600 hover:text-sky-700 font-medium underline">indirizzo di partenza</a> nel profilo.
-                </div>
-              )}
+          {hasGps && hike.trackPoints?.length ? (
+            <div className="bg-white rounded-2xl border border-stone-200 p-4">
+              <h3 className="font-display text-lg font-semibold text-stone-700 mb-3 flex items-center gap-2"><Mountain className="w-4 h-4 text-sky-500" /> Profilo altimetrico</h3>
+              <ElevationProfileChart trackPoints={hike.trackPoints} onHover={setAltActiveIndex} />
             </div>
-          )}
-
+          ) : null}
         </div>
       </SectionSplit>
     )
@@ -570,10 +540,6 @@ export default function GuidaHub({ id }: { id?: string }) {
           {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
             <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
           )}
-          {hasGps && !si.notMatched && (
-            <CurrentConditionsNotice osmId={hike.osmId} polyline={hike.routePolyline} plannedId={hike.id} signals={si.result?.signals} />
-          )}
-          {hasGps && <ShadeWaterTile data={s2.data} loading={s2.loading} />}
           <div className="flex gap-2">
             <button onClick={() => setShowFloraGallery(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
               <Leaf className="w-4 h-4 text-emerald-600" /> Galleria Verde
@@ -652,6 +618,9 @@ export default function GuidaHub({ id }: { id?: string }) {
         >
           <div ref={sicurezzaCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-5">
             {hike.assessment && <AssessmentPanel a={hike.assessment} />}
+            {hasGps && !si.notMatched && (
+              <CurrentConditionsNotice osmId={hike.osmId} polyline={hike.routePolyline} plannedId={hike.id} signals={si.result?.signals} />
+            )}
             {markers.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Segnalazioni dal tracciato</p>
@@ -673,25 +642,6 @@ export default function GuidaHub({ id }: { id?: string }) {
         </SectionSplit>
       )
     }
-
-    if (section === 'altimetria') return (
-      <SectionSplit title={item.title} onClose={onClose} on3D={open3D(onClose)} mapContent={
-        hasGps
-          ? <MapView trackPoints={hike.trackPoints ?? []} height="100%" interactive activeIndex={altActiveIndex} planned />
-          : <div className="absolute inset-0 bg-[#0b1a24]" />
-      }>
-        <div className="h-full flex flex-col px-3 pt-3.5 pb-5">
-          <div className="flex items-baseline justify-between px-1.5 pb-2 shrink-0">
-            <span className="text-[12px] font-semibold text-stone-300">Profilo altimetrico</span>
-          </div>
-          <div className="flex-1 min-h-0">
-            {hike.trackPoints?.length
-              ? <ElevationProfileChart trackPoints={hike.trackPoints} onHover={setAltActiveIndex} />
-              : <div className="h-full flex items-center justify-center text-stone-400 text-sm">Dati altimetrici non disponibili</div>}
-          </div>
-        </div>
-      </SectionSplit>
-    )
 
     // strumenti
     return (
@@ -747,10 +697,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         onOpenFeatured={() => setShowGuideSection(true)}
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
         weatherIcon={(routeItem) => hike && routeItem.id === hike.id ? weatherIcon : undefined}
-        drivingIcon={(routeItem) => hike && routeItem.id === hike.id && driving
-          ? { icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto da casa` } : undefined}
         onOpenMap3D={() => setShow3D(true)}
-        onOpenOffline={(routeItem) => hike && routeItem.id === hike.id ? setShowOfflineSheet(true) : undefined}
         renderUnlockedControls={(routeItem) => hike && routeItem.id === hike.id && hasGps ? (
           <>
             {hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
@@ -764,10 +711,6 @@ export default function GuidaHub({ id }: { id?: string }) {
           </>
         ) : undefined}
       />
-
-      <Sheet open={showOfflineSheet} onClose={() => setShowOfflineSheet(false)} title="Scarica per offline">
-        {hike && <OfflinePackageDownloader hikeId={hike.id} routePolyline={hike.routePolyline ?? []} />}
-      </Sheet>
 
       {showGuideSection && hike && (
         guideExpanded ? (

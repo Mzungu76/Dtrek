@@ -2,18 +2,16 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { NAV_LINKS, isActive, ProfileAvatar } from '@/components/Navbar'
-import type { StatPill, WeatherIcon, InfoIcon } from './types'
+import type { StatPill, WeatherIcon } from './types'
 
 interface Props {
   title: string
   statPills: StatPill[]
   weatherIcon?: WeatherIcon | null
   onOpenWeather?: () => void
-  drivingIcon?: InfoIcon | null
-  onOpenDriving?: () => void
 }
 
-export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeather, drivingIcon, onOpenDriving }: Props) {
+export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeather }: Props) {
   const path = usePathname()
 
   return (
@@ -34,33 +32,21 @@ export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeathe
             })}
           </div>
 
-          {drivingIcon && onOpenDriving && (
-            <div className="pointer-events-auto shrink-0">
-              <button
-                onClick={onOpenDriving}
-                title={drivingIcon.label}
-                className="w-9 h-9 rounded-full bg-black/45 border border-white/15 backdrop-blur-md flex items-center justify-center text-stone-100"
-              >
-                <drivingIcon.icon className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
           <div className="pointer-events-auto shrink-0 rounded-full ring-2 ring-black/30">
             <ProfileAvatar size={36} iconSize={16} />
           </div>
         </div>
 
-        <div className="mt-3 flex flex-nowrap items-center gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {statPills.map(({ icon: Icon, label }) => (
-            <span key={label} className="pointer-events-auto shrink-0 flex items-center gap-1.5 bg-black/45 backdrop-blur-md text-white text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full border border-white/10">
+            <span key={label} className="pointer-events-auto flex items-center gap-1.5 bg-black/45 backdrop-blur-md text-white text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full border border-white/10">
               <Icon className="w-3 h-3" /> {label}
             </span>
           ))}
         </div>
 
-        <div className="mt-3 flex items-center gap-2.5">
-          <p className="min-w-0 truncate font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+        <div className="mt-3 flex items-start gap-2.5">
+          <p className="flex-1 font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
             {title}
           </p>
           {weatherIcon && onOpenWeather && (
