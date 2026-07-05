@@ -376,7 +376,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
         highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : null}
         activeIndex={openSection === 'dati' ? altActiveIndex : null}
         showPoiLayer={showPoiLayer}
-        showTourControls={interactive}
       />
     )
   }
@@ -409,7 +408,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 snap-x">
       {photos.map(ph => (
         // eslint-disable-next-line @next/next/no-img-element
-        <img key={ph.id} src={ph.url} alt={ph.caption ?? ''} className="w-28 h-28 object-cover rounded-2xl shrink-0 snap-start border border-white/15" />
+        <img key={ph.id} src={ph.url} alt={ph.caption ?? ''} className="w-28 h-28 object-cover rounded-2xl shrink-0 snap-start border border-stone-200" />
       ))}
     </div>
   ) : undefined
@@ -464,7 +463,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
           {hasGps && activity.trackPoints.length ? (
             <div>
-              <h3 className={`font-display text-lg font-semibold mb-3 flex items-center gap-2 ${textPrimary}`}><Map className="w-4 h-4 text-emerald-300" /> Profilo altimetrico</h3>
+              <h3 className={`font-display text-lg font-semibold mb-3 flex items-center gap-2 ${textPrimary}`}><Map className="w-4 h-4 text-emerald-500" /> Profilo altimetrico</h3>
               <ElevationProfileChart trackPoints={activity.trackPoints} onHover={setAltActiveIndex} />
             </div>
           ) : null}
@@ -479,12 +478,12 @@ export default function ResocontoHub({ id }: { id?: string }) {
             return (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {hasHR && <StatCard dark label="FC Media" value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
-                  <StatCard dark label="Vel. Media" value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
-                  {hasNetSpeed && <StatCard dark label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue" />}
-                  {hasCal && <StatCard dark label="Calorie" value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
-                  <StatCard dark label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone" />
-                  {hasIev && <StatCard dark label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest" />}
+                  {hasHR && <StatCard label="FC Media" value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
+                  <StatCard label="Vel. Media" value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
+                  {hasNetSpeed && <StatCard label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue" />}
+                  {hasCal && <StatCard label="Calorie" value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
+                  <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone" />
+                  {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest" />}
                 </div>
                 {hasHRTrack && <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />}
                 <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
@@ -497,7 +496,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
                     ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
                     ['Sport', activity.sport],
                   ].map(([k, v]) => (
-                    <div key={k} className="flex justify-between border-b border-white/10 py-1">
+                    <div key={k} className="flex justify-between border-b border-stone-100 py-1">
                       <dt className="text-stone-400/60 text-xs">{k}</dt>
                       <dd className={`font-mono text-xs font-medium ${textPrimary}`}>{v}</dd>
                     </div>
@@ -514,7 +513,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
                 <table className="w-full text-xs">
                   <tbody>
                     {similarActivities.slice(0, 5).map(({ activity: a, startDistanceM }) => (
-                      <tr key={a.id} className="border-t border-white/10 first:border-t-0 hover:bg-white/[0.06] cursor-pointer" onClick={() => router.push(`/resoconto/${a.id}`)}>
+                      <tr key={a.id} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50 cursor-pointer" onClick={() => router.push(`/resoconto/${a.id}`)}>
                         <td className={`px-3 py-2 ${textPrimary}`}>{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
                         <td className={`px-3 py-2 ${textPrimary}`}>{(a.distanceMeters / 1000).toFixed(1)} km</td>
                         <td className="px-3 py-2 text-stone-400/60">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
@@ -544,7 +543,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
             <Leaf className="w-4 h-4 text-emerald-400" /> Galleria Verde
           </button>
           <button onClick={() => setShowAnimalGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
-            <PawPrint className="w-4 h-4 text-amber-300" /> Galleria Animali
+            <PawPrint className="w-4 h-4 text-amber-500" /> Galleria Animali
           </button>
         </div>
       </div>
@@ -562,7 +561,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
           return (
             <div key={poi.id} ref={poiCenter.setItemRef(i)}
               className={`${glassTile} p-4 flex gap-3 transition-colors ${highlighted ? 'bg-emerald-400/15 border-emerald-400/40' : ''}`}>
-              <span className="w-12 h-12 rounded-xl bg-white/[0.06] flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>
+              <span className="w-12 h-12 rounded-xl bg-stone-100 flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className={`text-[10px] font-semibold uppercase tracking-wide ${textMuted}`}>{meta.label}</span>
@@ -593,54 +592,54 @@ export default function ResocontoHub({ id }: { id?: string }) {
     // strumenti
     return (
       <div className="px-4 py-4 space-y-1">
-        <button onClick={() => router.push(`/resoconto/${encodeURIComponent(activity.id)}/leggi`)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+        <button onClick={() => router.push(`/resoconto/${encodeURIComponent(activity.id)}/leggi`)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
           <BookOpen className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Racconto</span>
         </button>
-        <button onClick={() => setShowStreetView(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+        <button onClick={() => setShowStreetView(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
           <Images className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Foto zona (street view)</span>
         </button>
-        <div className="pt-1 mt-1 border-t border-white/10">
+        <div className="pt-1 mt-1 border-t border-stone-200">
           <ActivityPhotoManager
             activityId={activity.id} trackPoints={activity.trackPoints}
             activityTitle={activity.title ?? undefined}
             distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain}
           />
         </div>
-        <div className="pt-1 mt-1 border-t border-white/10 space-y-1">
+        <div className="pt-1 mt-1 border-t border-stone-200 space-y-1">
           {photos.length > 0 && (
-            <button onClick={() => setShowCoverPicker(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+            <button onClick={() => setShowCoverPicker(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
               <Camera className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Cambia copertina</span>
             </button>
           )}
-          <button onClick={() => setShowShare(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+          <button onClick={() => setShowShare(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <Share2 className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Condividi</span>
           </button>
-          <button onClick={() => setShow3D(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+          <button onClick={() => setShow3D(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <Box className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Vista 3D</span>
           </button>
-          <button onClick={() => { setOpenVideoWizard(true); setShow3D(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+          <button onClick={() => { setOpenVideoWizard(true); setShow3D(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <Film className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Crea video</span>
           </button>
-          <button onClick={() => exportActivityToExcel(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+          <button onClick={() => exportActivityToExcel(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <FileSpreadsheet className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta Excel</span>
           </button>
-          <button onClick={() => exportActivityToDoc(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+          <button onClick={() => exportActivityToDoc(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <FileText className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta Word</span>
           </button>
-          <button onClick={() => exportActivityToGpx(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+          <button onClick={() => exportActivityToGpx(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <Map className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta GPX</span>
           </button>
-          <button onClick={() => exportActivityPdf(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+          <button onClick={() => exportActivityPdf(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <FileDown className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta PDF</span>
           </button>
         </div>
 
-        <div className="pt-1 mt-1 border-t border-white/10">
+        <div className="pt-1 mt-1 border-t border-stone-200">
           {editNotes ? (
             <div className="px-2 py-2 space-y-2">
               <textarea autoFocus value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={4}
                 placeholder="Descrivi l'escursione, i luoghi visitati, le sensazioni…"
-                className="w-full border border-white/15 rounded-xl p-3 text-sm text-stone-100 bg-white/5 outline-none focus:border-forest-400/50 resize-none placeholder:text-stone-400/50" />
+                className="w-full border border-stone-300 rounded-xl p-3 text-sm text-stone-800 bg-white outline-none focus:border-forest-500 resize-none placeholder:text-stone-400" />
               <div className="flex gap-2">
                 <button onClick={saveNotes} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-forest-500 text-white rounded-lg text-sm hover:bg-forest-400 transition-colors disabled:opacity-60">
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salva
@@ -649,7 +648,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
               </div>
             </div>
           ) : (
-            <button onClick={() => setEditNotes(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+            <button onClick={() => setEditNotes(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
               <Pencil className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Note personali{activity.userNotes ? '' : ' (vuote)'}</span>
             </button>
           )}
@@ -659,8 +658,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
           <HikeNotesRecorder notes={activity.hikeNotes ?? []} onChange={hikeNotes => patch({ hikeNotes })} />
         </div>
 
-        <div className="pt-1 mt-1 border-t border-white/10">
-          <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-400/10 transition-colors text-left text-red-300">
+        <div className="pt-1 mt-1 border-t border-stone-200">
+          <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
             <span className="text-sm font-medium">Elimina escursione</span>
           </button>

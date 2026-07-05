@@ -21,7 +21,7 @@ function heightForSnap(snap: SheetSnap): number {
 
 const CTA_VARIANTS = {
   terra: 'bg-terra-500 text-white',
-  glass: 'bg-white/15 text-white border border-white/20',
+  glass: 'bg-stone-100 text-stone-700 border border-stone-200',
 } as const
 
 interface Props {
@@ -106,7 +106,7 @@ export default function RouteSheet({
       </div>
 
       <div
-        className={`relative rounded-t-[28px] bg-black/55 backdrop-blur-xl border-t border-white/10 shadow-[0_-8px_32px_rgba(0,0,0,0.35)] overflow-hidden ${
+        className={`relative rounded-t-[28px] bg-[#fdfcfa] border-t border-stone-200 shadow-[0_-8px_32px_rgba(0,0,0,0.25)] overflow-hidden ${
           dragHeight === null ? 'transition-[height] duration-200 ease-out' : ''
         }`}
         style={{ height: `${currentHeight}px`, maxHeight: 'calc(100% - 72px)' }}
@@ -119,9 +119,9 @@ export default function RouteSheet({
           onClick={() => { if (dragHeight === null) onSnapChange(snap === 'peek' ? 'half' : 'peek') }}
           className="w-full flex flex-col items-center gap-2 pt-2.5 pb-3 px-4 touch-none cursor-grab active:cursor-grabbing select-none"
         >
-          <span className="w-10 h-1.5 rounded-full bg-white/30" />
+          <span className="w-10 h-1.5 rounded-full bg-stone-300" />
           <div className="w-full flex items-center justify-between gap-3">
-            <p className="flex-1 min-w-0 truncate font-display text-base font-bold text-white">{item.title}</p>
+            <p className="flex-1 min-w-0 truncate font-display text-base font-bold text-stone-900">{item.title}</p>
             {primaryAction && (
               <button
                 onClick={primaryAction.onClick}
@@ -137,7 +137,7 @@ export default function RouteSheet({
           {snap === 'peek' && item.statPills.length > 0 && (
             <div className="w-full flex flex-wrap items-center gap-1.5">
               {item.statPills.slice(0, 3).map(({ icon: Icon, label }) => (
-                <span key={label} className="flex items-center gap-1 bg-white/10 text-white text-[10px] font-semibold px-2 py-1 rounded-full">
+                <span key={label} className="flex items-center gap-1 bg-stone-100 text-stone-700 text-[10px] font-semibold px-2 py-1 rounded-full">
                   <Icon className="w-3 h-3" /> {label}
                 </span>
               ))}
@@ -153,7 +153,7 @@ export default function RouteSheet({
                   key={t.key}
                   onClick={() => onTabChange(t.key)}
                   className={`relative shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                    activeTab === t.key ? 'bg-terra-500 text-white' : 'bg-white/10 text-white/70'
+                    activeTab === t.key ? 'bg-terra-500 text-white' : 'bg-stone-100 text-stone-600'
                   }`}
                 >
                   <t.icon className="w-3.5 h-3.5" /> {t.label}

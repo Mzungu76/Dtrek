@@ -485,13 +485,13 @@ export default function GuidaHub({ id }: { id?: string }) {
           const expired = new Date(hike.pendingExpiresAt!).getTime() < Date.now()
           const daysLeft = Math.ceil((new Date(hike.pendingExpiresAt!).getTime() - Date.now()) / 86400000)
           return (
-            <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${expired ? 'bg-amber-400/10 border-amber-400/25' : 'bg-sky-400/10 border-sky-400/25'}`}>
-              <p className={`text-sm font-medium ${expired ? 'text-amber-200' : 'text-sky-200'}`}>
+            <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${expired ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
+              <p className={`text-sm font-medium ${expired ? 'text-amber-800' : 'text-sky-800'}`}>
                 {expired ? 'Questa guida è scaduta: la proroghi o la archivi?' : `In attesa — scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}`}
               </p>
               <div className="flex items-center gap-2">
                 <button onClick={handleExtendPending} className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold transition-colors">Proroga</button>
-                {expired && <button onClick={handleArchive} className="px-3 py-1.5 rounded-lg bg-white/10 border border-amber-400/30 hover:border-amber-400/50 text-amber-200 text-xs font-semibold transition-colors">Archivia</button>}
+                {expired && <button onClick={handleArchive} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:border-amber-400 text-amber-800 text-xs font-semibold transition-colors">Archivia</button>}
               </div>
             </div>
           )
@@ -523,7 +523,7 @@ export default function GuidaHub({ id }: { id?: string }) {
 
         {hasGps && hike.trackPoints?.length ? (
           <div>
-            <h3 className={`font-display text-lg font-semibold mb-3 flex items-center gap-2 ${textPrimary}`}><Mountain className="w-4 h-4 text-amber-300" /> Profilo altimetrico</h3>
+            <h3 className={`font-display text-lg font-semibold mb-3 flex items-center gap-2 ${textPrimary}`}><Mountain className="w-4 h-4 text-amber-500" /> Profilo altimetrico</h3>
             <ElevationProfileChart trackPoints={hike.trackPoints} onHover={setAltActiveIndex} />
           </div>
         ) : null}
@@ -548,7 +548,7 @@ export default function GuidaHub({ id }: { id?: string }) {
             <Leaf className="w-4 h-4 text-emerald-400" /> Galleria Verde
           </button>
           <button onClick={() => setShowAnimalGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
-            <PawPrint className="w-4 h-4 text-amber-300" /> Galleria Animali
+            <PawPrint className="w-4 h-4 text-amber-500" /> Galleria Animali
           </button>
         </div>
       </div>
@@ -569,7 +569,7 @@ export default function GuidaHub({ id }: { id?: string }) {
             <>
               {wiki?.thumbnail
                 ? <img src={wiki.thumbnail} alt={wiki.title} className="w-16 h-16 object-cover rounded-xl shrink-0" />
-                : <span className="w-16 h-16 rounded-xl bg-white/[0.06] flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>}
+                : <span className="w-16 h-16 rounded-xl bg-stone-100 flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1"><span className="text-base leading-none">{meta.emoji}</span><span className={`text-[10px] font-semibold uppercase tracking-wide ${textMuted}`}>{meta.label}</span>
                   <span className="text-[10px] text-stone-400/50 ml-auto shrink-0">{poi.distFromTrack === 0 ? 'sul tracciato' : `${poi.distFromTrack} m`}</span>
@@ -611,7 +611,7 @@ export default function GuidaHub({ id }: { id?: string }) {
               <p className={sectionHeading}>Segnalazioni dal tracciato</p>
               {markers.map((m, i) => {
                 const highlighted = i === sicurezzaCenter.centeredIndex
-                const colors = m.severity === 'danger' ? 'bg-red-400/10 border-red-400/25 text-red-200' : m.severity === 'warning' ? 'bg-amber-400/10 border-amber-400/25 text-amber-200' : 'bg-sky-400/10 border-sky-400/25 text-sky-200'
+                const colors = m.severity === 'danger' ? 'bg-red-50 border-red-200 text-red-700' : m.severity === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-sky-50 border-sky-200 text-sky-700'
                 return (
                   <div key={i} ref={sicurezzaCenter.setItemRef(i)} className={`rounded-xl border px-3 py-2.5 text-sm transition-colors ${colors} ${highlighted ? 'ring-2 ring-offset-1 ring-offset-black/50 ring-current' : ''}`}>
                     {m.text}
@@ -656,7 +656,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         <div className="flex flex-col">
           {guideParagraphs.length > 0 && (
             <div className="flex items-center justify-end px-4 pt-3 shrink-0">
-              <button onClick={() => setGuideExpanded(true)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+              <button onClick={() => setGuideExpanded(true)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600">
                 <Maximize2 className="w-3.5 h-3.5" /> Schermo intero
               </button>
             </div>
@@ -683,15 +683,15 @@ export default function GuidaHub({ id }: { id?: string }) {
     // strumenti
     return (
       <div className="px-4 py-4 space-y-1">
-        <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className={`w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left text-sm font-medium ${textPrimary}`} />
-        <button onClick={() => setShowStreetView(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+        <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className={`w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left text-sm font-medium ${textPrimary}`} />
+        <button onClick={() => setShowStreetView(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
           <Images className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Foto zona (street view)</span>
         </button>
         <div>
           {editNotes ? (
             <div className="px-2 py-2 space-y-2">
               <textarea autoFocus value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={4} placeholder="Aggiungi note, equipaggiamento, punti di interesse…"
-                className="w-full border border-white/15 rounded-xl px-3 py-2 text-sm text-stone-100 bg-white/5 resize-none outline-none focus:border-sky-400/50 placeholder:text-stone-400/50" />
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-white resize-none outline-none focus:border-sky-500 placeholder:text-stone-400" />
               <div className="flex gap-2">
                 <button onClick={saveNotes} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 text-white text-sm rounded-lg hover:bg-sky-400 transition-colors">
                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salva
@@ -700,13 +700,13 @@ export default function GuidaHub({ id }: { id?: string }) {
               </div>
             </div>
           ) : (
-            <button onClick={() => setEditNotes(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+            <button onClick={() => setEditNotes(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
               <Pencil className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Note personali{hike.userNotes ? '' : ' (vuote)'}</span>
             </button>
           )}
         </div>
-        <div className="pt-1 mt-1 border-t border-white/10">
-          <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-400/10 transition-colors text-left text-red-300">
+        <div className="pt-1 mt-1 border-t border-stone-200">
+          <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
             <span className="text-sm font-medium">Elimina guida</span>
           </button>

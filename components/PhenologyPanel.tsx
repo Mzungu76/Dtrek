@@ -52,14 +52,14 @@ function PhenologyChart({ data }: { data: Sentinel2Data }) {
                 <stop offset="95%" stopColor="#34d399" stopOpacity={0.04} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.12)" />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.55)' }} tickLine={false} axisLine={{ stroke: 'rgba(255,255,255,0.15)' }} />
-            <YAxis domain={[0, 1]} tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.55)' }} tickLine={false} axisLine={false} width={32} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} />
+            <YAxis domain={[0, 1]} tick={{ fontSize: 11, fill: '#78716c' }} tickLine={false} axisLine={false} width={32} />
             <Tooltip
               formatter={(v: number) => [v.toFixed(2), 'NDVI']}
-              labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
-              itemStyle={{ color: '#fff' }}
-              contentStyle={{ background: 'rgba(15,23,32,0.92)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', fontSize: 13 }}
+              labelStyle={{ color: '#57534e' }}
+              itemStyle={{ color: '#1c1917' }}
+              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 13 }}
             />
             {peakLabel && <ReferenceLine x={peakLabel} stroke="#34d399" strokeDasharray="4 4" />}
             <Area type="monotone" dataKey="ndvi" stroke="#34d399" strokeWidth={2.5}
@@ -74,7 +74,7 @@ function PhenologyChart({ data }: { data: Sentinel2Data }) {
         </ul>
       )}
       {data.landscapeVariety != null && (
-        <div className={`flex items-center justify-between text-xs pt-1 border-t border-white/10 ${textMuted}`}>
+        <div className={`flex items-center justify-between text-xs pt-1 border-t border-stone-200 ${textMuted}`}>
           <span className="flex items-center gap-1.5"><TreePine className="w-3.5 h-3.5 text-emerald-400" /> Varietà del paesaggio</span>
           <span className={`font-semibold ${textPrimary}`}>{data.landscapeVariety.toFixed(2)}</span>
         </div>
@@ -87,7 +87,7 @@ function PhenologyChart({ data }: { data: Sentinel2Data }) {
 
 function FloraSection({ flora, loading }: { flora: FloraResult | null; loading?: boolean }) {
   if (loading) {
-    return <div className="h-16 bg-white/[0.05] rounded-xl animate-pulse" />
+    return <div className="h-16 bg-stone-100 rounded-xl animate-pulse" />
   }
   if (!flora || !flora.available) {
     return (
@@ -110,7 +110,7 @@ function FloraSection({ flora, loading }: { flora: FloraResult | null; loading?:
         </p>
       ) : belt ? (
         <p className={`text-xs ${textMuted}`}>
-          <span className="text-[10px] font-semibold uppercase text-amber-300 mr-1">Stima</span>
+          <span className="text-[10px] font-semibold uppercase text-amber-600 mr-1">Stima</span>
           Tipo di bosco non mappato su OSM — in base a quota e posizione è probabile la <span className={`font-semibold ${textPrimary}`}>{belt.label}</span>.
         </p>
       ) : (
@@ -119,15 +119,15 @@ function FloraSection({ flora, loading }: { flora: FloraResult | null; loading?:
       {flora.speciesFound.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 pt-1">
           {flora.speciesFound.map(s => (
-            <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300 border border-emerald-400/30">{s}</span>
+            <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{s}</span>
           ))}
         </div>
       ) : belt ? (
-        <p className="text-[11px] text-stone-400/60 leading-snug">
+        <p className="text-[11px] text-stone-500 leading-snug">
           <span className="italic">Specie non annotate su OSM. </span>{belt.description}
         </p>
       ) : (
-        <p className="text-[11px] text-stone-400/60 italic">Nessuna specie o genere arboreo specifico annotato su OSM per quest&apos;area.</p>
+        <p className="text-[11px] text-stone-500 italic">Nessuna specie o genere arboreo specifico annotato su OSM per quest&apos;area.</p>
       )}
     </div>
   )
@@ -139,7 +139,7 @@ export function PhenologyPanel({ data, loading, flora, floraLoading }: Props) {
   if (loading) {
     return (
       <div className="animate-pulse">
-        <div className="h-48 bg-white/[0.05] rounded-xl" />
+        <div className="h-48 bg-stone-100 rounded-xl" />
       </div>
     )
   }
@@ -176,7 +176,7 @@ export function PhenologyPanel({ data, loading, flora, floraLoading }: Props) {
   return (
     <div className="space-y-5">
       <PhenologyChart data={data} />
-      <div className="pt-1 border-t border-white/10">
+      <div className="pt-1 border-t border-stone-200">
         <FloraSection flora={flora} loading={floraLoading} />
       </div>
     </div>
