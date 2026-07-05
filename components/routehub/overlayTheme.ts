@@ -1,6 +1,6 @@
 /**
- * Token di stile condivisi per il contenuto delle sezioni di approfondimento
- * (SectionOverlay): vetro scuro, nativo della mappa — sostituisce l'idioma
+ * Token di stile condivisi per il contenuto delle tab del bottom-sheet
+ * (RouteSheet): vetro scuro, nativo della mappa — sostituisce l'idioma
  * "card bianca a bordo" usato in precedenza da SectionSplit.
  */
 export const glassTile   = 'bg-white/[0.07] border border-white/15 rounded-2xl backdrop-blur-sm'
