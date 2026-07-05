@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'dtrek-static-v2';
+const STATIC_CACHE = 'dtrek-static-v3';
 const API_CACHE    = 'dtrek-api-v1';
 
 // Pages / assets to pre-cache on install
