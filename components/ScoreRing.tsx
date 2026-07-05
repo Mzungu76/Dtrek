@@ -126,7 +126,7 @@ export function ScoreRing({
                 <g key={s.key}>
                   <path
                     d={arcPath(CX, CY, R, start, start + span)}
-                    stroke="rgba(255,255,255,0.12)" strokeWidth={STROKE} strokeLinecap="round" fill="none"
+                    stroke="#e7e5e4" strokeWidth={STROKE} strokeLinecap="round" fill="none"
                   />
                   {s.value != null && (
                     <path
@@ -146,9 +146,9 @@ export function ScoreRing({
             })}
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-[9px] font-bold text-stone-300/70 uppercase tracking-widest">Punteggio</span>
-            <span className="font-display font-black text-[30px] text-white leading-none mt-0.5" style={{ textShadow: '0 0 16px rgba(255,255,255,0.25)' }}>{Math.round(total)}</span>
-            <span className="text-[10px] text-stone-400/60 font-semibold mt-0.5">su {known * 100 || SEG_COUNT * 100}</span>
+            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Punteggio</span>
+            <span className="font-display font-black text-[30px] text-stone-900 leading-none mt-0.5">{Math.round(total)}</span>
+            <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {known * 100 || SEG_COUNT * 100}</span>
           </div>
         </div>
 
@@ -158,11 +158,11 @@ export function ScoreRing({
               key={s.key}
               onClick={() => s.value != null && setActiveKey(s.key)}
               disabled={s.value == null}
-              className="w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-xl transition-colors disabled:opacity-40 hover:bg-white/[0.06]"
+              className="w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-xl transition-colors disabled:opacity-40 hover:bg-stone-100"
               style={s.value != null ? { backgroundColor: `${s.color}1a` } : undefined}
             >
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 0 3px ${s.color}33` }} />
-              <span className="flex-1 text-xs text-stone-200 truncate">{s.title}</span>
+              <span className="flex-1 text-xs text-stone-700 truncate">{s.title}</span>
               <span className="text-sm font-bold" style={{ color: s.value != null ? s.color : '#78716c' }}>{s.value != null ? Math.round(s.value) : '—'}</span>
             </button>
           ))}

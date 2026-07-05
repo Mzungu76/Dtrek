@@ -32,7 +32,7 @@ export default function WikiCards({ lat, lon, radiusM = 8000, onLoaded }: Props)
     </div>
   )
   if (error) return (
-    <p className="text-sm text-red-300">{error}</p>
+    <p className="text-sm text-red-600">{error}</p>
   )
   if (pages.length === 0) return (
     <p className={`text-sm italic ${textMuted}`}>Nessun articolo Wikipedia nelle vicinanze.</p>
@@ -56,12 +56,12 @@ export default function WikiCards({ lat, lon, radiusM = 8000, onLoaded }: Props)
             />
           )}
           <div className="min-w-0">
-            <p className={`font-semibold text-sm truncate group-hover:text-sky-300 ${textPrimary}`}>{page.title}</p>
+            <p className={`font-semibold text-sm truncate group-hover:text-sky-600 ${textPrimary}`}>{page.title}</p>
             {page.description && (
               <p className={`text-xs mb-1 ${textMuted}`}>{page.description}</p>
             )}
             <p className={`text-xs line-clamp-2 ${textMuted}`}>{page.extract}</p>
-            <p className="text-xs text-stone-400/50 mt-1">{(page.dist / 1000).toFixed(1)} km di distanza</p>
+            <p className="text-xs text-stone-400 mt-1">{(page.dist / 1000).toFixed(1)} km di distanza</p>
           </div>
         </a>
       ))}

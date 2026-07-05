@@ -79,6 +79,7 @@ export default function RouteHub({
               index={state.index}
               dragging={state.dragging}
               dragDeltaPx={state.dragDeltaPx}
+              swipeEnabled={!state.openSection}
               onDragStart={() => { dispatch({ type: 'DRAG_START' }); dispatch({ type: 'SHOW_GALLERY' }) }}
               onDragMove={deltaPx => dispatch({ type: 'DRAG_MOVE', deltaPx })}
               onDragEnd={() => dispatch({ type: 'DRAG_END', count: items.length })}
@@ -127,7 +128,7 @@ export default function RouteHub({
       )}
 
       {!state.openSection && (
-        <SideRails onOpenSheet={() => dispatch({ type: 'OPEN_SECTION', section: tabs[0]?.key ?? 'dati', snap: 'peek' })} />
+        <SideRails onOpenSheet={() => dispatch({ type: 'OPEN_SECTION', section: tabs[0]?.key ?? 'dati', snap: 'half' })} />
       )}
 
       {!state.openSection && (

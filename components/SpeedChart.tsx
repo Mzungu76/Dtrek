@@ -61,14 +61,14 @@ export default function SpeedChart({ trackPoints, avgSpeedMs, syncId, onHover }:
     <div className="relative">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-baseline gap-2">
-          <span className={`${bigNumber} text-4xl leading-none`} style={{ textShadow: '0 0 20px rgba(255,255,255,0.25)' }}>
+          <span className={`${bigNumber} text-4xl leading-none`}>
             {hovered ?? avgKmh}
           </span>
           <span className={`text-sm font-semibold ${textMuted}`}>km/h {hovered ? '' : '· media'}</span>
         </div>
         <button onClick={toggleAlt} title="Mostra/nascondi profilo altimetrico"
           className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-colors ${
-            showAlt ? 'bg-white/15 text-stone-100' : 'bg-white/5 text-stone-400'
+            showAlt ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-400'
           }`}>
           <Layers className="w-3 h-3" /> Quota
         </button>
@@ -88,12 +88,12 @@ export default function SpeedChart({ trackPoints, avgSpeedMs, syncId, onHover }:
                 <stop offset="95%" stopColor="#94a3b8" stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.12)" />
-            <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.55)' }} tickLine={false} axisLine={{ stroke: 'rgba(255,255,255,0.15)' }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+            <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} />
             <YAxis
               yAxisId="spd"
               domain={[0, 'auto']}
-              tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.55)' }}
+              tick={{ fontSize: 11, fill: '#78716c' }}
               tickLine={false}
               axisLine={false}
               unit=" km/h"
@@ -112,9 +112,9 @@ export default function SpeedChart({ trackPoints, avgSpeedMs, syncId, onHover }:
             )}
             <Tooltip
               formatter={(v: number, name: string) => name === 'alt' ? [`${v} m`, 'Quota'] : [`${v} km/h`, 'Velocità']}
-              labelStyle={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}
-              itemStyle={{ color: '#fff' }}
-              contentStyle={{ background: 'rgba(15,23,32,0.92)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', fontSize: 13 }}
+              labelStyle={{ fontSize: 12, color: '#57534e' }}
+              itemStyle={{ color: '#1c1917' }}
+              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 13 }}
             />
             <ReferenceLine yAxisId="spd" y={avgKmh} stroke="#38bdf8" strokeDasharray="4 4" strokeOpacity={0.8}
               label={{ value: `Media ${avgKmh}`, position: 'right', fontSize: 11, fill: '#38bdf8' }} />

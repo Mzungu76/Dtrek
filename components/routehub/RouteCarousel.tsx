@@ -10,27 +10,31 @@ interface Props {
   onDragStart: () => void
   onDragMove: (deltaPx: number) => void
   onDragEnd: () => void
+  /** False while Screen 2's sheet is open — the carousel stops capturing pointer gestures
+   *  entirely so the map underneath the current slide can be freely panned/zoomed. */
+  swipeEnabled?: boolean
   /** Slides within index±1 render full content; others get a cheap placeholder — caller decides via `inWindow`. */
   renderSlide: (item: RouteHubItem, i: number, inWindow: boolean) => ReactNode
 }
 
-export default function RouteCarousel({ items, index, dragging, dragDeltaPx, onDragStart, onDragMove, onDragEnd, renderSlide }: Props) {
+export default function RouteCarousel({ items, index, dragging, dragDeltaPx, onDragStart, onDragMove, onDragEnd, swipeEnabled = true, renderSlide }: Props) {
   const startX = useRef(0)
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!swipeEnabled) return
     startX.current = e.clientX
     e.currentTarget.setPointerCapture(e.pointerId)
     onDragStart()
   }
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragging) return
+    if (!swipeEnabled || !dragging) return
     onDragMove(e.clientX - startX.current)
   }
-  const handlePointerUp = () => { if (dragging) onDragEnd() }
+  const handlePointerUp = () => { if (swipeEnabled && dragging) onDragEnd() }
 
   return (
     <div
-      className="absolute inset-0 overflow-hidden touch-pan-y cursor-grab active:cursor-grabbing"
+      className={`absolute inset-0 overflow-hidden ${swipeEnabled ? 'touch-pan-y cursor-grab active:cursor-grabbing' : ''}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

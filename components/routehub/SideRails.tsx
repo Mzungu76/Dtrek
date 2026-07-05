@@ -1,6 +1,6 @@
 'use client'
 import type { ReactNode } from 'react'
-import { PanelTopOpen } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 
 export const RAIL_VARIANTS = {
   glass: 'bg-black/45 border border-white/15',
@@ -36,7 +36,7 @@ export default function SideRails({ onOpenSheet }: Props) {
   return (
     <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-30">
       <RailButton onClick={onOpenSheet} title="Apri percorso" variant="glass">
-        <PanelTopOpen className="w-5 h-5 text-white" />
+        <ArrowRight className="w-5 h-5 text-white" />
       </RailButton>
     </div>
   )

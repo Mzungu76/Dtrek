@@ -68,7 +68,7 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
   return (
     <div>
       <div className="flex items-baseline gap-2 mb-1">
-        <span className={`${bigNumber} text-4xl leading-none`} style={{ textShadow: '0 0 20px rgba(255,255,255,0.25)' }}>
+        <span className={`${bigNumber} text-4xl leading-none`}>
           {displayAlt}
         </span>
         <span className={`text-sm font-semibold ${textMuted}`}>m {hovered ? `· ${hovered.km} km` : '· quota max'}</span>
@@ -89,33 +89,32 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
                 <stop offset="100%" stopColor="#34d399" stopOpacity={0.06} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.12)" />
-            <XAxis dataKey="km" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.55)' }} tickLine={false} axisLine={{ stroke: 'rgba(255,255,255,0.15)' }} unit=" km" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+            <XAxis dataKey="km" tick={{ fontSize: 11, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} unit=" km" />
             <YAxis
               domain={['auto', 'auto']}
-              tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.55)' }}
+              tick={{ fontSize: 11, fill: '#78716c' }}
               tickLine={false} axisLine={false}
               unit=" m" width={48}
             />
             <Tooltip
               formatter={(v: number) => [`${v} m`, 'Quota']}
               labelFormatter={l => `${l} km`}
-              labelStyle={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}
-              itemStyle={{ color: '#fff' }}
-              contentStyle={{ background: 'rgba(15,23,32,0.92)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', fontSize: 13 }}
+              labelStyle={{ fontSize: 12, color: '#57534e' }}
+              itemStyle={{ color: '#1c1917' }}
+              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 13 }}
             />
             <Area
               type="monotone" dataKey="alt"
-              stroke="#fbbf24" strokeWidth={2.5} strokeLinecap="round"
-              style={{ filter: 'drop-shadow(0 0 4px rgba(251,191,36,0.5))' }}
-              fill="url(#elevGrad)" dot={false} activeDot={{ r: 4, fill: '#fbbf24', stroke: '#fff', strokeWidth: 1.5 }}
+              stroke="#f59e0b" strokeWidth={2.5} strokeLinecap="round"
+              fill="url(#elevGrad)" dot={false} activeDot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 1.5 }}
             />
             {currentPoint && (
               <ReferenceDot
                 x={currentPoint.km} y={currentPoint.alt}
-                r={6} fill="#fbbf24" stroke="#fff" strokeWidth={2}
+                r={6} fill="#f59e0b" stroke="#fff" strokeWidth={2}
                 isFront
-                label={{ value: 'Sei qui', position: 'top', fontSize: 11, fontWeight: 600, fill: '#fff' }}
+                label={{ value: 'Sei qui', position: 'top', fontSize: 11, fontWeight: 600, fill: '#78350f' }}
               />
             )}
           </AreaChart>

@@ -6,10 +6,10 @@ const DIFFICULTY_LABEL: Record<string, string> = {
   facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
 }
 const DIFFICULTY_COLORS: Record<string, string> = {
-  facile:      'bg-emerald-400/15 text-emerald-300 border-emerald-400/30',
-  moderata:    'bg-amber-400/15 text-amber-300 border-amber-400/30',
-  impegnativa: 'bg-orange-400/15 text-orange-300 border-orange-400/30',
-  estrema:     'bg-red-400/15 text-red-300 border-red-400/30',
+  facile:      'bg-emerald-50 text-emerald-700 border-emerald-200',
+  moderata:    'bg-amber-50 text-amber-700 border-amber-200',
+  impegnativa: 'bg-orange-50 text-orange-700 border-orange-200',
+  estrema:     'bg-red-50 text-red-700 border-red-200',
 }
 const SUIT_LABEL = (s: number) =>
   s >= 75 ? 'Ben preparato' : s >= 50 ? 'Fattibile con impegno' :
@@ -19,9 +19,9 @@ const SUIT_COLOR = (s: number) =>
 
 function RiskItem({ type, text }: { type: 'danger' | 'warning' | 'info'; text: string }) {
   const colors = {
-    danger:  'bg-red-400/10 border-red-400/25 text-red-200',
-    warning: 'bg-amber-400/10 border-amber-400/25 text-amber-200',
-    info:    'bg-sky-400/10 border-sky-400/25 text-sky-200',
+    danger:  'bg-red-50 border-red-200 text-red-700',
+    warning: 'bg-amber-50 border-amber-200 text-amber-700',
+    info:    'bg-sky-50 border-sky-200 text-sky-700',
   }
   const Icon = type === 'danger' ? ShieldAlert : type === 'warning' ? AlertTriangle : Info
   return (
@@ -40,7 +40,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
   return (
     <div className="space-y-5">
       {a.summary && (
-        <div className={`border-l-4 ${summaryBorder} bg-white/[0.05] rounded-r-lg px-4 py-3 text-sm font-medium ${textPrimary}`}>
+        <div className={`border-l-4 ${summaryBorder} bg-stone-50 rounded-r-lg px-4 py-3 text-sm font-medium ${textPrimary}`}>
           {a.summary}
         </div>
       )}
@@ -54,7 +54,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
             <span>Adatta a te</span>
             <span>{suit}% · {SUIT_LABEL(suit)}</span>
           </div>
-          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
             <div className={`h-full rounded-full transition-all ${SUIT_COLOR(suit)}`} style={{ width: `${suit}%` }} />
           </div>
         </div>
