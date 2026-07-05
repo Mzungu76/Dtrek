@@ -1,12 +1,18 @@
 import { useReducer } from 'react'
 import type { SectionKind } from './types'
 
+export type SheetSnap = 'peek' | 'half' | 'full'
+
 export interface RouteHubState {
   index: number
-  locked: boolean
   dragging: boolean
   dragDeltaPx: number
+  /** Non-null ⇒ Screen 2 (RouteSheet) is open, showing this tab. */
   openSection: SectionKind | null
+  /** Meaningful only while openSection is set. */
+  snap: SheetSnap
+  /** Screen 1's bottom gallery — shown on entry/interaction, auto-hidden after inactivity. */
+  galleryVisible: boolean
 }
 
 export type RouteHubAction =
@@ -14,9 +20,12 @@ export type RouteHubAction =
   | { type: 'DRAG_MOVE'; deltaPx: number }
   | { type: 'DRAG_END'; count: number }
   | { type: 'JUMP_TO'; index: number }
-  | { type: 'TOGGLE_LOCK' }
-  | { type: 'OPEN_SECTION'; section: SectionKind }
+  | { type: 'OPEN_SECTION'; section: SectionKind; snap: SheetSnap }
+  | { type: 'SELECT_TAB'; section: SectionKind }
+  | { type: 'SET_SNAP'; snap: SheetSnap }
   | { type: 'CLOSE_SECTION' }
+  | { type: 'SHOW_GALLERY' }
+  | { type: 'HIDE_GALLERY' }
 
 function clampIndex(i: number, count: number): number {
   return Math.max(0, Math.min(count - 1, i))
@@ -25,7 +34,7 @@ function clampIndex(i: number, count: number): number {
 function reducer(state: RouteHubState, action: RouteHubAction): RouteHubState {
   switch (action.type) {
     case 'DRAG_START':
-      return { ...state, dragging: true, dragDeltaPx: 0 }
+      return { ...state, dragging: true, dragDeltaPx: 0, galleryVisible: true }
     case 'DRAG_MOVE':
       return state.dragging ? { ...state, dragDeltaPx: action.deltaPx } : state
     case 'DRAG_END': {
@@ -36,15 +45,19 @@ function reducer(state: RouteHubState, action: RouteHubAction): RouteHubState {
       return { ...state, dragging: false, dragDeltaPx: 0, index: next }
     }
     case 'JUMP_TO':
-      return { ...state, index: action.index, locked: true, openSection: null }
-    case 'TOGGLE_LOCK': {
-      const locked = !state.locked
-      return locked ? { ...state, locked } : { ...state, locked, openSection: null }
-    }
+      return { ...state, index: action.index, openSection: null, galleryVisible: true }
     case 'OPEN_SECTION':
-      return state.locked ? { ...state, openSection: action.section } : state
+      return { ...state, openSection: action.section, snap: action.snap }
+    case 'SELECT_TAB':
+      return { ...state, openSection: action.section, snap: state.snap === 'peek' ? 'half' : state.snap }
+    case 'SET_SNAP':
+      return { ...state, snap: action.snap }
     case 'CLOSE_SECTION':
-      return { ...state, openSection: null }
+      return { ...state, openSection: null, snap: 'peek', galleryVisible: true }
+    case 'SHOW_GALLERY':
+      return state.galleryVisible ? state : { ...state, galleryVisible: true }
+    case 'HIDE_GALLERY':
+      return state.galleryVisible ? { ...state, galleryVisible: false } : state
     default:
       return state
   }
@@ -53,9 +66,10 @@ function reducer(state: RouteHubState, action: RouteHubAction): RouteHubState {
 export function useRouteHubState(initialIndex: number) {
   return useReducer(reducer, {
     index: initialIndex,
-    locked: true,
     dragging: false,
     dragDeltaPx: 0,
     openSection: null,
+    snap: 'peek',
+    galleryVisible: true,
   })
 }

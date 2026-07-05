@@ -68,6 +68,8 @@ function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
       )}
       {hasRoute && !nearView && <RouteThumb polyline={polyline!} color="#7dd3fc" strokeWidth={3} />}
       {hasRoute && nearView && <div ref={mapRef} className="absolute inset-0" />}
+      {/* Darkens the tile so the colored route stands out more clearly than the raw raster tiles. */}
+      <div className="absolute inset-0 bg-black/20 pointer-events-none" />
     </div>
   )
 }
@@ -120,32 +122,35 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
         {onImport && (
           <button
             onClick={onImport}
-            className="shrink-0 w-16 h-16 rounded-2xl overflow-hidden relative border-[1.5px] border-dashed border-white/40 bg-white/10 flex flex-col items-center justify-center gap-0.5 hover:bg-white/15 transition-colors"
+            className="shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative border-[1.5px] border-dashed border-white/40 bg-white/10 flex flex-col items-center justify-center gap-0.5 hover:bg-white/15 transition-colors"
             style={{ scrollSnapAlign: 'start' }}
           >
-            <Upload className="w-4 h-4 text-white/80" />
-            <span className="text-[9px] font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
+            <Upload className="w-5 h-5 text-white/80" />
+            <span className="text-[10px] font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
           </button>
         )}
         {others.map(({ item, i }) => (
           <button
             key={item.id}
             onClick={() => onSelect(i)}
-            className="shrink-0 w-16 h-16 rounded-2xl overflow-hidden relative border-[1.5px] border-white/35"
+            className="shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative border-[1.5px] border-white/35"
             style={{ scrollSnapAlign: 'start' }}
           >
             {mode === 'guida' ? (
               <GalleryMapThumb polyline={item.polyline} />
             ) : item.coverPhotoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.coverPhotoUrl} alt={item.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={item.coverPhotoUrl} alt={item.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+              </>
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-forest-800 to-forest-950 flex items-center justify-center">
                 <Mountain className="w-5 h-5 text-white/40" />
               </div>
             )}
             <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-3 bg-gradient-to-t from-black/75 to-transparent">
-              <span className="block text-[9px] font-bold text-white truncate leading-tight">{item.title}</span>
+              <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
             </div>
           </button>
         ))}

@@ -1,24 +1,6 @@
 'use client'
 import type { ReactNode } from 'react'
-import type { LucideIcon } from 'lucide-react'
-import { BarChart2, Leaf, MapPin, ShieldAlert, Wrench, Map, Navigation, Star, Box } from 'lucide-react'
-import type { HubMode, SectionKind } from './types'
-
-interface Props {
-  mode: HubMode
-  locked: boolean
-  onToggleLock: () => void
-  onOpenSection: (section: SectionKind) => void
-  datiBadge?: ReactNode
-  onNavigate?: () => void
-  ratingBadge?: ReactNode
-  onOpenRating?: () => void
-  featuredLabel: string
-  featuredIcon: LucideIcon
-  onOpenFeatured: () => void
-  onOpenMap3D?: () => void
-  unlockedControls?: ReactNode
-}
+import { PanelTopOpen } from 'lucide-react'
 
 export const RAIL_VARIANTS = {
   glass: 'bg-black/45 border border-white/15',
@@ -43,72 +25,19 @@ export function RailButton({ onClick, title, children, variant = 'glass', badge,
   )
 }
 
-export default function SideRails({
-  mode, locked, onToggleLock, onOpenSection, datiBadge, onNavigate, ratingBadge, onOpenRating,
-  featuredLabel, featuredIcon: FeaturedIcon, onOpenFeatured, onOpenMap3D, unlockedControls,
-}: Props) {
-  if (!locked) {
-    // Sbloccata: immersione totale — restano solo il toggle mappa (per ribloccare), l'accesso 3D
-    // ed eventuali controlli propri dello stage (pendenza, foto zona…).
-    return (
-      <>
-        {unlockedControls && (
-          <div className="fixed top-[calc(env(safe-area-inset-top,0px)+16px)] left-3 md:left-5 z-30 flex flex-col gap-3">
-            {unlockedControls}
-          </div>
-        )}
-        <div className="fixed top-[calc(env(safe-area-inset-top,0px)+16px)] right-3 md:right-5 z-30 flex flex-col gap-3">
-          <RailButton onClick={onToggleLock} title="Blocca mappa">
-            <Map className="w-[18px] h-[18px] text-terra-400" />
-          </RailButton>
-          {onOpenMap3D && (
-            <RailButton onClick={onOpenMap3D} title="Vista 3D">
-              <Box className="w-[18px] h-[18px] text-sky-300" />
-            </RailButton>
-          )}
-        </div>
-      </>
-    )
-  }
+interface Props {
+  onOpenSheet: () => void
+}
 
+/** Screen 1's only floating icon — opens the Screen 2 route card. Every other former section
+ *  icon (dati/natura/poi/sicurezza/strumenti/featured) now lives as a labeled tab inside
+ *  RouteSheet instead of a bare floating icon here. */
+export default function SideRails({ onOpenSheet }: Props) {
   return (
-    <>
-      <div className="fixed left-3 md:left-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3">
-        {mode === 'guida' && onNavigate && (
-          <RailButton onClick={onNavigate} title="Avvia navigazione sul sentiero" variant="terra">
-            <Navigation className="w-5 h-5 text-white" fill="white" />
-          </RailButton>
-        )}
-        {mode === 'resoconto' && onOpenRating && (
-          <RailButton onClick={onOpenRating} title="Vota bellezza" variant={ratingBadge ? 'glass' : 'terra'}>
-            {ratingBadge ?? <Star className="w-5 h-5 text-white" />}
-          </RailButton>
-        )}
-        <RailButton onClick={onOpenFeatured} title={featuredLabel} variant="amber">
-          <FeaturedIcon className="w-5 h-5 text-white" />
-        </RailButton>
-        <RailButton onClick={() => onOpenSection('dati')} title="Dati & punteggi" badge={datiBadge}>
-          <BarChart2 className="w-5 h-5 text-amber-300" />
-        </RailButton>
-        <RailButton onClick={() => onOpenSection('natura')} title="Natura">
-          <Leaf className="w-5 h-5 text-emerald-300" />
-        </RailButton>
-      </div>
-
-      <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3">
-        <RailButton onClick={() => onOpenSection('poi')} title="Punti di interesse">
-          <MapPin className="w-5 h-5 text-fuchsia-300" />
-        </RailButton>
-        <RailButton onClick={() => onOpenSection('sicurezza')} title="Sicurezza">
-          <ShieldAlert className="w-5 h-5 text-red-300" />
-        </RailButton>
-        <RailButton onClick={() => onOpenSection('strumenti')} title="Strumenti">
-          <Wrench className="w-5 h-5 text-stone-100" />
-        </RailButton>
-        <RailButton onClick={onToggleLock} title="Sblocca mappa">
-          <Map className="w-[18px] h-[18px] text-stone-100" />
-        </RailButton>
-      </div>
-    </>
+    <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-30">
+      <RailButton onClick={onOpenSheet} title="Apri percorso" variant="glass">
+        <PanelTopOpen className="w-5 h-5 text-white" />
+      </RailButton>
+    </div>
   )
 }
