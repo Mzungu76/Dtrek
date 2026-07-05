@@ -15,7 +15,7 @@ interface Props {
 export default function BackLink({ label, className, fallbackHref }: Props) {
   const pathname = usePathname()
   const router = useRouter()
-  const parent = resolveParent(pathname) ?? fallbackHref ?? '/'
+  const parent = resolveParent(pathname) ?? fallbackHref ?? '/guida'
   const text = label ?? ROUTE_LABELS[parent] ?? 'Indietro'
 
   return (

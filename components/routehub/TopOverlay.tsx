@@ -1,7 +1,5 @@
 'use client'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { NAV_LINKS, isActive, ProfileAvatar } from '@/components/Navbar'
+import HubNavBar from './HubNavBar'
 import type { StatPill, WeatherIcon } from './types'
 
 interface Props {
@@ -12,30 +10,12 @@ interface Props {
 }
 
 export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeather }: Props) {
-  const path = usePathname()
-
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
       <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/70 to-transparent" />
 
       <div className="relative px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
-        <div className="flex items-center gap-2">
-          <div className="pointer-events-auto flex-1 flex items-center justify-around bg-forest-900/90 backdrop-blur-md rounded-full px-2.5 py-2 shadow-lg max-w-sm">
-            {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-              const active = isActive(href, path ?? '')
-              return (
-                <Link key={href} href={href} className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1 ${active ? 'text-white' : 'text-forest-300'}`}>
-                  <Icon className="w-5 h-5" strokeWidth={2} />
-                  <span className="text-[10px] font-bold leading-none whitespace-nowrap">{label}</span>
-                </Link>
-              )
-            })}
-          </div>
-
-          <div className="pointer-events-auto shrink-0 rounded-full ring-2 ring-black/30">
-            <ProfileAvatar size={36} iconSize={16} />
-          </div>
-        </div>
+        <HubNavBar />
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {statPills.map(({ icon: Icon, label }) => (

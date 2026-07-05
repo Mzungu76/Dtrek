@@ -14,7 +14,7 @@ import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/s
 export const NAV_LINKS = [
   { href: '/guida',     label: 'Guida',     icon: Compass    },
   { href: '/resoconto', label: 'Resoconto', icon: BookOpen   },
-  { href: '/',          label: 'Diario',    icon: BookMarked },
+  { href: '/diario',    label: 'Diario',    icon: BookMarked },
 ]
 
 export function isActive(href: string, path: string) {
@@ -87,7 +87,7 @@ function DesktopNav() {
   return (
     <nav className="hidden md:block sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
       <div className="max-w-[1400px] mx-auto px-4 flex items-center justify-between h-14">
-        <Link href="/" className="flex items-center gap-2 group shrink-0">
+        <Link href="/guida" className="flex items-center gap-2 group shrink-0">
           <Image src="/icon-192.png" alt="DTrek" width={28} height={28} className="rounded-md" />
           <span className="font-display font-semibold text-lg text-stone-800 tracking-tight">
             Diario Trekking
