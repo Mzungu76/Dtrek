@@ -1,26 +1,27 @@
 import { ShieldAlert, AlertTriangle, Info } from 'lucide-react'
 import type { HikeAssessment } from '@/lib/plannedStore'
+import { glassTile, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
 }
 const DIFFICULTY_COLORS: Record<string, string> = {
-  facile:      'bg-emerald-100 text-emerald-700 border-emerald-200',
-  moderata:    'bg-amber-100 text-amber-700 border-amber-200',
-  impegnativa: 'bg-orange-100 text-orange-700 border-orange-200',
-  estrema:     'bg-red-100 text-red-700 border-red-200',
+  facile:      'bg-emerald-400/15 text-emerald-300 border-emerald-400/30',
+  moderata:    'bg-amber-400/15 text-amber-300 border-amber-400/30',
+  impegnativa: 'bg-orange-400/15 text-orange-300 border-orange-400/30',
+  estrema:     'bg-red-400/15 text-red-300 border-red-400/30',
 }
 const SUIT_LABEL = (s: number) =>
   s >= 75 ? 'Ben preparato' : s >= 50 ? 'Fattibile con impegno' :
   s >= 30 ? 'Al limite delle capacità' : 'Molto sfidante'
 const SUIT_COLOR = (s: number) =>
-  s >= 75 ? 'bg-emerald-500' : s >= 50 ? 'bg-amber-500' : s >= 30 ? 'bg-orange-500' : 'bg-red-500'
+  s >= 75 ? 'bg-emerald-400' : s >= 50 ? 'bg-amber-400' : s >= 30 ? 'bg-orange-400' : 'bg-red-400'
 
 function RiskItem({ type, text }: { type: 'danger' | 'warning' | 'info'; text: string }) {
   const colors = {
-    danger:  'bg-red-50 border-red-200 text-red-700',
-    warning: 'bg-amber-50 border-amber-200 text-amber-700',
-    info:    'bg-sky-50 border-sky-200 text-sky-700',
+    danger:  'bg-red-400/10 border-red-400/25 text-red-200',
+    warning: 'bg-amber-400/10 border-amber-400/25 text-amber-200',
+    info:    'bg-sky-400/10 border-sky-400/25 text-sky-200',
   }
   const Icon = type === 'danger' ? ShieldAlert : type === 'warning' ? AlertTriangle : Info
   return (
@@ -39,7 +40,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
   return (
     <div className="space-y-5">
       {a.summary && (
-        <div className={`border-l-4 ${summaryBorder} bg-stone-50 rounded-r-lg px-4 py-3 text-sm font-medium text-stone-700`}>
+        <div className={`border-l-4 ${summaryBorder} bg-white/[0.05] rounded-r-lg px-4 py-3 text-sm font-medium ${textPrimary}`}>
           {a.summary}
         </div>
       )}
@@ -49,42 +50,42 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
           {DIFFICULTY_LABEL[a.difficulty]}
         </div>
         <div className="flex-1 min-w-[180px] space-y-1">
-          <div className="flex justify-between text-xs font-medium text-stone-600">
+          <div className={`flex justify-between text-xs font-medium ${textMuted}`}>
             <span>Adatta a te</span>
             <span>{suit}% · {SUIT_LABEL(suit)}</span>
           </div>
-          <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
             <div className={`h-full rounded-full transition-all ${SUIT_COLOR(suit)}`} style={{ width: `${suit}%` }} />
           </div>
         </div>
       </div>
 
       {a.userContext.activityCount > 0 && (
-        <div className="bg-stone-50 rounded-xl border border-stone-200 p-4 grid grid-cols-2 gap-3 text-sm">
+        <div className={`${glassTile} p-4 grid grid-cols-2 gap-3 text-sm`}>
           <div>
-            <p className="text-xs text-stone-400 mb-0.5">vs. media distanza</p>
-            <p className="font-semibold text-stone-800">
+            <p className={`text-xs mb-0.5 ${textMuted}`}>vs. media distanza</p>
+            <p className={`font-semibold ${textPrimary}`}>
               {a.userContext.vsAvgDistPct}%
-              <span className="text-xs font-normal text-stone-400 ml-1">(media {a.userContext.avgDistanceKm.toFixed(1)} km)</span>
+              <span className={`text-xs font-normal ml-1 ${textMuted}`}>(media {a.userContext.avgDistanceKm.toFixed(1)} km)</span>
             </p>
           </div>
           <div>
-            <p className="text-xs text-stone-400 mb-0.5">vs. media dislivello</p>
-            <p className="font-semibold text-stone-800">
+            <p className={`text-xs mb-0.5 ${textMuted}`}>vs. media dislivello</p>
+            <p className={`font-semibold ${textPrimary}`}>
               {a.userContext.vsAvgElevPct}%
-              <span className="text-xs font-normal text-stone-400 ml-1">(media {a.userContext.avgElevationM} m D+)</span>
+              <span className={`text-xs font-normal ml-1 ${textMuted}`}>(media {a.userContext.avgElevationM} m D+)</span>
             </p>
           </div>
           {a.userContext.maxDistanceKm > 0 && (
             <div>
-              <p className="text-xs text-stone-400 mb-0.5">record distanza</p>
-              <p className="font-semibold text-stone-800">{a.userContext.maxDistanceKm.toFixed(1)} km</p>
+              <p className={`text-xs mb-0.5 ${textMuted}`}>record distanza</p>
+              <p className={`font-semibold ${textPrimary}`}>{a.userContext.maxDistanceKm.toFixed(1)} km</p>
             </div>
           )}
           {a.userContext.maxElevationM > 0 && (
             <div>
-              <p className="text-xs text-stone-400 mb-0.5">record dislivello</p>
-              <p className="font-semibold text-stone-800">{a.userContext.maxElevationM} m D+</p>
+              <p className={`text-xs mb-0.5 ${textMuted}`}>record dislivello</p>
+              <p className={`font-semibold ${textPrimary}`}>{a.userContext.maxElevationM} m D+</p>
             </div>
           )}
         </div>
@@ -92,7 +93,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
 
       {a.risks.length > 0 && (
         <div>
-          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Fattori di rischio</p>
+          <p className={`${sectionHeading} mb-2`}>Fattori di rischio</p>
           <div className="space-y-2">
             {a.risks.map((r, i) => <RiskItem key={i} type={r.type} text={r.text} />)}
           </div>
@@ -101,7 +102,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
 
       {a.suggestions.length > 0 && (
         <div>
-          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Consigli pratici</p>
+          <p className={`${sectionHeading} mb-2`}>Consigli pratici</p>
           <div className="space-y-2">
             {a.suggestions.map((s, i) => <RiskItem key={i} type={s.type} text={s.text} />)}
           </div>

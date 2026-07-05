@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { fetchNearbyWiki } from '@/lib/wikipedia'
 import type { WikiPage } from '@/lib/wikipedia'
+import { glassTile, glassTileHover, textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 
 interface Props {
   lat: number
@@ -26,15 +27,15 @@ export default function WikiCards({ lat, lon, radiusM = 8000, onLoaded }: Props)
   if (loading) return (
     <div className="space-y-3">
       {[1, 2].map(i => (
-        <div key={i} className="rounded-xl border border-stone-200 bg-stone-50 h-24 animate-pulse" />
+        <div key={i} className={`${glassTile} h-24 animate-pulse`} />
       ))}
     </div>
   )
   if (error) return (
-    <p className="text-sm text-red-500">{error}</p>
+    <p className="text-sm text-red-300">{error}</p>
   )
   if (pages.length === 0) return (
-    <p className="text-sm text-stone-400 italic">Nessun articolo Wikipedia nelle vicinanze.</p>
+    <p className={`text-sm italic ${textMuted}`}>Nessun articolo Wikipedia nelle vicinanze.</p>
   )
 
   return (
@@ -45,7 +46,7 @@ export default function WikiCards({ lat, lon, radiusM = 8000, onLoaded }: Props)
           href={page.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex gap-3 rounded-xl border border-stone-200 bg-white p-3 hover:bg-stone-50 transition-colors group"
+          className={`flex gap-3 p-3 group ${glassTile} ${glassTileHover}`}
         >
           {page.thumbnail && (
             <img
@@ -55,12 +56,12 @@ export default function WikiCards({ lat, lon, radiusM = 8000, onLoaded }: Props)
             />
           )}
           <div className="min-w-0">
-            <p className="font-semibold text-stone-800 text-sm group-hover:text-forest-700 truncate">{page.title}</p>
+            <p className={`font-semibold text-sm truncate group-hover:text-sky-300 ${textPrimary}`}>{page.title}</p>
             {page.description && (
-              <p className="text-xs text-stone-500 mb-1">{page.description}</p>
+              <p className={`text-xs mb-1 ${textMuted}`}>{page.description}</p>
             )}
-            <p className="text-xs text-stone-600 line-clamp-2">{page.extract}</p>
-            <p className="text-xs text-stone-400 mt-1">{(page.dist / 1000).toFixed(1)} km di distanza</p>
+            <p className={`text-xs line-clamp-2 ${textMuted}`}>{page.extract}</p>
+            <p className="text-xs text-stone-400/50 mt-1">{(page.dist / 1000).toFixed(1)} km di distanza</p>
           </div>
         </a>
       ))}

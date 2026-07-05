@@ -2,11 +2,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
-import { POI_META, buildPoiPopupHtml } from '@/lib/overpass'
+import { POI_META, buildPoiPopupHtml, poiHasLink } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { colorSegmentsByDtm, aspectDegToColor } from '@/lib/dtm/dtmColors'
+import { useRouteTour, SPEEDS } from './mapview/useRouteTour'
+import TourControls from './mapview/TourControls'
 
 interface Props {
   trackPoints: TrackPoint[]
@@ -26,6 +28,11 @@ interface Props {
   highlightedPoiIndex?: number | null
   /** Index into `difficultyMarkers` to draw larger/highlighted and pan the map to (used by the route hub's Sicurezza section). */
   highlightedDifficultyIndex?: number | null
+  /** Whether the POI markers are actually mounted on the map — off by default, turned on by the
+   *  "Punti di interesse" side-rail icon so the layer starts hidden and is a deliberate action. */
+  showPoiLayer?: boolean
+  /** Shows the play/pause/speed tour controls and enables the animated playback along the track. */
+  showTourControls?: boolean
 }
 
 const DTM_MATCH_RADIUS_M = 25
@@ -75,10 +82,13 @@ export default function MapView({
   interactive = true,
   highlightedPoiIndex = null,
   highlightedDifficultyIndex = null,
+  showPoiLayer = false,
+  showTourControls = false,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<any>(null)
   const poiLayer        = useRef<any[]>([])
+  const poiMarkersRef   = useRef<Map<number, any>>(new Map())
   const wikiLayer       = useRef<any[]>([])
   const dtmProfileRef   = useRef(dtmProfile)
   dtmProfileRef.current = dtmProfile
@@ -86,6 +96,10 @@ export default function MapView({
   const floraLayer      = useRef<any[]>([])
   const activeMarker    = useRef<any>(null)
   const [mapReady, setMapReady] = useState(false)
+
+  const tour = useRouteTour({
+    mapInstance, mapReady, trackPoints, pois, poiMarkersRef, enabled: showTourControls,
+  })
 
   // Main map init effect
   useEffect(() => {
@@ -252,7 +266,9 @@ export default function MapView({
     handlers.forEach(h => { if (h) interactive ? h.enable() : h.disable() })
   }, [interactive, mapReady])
 
-  // POI layer — re-runs when pois arrive OR when map finishes initializing
+  // POI layer — re-runs when pois arrive, the map finishes initializing, or the layer is
+  // toggled on/off. Off by default: markers aren't mounted at all until `showPoiLayer` is true,
+  // both to keep the map clean until asked for and to avoid the cost of dozens of markers.
   useEffect(() => {
     if (!mapReady || !mapInstance.current) return
 
@@ -260,13 +276,26 @@ export default function MapView({
       // Clear previous markers
       poiLayer.current.forEach((m: any) => m.remove())
       poiLayer.current = []
+      poiMarkersRef.current.clear()
+
+      if (!showPoiLayer) return
 
       pois.forEach((poi, i) => {
         const meta = POI_META[poi.type]
         const isHighlighted = i === highlightedPoiIndex
+        const hasLink = poiHasLink(poi)
         const size = isHighlighted ? 40 : 28
+        // POIs with a Wikipedia/website link get a blue ring + badge, so they stand out on the
+        // map itself (before the popup is even opened) — same blue used for Wikipedia markers.
+        const ring = hasLink
+          ? `<div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid #2563eb;box-shadow:0 0 0 2px rgba(37,99,235,0.25)"></div>
+             <div style="position:absolute;bottom:-1px;right:-1px;width:11px;height:11px;border-radius:50%;background:#2563eb;border:1.5px solid white"></div>`
+          : ''
         const icon = L.divIcon({
-          html: `<div style="font-size:${isHighlighted ? 30 : 22}px;line-height:1;filter:drop-shadow(0 1px ${isHighlighted ? 4 : 2}px rgba(0,0,0,0.5));transition:font-size .2s">${meta.emoji}</div>`,
+          html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center">
+                   ${ring}
+                   <div style="font-size:${isHighlighted ? 30 : 22}px;line-height:1;filter:drop-shadow(0 1px ${isHighlighted ? 4 : 2}px rgba(0,0,0,0.5));transition:font-size .2s">${meta.emoji}</div>
+                 </div>`,
           iconSize: [size, size],
           iconAnchor: [size / 2, size / 2],
           className: '',
@@ -276,13 +305,14 @@ export default function MapView({
         const m = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 }).addTo(mapInstance.current).bindPopup(popup, { maxWidth: 250 })
         m.on('click', () => mapInstance.current.setView([poi.lat, poi.lon], Math.max(mapInstance.current.getZoom(), 16), { animate: true }))
         poiLayer.current.push(m)
+        poiMarkersRef.current.set(poi.id, m)
       })
 
       if (highlightedPoiIndex != null && pois[highlightedPoiIndex]) {
         mapInstance.current.panTo([pois[highlightedPoiIndex].lat, pois[highlightedPoiIndex].lon])
       }
     })
-  }, [pois, mapReady, highlightedPoiIndex])
+  }, [pois, mapReady, highlightedPoiIndex, showPoiLayer])
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {
@@ -420,10 +450,24 @@ export default function MapView({
   }
 
   return (
-    <div
-      ref={mapRef}
-      style={{ height }}
-      className="rounded-xl overflow-hidden border border-stone-200 shadow-sm"
-    />
+    <div className="relative" style={{ height }}>
+      <div
+        ref={mapRef}
+        style={{ height: '100%' }}
+        className="rounded-xl overflow-hidden border border-stone-200 shadow-sm"
+      />
+      {showTourControls && tour.hasTrack && (
+        <TourControls
+          isPlaying={tour.isPlaying}
+          progress={tour.progress}
+          speedIdx={tour.speedIdx}
+          speeds={SPEEDS}
+          onPlay={tour.play}
+          onPause={tour.pause}
+          onReset={tour.reset}
+          onSpeedChange={tour.setSpeedIdx}
+        />
+      )}
+    </div>
   )
 }

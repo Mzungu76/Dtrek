@@ -1,4 +1,5 @@
 'use client'
+import type { ReactNode } from 'react'
 import HubNavBar from './HubNavBar'
 import type { StatPill, WeatherIcon } from './types'
 
@@ -7,9 +8,11 @@ interface Props {
   statPills: StatPill[]
   weatherIcon?: WeatherIcon | null
   onOpenWeather?: () => void
+  /** Score/rating chips (CTS, Sicurezza, Bellezza…), floating persistently over the map. */
+  scoreBadges?: ReactNode
 }
 
-export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeather }: Props) {
+export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeather, scoreBadges }: Props) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
       <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/70 to-transparent" />
@@ -24,6 +27,12 @@ export default function TopOverlay({ title, statPills, weatherIcon, onOpenWeathe
             </span>
           ))}
         </div>
+
+        {scoreBadges && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {scoreBadges}
+          </div>
+        )}
 
         <div className="mt-3 flex items-start gap-2.5">
           <p className="flex-1 font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>

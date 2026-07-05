@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 
 export type HubMode = 'guida' | 'resoconto'
 
-export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'meteo'
+export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'meteo' | 'featured'
 
 export interface StatPill {
   icon: LucideIcon
@@ -45,8 +45,8 @@ export interface RouteHubProps {
   /** The real, always-visible map/photo for the current route — `interactive` is false while
    *  the hub is locked (frozen carousel) and true while unlocked (free pan/zoom stage). */
   renderStageMap: (item: RouteHubItem, interactive: boolean) => ReactNode
-  /** Composes and returns a full `<SectionSplit>` for the given section (map half + scrollable
-   *  content half) — RouteHub only decides *which* section is open, not its content. */
+  /** Composes and returns a full `<SectionOverlay>` for the given section (a glass sheet floating
+   *  over the persistent map) — RouteHub only decides *which* section is open, not its content. */
   renderSection: (section: SectionKind, item: RouteHubItem, onClose: () => void) => ReactNode
   /** Guida-only "Avvia navigazione" primary action. */
   onNavigate?: (item: RouteHubItem) => void
@@ -56,11 +56,14 @@ export interface RouteHubProps {
   /** Small badge (e.g. CTS score) overlaid on the "Dati & punteggi" icon, when available. */
   datiBadge?: (item: RouteHubItem) => ReactNode
   /** The prominent, dedicated icon for the AI-generated long-form content — "Guida Turistica"
-   *  (Guida, opens as a section split) or "Racconto" (Resoconto, navigates away directly). Fully
-   *  owned by the calling page: RouteHub just renders the button and forwards the click. */
+   *  (Guida, opens as the 'featured' section) or "Racconto" (Resoconto, navigates away directly).
+   *  Fully owned by the calling page: RouteHub just renders the button and forwards the click. */
   featuredLabel: string
   featuredIcon: LucideIcon
   onOpenFeatured: (item: RouteHubItem) => void
+  /** When true, the featured button opens the 'featured' section through the same reducer as every
+   *  other section (map stays mounted, side rails hide) instead of just calling `onOpenFeatured`. */
+  featuredOpensSection?: boolean
   /** Sentence from the personalized assessment, shown floating over the map just above the
    *  bottom gallery (locked mode only). Undefined/null when there's nothing to show. */
   summaryBanner?: (item: RouteHubItem) => string | null | undefined
@@ -70,6 +73,13 @@ export interface RouteHubProps {
   /** Opens the fullscreen 3D map view for the current route — available whenever the map is
    *  interactive (unlocked stage, and from within every section's map half). */
   onOpenMap3D?: (item: RouteHubItem) => void
+  /** Fired whenever the open section changes (including to/from null) — lets the caller derive
+   *  section-specific map props (highlighted POI/difficulty index, POI layer visibility, …) without
+   *  lifting the whole reducer out of RouteHub. */
+  onSectionChange?: (section: SectionKind | null) => void
+  /** Score/rating chips (CTS, Sicurezza, Bellezza…) shown floating over the map at all times — not
+   *  gated behind any open section. `onTap` opens the 'dati' section. */
+  scoreBadges?: (item: RouteHubItem, onTap: () => void) => ReactNode
   /** Extra floating buttons shown only while the stage is unlocked (e.g. pendenza/foto-zona
    *  toggles) — rendered on the opposite side from the lock/3D controls. */
   renderUnlockedControls?: (item: RouteHubItem) => ReactNode

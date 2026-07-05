@@ -50,6 +50,11 @@ export const POI_META: Record<PoiType, { label: string; emoji: string; color: st
   monument:       { label: 'Monumento',          emoji: '🗿', color: '#6b7280' },
 }
 
+/** True when a POI has a Wikipedia entry or website/url tag — used to highlight its marker on the map. */
+export function poiHasLink(poi: PoiItem): boolean {
+  return !!(poi.tags?.['wikipedia'] || poi.tags?.['website'] || poi.tags?.['url'])
+}
+
 // Markup HTML del popup di un POI — condiviso tra mappa 2D (Leaflet) e 3D (MapLibre)
 export function buildPoiPopupHtml(poi: PoiItem): string {
   const meta     = POI_META[poi.type]
