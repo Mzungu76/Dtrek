@@ -73,4 +73,8 @@ export interface RouteHubProps {
   /** Extra floating buttons shown only while the stage is unlocked (e.g. pendenza/foto-zona
    *  toggles) — rendered on the opposite side from the lock/3D controls. */
   renderUnlockedControls?: (item: RouteHubItem) => ReactNode
+  /** Import a new GPX/FIT/TCX — rendered as the first tile in the bottom gallery, always
+   *  present (even with a single route) so there's a persistent way back to /upload. */
+  importLabel?: string
+  onImport?: () => void
 }

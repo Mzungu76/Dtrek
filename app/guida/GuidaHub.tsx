@@ -705,6 +705,8 @@ export default function GuidaHub({ id }: { id?: string }) {
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
         weatherIcon={(routeItem) => hike && routeItem.id === hike.id ? weatherIcon : undefined}
         onOpenMap3D={() => setShow3D(true)}
+        importLabel="Importa"
+        onImport={() => router.push('/upload?tab=gpx')}
         renderUnlockedControls={(routeItem) => hike && routeItem.id === hike.id && hasGps ? (
           <>
             {hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (

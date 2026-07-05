@@ -695,6 +695,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
         onOpenFeatured={(routeItem) => router.push(`/resoconto/${encodeURIComponent(routeItem.id)}/leggi`)}
         weatherIcon={(routeItem) => activity && routeItem.id === activity.id ? weatherIcon : undefined}
         onOpenMap3D={() => setShow3D(true)}
+        importLabel="Carica"
+        onImport={() => router.push('/upload?tab=activity')}
         renderUnlockedControls={(routeItem) => activity && routeItem.id === activity.id && hasGps ? (
           <>
             {activity.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
