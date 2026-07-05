@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Mountain, ArrowUpDown } from 'lucide-react'
+import { Mountain, ArrowUpDown, Upload } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import type { HubMode, RouteHubItem, SortValues } from './types'
 
@@ -77,9 +77,13 @@ interface Props {
   items: RouteHubItem[]
   currentId: string
   onSelect: (index: number) => void
+  /** Import a new GPX/FIT/TCX — rendered as a dedicated tile ahead of the other routes so it's
+   *  always reachable from the gallery, even when there's only one route (and no "others"). */
+  importLabel?: string
+  onImport?: () => void
 }
 
-export default function BottomGallery({ mode, items, currentId, onSelect }: Props) {
+export default function BottomGallery({ mode, items, currentId, onSelect, importLabel, onImport }: Props) {
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const hasSortData = items.some(i => i.sortValues)
 
@@ -92,7 +96,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect }: Prop
     ))
   }, [items, currentId, sortBy, hasSortData])
 
-  if (others.length === 0) return null
+  if (others.length === 0 && !onImport) return null
 
   return (
     <div>
@@ -113,6 +117,16 @@ export default function BottomGallery({ mode, items, currentId, onSelect }: Prop
         </div>
       )}
       <div className="flex gap-2.5 overflow-x-auto px-4 [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}>
+        {onImport && (
+          <button
+            onClick={onImport}
+            className="shrink-0 w-16 h-16 rounded-2xl overflow-hidden relative border-[1.5px] border-dashed border-white/40 bg-white/10 flex flex-col items-center justify-center gap-0.5 hover:bg-white/15 transition-colors"
+            style={{ scrollSnapAlign: 'start' }}
+          >
+            <Upload className="w-4 h-4 text-white/80" />
+            <span className="text-[9px] font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
+          </button>
+        )}
         {others.map(({ item, i }) => (
           <button
             key={item.id}

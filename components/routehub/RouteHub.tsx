@@ -11,7 +11,7 @@ import type { RouteHubProps } from './types'
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, renderStageMap, renderSection,
   onNavigate, ratingBadge, onOpenRating, datiBadge, featuredLabel, featuredIcon, onOpenFeatured,
-  summaryBanner, weatherIcon, onOpenMap3D, renderUnlockedControls,
+  summaryBanner, weatherIcon, onOpenMap3D, renderUnlockedControls, importLabel, onImport,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
 
@@ -115,7 +115,11 @@ export default function RouteHub({
                   {summary}
                 </p>
               )}
-              <BottomGallery mode={mode} items={items} currentId={item.id} onSelect={index => dispatch({ type: 'JUMP_TO', index })} />
+              <BottomGallery
+                mode={mode} items={items} currentId={item.id}
+                onSelect={index => dispatch({ type: 'JUMP_TO', index })}
+                importLabel={importLabel} onImport={onImport}
+              />
             </div>
           )}
         </>
