@@ -4,9 +4,10 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import RouteHub from '@/components/routehub/RouteHub'
-import SectionSplit from '@/components/routehub/SectionSplit'
+import SectionOverlay from '@/components/routehub/SectionOverlay'
 import { RailButton } from '@/components/routehub/SideRails'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
+import { glassChip, glassTile, glassTileHover, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind } from '@/components/routehub/types'
 import { wmoInfo } from '@/lib/openmeteo'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
@@ -37,7 +38,7 @@ import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import {
   FileSpreadsheet, FileText, Map, FileDown,
   Route, TrendingUp, Clock, Flame, Heart, Zap,
-  Pencil, Trash2, Loader2, Share2, Layers, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint, X,
+  Pencil, Trash2, Loader2, Share2, Layers, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint, X, MapPin,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -114,6 +115,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [prefsLoaded,     setPrefsLoaded]     = useState(false)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefDurata,      setPrefDurata]      = useState(270)
+  const [openSection,     setOpenSection]     = useState<SectionKind | null>(null)
+  const [showPoiLayer,    setShowPoiLayer]    = useState(false)
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -370,15 +373,49 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (!hasGps) return <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-sm">Tracciato non disponibile</div>
     return (
       <MapView trackPoints={activity.trackPoints} height="100%" interactive={interactive}
-        showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages} />
+        showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages}
+        highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : null}
+        activeIndex={openSection === 'dati' ? altActiveIndex : null}
+        showPoiLayer={showPoiLayer}
+        showTourControls={interactive}
+      />
     )
   }
 
-  // Default section map — real, interactive/navigable, no per-section highlight.
-  const sectionMap = () => hasGps && activity
-    ? <MapView trackPoints={activity.trackPoints} height="100%" interactive pois={pois} />
-    : <div className="absolute inset-0 bg-[#0b1a24]" />
   const open3D = (closeSection: () => void) => hasGps ? () => { closeSection(); setShow3D(true) } : undefined
+
+  const poiToggleChip = (
+    <button
+      onClick={() => setShowPoiLayer(v => !v)}
+      title="Punti di interesse"
+      className={`flex items-center justify-center w-9 h-9 rounded-full border transition-colors ${showPoiLayer ? 'bg-fuchsia-500/80 border-fuchsia-300/40 text-white' : 'bg-black/50 border-white/15 text-white/80'} backdrop-blur-md`}
+    >
+      <MapPin className="w-4 h-4" />
+    </button>
+  )
+
+  const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
+    if (!activity || routeItem.id !== activity.id) return null
+    return (
+      <>
+        {activity.trailScore != null && (
+          <button onClick={onTap} className={`${glassChip} text-[11px] font-semibold px-2.5 py-1.5`}>CTS {Math.round(activity.trailScore)}</button>
+        )}
+        {rated && (
+          <button onClick={onTap} className="px-2.5 py-1.5 rounded-full text-white text-[11px] font-bold border border-white/10 backdrop-blur-md" style={{ backgroundColor: ratingColor(activity.userRating!) }}>Bellezza {activity.userRating}/10</button>
+        )}
+      </>
+    )
+  }
+
+  const heroPhotos = photos.length > 0 ? (
+    <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 snap-x">
+      {photos.map(ph => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={ph.id} src={ph.url} alt={ph.caption ?? ''} className="w-28 h-28 object-cover rounded-2xl shrink-0 snap-start border border-white/15" />
+      ))}
+    </div>
+  ) : undefined
 
   const ratingBadge = (item: RouteHubItem) => {
     if (!activity || item.id !== activity.id || !rated) return null
@@ -392,33 +429,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
   const renderSection = (section: SectionKind, item: RouteHubItem, onClose: () => void) => {
     if (!activity || item.id !== activity.id) {
-      return <SectionSplit title="…" onClose={onClose} mapContent={<div className="absolute inset-0 bg-[#0b1a24]" />}>
-        <div className="py-10 text-center text-sm text-stone-400">Caricamento…</div>
-      </SectionSplit>
+      return <SectionOverlay title="…" onClose={onClose}>
+        <div className={`py-10 text-center text-sm ${textMuted}`}>Caricamento…</div>
+      </SectionOverlay>
     }
 
     if (section === 'dati') return (
-      <SectionSplit
-        title="Dati & punteggi"
-        onClose={onClose}
-        on3D={open3D(onClose)}
-        mapContent={
-          <div className="absolute inset-0">
-            {hasGps
-              ? <MapView trackPoints={activity.trackPoints} height="100%" interactive activeIndex={altActiveIndex} />
-              : <div className="absolute inset-0 bg-[#0b1a24]" />}
-            <div className="absolute bottom-3 inset-x-3 flex flex-wrap gap-1.5 justify-center pointer-events-none">
-              {activity.trailScore != null && (
-                <span className="px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md text-white text-[11px] font-bold border border-white/15">CTS {Math.round(activity.trailScore)}</span>
-              )}
-              {rated && (
-                <span className="px-2.5 py-1 rounded-full text-white text-[11px] font-bold border border-white/15" style={{ backgroundColor: ratingColor(activity.userRating!) }}>Bellezza {activity.userRating}/10</span>
-              )}
-            </div>
-          </div>
-        }
-      >
-        <div className="h-full overflow-y-auto px-4 py-4 space-y-5">
+      <SectionOverlay title="Dati & punteggi" onClose={onClose} on3D={open3D(onClose)} mapHeaderActions={poiToggleChip} heroPhotos={heroPhotos}>
+        <div className="px-4 py-4 space-y-5">
           {(ctsResult || activity.trailScore != null) ? (
             <ScoreRing
               cl={{ notMatched: true }}
@@ -427,9 +445,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
               shadeWater={{ data: s2.data, loading: s2.loading }}
             />
           ) : (
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 flex items-center justify-between gap-4">
-              <p className="text-sm text-stone-500">Il punteggio non è ancora stato calcolato.</p>
-              <button onClick={handleComputeCts} disabled={ctsComputing} className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-medium transition-colors">
+            <div className={`${glassTile} px-5 py-4 flex items-center justify-between gap-4`}>
+              <p className={`text-sm ${textMuted}`}>Il punteggio non è ancora stato calcolato.</p>
+              <button onClick={handleComputeCts} disabled={ctsComputing} className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-forest-500 hover:bg-forest-400 disabled:opacity-50 text-white text-sm font-medium transition-colors">
                 {ctsComputing ? <><Loader2 className="w-4 h-4 animate-spin" /> Calcolo…</> : <><RefreshCw className="w-4 h-4" /> Calcola CTS</>}
               </button>
             </div>
@@ -438,15 +456,15 @@ export default function ResocontoHub({ id }: { id?: string }) {
           {hasGps && dtmProfile?.source === 'dtm' && (
             <div className="flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setShowAspect(a => !a)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-forest-500 text-white border-forest-500' : `${glassTile} ${textMuted}`}`}>
                 <Compass className="w-3 h-3" /> Esposizione
               </button>
             </div>
           )}
 
           {hasGps && activity.trackPoints.length ? (
-            <div className="bg-white rounded-2xl border border-stone-200 p-4">
-              <h3 className="font-display text-lg font-semibold text-stone-700 mb-3 flex items-center gap-2"><Map className="w-4 h-4 text-forest-500" /> Profilo altimetrico</h3>
+            <div>
+              <h3 className={`font-display text-lg font-semibold mb-3 flex items-center gap-2 ${textPrimary}`}><Map className="w-4 h-4 text-emerald-300" /> Profilo altimetrico</h3>
               <ElevationProfileChart trackPoints={activity.trackPoints} onHover={setAltActiveIndex} />
             </div>
           ) : null}
@@ -461,24 +479,16 @@ export default function ResocontoHub({ id }: { id?: string }) {
             return (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {hasHR && <StatCard label="FC Media" value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
-                  <StatCard label="Vel. Media" value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
-                  {hasNetSpeed && <StatCard label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue" />}
-                  {hasCal && <StatCard label="Calorie" value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
-                  <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone" />
-                  {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest" />}
+                  {hasHR && <StatCard dark label="FC Media" value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
+                  <StatCard dark label="Vel. Media" value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
+                  {hasNetSpeed && <StatCard dark label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue" />}
+                  {hasCal && <StatCard dark label="Calorie" value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
+                  <StatCard dark label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone" />
+                  {hasIev && <StatCard dark label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest" />}
                 </div>
-                {hasHRTrack && (
-                  <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                    <h3 className="text-sm font-semibold text-stone-600 mb-3 flex items-center gap-2"><Heart className="w-4 h-4 text-red-400" /> Frequenza cardiaca</h3>
-                    <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
-                  </div>
-                )}
-                <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                  <h3 className="text-sm font-semibold text-stone-600 mb-3 flex items-center gap-2"><Zap className="w-4 h-4 text-terra-400" /> Velocità</h3>
-                  <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
-                </div>
-                <dl className="bg-white rounded-2xl border border-stone-200 p-4 grid grid-cols-2 gap-x-3 gap-y-1.5">
+                {hasHRTrack && <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />}
+                <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
+                <dl className={`${glassTile} p-4 grid grid-cols-2 gap-x-3 gap-y-1.5`}>
                   {[
                     ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
                     ['Quota partenza', `${activity.trackPoints[0]?.altitudeMeters?.toFixed(1) ?? '--'} m`],
@@ -487,9 +497,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
                     ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
                     ['Sport', activity.sport],
                   ].map(([k, v]) => (
-                    <div key={k} className="flex justify-between border-b border-stone-100 py-1">
-                      <dt className="text-stone-400 text-xs">{k}</dt>
-                      <dd className="font-mono text-stone-700 text-xs font-medium">{v}</dd>
+                    <div key={k} className="flex justify-between border-b border-white/10 py-1">
+                      <dt className="text-stone-400/60 text-xs">{k}</dt>
+                      <dd className={`font-mono text-xs font-medium ${textPrimary}`}>{v}</dd>
                     </div>
                   ))}
                 </dl>
@@ -499,15 +509,15 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
           {similarActivities.length > 0 && (
             <div>
-              <p className="text-sm font-semibold text-stone-700 mb-2">Percorsi simili</p>
-              <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+              <p className={`text-sm font-semibold mb-2 ${textPrimary}`}>Percorsi simili</p>
+              <div className={`${glassTile} overflow-hidden`}>
                 <table className="w-full text-xs">
                   <tbody>
                     {similarActivities.slice(0, 5).map(({ activity: a, startDistanceM }) => (
-                      <tr key={a.id} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50 cursor-pointer" onClick={() => router.push(`/resoconto/${a.id}`)}>
-                        <td className="px-3 py-2 text-stone-700">{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
-                        <td className="px-3 py-2 text-stone-700">{(a.distanceMeters / 1000).toFixed(1)} km</td>
-                        <td className="px-3 py-2 text-stone-400">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
+                      <tr key={a.id} className="border-t border-white/10 first:border-t-0 hover:bg-white/[0.06] cursor-pointer" onClick={() => router.push(`/resoconto/${a.id}`)}>
+                        <td className={`px-3 py-2 ${textPrimary}`}>{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
+                        <td className={`px-3 py-2 ${textPrimary}`}>{(a.distanceMeters / 1000).toFixed(1)} km</td>
+                        <td className="px-3 py-2 text-stone-400/60">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -516,140 +526,133 @@ export default function ResocontoHub({ id }: { id?: string }) {
             </div>
           )}
         </div>
-      </SectionSplit>
+      </SectionOverlay>
     )
 
     if (section === 'meteo') return (
-      <SectionSplit title="Meteo" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
-        <div className="h-full overflow-y-auto px-4 py-4">
+      <SectionOverlay title="Meteo" onClose={onClose} on3D={open3D(onClose)} mapHeaderActions={poiToggleChip} heroPhotos={heroPhotos}>
+        <div className="px-4 py-4">
           {hasGps && dateISO
             ? <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />
-            : <p className="text-sm text-stone-400 italic text-center py-8">Meteo non disponibile senza un tracciato GPS.</p>}
+            : <p className={`text-sm italic text-center py-8 ${textMuted}`}>Meteo non disponibile senza un tracciato GPS.</p>}
         </div>
-      </SectionSplit>
+      </SectionOverlay>
     )
 
     if (section === 'natura') return (
-      <SectionSplit title="Natura" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
-        <div className="h-full overflow-y-auto px-4 py-4 space-y-5">
+      <SectionOverlay title="Natura" onClose={onClose} on3D={open3D(onClose)} mapHeaderActions={poiToggleChip} heroPhotos={heroPhotos}>
+        <div className="px-4 py-4 space-y-5">
           {hasGps && heroPolyline.length > 1 && <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />}
           <div className="flex gap-2">
-            <button onClick={() => setShowFloraGallery(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
-              <Leaf className="w-4 h-4 text-emerald-600" /> Galleria Verde
+            <button onClick={() => setShowFloraGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
+              <Leaf className="w-4 h-4 text-emerald-400" /> Galleria Verde
             </button>
-            <button onClick={() => setShowAnimalGallery(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-stone-50 hover:bg-stone-100 text-sm font-medium text-stone-700 transition-colors">
-              <PawPrint className="w-4 h-4 text-amber-600" /> Galleria Animali
+            <button onClick={() => setShowAnimalGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
+              <PawPrint className="w-4 h-4 text-amber-300" /> Galleria Animali
             </button>
           </div>
         </div>
-      </SectionSplit>
+      </SectionOverlay>
     )
 
     if (section === 'poi') return (
-      <SectionSplit
-        title="Punti di interesse"
-        onClose={onClose}
-        on3D={open3D(onClose)}
-        mapContent={hasGps
-          ? <MapView trackPoints={activity.trackPoints} height="100%" interactive pois={pois} highlightedPoiIndex={poiCenter.centeredIndex} />
-          : <div className="absolute inset-0 bg-[#0b1a24]" />}
-      >
-        <div ref={poiCenter.containerRef} className="h-full overflow-y-auto px-4 py-4 space-y-3">
-          <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Sul percorso</p>
+      <SectionOverlay title="Punti di interesse" onClose={onClose} on3D={open3D(onClose)} mapHeaderActions={poiToggleChip} heroPhotos={heroPhotos} scrollRef={poiCenter.containerRef}>
+        <div className="px-4 py-4 space-y-3">
+          <p className={sectionHeading}>Sul percorso</p>
           {pois.length === 0 && (
-            <p className="text-sm text-stone-400 italic text-center py-8">Nessun punto di interesse trovato lungo il tracciato.</p>
+            <p className={`text-sm italic text-center py-8 ${textMuted}`}>Nessun punto di interesse trovato lungo il tracciato.</p>
           )}
           {pois.map((poi, i) => {
             const meta = POI_META[poi.type]
             const highlighted = i === poiCenter.centeredIndex
             return (
               <div key={poi.id} ref={poiCenter.setItemRef(i)}
-                className={`rounded-2xl border p-4 flex gap-3 transition-colors ${highlighted ? 'bg-forest-50 border-forest-300' : 'bg-white border-stone-200'}`}>
-                <span className="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>
+                className={`${glassTile} p-4 flex gap-3 transition-colors ${highlighted ? 'bg-emerald-400/15 border-emerald-400/40' : ''}`}>
+                <span className="w-12 h-12 rounded-xl bg-white/[0.06] flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">{meta.label}</span>
-                    <span className="text-[10px] text-stone-300 ml-auto shrink-0">{poi.distFromTrack === 0 ? 'sul tracciato' : `${poi.distFromTrack} m`}</span>
+                    <span className={`text-[10px] font-semibold uppercase tracking-wide ${textMuted}`}>{meta.label}</span>
+                    <span className="text-[10px] text-stone-400/50 ml-auto shrink-0">{poi.distFromTrack === 0 ? 'sul tracciato' : `${poi.distFromTrack} m`}</span>
                   </div>
-                  <p className="text-sm font-semibold text-stone-800 leading-tight">{poi.name ?? meta.label}</p>
+                  <p className={`text-sm font-semibold leading-tight ${textPrimary}`}>{poi.name ?? meta.label}</p>
                 </div>
               </div>
             )
           })}
           {hasGps && (
             <>
-              <p className="text-xs font-bold text-stone-500 uppercase tracking-wider pt-2">Wikipedia nei dintorni</p>
+              <p className={`${sectionHeading} pt-2`}>Wikipedia nei dintorni</p>
               <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
             </>
           )}
         </div>
-      </SectionSplit>
+      </SectionOverlay>
     )
 
     if (section === 'sicurezza') return (
-      <SectionSplit title="Sicurezza & segnalazioni" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
-        <div className="h-full flex items-center justify-center px-6">
-          <p className="text-sm text-stone-400 italic text-center">
+      <SectionOverlay title="Sicurezza & segnalazioni" onClose={onClose} on3D={open3D(onClose)} mapHeaderActions={poiToggleChip} heroPhotos={heroPhotos}>
+        <div className="flex items-center justify-center px-6 py-10">
+          <p className={`text-sm italic text-center ${textMuted}`}>
             Il punteggio sicurezza è disponibile solo per le guide pre-escursione, non per le escursioni concluse.
           </p>
         </div>
-      </SectionSplit>
+      </SectionOverlay>
     )
 
     // strumenti
     return (
-      <SectionSplit title="Strumenti" onClose={onClose} mapContent={sectionMap()} on3D={open3D(onClose)}>
-        <div className="h-full overflow-y-auto px-4 py-4 space-y-1">
+      <SectionOverlay title="Strumenti" onClose={onClose} on3D={open3D(onClose)} mapHeaderActions={poiToggleChip} heroPhotos={heroPhotos}>
+        <div className="px-4 py-4 space-y-1">
           <ActivityPhotoManager
             activityId={activity.id} trackPoints={activity.trackPoints}
             activityTitle={activity.title ?? undefined}
             distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain}
           />
-          <div className="pt-1 mt-1 border-t border-stone-100 space-y-1">
+          <div className="pt-1 mt-1 border-t border-white/10 space-y-1">
             {photos.length > 0 && (
-              <button onClick={() => setShowCoverPicker(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-                <Camera className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Cambia copertina</span>
+              <button onClick={() => setShowCoverPicker(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+                <Camera className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Cambia copertina</span>
               </button>
             )}
-            <button onClick={() => setShowShare(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-              <Share2 className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Condividi</span>
+            <button onClick={() => setShowShare(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+              <Share2 className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Condividi</span>
             </button>
-            <button onClick={() => setShow3D(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-              <Box className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Vista 3D</span>
+            <button onClick={() => setShow3D(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+              <Box className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Vista 3D</span>
             </button>
-            <button onClick={() => { setOpenVideoWizard(true); setShow3D(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-              <Film className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Crea video</span>
+            <button onClick={() => { setOpenVideoWizard(true); setShow3D(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+              <Film className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Crea video</span>
             </button>
-            <button onClick={() => exportActivityToExcel(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-              <FileSpreadsheet className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta Excel</span>
+            <button onClick={() => exportActivityToExcel(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+              <FileSpreadsheet className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta Excel</span>
             </button>
-            <button onClick={() => exportActivityToDoc(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-              <FileText className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta Word</span>
+            <button onClick={() => exportActivityToDoc(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+              <FileText className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta Word</span>
             </button>
-            <button onClick={() => exportActivityToGpx(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-              <Map className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta GPX</span>
+            <button onClick={() => exportActivityToGpx(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+              <Map className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta GPX</span>
             </button>
-            <button onClick={() => exportActivityPdf(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-              <FileDown className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Esporta PDF</span>
+            <button onClick={() => exportActivityPdf(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+              <FileDown className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta PDF</span>
             </button>
           </div>
 
-          <div className="pt-1 mt-1 border-t border-stone-100">
+          <div className="pt-1 mt-1 border-t border-white/10">
             {editNotes ? (
               <div className="px-2 py-2 space-y-2">
                 <textarea autoFocus value={notesVal} onChange={e => setNotesVal(e.target.value)} rows={4}
                   placeholder="Descrivi l'escursione, i luoghi visitati, le sensazioni…"
-                  className="w-full border border-stone-200 rounded-xl p-3 text-sm text-stone-700 bg-stone-50 outline-none focus:border-forest-400 resize-none" />
+                  className="w-full border border-white/15 rounded-xl p-3 text-sm text-stone-100 bg-white/5 outline-none focus:border-forest-400/50 resize-none placeholder:text-stone-400/50" />
                 <div className="flex gap-2">
-                  <button onClick={saveNotes} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-forest-600 text-white rounded-lg text-sm hover:bg-forest-700 transition-colors disabled:opacity-60">
+                  <button onClick={saveNotes} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-forest-500 text-white rounded-lg text-sm hover:bg-forest-400 transition-colors disabled:opacity-60">
                     {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salva
                   </button>
-                  <button onClick={() => { setNotesVal(activity.userNotes ?? ''); setEditNotes(false) }} className="px-4 py-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">Annulla</button>
+                  <button onClick={() => { setNotesVal(activity.userNotes ?? ''); setEditNotes(false) }} className={`px-4 py-1.5 text-sm transition-colors ${textMuted}`}>Annulla</button>
                 </div>
               </div>
             ) : (
-              <button onClick={() => setEditNotes(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-50 transition-colors text-left">
-                <Pencil className="w-4 h-4 text-stone-400" /> <span className="text-sm font-medium text-stone-700">Note personali{activity.userNotes ? '' : ' (vuote)'}</span>
+              <button onClick={() => setEditNotes(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left">
+                <Pencil className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Note personali{activity.userNotes ? '' : ' (vuote)'}</span>
               </button>
             )}
           </div>
@@ -658,14 +661,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
             <HikeNotesRecorder notes={activity.hikeNotes ?? []} onChange={hikeNotes => patch({ hikeNotes })} />
           </div>
 
-          <div className="pt-1 mt-1 border-t border-stone-100">
-            <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+          <div className="pt-1 mt-1 border-t border-white/10">
+            <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-400/10 transition-colors text-left text-red-300">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
               <span className="text-sm font-medium">Elimina escursione</span>
             </button>
           </div>
         </div>
-      </SectionSplit>
+      </SectionOverlay>
     )
   }
 
@@ -688,6 +691,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
         }}
         renderStageMap={renderStageMap}
         renderSection={renderSection}
+        onSectionChange={(section) => { setOpenSection(section); if (section === 'poi') setShowPoiLayer(true) }}
+        scoreBadges={scoreBadges}
         ratingBadge={ratingBadge}
         onOpenRating={() => setShowRatingPanel(true)}
         featuredLabel="Racconto"
