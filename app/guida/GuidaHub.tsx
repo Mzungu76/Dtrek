@@ -686,7 +686,14 @@ export default function GuidaHub({ id }: { id?: string }) {
         mode="guida"
         items={displayItems}
         initialIndex={initialIndex}
-        onIndexChange={(item) => { setCurrentId(item.id); router.replace(`/guida/${encodeURIComponent(item.id)}`, { scroll: false }) }}
+        onIndexChange={(item) => {
+          setCurrentId(item.id)
+          // Plain History API, not router.replace: `/guida` and `/guida/[id]` are different
+          // page components, so a Next.js navigation between them unmounts/remounts this whole
+          // hub (re-running every data-loading effect) and produces a visible double-render —
+          // this is a purely cosmetic address-bar sync, so it doesn't need a real navigation.
+          window.history.replaceState(null, '', `/guida/${encodeURIComponent(item.id)}`)
+        }}
         renderStageMap={renderStageMap}
         renderSection={renderSection}
         onNavigate={(item) => router.push(`/guida/${encodeURIComponent(item.id)}/naviga`)}
