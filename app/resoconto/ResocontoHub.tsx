@@ -173,7 +173,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
         .catch(() => {})
     }
     setPois([]); setPhotos([]); setCoverPhotoId(null)
-    getActivityById(currentId, fresh => { setActivity(fresh); loadPoisFor(fresh) }).then(a => {
+    // No onRefresh callback here: getActivityById already persists the background-revalidated
+    // copy to the local cache for next time. Wiring it into setActivity too would re-apply the
+    // full activity (new object/array references) a second time once the network round-trip
+    // completes — a visible re-render "blink" ~1s after the card already opened correctly.
+    getActivityById(currentId).then(a => {
       if (!a) { router.push('/resoconto'); return }
       setActivity(a)
       setNotesVal(a.userNotes ?? '')
@@ -674,7 +678,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
         mode="resoconto"
         items={displayItems}
         initialIndex={initialIndex}
-        onIndexChange={(item) => { setCurrentId(item.id); router.replace(`/resoconto/${encodeURIComponent(item.id)}`, { scroll: false }) }}
+        onIndexChange={(item) => {
+          setCurrentId(item.id)
+          // Plain History API, not router.replace: `/resoconto` and `/resoconto/[id]` are
+          // different page components, so a Next.js navigation between them unmounts/remounts
+          // this whole hub (re-running every data-loading effect) and produces a visible
+          // double-render — this is a purely cosmetic address-bar sync, not a real navigation.
+          window.history.replaceState(null, '', `/resoconto/${encodeURIComponent(item.id)}`)
+        }}
         renderStageMap={renderStageMap}
         renderSection={renderSection}
         ratingBadge={ratingBadge}
