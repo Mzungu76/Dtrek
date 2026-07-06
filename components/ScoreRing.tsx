@@ -76,8 +76,8 @@ export function computeTrailScoreTotal(cl: CLProps, safety: SafetyScore | null, 
  *  of a percentage-based scale where "weak" would silently shift with TRAIL_SCORE_MAX. */
 export function tsColor(value: number): string {
   if (value <= 100) return '#dc2626' // rosso
-  if (value <= 200) return '#f97316' // arancione
-  if (value <= 300) return '#eab308' // giallo
+  if (value <= 200) return '#eab308' // giallo
+  if (value <= 300) return '#0ea5e9' // celeste
   return '#16a34a'                   // verde
 }
 
