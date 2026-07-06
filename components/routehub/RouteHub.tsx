@@ -132,49 +132,52 @@ export default function RouteHub({
         />
       </div>
 
-      {/* Screen 1's chrome — cross-dissolves with the sheet instead of hard-cutting, both
-          opening (drag up) and closing (drag down/back button) it. Stays mounted the whole
-          time; only opacity/pointer-events toggle, in lockstep with the sheet's own fade. */}
-      <div
-        className="absolute inset-0 transition-opacity ease-out"
-        style={{ opacity: isOpen ? 0 : 1, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${SHEET_TRANSITION_MS}ms` }}
-      >
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
+      {/* Screen 1's chrome cross-dissolves with the sheet instead of hard-cutting, both opening
+          (drag up) and closing (drag down/back button) it — stays mounted the whole time, only
+          opacity/pointer-events toggle. Each piece keeps its own natural (content-sized)
+          footprint rather than one full-screen inset-0 wrapper: a full-screen wrapper with
+          pointer-events:auto would swallow every pointer event over the empty middle of the
+          screen too, blocking the carousel's own swipe/drag gesture underneath it entirely. */}
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10 transition-opacity ease-out" style={{ opacity: isOpen ? 0 : 1, transitionDuration: `${SHEET_TRANSITION_MS}ms` }} />
 
-        {/* Swipe hints — only on the side(s) where another route actually exists. */}
-        {state.index > 0 && (
-          <div className="pointer-events-none absolute left-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
-            <ChevronLeft className="w-4 h-4 text-white/70" />
-          </div>
-        )}
-        {state.index < items.length - 1 && (
-          <div className="pointer-events-none absolute right-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
-            <ChevronRight className="w-4 h-4 text-white/70" />
-          </div>
-        )}
+      {/* Swipe hints — only on the side(s) where another route actually exists. */}
+      {state.index > 0 && (
+        <div className="pointer-events-none absolute left-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center transition-opacity ease-out" style={{ opacity: isOpen ? 0 : 1, transitionDuration: `${SHEET_TRANSITION_MS}ms` }}>
+          <ChevronLeft className="w-4 h-4 text-white/70" />
+        </div>
+      )}
+      {state.index < items.length - 1 && (
+        <div className="pointer-events-none absolute right-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center transition-opacity ease-out" style={{ opacity: isOpen ? 0 : 1, transitionDuration: `${SHEET_TRANSITION_MS}ms` }}>
+          <ChevronRight className="w-4 h-4 text-white/70" />
+        </div>
+      )}
 
+      <div className="absolute inset-x-0 top-0 transition-opacity ease-out" style={{ opacity: isOpen ? 0 : 1, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${SHEET_TRANSITION_MS}ms` }}>
         <TopOverlay
           itemKey={item.id}
           title={item.title} statPills={item.statPills}
           weatherIcon={weatherIcon?.(item)} onOpenWeather={() => dispatch({ type: 'OPEN_SECTION', section: 'meteo', snap: 'half' })}
           scoreBadges={scoreBadges?.(item, () => dispatch({ type: 'OPEN_SECTION', section: 'dati', snap: 'half' }))}
         />
+      </div>
 
-        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
-          {summary && (
-            <p className="mx-4 self-stretch font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
-              {summary}
-            </p>
-          )}
-          <BottomGallery
-            mode={mode} items={items} currentId={item.id}
-            onSelect={index => dispatch({ type: 'JUMP_TO', index })}
-            importLabel={importLabel} onImport={onImport}
-          />
-          {/* Trascina la scheda chiusa verso l'alto per aprirla — unico invito visivo rimasto
-              dopo la rimozione dell'icona dedicata. */}
-          <ChevronUp className="w-5 h-5 text-white/60 animate-bounce pointer-events-none" strokeWidth={2.5} />
-        </div>
+      <div
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] transition-opacity ease-out"
+        style={{ opacity: isOpen ? 0 : 1, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${SHEET_TRANSITION_MS}ms` }}
+      >
+        {summary && (
+          <p className="mx-4 self-stretch font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+            {summary}
+          </p>
+        )}
+        <BottomGallery
+          mode={mode} items={items} currentId={item.id}
+          onSelect={index => dispatch({ type: 'JUMP_TO', index })}
+          importLabel={importLabel} onImport={onImport}
+        />
+        {/* Trascina la scheda chiusa verso l'alto per aprirla — unico invito visivo rimasto
+            dopo la rimozione dell'icona dedicata. */}
+        <ChevronUp className="w-5 h-5 text-white/60 animate-bounce pointer-events-none" strokeWidth={2.5} />
       </div>
 
       {sheetMounted && (
