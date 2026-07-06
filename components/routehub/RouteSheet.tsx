@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent, type Ref, type ReactNode } from 'react'
 import { ChevronDown, Box } from 'lucide-react'
 import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from './types'
 import type { SheetSnap } from './useRouteHubState'
@@ -11,6 +11,9 @@ const CHROME_PX = 108
  *  through this closes the sheet instead of snapping back to peek, mirroring the drag-up-to-open
  *  gesture on Screen 1. */
 const CLOSE_DRAG_PX = 60
+/** Desktop equivalent of dragging the handle down to close — a mouse-wheel/trackpad scroll "up"
+ *  while hovering the handle itself (never the scrollable tab content below it). */
+const WHEEL_CLOSE_PX = 30
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
@@ -87,6 +90,15 @@ export default function RouteSheet({
     onSnapChange(nearest[0])
   }
 
+  const wheelCloseLocked = useRef(false)
+  const handleWheel = (e: ReactWheelEvent<HTMLDivElement>) => {
+    if (wheelCloseLocked.current) return
+    if (e.deltaY < -WHEEL_CLOSE_PX) {
+      wheelCloseLocked.current = true
+      onClose()
+    }
+  }
+
   const currentHeight = dragHeight ?? heightForSnap(snap)
 
   useEffect(() => { onHeightChange?.(currentHeight) }, [currentHeight]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -132,6 +144,7 @@ export default function RouteSheet({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onWheel={handleWheel}
           onClick={() => { if (dragHeight === null) onSnapChange(snap === 'peek' ? 'half' : 'peek') }}
           className="w-full flex flex-col items-center gap-2 pt-2.5 pb-3 px-4 touch-none cursor-grab active:cursor-grabbing select-none"
         >

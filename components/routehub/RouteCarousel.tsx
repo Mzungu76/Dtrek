@@ -1,5 +1,5 @@
 'use client'
-import { useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent, type ReactNode } from 'react'
 import type { RouteHubItem } from './types'
 
 // Below this, a touch/mouse move is still "undecided" — neither a horizontal route-swipe nor a
@@ -7,6 +7,10 @@ import type { RouteHubItem } from './types'
 const AXIS_LOCK_PX = 8
 // Vertical distance (px, upward) that commits to opening the sheet.
 const OPEN_THRESHOLD_PX = 56
+// Desktop has no touch drag, so a mouse-wheel/trackpad scroll "down" over the closed card stands
+// in for dragging it up — one wheel notch (commonly ~100 in Chrome/Windows, less on trackpads/Mac)
+// clears this comfortably.
+const WHEEL_OPEN_PX = 30
 
 interface Props {
   items: RouteHubItem[]
@@ -38,6 +42,19 @@ export default function RouteCarousel({ items, index, dragging, dragDeltaPx, onD
   const active = useRef(false)
 
   const reset = () => { axis.current = 'none'; opened.current = false; active.current = false }
+
+  // One-shot per "closed" spell: reset whenever Screen 1 becomes interactive again, so the next
+  // wheel gesture can open the sheet again (without this, wheel events keep firing well past the
+  // first one that crosses WHEEL_OPEN_PX, calling onOpenSheet repeatedly for one gesture).
+  const wheelLocked = useRef(false)
+  useEffect(() => { wheelLocked.current = false }, [swipeEnabled])
+  const handleWheel = (e: ReactWheelEvent<HTMLDivElement>) => {
+    if (!swipeEnabled || wheelLocked.current) return
+    if (e.deltaY > WHEEL_OPEN_PX) {
+      wheelLocked.current = true
+      onOpenSheet?.()
+    }
+  }
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!swipeEnabled) return
@@ -76,6 +93,7 @@ export default function RouteCarousel({ items, index, dragging, dragDeltaPx, onD
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onWheel={handleWheel}
     >
       <div
         className="flex h-full"
