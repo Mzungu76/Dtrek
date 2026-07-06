@@ -6,6 +6,7 @@ import RouteHub from '@/components/routehub/RouteHub'
 import RouteThumb from '@/components/RouteThumb'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import { AssessmentPanel } from '@/components/routehub/AssessmentPanel'
+import GuideReader from '@/components/guida/GuideReader'
 import { glassTile, glassTileHover, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from '@/components/routehub/types'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
@@ -38,7 +39,7 @@ import { fetchForecastWeather, wmoInfo } from '@/lib/openmeteo'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2, BookOpen, Leaf, PawPrint,
   Car, Layers, Compass, Images, Trash2, Pencil, Check,
-  Maximize2, Minimize2, X, MapPin, BarChart2, ShieldAlert, Wrench, Navigation,
+  MapPin, BarChart2, ShieldAlert, Wrench, Navigation,
   Calendar as CalendarIcon,
 } from 'lucide-react'
 import { fetchDrivingInfo, getUserStartingPoint, getTrailStartPoint, originMatches } from '@/lib/drivingInfo'
@@ -120,7 +121,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [altActiveIndex, setAltActiveIndex] = useState<number | null>(null)
   const [openSection, setOpenSection] = useState<SectionKind | null>(null)
   const [showPoiLayer, setShowPoiLayer] = useState(false)
-  const [guideExpanded, setGuideExpanded] = useState(false)
   const [show3D, setShow3D] = useState(false)
   const [showFloraGallery, setShowFloraGallery] = useState(false)
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
@@ -132,33 +132,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
   const poiCenter = useCenteredItem(pois.length)
   const sicurezzaCenter = useCenteredItem(hike?.difficultyMarkers?.length ?? 0)
-
-  const guideParagraphs = useMemo(() => {
-    if (!hike?.cachedGuide) return []
-    return hike.cachedGuide
-      .split(/\n{2,}/)
-      .map(p => p.replace(/^#{1,6}\s+/, '').replace(/\[\/?curiosita\]/g, '').trim())
-      .filter(p => p.length > 20)
-  }, [hike?.cachedGuide])
-  const guideCenter = useCenteredItem(guideParagraphs.length)
-
-  // Approximates where in the track the paragraph currently being read corresponds to — the
-  // guide text has no real per-paragraph geo-tags, so paragraphs are assumed evenly spread
-  // along the route (paragraph i/N ≈ i/N of the way along the trail).
-  const guideActiveTrackIndex = useMemo(() => {
-    const points = hike?.trackPoints
-    if (!points?.length || guideCenter.centeredIndex == null || guideParagraphs.length < 2) return null
-    const frac = guideCenter.centeredIndex / (guideParagraphs.length - 1)
-    return Math.round(frac * (points.length - 1))
-  }, [hike?.trackPoints, guideCenter.centeredIndex, guideParagraphs.length])
-
-  // A POI mentioned by name in the paragraph currently being read — highlighted on the map.
-  const guideActivePoiIndex = useMemo(() => {
-    if (guideCenter.centeredIndex == null) return null
-    const text = guideParagraphs[guideCenter.centeredIndex]?.toLowerCase() ?? ''
-    const idx = pois.findIndex(p => p.name && text.includes(p.name.toLowerCase()))
-    return idx >= 0 ? idx : null
-  }, [guideCenter.centeredIndex, guideParagraphs, pois])
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
   // order (most recent first) — backs the carousel/gallery. Resolves the bare
@@ -517,9 +490,9 @@ export default function GuidaHub({ id }: { id?: string }) {
         trackPoints={hike.trackPoints ?? []} height="100%" interactive={interactive}
         showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
         pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned
-        highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : openSection === 'featured' ? guideActivePoiIndex : null}
+        highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : null}
         highlightedDifficultyIndex={openSection === 'sicurezza' ? sicurezzaCenter.centeredIndex : null}
-        activeIndex={openSection === 'profilo' ? altActiveIndex : openSection === 'featured' ? guideActiveTrackIndex : null}
+        activeIndex={openSection === 'profilo' ? altActiveIndex : null}
         showPoiLayer={showPoiLayer}
         showTourControls={interactive}
         obscuredBottomPx={obscuredBottomPx}
@@ -739,58 +712,12 @@ export default function GuidaHub({ id }: { id?: string }) {
       )
     }
 
-    if (section === 'featured') {
-      if (guideExpanded) {
-        return (
-          <div className="fixed inset-0 z-40 bg-white flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100 shrink-0">
-              <p className="font-display text-lg font-bold text-stone-800 truncate">Guida Turistica</p>
-              <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => setGuideExpanded(false)} title="Comprimi" className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-500">
-                  <Minimize2 className="w-4 h-4" />
-                </button>
-                <button onClick={() => { setGuideExpanded(false); onClose() }} title="Chiudi" className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-500">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-5 py-6">
-              <div className="max-w-2xl mx-auto space-y-4">
-                {guideParagraphs.map((p, i) => (
-                  <p key={i} className="font-lora text-stone-700 leading-relaxed">{p}</p>
-                ))}
-              </div>
-            </div>
-          </div>
-        )
-      }
-      return (
-        <div className="flex flex-col">
-          {guideParagraphs.length > 0 && (
-            <div className="flex items-center justify-end px-4 pt-3 shrink-0">
-              <button onClick={() => setGuideExpanded(true)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600">
-                <Maximize2 className="w-3.5 h-3.5" /> Schermo intero
-              </button>
-            </div>
-          )}
-          <div className="px-4 py-4 space-y-4">
-            {guideParagraphs.length > 0 ? (
-              guideParagraphs.map((p, i) => (
-                <p key={i} ref={guideCenter.setItemRef(i)} className={`font-lora leading-relaxed transition-colors ${i === guideCenter.centeredIndex ? 'text-white' : 'text-stone-400/70'}`}>
-                  {p}
-                </p>
-              ))
-            ) : (
-              <p className={`text-sm italic ${textMuted}`}>Nessuna guida ancora generata per questo percorso. Giulia può raccontarti storia, natura e curiosità lungo il tracciato.</p>
-            )}
-            <button onClick={() => router.push(`/guida/${encodeURIComponent(hike.id)}/leggi`)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold transition-colors">
-              <BookOpen className="w-4 h-4" /> {hike.cachedGuide ? 'Genera di nuovo' : 'Genera guida'}
-            </button>
-          </div>
-        </div>
-      )
-    }
+    // Same reader previously at the standalone /guida/[id]/leggi page — full features (sections,
+    // TTS, PDF export, hero/stats/mosaic) live here now, reachable by dragging the sheet open
+    // like any other tab instead of navigating to a separate page.
+    if (section === 'featured') return (
+      <GuideReader hike={hike} onHikeUpdate={patch => setHike(prev => prev ? { ...prev, ...patch } : prev)} />
+    )
 
     // strumenti
     return (
@@ -854,7 +781,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   const tabScrollRef = (section: SectionKind) => {
     if (section === 'poi') return poiCenter.containerRef
     if (section === 'sicurezza') return sicurezzaCenter.containerRef
-    if (section === 'featured') return guideCenter.containerRef
     return undefined
   }
 

@@ -21,7 +21,6 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
   // indipendentemente da quanto in profondità sia stata raggiunta.
   { pattern: '/guida', parent: null },
   { pattern: '/guida/[id]', parent: '/guida' },
-  { pattern: '/guida/[id]/leggi', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/percorso', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/flora', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/animali', parent: (p) => `/guida/${p.id}` },

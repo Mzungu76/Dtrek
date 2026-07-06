@@ -1,9 +1,6 @@
 'use client'
-import {
-  useEffect, useState, useRef, useCallback, useMemo,
-} from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { getPlannedById, updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -14,7 +11,6 @@ import {
   Leaf, Utensils, ShieldCheck, Compass, MapPin,
   FileDown, ExternalLink, BookOpen,
 } from 'lucide-react'
-import BackLink from '@/app/components/BackLink'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractRiddles } from '@/lib/riddles'
@@ -287,17 +283,24 @@ const LENGTH_OPTS: { key: GuideLength; label: string; desc: string }[] = [
   { key: 'lunga', label: 'Lunga',  desc: '~30 min' },
 ]
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+interface Props {
+  hike: PlannedHike
+  /** Mirrors what's persisted (cachedGuide/cachedRiddles/cachedEpochPois) back into the caller's
+   *  own hike state, so the rest of the app (map riddles, epoch POIs) sees a freshly generated
+   *  guide without waiting for a refetch. */
+  onHikeUpdate: (patch: Partial<PlannedHike>) => void
+}
 
-export default function GuidaPage() {
-  const { id }  = useParams() as { id: string }
-  const hikeId  = decodeURIComponent(id)
-  const router  = useRouter()
-
-  const [hike,         setHike]         = useState<PlannedHike | null>(null)
-  const [guideText,    setGuideText]    = useState<string>('')
-  const [sections,     setSections]     = useState<Section[]>([])
-  const [loading,      setLoading]      = useState(true)
+/**
+ * Full-featured tourist guide reader — generation (with length picker), sectioned magazine
+ * layout with per-topic icons/colors, "Lo sapevi?" callouts, hero/stats/photo mosaic, POI photo
+ * cards, text-to-speech narration, and PDF export. Was previously a standalone page
+ * (app/guida/[id]/leggi), now the 'featured' tab's content directly — same features, reachable
+ * by dragging the sheet open like any other tab instead of navigating away.
+ */
+export default function GuideReader({ hike, onHikeUpdate }: Props) {
+  const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
+  const [sections,     setSections]     = useState<Section[]>(() => hike.cachedGuide ? parseGuide(hike.cachedGuide) : [])
   const [generating,   setGenerating]   = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [guideLength,  setGuideLength]  = useState<GuideLength>('media')
@@ -305,7 +308,7 @@ export default function GuidaPage() {
   const [visibleSec,   setVisibleSec]   = useState(0)
 
   const poiPhotos = useMemo(() => {
-    if (!hike?.cachedPoiWiki) return []
+    if (!hike.cachedPoiWiki) return []
     return (hike.cachedPoiWiki as Array<{ poi: PoiItem; wiki: WikiPage }>)
       .filter(w => w.wiki?.thumbnail)
       .map(w => ({
@@ -314,7 +317,7 @@ export default function GuidaPage() {
         url:         w.wiki.url,
         description: w.wiki.description,
       }))
-  }, [hike?.cachedPoiWiki])
+  }, [hike.cachedPoiWiki])
 
   // Voice state
   const [isPlaying,     setIsPlaying]     = useState(false)
@@ -329,21 +332,15 @@ export default function GuidaPage() {
   const iosTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sectionRefs = useRef<(HTMLElement | null)[]>([])
 
-  // Load hike + guide
+  // Re-sync from the caller's hike whenever it changes underneath us (e.g. switching routes
+  // while this tab stays open, or the cached guide arriving from elsewhere).
   useEffect(() => {
-    getPlannedById(hikeId).then(h => {
-      setHike(h)
-      if (h?.cachedGuide) {
-        setGuideText(h.cachedGuide)
-        setSections(parseGuide(h.cachedGuide))
-      }
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [hikeId])
+    setGuideText(hike.cachedGuide ?? '')
+    setSections(hike.cachedGuide ? parseGuide(hike.cachedGuide) : [])
+  }, [hike.id, hike.cachedGuide])
 
   // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
   useEffect(() => {
-    if (!hike) return
     const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
     const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map((p: [number, number]) => ({ lat: p[0], lon: p[1] }))
     if (!poly.length) return
@@ -353,7 +350,7 @@ export default function GuidaPage() {
     ).then(photos => {
       setRoutePhotos(photos.map(p => p.url))
     }).catch(() => {})
-  }, [hike])
+  }, [hike.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // IntersectionObserver: track which section is in view for tab highlighting
   useEffect(() => {
@@ -367,7 +364,7 @@ export default function GuidaPage() {
           }
         }
       },
-      { threshold: 0.3, rootMargin: '-56px 0px -40% 0px' },
+      { threshold: 0.3, rootMargin: '-48px 0px -40% 0px' },
     )
     sectionRefs.current.forEach(el => el && obs.observe(el))
     return () => obs.disconnect()
@@ -394,7 +391,7 @@ export default function GuidaPage() {
       const res = await fetch('/api/guide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hikeId, length }),
+        body: JSON.stringify({ hikeId: hike.id, length }),
       })
 
       if (!res.ok) {
@@ -414,17 +411,19 @@ export default function GuidaPage() {
         setSections(parseGuide(acc))
       }
 
-      const cachedPois = (hike?.cachedPois ?? []) as PoiItem[]
-      const cachedPoiWiki = (hike?.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+      const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
+      const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
       const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
       const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
-      updatePlannedMeta(hikeId, { cachedGuide: acc, cachedRiddles: riddles, cachedEpochPois: epochPois }).catch(() => {})
+      const patch = { cachedGuide: acc, cachedRiddles: riddles, cachedEpochPois: epochPois }
+      updatePlannedMeta(hike.id, patch).catch(() => {})
+      onHikeUpdate(patch)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore durante la generazione')
     } finally {
       setGenerating(false)
     }
-  }, [hikeId, hike])
+  }, [hike.id, hike.cachedPois, hike.cachedPoiWiki, onHikeUpdate])
 
   // ── Voice ─────────────────────────────────────────────────────────────────
 
@@ -524,7 +523,7 @@ export default function GuidaPage() {
   const [exportingPdf, setExportingPdf] = useState(false)
 
   async function exportPdf() {
-    if (!hike || exportingPdf) return
+    if (exportingPdf) return
     setExportingPdf(true)
     try {
       const { exportGuidePdf } = await import('@/utils/pdfExport')
@@ -536,27 +535,6 @@ export default function GuidaPage() {
     }
   }
 
-  // ── Loading / not found ───────────────────────────────────────────────────
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f5f3ef' }}>
-        <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
-      </div>
-    )
-  }
-
-  if (!hike) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#f5f3ef' }}>
-        <p className="text-stone-500 text-lg">Percorso non trovato</p>
-        <button onClick={() => router.push('/guida')} className="text-amber-600 hover:underline">
-          ← Torna alla Guida
-        </button>
-      </div>
-    )
-  }
-
   const hasGuide   = guideText.trim().length > 50
   const hikeTitle  = hike.title
   const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
@@ -564,54 +542,10 @@ export default function GuidaPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen" style={{ background: '#f5f3ef' }}>
-
-      {/* ── Sticky nav bar ──────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b shadow-sm print:hidden" style={{ borderColor: '#e5e1d8' }}>
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <BackLink
-            className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition-colors shrink-0"
-          />
-
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[9px] font-bold tracking-[3px] text-amber-600 uppercase hidden sm:block">DTrek</span>
-            <span className="text-stone-300 hidden sm:block">·</span>
-            <span className="text-sm font-semibold text-stone-700 truncate font-display">{hikeTitle}</span>
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            {hasGuide && RATES.map((r, i) => (
-              <button key={r} onClick={() => changeRate(i)}
-                className={`text-xs px-1.5 py-0.5 rounded font-mono transition-colors ${
-                  rateIdx === i ? 'bg-amber-500 text-white' : 'text-stone-400 hover:text-stone-600'
-                }`}
-              >{r}×</button>
-            ))}
-            {hasGuide && (
-              <>
-                <button onClick={togglePlayPause}
-                  className={`ml-1 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                    isPlaying || isPaused
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                  }`}
-                >
-                  {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
-                </button>
-                {(isPlaying || isPaused) && (
-                  <button onClick={stopVoice}
-                    className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors"
-                  ><Square className="w-3 h-3" /></button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+    <div style={{ background: '#f5f3ef' }}>
 
       {/* ── Hero ────────────────────────────────────────────────────────── */}
-      <div className="relative w-full overflow-hidden print:h-[220px]" style={{ height: 'clamp(280px, 42vw, 480px)' }}>
-        {/* Background: photo or gradient */}
+      <div className="relative w-full overflow-hidden" style={{ height: 'clamp(200px, 34vw, 340px)' }}>
         {routePhotos[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -629,23 +563,21 @@ export default function GuidaPage() {
           </div>
         )}
 
-        {/* Gradient overlay */}
         <div className="absolute inset-0" style={{
           background: 'linear-gradient(to top, rgba(5,5,5,0.9) 0%, rgba(5,5,5,0.5) 40%, rgba(0,0,0,0.15) 80%, transparent 100%)',
         }} />
 
-        {/* Content */}
-        <div className="absolute bottom-0 left-0 right-0 px-6 sm:px-10 pb-7">
-          <span className="inline-block bg-amber-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-3 uppercase">
+        <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 pb-5">
+          <span className="inline-block bg-amber-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
             {categoryBadge}
           </span>
-          <h1 className="font-barlow text-2xl sm:text-4xl font-black text-white leading-tight mb-1.5 max-w-2xl uppercase tracking-tight"
+          <h1 className="font-barlow text-xl sm:text-3xl font-black text-white leading-tight mb-1 max-w-2xl uppercase tracking-tight"
             style={{ textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}
           >
             {hikeTitle}
           </h1>
           {hike.plannedDate && (
-            <p className="font-lora text-[13px] italic text-white/70">
+            <p className="font-lora text-[12px] italic text-white/70">
               {format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })}
             </p>
           )}
@@ -660,14 +592,14 @@ export default function GuidaPage() {
           { icon: <Mountain className="w-3.5 h-3.5" />, value: `${Math.round(hike.altitudeMax)} m`,                  label: 'Quota max' },
           { icon: <Clock    className="w-3.5 h-3.5" />, value: formatDuration(hike.estimatedTimeSeconds),            label: 'Durata' },
         ].map(({ icon, value, label }, i, arr) => (
-          <div key={label} className="flex-1 flex flex-col items-center justify-center py-4 gap-1"
+          <div key={label} className="flex-1 flex flex-col items-center justify-center py-3 gap-1"
             style={{ borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}
           >
-            <span className="flex items-center gap-1.5 text-[17px] font-bold text-white leading-none">
+            <span className="flex items-center gap-1.5 text-[14px] font-bold text-white leading-none">
               <span className="text-amber-500 hidden sm:block">{icon}</span>
               {value}
             </span>
-            <span className="font-barlow text-[8px] font-semibold tracking-[1.8px] uppercase text-amber-500/80">{label}</span>
+            <span className="font-barlow text-[7px] font-semibold tracking-[1.6px] uppercase text-amber-500/80">{label}</span>
           </div>
         ))}
       </div>
@@ -675,23 +607,73 @@ export default function GuidaPage() {
       {/* ── Photo mosaic strip ─────────────────────────────────────────── */}
       <PhotoMosaic
         photos={routePhotos.slice(1, 5).map((url, i) => ({ id: String(i), url }))}
-        heightClass="h-40"
+        heightClass="h-32"
       />
 
+      {/* ── Voice controls + section tabs (single sticky row) ───────────── */}
+      {hasGuide && (
+        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b px-4 py-2 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+          style={{ borderColor: '#e5e1d8', scrollbarWidth: 'none' }}
+        >
+          <div className="flex items-center gap-1 shrink-0">
+            {RATES.map((r, i) => (
+              <button key={r} onClick={() => changeRate(i)}
+                className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition-colors ${
+                  rateIdx === i ? 'bg-amber-500 text-white' : 'text-stone-400 hover:text-stone-600'
+                }`}
+              >{r}×</button>
+            ))}
+            <button onClick={togglePlayPause}
+              className={`ml-1 w-7 h-7 rounded-full flex items-center justify-center transition-colors shrink-0 ${
+                isPlaying || isPaused
+                  ? 'bg-amber-500 text-white hover:bg-amber-600'
+                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+              }`}
+            >
+              {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+            </button>
+            {(isPlaying || isPaused) && (
+              <button onClick={stopVoice}
+                className="w-7 h-7 rounded-full flex items-center justify-center bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors shrink-0"
+              ><Square className="w-2.5 h-2.5" /></button>
+            )}
+          </div>
+          {sections.length > 0 && (
+            <>
+              <div className="w-px h-5 bg-stone-200 shrink-0" />
+              <div className="flex gap-1.5 shrink-0">
+                {sections.map((s, i) => (
+                  <button key={i} onClick={() => scrollToSection(i)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap"
+                    style={visibleSec === i
+                      ? { background: s.color, color: 'white' }
+                      : { background: '#f5f3ef', color: '#78716c' }
+                    }
+                  >
+                    <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
+                    <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── Main content ────────────────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 print:max-w-full print:px-0">
+      <div className="px-4 sm:px-6">
 
         {/* ── No guide yet ────────────────────────────────────────────── */}
         {!hasGuide && !generating && (
-          <div className="flex flex-col items-center py-20 gap-8 text-center print:hidden">
-            <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center shadow-inner">
-              <BookOpen className="w-9 h-9 text-amber-500" />
+          <div className="flex flex-col items-center py-14 gap-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center shadow-inner">
+              <BookOpen className="w-7 h-7 text-amber-500" />
             </div>
             <div className="max-w-sm">
-              <h2 className="font-display text-2xl font-bold text-stone-800 mb-3">
+              <h2 className="font-display text-xl font-bold text-stone-800 mb-2">
                 Nessuna guida ancora generata
               </h2>
-              <p className="text-stone-500 text-[15px] leading-relaxed">
+              <p className="text-stone-500 text-sm leading-relaxed">
                 Giulia elaborerà una guida personalizzata raccontando storia, natura,
                 curiosità e consigli pratici per questo percorso.
               </p>
@@ -724,7 +706,7 @@ export default function GuidaPage() {
             )}
 
             <button onClick={() => generate(guideLength)}
-              className="flex items-center gap-2 px-7 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
+              className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
             >
               <BookOpen className="w-4 h-4" />
               Genera la guida con Giulia
@@ -734,12 +716,12 @@ export default function GuidaPage() {
 
         {/* ── Generating spinner ──────────────────────────────────────── */}
         {generating && sections.length === 0 && (
-          <div className="flex flex-col items-center gap-4 py-20 text-center print:hidden">
-            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center animate-pulse">
-              <BookOpen className="w-7 h-7 text-amber-500" />
+          <div className="flex flex-col items-center gap-4 py-14 text-center">
+            <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center animate-pulse">
+              <BookOpen className="w-6 h-6 text-amber-500" />
             </div>
             <div>
-              <p className="font-display font-semibold text-stone-700 text-lg">Giulia sta scrivendo…</p>
+              <p className="font-display font-semibold text-stone-700">Giulia sta scrivendo…</p>
               <p className="text-stone-400 text-sm mt-1">ci vorranno circa 20–30 secondi</p>
             </div>
           </div>
@@ -747,7 +729,7 @@ export default function GuidaPage() {
 
         {/* ── Voice progress bar (when playing) ──────────────────────── */}
         {(isPlaying || isPaused) && hasGuide && (
-          <div className="mt-6 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3 print:hidden" style={{ borderColor: '#e5e1d8' }}>
+          <div className="mt-4 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3" style={{ borderColor: '#e5e1d8' }}>
             <Volume2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-[11px] font-medium text-stone-600 truncate">
@@ -766,31 +748,9 @@ export default function GuidaPage() {
           </div>
         )}
 
-        {/* ── Section tab navigation ──────────────────────────────────── */}
-        {sections.length > 0 && (
-          <div className="sticky z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 bg-white/95 backdrop-blur-sm border-b overflow-x-auto print:hidden"
-            style={{ top: '56px', borderColor: '#e5e1d8', scrollbarWidth: 'none' }}
-          >
-            <div className="flex gap-1.5 min-w-max">
-              {sections.map((s, i) => (
-                <button key={i} onClick={() => scrollToSection(i)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap"
-                  style={visibleSec === i
-                    ? { background: s.color, color: 'white' }
-                    : { background: '#f5f3ef', color: '#78716c' }
-                  }
-                >
-                  <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
-                  <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* ── Guide sections ──────────────────────────────────────────── */}
         {sections.length > 0 && (
-          <div className="mt-6 space-y-0">
+          <div className="mt-4 space-y-0">
             {sections.map((s, i) => {
               const isLuoghi = s.title.toLowerCase().includes('luoghi')
               const isVoiceActive = activeSection === i && (isPlaying || isPaused)
@@ -799,38 +759,35 @@ export default function GuidaPage() {
                 <article
                   key={i}
                   ref={el => { sectionRefs.current[i] = el }}
-                  className={`scroll-mt-28 bg-white rounded-2xl mb-5 overflow-hidden shadow-sm transition-shadow print:rounded-none print:shadow-none print:overflow-visible print:mb-0 print:border-b print:border-stone-200 ${
+                  className={`scroll-mt-16 bg-white rounded-2xl mb-4 overflow-hidden shadow-sm transition-shadow ${
                     isVoiceActive ? 'ring-2 ring-amber-300 shadow-amber-100 shadow-md' : 'hover:shadow-md'
                   }`}
                 >
-                  {/* Section header band */}
                   <div
-                    className="flex items-center gap-3 px-6 py-3.5"
+                    className="flex items-center gap-3 px-5 py-3"
                     style={{ background: s.color }}
                   >
                     <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
                     <div className="flex items-center gap-2 text-white">
                       <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
-                      <h2 className="font-barlow text-[13px] font-bold tracking-[2px] uppercase">{s.title}</h2>
+                      <h2 className="font-barlow text-[12px] font-bold tracking-[2px] uppercase">{s.title}</h2>
                     </div>
                     <div className="flex-1" />
                     <button
                       onClick={() => speakSection(i)}
-                      className="opacity-60 hover:opacity-100 transition-opacity print:hidden"
+                      className="opacity-60 hover:opacity-100 transition-opacity"
                       title="Ascolta questa sezione"
                     >
                       <Volume2 className="w-3.5 h-3.5 text-white" />
                     </button>
                   </div>
 
-                  {/* Section body */}
-                  <div className="px-6 py-6 sm:px-8">
+                  <div className="px-5 py-5 sm:px-6">
                     <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
 
-                    {/* POI photo grid — only in "I luoghi" section */}
                     {isLuoghi && poiPhotos.length > 0 && (
-                      <div className="mt-8 pt-6 border-t" style={{ borderColor: '#e5e1d8' }}>
-                        <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-4">
+                      <div className="mt-6 pt-5 border-t" style={{ borderColor: '#e5e1d8' }}>
+                        <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-3">
                           Luoghi e siti del percorso
                         </p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -845,9 +802,8 @@ export default function GuidaPage() {
               )
             })}
 
-            {/* Generating more... */}
             {generating && (
-              <div className="flex items-center gap-2 px-6 py-4 bg-white rounded-2xl shadow-sm print:hidden">
+              <div className="flex items-center gap-2 px-5 py-4 bg-white rounded-2xl shadow-sm">
                 <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
                 <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
               </div>
@@ -856,54 +812,47 @@ export default function GuidaPage() {
         )}
 
         {error && hasGuide && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600 print:hidden">
+          <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
             {error}
           </div>
         )}
 
         {/* ── Bottom actions ──────────────────────────────────────────── */}
         {hasGuide && !generating && (
-          <div className="mt-10 mb-16 pt-6 flex flex-wrap items-center justify-between gap-4 print:hidden" style={{ borderTop: '1px solid #e5e1d8' }}>
-            <BackLink
-              className="flex items-center gap-1.5 text-stone-400 hover:text-stone-700 text-sm transition-colors"
-            />
-
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Regenerate controls */}
-              <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#e5e1d8' }}>
-                {LENGTH_OPTS.map(opt => (
-                  <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                    className={`text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
-                      guideLength === opt.key
-                        ? 'bg-amber-500 text-white'
-                        : 'text-stone-400 hover:text-stone-700'
-                    }`}
-                  >{opt.label}</button>
-                ))}
-              </div>
-
-              <button onClick={() => generate(guideLength)} disabled={generating}
-                className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-amber-600 transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Rigenera
-              </button>
-
-              {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
-                <span className="flex items-center gap-1 text-xs text-stone-400">
-                  <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
-                </span>
-              )}
-
-              <button onClick={exportPdf} disabled={exportingPdf}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
-              >
-                {exportingPdf
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <FileDown className="w-3.5 h-3.5" />}
-                {exportingPdf ? 'Genero PDF…' : 'Scarica PDF'}
-              </button>
+          <div className="mt-8 mb-6 pt-5 flex flex-wrap items-center justify-end gap-3" style={{ borderTop: '1px solid #e5e1d8' }}>
+            <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#e5e1d8' }}>
+              {LENGTH_OPTS.map(opt => (
+                <button key={opt.key} onClick={() => setGuideLength(opt.key)}
+                  className={`text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
+                    guideLength === opt.key
+                      ? 'bg-amber-500 text-white'
+                      : 'text-stone-400 hover:text-stone-700'
+                  }`}
+                >{opt.label}</button>
+              ))}
             </div>
+
+            <button onClick={() => generate(guideLength)} disabled={generating}
+              className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-amber-600 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Rigenera
+            </button>
+
+            {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
+              <span className="flex items-center gap-1 text-xs text-stone-400">
+                <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
+              </span>
+            )}
+
+            <button onClick={exportPdf} disabled={exportingPdf}
+              className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+            >
+              {exportingPdf
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <FileDown className="w-3.5 h-3.5" />}
+              {exportingPdf ? 'Genero PDF…' : 'Scarica PDF'}
+            </button>
           </div>
         )}
       </div>
