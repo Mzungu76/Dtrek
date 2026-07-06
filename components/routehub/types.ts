@@ -4,7 +4,7 @@ import type { SheetSnap } from './useRouteHubState'
 
 export type HubMode = 'guida' | 'resoconto'
 
-export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'meteo' | 'featured'
+export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'meteo' | 'featured' | 'profilo'
 
 export interface StatPill {
   icon: LucideIcon
@@ -35,6 +35,10 @@ export interface RouteHubItem {
   coverPhotoUrl?: string
   statPills: StatPill[]
   sortValues?: SortValues
+  /** Best-effort score badge for the gallery thumbnail (top-left) — Guida: partial Trail Score
+   *  from whatever's already cached (no live fetch per list item); Resoconto: the user's manual
+   *  rating. Undefined when nothing's known yet for this item. */
+  scorePreview?: { value: number; max: number; color?: string }
 }
 
 /** One tab of the Screen 2 bottom sheet — replaces the old floating per-section icons, each

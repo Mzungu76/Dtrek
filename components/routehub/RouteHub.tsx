@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RouteSheet from './RouteSheet'
@@ -7,8 +8,6 @@ import TopOverlay from './TopOverlay'
 import SideRails from './SideRails'
 import BottomGallery from './BottomGallery'
 import type { RouteHubProps } from './types'
-
-const GALLERY_AUTO_HIDE_MS = 4000
 
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, renderStageMap, tabs, renderSection,
@@ -24,17 +23,6 @@ export default function RouteHub({
   // Notifies the caller of which section is open (or none) so it can derive section-specific map
   // props (highlighted POI/difficulty index, POI layer visibility…) without lifting this reducer out.
   useEffect(() => { onSectionChange?.(state.openSection) }, [state.openSection]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Screen 1's bottom gallery auto-hides after a short idle period so the map stays the
-  // protagonist — any interaction (swipe, JUMP_TO, tapping the persistent handle) re-shows it
-  // and restarts the countdown.
-  const hideTimer = useRef<ReturnType<typeof setTimeout>>()
-  useEffect(() => {
-    clearTimeout(hideTimer.current)
-    if (state.openSection || !state.galleryVisible) return
-    hideTimer.current = setTimeout(() => dispatch({ type: 'HIDE_GALLERY' }), GALLERY_AUTO_HIDE_MS)
-    return () => clearTimeout(hideTimer.current)
-  }, [state.galleryVisible, state.openSection, state.index, state.dragging]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced URL sync — settles ~150ms after the index stops changing so a fast
   // multi-swipe doesn't spam router.replace calls. Skips the very first run: on mount
@@ -88,7 +76,7 @@ export default function RouteHub({
               dragging={state.dragging}
               dragDeltaPx={state.dragDeltaPx}
               swipeEnabled={!state.openSection}
-              onDragStart={() => { dispatch({ type: 'DRAG_START' }); dispatch({ type: 'SHOW_GALLERY' }) }}
+              onDragStart={() => dispatch({ type: 'DRAG_START' })}
               onDragMove={deltaPx => dispatch({ type: 'DRAG_MOVE', deltaPx })}
               onDragEnd={() => dispatch({ type: 'DRAG_END', count: items.length })}
               renderSlide={(slideItem, _i, inWindow) => (
@@ -121,6 +109,20 @@ export default function RouteHub({
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
       )}
 
+      {/* Swipe hints — only on the side(s) where another route actually exists. Sit above the
+          "apri percorso" button's own vertical center (right-3/5, top-1/2 in SideRails) so the
+          two never overlap. */}
+      {!state.openSection && state.index > 0 && (
+        <div className="pointer-events-none absolute left-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
+          <ChevronLeft className="w-4 h-4 text-white/70" />
+        </div>
+      )}
+      {!state.openSection && state.index < items.length - 1 && (
+        <div className="pointer-events-none absolute right-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
+          <ChevronRight className="w-4 h-4 text-white/70" />
+        </div>
+      )}
+
       {!state.openSection && (
         <TopOverlay
           itemKey={item.id}
@@ -135,28 +137,18 @@ export default function RouteHub({
       )}
 
       {!state.openSection && (
-        state.galleryVisible ? (
-          <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
-            {summary && (
-              <p className="mx-4 font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
-                {summary}
-              </p>
-            )}
-            <BottomGallery
-              mode={mode} items={items} currentId={item.id}
-              onSelect={index => dispatch({ type: 'JUMP_TO', index })}
-              importLabel={importLabel} onImport={onImport}
-            />
-          </div>
-        ) : (
-          <button
-            onClick={() => dispatch({ type: 'SHOW_GALLERY' })}
-            aria-label="Mostra galleria percorsi"
-            className="absolute bottom-[calc(env(safe-area-inset-bottom,0px)+10px)] left-1/2 -translate-x-1/2 z-20 w-11 h-5 rounded-full bg-white/25 backdrop-blur-md flex items-center justify-center"
-          >
-            <span className="w-6 h-1 rounded-full bg-white/70" />
-          </button>
-        )
+        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+          {summary && (
+            <p className="mx-4 font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+              {summary}
+            </p>
+          )}
+          <BottomGallery
+            mode={mode} items={items} currentId={item.id}
+            onSelect={index => dispatch({ type: 'JUMP_TO', index })}
+            importLabel={importLabel} onImport={onImport}
+          />
+        </div>
       )}
 
       {state.openSection && (
