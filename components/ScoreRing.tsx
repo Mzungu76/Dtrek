@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { CLLabel, CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { TrailScoreResult } from '@/lib/trailScore'
+import { ctsLabel } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import { CLBadge } from '@/components/CLBadge'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
@@ -10,7 +11,7 @@ import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import { ShadeWaterTile } from '@/components/ShadeWaterTile'
 import Sheet from '@/components/ui/Sheet'
 
-interface CLProps {
+export interface CLProps {
   si?: number
   label?: CLLabel
   signals?: CLSignals
@@ -23,7 +24,7 @@ interface CLProps {
   refreshError?: string | null
 }
 
-interface CtsProps {
+export interface CtsProps {
   result: TrailScoreResult | null
   cached?: number
   beautyScore?: BeautyScore
@@ -31,7 +32,7 @@ interface CtsProps {
   onCompute?: () => void
 }
 
-interface ShadeWaterProps {
+export interface ShadeWaterProps {
   data: Sentinel2Data | null
   loading?: boolean
 }
@@ -41,6 +42,62 @@ interface Segment {
   title: string
   value: number | null
   color: string
+}
+
+/** Max possible value of the combined Trail Score (TS) — one of these 5 segments, each capped
+ *  at 100, summed together. */
+export const TRAIL_SCORE_MAX = 500
+
+function computeSegments(cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps): Segment[] {
+  const ctsValue    = cts.result?.ts ?? cts.cached ?? null
+  const beautyValue = cts.result?.b != null
+    ? cts.result.b * 10
+    : cts.beautyScore?.overall != null ? cts.beautyScore.overall * 10 : null
+  const shadeWaterValue = shadeWater.data?.available && shadeWater.data.shadeScore != null
+    ? shadeWater.data.shadeScore * 100 : null
+
+  return [
+    { key: 'cl',         title: 'Livello di affidabilità', value: cl.notMatched || cl.loading ? null : cl.si ?? null, color: colorForCL(cl.label) },
+    { key: 'safety',     title: 'Sicurezza',                value: safety?.overall ?? null,                          color: safety?.color ?? '#a8a29e' },
+    { key: 'cts',        title: 'Comfort TrailScore',       value: ctsValue,                                          color: cts.result?.color ?? '#a8a29e' },
+    { key: 'beauty',     title: 'Bellezza del percorso',    value: beautyValue,                                       color: cts.beautyScore?.color ?? '#059669' },
+    { key: 'shadewater', title: 'Ombra e acqua',            value: shadeWaterValue,                                   color: '#0ea5e9' },
+  ]
+}
+
+/** Combined "TS" (Trail Score) shown as a compact badge — sum of every known segment (CL,
+ *  Sicurezza, Comfort TrailScore, Bellezza, Ombra e acqua), each capped at 100, out of
+ *  TRAIL_SCORE_MAX (500). Same figure as ScoreRing's own central number, computed the same way
+ *  so the two never disagree. */
+export function computeTrailScoreTotal(cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps): number {
+  return computeSegments(cl, safety, cts, shadeWater).reduce((sum, s) => sum + (s.value ?? 0), 0)
+}
+
+const MINI_STROKE = 3
+
+/** Small circular progress badge for the combined Trail Score — same fill logic as the big
+ *  ScoreRing, shrunk down to sit inline among the other stat chips over the map. */
+export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30 }: { value: number; max?: number; size?: number }) {
+  const r = (size - MINI_STROKE) / 2
+  const c = size / 2
+  const circumference = 2 * Math.PI * r
+  const pct = Math.max(0, Math.min(1, value / max))
+  const { color } = ctsLabel(Math.round(pct * 100))
+  return (
+    <div className="relative shrink-0 rounded-full bg-white shadow-sm" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={c} cy={c} r={r} fill="none" stroke="#e7e5e4" strokeWidth={MINI_STROKE} />
+        <circle
+          cx={c} cy={c} r={r} fill="none" stroke={color} strokeWidth={MINI_STROKE} strokeLinecap="round"
+          strokeDasharray={circumference} strokeDashoffset={circumference * (1 - pct)}
+          transform={`rotate(-90 ${c} ${c})`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="font-bold leading-none" style={{ color, fontSize: size * 0.32 }}>{Math.round(value)}</span>
+      </div>
+    </div>
+  )
 }
 
 function colorForCL(label?: CLLabel): string {
@@ -94,21 +151,7 @@ export function ScoreRing({
 }) {
   const [activeKey, setActiveKey] = useState<Segment['key'] | null>(null)
 
-  const ctsValue    = cts.result?.ts ?? cts.cached ?? null
-  const beautyValue = cts.result?.b != null
-    ? cts.result.b * 10
-    : cts.beautyScore?.overall != null ? cts.beautyScore.overall * 10 : null
-  const shadeWaterValue = shadeWater.data?.available && shadeWater.data.shadeScore != null
-    ? shadeWater.data.shadeScore * 100 : null
-
-  const segments: Segment[] = [
-    { key: 'cl',         title: 'Livello di affidabilità', value: cl.notMatched || cl.loading ? null : cl.si ?? null, color: colorForCL(cl.label) },
-    { key: 'safety',     title: 'Sicurezza',                value: safety?.overall ?? null,                          color: safety?.color ?? '#a8a29e' },
-    { key: 'cts',        title: 'Comfort TrailScore',       value: ctsValue,                                          color: cts.result?.color ?? '#a8a29e' },
-    { key: 'beauty',     title: 'Bellezza del percorso',    value: beautyValue,                                       color: cts.beautyScore?.color ?? '#059669' },
-    { key: 'shadewater', title: 'Ombra e acqua',            value: shadeWaterValue,                                   color: '#0ea5e9' },
-  ]
-
+  const segments = computeSegments(cl, safety, cts, shadeWater)
   const total   = segments.reduce((sum, s) => sum + (s.value ?? 0), 0)
   const known   = segments.filter(s => s.value != null).length
   const active  = segments.find(s => s.key === activeKey) ?? null

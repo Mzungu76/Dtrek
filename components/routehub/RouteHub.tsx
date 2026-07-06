@@ -67,7 +67,11 @@ export default function RouteHub({
   const on3D = onOpenMap3D ? () => { dispatch({ type: 'CLOSE_SECTION' }); onOpenMap3D(item) } : undefined
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none" style={{ touchAction: 'pan-y' }}>
+    // touch-action is capped by the intersection of every ancestor's value, so restricting it
+    // here to pan-y would also cap the map's own 2D touch panning once the sheet is open (this
+    // element wraps it) — only restrict while Screen 1's carousel needs it to leave vertical
+    // browser gestures alone; let the map fully own touch once a route is open.
+    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none" style={{ touchAction: state.openSection ? 'auto' : 'pan-y' }}>
       {/* STAGE — always mounted, never conditioned on openSection, so the map/photo underneath a
           section overlay is the very same instance the user was browsing (zoom/pan preserved) and
           stays identical while switching between sections. */}
