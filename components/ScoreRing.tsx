@@ -38,21 +38,21 @@ export interface ShadeWaterProps {
 }
 
 interface Segment {
-  key: 'cl' | 'safety' | 'cts' | 'beauty' | 'shadewater'
+  key: 'cl' | 'safety' | 'cts' | 'shadewater'
   title: string
   value: number | null
   color: string
 }
 
-/** Max possible value of the combined Trail Score (TS) — one of these 5 segments, each capped
- *  at 100, summed together. */
-export const TRAIL_SCORE_MAX = 500
+/** Max possible value of the combined Trail Score (TS) — one of these 4 segments, each capped
+ *  at 100, summed together. Bellezza is deliberately not its own segment: it's already one of
+ *  the direct inputs computeTrailScore() uses to derive the Comfort TrailScore itself (see
+ *  lib/trailScore.ts's tsBase, a log ratio of beauty vs. difficulty) — counting it a second time
+ *  here as a standalone segment would double the same signal. */
+export const TRAIL_SCORE_MAX = 400
 
 function computeSegments(cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps): Segment[] {
   const ctsValue    = cts.result?.ts ?? cts.cached ?? null
-  const beautyValue = cts.result?.b != null
-    ? cts.result.b * 10
-    : cts.beautyScore?.overall != null ? cts.beautyScore.overall * 10 : null
   const shadeWaterValue = shadeWater.data?.available && shadeWater.data.shadeScore != null
     ? shadeWater.data.shadeScore * 100 : null
 
@@ -60,15 +60,14 @@ function computeSegments(cl: CLProps, safety: SafetyScore | null, cts: CtsProps,
     { key: 'cl',         title: 'Livello di affidabilità', value: cl.notMatched || cl.loading ? null : cl.si ?? null, color: colorForCL(cl.label) },
     { key: 'safety',     title: 'Sicurezza',                value: safety?.overall ?? null,                          color: safety?.color ?? '#a8a29e' },
     { key: 'cts',        title: 'Comfort TrailScore',       value: ctsValue,                                          color: cts.result?.color ?? '#a8a29e' },
-    { key: 'beauty',     title: 'Bellezza del percorso',    value: beautyValue,                                       color: cts.beautyScore?.color ?? '#059669' },
     { key: 'shadewater', title: 'Ombra e acqua',            value: shadeWaterValue,                                   color: '#0ea5e9' },
   ]
 }
 
 /** Combined "TS" (Trail Score) shown as a compact badge — sum of every known segment (CL,
- *  Sicurezza, Comfort TrailScore, Bellezza, Ombra e acqua), each capped at 100, out of
- *  TRAIL_SCORE_MAX (500). Same figure as ScoreRing's own central number, computed the same way
- *  so the two never disagree. */
+ *  Sicurezza, Comfort TrailScore, Ombra e acqua — Bellezza is folded into Comfort TrailScore,
+ *  not counted separately), each capped at 100, out of TRAIL_SCORE_MAX (400). Same figure as
+ *  ScoreRing's own central number, computed the same way so the two never disagree. */
 export function computeTrailScoreTotal(cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps): number {
   return computeSegments(cl, safety, cts, shadeWater).reduce((sum, s) => sum + (s.value ?? 0), 0)
 }
@@ -145,7 +144,7 @@ function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: nu
 }
 
 const GAP_DEG   = 4
-const SEG_COUNT = 5
+const SEG_COUNT = 4
 const SEG_DEG   = 360 / SEG_COUNT
 const SIZE      = 208
 const R         = 86
@@ -156,9 +155,10 @@ const CY        = SIZE / 2
 /**
  * Grafico ad anello che sostituisce la griglia a tile di ScoresSection: un solo
  * elemento compatto invece di una dashboard a sé, coerente con l'idea che tutta
- * l'infrastruttura di valutazione (CL, Sicurezza, Comfort TrailScore, Bellezza/TEI,
- * Ombra e acqua) resti consultabile ma non occupi una sezione propria. Click su
- * uno spicchio apre il dettaglio del punteggio corrispondente in un foglio a comparsa.
+ * l'infrastruttura di valutazione (CL, Sicurezza, Comfort TrailScore — che già
+ * incorpora la Bellezza/TEI come input —, Ombra e acqua) resti consultabile ma
+ * non occupi una sezione propria. Click su uno spicchio apre il dettaglio del
+ * punteggio corrispondente in un foglio a comparsa.
  */
 export function ScoreRing({
   cl, safety, cts, shadeWater,
@@ -242,9 +242,6 @@ export function ScoreRing({
           )}
           {active?.key === 'safety' && <SafetyScoreWidget safety={safety} defaultOpen />}
           {active?.key === 'cts' && (
-            <ComfortTrailScoreWidget result={cts.result} cached={cts.cached} beautyScore={cts.beautyScore} defaultOpen />
-          )}
-          {active?.key === 'beauty' && (
             <ComfortTrailScoreWidget result={cts.result} cached={cts.cached} beautyScore={cts.beautyScore} defaultOpen />
           )}
           {active?.key === 'shadewater' && (
