@@ -540,8 +540,14 @@ export default function GuidaHub({ id }: { id?: string }) {
 
   const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
-    const scoreLoading = si.loading || s2.loading
-    const trailScoreTotal = computeTrailScoreTotal(
+    // Mirrors previewScoreValue(): if the aggregate is already cached in Supabase, show it
+    // instantly like the gallery thumbnail does — don't make the pin wait on CL/Sentinel2
+    // network fetches that only exist to keep the cache itself fresh in the background. Those
+    // fetches still run (see the sync effect above) and will silently update the pin once they
+    // land, but only a hike that's never had a total computed needs the live loading state.
+    const cached = hike.cachedTsTotal
+    const scoreLoading = cached == null && (si.loading || s2.loading)
+    const trailScoreTotal = cached ?? computeTrailScoreTotal(
       { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
       safetyScore,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
