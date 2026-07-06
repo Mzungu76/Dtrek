@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RouteSheet from './RouteSheet'
 import TopOverlay from './TopOverlay'
-import BottomGallery from './BottomGallery'
+import BottomGallery, { SORT_CMP, type SortKey } from './BottomGallery'
 import type { RouteHubProps, SectionKind } from './types'
 
 // Shared duration for the Screen1 ⇄ Screen2 cross-dissolve, both directions.
@@ -17,6 +17,7 @@ export default function RouteHub({
   scoreBadges, heroPhotos, mapHeaderActions, importLabel, onImport,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
+  const [sortBy, setSortBy] = useState<SortKey>('date')
   // Live height (px) of the Screen 2 sheet — 0 while it's closed — forwarded to the map so it
   // can keep its focus point centered in the visible band as the sheet opens/resizes/drags.
   const [sheetHeightPx, setSheetHeightPx] = useState(0)
@@ -61,11 +62,40 @@ export default function RouteHub({
     if (!skippedFirstRun.current) { skippedFirstRun.current = true; return }
     clearTimeout(indexChangeTimer.current)
     indexChangeTimer.current = setTimeout(() => {
-      const item = items[state.index]
+      const item = sortedItems[state.index]
       if (item) onIndexChange(item, state.index)
     }, 150)
     return () => clearTimeout(indexChangeTimer.current)
   }, [state.index]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The gallery and the carousel must swipe through the very same order — otherwise picking a
+  // sort other than "Data" leaves the gallery reordered while swiping still steps through the
+  // original load order, and "next" jumps to a route unrelated to what's actually next by the
+  // chosen sort.
+  const hasSortData = items.some(i => i.sortValues)
+  const sortedItems = useMemo(() => {
+    if (!hasSortData) return items
+    return [...items].sort((a, b) => SORT_CMP[sortBy](
+      a.sortValues ?? { date: 0, km: 0, dplus: 0 },
+      b.sortValues ?? { date: 0, km: 0, dplus: 0 },
+    ))
+  }, [items, sortBy, hasSortData])
+
+  // Changing the sort reorders the array `state.index` points into — capture which route is on
+  // screen *before* the sort changes, then resync the index to wherever that same route lands in
+  // the new order, so the sort never changes which route is shown, only its position. Runs as a
+  // layout effect so the one-render mismatch (old index against the new order) never paints.
+  const pendingResyncId = useRef<string | null>(null)
+  const handleSortChange = (key: SortKey) => {
+    pendingResyncId.current = sortedItems[state.index]?.id ?? null
+    setSortBy(key)
+  }
+  useLayoutEffect(() => {
+    if (!pendingResyncId.current) return
+    const idx = sortedItems.findIndex(it => it.id === pendingResyncId.current)
+    pendingResyncId.current = null
+    if (idx >= 0 && idx !== state.index) dispatch({ type: 'JUMP_TO', index: idx })
+  }, [sortedItems]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (items.length === 0) {
     return (
@@ -75,7 +105,7 @@ export default function RouteHub({
     )
   }
 
-  const item = items[state.index]
+  const item = sortedItems[state.index]
   const summary = summaryBanner?.(item)
   const on3D = onOpenMap3D ? () => { dispatch({ type: 'CLOSE_SECTION' }); onOpenMap3D(item) } : undefined
 
@@ -97,14 +127,14 @@ export default function RouteHub({
         {(mode === 'guida' || !state.openSection) && (
           <div className="absolute inset-0">
             <RouteCarousel
-              items={items}
+              items={sortedItems}
               index={state.index}
               dragging={state.dragging}
               dragDeltaPx={state.dragDeltaPx}
               swipeEnabled={!state.openSection}
               onDragStart={() => dispatch({ type: 'DRAG_START' })}
               onDragMove={deltaPx => dispatch({ type: 'DRAG_MOVE', deltaPx })}
-              onDragEnd={() => dispatch({ type: 'DRAG_END', count: items.length })}
+              onDragEnd={() => dispatch({ type: 'DRAG_END', count: sortedItems.length })}
               onOpenSheet={() => dispatch({ type: 'OPEN_SECTION', section: tabs[0]?.key ?? 'dati', snap: 'half' })}
               renderSlide={(slideItem, _i, inWindow) => (
                 mode === 'guida' ? (
@@ -146,7 +176,7 @@ export default function RouteHub({
           <ChevronLeft className="w-4 h-4 text-white/70" />
         </div>
       )}
-      {state.index < items.length - 1 && (
+      {state.index < sortedItems.length - 1 && (
         <div className="pointer-events-none absolute right-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center transition-opacity ease-out" style={{ opacity: isOpen ? 0 : 1, transitionDuration: `${SHEET_TRANSITION_MS}ms` }}>
           <ChevronRight className="w-4 h-4 text-white/70" />
         </div>
@@ -171,8 +201,9 @@ export default function RouteHub({
           </p>
         )}
         <BottomGallery
-          mode={mode} items={items} currentId={item.id}
+          mode={mode} items={sortedItems} currentId={item.id}
           onSelect={index => dispatch({ type: 'JUMP_TO', index })}
+          sortBy={sortBy} onSortChange={handleSortChange}
           importLabel={importLabel} onImport={onImport}
         />
         {/* Trascina la scheda chiusa verso l'alto per aprirla — unico invito visivo rimasto

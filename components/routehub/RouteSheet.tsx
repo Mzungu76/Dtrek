@@ -103,6 +103,42 @@ export default function RouteSheet({
 
   useEffect(() => { onHeightChange?.(currentHeight) }, [currentHeight]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Content swipes between tabs, exactly like swiping routes on Screen 1 — the pill bar just
+  // reflects whichever tab is now centered, tap or swipe. Native horizontal scroll-snap rather
+  // than a custom pointer-drag: with each page independently vertically scrollable, letting the
+  // browser disambiguate the gesture's axis is far more reliable than reimplementing it.
+  const activeIndex = Math.max(0, tabs.findIndex(t => t.key === activeTab))
+  const contentScrollRef = useRef<HTMLDivElement>(null)
+  const firstSync = useRef(true)
+  const scrollSettleTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  // Keeps the strip in sync with activeTab when it changes for a reason other than swiping it
+  // directly — tapping a pill, or an external jump (weather emoji / score badge on Screen 1).
+  // Instant on mount, smooth afterwards, so landing straight on a non-first tab doesn't visibly
+  // slide in from the left.
+  useEffect(() => {
+    const el = contentScrollRef.current
+    if (!el || el.clientWidth === 0) return
+    const left = activeIndex * el.clientWidth
+    if (Math.abs(el.scrollLeft - left) < 2) return
+    el.scrollTo({ left, behavior: firstSync.current ? 'auto' : 'smooth' })
+    firstSync.current = false
+  }, [activeIndex])
+
+  // Debounced to the scroll settling (not every frame of the drag/momentum) — updates the pill
+  // bar once, when the swipe/fling actually lands, instead of flickering through every tab it
+  // passes over on the way.
+  const handleContentScroll = () => {
+    clearTimeout(scrollSettleTimer.current)
+    scrollSettleTimer.current = setTimeout(() => {
+      const el = contentScrollRef.current
+      if (!el || el.clientWidth === 0) return
+      const idx = Math.max(0, Math.min(tabs.length - 1, Math.round(el.scrollLeft / el.clientWidth)))
+      if (tabs[idx] && tabs[idx].key !== activeTab) onTabChange(tabs[idx].key)
+    }, 80)
+  }
+  useEffect(() => () => clearTimeout(scrollSettleTimer.current), [])
+
   return (
     // pointer-events-none on the root: this div spans the full screen (inset-0) so the map
     // stays pannable through the empty space above the docking strip/sheet — only the actual
@@ -200,12 +236,24 @@ export default function RouteSheet({
             </div>
 
             <div
-              ref={tabScrollRef?.(activeTab)}
-              className="overflow-y-auto md:max-w-2xl md:mx-auto"
-              style={{ height: `calc(${currentHeight}px - ${CHROME_PX}px)` }}
+              ref={contentScrollRef}
+              onScroll={handleContentScroll}
+              className="flex overflow-x-auto [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: 'none', scrollSnapType: 'x mandatory', height: `calc(${currentHeight}px - ${CHROME_PX}px)` }}
             >
-              {heroPhotos}
-              {renderTabContent(activeTab)}
+              {tabs.map((t, i) => (
+                <div key={t.key} className="w-full h-full shrink-0" style={{ scrollSnapAlign: 'start' }}>
+                  {/* Only the active tab and its immediate neighbors ever mount their content —
+                      renderTabContent can be expensive (maps, wiki fetches…) and every tab
+                      mounting at once would fire all of it regardless of what's ever viewed. */}
+                  {Math.abs(i - activeIndex) <= 1 && (
+                    <div ref={tabScrollRef?.(t.key)} className="h-full overflow-y-auto md:max-w-2xl md:mx-auto">
+                      {heroPhotos}
+                      {renderTabContent(t.key)}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </>
         )}
