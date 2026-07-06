@@ -1,15 +1,15 @@
 'use client'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Mountain, ArrowUpDown, Upload } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import type { HubMode, RouteHubItem, SortValues } from './types'
 
-type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating'
+export type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating'
 
 // Guida can sort/preview by Trail Score (a route not yet hiked has no personal vote); Resoconto
 // by the user's own vote (a computed score matters less once the hike is already done).
-const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string }[]> = {
+export const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string }[]> = {
   guida: [
     { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
   ],
@@ -18,7 +18,10 @@ const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string }[]> = 
   ],
 }
 
-const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number> = {
+// Exported so RouteHub can sort the very same `items` array it feeds the carousel — otherwise
+// the gallery's order and the swipe order silently disagree the moment the user picks a sort
+// other than the list's original load order, and swiping "next" jumps to an unrelated route.
+export const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number> = {
   date:   (a, b) => b.date - a.date,
   km:     (a, b) => b.km - a.km,
   dplus:  (a, b) => b.dplus - a.dplus,
@@ -113,33 +116,25 @@ function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
 
 interface Props {
   mode: HubMode
+  /** Already in final display order — RouteHub sorts this the same way for the carousel too, so
+   *  the gallery's order and the swipe order never disagree. */
   items: RouteHubItem[]
   currentId: string
   onSelect: (index: number) => void
+  sortBy: SortKey
+  onSortChange: (key: SortKey) => void
   /** Import a new GPX/FIT/TCX — rendered as a dedicated tile ahead of the other routes so it's
    *  always reachable from the gallery, even when there's only one route (and no "others"). */
   importLabel?: string
   onImport?: () => void
 }
 
-export default function BottomGallery({ mode, items, currentId, onSelect, importLabel, onImport }: Props) {
-  const [sortBy, setSortBy] = useState<SortKey>('date')
+export default function BottomGallery({ mode, items, currentId, onSelect, sortBy, onSortChange, importLabel, onImport }: Props) {
   const hasSortData = items.some(i => i.sortValues)
   const sortOptions = SORT_OPTIONS_BY_MODE[mode]
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Includes the route on screen — it stays in the strip (highlighted, see below) instead of
-  // vanishing from it, so the gallery always shows where "here" sits among every other route.
-  const sorted = useMemo(() => {
-    const list = items.map((item, i) => ({ item, i }))
-    if (!hasSortData) return list
-    return [...list].sort((a, b) => SORT_CMP[sortBy](
-      a.item.sortValues ?? { date: 0, km: 0, dplus: 0 },
-      b.item.sortValues ?? { date: 0, km: 0, dplus: 0 },
-    ))
-  }, [items, sortBy, hasSortData])
-
-  // Without this, changing the sort re-orders `sorted` correctly but the strip stays scrolled
+  // Without this, changing the sort re-orders `items` correctly but the strip stays scrolled
   // wherever the user left it — the new #1 item lands off-screen and the re-sort looks like it
   // silently did nothing.
   useEffect(() => { scrollRef.current?.scrollTo({ left: 0 }) }, [sortBy])
@@ -151,7 +146,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
     el?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
   }, [currentId])
 
-  if (sorted.length === 0 && !onImport) return null
+  if (items.length === 0 && !onImport) return null
 
   return (
     <div>
@@ -161,7 +156,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
           {sortOptions.map(s => (
             <button
               key={s.id}
-              onClick={() => setSortBy(s.id)}
+              onClick={() => onSortChange(s.id)}
               className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold border backdrop-blur-md transition-colors ${
                 sortBy === s.id ? 'bg-white text-stone-800 border-white' : 'bg-black/40 text-stone-200 border-white/20'
               }`}
@@ -182,7 +177,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
             <span className="text-[10px] font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
           </button>
         )}
-        {sorted.map(({ item, i }) => {
+        {items.map((item, i) => {
           const isCurrent = item.id === currentId
           return (
           <button
