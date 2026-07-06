@@ -33,6 +33,10 @@ interface Props {
   showPoiLayer?: boolean
   /** Shows the play/pause/speed tour controls and enables the animated playback along the track. */
   showTourControls?: boolean
+  /** Height, in px, currently covered by an overlapping bottom sheet/banner — when it changes,
+   *  the map re-centers so whatever point was visually centered in the *unobscured* band stays
+   *  there, instead of drifting toward the half hidden behind the sheet. 0 when nothing overlaps. */
+  obscuredBottomPx?: number
 }
 
 const DTM_MATCH_RADIUS_M = 25
@@ -84,9 +88,13 @@ export default function MapView({
   highlightedDifficultyIndex = null,
   showPoiLayer = false,
   showTourControls = false,
+  obscuredBottomPx = 0,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<any>(null)
+  const obscuredBottomPxRef = useRef(obscuredBottomPx)
+  obscuredBottomPxRef.current = obscuredBottomPx
+  const focusLatLngRef  = useRef<any>(null)
   const poiLayer        = useRef<any[]>([])
   const poiMarkersRef   = useRef<Map<number, any>>(new Map())
   const wikiLayer       = useRef<any[]>([])
@@ -265,6 +273,38 @@ export default function MapView({
     const handlers = [map.dragging, map.scrollWheelZoom, map.touchZoom, map.doubleClickZoom]
     handlers.forEach(h => { if (h) interactive ? h.enable() : h.disable() })
   }, [interactive, mapReady])
+
+  // Tracks whichever LatLng currently sits at the *visible* (unobscured) center — every user
+  // pan/zoom (and our own corrective pans below) updates it, so "the point centered before the
+  // change" always means the right thing, whether that's the route's initial center or somewhere
+  // the user has since navigated to.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    const map = mapInstance.current
+    const updateFocus = () => {
+      const size = map.getSize()
+      const desiredY = (size.y - obscuredBottomPxRef.current) / 2
+      focusLatLngRef.current = map.containerPointToLatLng([size.x / 2, desiredY])
+    }
+    updateFocus()
+    map.on('moveend', updateFocus)
+    return () => { map.off('moveend', updateFocus) }
+  }, [mapReady])
+
+  // Re-anchors the tracked focus point at the visible center whenever the obscured height
+  // changes (the bottom sheet opening, or being dragged up/down) — so the map adapts live
+  // instead of leaving the focus point to drift behind the sheet.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current || !focusLatLngRef.current) return
+    const map = mapInstance.current
+    const size = map.getSize()
+    const desiredY = (size.y - obscuredBottomPx) / 2
+    const p = map.latLngToContainerPoint(focusLatLngRef.current)
+    const offsetX = p.x - size.x / 2
+    const offsetY = p.y - desiredY
+    if (Math.abs(offsetX) < 0.5 && Math.abs(offsetY) < 0.5) return
+    map.panBy([offsetX, offsetY], { animate: false })
+  }, [obscuredBottomPx, mapReady])
 
   // POI layer — re-runs when pois arrive, the map finishes initializing, or the layer is
   // toggled on/off. Off by default: markers aren't mounted at all until `showPoiLayer` is true,

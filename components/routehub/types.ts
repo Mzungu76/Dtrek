@@ -63,8 +63,10 @@ export interface RouteHubProps {
   /** Called (debounced) whenever the current route settles on a new index — used to sync the URL. */
   onIndexChange?: (item: RouteHubItem, index: number) => void
   /** The real, always-visible map/photo for the current route — `interactive` is false while
-   *  Screen 1's carousel is showing and true whenever the Screen 2 sheet is open. */
-  renderStageMap: (item: RouteHubItem, interactive: boolean) => ReactNode
+   *  Screen 1's carousel is showing and true whenever the Screen 2 sheet is open.
+   *  `obscuredBottomPx` is the sheet's current height in px (0 on Screen 1) — forwarded to the
+   *  map so it can keep its focus point centered in the shrinking/growing visible band. */
+  renderStageMap: (item: RouteHubItem, interactive: boolean, obscuredBottomPx: number) => ReactNode
   /** Tabs shown in the Screen 2 sheet's horizontal tab-bar, in display order. Does not include
    *  'meteo' — that quick-view is reachable only via the weather icon next to the title. */
   tabs: TabDef[]
