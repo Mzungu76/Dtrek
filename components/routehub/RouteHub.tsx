@@ -81,21 +81,24 @@ export default function RouteHub({
     ))
   }, [items, sortBy, hasSortData])
 
-  // Changing the sort reorders the array `state.index` points into — capture which route is on
-  // screen *before* the sort changes, then resync the index to wherever that same route lands in
-  // the new order, so the sort never changes which route is shown, only its position. Runs as a
-  // layout effect so the one-render mismatch (old index against the new order) never paints.
-  const pendingResyncId = useRef<string | null>(null)
-  const handleSortChange = (key: SortKey) => {
-    pendingResyncId.current = sortedItems[state.index]?.id ?? null
-    setSortBy(key)
-  }
+  // `sortedItems` can reorder for two very different reasons: the user picking a different sort
+  // (handleSortChange below), or a route's own score/date/etc. quietly updating live (e.g. its
+  // TS finishes computing once it becomes the open hike) and moving it within the current sort.
+  // Either way, `state.index` must keep pointing at the SAME route, not whatever numeric slot it
+  // used to occupy — otherwise the screen can silently swap to a different route out from under
+  // the user the instant its neighbor's score arrives. currentRouteId tracks intent (updated
+  // whenever the index changes, from ANY cause); the layout effect below re-derives the index
+  // from that id every time the order changes, so a reorder can shuffle the array without ever
+  // being able to change which route is on screen.
+  const currentRouteId = useRef<string | null>(null)
+  useEffect(() => { currentRouteId.current = sortedItems[state.index]?.id ?? currentRouteId.current }, [state.index]) // eslint-disable-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
-    if (!pendingResyncId.current) return
-    const idx = sortedItems.findIndex(it => it.id === pendingResyncId.current)
-    pendingResyncId.current = null
+    const id = currentRouteId.current
+    if (id == null) return
+    const idx = sortedItems.findIndex(it => it.id === id)
     if (idx >= 0 && idx !== state.index) dispatch({ type: 'JUMP_TO', index: idx })
   }, [sortedItems]) // eslint-disable-line react-hooks/exhaustive-deps
+  const handleSortChange = (key: SortKey) => setSortBy(key)
 
   if (items.length === 0) {
     return (
