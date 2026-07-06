@@ -40,19 +40,14 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           className="transition-opacity ease-out"
           style={{ opacity: visible ? 1 : 0, transitionDuration: `${visible ? FADE_IN_MS : FADE_OUT_MS}ms` }}
         >
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <div className="pointer-events-auto mt-3 flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
             {statPills.map(({ icon: Icon, label }) => (
-              <span key={label} className="pointer-events-auto flex items-center gap-1.5 bg-black/45 backdrop-blur-md text-white text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full border border-white/10">
+              <span key={label} className="pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm">
                 <Icon className="w-3 h-3" /> {label}
               </span>
             ))}
+            {scoreBadges}
           </div>
-
-          {scoreBadges && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {scoreBadges}
-            </div>
-          )}
 
           <div className="mt-3 flex items-start gap-2.5">
             <p className="flex-1 font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>

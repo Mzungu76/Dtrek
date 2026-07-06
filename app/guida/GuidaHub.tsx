@@ -6,12 +6,12 @@ import RouteHub from '@/components/routehub/RouteHub'
 import RouteThumb from '@/components/RouteThumb'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import { AssessmentPanel } from '@/components/routehub/AssessmentPanel'
-import { glassChip, glassTile, glassTileHover, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
+import { glassTile, glassTileHover, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from '@/components/routehub/types'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
-import { ScoreRing } from '@/components/ScoreRing'
+import { ScoreRing, computeTrailScoreTotal, MiniScoreRing } from '@/components/ScoreRing'
 import { CurrentConditionsNotice } from '@/components/CurrentConditionsNotice'
 import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
@@ -460,16 +460,24 @@ export default function GuidaHub({ id }: { id?: string }) {
 
   const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
+    const trailScoreTotal = computeTrailScoreTotal(
+      { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
+      safetyScore,
+      { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
+      { data: s2.data, loading: s2.loading },
+    )
     return (
       <>
-        {hike.cachedTrailScore != null && (
-          <button onClick={onTap} className={`${glassChip} text-[11px] font-semibold px-2.5 py-1.5`}>CTS {Math.round(hike.cachedTrailScore)}</button>
+        {trailScoreTotal > 0 && (
+          <button onClick={onTap} title="Trail Score" className="pointer-events-auto shrink-0">
+            <MiniScoreRing value={trailScoreTotal} />
+          </button>
         )}
         {safetyScore && (
-          <button onClick={onTap} className="px-2.5 py-1.5 rounded-full text-white text-[11px] font-bold border border-white/10 backdrop-blur-md" style={{ backgroundColor: safetyScore.color }}>Sicurezza {safetyScore.label}</button>
+          <button onClick={onTap} className="pointer-events-auto shrink-0 px-2.5 py-1.5 rounded-full text-white text-[11px] font-bold border border-white/10 backdrop-blur-md" style={{ backgroundColor: safetyScore.color }}>Sicurezza {safetyScore.label}</button>
         )}
         {hike.cachedBeautyScore && (
-          <button onClick={onTap} className="px-2.5 py-1.5 rounded-full text-white text-[11px] font-bold border border-white/10 backdrop-blur-md" style={{ backgroundColor: hike.cachedBeautyScore.color }}>Bellezza {hike.cachedBeautyScore.gradeLabel}</button>
+          <button onClick={onTap} className="pointer-events-auto shrink-0 px-2.5 py-1.5 rounded-full text-white text-[11px] font-bold border border-white/10 backdrop-blur-md" style={{ backgroundColor: hike.cachedBeautyScore.color }}>Bellezza {hike.cachedBeautyScore.gradeLabel}</button>
         )}
       </>
     )

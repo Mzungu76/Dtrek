@@ -84,7 +84,10 @@ export default function RouteSheet({
   useEffect(() => { onHeightChange?.(currentHeight) }, [currentHeight]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="absolute inset-0 flex flex-col justify-end">
+    // pointer-events-none on the root: this div spans the full screen (inset-0) so the map
+    // stays pannable through the empty space above the docking strip/sheet — only the actual
+    // visible chrome (buttons, sheet card) opts back in with pointer-events-auto below.
+    <div className="absolute inset-0 flex flex-col justify-end pointer-events-none">
       {/* Docking strip — fixed, independent of the sheet's height, never covered by it. */}
       <div className="relative h-16 shrink-0 pointer-events-none">
         <div className="absolute top-[calc(env(safe-area-inset-top,0px)+16px)] inset-x-4 flex items-center justify-between gap-2">
@@ -111,7 +114,7 @@ export default function RouteSheet({
       </div>
 
       <div
-        className={`relative rounded-t-[28px] bg-[#fdfcfa] border-t border-stone-200 shadow-[0_-8px_32px_rgba(0,0,0,0.25)] overflow-hidden ${
+        className={`relative rounded-t-[28px] bg-[#fdfcfa] border-t border-stone-200 shadow-[0_-8px_32px_rgba(0,0,0,0.25)] overflow-hidden pointer-events-auto ${
           dragHeight === null ? 'transition-[height] duration-200 ease-out' : ''
         }`}
         style={{ height: `${currentHeight}px`, maxHeight: 'calc(100% - 72px)' }}
