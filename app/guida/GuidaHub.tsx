@@ -37,6 +37,7 @@ import {
   Mountain, Route, TrendingUp, Clock, Loader2, BookOpen, Leaf, PawPrint,
   Car, Layers, Compass, Images, Trash2, Pencil, Check,
   Maximize2, Minimize2, X, MapPin, BarChart2, ShieldAlert, Wrench, Navigation,
+  Calendar as CalendarIcon,
 } from 'lucide-react'
 import { fetchDrivingInfo, getUserStartingPoint, getTrailStartPoint, originMatches } from '@/lib/drivingInfo'
 import PdfExportButton from '@/components/PdfExportButton'
@@ -112,6 +113,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [showFloraGallery, setShowFloraGallery] = useState(false)
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
   const [weatherIcon, setWeatherIcon] = useState<{ emoji: string; label: string } | null>(null)
+  const [showDatePicker, setShowDatePicker] = useState(false)
 
   const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
@@ -468,6 +470,34 @@ export default function GuidaHub({ id }: { id?: string }) {
     </button>
   )
 
+  // Lets the user set/change the planned outing date directly over the map, without a separate
+  // page — only relevant for a hike not yet done (Guida), so this stays out of Resoconto.
+  const dateChip = (
+    <div className="relative">
+      <button
+        onClick={() => setShowDatePicker(v => !v)}
+        title="Programma data di uscita"
+        className={`flex items-center justify-center w-9 h-9 rounded-full border transition-colors ${showDatePicker ? 'bg-sky-500/80 border-sky-300/40 text-white' : 'bg-black/50 border-white/15 text-white/80'} backdrop-blur-md`}
+      >
+        <CalendarIcon className="w-4 h-4" />
+      </button>
+      {showDatePicker && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setShowDatePicker(false)} />
+          <div className="absolute right-0 top-11 z-20 p-3 rounded-xl bg-white shadow-2xl border border-stone-200">
+            <label className="block text-[10px] font-semibold uppercase tracking-wide text-stone-400 mb-1.5">Data di uscita</label>
+            <input
+              type="date"
+              defaultValue={hike?.plannedDate ?? ''}
+              onChange={e => { patch({ plannedDate: e.target.value || undefined }); setShowDatePicker(false) }}
+              className="text-sm text-stone-800 outline-none border border-stone-200 rounded-lg px-2 py-1.5"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
+
   const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
     const scoreLoading = si.loading || s2.loading
@@ -788,7 +818,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
         weatherIcon={(routeItem) => hike && routeItem.id === hike.id ? weatherIcon : undefined}
         onOpenMap3D={hasGps ? () => setShow3D(true) : undefined}
-        mapHeaderActions={poiToggleChip}
+        mapHeaderActions={<>{dateChip}{poiToggleChip}</>}
         importLabel="Importa"
         onImport={() => router.push('/upload?tab=gpx')}
       />

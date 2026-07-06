@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Mountain, ArrowUpDown, Upload } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
@@ -7,10 +7,16 @@ import type { HubMode, RouteHubItem, SortValues } from './types'
 
 type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating'
 
-const SORT_OPTIONS: { id: SortKey; label: string }[] = [
-  { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' },
-  { id: 'rating', label: 'Voto' }, { id: 'cts', label: 'CTS' },
-]
+// Guida can sort/preview by Trail Score (a route not yet hiked has no personal vote); Resoconto
+// by the user's own vote (a computed score matters less once the hike is already done).
+const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string }[]> = {
+  guida: [
+    { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
+  ],
+  resoconto: [
+    { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'rating', label: 'Voto' },
+  ],
+}
 
 const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number> = {
   date:   (a, b) => b.date - a.date,
@@ -18,6 +24,36 @@ const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number> = {
   dplus:  (a, b) => b.dplus - a.dplus,
   cts:    (a, b) => (b.cts ?? -1) - (a.cts ?? -1),
   rating: (a, b) => (b.rating ?? -1) - (a.rating ?? -1),
+}
+
+function TextBadge({ children }: { children: ReactNode }) {
+  return (
+    <span className="px-1.5 py-0.5 rounded-md bg-white/90 text-stone-800 text-[9px] font-bold shadow-sm leading-none">
+      {children}
+    </span>
+  )
+}
+
+/** The thumbnail's top-left badge mirrors whichever sort is currently active, instead of always
+ *  showing the same score — sorting by date shows the date, by distance shows the distance, etc. */
+function ThumbBadge({ sortBy, item }: { sortBy: SortKey; item: RouteHubItem }) {
+  const sv = item.sortValues
+  if (!sv) return null
+  switch (sortBy) {
+    case 'cts':
+    case 'rating':
+      return item.scorePreview
+        ? <MiniScoreRing value={item.scorePreview.value} max={item.scorePreview.max} color={item.scorePreview.color} size={22} />
+        : null
+    case 'date':
+      return <TextBadge>{new Date(sv.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</TextBadge>
+    case 'km':
+      return <TextBadge>{(sv.km / 1000).toFixed(1)} km</TextBadge>
+    case 'dplus':
+      return <TextBadge>+{Math.round(sv.dplus)} m</TextBadge>
+    default:
+      return null
+  }
 }
 
 // Mappa 2D statica (no drag/zoom) per il quadrato di galleria — mostra le tile
@@ -89,6 +125,7 @@ interface Props {
 export default function BottomGallery({ mode, items, currentId, onSelect, importLabel, onImport }: Props) {
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const hasSortData = items.some(i => i.sortValues)
+  const sortOptions = SORT_OPTIONS_BY_MODE[mode]
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const others = useMemo(() => {
@@ -112,7 +149,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
       {hasSortData && (
         <div className="flex items-center justify-center gap-1.5 overflow-x-auto px-4 mb-2 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
           <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />
-          {SORT_OPTIONS.map(s => (
+          {sortOptions.map(s => (
             <button
               key={s.id}
               onClick={() => setSortBy(s.id)}
@@ -156,9 +193,9 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
                 <Mountain className="w-5 h-5 text-white/40" />
               </div>
             )}
-            {item.scorePreview && (
+            {hasSortData && (
               <div className="absolute top-1 left-1">
-                <MiniScoreRing value={item.scorePreview.value} max={item.scorePreview.max} color={item.scorePreview.color} size={22} />
+                <ThumbBadge sortBy={sortBy} item={item} />
               </div>
             )}
             <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-3 bg-gradient-to-t from-black/75 to-transparent">
