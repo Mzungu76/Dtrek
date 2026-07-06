@@ -13,13 +13,8 @@ import { plannedFromActivity } from '@/lib/plannedFromActivity'
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
-import { type PoiItem } from '@/lib/overpass'
-import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
-import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
-import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
-import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
-import { computeTrailScore } from '@/lib/trailScore'
-import { computeBbox } from '@/lib/geoUtils'
+import { computeCtsForHike } from '@/lib/computeCtsForHike'
+import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
 import { Upload, FileText, CheckCircle, AlertCircle, Mountain, MapPin, Clock, TrendingUp, Route, Link2, Link2Off, Info, PencilLine, History, Loader2 } from 'lucide-react'
 
 async function defaultPendingExpiresAt(): Promise<string> {
@@ -413,53 +408,12 @@ function GpxUploader() {
 
       await savePlanned(hike)
 
-      // Compute and persist CTS (fire-and-forget, uses already-fetched POIs)
-      if (gps.length >= 2 && hike.cachedPois?.length) {
-        ;(async () => {
-          try {
-            const bbox = computeBbox(gps)
-            const elevProfile = (parsed.trackPoints ?? [])
-              .filter(p => p.lat && p.lon)
-              .map(p => p.altitudeMeters ?? 0)
-            const [osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
-              fetch(`/api/tei-overpass?bbox=${bbox}`)
-                .then(r => r.json() as Promise<OsmTeiData>)
-                .catch(() => undefined),
-              fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
-                .then(r => r.json() as Promise<TrailDtmProfile>)
-                .catch(() => undefined),
-              fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
-                .then(r => r.json() as Promise<TrailTerrainProfile>)
-                .catch(() => undefined),
-              checkProtectedArea(gps).then(r => r.inProtectedArea).catch(() => undefined),
-            ])
-            const tei = computeTEI({
-              track: gps,
-              elevGain: hike.elevationGain,
-              distanceMeters: hike.distanceMeters,
-              altitudeMax: hike.altitudeMax,
-              elevProfile,
-              pois: hike.cachedPois as PoiItem[],
-              osmData,
-              dtmProfile,
-              terrainProfile,
-              inProtectedArea,
-            })
-            const bs = teiToBeautyScore(tei)
-            const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-            const { ts } = computeTrailScore(bs, {
-              distanceMeters: hike.distanceMeters,
-              elevationGain:  hike.elevationGain,
-              elevationLoss:  hike.elevationLoss,
-              altitudeMax:    hike.altitudeMax,
-              prefSforzo:     prefs.prefSforzo,
-              prefDurata:     prefs.prefDurata,
-              avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
-            })
-            await updatePlannedMeta(hike.id, { cachedBeautyScore: bs, cachedTrailScore: ts })
-          } catch {}
-        })()
-      }
+      // Every score gets computed once, right here at import, then persisted — not gated on
+      // POIs being found (computeCtsForHike degrades gracefully with an empty POI list) and not
+      // deferred to whenever/if the user happens to open the hike. Fire-and-forget: the user is
+      // already being routed to the detail page below, these just land in the background.
+      computeCtsForHike(hike).catch(() => {})
+      computeSafetyForHike(hike).catch(() => {})
 
       setStatus('success')
       setTimeout(() => router.push(`/guida/${encodeURIComponent(parsed.id)}`), 1200)

@@ -5,22 +5,20 @@ import type { TrailDtmProfile } from './dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import { checkProtectedArea } from './natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from './geoUtils'
-import { updatePlannedMeta, type PlannedHike } from './plannedStore'
+import { updateActivityMeta, type StoredActivity } from './blobStore'
 import type { BeautyScore } from './beautyScore'
 
 const FETCH_TIMEOUT_MS = 25000
 
 /**
- * Runs the full CTS pipeline (POIs, OSM tags, DTM slope/aspect, terrain,
- * protected-area overlap) for a planned hike and persists the result.
- * Self-contained: fetches everything it needs rather than relying on
- * page-local state, so it can run fire-and-forget right after a hike is
- * added, not just from the manual "Calcola CTS" button.
+ * Activity counterpart of computeCtsForHike — same self-contained CTS pipeline, persisted via
+ * updateActivityMeta instead of updatePlannedMeta. Lets a completed hike's CTS auto-refresh on
+ * open (once stale) without going through the heavier saveActivityWithEnrichment/full re-save.
  */
-export async function computeCtsForHike(hike: Pick<PlannedHike,
-  'id' | 'trackPoints' | 'elevationGain' | 'distanceMeters' | 'elevationLoss' | 'altitudeMax'
->): Promise<{ cachedBeautyScore: BeautyScore; cachedTrailScore: number; cachedTrailScoreConfidence: CtsConfidence; cachedScoresComputedAt: string } | null> {
-  const gps = (hike.trackPoints ?? [])
+export async function computeCtsForActivity(activity: Pick<StoredActivity,
+  'id' | 'trackPoints' | 'elevationGain' | 'distanceMeters' | 'elevationLoss' | 'altitudeMax' | 'avgHeartRate'
+>): Promise<{ linkedBeautyScore: BeautyScore; trailScore: number; trailScoreConfidence: CtsConfidence; trailScoreComputedAt: string } | null> {
+  const gps = (activity.trackPoints ?? [])
     .filter(p => p.lat && p.lon)
     .map(p => [p.lat!, p.lon!] as [number, number])
   if (gps.length < 2) return null
@@ -40,15 +38,15 @@ export async function computeCtsForHike(hike: Pick<PlannedHike,
     .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
     .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
 
-  const elevProfile = (hike.trackPoints ?? [])
+  const elevProfile = (activity.trackPoints ?? [])
     .filter(p => p.lat && p.lon)
     .map(p => p.altitudeMeters ?? 0)
 
   const tei = computeTEI({
     track: gps,
-    elevGain: hike.elevationGain,
-    distanceMeters: hike.distanceMeters,
-    altitudeMax: hike.altitudeMax,
+    elevGain: activity.elevationGain,
+    distanceMeters: activity.distanceMeters,
+    altitudeMax: activity.altitudeMax,
     elevProfile,
     pois,
     osmData,
@@ -61,10 +59,11 @@ export async function computeCtsForHike(hike: Pick<PlannedHike,
 
   const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
   let { ts } = computeTrailScore(bs, {
-    distanceMeters: hike.distanceMeters,
-    elevationGain:  hike.elevationGain,
-    elevationLoss:  hike.elevationLoss,
-    altitudeMax:    hike.altitudeMax,
+    distanceMeters: activity.distanceMeters,
+    elevationGain:  activity.elevationGain,
+    elevationLoss:  activity.elevationLoss ?? 0,
+    altitudeMax:    activity.altitudeMax,
+    avgHeartRate:   activity.avgHeartRate,
     prefSforzo:     prefs.prefSforzo,
     prefDurata:     prefs.prefDurata,
     hrRest:         prefs.hrRest,
@@ -74,9 +73,9 @@ export async function computeCtsForHike(hike: Pick<PlannedHike,
   if (confidence === 'estimated') ts = Math.round(ts * 0.9)
 
   const result = {
-    cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence,
-    cachedScoresComputedAt: new Date().toISOString(),
+    linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence,
+    trailScoreComputedAt: new Date().toISOString(),
   }
-  await updatePlannedMeta(hike.id, result)
+  await updateActivityMeta(activity.id, result)
   return result
 }

@@ -30,6 +30,8 @@ export interface StoredActivity extends TcxActivity {
   linkedBeautyScore?: BeautyScore
   trailScore?: number
   trailScoreConfidence?: CtsConfidence
+  // When linkedBeautyScore+trailScore were last computed — see lib/scoreFreshness.ts.
+  trailScoreComputedAt?: string
   depKm?: number
   weatherAtHike?: WeatherAtHike
 }
@@ -59,6 +61,7 @@ export interface ActivityMeta {
   linkedBeautyScore?: BeautyScore
   trailScore?: number
   trailScoreConfidence?: CtsConfidence
+  trailScoreComputedAt?: string
   depKm?: number
   iev?: number
 }
@@ -98,6 +101,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     linkedBeautyScore:       a.linkedBeautyScore,
     trailScore:              a.trailScore,
     trailScoreConfidence:    a.trailScoreConfidence,
+    trailScoreComputedAt:    a.trailScoreComputedAt,
     depKm:           computeDEP(a.distanceMeters, a.elevationGain),
     iev:             a.iev ?? undefined,  // a.iev is number | null | undefined (TcxActivity)
   }
@@ -172,7 +176,7 @@ export async function saveActivity(activity: StoredActivity): Promise<void> {
 /** Patches Supabase, then applies the same patch to local cached copies. */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore' | 'trailScoreConfidence'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore' | 'trailScoreConfidence' | 'trailScoreComputedAt'>>
 ): Promise<void> {
   // Update local caches optimistically (before API) so scores always persist locally
   lsGet<StoredActivity>(LS_KEYS.activity(id)).then((local) => {
