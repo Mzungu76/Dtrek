@@ -57,7 +57,9 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedBeautyScore:            row.cached_beauty_score            as PlannedHike['cachedBeautyScore'] | undefined,
     cachedTrailScore:             row.cached_trail_score             as number | undefined,
     cachedTrailScoreConfidence:   row.cached_trail_score_confidence  as PlannedHike['cachedTrailScoreConfidence'] | undefined,
+    cachedScoresComputedAt:       row.cached_scores_computed_at      as string | undefined,
     cachedSafetyScore:            row.cached_safety_score            as SafetyScore | undefined,
+    cachedSafetyComputedAt:       row.cached_safety_computed_at      as string | undefined,
     cachedTsTotal:                row.cached_ts_total                as number | undefined,
     cachedRiddles:                row.cached_riddles                 as PlannedHike['cachedRiddles'],
     cachedEpochPois:              row.cached_epoch_pois              as PlannedHike['cachedEpochPois'],
@@ -96,7 +98,9 @@ function hikeToRow(h: PlannedHike) {
     cached_beauty_score:              h.cachedBeautyScore ?? null,
     cached_trail_score:               h.cachedTrailScore ?? null,
     cached_trail_score_confidence:    h.cachedTrailScoreConfidence ?? null,
+    cached_scores_computed_at:        h.cachedScoresComputedAt ?? null,
     cached_safety_score:              h.cachedSafetyScore ?? null,
+    cached_safety_computed_at:        h.cachedSafetyComputedAt ?? null,
     cached_ts_total:                  h.cachedTsTotal ?? null,
     cached_riddles:                   h.cachedRiddles ?? null,
     cached_epoch_pois:                h.cachedEpochPois ?? null,
@@ -115,8 +119,8 @@ const META_COLS = [
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
   'route_polyline', 'assessment', 'cached_guide', 'osm_relation_id',
-  'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence',
-  'cached_safety_score', 'cached_ts_total', 'cached_riddles', 'cached_epoch_pois',
+  'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence', 'cached_scores_computed_at',
+  'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_riddles', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
   'pending_expires_at', 'archived_at',
@@ -289,7 +293,9 @@ export async function PATCH(req: NextRequest) {
       cachedBeautyScore?: PlannedHike['cachedBeautyScore']
       cachedTrailScore?: number
       cachedTrailScoreConfidence?: string
+      cachedScoresComputedAt?: string
       cachedSafetyScore?: SafetyScore
+      cachedSafetyComputedAt?: string
       cachedTsTotal?: number
       cachedRiddles?: PlannedHike['cachedRiddles']
       cachedEpochPois?: PlannedHike['cachedEpochPois']
@@ -313,7 +319,9 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedBeautyScore            !== undefined) dbPatch.cached_beauty_score            = patch.cachedBeautyScore
     if (patch.cachedTrailScore             !== undefined) dbPatch.cached_trail_score             = patch.cachedTrailScore
     if (patch.cachedTrailScoreConfidence   !== undefined) dbPatch.cached_trail_score_confidence  = patch.cachedTrailScoreConfidence
+    if (patch.cachedScoresComputedAt       !== undefined) dbPatch.cached_scores_computed_at      = patch.cachedScoresComputedAt
     if (patch.cachedSafetyScore            !== undefined) dbPatch.cached_safety_score            = patch.cachedSafetyScore
+    if (patch.cachedSafetyComputedAt       !== undefined) dbPatch.cached_safety_computed_at      = patch.cachedSafetyComputedAt
     if (patch.cachedTsTotal                !== undefined) dbPatch.cached_ts_total                = patch.cachedTsTotal
     if (patch.cachedRiddles                !== undefined) dbPatch.cached_riddles                 = patch.cachedRiddles
     if (patch.cachedEpochPois              !== undefined) dbPatch.cached_epoch_pois              = patch.cachedEpochPois

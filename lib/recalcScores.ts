@@ -126,7 +126,7 @@ export async function recalcAllCts(prefs: CtsPrefs, onProgress?: (text: string) 
       })
       finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
     }
-    await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence })
+    await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence, trailScoreComputedAt: new Date().toISOString() })
     computed++
   })
 
@@ -196,7 +196,7 @@ export async function recalcAllCts(prefs: CtsPrefs, onProgress?: (text: string) 
       })
       finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
     }
-    await updatePlannedMeta(full.id, { cachedBeautyScore: bs, cachedTrailScore: finalTs, cachedTrailScoreConfidence: confidence })
+    await updatePlannedMeta(full.id, { cachedBeautyScore: bs, cachedTrailScore: finalTs, cachedTrailScoreConfidence: confidence, cachedScoresComputedAt: new Date().toISOString() })
     computed++
   })
 
@@ -243,7 +243,7 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
       gbifWildlifeRisks,
       guardianDogRisk,
     })
-    await updatePlannedMeta(meta.id, { cachedSafetyScore: safety })
+    await updatePlannedMeta(meta.id, { cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() })
   })
   return ok
 }

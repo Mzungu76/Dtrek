@@ -84,7 +84,7 @@ export default function SectionComfortTrailScore() {
               hrMax:          prefs.hrMax ?? hrMax ?? undefined,
             })
             updated++
-            return updatePlannedMeta(h.id, { cachedTrailScore: ts, cachedTrailScoreConfidence: confidence })
+            return updatePlannedMeta(h.id, { cachedTrailScore: ts, cachedTrailScoreConfidence: confidence, cachedScoresComputedAt: new Date().toISOString() })
           }),
         ...activities
           .filter(a => (a as { linkedBeautyScore?: BeautyScore }).linkedBeautyScore?.categories?.length)
@@ -102,7 +102,7 @@ export default function SectionComfortTrailScore() {
               hrMax:          prefs.hrMax ?? hrMax ?? undefined,
             })
             updated++
-            return updateActivityMeta(a.id, { trailScore: ts, trailScoreConfidence: confidence })
+            return updateActivityMeta(a.id, { trailScore: ts, trailScoreConfidence: confidence, trailScoreComputedAt: new Date().toISOString() })
           }),
       ])
     } catch {}
@@ -196,7 +196,7 @@ export default function SectionComfortTrailScore() {
           })
           finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
         }
-        await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence })
+        await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence, trailScoreComputedAt: new Date().toISOString() })
         computed++
       })
     } catch {}

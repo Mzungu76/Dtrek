@@ -132,6 +132,9 @@ CREATE INDEX IF NOT EXISTS idx_activities_merita_score ON activities (merita_sco
 ALTER TABLE activities    ADD COLUMN IF NOT EXISTS soddisfazione INTEGER;
 ALTER TABLE activities    ADD COLUMN IF NOT EXISTS loot_score    DOUBLE PRECISION;
 ALTER TABLE activities    ADD COLUMN IF NOT EXISTS trail_score   DOUBLE PRECISION;
+-- When trail_score/linked_beauty_score were last computed — same staleness policy as
+-- planned_hikes.cached_scores_computed_at, see lib/computeCtsForActivity.ts.
+ALTER TABLE activities    ADD COLUMN IF NOT EXISTS trail_score_computed_at TIMESTAMPTZ;
 
 -- Biometric profile (replaces manual FCmax setting)
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_age        INTEGER;
@@ -144,9 +147,14 @@ CREATE INDEX IF NOT EXISTS idx_activities_trail_score ON activities (trail_score
 -- TrailScore cache for planned hikes
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score             DOUBLE PRECISION;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score_confidence  TEXT;
+-- When cached_trail_score/cached_beauty_score were last computed — drives the "recompute if
+-- missing or older than 30 days" policy in lib/computeCtsForHike.ts / app/guida/GuidaHub.tsx.
+-- Beauty is never tracked as its own score (it's purely CTS's input), so one timestamp covers both.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_scores_computed_at      TIMESTAMPTZ;
 
 -- SafetyScore cache for planned hikes
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_safety_score JSONB;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_safety_computed_at TIMESTAMPTZ;
 
 -- Full Trail Score (TS) aggregate cache — CL + Sicurezza + Comfort TrailScore (cached_trail_score
 -- above, despite the similar name) + Ombra e acqua, each capped at 100, see

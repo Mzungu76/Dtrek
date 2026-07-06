@@ -20,8 +20,10 @@ import {
   getAllPlanned, getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type PlannedHikeMeta,
 } from '@/lib/plannedStore'
-import { computeSafetyScore, type SafetyScore, type WildlifeRisk } from '@/lib/safetyScore'
-import { fetchWildlifeRiskFromGbif } from '@/lib/wildlifeRiskFromGbif'
+import { type SafetyScore } from '@/lib/safetyScore'
+import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
+import { computeCtsForHike } from '@/lib/computeCtsForHike'
+import { isScoreFresh } from '@/lib/scoreFreshness'
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/lib/trailScore'
@@ -309,38 +311,39 @@ export default function GuidaHub({ id }: { id?: string }) {
     setCtsResult({ ...computed, ts: hike.cachedTrailScore ?? computed.ts })
   }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Safety: shows the cached value immediately if there is one (even a stale one, to avoid a
+  // flash of "no data"), then refreshes in the background if it's missing or older than
+  // SCORE_STALE_DAYS — normally that background refresh already happened at import time
+  // (app/upload/page.tsx), so this is the "reopen it later" half of the same policy.
   useEffect(() => {
     if (!hike) return
-    if (hike.cachedSafetyScore) { setSafetyScore(hike.cachedSafetyScore); return }
+    if (hike.cachedSafetyScore) setSafetyScore(hike.cachedSafetyScore)
+    if (hike.cachedSafetyScore && isScoreFresh(hike.cachedSafetyComputedAt)) return
     let cancelled = false
-    async function run() {
-      const poly = hike!.routePolyline
-      let gbifWildlifeRisks: WildlifeRisk[] = []
-      let guardianDogRisk: { present: boolean } | undefined
-      if (poly && poly.length >= 2) {
-        const bbox = computeBbox(poly, 0.005)
-        const [minLat, minLon, maxLat, maxLon] = bbox.split(',').map(Number)
-        const animalsBbox = `${minLat},${maxLat},${minLon},${maxLon}`
-        const month = hike!.plannedDate ? new Date(hike!.plannedDate).getMonth() + 1 : new Date().getMonth() + 1
-        const [gbifResult, guardianResult] = await Promise.allSettled([
-          fetchWildlifeRiskFromGbif(animalsBbox, month),
-          fetch(`/api/trails/guardian-dogs?bbox=${encodeURIComponent(bbox)}`, { signal: AbortSignal.timeout(20000) })
-            .then(r => r.json()) as Promise<{ present: boolean }>,
-        ])
-        if (gbifResult.status === 'fulfilled') gbifWildlifeRisks = gbifResult.value
-        if (guardianResult.status === 'fulfilled') guardianDogRisk = guardianResult.value
-      }
+    computeSafetyForHike(hike).then(safety => {
       if (cancelled) return
-      const safety = computeSafetyScore({
-        distanceMeters: hike!.distanceMeters, elevationGain: hike!.elevationGain,
-        elevationLoss: hike!.elevationLoss, altitudeMax: hike!.altitudeMax, altitudeMin: hike!.altitudeMin,
-        estimatedTimeSeconds: hike!.estimatedTimeSeconds, routePolyline: hike!.routePolyline,
-        plannedDate: hike!.plannedDate, gbifWildlifeRisks, guardianDogRisk,
-      })
       setSafetyScore(safety)
-      updatePlannedMeta(hike!.id, { cachedSafetyScore: safety }).catch(() => {})
-    }
-    run()
+      setHike(prev => prev ? { ...prev, cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() } : prev)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // CTS+Beauty: same policy as Safety above — computed once at import, and re-verified here
+  // only if missing (an older hike, imported before this policy existed) or stale. Reuses the
+  // "Calcola CTS" button's own loading flag so the UI treats an automatic and a manual
+  // (re)compute identically.
+  useEffect(() => {
+    if (!hike) return
+    const fresh = hike.cachedTrailScore != null && isScoreFresh(hike.cachedScoresComputedAt)
+    if (fresh) return
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
+    if (gps.length < 2) return
+    let cancelled = false
+    setCtsComputing(true)
+    computeCtsForHike(hike)
+      .then(result => { if (!cancelled && result) setHike(prev => prev ? { ...prev, ...result } : prev) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setCtsComputing(false) })
     return () => { cancelled = true }
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -486,8 +489,9 @@ export default function GuidaHub({ id }: { id?: string }) {
         hrRest: prefs.hrRest, hrMax: prefs.hrMax ?? undefined, avgSlopeDeg: dtmProfile?.avgSlopeDeg ?? undefined,
       })
       if (confidence === 'estimated') ts = Math.round(ts * 0.9)
-      await updatePlannedMeta(hike.id, { cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence })
-      setHike(prev => prev ? { ...prev, cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence } : prev)
+      const computedAt = new Date().toISOString()
+      await updatePlannedMeta(hike.id, { cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence, cachedScoresComputedAt: computedAt })
+      setHike(prev => prev ? { ...prev, cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence, cachedScoresComputedAt: computedAt } : prev)
     } catch (e) {
       console.error('CTS computation error:', e)
     } finally {

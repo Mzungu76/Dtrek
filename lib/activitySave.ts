@@ -36,6 +36,8 @@ export async function saveActivityWithEnrichment(
   // ── CTS analysis (best-effort, 18s deadline) ───────────────────
   let linkedBeautyScore: StoredActivity['linkedBeautyScore']
   let trailScore: number | undefined
+  let trailScoreConfidence: StoredActivity['trailScoreConfidence']
+  let trailScoreComputedAt: string | undefined
   try {
     const gps = (activity.trackPoints ?? [])
       .filter((p) => p.lat && p.lon)
@@ -80,8 +82,9 @@ export async function saveActivityWithEnrichment(
         inProtectedArea,
       })
       const bs = teiToBeautyScore(tei)
+      const confidence = tei.confidence
       const prefs = await fetch('/api/user-settings').then((r) => r.json()).catch(() => ({}))
-      const { ts } = computeTrailScore(bs, {
+      let { ts } = computeTrailScore(bs, {
         distanceMeters: activity.distanceMeters,
         elevationGain: activity.elevationGain,
         elevationLoss: activity.elevationLoss ?? 0,
@@ -94,8 +97,11 @@ export async function saveActivityWithEnrichment(
         prefDurata: prefs.prefDurata,
         avgSlopeDeg: dtmProfile?.avgSlopeDeg ?? undefined,
       }, prefs.beautyNaturaWeight ?? 50)
+      if (confidence === 'estimated') ts = Math.round(ts * 0.9)
       linkedBeautyScore = bs
       trailScore = ts
+      trailScoreConfidence = confidence
+      trailScoreComputedAt = new Date().toISOString()
     }
   } catch {} // non-blocking — save proceeds regardless
 
@@ -119,6 +125,8 @@ export async function saveActivityWithEnrichment(
     hikeNotes: opts.hikeNotes,
     linkedBeautyScore,
     trailScore,
+    trailScoreConfidence,
+    trailScoreComputedAt,
     weatherAtHike,
   }
   await saveActivity(stored)

@@ -34,6 +34,8 @@ import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeDEP, depLabel, findSimilarActivities } from '@/lib/stats'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
+import { isScoreFresh } from '@/lib/scoreFreshness'
 import {
   FileSpreadsheet, FileText, Map, FileDown,
   Route, TrendingUp, Clock, Flame, Heart, Zap,
@@ -239,6 +241,24 @@ export default function ResocontoHub({ id }: { id?: string }) {
     return () => { cancelled = true }
   }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // CTS+Beauty: computed once at import (lib/activitySave.ts) and re-verified here only if
+  // missing (an older activity, saved before that policy existed) or older than
+  // SCORE_STALE_DAYS — same policy as the planned-hike side in GuidaHub.
+  useEffect(() => {
+    if (!activity) return
+    const fresh = activity.trailScore != null && isScoreFresh(activity.trailScoreComputedAt)
+    if (fresh) return
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon)
+    if (gps.length < 2) return
+    let cancelled = false
+    setCtsComputing(true)
+    computeCtsForActivity(activity)
+      .then(result => { if (!cancelled && result) setActivity(prev => prev ? { ...prev, ...result } : prev) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setCtsComputing(false) })
+    return () => { cancelled = true }
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     fetch('/api/user-settings').then(r => r.json()).then(d => {
       if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
@@ -382,8 +402,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
         avgSlopeDeg: dtmProfile?.avgSlopeDeg ?? undefined,
       })
       if (confidence === 'estimated') ts = Math.round(ts * 0.9)
-      await updateActivityMeta(activity.id, { linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence })
-      setActivity(prev => prev ? { ...prev, linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence } : prev)
+      const computedAt = new Date().toISOString()
+      await updateActivityMeta(activity.id, { linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence, trailScoreComputedAt: computedAt })
+      setActivity(prev => prev ? { ...prev, linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence, trailScoreComputedAt: computedAt } : prev)
     } catch (e) {
       console.error('CTS computation error:', e)
     } finally {
