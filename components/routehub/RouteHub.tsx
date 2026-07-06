@@ -1,11 +1,10 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RouteSheet from './RouteSheet'
 import TopOverlay from './TopOverlay'
-import SideRails from './SideRails'
 import BottomGallery from './BottomGallery'
 import type { RouteHubProps } from './types'
 
@@ -56,10 +55,11 @@ export default function RouteHub({
 
   return (
     // touch-action is capped by the intersection of every ancestor's value, so restricting it
-    // here to pan-y would also cap the map's own 2D touch panning once the sheet is open (this
-    // element wraps it) — only restrict while Screen 1's carousel needs it to leave vertical
-    // browser gestures alone; let the map fully own touch once a route is open.
-    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none" style={{ touchAction: state.openSection ? 'auto' : 'pan-y' }}>
+    // here would also cap the map's own 2D touch panning once the sheet is open (this element
+    // wraps it) — only restrict while Screen 1's carousel needs to own both axes itself (swipe
+    // left/right between routes, drag up to open the sheet); let the map fully own touch once a
+    // route is open.
+    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none" style={{ touchAction: state.openSection ? 'auto' : 'none' }}>
       {/* STAGE — always mounted, never conditioned on openSection, so the map/photo underneath a
           section overlay is the very same instance the user was browsing (zoom/pan preserved) and
           stays identical while switching between sections. */}
@@ -79,6 +79,7 @@ export default function RouteHub({
               onDragStart={() => dispatch({ type: 'DRAG_START' })}
               onDragMove={deltaPx => dispatch({ type: 'DRAG_MOVE', deltaPx })}
               onDragEnd={() => dispatch({ type: 'DRAG_END', count: items.length })}
+              onOpenSheet={() => dispatch({ type: 'OPEN_SECTION', section: tabs[0]?.key ?? 'dati', snap: 'half' })}
               renderSlide={(slideItem, _i, inWindow) => (
                 mode === 'guida' ? (
                   // Interactive once a section is open — the persistent map underneath the glass
@@ -109,9 +110,7 @@ export default function RouteHub({
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
       )}
 
-      {/* Swipe hints — only on the side(s) where another route actually exists. Sit above the
-          "apri percorso" button's own vertical center (right-3/5, top-1/2 in SideRails) so the
-          two never overlap. */}
+      {/* Swipe hints — only on the side(s) where another route actually exists. */}
       {!state.openSection && state.index > 0 && (
         <div className="pointer-events-none absolute left-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
           <ChevronLeft className="w-4 h-4 text-white/70" />
@@ -133,13 +132,9 @@ export default function RouteHub({
       )}
 
       {!state.openSection && (
-        <SideRails onOpenSheet={() => dispatch({ type: 'OPEN_SECTION', section: tabs[0]?.key ?? 'dati', snap: 'half' })} />
-      )}
-
-      {!state.openSection && (
-        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
           {summary && (
-            <p className="mx-4 font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+            <p className="mx-4 self-stretch font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
               {summary}
             </p>
           )}
@@ -148,6 +143,9 @@ export default function RouteHub({
             onSelect={index => dispatch({ type: 'JUMP_TO', index })}
             importLabel={importLabel} onImport={onImport}
           />
+          {/* Trascina la scheda chiusa verso l'alto per aprirla — unico invito visivo rimasto
+              dopo la rimozione dell'icona dedicata. */}
+          <ChevronUp className="w-5 h-5 text-white/60 animate-bounce pointer-events-none" strokeWidth={2.5} />
         </div>
       )}
 

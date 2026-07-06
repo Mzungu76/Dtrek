@@ -155,11 +155,17 @@ export default function GuidaHub({ id }: { id?: string }) {
   // order (most recent first) — backs the carousel/gallery. Resolves the bare
   // /guida entry point to the latest one once loaded.
   useEffect(() => {
-    getAllPlanned().then(list => {
+    // getAllPlanned() is stale-while-revalidate: it resolves instantly with whatever was cached
+    // locally from the *previous* visit, then fetches the real list in the background. Without
+    // onRefresh, that fresh fetch (with up-to-date cachedTrailScore/cachedBeautyScore/
+    // cachedSafetyScore) is written to the local cache for next time but never reaches this
+    // session's `items` — so the gallery's TS ring stays pinned to whatever it was a visit ago.
+    const applyList = (list: PlannedHikeMeta[]) => {
       const active = list.filter(h => !h.archivedAt)
       const sorted = active.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setItems(sorted.map(metaToItem))
-    }).catch(() => setItems([])).finally(() => setListLoaded(true))
+    }
+    getAllPlanned(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
   }, [])
 
   useEffect(() => {
