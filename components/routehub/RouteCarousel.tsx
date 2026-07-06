@@ -32,18 +32,24 @@ export default function RouteCarousel({ items, index, dragging, dragDeltaPx, onD
   // point) — locks to 'x' (route swipe) or 'y' (open-sheet drag) on the first move past it.
   const axis = useRef<'none' | 'x' | 'y'>('none')
   const opened = useRef(false)
+  // Without this, a mouse (unlike touch) fires pointermove on plain hover — with no button ever
+  // pressed — which was enough to lock an axis and start "dragging" the slide under the cursor
+  // on desktop, since nothing else gated the handler on an actual pointerdown having happened.
+  const active = useRef(false)
 
-  const reset = () => { axis.current = 'none'; opened.current = false }
+  const reset = () => { axis.current = 'none'; opened.current = false; active.current = false }
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!swipeEnabled) return
     startX.current = e.clientX
     startY.current = e.clientY
-    reset()
+    axis.current = 'none'
+    opened.current = false
+    active.current = true
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!swipeEnabled || opened.current) return
+    if (!swipeEnabled || !active.current || opened.current) return
     const dx = e.clientX - startX.current
     const dy = e.clientY - startY.current
     if (axis.current === 'none') {

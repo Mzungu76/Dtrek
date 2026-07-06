@@ -6,7 +6,10 @@ import RouteCarousel from './RouteCarousel'
 import RouteSheet from './RouteSheet'
 import TopOverlay from './TopOverlay'
 import BottomGallery from './BottomGallery'
-import type { RouteHubProps } from './types'
+import type { RouteHubProps, SectionKind } from './types'
+
+// Shared duration for the Screen1 ⇄ Screen2 cross-dissolve, both directions.
+const SHEET_TRANSITION_MS = 220
 
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, renderStageMap, tabs, renderSection,
@@ -18,6 +21,29 @@ export default function RouteHub({
   // can keep its focus point centered in the visible band as the sheet opens/resizes/drags.
   const [sheetHeightPx, setSheetHeightPx] = useState(0)
   const obscuredBottomPx = state.openSection ? sheetHeightPx : 0
+  const isOpen = state.openSection != null
+
+  // Keeps RouteSheet mounted for SHEET_TRANSITION_MS after closing so its opacity can fade to 0
+  // instead of vanishing the instant openSection goes null — the mirror image of mounting it
+  // immediately and fading opacity 0→1 on open, so the drag-up/drag-down transition dissolves
+  // both ways instead of cutting.
+  const [sheetMounted, setSheetMounted] = useState(false)
+  const [sheetOpacity, setSheetOpacity] = useState(0)
+  useEffect(() => {
+    if (isOpen) {
+      setSheetMounted(true)
+      const raf = requestAnimationFrame(() => setSheetOpacity(1))
+      return () => cancelAnimationFrame(raf)
+    }
+    setSheetOpacity(0)
+    const t = setTimeout(() => setSheetMounted(false), SHEET_TRANSITION_MS)
+    return () => clearTimeout(t)
+  }, [isOpen])
+
+  // While closing, openSection is already null but the fading-out sheet still needs a tab to
+  // render — keeps showing whatever was last open instead of falling back to nothing.
+  const lastSection = useRef<SectionKind>(tabs[0]?.key ?? 'dati')
+  if (state.openSection) lastSection.current = state.openSection
 
   // Notifies the caller of which section is open (or none) so it can derive section-specific map
   // props (highlighted POI/difficulty index, POI layer visibility…) without lifting this reducer out.
@@ -54,12 +80,12 @@ export default function RouteHub({
   const on3D = onOpenMap3D ? () => { dispatch({ type: 'CLOSE_SECTION' }); onOpenMap3D(item) } : undefined
 
   return (
-    // touch-action is capped by the intersection of every ancestor's value, so restricting it
-    // here would also cap the map's own 2D touch panning once the sheet is open (this element
-    // wraps it) — only restrict while Screen 1's carousel needs to own both axes itself (swipe
-    // left/right between routes, drag up to open the sheet); let the map fully own touch once a
-    // route is open.
-    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none" style={{ touchAction: state.openSection ? 'auto' : 'none' }}>
+    // No touch-action restriction at this level: touch-action is capped by the intersection of
+    // every ancestor's value, so a blanket restriction here also caps unrelated descendants —
+    // it previously broke the bottom gallery's native horizontal scroll, since that strip lives
+    // inside this same wrapper. Each element that actually needs to own a gesture sets its own
+    // touch-action directly (RouteCarousel, RouteSheet's drag handle).
+    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none">
       {/* STAGE — always mounted, never conditioned on openSection, so the map/photo underneath a
           section overlay is the very same instance the user was browsing (zoom/pan preserved) and
           stays identical while switching between sections. */}
@@ -106,32 +132,34 @@ export default function RouteHub({
         />
       </div>
 
-      {!state.openSection && (
+      {/* Screen 1's chrome — cross-dissolves with the sheet instead of hard-cutting, both
+          opening (drag up) and closing (drag down/back button) it. Stays mounted the whole
+          time; only opacity/pointer-events toggle, in lockstep with the sheet's own fade. */}
+      <div
+        className="absolute inset-0 transition-opacity ease-out"
+        style={{ opacity: isOpen ? 0 : 1, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${SHEET_TRANSITION_MS}ms` }}
+      >
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
-      )}
 
-      {/* Swipe hints — only on the side(s) where another route actually exists. */}
-      {!state.openSection && state.index > 0 && (
-        <div className="pointer-events-none absolute left-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
-          <ChevronLeft className="w-4 h-4 text-white/70" />
-        </div>
-      )}
-      {!state.openSection && state.index < items.length - 1 && (
-        <div className="pointer-events-none absolute right-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
-          <ChevronRight className="w-4 h-4 text-white/70" />
-        </div>
-      )}
+        {/* Swipe hints — only on the side(s) where another route actually exists. */}
+        {state.index > 0 && (
+          <div className="pointer-events-none absolute left-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
+            <ChevronLeft className="w-4 h-4 text-white/70" />
+          </div>
+        )}
+        {state.index < items.length - 1 && (
+          <div className="pointer-events-none absolute right-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center">
+            <ChevronRight className="w-4 h-4 text-white/70" />
+          </div>
+        )}
 
-      {!state.openSection && (
         <TopOverlay
           itemKey={item.id}
           title={item.title} statPills={item.statPills}
           weatherIcon={weatherIcon?.(item)} onOpenWeather={() => dispatch({ type: 'OPEN_SECTION', section: 'meteo', snap: 'half' })}
           scoreBadges={scoreBadges?.(item, () => dispatch({ type: 'OPEN_SECTION', section: 'dati', snap: 'half' }))}
         />
-      )}
 
-      {!state.openSection && (
         <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
           {summary && (
             <p className="mx-4 self-stretch font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
@@ -147,21 +175,27 @@ export default function RouteHub({
               dopo la rimozione dell'icona dedicata. */}
           <ChevronUp className="w-5 h-5 text-white/60 animate-bounce pointer-events-none" strokeWidth={2.5} />
         </div>
-      )}
+      </div>
 
-      {state.openSection && (
+      {sheetMounted && (
         // pointer-events-none: this wrapper spans the full screen (inset-0) purely to give
         // RouteSheet a z-40 stacking context — without this, it would sit on top of the map
         // exactly like RouteSheet's own root and block every pan/click above the visible sheet.
-        // RouteSheet re-enables pointer-events on its own actual visible chrome.
-        <div className="absolute inset-0 z-40 pointer-events-none">
+        // RouteSheet re-enables pointer-events on its own actual visible chrome. Opacity fades
+        // in step with Screen 1's chrome fading out above, and lingers mounted while closing so
+        // it can fade back out instead of disappearing the instant openSection goes null.
+        <div
+          className="absolute inset-0 z-40 pointer-events-none transition-opacity ease-out"
+          style={{ opacity: sheetOpacity, transitionDuration: `${SHEET_TRANSITION_MS}ms` }}
+        >
           <RouteSheet
             item={item}
             snap={state.snap}
             onSnapChange={snap => dispatch({ type: 'SET_SNAP', snap })}
             onBackToGallery={() => dispatch({ type: 'CLOSE_SECTION' })}
+            onClose={() => dispatch({ type: 'CLOSE_SECTION' })}
             tabs={tabs}
-            activeTab={state.openSection}
+            activeTab={lastSection.current}
             onTabChange={section => dispatch({ type: 'SELECT_TAB', section })}
             renderTabContent={section => renderSection(section, item, () => dispatch({ type: 'CLOSE_SECTION' }))}
             tabScrollRef={tabScrollRef}
