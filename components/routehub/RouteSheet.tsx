@@ -103,41 +103,61 @@ export default function RouteSheet({
 
   useEffect(() => { onHeightChange?.(currentHeight) }, [currentHeight]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Content swipes between tabs, exactly like swiping routes on Screen 1 — the pill bar just
-  // reflects whichever tab is now centered, tap or swipe. Native horizontal scroll-snap rather
-  // than a custom pointer-drag: with each page independently vertically scrollable, letting the
-  // browser disambiguate the gesture's axis is far more reliable than reimplementing it.
+  // Content swipes between tabs, exactly like swiping routes on Screen 1 — same pointer-drag
+  // mechanic as RouteCarousel (translateX + drag delta), not native scroll-snap: a fling on a
+  // scroll-snap strip can carry momentum past more than one snap point, moving 2-3 tabs in a
+  // single gesture — here one swipe commits to at most one neighboring tab, however hard/fast.
   const activeIndex = Math.max(0, tabs.findIndex(t => t.key === activeTab))
-  const contentScrollRef = useRef<HTMLDivElement>(null)
-  const firstSync = useRef(true)
-  const scrollSettleTimer = useRef<ReturnType<typeof setTimeout>>()
+  const TAB_AXIS_LOCK_PX = 8
+  const TAB_SWIPE_THRESHOLD_PX = 50
+  const [tabDragging, setTabDragging] = useState(false)
+  const [tabDeltaPx, setTabDeltaPx] = useState(0)
+  const tabStartX = useRef(0)
+  const tabStartY = useRef(0)
+  const tabAxis = useRef<'none' | 'x' | 'y'>('none')
+  const tabActive = useRef(false)
 
-  // Keeps the strip in sync with activeTab when it changes for a reason other than swiping it
-  // directly — tapping a pill, or an external jump (weather emoji / score badge on Screen 1).
-  // Instant on mount, smooth afterwards, so landing straight on a non-first tab doesn't visibly
-  // slide in from the left.
-  useEffect(() => {
-    const el = contentScrollRef.current
-    if (!el || el.clientWidth === 0) return
-    const left = activeIndex * el.clientWidth
-    if (Math.abs(el.scrollLeft - left) < 2) return
-    el.scrollTo({ left, behavior: firstSync.current ? 'auto' : 'smooth' })
-    firstSync.current = false
-  }, [activeIndex])
-
-  // Debounced to the scroll settling (not every frame of the drag/momentum) — updates the pill
-  // bar once, when the swipe/fling actually lands, instead of flickering through every tab it
-  // passes over on the way.
-  const handleContentScroll = () => {
-    clearTimeout(scrollSettleTimer.current)
-    scrollSettleTimer.current = setTimeout(() => {
-      const el = contentScrollRef.current
-      if (!el || el.clientWidth === 0) return
-      const idx = Math.max(0, Math.min(tabs.length - 1, Math.round(el.scrollLeft / el.clientWidth)))
-      if (tabs[idx] && tabs[idx].key !== activeTab) onTabChange(tabs[idx].key)
-    }, 80)
+  const handleTabPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    tabStartX.current = e.clientX
+    tabStartY.current = e.clientY
+    tabAxis.current = 'none'
+    tabActive.current = true
+    e.currentTarget.setPointerCapture(e.pointerId)
   }
-  useEffect(() => () => clearTimeout(scrollSettleTimer.current), [])
+  const handleTabPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!tabActive.current) return
+    const dx = e.clientX - tabStartX.current
+    const dy = e.clientY - tabStartY.current
+    if (tabAxis.current === 'none') {
+      if (Math.abs(dx) < TAB_AXIS_LOCK_PX && Math.abs(dy) < TAB_AXIS_LOCK_PX) return
+      tabAxis.current = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'
+      if (tabAxis.current === 'x') setTabDragging(true)
+    }
+    if (tabAxis.current !== 'x') return
+    // Resistance past the first/last tab instead of a hard stop — confirms there's nothing
+    // further that way rather than just silently not moving.
+    const atEdge = (dx > 0 && activeIndex === 0) || (dx < 0 && activeIndex === tabs.length - 1)
+    setTabDeltaPx(atEdge ? dx / 3 : dx)
+  }
+  const handleTabPointerUp = () => {
+    if (tabAxis.current === 'x') {
+      if (tabDeltaPx < -TAB_SWIPE_THRESHOLD_PX && activeIndex < tabs.length - 1) onTabChange(tabs[activeIndex + 1].key)
+      else if (tabDeltaPx > TAB_SWIPE_THRESHOLD_PX && activeIndex > 0) onTabChange(tabs[activeIndex - 1].key)
+    }
+    setTabDragging(false)
+    setTabDeltaPx(0)
+    tabAxis.current = 'none'
+    tabActive.current = false
+  }
+
+  // Keeps the active tab's own pill in view in the pill bar — switching tabs by swiping the
+  // content (rather than tapping a pill directly) would otherwise leave the bar scrolled
+  // wherever it was, possibly not even showing the tab that's now active.
+  const pillBarRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = pillBarRef.current?.querySelector<HTMLElement>(`[data-tab-key="${activeTab}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+  }, [activeTab])
 
   return (
     // pointer-events-none on the root: this div spans the full screen (inset-0) so the map
@@ -218,12 +238,14 @@ export default function RouteSheet({
                 ignored entirely instead of scrolling it — tabs beyond the first screenful would
                 then only be reachable by already being visible, never by scrolling to them. */}
             <div
+              ref={pillBarRef}
               className="flex gap-1.5 px-4 pb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
               style={{ scrollbarWidth: 'none', touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
             >
               {tabs.map(t => (
                 <button
                   key={t.key}
+                  data-tab-key={t.key}
                   onClick={() => onTabChange(t.key)}
                   className={`relative shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                     activeTab === t.key ? 'bg-terra-500 text-white' : 'bg-stone-100 text-stone-600'
@@ -236,24 +258,34 @@ export default function RouteSheet({
             </div>
 
             <div
-              ref={contentScrollRef}
-              onScroll={handleContentScroll}
-              className="flex overflow-x-auto [&::-webkit-scrollbar]:hidden"
-              style={{ scrollbarWidth: 'none', scrollSnapType: 'x mandatory', height: `calc(${currentHeight}px - ${CHROME_PX}px)` }}
+              className="overflow-hidden"
+              style={{ height: `calc(${currentHeight}px - ${CHROME_PX}px)`, touchAction: 'pan-y' }}
+              onPointerDown={handleTabPointerDown}
+              onPointerMove={handleTabPointerMove}
+              onPointerUp={handleTabPointerUp}
+              onPointerCancel={handleTabPointerUp}
             >
-              {tabs.map((t, i) => (
-                <div key={t.key} className="w-full h-full shrink-0" style={{ scrollSnapAlign: 'start' }}>
-                  {/* Only the active tab and its immediate neighbors ever mount their content —
-                      renderTabContent can be expensive (maps, wiki fetches…) and every tab
-                      mounting at once would fire all of it regardless of what's ever viewed. */}
-                  {Math.abs(i - activeIndex) <= 1 && (
-                    <div ref={tabScrollRef?.(t.key)} className="h-full overflow-y-auto md:max-w-2xl md:mx-auto">
-                      {heroPhotos}
-                      {renderTabContent(t.key)}
-                    </div>
-                  )}
-                </div>
-              ))}
+              <div
+                className="flex h-full"
+                style={{
+                  transform: `translateX(calc(${-activeIndex * 100}% + ${tabDeltaPx}px))`,
+                  transition: tabDragging ? 'none' : 'transform 0.32s cubic-bezier(.2,.8,.2,1)',
+                }}
+              >
+                {tabs.map((t, i) => (
+                  <div key={t.key} className="w-full h-full shrink-0">
+                    {/* Only the active tab and its immediate neighbors ever mount their content —
+                        renderTabContent can be expensive (maps, wiki fetches…) and every tab
+                        mounting at once would fire all of it regardless of what's ever viewed. */}
+                    {Math.abs(i - activeIndex) <= 1 && (
+                      <div ref={tabScrollRef?.(t.key)} className="h-full overflow-y-auto md:max-w-2xl md:mx-auto">
+                        {heroPhotos}
+                        {renderTabContent(t.key)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </>
         )}
