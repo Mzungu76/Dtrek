@@ -38,6 +38,10 @@ export interface PlannedHike {
   cachedTrailScore?:             number
   cachedTrailScoreConfidence?:   CtsConfidence
   cachedSafetyScore?:            SafetyScore
+  // Full Trail Score aggregate (CL + Sicurezza + Comfort TrailScore + Ombra e acqua, see
+  // components/ScoreRing.tsx) — computed once live while the hike is open, then persisted so
+  // list/gallery views can read it back instantly instead of recomputing a partial version.
+  cachedTsTotal?:                number
   cachedRiddles?:                TrailRiddle[]
   cachedEpochPois?:              EpochPoi[]
   // Distanza/tempo di guida (auto) dal punto di partenza dell'utente, con le coordinate
@@ -131,7 +135,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedSafetyScore' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt'>>,
 ): Promise<void> {
   // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {

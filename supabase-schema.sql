@@ -148,6 +148,13 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_trail_score_confidence
 -- SafetyScore cache for planned hikes
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_safety_score JSONB;
 
+-- Full Trail Score (TS) aggregate cache — CL + Sicurezza + Comfort TrailScore (cached_trail_score
+-- above, despite the similar name) + Ombra e acqua, each capped at 100, see
+-- components/ScoreRing.tsx's TRAIL_SCORE_MAX (400). Computed once live while a hike is open
+-- (app/guida/GuidaHub.tsx), then read back here so list/gallery views don't need to recompute a
+-- partial version from scratch on every load.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_ts_total DOUBLE PRECISION;
+
 -- Trail riddles ("indovinelli per tappa") extracted from the generated guide text —
 -- see lib/riddles.ts. Each entry carries its own lat/lon (matched against cached_pois/
 -- cached_poi_wiki at extraction time), so the navigator can trigger them with the same
@@ -161,6 +168,7 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_riddles JSONB;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_epoch_pois JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_planned_trail_score ON planned_hikes (cached_trail_score DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_planned_ts_total     ON planned_hikes (cached_ts_total    DESC NULLS LAST);
 
 -- ── Link pubblici condivisibili ───────────────────────────────────────────────
 -- Quando share_token è valorizzato, l'escursione è visibile pubblicamente

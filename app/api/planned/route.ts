@@ -58,6 +58,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedTrailScore:             row.cached_trail_score             as number | undefined,
     cachedTrailScoreConfidence:   row.cached_trail_score_confidence  as PlannedHike['cachedTrailScoreConfidence'] | undefined,
     cachedSafetyScore:            row.cached_safety_score            as SafetyScore | undefined,
+    cachedTsTotal:                row.cached_ts_total                as number | undefined,
     cachedRiddles:                row.cached_riddles                 as PlannedHike['cachedRiddles'],
     cachedEpochPois:              row.cached_epoch_pois              as PlannedHike['cachedEpochPois'],
     cachedDrivingDistanceMeters:  row.cached_driving_distance_m      as number | undefined,
@@ -96,6 +97,7 @@ function hikeToRow(h: PlannedHike) {
     cached_trail_score:               h.cachedTrailScore ?? null,
     cached_trail_score_confidence:    h.cachedTrailScoreConfidence ?? null,
     cached_safety_score:              h.cachedSafetyScore ?? null,
+    cached_ts_total:                  h.cachedTsTotal ?? null,
     cached_riddles:                   h.cachedRiddles ?? null,
     cached_epoch_pois:                h.cachedEpochPois ?? null,
     cached_driving_distance_m:        h.cachedDrivingDistanceMeters ?? null,
@@ -114,7 +116,7 @@ const META_COLS = [
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
   'route_polyline', 'assessment', 'cached_guide', 'osm_relation_id',
   'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence',
-  'cached_safety_score', 'cached_riddles', 'cached_epoch_pois',
+  'cached_safety_score', 'cached_ts_total', 'cached_riddles', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
   'pending_expires_at', 'archived_at',
@@ -288,6 +290,7 @@ export async function PATCH(req: NextRequest) {
       cachedTrailScore?: number
       cachedTrailScoreConfidence?: string
       cachedSafetyScore?: SafetyScore
+      cachedTsTotal?: number
       cachedRiddles?: PlannedHike['cachedRiddles']
       cachedEpochPois?: PlannedHike['cachedEpochPois']
       cachedDrivingDistanceMeters?: number
@@ -311,6 +314,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedTrailScore             !== undefined) dbPatch.cached_trail_score             = patch.cachedTrailScore
     if (patch.cachedTrailScoreConfidence   !== undefined) dbPatch.cached_trail_score_confidence  = patch.cachedTrailScoreConfidence
     if (patch.cachedSafetyScore            !== undefined) dbPatch.cached_safety_score            = patch.cachedSafetyScore
+    if (patch.cachedTsTotal                !== undefined) dbPatch.cached_ts_total                = patch.cachedTsTotal
     if (patch.cachedRiddles                !== undefined) dbPatch.cached_riddles                 = patch.cachedRiddles
     if (patch.cachedEpochPois              !== undefined) dbPatch.cached_epoch_pois              = patch.cachedEpochPois
     if (patch.cachedDrivingDistanceMeters  !== undefined) dbPatch.cached_driving_distance_m      = patch.cachedDrivingDistanceMeters
