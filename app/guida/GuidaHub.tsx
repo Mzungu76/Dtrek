@@ -48,16 +48,23 @@ const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      {
 const FloraGallery     = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
 const AnimalGallery    = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
 
-function metaToItem(h: PlannedHikeMeta): RouteHubItem {
-  // Best-effort preview using only what's already cached in the lightweight list metadata (no
-  // per-item live fetch of CL/ombra-acqua) — the same computeTrailScoreTotal the live "Dati &
-  // punteggi" tab uses, so it lands on the same figure once the full data is loaded.
-  const previewTotal = computeTrailScoreTotal(
+/** cachedTsTotal is the full aggregate (CL + Sicurezza + Comfort TrailScore + Ombra e acqua)
+ *  persisted to Supabase once it's been computed live for this hike (see the sync effect in
+ *  GuidaHub) — reading it back is instant and, unlike the fallback below, includes CL/ombra-acqua
+ *  too. For a hike that's never been opened yet, fall back to a best-effort total from only
+ *  what's already cached in the lightweight list metadata (no per-item live fetch). */
+function previewScoreValue(h: PlannedHikeMeta): number {
+  if (h.cachedTsTotal != null) return h.cachedTsTotal
+  return computeTrailScoreTotal(
     { notMatched: true },
     h.cachedSafetyScore ?? null,
     { result: null, cached: h.cachedTrailScore, beautyScore: h.cachedBeautyScore },
     { data: null },
   )
+}
+
+function metaToItem(h: PlannedHikeMeta): RouteHubItem {
+  const previewTotal = previewScoreValue(h)
   return {
     id: h.id,
     title: h.title,
@@ -337,17 +344,30 @@ export default function GuidaHub({ id }: { id?: string }) {
     return () => { cancelled = true }
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keeps the gallery thumbnail's TS ring — and the "TS" sort key that ranks by it — in sync with
-  // whatever just got cached (Calcola CTS, or the auto-cached safety score). Same cached-only
-  // formula as metaToItem() for every other item in the list, so a hike's rank and its own badge
-  // never disagree, whether or not it's the one currently open.
-  const scorePreviewFor = (h: PlannedHike) => {
+  // Once every live input has settled (no per-item fetch needed — this only runs for the hike
+  // that's actually open), persists the *full* aggregate — including CL and ombra/acqua, which
+  // the cached-only fallback above can never see — to Supabase. From then on every gallery
+  // render (this session, next session, other devices) reads that number back instantly via
+  // previewScoreValue() instead of recomputing a partial one from scratch.
+  useEffect(() => {
+    if (!hike || si.loading || s2.loading) return
     const total = computeTrailScoreTotal(
-      { notMatched: true },
-      h.cachedSafetyScore ?? null,
-      { result: null, cached: h.cachedTrailScore, beautyScore: h.cachedBeautyScore },
-      { data: null },
+      { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
+      safetyScore,
+      { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
+      { data: s2.data, loading: s2.loading },
     )
+    if (total <= 0 || total === hike.cachedTsTotal) return
+    updatePlannedMeta(hike.id, { cachedTsTotal: total }).catch(() => {})
+    setHike(prev => prev ? { ...prev, cachedTsTotal: total } : prev)
+  }, [hike, safetyScore, ctsResult, si.loading, si.result, si.notMatched, s2.loading, s2.data]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keeps the gallery thumbnail's TS ring — and the "TS" sort key that ranks by it — in sync with
+  // whatever just got cached (Calcola CTS, the auto-cached safety score, or the full aggregate
+  // above). Same formula as metaToItem() for every other item in the list, so a hike's rank and
+  // its own badge never disagree, whether or not it's the one currently open.
+  const scorePreviewFor = (h: PlannedHike) => {
+    const total = previewScoreValue(h)
     return total > 0 ? { value: total, max: TRAIL_SCORE_MAX } : undefined
   }
 
@@ -364,7 +384,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       next[idx] = { ...next[idx], scorePreview: preview, sortValues: { ...next[idx].sortValues!, cts: preview?.value ?? 0 } }
       return next
     })
-  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore, hike?.cachedTsTotal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const displayItems = useMemo(() => {
     const pillsFor = (h: PlannedHike) => [
