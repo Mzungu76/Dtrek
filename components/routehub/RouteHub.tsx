@@ -165,7 +165,11 @@ export default function RouteHub({
       )}
 
       {state.openSection && (
-        <div className="absolute inset-0 z-40">
+        // pointer-events-none: this wrapper spans the full screen (inset-0) purely to give
+        // RouteSheet a z-40 stacking context — without this, it would sit on top of the map
+        // exactly like RouteSheet's own root and block every pan/click above the visible sheet.
+        // RouteSheet re-enables pointer-events on its own actual visible chrome.
+        <div className="absolute inset-0 z-40 pointer-events-none">
           <RouteSheet
             item={item}
             snap={state.snap}
