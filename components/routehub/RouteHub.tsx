@@ -162,11 +162,11 @@ export default function RouteHub({
       </div>
 
       <div
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] transition-opacity ease-out"
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] transition-opacity ease-out"
         style={{ opacity: isOpen ? 0 : 1, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${SHEET_TRANSITION_MS}ms` }}
       >
         {summary && (
-          <p className="mx-4 self-stretch font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <p className="mx-4 font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
             {summary}
           </p>
         )}
@@ -176,8 +176,12 @@ export default function RouteHub({
           importLabel={importLabel} onImport={onImport}
         />
         {/* Trascina la scheda chiusa verso l'alto per aprirla — unico invito visivo rimasto
-            dopo la rimozione dell'icona dedicata. */}
-        <ChevronUp className="w-5 h-5 text-white/60 animate-bounce pointer-events-none" strokeWidth={2.5} />
+            dopo la rimozione dell'icona dedicata. Centrata a parte, senza costringere la
+            galleria sopra (che deve restare larga quanto lo schermo per poter scorrere) a
+            restringersi al contenuto tramite items-center sul contenitore flex. */}
+        <div className="flex justify-center">
+          <ChevronUp className="w-5 h-5 text-white/60 animate-bounce pointer-events-none" strokeWidth={2.5} />
+        </div>
       </div>
 
       {sheetMounted && (
