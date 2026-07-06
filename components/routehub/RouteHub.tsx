@@ -101,7 +101,7 @@ export default function RouteHub({
             there and reads as a normal, undimmed map behind the white card. */}
         <div
           className="absolute inset-0 pointer-events-none transition-opacity duration-300"
-          style={{ background: 'rgba(4,10,16,0.35)', opacity: state.openSection ? 0 : 1 }}
+          style={{ background: 'rgba(4,10,16,0.2)', opacity: state.openSection ? 0 : 1 }}
         />
       </div>
 
