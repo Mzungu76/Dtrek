@@ -367,7 +367,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const rated     = (activity?.userRating ?? 0) > 0
   const dateISO   = activity ? activity.startTime.slice(0, 10) : undefined
 
-  const renderStageMap = (item: RouteHubItem, interactive: boolean) => {
+  const renderStageMap = (item: RouteHubItem, interactive: boolean, obscuredBottomPx: number) => {
     if (!activity || item.id !== activity.id) return <div className="absolute inset-0 bg-gradient-to-br from-forest-900 to-forest-950" />
     if (!hasGps) return <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-sm">Tracciato non disponibile</div>
     return (
@@ -376,6 +376,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
         highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : null}
         activeIndex={openSection === 'dati' ? altActiveIndex : null}
         showPoiLayer={showPoiLayer}
+        obscuredBottomPx={obscuredBottomPx}
       />
     )
   }

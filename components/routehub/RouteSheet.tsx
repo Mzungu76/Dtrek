@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useState, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react'
 import { ChevronDown, Box } from 'lucide-react'
 import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from './types'
 import type { SheetSnap } from './useRouteHubState'
@@ -38,6 +38,9 @@ interface Props {
   on3D?: () => void
   mapHeaderActions?: ReactNode
   heroPhotos?: ReactNode
+  /** Fired whenever the sheet's own rendered height changes (snap transitions and live drag) —
+   *  lets the map underneath re-center on the visible band as the sheet resizes. */
+  onHeightChange?: (heightPx: number) => void
 }
 
 /**
@@ -48,7 +51,7 @@ interface Props {
  */
 export default function RouteSheet({
   item, snap, onSnapChange, onBackToGallery, tabs, activeTab, onTabChange,
-  renderTabContent, tabScrollRef, primaryAction, on3D, mapHeaderActions, heroPhotos,
+  renderTabContent, tabScrollRef, primaryAction, on3D, mapHeaderActions, heroPhotos, onHeightChange,
 }: Props) {
   const [dragHeight, setDragHeight] = useState<number | null>(null)
   const dragStart = useRef<{ y: number; height: number } | null>(null)
@@ -77,6 +80,8 @@ export default function RouteSheet({
   }
 
   const currentHeight = dragHeight ?? heightForSnap(snap)
+
+  useEffect(() => { onHeightChange?.(currentHeight) }, [currentHeight]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="absolute inset-0 flex flex-col justify-end">

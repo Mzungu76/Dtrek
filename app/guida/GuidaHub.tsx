@@ -424,7 +424,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
 
-  const renderStageMap = (item: RouteHubItem, interactive: boolean) => {
+  const renderStageMap = (item: RouteHubItem, interactive: boolean, obscuredBottomPx: number) => {
     if (!hike || item.id !== hike.id) return (
       <div className="absolute inset-0 bg-gradient-to-br from-[#123448] via-[#0b2333] to-[#071824]">
         {item.polyline && item.polyline.length > 1 && (
@@ -443,6 +443,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         activeIndex={openSection === 'dati' ? altActiveIndex : openSection === 'featured' ? guideActiveTrackIndex : null}
         showPoiLayer={showPoiLayer}
         showTourControls={interactive}
+        obscuredBottomPx={obscuredBottomPx}
       />
     )
   }

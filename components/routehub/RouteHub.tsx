@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RouteSheet from './RouteSheet'
@@ -16,6 +16,10 @@ export default function RouteHub({
   scoreBadges, heroPhotos, mapHeaderActions, importLabel, onImport,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
+  // Live height (px) of the Screen 2 sheet — 0 while it's closed — forwarded to the map so it
+  // can keep its focus point centered in the visible band as the sheet opens/resizes/drags.
+  const [sheetHeightPx, setSheetHeightPx] = useState(0)
+  const obscuredBottomPx = state.openSection ? sheetHeightPx : 0
 
   // Notifies the caller of which section is open (or none) so it can derive section-specific map
   // props (highlighted POI/difficulty index, POI layer visibility…) without lifting this reducer out.
@@ -69,7 +73,7 @@ export default function RouteHub({
           stays identical while switching between sections. */}
       <div className="absolute inset-0">
         {mode === 'resoconto' && (
-          <div className="absolute inset-0">{renderStageMap(item, true)}</div>
+          <div className="absolute inset-0">{renderStageMap(item, true, obscuredBottomPx)}</div>
         )}
 
         {(mode === 'guida' || !state.openSection) && (
@@ -88,7 +92,7 @@ export default function RouteHub({
                   // Interactive once a section is open — the persistent map underneath the glass
                   // sheet must stay pannable/zoomable, even though the carousel itself is still
                   // frozen (no route-swiping while the sheet is up).
-                  <div className="absolute inset-0">{renderStageMap(slideItem, state.openSection != null)}</div>
+                  <div className="absolute inset-0">{renderStageMap(slideItem, state.openSection != null, obscuredBottomPx)}</div>
                 ) : slideItem.coverPhotoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={slideItem.coverPhotoUrl} alt={slideItem.title} className="absolute inset-0 w-full h-full object-cover" draggable={false} loading={inWindow ? 'eager' : 'lazy'} />
@@ -172,6 +176,7 @@ export default function RouteHub({
             on3D={on3D}
             mapHeaderActions={mapHeaderActions}
             heroPhotos={heroPhotos}
+            onHeightChange={setSheetHeightPx}
           />
         </div>
       )}
