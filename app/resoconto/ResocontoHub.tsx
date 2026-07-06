@@ -280,11 +280,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
       date: new Date(a.startTime).getTime(), km: a.distanceMeters, dplus: a.elevationGain, cts: a.trailScore, rating: a.userRating,
     })
     const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? photos[0]?.url : undefined)
+    // Otherwise the gallery thumbnail's rating ring stays at whatever it was when the list first
+    // loaded, so voting while the hike is open never reaches its own thumbnail once the user swipes away.
+    const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
     const mapped = items.map(it => it.id === activity?.id
-      ? { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity) }
+      ? { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }
       : (cover(it.id) ? { ...it, coverPhotoUrl: cover(it.id) } : it))
     if (activity && !mapped.some(it => it.id === activity.id)) {
-      return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity) }, ...mapped]
+      return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }, ...mapped]
     }
     return mapped
   }, [items, covers, activity, photos, coverPhotoId, driving])

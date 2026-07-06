@@ -339,14 +339,30 @@ export default function GuidaHub({ id }: { id?: string }) {
     const sortValuesFor = (h: PlannedHike) => ({
       date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: h.cachedTrailScore,
     })
-    const mapped = items.map(it => it.id === hike?.id ? { ...it, statPills: pillsFor(hike), sortValues: sortValuesFor(hike) } : it)
+    // The gallery thumbnail's TS ring otherwise stays frozen at whatever computeTrailScoreTotal()
+    // saw when the list first loaded — e.g. before the safety score auto-cached or the user hit
+    // "Calcola CTS" — so once the hike stops being the active one, its thumbnail keeps showing that
+    // stale (often CTS-only) figure forever. Recompute it here from the same live sources scoreBadges
+    // uses, so what was current while the hike was open is what sticks in the gallery afterwards.
+    const scorePreviewFor = (h: PlannedHike, fallback?: RouteHubItem['scorePreview']) => {
+      const total = computeTrailScoreTotal(
+        { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
+        safetyScore,
+        { result: ctsResult, cached: h.cachedTrailScore, beautyScore: h.cachedBeautyScore },
+        { data: s2.data, loading: s2.loading },
+      )
+      return total > 0 ? { value: total, max: TRAIL_SCORE_MAX } : fallback
+    }
+    const mapped = items.map(it => it.id === hike?.id
+      ? { ...it, statPills: pillsFor(hike), sortValues: sortValuesFor(hike), scorePreview: scorePreviewFor(hike, it.scorePreview) }
+      : it)
     // Deep link to a hike outside the active list (e.g. archived/expired) — still show it
     // standalone rather than 404, once its full record has loaded.
     if (hike && !mapped.some(it => it.id === hike.id)) {
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike), sortValues: sortValuesFor(hike) }, ...mapped]
+      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike), sortValues: sortValuesFor(hike), scorePreview: scorePreviewFor(hike) }, ...mapped]
     }
     return mapped
-  }, [items, hike, driving])
+  }, [items, hike, driving, si, safetyScore, ctsResult, s2])
 
   if (!listLoaded) {
     return (
