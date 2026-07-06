@@ -11,7 +11,7 @@ import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from '@/compone
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
-import { ScoreRing, computeTrailScoreTotal, MiniScoreRing } from '@/components/ScoreRing'
+import { ScoreRing, computeTrailScoreTotal, MiniScoreRing, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { CurrentConditionsNotice } from '@/components/CurrentConditionsNotice'
 import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
@@ -48,6 +48,15 @@ const FloraGallery     = dynamic(() => import('@/components/FloraGallery'),    {
 const AnimalGallery    = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
 
 function metaToItem(h: PlannedHikeMeta): RouteHubItem {
+  // Best-effort preview using only what's already cached in the lightweight list metadata (no
+  // per-item live fetch of CL/ombra-acqua) — the same computeTrailScoreTotal the live "Dati &
+  // punteggi" tab uses, so it lands on the same figure once the full data is loaded.
+  const previewTotal = computeTrailScoreTotal(
+    { notMatched: true },
+    h.cachedSafetyScore ?? null,
+    { result: null, cached: h.cachedTrailScore, beautyScore: h.cachedBeautyScore },
+    { data: null },
+  )
   return {
     id: h.id,
     title: h.title,
@@ -64,6 +73,7 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
       dplus: h.elevationGain,
       cts: h.cachedTrailScore,
     },
+    scorePreview: previewTotal > 0 ? { value: previewTotal, max: TRAIL_SCORE_MAX } : undefined,
   }
 }
 
@@ -440,7 +450,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned
         highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : openSection === 'featured' ? guideActivePoiIndex : null}
         highlightedDifficultyIndex={openSection === 'sicurezza' ? sicurezzaCenter.centeredIndex : null}
-        activeIndex={openSection === 'dati' ? altActiveIndex : openSection === 'featured' ? guideActiveTrackIndex : null}
+        activeIndex={openSection === 'profilo' ? altActiveIndex : openSection === 'featured' ? guideActiveTrackIndex : null}
         showPoiLayer={showPoiLayer}
         showTourControls={interactive}
         obscuredBottomPx={obscuredBottomPx}
@@ -460,26 +470,18 @@ export default function GuidaHub({ id }: { id?: string }) {
 
   const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
+    const scoreLoading = si.loading || s2.loading
     const trailScoreTotal = computeTrailScoreTotal(
       { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
       safetyScore,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
       { data: s2.data, loading: s2.loading },
     )
+    if (!scoreLoading && trailScoreTotal <= 0) return null
     return (
-      <>
-        {trailScoreTotal > 0 && (
-          <button onClick={onTap} title="Trail Score" className="pointer-events-auto shrink-0">
-            <MiniScoreRing value={trailScoreTotal} />
-          </button>
-        )}
-        {safetyScore && (
-          <button onClick={onTap} className="pointer-events-auto shrink-0 px-2.5 py-1.5 rounded-full text-white text-[11px] font-bold border border-white/10 backdrop-blur-md" style={{ backgroundColor: safetyScore.color }}>Sicurezza {safetyScore.label}</button>
-        )}
-        {hike.cachedBeautyScore && (
-          <button onClick={onTap} className="pointer-events-auto shrink-0 px-2.5 py-1.5 rounded-full text-white text-[11px] font-bold border border-white/10 backdrop-blur-md" style={{ backgroundColor: hike.cachedBeautyScore.color }}>Bellezza {hike.cachedBeautyScore.gradeLabel}</button>
-        )}
-      </>
+      <button onClick={onTap} title="Trail Score" className="pointer-events-auto shrink-0">
+        <MiniScoreRing value={trailScoreTotal} loading={scoreLoading} />
+      </button>
     )
   }
 
@@ -530,12 +532,16 @@ export default function GuidaHub({ id }: { id?: string }) {
           </div>
         )}
 
+      </div>
+    )
+
+    if (section === 'profilo') return (
+      <div className="px-4 py-4">
         {hasGps && hike.trackPoints?.length ? (
-          <div>
-            <h3 className={`font-display text-lg font-semibold mb-3 flex items-center gap-2 ${textPrimary}`}><Mountain className="w-4 h-4 text-amber-500" /> Profilo altimetrico</h3>
-            <ElevationProfileChart trackPoints={hike.trackPoints} onHover={setAltActiveIndex} />
-          </div>
-        ) : null}
+          <ElevationProfileChart trackPoints={hike.trackPoints} onHover={setAltActiveIndex} />
+        ) : (
+          <p className={`text-sm italic text-center py-8 ${textMuted}`}>Profilo altimetrico non disponibile senza un tracciato GPS.</p>
+        )}
       </div>
     )
 
@@ -734,6 +740,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         </span>
       ) : undefined,
     },
+    { key: 'profilo', label: 'Profilo altimetrico', icon: Mountain },
     { key: 'natura', label: 'Natura', icon: Leaf },
     { key: 'poi', label: 'Punti di interesse', icon: MapPin },
     { key: 'sicurezza', label: 'Sicurezza & segnalazioni', icon: ShieldAlert },

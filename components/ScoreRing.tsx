@@ -76,13 +76,32 @@ export function computeTrailScoreTotal(cl: CLProps, safety: SafetyScore | null, 
 const MINI_STROKE = 3
 
 /** Small circular progress badge for the combined Trail Score — same fill logic as the big
- *  ScoreRing, shrunk down to sit inline among the other stat chips over the map. */
-export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30 }: { value: number; max?: number; size?: number }) {
+ *  ScoreRing, shrunk down to sit inline among the other stat chips over the map. While the
+ *  underlying data is still settling (`loading`), shows a neutral pulsing ring instead of a
+ *  number that would otherwise jump several times before landing on its final value. `color`
+ *  overrides the automatic CTS-tier coloring (used by callers scoring on a different scale,
+ *  e.g. Resoconto's 0-10 manual rating). */
+export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30, loading = false, color: colorOverride }: { value: number; max?: number; size?: number; loading?: boolean; color?: string }) {
   const r = (size - MINI_STROKE) / 2
   const c = size / 2
   const circumference = 2 * Math.PI * r
   const pct = Math.max(0, Math.min(1, value / max))
-  const { color } = ctsLabel(Math.round(pct * 100))
+  const color = colorOverride ?? ctsLabel(Math.round(pct * 100)).color
+
+  if (loading) {
+    return (
+      <div className="relative shrink-0 rounded-full bg-white shadow-sm animate-pulse" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={c} cy={c} r={r} fill="none" stroke="#e7e5e4" strokeWidth={MINI_STROKE} />
+          <circle
+            cx={c} cy={c} r={r} fill="none" stroke="#d6d3d1" strokeWidth={MINI_STROKE} strokeLinecap="round"
+            strokeDasharray={`${circumference * 0.25} ${circumference}`}
+          />
+        </svg>
+      </div>
+    )
+  }
+
   return (
     <div className="relative shrink-0 rounded-full bg-white shadow-sm" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>

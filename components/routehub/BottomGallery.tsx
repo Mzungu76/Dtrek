@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Mountain, ArrowUpDown, Upload } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
+import { MiniScoreRing } from '@/components/ScoreRing'
 import type { HubMode, RouteHubItem, SortValues } from './types'
 
 type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating'
@@ -88,6 +89,7 @@ interface Props {
 export default function BottomGallery({ mode, items, currentId, onSelect, importLabel, onImport }: Props) {
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const hasSortData = items.some(i => i.sortValues)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const others = useMemo(() => {
     const list = items.map((item, i) => ({ item, i })).filter(({ item }) => item.id !== currentId)
@@ -97,6 +99,11 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
       b.item.sortValues ?? { date: 0, km: 0, dplus: 0 },
     ))
   }, [items, currentId, sortBy, hasSortData])
+
+  // Without this, changing the sort re-orders `others` correctly but the strip stays scrolled
+  // wherever the user left it — the new #1 item lands off-screen and the re-sort looks like it
+  // silently did nothing.
+  useEffect(() => { scrollRef.current?.scrollTo({ left: 0 }) }, [sortBy])
 
   if (others.length === 0 && !onImport) return null
 
@@ -118,7 +125,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
           ))}
         </div>
       )}
-      <div className="flex gap-2.5 overflow-x-auto px-4 [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}>
+      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4 [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}>
         {onImport && (
           <button
             onClick={onImport}
@@ -147,6 +154,11 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-forest-800 to-forest-950 flex items-center justify-center">
                 <Mountain className="w-5 h-5 text-white/40" />
+              </div>
+            )}
+            {item.scorePreview && (
+              <div className="absolute top-1 left-1">
+                <MiniScoreRing value={item.scorePreview.value} max={item.scorePreview.max} color={item.scorePreview.color} size={22} />
               </div>
             )}
             <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-3 bg-gradient-to-t from-black/75 to-transparent">

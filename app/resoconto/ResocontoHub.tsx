@@ -11,7 +11,7 @@ import { wmoInfo } from '@/lib/openmeteo'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
-import { ScoreRing, computeTrailScoreTotal, MiniScoreRing } from '@/components/ScoreRing'
+import { ScoreRing, MiniScoreRing } from '@/components/ScoreRing'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
 import SpeedChart from '@/components/SpeedChart'
@@ -37,7 +37,7 @@ import {
   FileSpreadsheet, FileText, Map, FileDown,
   Route, TrendingUp, Clock, Flame, Heart, Zap,
   Pencil, Trash2, Loader2, Share2, Layers, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint, X, MapPin,
-  BarChart2, ShieldAlert, Wrench, Star,
+  BarChart2, ShieldAlert, Wrench, Star, Mountain,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -76,6 +76,9 @@ function metaToItem(a: ActivityMeta): RouteHubItem {
       cts: a.trailScore,
       rating: a.userRating,
     },
+    // Manual rating stands in for a computed score here — a completed hike's own vote is more
+    // meaningful than an estimate, and it's already known for every item with no extra fetch.
+    scorePreview: a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined,
   }
 }
 
@@ -374,7 +377,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       <MapView trackPoints={activity.trackPoints} height="100%" interactive={interactive}
         showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages}
         highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : null}
-        activeIndex={openSection === 'dati' ? altActiveIndex : null}
+        activeIndex={openSection === 'profilo' ? altActiveIndex : null}
         showPoiLayer={showPoiLayer}
         obscuredBottomPx={obscuredBottomPx}
       />
@@ -392,24 +395,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
   )
 
   const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
-    if (!activity || routeItem.id !== activity.id) return null
-    const trailScoreTotal = computeTrailScoreTotal(
-      { notMatched: true },
-      null,
-      { result: ctsResult, cached: activity.trailScore, beautyScore: activity.linkedBeautyScore },
-      { data: s2.data, loading: s2.loading },
-    )
+    if (!activity || routeItem.id !== activity.id || !rated) return null
     return (
-      <>
-        {trailScoreTotal > 0 && (
-          <button onClick={onTap} title="Trail Score" className="pointer-events-auto shrink-0">
-            <MiniScoreRing value={trailScoreTotal} />
-          </button>
-        )}
-        {rated && (
-          <button onClick={onTap} className="pointer-events-auto shrink-0 px-2.5 py-1.5 rounded-full text-white text-[11px] font-bold border border-white/10 backdrop-blur-md" style={{ backgroundColor: ratingColor(activity.userRating!) }}>Bellezza {activity.userRating}/10</button>
-        )}
-      </>
+      // The manual vote (not a computed score) is the most meaningful "how good was it" figure
+      // for a hike already done — shown the same way Guida shows its Trail Score, just on a
+      // 0-10 scale with its own color instead of the CTS-tier gradient.
+      <button onClick={onTap} title="Voto" className="pointer-events-auto shrink-0">
+        <MiniScoreRing value={activity.userRating!} max={10} color={ratingColor(activity.userRating!)} />
+      </button>
     )
   }
 
@@ -470,19 +463,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
             </div>
           )}
 
-          {hasGps && activity.trackPoints.length ? (
-            <div>
-              <h3 className={`font-display text-lg font-semibold mb-3 flex items-center gap-2 ${textPrimary}`}><Map className="w-4 h-4 text-emerald-500" /> Profilo altimetrico</h3>
-              <ElevationProfileChart trackPoints={activity.trackPoints} onHover={setAltActiveIndex} />
-            </div>
-          ) : null}
-
           {(() => {
             const hasHR  = (activity.avgHeartRate ?? 0) > 0
             const hasCal = (activity.calories ?? 0) > 0
             const hasNetSpeed = (activity.netSpeedMs ?? 0) > 0 && (activity.pauseTimeSeconds ?? 0) > 0
             const hasIev = (activity.iev ?? 0) > 0
-            const hasHRTrack = activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0)
             const dep = computeDEP(activity.distanceMeters, activity.elevationGain)
             return (
               <div className="space-y-3">
@@ -494,8 +479,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
                   <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone" />
                   {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest" />}
                 </div>
-                {hasHRTrack && <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />}
-                <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
                 <dl className={`${glassTile} p-4 grid grid-cols-2 gap-x-3 gap-y-1.5`}>
                   {[
                     ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
@@ -534,6 +517,20 @@ export default function ResocontoHub({ id }: { id?: string }) {
             </div>
           )}
         </div>
+    )
+
+    if (section === 'profilo') return (
+      <div className="px-4 py-4 space-y-5">
+        {hasGps && activity.trackPoints.length ? (
+          <ElevationProfileChart trackPoints={activity.trackPoints} onHover={setAltActiveIndex} />
+        ) : (
+          <p className={`text-sm italic text-center py-8 ${textMuted}`}>Profilo altimetrico non disponibile senza un tracciato GPS.</p>
+        )}
+        {activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0) && (
+          <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
+        )}
+        <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
+      </div>
     )
 
     if (section === 'meteo') return (
@@ -686,6 +683,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
         </span>
       ) : undefined,
     },
+    { key: 'profilo', label: 'Andamento', icon: Mountain },
     { key: 'natura', label: 'Natura', icon: Leaf },
     { key: 'poi', label: 'Punti di interesse', icon: MapPin },
     { key: 'sicurezza', label: 'Sicurezza & segnalazioni', icon: ShieldAlert },
