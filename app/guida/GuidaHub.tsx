@@ -72,7 +72,10 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
       date: new Date(h.createdAt).getTime(),
       km: h.distanceMeters,
       dplus: h.elevationGain,
-      cts: h.cachedTrailScore,
+      // The "TS" sort must rank by the same aggregate the ring badge shows — using the raw
+      // cachedTrailScore here would silently sort by the old single-dimension CTS while the
+      // badge displays the 5-segment total, so a route's rank and its own badge would disagree.
+      cts: previewTotal,
     },
     scorePreview: previewTotal > 0 ? { value: previewTotal, max: TRAIL_SCORE_MAX } : undefined,
   }
@@ -328,6 +331,35 @@ export default function GuidaHub({ id }: { id?: string }) {
     return () => { cancelled = true }
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keeps the gallery thumbnail's TS ring — and the "TS" sort key that ranks by it — in sync with
+  // whatever just got cached (Calcola CTS, or the auto-cached safety score). Same cached-only
+  // formula as metaToItem() for every other item in the list, so a hike's rank and its own badge
+  // never disagree, whether or not it's the one currently open.
+  const scorePreviewFor = (h: PlannedHike) => {
+    const total = computeTrailScoreTotal(
+      { notMatched: true },
+      h.cachedSafetyScore ?? null,
+      { result: null, cached: h.cachedTrailScore, beautyScore: h.cachedBeautyScore },
+      { data: null },
+    )
+    return total > 0 ? { value: total, max: TRAIL_SCORE_MAX } : undefined
+  }
+
+  // Persists the refreshed preview into `items` itself (not just this render's displayItems) —
+  // otherwise the moment the hike stops being the active one, its gallery entry reverts to
+  // whatever metaToItem() saw when the list first loaded.
+  useEffect(() => {
+    if (!hike) return
+    const preview = scorePreviewFor(hike)
+    setItems(prev => {
+      const idx = prev.findIndex(it => it.id === hike.id)
+      if (idx === -1 || prev[idx].scorePreview?.value === preview?.value) return prev
+      const next = [...prev]
+      next[idx] = { ...next[idx], scorePreview: preview, sortValues: { ...next[idx].sortValues!, cts: preview?.value ?? 0 } }
+      return next
+    })
+  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const displayItems = useMemo(() => {
     const pillsFor = (h: PlannedHike) => [
       { icon: Route,      label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
@@ -336,33 +368,22 @@ export default function GuidaHub({ id }: { id?: string }) {
       { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
       ...(driving ? [{ icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }] : []),
     ]
-    const sortValuesFor = (h: PlannedHike) => ({
-      date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: h.cachedTrailScore,
+    const sortValuesFor = (h: PlannedHike, previewValue: number) => ({
+      date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: previewValue,
     })
-    // The gallery thumbnail's TS ring otherwise stays frozen at whatever computeTrailScoreTotal()
-    // saw when the list first loaded — e.g. before the safety score auto-cached or the user hit
-    // "Calcola CTS" — so once the hike stops being the active one, its thumbnail keeps showing that
-    // stale (often CTS-only) figure forever. Recompute it here from the same live sources scoreBadges
-    // uses, so what was current while the hike was open is what sticks in the gallery afterwards.
-    const scorePreviewFor = (h: PlannedHike, fallback?: RouteHubItem['scorePreview']) => {
-      const total = computeTrailScoreTotal(
-        { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
-        safetyScore,
-        { result: ctsResult, cached: h.cachedTrailScore, beautyScore: h.cachedBeautyScore },
-        { data: s2.data, loading: s2.loading },
-      )
-      return total > 0 ? { value: total, max: TRAIL_SCORE_MAX } : fallback
-    }
-    const mapped = items.map(it => it.id === hike?.id
-      ? { ...it, statPills: pillsFor(hike), sortValues: sortValuesFor(hike), scorePreview: scorePreviewFor(hike, it.scorePreview) }
-      : it)
+    const mapped = items.map(it => {
+      if (it.id !== hike?.id) return it
+      const preview = scorePreviewFor(hike)
+      return { ...it, statPills: pillsFor(hike), sortValues: sortValuesFor(hike, preview?.value ?? 0), scorePreview: preview }
+    })
     // Deep link to a hike outside the active list (e.g. archived/expired) — still show it
     // standalone rather than 404, once its full record has loaded.
     if (hike && !mapped.some(it => it.id === hike.id)) {
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike), sortValues: sortValuesFor(hike), scorePreview: scorePreviewFor(hike) }, ...mapped]
+      const preview = scorePreviewFor(hike)
+      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike), sortValues: sortValuesFor(hike, preview?.value ?? 0), scorePreview: preview }, ...mapped]
     }
     return mapped
-  }, [items, hike, driving, si, safetyScore, ctsResult, s2])
+  }, [items, hike, driving])
 
   if (!listLoaded) {
     return (
