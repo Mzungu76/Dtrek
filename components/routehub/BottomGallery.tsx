@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import Image from 'next/image'
 import { Mountain, ArrowUpDown, Upload } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
@@ -89,7 +90,7 @@ function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
         doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, attributionControl: false,
       })
       mapInstance.current = map
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map)
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
       const line = L.polyline(polyline, { color: '#7dd3fc', weight: 4, opacity: 0.95 }).addTo(map)
       map.fitBounds(line.getBounds(), { padding: [4, 4] })
     })
@@ -193,8 +194,7 @@ export default function BottomGallery({ mode, items, currentId, onSelect, sortBy
               <GalleryMapThumb polyline={item.polyline} />
             ) : item.coverPhotoUrl ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={item.coverPhotoUrl} alt={item.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="80px" className="object-cover" loading="lazy" />
                 <div className="absolute inset-0 bg-black/20 pointer-events-none" />
               </>
             ) : (

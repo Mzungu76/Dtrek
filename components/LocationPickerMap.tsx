@@ -1,4 +1,5 @@
 'use client'
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef } from 'react'
 
 interface Props {
@@ -29,14 +30,6 @@ export default function LocationPickerMap({ lat, lon, onPick, height = '260px' }
     let cancelled = false
 
     ;(async () => {
-      if (!document.querySelector('#leaflet-css')) {
-        const link = document.createElement('link')
-        link.id   = 'leaflet-css'
-        link.rel  = 'stylesheet'
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-        document.head.appendChild(link)
-      }
-
       const L = (await import('leaflet')).default
       if (cancelled || !containerRef.current) return
 
@@ -45,7 +38,7 @@ export default function LocationPickerMap({ lat, lon, onPick, height = '260px' }
         .setView(start, lat != null && lon != null ? 14 : DEFAULT_ZOOM)
       mapRef.current = map
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', {
         maxZoom: 18,
         attribution: '© OpenStreetMap',
       }).addTo(map)

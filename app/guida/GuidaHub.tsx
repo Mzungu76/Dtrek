@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import RouteHub from '@/components/routehub/RouteHub'
 import RouteThumb from '@/components/RouteThumb'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
@@ -27,9 +28,8 @@ import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/lib/trailScore'
+import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { type BeautyScore } from '@/lib/beautyScore'
-import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
@@ -116,6 +116,8 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [prefsLoaded,    setPrefsLoaded]   = useState(false)
   const [prefSforzo,     setPrefSforzo]    = useState(50)
   const [prefDurata,     setPrefDurata]    = useState(270)
+  const [hrRest,         setHrRest]        = useState<number | undefined>(undefined)
+  const [hrMax,          setHrMax]         = useState<number | undefined>(undefined)
   const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
   const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
   const [altActiveIndex, setAltActiveIndex] = useState<number | null>(null)
@@ -239,6 +241,8 @@ export default function GuidaHub({ id }: { id?: string }) {
     fetch('/api/user-settings').then(r => r.json()).then(d => {
       if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
       if (d.prefDurata != null) setPrefDurata(d.prefDurata)
+      if (d.hrRest != null) setHrRest(d.hrRest)
+      if (d.hrMax != null) setHrMax(d.hrMax)
     }).catch(() => {}).finally(() => setPrefsLoaded(true))
   }, [])
 
@@ -305,20 +309,26 @@ export default function GuidaHub({ id }: { id?: string }) {
   // only if missing (an older hike, imported before this policy existed) or stale. Reuses the
   // "Calcola CTS" button's own loading flag so the UI treats an automatic and a manual
   // (re)compute identically.
+  //
+  // Waits for the POI/DTM/terrain/protected-area/prefs effects above to land before running, so
+  // it can hand their results to computeCtsForHike as `prefetched` instead of having it repeat
+  // the exact same /api/pois, /api/tei-dtm, /api/tei-terrain and /api/natura2000 calls this
+  // component is already making for its own map/UI state.
   useEffect(() => {
     if (!hike) return
     const fresh = hike.cachedTrailScore != null && isScoreFresh(hike.cachedScoresComputedAt)
     if (fresh) return
     const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
     if (gps.length < 2) return
+    if (!poisFullyLoaded || dtmProfile === undefined || terrainProfile === undefined || inProtectedArea === undefined || !prefsLoaded) return
     let cancelled = false
     setCtsComputing(true)
-    computeCtsForHike(hike)
+    computeCtsForHike(hike, { pois, dtmProfile, terrainProfile, inProtectedArea, prefs: { prefSforzo, prefDurata, hrRest, hrMax } })
       .then(result => { if (!cancelled && result) setHike(prev => prev ? { ...prev, ...result } : prev) })
       .catch(() => {})
       .finally(() => { if (!cancelled) setCtsComputing(false) })
     return () => { cancelled = true }
-  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike?.id, poisFullyLoaded, dtmProfile, terrainProfile, inProtectedArea, prefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Once every live input has settled (no per-item fetch needed — this only runs for the hike
   // that's actually open), persists the *full* aggregate — including CL and ombra/acqua, which
@@ -435,36 +445,19 @@ export default function GuidaHub({ id }: { id?: string }) {
 
   const handleComputeCts = async () => {
     if (!hike) return
-    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
     if (gps.length < 2) return
     setCtsComputing(true)
     try {
-      const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
-      const bbox = computeBbox(gps)
-      const [allPoisRes, osmData] = await Promise.all([
-        Promise.race([fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>, deadline]).then(r => r ?? []),
-        Promise.race([fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>, deadline]).then(r => r ?? undefined).catch(() => undefined),
-      ])
-      const allPois = allPoisRes as PoiItem[]
-      const poisNear = allPois.filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
-        .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
-      const elevProfile = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => p.altitudeMeters ?? 0)
-      const tei = computeTEI({
-        track: gps, elevGain: hike.elevationGain, distanceMeters: hike.distanceMeters, altitudeMax: hike.altitudeMax,
-        elevProfile, pois: poisNear, osmData, dtmProfile, terrainProfile, inProtectedArea,
+      // Shares the same pipeline (and the same prefetched-data shortcut) as the automatic
+      // background recompute above — hands it whatever this hub has already fetched for its own
+      // POI/DTM/terrain/protected-area/prefs UI instead of asking it to fetch that all again.
+      const result = await computeCtsForHike(hike, {
+        pois: poisFullyLoaded ? pois : undefined,
+        dtmProfile, terrainProfile, inProtectedArea,
+        prefs: prefsLoaded ? { prefSforzo, prefDurata, hrRest, hrMax } : undefined,
       })
-      const bs = teiToBeautyScore(tei)
-      const confidence: CtsConfidence = tei.confidence
-      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      let { ts } = computeTrailScore(bs, {
-        distanceMeters: hike.distanceMeters, elevationGain: hike.elevationGain, elevationLoss: hike.elevationLoss,
-        altitudeMax: hike.altitudeMax, prefSforzo: prefs.prefSforzo, prefDurata: prefs.prefDurata,
-        hrRest: prefs.hrRest, hrMax: prefs.hrMax ?? undefined, avgSlopeDeg: dtmProfile?.avgSlopeDeg ?? undefined,
-      })
-      if (confidence === 'estimated') ts = Math.round(ts * 0.9)
-      const computedAt = new Date().toISOString()
-      await updatePlannedMeta(hike.id, { cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence, cachedScoresComputedAt: computedAt })
-      setHike(prev => prev ? { ...prev, cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence, cachedScoresComputedAt: computedAt } : prev)
+      if (result) setHike(prev => prev ? { ...prev, ...result } : prev)
     } catch (e) {
       console.error('CTS computation error:', e)
     } finally {
@@ -659,7 +652,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           const cardContent = (
             <>
               {wiki?.thumbnail
-                ? <img src={wiki.thumbnail} alt={wiki.title} className="w-16 h-16 object-cover rounded-xl shrink-0" />
+                ? <Image src={wiki.thumbnail} alt={wiki.title} width={64} height={64} className="w-16 h-16 object-cover rounded-xl shrink-0" />
                 : <span className="w-16 h-16 rounded-xl bg-stone-100 flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1"><span className="text-base leading-none">{meta.emoji}</span><span className={`text-[10px] font-semibold uppercase tracking-wide ${textMuted}`}>{meta.label}</span>

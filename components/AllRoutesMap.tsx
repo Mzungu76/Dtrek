@@ -1,4 +1,5 @@
 'use client'
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef } from 'react'
 
 interface RouteEntry {
@@ -37,24 +38,15 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
     if (!mapRef.current || mapInstance.current) return
     if (validRoutes.length === 0) return
 
-    // Carica CSS Leaflet
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link')
-      link.id = 'leaflet-css'
-      link.rel = 'stylesheet'
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-      document.head.appendChild(link)
-    }
-
     import('leaflet').then(L => {
       if (!mapRef.current || mapInstance.current) return
 
       // Fix icone Leaflet con Next.js
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconRetinaUrl: '/leaflet/marker-icon-2x.png',
+        iconUrl: '/leaflet/marker-icon.png',
+        shadowUrl: '/leaflet/marker-shadow.png',
       })
 
       const map = L.map(mapRef.current!, {
@@ -67,7 +59,7 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
       }).setView([44, 11], 7)
       mapInstance.current = map
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
         maxZoom: 19,
       }).addTo(map)

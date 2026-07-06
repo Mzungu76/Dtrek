@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { fetchNearbyWiki } from '@/lib/wikipedia'
 import type { WikiPage } from '@/lib/wikipedia'
 import { glassTile, glassTileHover, textPrimary, textMuted } from '@/components/routehub/overlayTheme'
@@ -49,9 +50,11 @@ export default function WikiCards({ lat, lon, radiusM = 8000, onLoaded }: Props)
           className={`flex gap-3 p-3 group ${glassTile} ${glassTileHover}`}
         >
           {page.thumbnail && (
-            <img
+            <Image
               src={page.thumbnail}
               alt={page.title}
+              width={64}
+              height={64}
               className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
             />
           )}

@@ -1,4 +1,5 @@
 'use client'
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef } from 'react'
 
 interface Props {
@@ -31,7 +32,7 @@ export default function TrailMiniMap({ polyline, height = '160px' }: Props) {
       })
       mapInstance.current = map
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', {
         attribution: '© OpenStreetMap',
         maxZoom: 19,
       }).addTo(map)
@@ -42,14 +43,6 @@ export default function TrailMiniMap({ polyline, height = '160px' }: Props) {
       L.circleMarker(polyline[0], { radius: 5, color: '#16a34a', fillColor: '#16a34a', fillOpacity: 1, weight: 2 }).addTo(map)
       L.circleMarker(polyline[polyline.length - 1], { radius: 5, color: '#dc2626', fillColor: '#dc2626', fillOpacity: 1, weight: 2 }).addTo(map)
     })
-
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link')
-      link.id = 'leaflet-css'
-      link.rel = 'stylesheet'
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-      document.head.appendChild(link)
-    }
 
     return () => {
       cancelled = true
