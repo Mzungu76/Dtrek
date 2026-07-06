@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 
 export interface MosaicPhoto {
   id: string
@@ -18,9 +19,9 @@ export default function PhotoMosaic({ photos, onPhotoClick, heightClass = 'h-32'
     <div className={`flex ${heightClass} overflow-hidden print:hidden`}>
       {photos.map(ph => (
         <button key={ph.id} onClick={() => onPhotoClick?.(ph.id)}
-          className="flex-1 overflow-hidden hover:scale-[1.02] transition-transform">
-          <img src={ph.url} alt={ph.alt ?? ''}
-            className="w-full h-full object-cover" style={{ objectPosition: 'center 40%' }} />
+          className="relative flex-1 overflow-hidden hover:scale-[1.02] transition-transform">
+          <Image src={ph.url} alt={ph.alt ?? ''} fill sizes="33vw"
+            className="object-cover" style={{ objectPosition: 'center 40%' }} />
         </button>
       ))}
     </div>

@@ -1,4 +1,5 @@
 'use client'
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState } from 'react'
 import { Sun, Waves } from 'lucide-react'
 import type { Sentinel2Data } from '@/lib/cl/types'
@@ -44,7 +45,7 @@ function WaterSourcesMiniMap({ points }: { points: Array<{ lat: number; lon: num
       })
       mapInstance.current = map
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', {
         attribution: '© OpenStreetMap',
         maxZoom: 19,
       }).addTo(map)
@@ -57,14 +58,6 @@ function WaterSourcesMiniMap({ points }: { points: Array<{ lat: number; lon: num
         map.fitBounds(bounds, { padding: [20, 20] })
       }
     })
-
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link')
-      link.id = 'leaflet-css'
-      link.rel = 'stylesheet'
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-      document.head.appendChild(link)
-    }
 
     return () => {
       cancelled = true

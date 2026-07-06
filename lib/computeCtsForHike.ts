@@ -10,16 +10,30 @@ import type { BeautyScore } from './beautyScore'
 
 const FETCH_TIMEOUT_MS = 25000
 
+/** Whatever the caller already has in memory for this same hike — passing it in skips the
+ *  matching network fetch below instead of repeating a request a sibling effect/handler already
+ *  made (or is already making) for the exact same bbox/track. Anything omitted is fetched as
+ *  before, so a fire-and-forget caller with no page-local state (e.g. right after import) still
+ *  works unchanged. */
+export interface CtsPrefetched {
+  pois?: PoiItem[]
+  dtmProfile?: TrailDtmProfile
+  terrainProfile?: TrailTerrainProfile
+  inProtectedArea?: boolean
+  prefs?: { prefSforzo?: number; prefDurata?: number; hrRest?: number; hrMax?: number }
+}
+
 /**
  * Runs the full CTS pipeline (POIs, OSM tags, DTM slope/aspect, terrain,
  * protected-area overlap) for a planned hike and persists the result.
- * Self-contained: fetches everything it needs rather than relying on
- * page-local state, so it can run fire-and-forget right after a hike is
- * added, not just from the manual "Calcola CTS" button.
+ * Self-contained: fetches everything it doesn't already have rather than
+ * requiring page-local state, so it can still run fire-and-forget right
+ * after a hike is added (no `prefetched`), not just from a page that has
+ * already loaded some of the same data for its own UI.
  */
 export async function computeCtsForHike(hike: Pick<PlannedHike,
   'id' | 'trackPoints' | 'elevationGain' | 'distanceMeters' | 'elevationLoss' | 'altitudeMax'
->): Promise<{ cachedBeautyScore: BeautyScore; cachedTrailScore: number; cachedTrailScoreConfidence: CtsConfidence; cachedScoresComputedAt: string } | null> {
+>, prefetched?: CtsPrefetched): Promise<{ cachedBeautyScore: BeautyScore; cachedTrailScore: number; cachedTrailScoreConfidence: CtsConfidence; cachedScoresComputedAt: string } | null> {
   const gps = (hike.trackPoints ?? [])
     .filter(p => p.lat && p.lon)
     .map(p => [p.lat!, p.lon!] as [number, number])
@@ -29,11 +43,19 @@ export async function computeCtsForHike(hike: Pick<PlannedHike,
   const bbox = computeBbox(gps)
 
   const [allPoisRes, osmData, dtmProfile, terrainProfile, protectedArea] = await Promise.all([
-    Promise.race([fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>, deadline<PoiItem[]>()]).then(r => r ?? []).catch(() => []),
+    prefetched?.pois
+      ? Promise.resolve(prefetched.pois)
+      : Promise.race([fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>, deadline<PoiItem[]>()]).then(r => r ?? []).catch(() => []),
     Promise.race([fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>, deadline<OsmTeiData>()]).then(r => r ?? undefined).catch(() => undefined),
-    fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()).catch(() => undefined) as Promise<TrailDtmProfile | undefined>,
-    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()).catch(() => undefined) as Promise<TrailTerrainProfile | undefined>,
-    checkProtectedArea(gps).catch(() => undefined),
+    prefetched?.dtmProfile !== undefined
+      ? Promise.resolve(prefetched.dtmProfile)
+      : fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()).catch(() => undefined) as Promise<TrailDtmProfile | undefined>,
+    prefetched?.terrainProfile !== undefined
+      ? Promise.resolve(prefetched.terrainProfile)
+      : fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()).catch(() => undefined) as Promise<TrailTerrainProfile | undefined>,
+    prefetched?.inProtectedArea !== undefined
+      ? Promise.resolve({ inProtectedArea: prefetched.inProtectedArea })
+      : checkProtectedArea(gps).catch(() => undefined),
   ])
 
   const pois = allPoisRes
@@ -59,7 +81,7 @@ export async function computeCtsForHike(hike: Pick<PlannedHike,
   const bs = teiToBeautyScore(tei)
   const confidence: CtsConfidence = tei.confidence
 
-  const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+  const prefs = prefetched?.prefs ?? await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
   let { ts } = computeTrailScore(bs, {
     distanceMeters: hike.distanceMeters,
     elevationGain:  hike.elevationGain,

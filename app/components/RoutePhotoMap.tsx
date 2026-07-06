@@ -1,5 +1,6 @@
 'use client'
 
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 
@@ -35,13 +36,6 @@ export default function RoutePhotoMap({ trackPoints, photos, height = '180px' }:
   useEffect(() => {
     if (!mapRef.current || mapInstance.current || gpsPoints.length < 2) return
 
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link')
-      link.id = 'leaflet-css'; link.rel = 'stylesheet'
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-      document.head.appendChild(link)
-    }
-
     import('leaflet').then(L => {
       const coords: [number, number][] = gpsPoints.map(p => [p.lat!, p.lon!])
       const map = L.map(mapRef.current!, {
@@ -53,7 +47,7 @@ export default function RoutePhotoMap({ trackPoints, photos, height = '180px' }:
       }).setView(coords[0], 13)
       mapInstance.current = map
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map)
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
 
       const poly = L.polyline(coords, { color: '#378d44', weight: 3, opacity: 0.9 }).addTo(map)
       map.fitBounds(poly.getBounds(), { padding: [14, 14] })

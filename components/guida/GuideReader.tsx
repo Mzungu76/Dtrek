@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import Image from 'next/image'
 import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { format } from 'date-fns'
@@ -145,8 +146,9 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
       <div className="md:columns-2 md:gap-8 print-columns-2">
         {sectionPhoto && (
           <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={sectionPhoto} className="w-full h-40 object-cover rounded-sm shadow-sm" alt="" />
+            <div className="relative w-full h-40 rounded-sm shadow-sm overflow-hidden">
+              <Image src={sectionPhoto} alt="" fill sizes="(max-width: 640px) 42vw, 38vw" className="object-cover" />
+            </div>
             <p className="text-[9px] italic text-stone-400 mt-1">© Wikimedia Commons</p>
           </div>
         )}
@@ -211,12 +213,13 @@ function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
       rel="noopener noreferrer"
       className="group flex flex-col rounded-xl overflow-hidden border border-stone-100 hover:border-stone-200 shadow-sm hover:shadow-md transition-all bg-white"
     >
-      <div className="h-40 overflow-hidden bg-stone-100">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+      <div className="relative h-40 overflow-hidden bg-stone-100">
+        <Image
           src={photo.thumbnail}
           alt={photo.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          fill
+          sizes="(max-width: 640px) 100vw, 33vw"
+          className="object-cover group-hover:scale-105 transition-transform duration-500"
         />
       </div>
       <div className="p-3">
@@ -547,11 +550,13 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <div className="relative w-full overflow-hidden" style={{ height: 'clamp(200px, 34vw, 340px)' }}>
         {routePhotos[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={routePhotos[0]}
             alt={hikeTitle}
-            className="absolute inset-0 w-full h-full object-cover"
+            fill
+            sizes="100vw"
+            priority
+            className="object-cover"
             style={{ objectPosition: 'center 35%' }}
           />
         ) : (

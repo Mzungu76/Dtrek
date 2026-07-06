@@ -1,4 +1,5 @@
 'use client'
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
 import type { NavState } from '@/lib/navigation/types'
@@ -49,19 +50,6 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
 
   useEffect(() => {
     let cancelled = false
-
-    // Leaflet ships its layout/positioning CSS separately from the JS bundle
-    // — every other Leaflet map in this app injects it manually (see
-    // components/MapView.tsx) because there's no global <link> for it.
-    // Without this, .leaflet-container has no defined size and the map
-    // collapses to a tiny, broken tile block instead of filling the screen.
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link')
-      link.id = 'leaflet-css'
-      link.rel = 'stylesheet'
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-      document.head.appendChild(link)
-    }
 
     import('leaflet').then((L) => {
       if (cancelled || !mapRef.current || mapInstance.current) return

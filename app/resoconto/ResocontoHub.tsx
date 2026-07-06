@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import RouteHub from '@/components/routehub/RouteHub'
 import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import { glassTile, glassTileHover, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
@@ -20,7 +21,7 @@ import {
   getActivityById, updateActivityMeta, deleteActivity, getAllActivities,
   type StoredActivity, type ActivityMeta,
 } from '@/lib/blobStore'
-import { computeTrailScore, type TrailScoreResult, type CtsConfidence } from '@/lib/trailScore'
+import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
@@ -28,7 +29,6 @@ import { exportActivityToGpx } from '@/utils/exportGpx'
 import { exportActivityPdf } from '@/utils/pdfExport'
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
@@ -103,6 +103,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [terrainProfile,  setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
   const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [pois,            setPois]           = useState<PoiItem[]>([])
+  const [poisLoaded,      setPoisLoaded]     = useState(false)
   const [wikiPages,       setWikiPages]      = useState<WikiPage[]>([])
   const [ratingVal,       setRatingVal]      = useState(0)
   const [ratingNote,      setRatingNote]     = useState('')
@@ -120,6 +121,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [prefsLoaded,     setPrefsLoaded]     = useState(false)
   const [prefSforzo,      setPrefSforzo]      = useState(50)
   const [prefDurata,      setPrefDurata]      = useState(270)
+  const [hrRest,          setHrRest]          = useState<number | undefined>(undefined)
+  const [hrMax,           setHrMax]           = useState<number | undefined>(undefined)
   const [openSection,     setOpenSection]     = useState<SectionKind | null>(null)
   const [showPoiLayer,    setShowPoiLayer]    = useState(false)
   const [driving,         setDriving]         = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
@@ -175,7 +178,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (!currentId) return
     const loadPoisFor = (a: StoredActivity) => {
       const gps = a.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined).map(p => [p.lat!, p.lon!] as [number, number])
-      if (gps.length === 0) return
+      if (gps.length === 0) { setPoisLoaded(true); return }
       const bbox = computeBbox(gps)
       fetch(`/api/pois?bbox=${bbox}`)
         .then(r => r.json())
@@ -185,8 +188,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
           setPois(nearby)
         })
         .catch(() => {})
+        .finally(() => setPoisLoaded(true))
     }
-    setPois([]); setPhotos([]); setCoverPhotoId(null)
+    setPois([]); setPoisLoaded(false); setPhotos([]); setCoverPhotoId(null)
     // No onRefresh callback here: getActivityById already persists the background-revalidated
     // copy to the local cache for next time. Wiring it into setActivity too would re-apply the
     // full activity (new object/array references) a second time once the network round-trip
@@ -244,25 +248,32 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // CTS+Beauty: computed once at import (lib/activitySave.ts) and re-verified here only if
   // missing (an older activity, saved before that policy existed) or older than
   // SCORE_STALE_DAYS — same policy as the planned-hike side in GuidaHub.
+  // Waits for the POI/DTM/terrain/protected-area/prefs effects above to land, then hands their
+  // results to computeCtsForActivity as `prefetched` instead of having it repeat the exact same
+  // /api/pois, /api/tei-dtm, /api/tei-terrain and /api/natura2000 calls this component already
+  // made for its own map/UI state (mirrors the same fix on the Guida/GuidaHub side).
   useEffect(() => {
     if (!activity) return
     const fresh = activity.trailScore != null && isScoreFresh(activity.trailScoreComputedAt)
     if (fresh) return
     const gps = activity.trackPoints.filter(p => p.lat && p.lon)
     if (gps.length < 2) return
+    if (!poisLoaded || dtmProfile === undefined || terrainProfile === undefined || inProtectedArea === undefined || !prefsLoaded) return
     let cancelled = false
     setCtsComputing(true)
-    computeCtsForActivity(activity)
+    computeCtsForActivity(activity, { pois, dtmProfile, terrainProfile, inProtectedArea, prefs: { prefSforzo, prefDurata, hrRest, hrMax } })
       .then(result => { if (!cancelled && result) setActivity(prev => prev ? { ...prev, ...result } : prev) })
       .catch(() => {})
       .finally(() => { if (!cancelled) setCtsComputing(false) })
     return () => { cancelled = true }
-  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activity?.id, poisLoaded, dtmProfile, terrainProfile, inProtectedArea, prefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch('/api/user-settings').then(r => r.json()).then(d => {
       if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
       if (d.prefDurata != null) setPrefDurata(d.prefDurata)
+      if (d.hrRest != null) setHrRest(d.hrRest)
+      if (d.hrMax != null) setHrMax(d.hrMax)
     }).catch(() => {}).finally(() => setPrefsLoaded(true))
   }, [])
 
@@ -374,37 +385,19 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
   const handleComputeCts = async () => {
     if (!activity) return
-    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+    const gps = activity.trackPoints.filter(p => p.lat && p.lon)
     if (gps.length < 2) return
     setCtsComputing(true)
     try {
-      const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
-      const bbox = computeBbox(gps)
-      const [allPoisRes, osmData] = await Promise.all([
-        Promise.race([fetch(`/api/pois?bbox=${bbox}`).then(r => r.json()) as Promise<PoiItem[]>, deadline]).then(r => r ?? []),
-        Promise.race([fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>, deadline]).then(r => r ?? undefined).catch(() => undefined),
-      ])
-      const allPois = allPoisRes as PoiItem[]
-      const poisNear = allPois.filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
-        .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
-      const elevProfile = activity.trackPoints.filter(p => p.lat && p.lon).map(p => p.altitudeMeters ?? 0)
-      const tei = computeTEI({
-        track: gps, elevGain: activity.elevationGain, distanceMeters: activity.distanceMeters, altitudeMax: activity.altitudeMax,
-        elevProfile, pois: poisNear, osmData, dtmProfile, terrainProfile, inProtectedArea,
+      // Shares the pipeline (and the prefetched-data shortcut) with the automatic background
+      // recompute above — reuses whatever this hub has already fetched for its own POI/DTM/
+      // terrain/protected-area/prefs UI instead of asking it to fetch that all again.
+      const result = await computeCtsForActivity(activity, {
+        pois: poisLoaded ? pois : undefined,
+        dtmProfile, terrainProfile, inProtectedArea,
+        prefs: prefsLoaded ? { prefSforzo, prefDurata, hrRest, hrMax } : undefined,
       })
-      const bs = teiToBeautyScore(tei)
-      const confidence: CtsConfidence = tei.confidence
-      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
-      let { ts } = computeTrailScore(bs, {
-        distanceMeters: activity.distanceMeters, elevationGain: activity.elevationGain, elevationLoss: activity.elevationLoss ?? 0,
-        altitudeMax: activity.altitudeMax, avgHeartRate: activity.avgHeartRate,
-        prefSforzo: prefs.prefSforzo, prefDurata: prefs.prefDurata, hrRest: prefs.hrRest, hrMax: prefs.hrMax ?? undefined,
-        avgSlopeDeg: dtmProfile?.avgSlopeDeg ?? undefined,
-      })
-      if (confidence === 'estimated') ts = Math.round(ts * 0.9)
-      const computedAt = new Date().toISOString()
-      await updateActivityMeta(activity.id, { linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence, trailScoreComputedAt: computedAt })
-      setActivity(prev => prev ? { ...prev, linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence, trailScoreComputedAt: computedAt } : prev)
+      if (result) setActivity(prev => prev ? { ...prev, ...result } : prev)
     } catch (e) {
       console.error('CTS computation error:', e)
     } finally {
@@ -457,8 +450,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const heroPhotos = photos.length > 0 ? (
     <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 snap-x">
       {photos.map(ph => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img key={ph.id} src={ph.url} alt={ph.caption ?? ''} className="w-28 h-28 object-cover rounded-2xl shrink-0 snap-start border border-stone-200" />
+        <Image key={ph.id} src={ph.url} alt={ph.caption ?? ''} width={112} height={112} className="w-28 h-28 object-cover rounded-2xl shrink-0 snap-start border border-stone-200" />
       ))}
     </div>
   ) : undefined
@@ -827,7 +819,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
               {photos.map(ph => (
                 <button key={ph.id} onClick={() => setCover(ph.id)}
                   className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors ${coverPhotoId === ph.id ? 'border-forest-500' : 'border-stone-200 hover:border-forest-300'}`}>
-                  <img src={ph.url} alt={ph.caption ?? ''} className="w-full h-full object-cover" />
+                  <Image src={ph.url} alt={ph.caption ?? ''} fill sizes="120px" className="object-cover" />
                 </button>
               ))}
             </div>

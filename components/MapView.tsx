@@ -1,4 +1,5 @@
 'use client'
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
@@ -127,9 +128,9 @@ export default function MapView({
       if (cancelled || !mapRef.current || mapInstance.current) return
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconRetinaUrl: '/leaflet/marker-icon-2x.png',
+        iconUrl: '/leaflet/marker-icon.png',
+        shadowUrl: '/leaflet/marker-shadow.png',
       })
 
       const coords: [number, number][] = points.map(p => [p.lat!, p.lon!])
@@ -140,7 +141,9 @@ export default function MapView({
       mapInstance.current = map
       setMapReady(true)
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // Same-origin proxy (cached by the service worker + Next's server-side fetch cache)
+      // instead of hitting tile.openstreetmap.org directly on every pan/zoom.
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
         maxZoom: 19,
       }).addTo(map)
@@ -246,14 +249,6 @@ export default function MapView({
       L.marker(coords[0], { icon: mkIcon('S', baseColor) }).addTo(map).bindPopup('Partenza')
       L.marker(coords[coords.length - 1], { icon: mkIcon('A', '#c05a17') }).addTo(map).bindPopup('Arrivo')
     })
-
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link')
-      link.id   = 'leaflet-css'
-      link.rel  = 'stylesheet'
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-      document.head.appendChild(link)
-    }
 
     return () => {
       cancelled = true

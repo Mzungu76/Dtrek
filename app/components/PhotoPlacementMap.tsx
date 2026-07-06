@@ -1,5 +1,6 @@
 'use client'
 
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { TrackPoint } from '@/lib/tcxParser'
@@ -56,19 +57,12 @@ export default function PhotoPlacementMap({
   useEffect(() => {
     if (!mapRef.current || mapInstance.current || gpsPoints.length < 2) return
 
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link')
-      link.id = 'leaflet-css'; link.rel = 'stylesheet'
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-      document.head.appendChild(link)
-    }
-
     import('leaflet').then(L => {
       const coords: [number, number][] = gpsPoints.map(p => [p.lat!, p.lon!])
       const map = L.map(mapRef.current!, { zoomControl: true }).setView(coords[0], 13)
       mapInstance.current = map
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
         maxZoom: 19,
       }).addTo(map)
