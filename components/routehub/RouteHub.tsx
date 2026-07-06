@@ -109,16 +109,11 @@ export default function RouteHub({
         )}
 
         {/* Subtle darkening over Screen 1's frozen carousel — improves contrast for the white
-            text/pill overlays. Fades out as Screen 2's own (darker) scrim fades in. */}
+            text/pill overlays. Fades out once the sheet opens: the map is fully interactive
+            there and reads as a normal, undimmed map behind the white card. */}
         <div
           className="absolute inset-0 pointer-events-none transition-opacity duration-300"
           style={{ background: 'rgba(4,10,16,0.35)', opacity: state.openSection ? 0 : 1 }}
-        />
-        {/* Extra scrim while the sheet is open — a tone darker, so the glass sheet reads as
-            floating above the map rather than as a separate page. */}
-        <div
-          className="absolute inset-0 pointer-events-none transition-opacity duration-300"
-          style={{ background: 'rgba(4,10,16,0.55)', opacity: state.openSection ? 1 : 0 }}
         />
       </div>
 
