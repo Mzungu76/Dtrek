@@ -19,6 +19,16 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
 }
 
+function mergeRefs<T>(...refs: (Ref<T> | undefined)[]) {
+  return (el: T | null) => {
+    for (const ref of refs) {
+      if (!ref) continue
+      if (typeof ref === 'function') ref(el)
+      else (ref as { current: T | null }).current = el
+    }
+  }
+}
+
 function heightForSnap(snap: SheetSnap): number {
   if (typeof window === 'undefined') return PEEK_PX
   if (snap === 'peek') return PEEK_PX
@@ -107,6 +117,12 @@ export default function RouteSheet({
   // mechanic as RouteCarousel (translateX + drag delta), not native scroll-snap: a fling on a
   // scroll-snap strip can carry momentum past more than one snap point, moving 2-3 tabs in a
   // single gesture — here one swipe commits to at most one neighboring tab, however hard/fast.
+  //
+  // touch-action is 'none' on the outer drag surface, not 'pan-y': with 'pan-y' the browser's
+  // compositor is free to commit a touch straight to native vertical scrolling the instant it
+  // sees ANY vertical component — which every real swipe has — deciding before our own JS
+  // axis-lock ever gets a say, so the horizontal case silently never fired. With 'none' we own
+  // both axes and manually replay vertical drags onto the active panel's own scrollTop below.
   const activeIndex = Math.max(0, tabs.findIndex(t => t.key === activeTab))
   const TAB_AXIS_LOCK_PX = 8
   const TAB_SWIPE_THRESHOLD_PX = 50
@@ -114,8 +130,10 @@ export default function RouteSheet({
   const [tabDeltaPx, setTabDeltaPx] = useState(0)
   const tabStartX = useRef(0)
   const tabStartY = useRef(0)
+  const tabLastY = useRef(0)
   const tabAxis = useRef<'none' | 'x' | 'y'>('none')
   const tabActive = useRef(false)
+  const activePanelRef = useRef<HTMLDivElement | null>(null)
 
   const handleTabPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     tabStartX.current = e.clientX
@@ -132,8 +150,15 @@ export default function RouteSheet({
       if (Math.abs(dx) < TAB_AXIS_LOCK_PX && Math.abs(dy) < TAB_AXIS_LOCK_PX) return
       tabAxis.current = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'
       if (tabAxis.current === 'x') setTabDragging(true)
+      tabLastY.current = e.clientY
     }
-    if (tabAxis.current !== 'x') return
+    if (tabAxis.current === 'y') {
+      // touch-action:none disabled the panel's own native touch scroll too (an ancestor's value
+      // caps every descendant's), so replay the motion by hand.
+      activePanelRef.current?.scrollBy({ top: tabLastY.current - e.clientY })
+      tabLastY.current = e.clientY
+      return
+    }
     // Resistance past the first/last tab instead of a hard stop — confirms there's nothing
     // further that way rather than just silently not moving.
     const atEdge = (dx > 0 && activeIndex === 0) || (dx < 0 && activeIndex === tabs.length - 1)
@@ -259,7 +284,7 @@ export default function RouteSheet({
 
             <div
               className="overflow-hidden"
-              style={{ height: `calc(${currentHeight}px - ${CHROME_PX}px)`, touchAction: 'pan-y' }}
+              style={{ height: `calc(${currentHeight}px - ${CHROME_PX}px)`, touchAction: 'none' }}
               onPointerDown={handleTabPointerDown}
               onPointerMove={handleTabPointerMove}
               onPointerUp={handleTabPointerUp}
@@ -278,7 +303,10 @@ export default function RouteSheet({
                         renderTabContent can be expensive (maps, wiki fetches…) and every tab
                         mounting at once would fire all of it regardless of what's ever viewed. */}
                     {Math.abs(i - activeIndex) <= 1 && (
-                      <div ref={tabScrollRef?.(t.key)} className="h-full overflow-y-auto md:max-w-2xl md:mx-auto">
+                      <div
+                        ref={mergeRefs(tabScrollRef?.(t.key), i === activeIndex ? activePanelRef : undefined)}
+                        className="h-full overflow-y-auto md:max-w-2xl md:mx-auto"
+                      >
                         {heroPhotos}
                         {renderTabContent(t.key)}
                       </div>
