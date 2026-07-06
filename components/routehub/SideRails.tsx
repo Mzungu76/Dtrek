@@ -1,6 +1,5 @@
 'use client'
 import type { ReactNode } from 'react'
-import { Map } from 'lucide-react'
 
 export const RAIL_VARIANTS = {
   glass: 'bg-black/45 border border-white/15',
@@ -22,22 +21,5 @@ export function RailButton({ onClick, title, children, variant = 'glass', badge,
         </span>
       )}
     </button>
-  )
-}
-
-interface Props {
-  onOpenSheet: () => void
-}
-
-/** Screen 1's only floating icon — opens the Screen 2 route card. Every other former section
- *  icon (dati/natura/poi/sicurezza/strumenti/featured) now lives as a labeled tab inside
- *  RouteSheet instead of a bare floating icon here. */
-export default function SideRails({ onOpenSheet }: Props) {
-  return (
-    <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-30">
-      <RailButton onClick={onOpenSheet} title="Apri percorso" variant="glass">
-        <Map className="w-5 h-5 text-white" />
-      </RailButton>
-    </div>
   )
 }

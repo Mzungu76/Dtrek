@@ -138,11 +138,16 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
   // Lightweight list of all completed hikes, most recent first — backs the carousel/gallery.
   useEffect(() => {
-    getAllActivities().then(list => {
+    // getAllActivities() is stale-while-revalidate: it resolves instantly with last visit's
+    // locally cached list, then fetches the real one in the background. Without onRefresh, that
+    // fresh fetch (with up-to-date trailScore/userRating) is saved to the local cache for next
+    // time but never reaches this session's `items` — so the gallery stays a visit behind.
+    const applyList = (list: ActivityMeta[]) => {
       const sorted = list.slice().sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
       setRawActivities(sorted)
       setItems(sorted.map(metaToItem))
-    }).catch(() => setItems([])).finally(() => setListLoaded(true))
+    }
+    getAllActivities(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
   }, [])
 
   // Background best-effort cover-photo fetch for the gallery/carousel thumbnails (capped —
