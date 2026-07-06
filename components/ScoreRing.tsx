@@ -3,7 +3,6 @@ import { useState } from 'react'
 import type { CLLabel, CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { TrailScoreResult } from '@/lib/trailScore'
-import { ctsLabel } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import { CLBadge } from '@/components/CLBadge'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
@@ -72,20 +71,30 @@ export function computeTrailScoreTotal(cl: CLProps, safety: SafetyScore | null, 
   return computeSegments(cl, safety, cts, shadeWater).reduce((sum, s) => sum + (s.value ?? 0), 0)
 }
 
+/** TS tier coloring — thresholds on the raw 0-TRAIL_SCORE_MAX total, not a percentage: a route
+ *  stuck at 90 reads as weak (red) the same way whether the max is 400 or drifts later, instead
+ *  of a percentage-based scale where "weak" would silently shift with TRAIL_SCORE_MAX. */
+export function tsColor(value: number): string {
+  if (value <= 100) return '#dc2626' // rosso
+  if (value <= 200) return '#f97316' // arancione
+  if (value <= 300) return '#eab308' // giallo
+  return '#16a34a'                   // verde
+}
+
 const MINI_STROKE = 3
 
 /** Small circular progress badge for the combined Trail Score — same fill logic as the big
  *  ScoreRing, shrunk down to sit inline among the other stat chips over the map. While the
  *  underlying data is still settling (`loading`), shows a neutral pulsing ring instead of a
  *  number that would otherwise jump several times before landing on its final value. `color`
- *  overrides the automatic CTS-tier coloring (used by callers scoring on a different scale,
+ *  overrides the automatic TS-tier coloring (used by callers scoring on a different scale,
  *  e.g. Resoconto's 0-10 manual rating). */
 export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30, loading = false, color: colorOverride }: { value: number; max?: number; size?: number; loading?: boolean; color?: string }) {
   const r = (size - MINI_STROKE) / 2
   const c = size / 2
   const circumference = 2 * Math.PI * r
   const pct = Math.max(0, Math.min(1, value / max))
-  const color = colorOverride ?? ctsLabel(Math.round(pct * 100)).color
+  const color = colorOverride ?? tsColor(value)
 
   if (loading) {
     return (

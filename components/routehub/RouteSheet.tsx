@@ -176,7 +176,15 @@ export default function RouteSheet({
 
         {snap !== 'peek' && (
           <>
-            <div className="flex gap-1.5 px-4 pb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+            {/* touchAction + WebkitOverflowScrolling: nested overflow-x-auto strips inside a
+                position:fixed shell (the whole RouteHub root) are the classic case where iOS
+                Safari needs these set explicitly, or a horizontal drag across the strip is
+                ignored entirely instead of scrolling it — tabs beyond the first screenful would
+                then only be reachable by already being visible, never by scrolling to them. */}
+            <div
+              className="flex gap-1.5 px-4 pb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: 'none', touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
+            >
               {tabs.map(t => (
                 <button
                   key={t.key}
