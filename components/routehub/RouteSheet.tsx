@@ -7,6 +7,10 @@ import type { SheetSnap } from './useRouteHubState'
 const PEEK_PX = 132
 /** Header (handle + title/CTA row) + tab-bar, in px — used to size the scrollable content area. */
 const CHROME_PX = 108
+/** How far below the peek height the handle can be dragged before release — dragging past halfway
+ *  through this closes the sheet instead of snapping back to peek, mirroring the drag-up-to-open
+ *  gesture on Screen 1. */
+const CLOSE_DRAG_PX = 60
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
@@ -29,6 +33,9 @@ interface Props {
   snap: SheetSnap
   onSnapChange: (snap: SheetSnap) => void
   onBackToGallery: () => void
+  /** Dragging the handle down past CLOSE_DRAG_PX below peek — from any snap point — closes the
+   *  sheet and returns to Screen 1, the reverse of dragging the closed card up to open it. */
+  onClose: () => void
   tabs: TabDef[]
   activeTab: SectionKind
   onTabChange: (section: SectionKind) => void
@@ -50,7 +57,7 @@ interface Props {
  * CTA) live outside the collapsible area, so they're never covered by the sheet at any snap-point.
  */
 export default function RouteSheet({
-  item, snap, onSnapChange, onBackToGallery, tabs, activeTab, onTabChange,
+  item, snap, onSnapChange, onBackToGallery, onClose, tabs, activeTab, onTabChange,
   renderTabContent, tabScrollRef, primaryAction, on3D, mapHeaderActions, heroPhotos, onHeightChange,
 }: Props) {
   const [dragHeight, setDragHeight] = useState<number | null>(null)
@@ -63,11 +70,14 @@ export default function RouteSheet({
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!dragStart.current) return
     const delta = dragStart.current.y - e.clientY
-    setDragHeight(clamp(dragStart.current.height + delta, PEEK_PX, window.innerHeight * 0.92))
+    setDragHeight(clamp(dragStart.current.height + delta, PEEK_PX - CLOSE_DRAG_PX, window.innerHeight * 0.92))
   }
   const handlePointerUp = () => {
     if (!dragStart.current) return
     const current = dragHeight ?? heightForSnap(snap)
+    setDragHeight(null)
+    dragStart.current = null
+    if (current < PEEK_PX - CLOSE_DRAG_PX / 2) { onClose(); return }
     const snapPoints: [SheetSnap, number][] = [
       ['peek', heightForSnap('peek')],
       ['half', heightForSnap('half')],
@@ -75,8 +85,6 @@ export default function RouteSheet({
     ]
     const nearest = snapPoints.reduce((a, b) => (Math.abs(b[1] - current) < Math.abs(a[1] - current) ? b : a))
     onSnapChange(nearest[0])
-    setDragHeight(null)
-    dragStart.current = null
   }
 
   const currentHeight = dragHeight ?? heightForSnap(snap)
