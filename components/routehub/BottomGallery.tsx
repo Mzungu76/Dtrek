@@ -128,21 +128,30 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
   const sortOptions = SORT_OPTIONS_BY_MODE[mode]
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const others = useMemo(() => {
-    const list = items.map((item, i) => ({ item, i })).filter(({ item }) => item.id !== currentId)
+  // Includes the route on screen — it stays in the strip (highlighted, see below) instead of
+  // vanishing from it, so the gallery always shows where "here" sits among every other route.
+  const sorted = useMemo(() => {
+    const list = items.map((item, i) => ({ item, i }))
     if (!hasSortData) return list
     return [...list].sort((a, b) => SORT_CMP[sortBy](
       a.item.sortValues ?? { date: 0, km: 0, dplus: 0 },
       b.item.sortValues ?? { date: 0, km: 0, dplus: 0 },
     ))
-  }, [items, currentId, sortBy, hasSortData])
+  }, [items, sortBy, hasSortData])
 
-  // Without this, changing the sort re-orders `others` correctly but the strip stays scrolled
+  // Without this, changing the sort re-orders `sorted` correctly but the strip stays scrolled
   // wherever the user left it — the new #1 item lands off-screen and the re-sort looks like it
   // silently did nothing.
   useEffect(() => { scrollRef.current?.scrollTo({ left: 0 }) }, [sortBy])
 
-  if (others.length === 0 && !onImport) return null
+  // Keeps the highlighted (current) thumbnail actually in view when swiping between routes —
+  // otherwise it can scroll out of the visible strip and the highlight goes unseen.
+  useEffect(() => {
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-route-id="${CSS.escape(currentId)}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+  }, [currentId])
+
+  if (sorted.length === 0 && !onImport) return null
 
   return (
     <div>
@@ -173,11 +182,16 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
             <span className="text-[10px] font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
           </button>
         )}
-        {others.map(({ item, i }) => (
+        {sorted.map(({ item, i }) => {
+          const isCurrent = item.id === currentId
+          return (
           <button
             key={item.id}
+            data-route-id={item.id}
             onClick={() => onSelect(i)}
-            className="shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative border-[1.5px] border-white/35"
+            className={`shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative ${
+              isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
+            }`}
             style={{ scrollSnapAlign: 'start' }}
           >
             {mode === 'guida' ? (
@@ -202,7 +216,8 @@ export default function BottomGallery({ mode, items, currentId, onSelect, import
               <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
             </div>
           </button>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
