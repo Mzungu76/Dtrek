@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import Navbar from '@/components/Navbar'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
@@ -12,7 +11,7 @@ import { computeCurrentBadges } from '@/lib/badges'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   BarChart2, Trophy, Mountain, Compass, Settings, Sparkles, ArrowDownToLine,
-  Info, LogOut, ChevronRight, User as UserIcon,
+  Info, LogOut, ChevronRight, User as UserIcon, X,
 } from 'lucide-react'
 
 interface Row {
@@ -95,10 +94,15 @@ export default function ProfiloPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-28 md:pb-8">
-      <Navbar />
-
-      <div className="bg-gradient-to-br from-forest-900 to-forest-700 pt-16 pb-7 px-6 text-center">
+    <div className="min-h-screen bg-stone-50 pb-8">
+      <div className="relative bg-gradient-to-br from-forest-900 to-forest-700 pt-[calc(env(safe-area-inset-top,0px)+2rem)] pb-7 px-6 text-center">
+        <button
+          onClick={() => router.back()}
+          aria-label="Chiudi"
+          className="absolute top-[calc(env(safe-area-inset-top,0px)+12px)] right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
         <div className="w-[84px] h-[84px] mx-auto mb-3.5 rounded-full overflow-hidden bg-forest-800 border-2 border-white/20 flex items-center justify-center">
           {faceUrl
             ? <img src={faceUrl} alt="" className="w-full h-full object-cover" />

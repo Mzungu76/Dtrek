@@ -12,6 +12,7 @@ import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import { ScoreRing, MiniScoreRing } from '@/components/ScoreRing'
+import { fetchDrivingInfo, getUserStartingPoint, getTrailStartPoint } from '@/lib/drivingInfo'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
 import SpeedChart from '@/components/SpeedChart'
@@ -37,7 +38,7 @@ import {
   FileSpreadsheet, FileText, Map, FileDown,
   Route, TrendingUp, Clock, Flame, Heart, Zap,
   Pencil, Trash2, Loader2, Share2, Layers, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint, X, MapPin,
-  BarChart2, ShieldAlert, Wrench, Star, Mountain,
+  BarChart2, ShieldAlert, Wrench, Star, Mountain, Car,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -119,6 +120,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [prefDurata,      setPrefDurata]      = useState(270)
   const [openSection,     setOpenSection]     = useState<SectionKind | null>(null)
   const [showPoiLayer,    setShowPoiLayer]    = useState(false)
+  const [driving,         setDriving]         = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -216,6 +218,22 @@ export default function ResocontoHub({ id }: { id?: string }) {
     checkProtectedArea(gps).then(r => setInProtectedArea(r.inProtectedArea)).catch(() => {})
   }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Distance from the user's home address (if set) to the trailhead — no caching column exists
+  // for completed activities (unlike planned hikes), so this is just refetched live each time.
+  useEffect(() => {
+    if (!activity) return
+    const trailStart = getTrailStartPoint({ routePolyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]) })
+    if (!trailStart) return
+    let cancelled = false
+    getUserStartingPoint().then(pt => {
+      if (cancelled || !pt) return
+      fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
+        if (!cancelled) setDriving(info)
+      })
+    })
+    return () => { cancelled = true }
+  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     fetch('/api/user-settings').then(r => r.json()).then(d => {
       if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
@@ -256,6 +274,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       { icon: TrendingUp, label: `+${Math.round(a.elevationGain)} m` },
       { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
       ...((a.calories ?? 0) > 0 ? [{ icon: Flame, label: `${a.calories} kcal` }] : []),
+      ...(driving ? [{ icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }] : []),
     ]
     const sortValuesFor = (a: StoredActivity) => ({
       date: new Date(a.startTime).getTime(), km: a.distanceMeters, dplus: a.elevationGain, cts: a.trailScore, rating: a.userRating,
@@ -268,7 +287,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity) }, ...mapped]
     }
     return mapped
-  }, [items, covers, activity, photos, coverPhotoId])
+  }, [items, covers, activity, photos, coverPhotoId, driving])
 
   if (!listLoaded) {
     return (
