@@ -448,7 +448,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }
 
   const heroPhotos = photos.length > 0 ? (
-    <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 snap-x">
+    <div data-hscroll className="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 snap-x">
       {photos.map(ph => (
         <Image key={ph.id} src={ph.url} alt={ph.caption ?? ''} width={112} height={112} className="w-28 h-28 object-cover rounded-2xl shrink-0 snap-start border border-stone-200" />
       ))}
