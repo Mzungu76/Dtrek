@@ -139,7 +139,7 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
   return (
     <div>
       {lead && (
-        <p className="font-lora text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-700 mb-6">
+        <p className="text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-700 mb-6">
           {lead.text}
         </p>
       )}
@@ -166,7 +166,7 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
                     <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5" style={{ color }}>
                       ◆ Lo sapevi?
                     </p>
-                    <p className="font-lora italic text-[14px] leading-relaxed text-stone-700">
+                    <p className="italic text-[14px] leading-relaxed text-stone-700">
                       {b.text}
                     </p>
                   </div>
@@ -178,7 +178,7 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
             return (
               <h3
                 key={i}
-                className="font-barlow text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2"
+                className="font-display text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2"
                 style={{ color, breakAfter: 'avoid' }}
               >
                 {b.text}
@@ -186,7 +186,7 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
             )
           }
           return (
-            <p key={i} className="font-lora text-[15px] leading-7 text-stone-600 mb-4">
+            <p key={i} className="text-[15px] leading-7 text-stone-600 mb-4">
               {b.text}
             </p>
           )
@@ -223,7 +223,7 @@ function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
         />
       </div>
       <div className="p-3">
-        <p className="font-barlow font-semibold text-stone-800 text-[16px] leading-tight line-clamp-1 tracking-wide">
+        <p className="font-display font-semibold text-stone-800 text-[16px] leading-tight line-clamp-1 tracking-wide">
           {photo.title}
         </p>
         {photo.description && (
@@ -576,13 +576,13 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
           <span className="inline-block bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
             {categoryBadge}
           </span>
-          <h1 className="font-barlow text-xl sm:text-3xl font-black text-white leading-tight mb-1 max-w-2xl uppercase tracking-tight"
+          <h1 className="font-display text-xl sm:text-3xl font-black text-white leading-tight mb-1 max-w-2xl uppercase tracking-tight"
             style={{ textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}
           >
             {hikeTitle}
           </h1>
           {hike.plannedDate && (
-            <p className="font-lora text-[12px] italic text-white/70">
+            <p className="text-[12px] italic text-white/70">
               {format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })}
             </p>
           )}
@@ -590,7 +590,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
       </div>
 
       {/* ── Stats strip ─────────────────────────────────────────────────── */}
-      <div className="flex" style={{ background: '#1a1a1a' }}>
+      <div className="flex bg-stone-50 border-b border-stone-200">
         {[
           { icon: <Route    className="w-3.5 h-3.5" />, value: `${(hike.distanceMeters/1000).toFixed(1)} km`,         label: 'Distanza' },
           { icon: <Mountain className="w-3.5 h-3.5" />, value: `+${Math.round(hike.elevationGain)} m`,               label: 'Dislivello' },
@@ -598,13 +598,13 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
           { icon: <Clock    className="w-3.5 h-3.5" />, value: formatDuration(hike.estimatedTimeSeconds),            label: 'Durata' },
         ].map(({ icon, value, label }, i, arr) => (
           <div key={label} className="flex-1 flex flex-col items-center justify-center py-3 gap-1"
-            style={{ borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}
+            style={{ borderRight: i < arr.length - 1 ? '1px solid #dcd8cc' : 'none' }}
           >
-            <span className="flex items-center gap-1.5 text-[14px] font-bold text-white leading-none">
-              <span className="text-terra-500 hidden sm:block">{icon}</span>
+            <span className="flex items-center gap-1.5 text-[14px] font-bold text-stone-800 leading-none">
+              <span className="text-terra-600 hidden sm:block">{icon}</span>
               {value}
             </span>
-            <span className="font-barlow text-[7px] font-semibold tracking-[1.6px] uppercase text-terra-500/80">{label}</span>
+            <span className="font-display text-[7px] font-semibold tracking-[1.6px] uppercase text-stone-400">{label}</span>
           </div>
         ))}
       </div>
@@ -775,7 +775,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
                     <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
                     <div className="flex items-center gap-2 text-white">
                       <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
-                      <h2 className="font-barlow text-[12px] font-bold tracking-[2px] uppercase">{s.title}</h2>
+                      <h2 className="font-display text-[12px] font-bold tracking-[2px] uppercase">{s.title}</h2>
                     </div>
                     <div className="flex-1" />
                     <button
