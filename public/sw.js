@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'dtrek-static-v4';
+const STATIC_CACHE = 'dtrek-static-v5';
 const API_CACHE    = 'dtrek-api-v1';
 
 // Pages / assets to pre-cache on install
@@ -150,7 +150,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── App pages: stale-while-revalidate ─────────────────────────────────────
+  // ── App pages: network-first with cache fallback ───────────────────────────
+  // Was stale-while-revalidate: a page always came straight from cache first,
+  // so a freshly deployed change only ever became visible on the SECOND load
+  // (the first load's background refetch just refreshed the cache for next
+  // time) — every round of this project's own history that touched behavior
+  // needed a STATIC_CACHE version bump to force it, and still needed a reload
+  // to notice. Network-first means a normal reload sees the latest deploy
+  // immediately, same as any non-PWA site; the cache now only exists as the
+  // offline fallback, exactly like the API strategy above.
   const offlinePage = () => new Response(
     '<!DOCTYPE html><html lang="it"><meta charset="utf-8"><body style="font-family:sans-serif;text-align:center;padding:3rem 1rem;">' +
     '<h1>Sei offline</h1><p>Controlla la connessione e riprova.</p>' +
@@ -159,15 +167,10 @@ self.addEventListener('fetch', (event) => {
     { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
   );
   respondSafely(
-    caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request)
-        .then((response) => {
-          if (response.ok) safePut(STATIC_CACHE, request, response.clone());
-          return response;
-        })
-        .catch(() => offlinePage());
-      return cached ?? fetchPromise;
+    fetch(request).then((response) => {
+      if (response.ok) safePut(STATIC_CACHE, request, response.clone());
+      return response;
     }),
-    offlinePage,
+    async () => (await caches.match(request).catch(() => null)) ?? offlinePage(),
   );
 });
