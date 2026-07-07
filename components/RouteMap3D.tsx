@@ -2134,7 +2134,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             {plannedTrackPoints && plannedTrackPoints.filter(p=>p.lat&&p.lon).length >= 2 && (
               <button onClick={()=>setShowPlannedRoute(v=>!v)} title="Percorso pianificato"
                 className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
-                  showPlannedRoute ? 'bg-violet-500/80 hover:bg-violet-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
+                  showPlannedRoute ? 'bg-terra-500/80 hover:bg-terra-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
                 }`}>
                 <Layers style={{width:'1.1rem',height:'1.1rem'}}/>
               </button>
@@ -2142,7 +2142,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             {pois && pois.length > 0 && (
               <button onClick={()=>setShowPois(v=>!v)} title="Punti di interesse"
                 className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
-                  showPois ? 'bg-violet-500/80 hover:bg-violet-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
+                  showPois ? 'bg-terra-500/80 hover:bg-terra-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
                 }`}>
                 <MapPin style={{width:'1.1rem',height:'1.1rem'}}/>
               </button>
@@ -2152,8 +2152,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 onClick={() => setDtmColorMode(m => m === 'none' ? 'slope' : m === 'slope' ? 'aspect' : 'none')}
                 title={dtmColorMode === 'none' ? 'Colora per pendenza/esposizione (DTM)' : dtmColorMode === 'slope' ? 'Pendenza (DTM) — tocca per esposizione' : 'Esposizione (DTM) — tocca per disattivare'}
                 className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
-                  dtmColorMode === 'slope' ? 'bg-emerald-500/80 hover:bg-emerald-600 text-white'
-                  : dtmColorMode === 'aspect' ? 'bg-sky-500/80 hover:bg-sky-600 text-white'
+                  dtmColorMode === 'slope' ? 'bg-terra-500/80 hover:bg-terra-600 text-white'
+                  : dtmColorMode === 'aspect' ? 'bg-forest-500/80 hover:bg-forest-600 text-white'
                   : 'bg-black/50 hover:bg-black/75 text-white'
                 }`}>
                 {dtmColorMode === 'aspect' ? <Compass style={{width:'1.1rem',height:'1.1rem'}}/> : <Layers style={{width:'1.1rem',height:'1.1rem'}}/>}
@@ -2170,7 +2170,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       {/* Stats HUD */}
       <div className="absolute top-20 left-3 pointer-events-none">
         <div className="bg-black/50 backdrop-blur-md rounded-2xl px-4 py-3 text-white space-y-2 min-w-[148px] shadow-xl border border-white/10">
-          <div className="flex items-center gap-2"><Mountain className="w-3.5 h-3.5 text-blue-300 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Quota</span><span className="text-sm font-bold tabular-nums">{currentAlt} m</span></div>
+          <div className="flex items-center gap-2"><Mountain className="w-3.5 h-3.5 text-amber-400 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Quota</span><span className="text-sm font-bold tabular-nums">{currentAlt} m</span></div>
           <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Percorso</span><span className="text-sm font-bold tabular-nums">{coveredKm} km</span></div>
           <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Totale</span><span className="text-sm font-bold tabular-nums text-white/70">{totalKm} km</span></div>
           {weatherBadge&&(
@@ -2195,16 +2195,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             return(
               <div className="w-full rounded-xl overflow-hidden backdrop-blur-sm bg-black/30 border border-white/10" style={{height:`${H}px`}}>
                 <svg viewBox={`0 0 1000 ${H}`} preserveAspectRatio="none" className="w-full h-full">
-                  <defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity="0.45"/><stop offset="100%" stopColor="#3b82f6" stopOpacity="0.08"/></linearGradient></defs>
+                  <defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity="0.45"/><stop offset="100%" stopColor="#f59e0b" stopOpacity="0.08"/></linearGradient></defs>
                   <polygon points={`0,${H} ${pp} 1000,${H}`} fill="url(#eg)"/>
-                  <polyline points={pp} fill="none" stroke="#93c5fd" strokeWidth="2.5" strokeLinejoin="round"/>
+                  <polyline points={pp} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinejoin="round"/>
                   <line x1={cx} y1="0" x2={cx} y2={H} stroke="white" strokeWidth="2" strokeDasharray="4,3" opacity="0.75"/>
                 </svg>
               </div>
             )
           })():(
             <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
-              <div className="h-full rounded-full" style={{width:`${progress*100}%`,background:'linear-gradient(90deg,#3b82f6,#60a5fa)'}}/>
+              <div className="h-full rounded-full" style={{width:`${progress*100}%`,background:'linear-gradient(90deg,#c05a17,#d97220)'}}/>
             </div>
           )}
           <input type="range" min={0} max={1} step={0.0005} value={progress} onChange={e=>handleScrub(+e.target.value)}
@@ -2212,7 +2212,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         </div>
         <div className="flex justify-between mt-1 text-[10px] font-medium px-0.5">
           <span className="text-white/50">0 km</span>
-          {altitudeSeries.length>0&&<span className="text-blue-300">{currentAlt} m slm</span>}
+          {altitudeSeries.length>0&&<span className="text-amber-400">{currentAlt} m slm</span>}
           <span className="text-white/50">{totalKm} km</span>
         </div>
       </div>
@@ -2239,7 +2239,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-white/50 whitespace-nowrap font-medium">Rilievo</span>
-            <input type="range" min={1} max={3} step={0.1} value={exaggeration} onChange={e=>setExaggeration(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+            <input type="range" min={1} max={3} step={0.1} value={exaggeration} onChange={e=>setExaggeration(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
             <span className="text-[11px] text-white font-bold w-8 text-right">{exaggeration.toFixed(1)}×</span>
           </div>
         </div>
@@ -2284,7 +2284,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     setVideoOrientation(VIDEO_PRESETS[pr].orientation)
                     setVideoFps(30)
                     setVideoEnableAudio(true)
-                  }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                  }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-terra-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                     <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
                     <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
                   </button>
@@ -2299,7 +2299,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     switchStyle(VIDEO_PRESETS[pr].styleIdx)
                     setVideoOrientation(VIDEO_PRESETS[pr].orientation)
                     setVideoFps(30)
-                  }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                  }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-terra-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                     <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
                     <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
                   </button>
@@ -2325,7 +2325,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <div className="flex gap-2">
                 {[15,30,60,90].map(d=>(
                   <button key={d} onClick={()=>setVideoDuration(d)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoDuration===d?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoDuration===d?'bg-terra-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                     {d}s
                   </button>
                 ))}
@@ -2363,7 +2363,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   {key:'16:9',   sub:'YouTube/PC'},
                 ] as const).map(({key,sub})=>(
                   <button key={key} onClick={()=>setVideoOrientation(key as any)}
-                    className={`py-2.5 rounded-xl flex flex-col items-center transition-all ${videoOrientation===key?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                    className={`py-2.5 rounded-xl flex flex-col items-center transition-all ${videoOrientation===key?'bg-terra-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                     <span className="text-sm font-bold">{key}</span>
                     <span className="text-[9px] opacity-60 mt-0.5">{sub}</span>
                   </button>
@@ -2376,7 +2376,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <div className="flex gap-2">
                   {([30,60] as const).map(fps=>(
                     <button key={fps} onClick={()=>setVideoFps(fps)}
-                      className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoFps===fps?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoFps===fps?'bg-terra-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                       {fps} fps{fps===60?' · Reels':''}
                     </button>
                   ))}
@@ -2414,17 +2414,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <span className="text-white/55 text-xs w-28 shrink-0">Zoom iniziale</span>
-                  <input type="range" min={7} max={14} step={0.5} value={zoomIntro} onChange={e=>setZoomIntro(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                  <input type="range" min={7} max={14} step={0.5} value={zoomIntro} onChange={e=>setZoomIntro(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
                   <span className="text-white text-xs font-bold w-8 text-right">{zoomIntro.toFixed(1)}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-white/55 text-xs w-28 shrink-0">Zoom percorso</span>
-                  <input type="range" min={10} max={16} step={0.5} value={zoomFollow} onChange={e=>setZoomFollow(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                  <input type="range" min={10} max={16} step={0.5} value={zoomFollow} onChange={e=>setZoomFollow(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
                   <span className="text-white text-xs font-bold w-8 text-right">{zoomFollow.toFixed(1)}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-white/55 text-xs w-28 shrink-0">Zoom finale</span>
-                  <input type="range" min={5} max={12} step={0.5} value={zoomOutro} onChange={e=>setZoomOutro(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                  <input type="range" min={5} max={12} step={0.5} value={zoomOutro} onChange={e=>setZoomOutro(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
                   <span className="text-white text-xs font-bold w-8 text-right">{zoomOutro.toFixed(1)}</span>
                 </div>
               </div>
@@ -2434,7 +2434,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             </p>
             <div className="flex gap-3">
               <button onClick={()=>setVideoState('idle')} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">Annulla</button>
-              <button onClick={goToPostProd} className="flex-[2] py-3.5 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-bold">Avanti → Montaggio</button>
+              <button onClick={goToPostProd} className="flex-[2] py-3.5 rounded-2xl bg-terra-500 hover:bg-terra-600 text-white font-bold">Avanti → Montaggio</button>
             </div>
           </div>
         </div>
@@ -2445,13 +2445,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         <div className="absolute inset-0 z-20 pointer-events-none">
           {/* Instruction banner */}
           <div className="absolute top-0 inset-x-0 pointer-events-auto">
-            <div className="m-3 bg-blue-600/95 backdrop-blur-md rounded-2xl px-4 py-3 flex items-center gap-3 shadow-2xl">
+            <div className="m-3 bg-terra-600/95 backdrop-blur-md rounded-2xl px-4 py-3 flex items-center gap-3 shadow-2xl">
               <Navigation className="w-5 h-5 text-white shrink-0 animate-pulse"/>
               <div className="flex-1">
                 <p className="text-white font-bold text-sm">Tocca il percorso sulla mappa</p>
-                <p className="text-blue-200 text-xs mt-0.5">La foto verrà posizionata nel punto più vicino</p>
+                <p className="text-terra-200 text-xs mt-0.5">La foto verrà posizionata nel punto più vicino</p>
               </div>
-              <button onClick={()=>setPlacingPhoto(null)} className="text-blue-200 hover:text-white transition-colors pointer-events-auto">
+              <button onClick={()=>setPlacingPhoto(null)} className="text-terra-200 hover:text-white transition-colors pointer-events-auto">
                 <X className="w-5 h-5"/>
               </button>
             </div>
@@ -2513,7 +2513,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <div className="mb-5">
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DURATA POLAROID</p>
               <div className="flex items-center gap-3">
-                <input type="range" min={3} max={10} step={0.5} value={photoDurationSec} onChange={e=>setPhotoDurationSec(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                <input type="range" min={3} max={10} step={0.5} value={photoDurationSec} onChange={e=>setPhotoDurationSec(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
                 <span className="text-white text-sm font-bold w-16 text-right">{photoDurationSec.toFixed(1)}s / foto</span>
               </div>
             </div>
@@ -2522,9 +2522,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-white/45 text-[11px] font-semibold tracking-wider">
-                  FOTO DEL PERCORSO {routePhotos.length>0&&<span className="text-blue-400">({routePhotos.length})</span>}
+                  FOTO DEL PERCORSO {routePhotos.length>0&&<span className="text-terra-400">({routePhotos.length})</span>}
                 </p>
-                <label className={`flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:text-blue-300 cursor-pointer transition-colors ${photoBeingAdded?'opacity-50 pointer-events-none':''}`}>
+                <label className={`flex items-center gap-1.5 text-xs font-semibold text-terra-400 hover:text-terra-300 cursor-pointer transition-colors ${photoBeingAdded?'opacity-50 pointer-events-none':''}`}>
                   {photoBeingAdded?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ImagePlus className="w-3.5 h-3.5"/>}
                   Aggiungi
                   <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload}/>
@@ -2567,7 +2567,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                             {/* Place by clicking */}
                             {!photo.hasExifGps&&(
                               <button onClick={()=>setPlacingPhoto({id:photo.id,step:'pos'})}
-                                className="flex items-center gap-1 text-[10px] font-semibold text-blue-400 hover:text-blue-300 bg-blue-500/15 rounded-lg px-2 py-1 transition-colors">
+                                className="flex items-center gap-1 text-[10px] font-semibold text-terra-400 hover:text-terra-300 bg-terra-500/15 rounded-lg px-2 py-1 transition-colors">
                                 <Navigation className="w-3 h-3"/>
                                 {photo.progress!==0.5?`${Math.round(photo.progress*100)}% ✓`:'Posiziona'}
                               </button>
@@ -2630,7 +2630,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <div className="w-full h-2 bg-white/15 rounded-full overflow-hidden mb-2">
                 {videoState==='finalizing'
                   ? <div className="h-full w-2/5 rounded-full bg-amber-400 progress-indeterminate"/>
-                  : <div className="h-full rounded-full bg-blue-500" style={{width:`${renderProgress*100}%`,transition:'none'}}/>
+                  : <div className="h-full rounded-full bg-terra-500" style={{width:`${renderProgress*100}%`,transition:'none'}}/>
                 }
               </div>
               {videoState==='finalizing'
@@ -2659,7 +2659,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <p className="text-white/50 text-sm mt-1">1080p · {videoDuration}s · {videoOrientation} · {videoFps}fps</p>
             </div>
             <div className="flex flex-col gap-2.5">
-              <button onClick={handleVideoShare} className="w-full py-3.5 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-bold flex items-center justify-center gap-2">
+              <button onClick={handleVideoShare} className="w-full py-3.5 rounded-2xl bg-terra-500 hover:bg-terra-600 text-white font-bold flex items-center justify-center gap-2">
                 <Share2 className="w-4 h-4"/>Condividi
               </button>
               <button onClick={handleVideoDownload} className="w-full py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold flex items-center justify-center gap-2">
@@ -2674,7 +2674,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1">
                   {routePhotos.map(photo=>(
                     <button key={photo.id} onClick={()=>setCoverPhotoId(prev=>prev===photo.id?null:photo.id)}
-                      className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${coverPhotoId===photo.id?'border-blue-400 scale-105 shadow-lg shadow-blue-500/30':'border-white/10 opacity-55 hover:opacity-90'}`}>
+                      className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${coverPhotoId===photo.id?'border-terra-400 scale-105 shadow-lg shadow-terra-500/30':'border-white/10 opacity-55 hover:opacity-90'}`}>
                       <img src={photo.url} className="w-full h-full object-cover" alt=""/>
                     </button>
                   ))}
@@ -2707,7 +2707,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     {captionData.caption}
                   </div>
                   {captionData.hashtags && (
-                    <div className="bg-white/5 rounded-xl px-3.5 py-2.5 text-blue-300/70 text-xs leading-relaxed max-h-20 overflow-y-auto">
+                    <div className="bg-white/5 rounded-xl px-3.5 py-2.5 text-terra-300/70 text-xs leading-relaxed max-h-20 overflow-y-auto">
                       {captionData.hashtags}
                     </div>
                   )}
