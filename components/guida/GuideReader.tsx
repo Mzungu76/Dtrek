@@ -42,7 +42,7 @@ function sectionMeta(title: string) {
   for (const [k, v] of Object.entries(SECTION_META)) {
     if (key.includes(k)) return v
   }
-  return { icon: <BookOpen className="w-4 h-4" />, color: '#78716c' }
+  return { icon: <BookOpen className="w-4 h-4" />, color: '#978e7a' }
 }
 
 function parseGuide(text: string): Section[] {
@@ -545,7 +545,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ background: '#f5f3ef' }}>
+    <div style={{ background: '#fdfcfa' }}>
 
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <div className="relative w-full overflow-hidden" style={{ height: 'clamp(200px, 34vw, 340px)' }}>
@@ -573,7 +573,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
         }} />
 
         <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 pb-5">
-          <span className="inline-block bg-amber-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
+          <span className="inline-block bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
             {categoryBadge}
           </span>
           <h1 className="font-barlow text-xl sm:text-3xl font-black text-white leading-tight mb-1 max-w-2xl uppercase tracking-tight"
@@ -601,10 +601,10 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
             style={{ borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}
           >
             <span className="flex items-center gap-1.5 text-[14px] font-bold text-white leading-none">
-              <span className="text-amber-500 hidden sm:block">{icon}</span>
+              <span className="text-terra-500 hidden sm:block">{icon}</span>
               {value}
             </span>
-            <span className="font-barlow text-[7px] font-semibold tracking-[1.6px] uppercase text-amber-500/80">{label}</span>
+            <span className="font-barlow text-[7px] font-semibold tracking-[1.6px] uppercase text-terra-500/80">{label}</span>
           </div>
         ))}
       </div>
@@ -617,22 +617,22 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
 
       {/* ── Voice controls + section tabs (single sticky row) ───────────── */}
       {hasGuide && (
-        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b px-4 py-2 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-          style={{ borderColor: '#e5e1d8', scrollbarWidth: 'none' }}
+        <div data-hscroll className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b px-4 py-2 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+          style={{ borderColor: '#dcd8cc', scrollbarWidth: 'none' }}
         >
           <div className="flex items-center gap-1 shrink-0">
             {RATES.map((r, i) => (
               <button key={r} onClick={() => changeRate(i)}
                 className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition-colors ${
-                  rateIdx === i ? 'bg-amber-500 text-white' : 'text-stone-400 hover:text-stone-600'
+                  rateIdx === i ? 'bg-terra-500 text-white' : 'text-stone-400 hover:text-stone-600'
                 }`}
               >{r}×</button>
             ))}
             <button onClick={togglePlayPause}
               className={`ml-1 w-7 h-7 rounded-full flex items-center justify-center transition-colors shrink-0 ${
                 isPlaying || isPaused
-                  ? 'bg-amber-500 text-white hover:bg-amber-600'
-                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                  ? 'bg-terra-500 text-white hover:bg-terra-600'
+                  : 'bg-terra-100 text-terra-700 hover:bg-terra-200'
               }`}
             >
               {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
@@ -652,7 +652,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
                     className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap"
                     style={visibleSec === i
                       ? { background: s.color, color: 'white' }
-                      : { background: '#f5f3ef', color: '#78716c' }
+                      : { background: '#eeece5', color: '#8a7f6e' }
                     }
                   >
                     <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
@@ -671,8 +671,8 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
         {/* ── No guide yet ────────────────────────────────────────────── */}
         {!hasGuide && !generating && (
           <div className="flex flex-col items-center py-14 gap-6 text-center">
-            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center shadow-inner">
-              <BookOpen className="w-7 h-7 text-amber-500" />
+            <div className="w-16 h-16 rounded-full bg-terra-100 flex items-center justify-center shadow-inner">
+              <BookOpen className="w-7 h-7 text-terra-500" />
             </div>
             <div className="max-w-sm">
               <h2 className="font-display text-xl font-bold text-stone-800 mb-2">
@@ -693,8 +693,8 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
                   <button key={opt.key} onClick={() => setGuideLength(opt.key)}
                     className={`flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 transition-all ${
                       guideLength === opt.key
-                        ? 'border-amber-500 bg-amber-50 text-amber-800'
-                        : 'border-stone-200 bg-white text-stone-500 hover:border-amber-200'
+                        ? 'border-terra-500 bg-terra-50 text-terra-800'
+                        : 'border-stone-200 bg-white text-stone-500 hover:border-terra-200'
                     }`}
                   >
                     <span className="font-bold text-sm">{opt.label}</span>
@@ -711,7 +711,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
             )}
 
             <button onClick={() => generate(guideLength)}
-              className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
+              className="flex items-center gap-2 px-6 py-3 bg-terra-500 hover:bg-terra-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
             >
               <BookOpen className="w-4 h-4" />
               Genera la guida con Giulia
@@ -722,8 +722,8 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
         {/* ── Generating spinner ──────────────────────────────────────── */}
         {generating && sections.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-14 text-center">
-            <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center animate-pulse">
-              <BookOpen className="w-6 h-6 text-amber-500" />
+            <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center animate-pulse">
+              <BookOpen className="w-6 h-6 text-terra-500" />
             </div>
             <div>
               <p className="font-display font-semibold text-stone-700">Giulia sta scrivendo…</p>
@@ -734,16 +734,16 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
 
         {/* ── Voice progress bar (when playing) ──────────────────────── */}
         {(isPlaying || isPaused) && hasGuide && (
-          <div className="mt-4 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3" style={{ borderColor: '#e5e1d8' }}>
-            <Volume2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <div className="mt-4 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3" style={{ borderColor: '#dcd8cc' }}>
+            <Volume2 className="w-3.5 h-3.5 text-terra-500 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-[11px] font-medium text-stone-600 truncate">
                 {isPlaying && activeSection !== null
                   ? `▶ ${sections[activeSection]?.title ?? '…'}`
                   : '⏸ In pausa'}
               </p>
-              <div className="mt-1 h-0.5 bg-amber-100 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-400 rounded-full transition-all duration-300"
+              <div className="mt-1 h-0.5 bg-terra-100 rounded-full overflow-hidden">
+                <div className="h-full bg-terra-400 rounded-full transition-all duration-300"
                   style={{ width: `${Math.round(playProgress * 100)}%` }} />
               </div>
             </div>
@@ -765,7 +765,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
                   key={i}
                   ref={el => { sectionRefs.current[i] = el }}
                   className={`scroll-mt-16 bg-white rounded-2xl mb-4 overflow-hidden shadow-sm transition-shadow ${
-                    isVoiceActive ? 'ring-2 ring-amber-300 shadow-amber-100 shadow-md' : 'hover:shadow-md'
+                    isVoiceActive ? 'ring-2 ring-terra-300 shadow-terra-100 shadow-md' : 'hover:shadow-md'
                   }`}
                 >
                   <div
@@ -791,7 +791,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
                     <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
 
                     {isLuoghi && poiPhotos.length > 0 && (
-                      <div className="mt-6 pt-5 border-t" style={{ borderColor: '#e5e1d8' }}>
+                      <div className="mt-6 pt-5 border-t" style={{ borderColor: '#dcd8cc' }}>
                         <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-3">
                           Luoghi e siti del percorso
                         </p>
@@ -809,7 +809,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
 
             {generating && (
               <div className="flex items-center gap-2 px-5 py-4 bg-white rounded-2xl shadow-sm">
-                <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                <Loader2 className="w-4 h-4 animate-spin text-terra-500" />
                 <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
               </div>
             )}
@@ -824,13 +824,13 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
 
         {/* ── Bottom actions ──────────────────────────────────────────── */}
         {hasGuide && !generating && (
-          <div className="mt-8 mb-6 pt-5 flex flex-wrap items-center justify-end gap-3" style={{ borderTop: '1px solid #e5e1d8' }}>
-            <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#e5e1d8' }}>
+          <div className="mt-8 mb-6 pt-5 flex flex-wrap items-center justify-end gap-3" style={{ borderTop: '1px solid #dcd8cc' }}>
+            <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#dcd8cc' }}>
               {LENGTH_OPTS.map(opt => (
                 <button key={opt.key} onClick={() => setGuideLength(opt.key)}
                   className={`text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
                     guideLength === opt.key
-                      ? 'bg-amber-500 text-white'
+                      ? 'bg-terra-500 text-white'
                       : 'text-stone-400 hover:text-stone-700'
                   }`}
                 >{opt.label}</button>
@@ -838,7 +838,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
             </div>
 
             <button onClick={() => generate(guideLength)} disabled={generating}
-              className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-amber-600 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-terra-600 transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Rigenera
@@ -851,7 +851,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
             )}
 
             <button onClick={exportPdf} disabled={exportingPdf}
-              className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
             >
               {exportingPdf
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />

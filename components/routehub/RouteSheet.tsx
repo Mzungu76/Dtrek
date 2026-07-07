@@ -130,16 +130,24 @@ export default function RouteSheet({
   const [tabDeltaPx, setTabDeltaPx] = useState(0)
   const tabStartX = useRef(0)
   const tabStartY = useRef(0)
+  const tabLastX = useRef(0)
   const tabLastY = useRef(0)
-  const tabAxis = useRef<'none' | 'x' | 'y'>('none')
+  // 'innerX' is a horizontal drag that started on a [data-hscroll] strip (e.g. GuideReader's
+  // section-nav pills, Resoconto's photo strip) nested inside the swipeable tab content — it
+  // scrolls that strip instead of being mistaken for a tab-switch swipe, the same problem 'y'
+  // already solves for vertical content: touch-action:none on this container blocks the strip's
+  // own native scroll too (an ancestor's value caps every descendant's), so it's replayed by hand.
+  const tabAxis = useRef<'none' | 'x' | 'y' | 'innerX'>('none')
   const tabActive = useRef(false)
   const activePanelRef = useRef<HTMLDivElement | null>(null)
+  const innerHScrollRef = useRef<HTMLElement | null>(null)
 
   const handleTabPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     tabStartX.current = e.clientX
     tabStartY.current = e.clientY
     tabAxis.current = 'none'
     tabActive.current = true
+    innerHScrollRef.current = (e.target as HTMLElement).closest<HTMLElement>('[data-hscroll]')
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const handleTabPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -148,8 +156,10 @@ export default function RouteSheet({
     const dy = e.clientY - tabStartY.current
     if (tabAxis.current === 'none') {
       if (Math.abs(dx) < TAB_AXIS_LOCK_PX && Math.abs(dy) < TAB_AXIS_LOCK_PX) return
-      tabAxis.current = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y'
+      const horizontal = Math.abs(dx) >= Math.abs(dy)
+      tabAxis.current = horizontal ? (innerHScrollRef.current ? 'innerX' : 'x') : 'y'
       if (tabAxis.current === 'x') setTabDragging(true)
+      tabLastX.current = e.clientX
       tabLastY.current = e.clientY
     }
     if (tabAxis.current === 'y') {
@@ -157,6 +167,11 @@ export default function RouteSheet({
       // caps every descendant's), so replay the motion by hand.
       activePanelRef.current?.scrollBy({ top: tabLastY.current - e.clientY })
       tabLastY.current = e.clientY
+      return
+    }
+    if (tabAxis.current === 'innerX') {
+      innerHScrollRef.current?.scrollBy({ left: tabLastX.current - e.clientX })
+      tabLastX.current = e.clientX
       return
     }
     // Resistance past the first/last tab instead of a hard stop — confirms there's nothing
@@ -173,6 +188,7 @@ export default function RouteSheet({
     setTabDeltaPx(0)
     tabAxis.current = 'none'
     tabActive.current = false
+    innerHScrollRef.current = null
   }
 
   // Keeps the active tab's own pill in view in the pill bar — switching tabs by swiping the
