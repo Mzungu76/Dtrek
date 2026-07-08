@@ -54,6 +54,8 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedPois:            row.cached_pois as unknown[] | undefined,
     cachedPoiWiki:         row.cached_poi_wiki as unknown[] | undefined,
     cachedGuide:           row.cached_guide as string | undefined,
+    guideTier:                    row.guide_tier                     as PlannedHike['guideTier'] | undefined,
+    guideGeneratedAt:             row.guide_generated_at             as string | undefined,
     cachedBeautyScore:            row.cached_beauty_score            as PlannedHike['cachedBeautyScore'] | undefined,
     cachedTrailScore:             row.cached_trail_score             as number | undefined,
     cachedTrailScoreConfidence:   row.cached_trail_score_confidence  as PlannedHike['cachedTrailScoreConfidence'] | undefined,
@@ -95,6 +97,8 @@ function hikeToRow(h: PlannedHike) {
     cached_pois:            h.cachedPois ?? null,
     cached_poi_wiki:        h.cachedPoiWiki ?? null,
     cached_guide:           h.cachedGuide ?? null,
+    guide_tier:                       h.guideTier ?? null,
+    guide_generated_at:               h.guideGeneratedAt ?? null,
     cached_beauty_score:              h.cachedBeautyScore ?? null,
     cached_trail_score:               h.cachedTrailScore ?? null,
     cached_trail_score_confidence:    h.cachedTrailScoreConfidence ?? null,
@@ -118,7 +122,7 @@ const META_COLS = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'hike_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment', 'cached_guide', 'osm_relation_id',
+  'route_polyline', 'assessment', 'cached_guide', 'guide_tier', 'guide_generated_at', 'osm_relation_id',
   'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence', 'cached_scores_computed_at',
   'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_riddles', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
@@ -290,6 +294,8 @@ export async function PATCH(req: NextRequest) {
       cachedPois?: unknown[]
       cachedPoiWiki?: unknown[]
       cachedGuide?: string
+      guideTier?: PlannedHike['guideTier']
+      guideGeneratedAt?: string
       cachedBeautyScore?: PlannedHike['cachedBeautyScore']
       cachedTrailScore?: number
       cachedTrailScoreConfidence?: string
@@ -316,6 +322,8 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedPois                   !== undefined) dbPatch.cached_pois                    = patch.cachedPois
     if (patch.cachedPoiWiki                !== undefined) dbPatch.cached_poi_wiki                = patch.cachedPoiWiki
     if (patch.cachedGuide                  !== undefined) dbPatch.cached_guide                   = patch.cachedGuide
+    if (patch.guideTier                    !== undefined) dbPatch.guide_tier                     = patch.guideTier
+    if (patch.guideGeneratedAt             !== undefined) dbPatch.guide_generated_at             = patch.guideGeneratedAt
     if (patch.cachedBeautyScore            !== undefined) dbPatch.cached_beauty_score            = patch.cachedBeautyScore
     if (patch.cachedTrailScore             !== undefined) dbPatch.cached_trail_score             = patch.cachedTrailScore
     if (patch.cachedTrailScoreConfidence   !== undefined) dbPatch.cached_trail_score_confidence  = patch.cachedTrailScoreConfidence

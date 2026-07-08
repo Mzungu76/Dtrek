@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -10,47 +11,136 @@ import {
   Volume2, VolumeX, Play, Pause, Square,
   RefreshCw, Loader2, Mountain, Clock, Route,
   Leaf, Utensils, ShieldCheck, Compass, MapPin,
-  FileDown, ExternalLink, BookOpen,
+  FileDown, ExternalLink, BookOpen, BarChart2, KeyRound, Sparkles,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
+import { GUIDE_SECTIONS, sectionDefForTitle, type GuideSectionKey } from '@/lib/guideSections'
+import WeatherWidget from '@/components/WeatherWidget'
+import ScoresWidget from './widgets/ScoresWidget'
+import ElevationWidget from './widgets/ElevationWidget'
+import SafetyWidget from './widgets/SafetyWidget'
+import PoiListWidget from './widgets/PoiListWidget'
+import NaturaWidget from './widgets/NaturaWidget'
+import type { CLProps, CtsProps, ShadeWaterProps } from '@/components/ScoreRing'
+import type { SafetyScore } from '@/lib/safetyScore'
+import type { HikeAssessment } from '@/lib/hikeAssessment'
+import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
+import type { CLSignals, Sentinel2Data } from '@/lib/cl/types'
+import type { FloraResult } from '@/lib/floraTypes'
+
+const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Section {
+interface DisplaySection {
+  key: GuideSectionKey | `legacy-${number}`
+  guideKey: GuideSectionKey | null
   title: string
-  body:  string
-  icon:  React.ReactNode
+  body?: string
+  icon: ReactNode
   color: string
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const SECTION_META: Record<string, { icon: React.ReactNode; color: string }> = {
-  'prima di partire': { icon: <Compass    className="w-4 h-4" />, color: '#d97706' },
-  'il percorso':      { icon: <Route      className="w-4 h-4" />, color: '#16a34a' },
-  'i luoghi':         { icon: <MapPin     className="w-4 h-4" />, color: '#7c3aed' },
-  'la natura':        { icon: <Leaf       className="w-4 h-4" />, color: '#0f766e' },
-  'sapori':           { icon: <Utensils   className="w-4 h-4" />, color: '#b45309' },
-  'consigli':         { icon: <ShieldCheck className="w-4 h-4" />, color: '#0369a1' },
+export interface ScoresBundle {
+  cl: CLProps
+  safety: SafetyScore | null
+  cts: CtsProps
+  shadeWater: ShadeWaterProps
+  showAspectToggle: boolean
+  showGradientToggle: boolean
+  showAspect: boolean
+  showGradient: boolean
+  onToggleAspect: () => void
+  onToggleGradient: () => void
 }
 
-function sectionMeta(title: string) {
-  const key = title.toLowerCase()
-  for (const [k, v] of Object.entries(SECTION_META)) {
-    if (key.includes(k)) return v
-  }
-  return { icon: <BookOpen className="w-4 h-4" />, color: '#978e7a' }
+export interface SafetyDetailsBundle {
+  assessment?: HikeAssessment
+  hasGps: boolean
+  notMatched: boolean
+  osmId?: number
+  polyline?: [number, number][]
+  plannedId: string
+  signals?: CLSignals
+  markers: ClassifiedDifficultyMarker[]
+  highlightedMarkerIndex?: number | null
 }
 
-function parseGuide(text: string): Section[] {
+export interface PoiListBundle {
+  pois: PoiItem[]
+  poiWikiEntries: { poi: PoiItem; wiki: WikiPage }[]
+  hasGps: boolean
+  centerLat?: number
+  centerLon?: number
+  onWikiLoaded: (pages: WikiPage[]) => void
+}
+
+export interface NaturaBundle {
+  hasGps: boolean
+  data: Sentinel2Data | null
+  loading: boolean
+  flora?: FloraResult | null
+  floraLoading: boolean
+  onOpenFloraGallery: () => void
+  onOpenAnimalGallery: () => void
+}
+
+interface Props {
+  hike: PlannedHike
+  /** Mirrors what's persisted (cachedGuide/cachedRiddles/cachedEpochPois/guideTier) back into the
+   *  caller's own hike state, so the rest of the app (map riddles, epoch POIs) sees a freshly
+   *  generated guide without waiting for a refetch. */
+  onHikeUpdate: (patch: Partial<PlannedHike>) => void
+  /** Proroga/archivia banner for a "pending" hike — rendered above everything else. */
+  topBanner?: ReactNode
+  /** True once every enrichment source (POI/Wikipedia, scores, sicurezza, natura) has settled (or
+   *  a safety timeout fired) — gates the automatic Breve generation. */
+  enrichmentReady: boolean
+  /** null while the pre-flight check is in flight, then whether this account can call Claude at all. */
+  hasAiAccess: boolean | null
+  /** Set by the caller (e.g. tapping the Trail Score badge) to scroll to a specific section once. */
+  scrollToSectionKey?: GuideSectionKey | null
+  onScrollToSectionConsumed?: () => void
+  /** POI currently highlighted on the stage map (or tapped inside this guide) — kept in the
+   *  parent so the persistent stage map behind the sheet can reflect it too. */
+  highlightedPoiId?: number | null
+  onPoiTap?: (poiId: number) => void
+  weather?: { lat: number; lon: number; mode: 'planned' | 'forecast' }
+  elevation: { trackPoints?: PlannedHike['trackPoints']; onHover?: (i: number | null) => void }
+  scores?: ScoresBundle
+  safetyDetails?: SafetyDetailsBundle
+  poiList?: PoiListBundle
+  natura?: NaturaBundle
+}
+
+// ── Section styling (fixed skeleton) ────────────────────────────────────────────
+
+const SECTION_STYLE: Record<GuideSectionKey, { icon: ReactNode; color: string }> = {
+  prima_di_partire: { icon: <Compass     className="w-4 h-4" />, color: '#d97706' },
+  il_percorso:      { icon: <Route       className="w-4 h-4" />, color: '#16a34a' },
+  dati_sicurezza:   { icon: <BarChart2   className="w-4 h-4" />, color: '#0ea5e9' },
+  luoghi:           { icon: <MapPin      className="w-4 h-4" />, color: '#7c3aed' },
+  natura:           { icon: <Leaf        className="w-4 h-4" />, color: '#0f766e' },
+  sapori:           { icon: <Utensils    className="w-4 h-4" />, color: '#b45309' },
+  consigli:         { icon: <ShieldCheck className="w-4 h-4" />, color: '#0369a1' },
+}
+const LEGACY_STYLE = { icon: <BookOpen className="w-4 h-4" />, color: '#978e7a' }
+
+function slugifyHeading(text: string): string {
+  return 'poi-heading-' + text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+interface ParsedSection { key: GuideSectionKey | null; title: string; body: string }
+
+function parseGuide(text: string): ParsedSection[] {
   return text.split(/^## /m).filter(Boolean).map(part => {
     const nl = part.indexOf('\n')
     const title = (nl === -1 ? part : part.slice(0, nl)).trim()
     const body  = nl === -1 ? '' : part.slice(nl + 1).trim()
-    return { title, body, ...sectionMeta(title) }
+    return { key: sectionDefForTitle(title)?.key ?? null, title, body }
   })
 }
 
@@ -178,7 +268,8 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
             return (
               <h3
                 key={i}
-                className="font-display text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2"
+                id={slugifyHeading(b.text)}
+                className="font-display text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2 scroll-mt-24"
                 style={{ color, breakAfter: 'avoid' }}
               >
                 {b.text}
@@ -241,9 +332,10 @@ function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
 
 interface ChunkEntry { text: string; sectionIdx: number }
 
-function buildChunks(sections: Section[]): ChunkEntry[] {
+function buildChunks(sections: DisplaySection[]): ChunkEntry[] {
   const chunks: ChunkEntry[] = []
   sections.forEach((s, sectionIdx) => {
+    if (!s.body) return
     const lines = [`${s.title}.`, ...s.body.split(/\n+/).filter(l => l.trim().length > 3)]
     for (const line of lines) {
       if (line.length <= 220) {
@@ -278,35 +370,22 @@ function getItalianVoice(): SpeechSynthesisVoice | null {
 
 const RATES = [0.8, 1, 1.2, 1.5]
 
-type GuideLength = 'breve' | 'media' | 'lunga'
-
-const LENGTH_OPTS: { key: GuideLength; label: string; desc: string }[] = [
-  { key: 'breve', label: 'Breve',  desc: '~5 min' },
-  { key: 'media', label: 'Media',  desc: '~15 min' },
-  { key: 'lunga', label: 'Lunga',  desc: '~30 min' },
-]
-
-interface Props {
-  hike: PlannedHike
-  /** Mirrors what's persisted (cachedGuide/cachedRiddles/cachedEpochPois) back into the caller's
-   *  own hike state, so the rest of the app (map riddles, epoch POIs) sees a freshly generated
-   *  guide without waiting for a refetch. */
-  onHikeUpdate: (patch: Partial<PlannedHike>) => void
-}
+type GuideTier = 'breve' | 'approfondita'
 
 /**
- * Full-featured tourist guide reader — generation (with length picker), sectioned magazine
- * layout with per-topic icons/colors, "Lo sapevi?" callouts, hero/stats/photo mosaic, POI photo
- * cards, text-to-speech narration, and PDF export. Was previously a standalone page
- * (app/guida/[id]/leggi), now the 'featured' tab's content directly — same features, reachable
- * by dragging the sheet open like any other tab instead of navigating away.
+ * Magazine-style tourist guide reader. The Breve tier is generated automatically (no user
+ * action) once `enrichmentReady` — every widget (mappa, profilo altimetrico, punteggi, POI,
+ * natura) is always rendered regardless of whether the AI wrote text for that section, so no
+ * data ever becomes unreachable just because the user hasn't pressed "Approfondisci" yet.
  */
-export default function GuideReader({ hike, onHikeUpdate }: Props) {
+export default function GuideReader({
+  hike, onHikeUpdate, topBanner, enrichmentReady, hasAiAccess,
+  scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
+  weather, elevation, scores, safetyDetails, poiList, natura,
+}: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
-  const [sections,     setSections]     = useState<Section[]>(() => hike.cachedGuide ? parseGuide(hike.cachedGuide) : [])
   const [generating,   setGenerating]   = useState(false)
   const [error,        setError]        = useState<string | null>(null)
-  const [guideLength,  setGuideLength]  = useState<GuideLength>('media')
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
 
@@ -322,6 +401,25 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
       }))
   }, [hike.cachedPoiWiki])
 
+  const parsedSections = useMemo(() => guideText ? parseGuide(guideText) : [], [guideText])
+
+  const displaySections = useMemo<DisplaySection[]>(() => {
+    const byKey = new Map(parsedSections.filter(s => s.key).map(s => [s.key as GuideSectionKey, s]))
+    const fixed: DisplaySection[] = GUIDE_SECTIONS.map(def => {
+      const parsed = byKey.get(def.key)
+      const style = SECTION_STYLE[def.key]
+      return { key: def.key, guideKey: def.key, title: def.title, body: parsed?.body, icon: style.icon, color: style.color }
+    })
+    const legacy: DisplaySection[] = parsedSections
+      .filter(s => !s.key)
+      .map((s, i) => ({ key: `legacy-${i}` as const, guideKey: null, title: s.title, body: s.body, icon: LEGACY_STYLE.icon, color: LEGACY_STYLE.color }))
+    return [...fixed, ...legacy]
+  }, [parsedSections])
+
+  const highlightedPoiIndex = useMemo(() => (
+    highlightedPoiId != null && poiList ? poiList.pois.findIndex(p => p.id === highlightedPoiId) : null
+  ), [highlightedPoiId, poiList])
+
   // Voice state
   const [isPlaying,     setIsPlaying]     = useState(false)
   const [isPaused,      setIsPaused]      = useState(false)
@@ -334,12 +432,12 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
   const chunkIdxRef = useRef(0)
   const iosTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sectionRefs = useRef<(HTMLElement | null)[]>([])
+  const autoTriggeredForRef = useRef<string | null>(null)
 
   // Re-sync from the caller's hike whenever it changes underneath us (e.g. switching routes
   // while this tab stays open, or the cached guide arriving from elsewhere).
   useEffect(() => {
     setGuideText(hike.cachedGuide ?? '')
-    setSections(hike.cachedGuide ? parseGuide(hike.cachedGuide) : [])
   }, [hike.id, hike.cachedGuide])
 
   // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
@@ -355,9 +453,9 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
     }).catch(() => {})
   }, [hike.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // IntersectionObserver: track which section is in view for tab highlighting
+  // IntersectionObserver: track which section is in view for pin-nav highlighting
   useEffect(() => {
-    if (!sections.length) return
+    if (!displaySections.length) return
     const obs = new IntersectionObserver(
       entries => {
         for (const e of entries) {
@@ -371,20 +469,19 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
     )
     sectionRefs.current.forEach(el => el && obs.observe(el))
     return () => obs.disconnect()
-  }, [sections])
+  }, [displaySections])
 
   // Rebuild chunks on section change
   useEffect(() => {
-    chunksRef.current = buildChunks(sections)
-  }, [sections])
+    chunksRef.current = buildChunks(displaySections)
+  }, [displaySections])
 
   // ── Generate ──────────────────────────────────────────────────────────────
 
-  const generate = useCallback(async (length: GuideLength) => {
+  const generate = useCallback(async (tier: GuideTier) => {
     setGenerating(true)
     setError(null)
     setGuideText('')
-    setSections([])
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
     setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(0)
@@ -394,7 +491,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
       const res = await fetch('/api/guide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hikeId: hike.id, length }),
+        body: JSON.stringify({ hikeId: hike.id, tier }),
       })
 
       if (!res.ok) {
@@ -411,14 +508,13 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
         if (done) break
         acc += decoder.decode(value, { stream: true })
         setGuideText(acc)
-        setSections(parseGuide(acc))
       }
 
       const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
       const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
       const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
       const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
-      const patch = { cachedGuide: acc, cachedRiddles: riddles, cachedEpochPois: epochPois }
+      const patch = { cachedGuide: acc, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)
     } catch (e) {
@@ -427,6 +523,40 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
       setGenerating(false)
     }
   }, [hike.id, hike.cachedPois, hike.cachedPoiWiki, onHikeUpdate])
+
+  // Auto-generate the Breve guide the moment enrichment data has settled — no button, no user
+  // action. Only fires once per hike (guarded by the ref) and only if this account can call
+  // Claude at all; otherwise the "no access" card below invites the user to add a key instead.
+  useEffect(() => {
+    if (hike.cachedGuide || generating) return
+    if (!enrichmentReady || hasAiAccess !== true) return
+    if (autoTriggeredForRef.current === hike.id) return
+    autoTriggeredForRef.current = hike.id
+    generate('breve')
+  }, [hike.id, hike.cachedGuide, enrichmentReady, hasAiAccess]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function scrollToSection(idx: number) {
+    sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  // Caller (e.g. tapping the Trail Score badge) asked to jump straight to a section.
+  useEffect(() => {
+    if (!scrollToSectionKey) return
+    const idx = displaySections.findIndex(s => s.guideKey === scrollToSectionKey)
+    if (idx >= 0) scrollToSection(idx)
+    onScrollToSectionConsumed?.()
+  }, [scrollToSectionKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A POI pin was tapped (on the mini-map here or on the persistent stage map) — scroll to its
+  // "### Nome" subheading inside "I luoghi da non perdere", if the guide got that far.
+  useEffect(() => {
+    if (highlightedPoiId == null || !poiList) return
+    const wiki = poiList.poiWikiEntries.find(e => e.poi.id === highlightedPoiId)?.wiki
+    const poi  = poiList.pois.find(p => p.id === highlightedPoiId)
+    const name = wiki?.title ?? poi?.name
+    if (!name) return
+    document.getElementById(slugifyHeading(name))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [highlightedPoiId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Voice ─────────────────────────────────────────────────────────────────
 
@@ -511,10 +641,6 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
     if (startChunk >= 0) startFrom(startChunk)
   }
 
-  function scrollToSection(idx: number) {
-    sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
   useEffect(() => () => {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     clearIosTimer()
@@ -538,14 +664,62 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
     }
   }
 
-  const hasGuide   = guideText.trim().length > 50
-  const hikeTitle  = hike.title
+  // ── Widgets per section ───────────────────────────────────────────────────
+
+  const hasGps = (hike.trackPoints ?? []).some(p => p.lat && p.lon)
+
+  function renderWidget(key: DisplaySection['key']): ReactNode {
+    switch (key) {
+      case 'prima_di_partire':
+        return weather
+          ? <WeatherWidget mode={weather.mode} lat={weather.lat} lon={weather.lon} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />
+          : null
+      case 'il_percorso':
+        return (
+          <div className="space-y-4">
+            {hasGps && (
+              <div className="rounded-2xl overflow-hidden border" style={{ borderColor: '#dcd8cc', height: 260 }}>
+                <MapView
+                  trackPoints={hike.trackPoints ?? []} height="100%" interactive
+                  pois={poiList?.pois ?? []} planned showPoiLayer
+                  highlightedPoiIndex={highlightedPoiIndex}
+                  onPoiTap={poi => onPoiTap?.(poi.id)}
+                />
+              </div>
+            )}
+            <ElevationWidget trackPoints={elevation.trackPoints} onHover={elevation.onHover} />
+          </div>
+        )
+      case 'dati_sicurezza':
+        return (
+          <div className="space-y-5">
+            {scores && <ScoresWidget {...scores} />}
+            {safetyDetails && <SafetyWidget {...safetyDetails} />}
+          </div>
+        )
+      case 'luoghi':
+        return poiList
+          ? <PoiListWidget {...poiList} highlightedIndex={highlightedPoiIndex} onItemTap={poi => onPoiTap?.(poi.id)} />
+          : null
+      case 'natura':
+        return natura ? <NaturaWidget {...natura} /> : null
+      default:
+        return null
+    }
+  }
+
+  const hasGuide  = guideText.trim().length > 50
+  const tier      = hike.guideTier
+  const effectiveTier: GuideTier = tier ?? 'approfondita'
+  const hikeTitle = hike.title
   const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ background: '#fdfcfa' }}>
+
+      {topBanner && <div className="px-4 sm:px-6 pt-4">{topBanner}</div>}
 
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <div className="relative w-full overflow-hidden" style={{ height: 'clamp(200px, 34vw, 340px)' }}>
@@ -615,11 +789,12 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
         heightClass="h-32"
       />
 
-      {/* ── Voice controls + section tabs (single sticky row) ───────────── */}
-      {hasGuide && (
-        <div data-hscroll className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b px-4 py-2 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-          style={{ borderColor: '#dcd8cc', scrollbarWidth: 'none' }}
-        >
+      {/* ── Voice controls + pin navigation (single sticky row) — always visible, since every
+          section always has its own widget even before/without AI text. ─────────────────── */}
+      <div data-hscroll className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b px-4 py-2 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+        style={{ borderColor: '#dcd8cc', scrollbarWidth: 'none' }}
+      >
+        {hasGuide && (
           <div className="flex items-center gap-1 shrink-0">
             {RATES.map((r, i) => (
               <button key={r} onClick={() => changeRate(i)}
@@ -642,92 +817,63 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
                 className="w-7 h-7 rounded-full flex items-center justify-center bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors shrink-0"
               ><Square className="w-2.5 h-2.5" /></button>
             )}
+            <div className="w-px h-5 bg-stone-200 shrink-0" />
           </div>
-          {sections.length > 0 && (
-            <>
-              <div className="w-px h-5 bg-stone-200 shrink-0" />
-              <div className="flex gap-1.5 shrink-0">
-                {sections.map((s, i) => (
-                  <button key={i} onClick={() => scrollToSection(i)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap"
-                    style={visibleSec === i
-                      ? { background: s.color, color: 'white' }
-                      : { background: '#eeece5', color: '#8a7f6e' }
-                    }
-                  >
-                    <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
-                    <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+        )}
+        <div className="flex gap-1.5 shrink-0">
+          {displaySections.map((s, i) => (
+            <button key={s.key} onClick={() => scrollToSection(i)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap"
+              style={visibleSec === i
+                ? { background: s.color, color: 'white' }
+                : { background: '#eeece5', color: '#8a7f6e' }
+              }
+            >
+              <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
+              <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* ── Main content ────────────────────────────────────────────────── */}
       <div className="px-4 sm:px-6">
 
-        {/* ── No guide yet ────────────────────────────────────────────── */}
-        {!hasGuide && !generating && (
-          <div className="flex flex-col items-center py-14 gap-6 text-center">
-            <div className="w-16 h-16 rounded-full bg-terra-100 flex items-center justify-center shadow-inner">
-              <BookOpen className="w-7 h-7 text-terra-500" />
+        {/* ── No AI access ─────────────────────────────────────────────── */}
+        {!hasGuide && hasAiAccess === false && (
+          <div className="flex flex-col items-center py-10 gap-4 text-center">
+            <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center shadow-inner">
+              <KeyRound className="w-6 h-6 text-terra-500" />
             </div>
             <div className="max-w-sm">
-              <h2 className="font-display text-xl font-bold text-stone-800 mb-2">
-                Nessuna guida ancora generata
+              <h2 className="font-display text-lg font-bold text-stone-800 mb-2">
+                Racconto di Giulia non disponibile
               </h2>
               <p className="text-stone-500 text-sm leading-relaxed">
-                Giulia elaborerà una guida personalizzata raccontando storia, natura,
-                curiosità e consigli pratici per questo percorso.
+                Aggiungi la tua chiave API Claude nelle impostazioni del profilo per generare la guida narrata —
+                intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.
               </p>
             </div>
-
-            <div className="w-full max-w-xs">
-              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-[2px] mb-3">
-                Lunghezza della guida
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {LENGTH_OPTS.map(opt => (
-                  <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                    className={`flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 transition-all ${
-                      guideLength === opt.key
-                        ? 'border-terra-500 bg-terra-50 text-terra-800'
-                        : 'border-stone-200 bg-white text-stone-500 hover:border-terra-200'
-                    }`}
-                  >
-                    <span className="font-bold text-sm">{opt.label}</span>
-                    <span className="text-xs opacity-60">{opt.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {error && (
-              <p className="text-red-600 text-sm bg-red-50 border border-red-100 rounded-lg px-4 py-2 max-w-sm">
-                {error}
-              </p>
-            )}
-
-            <button onClick={() => generate(guideLength)}
-              className="flex items-center gap-2 px-6 py-3 bg-terra-500 hover:bg-terra-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all text-sm"
-            >
-              <BookOpen className="w-4 h-4" />
-              Genera la guida con Giulia
-            </button>
           </div>
         )}
 
-        {/* ── Generating spinner ──────────────────────────────────────── */}
-        {generating && sections.length === 0 && (
-          <div className="flex flex-col items-center gap-4 py-14 text-center">
+        {/* ── Preparing (waiting for enrichment) ──────────────────────── */}
+        {!hasGuide && hasAiAccess !== false && !generating && !enrichmentReady && (
+          <div className="flex items-center gap-3 py-8 justify-center text-center">
+            <Loader2 className="w-5 h-5 animate-spin text-terra-500" />
+            <p className="text-stone-500 text-sm">Sto raccogliendo i dati del percorso… la guida di Giulia arriverà tra poco.</p>
+          </div>
+        )}
+
+        {/* ── Generating spinner (no text yet) ────────────────────────── */}
+        {!hasGuide && generating && (
+          <div className="flex flex-col items-center gap-4 py-10 text-center">
             <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center animate-pulse">
               <BookOpen className="w-6 h-6 text-terra-500" />
             </div>
             <div>
               <p className="font-display font-semibold text-stone-700">Giulia sta scrivendo…</p>
-              <p className="text-stone-400 text-sm mt-1">ci vorranno circa 20–30 secondi</p>
+              <p className="text-stone-400 text-sm mt-1">i dati qui sotto sono già consultabili nel frattempo</p>
             </div>
           </div>
         )}
@@ -739,7 +885,7 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
             <div className="flex-1 min-w-0">
               <p className="text-[11px] font-medium text-stone-600 truncate">
                 {isPlaying && activeSection !== null
-                  ? `▶ ${sections[activeSection]?.title ?? '…'}`
+                  ? `▶ ${displaySections[activeSection]?.title ?? '…'}`
                   : '⏸ In pausa'}
               </p>
               <div className="mt-1 h-0.5 bg-terra-100 rounded-full overflow-hidden">
@@ -753,31 +899,32 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
           </div>
         )}
 
-        {/* ── Guide sections ──────────────────────────────────────────── */}
-        {sections.length > 0 && (
-          <div className="mt-4 space-y-0">
-            {sections.map((s, i) => {
-              const isLuoghi = s.title.toLowerCase().includes('luoghi')
-              const isVoiceActive = activeSection === i && (isPlaying || isPaused)
+        {/* ── Guide sections — always rendered (widgets), text where available ────────── */}
+        <div className="mt-4 space-y-0">
+          {displaySections.map((s, i) => {
+            const isLuoghi = s.guideKey === 'luoghi'
+            const isVoiceActive = activeSection === i && (isPlaying || isPaused)
+            const showBreveHint = hasGuide && effectiveTier === 'breve' && !s.body && !generating
 
-              return (
-                <article
-                  key={i}
-                  ref={el => { sectionRefs.current[i] = el }}
-                  className={`scroll-mt-16 bg-white rounded-2xl mb-4 overflow-hidden shadow-sm transition-shadow ${
-                    isVoiceActive ? 'ring-2 ring-terra-300 shadow-terra-100 shadow-md' : 'hover:shadow-md'
-                  }`}
+            return (
+              <article
+                key={s.key}
+                ref={el => { sectionRefs.current[i] = el }}
+                className={`scroll-mt-16 bg-white rounded-2xl mb-4 overflow-hidden shadow-sm transition-shadow ${
+                  isVoiceActive ? 'ring-2 ring-terra-300 shadow-terra-100 shadow-md' : 'hover:shadow-md'
+                }`}
+              >
+                <div
+                  className="flex items-center gap-3 px-5 py-3"
+                  style={{ background: s.color }}
                 >
-                  <div
-                    className="flex items-center gap-3 px-5 py-3"
-                    style={{ background: s.color }}
-                  >
-                    <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
-                    <div className="flex items-center gap-2 text-white">
-                      <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
-                      <h2 className="font-display text-[12px] font-bold tracking-[2px] uppercase">{s.title}</h2>
-                    </div>
-                    <div className="flex-1" />
+                  <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
+                  <div className="flex items-center gap-2 text-white">
+                    <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
+                    <h2 className="font-display text-[12px] font-bold tracking-[2px] uppercase">{s.title}</h2>
+                  </div>
+                  <div className="flex-1" />
+                  {s.body && (
                     <button
                       onClick={() => speakSection(i)}
                       className="opacity-60 hover:opacity-100 transition-opacity"
@@ -785,38 +932,56 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
                     >
                       <Volume2 className="w-3.5 h-3.5 text-white" />
                     </button>
-                  </div>
+                  )}
+                </div>
 
-                  <div className="px-5 py-5 sm:px-6">
-                    <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
+                <div className="px-5 py-5 sm:px-6">
+                  {(() => {
+                    const widget = renderWidget(s.key)
+                    return (
+                      <>
+                        {widget}
+                        {s.body && (
+                          <div className={widget ? 'mt-5 pt-5 border-t' : ''} style={widget ? { borderColor: '#dcd8cc' } : undefined}>
+                            <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
 
-                    {isLuoghi && poiPhotos.length > 0 && (
-                      <div className="mt-6 pt-5 border-t" style={{ borderColor: '#dcd8cc' }}>
-                        <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-3">
-                          Luoghi e siti del percorso
-                        </p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {poiPhotos.map((photo, pi) => (
-                            <PoiCard key={pi} photo={photo} color={s.color} />
-                          ))}
-                        </div>
+                  {showBreveHint && (
+                    <p className="text-xs italic text-stone-400 mt-4">
+                      Premi &quot;Approfondisci&quot; per il racconto completo di questa sezione.
+                    </p>
+                  )}
+
+                  {isLuoghi && poiPhotos.length > 0 && (
+                    <div className="mt-6 pt-5 border-t" style={{ borderColor: '#dcd8cc' }}>
+                      <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-3">
+                        Luoghi e siti del percorso
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {poiPhotos.map((photo, pi) => (
+                          <PoiCard key={pi} photo={photo} color={s.color} />
+                        ))}
                       </div>
-                    )}
-                  </div>
-                </article>
-              )
-            })}
+                    </div>
+                  )}
+                </div>
+              </article>
+            )
+          })}
 
-            {generating && (
-              <div className="flex items-center gap-2 px-5 py-4 bg-white rounded-2xl shadow-sm">
-                <Loader2 className="w-4 h-4 animate-spin text-terra-500" />
-                <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
-              </div>
-            )}
-          </div>
-        )}
+          {hasGuide && generating && (
+            <div className="flex items-center gap-2 px-5 py-4 bg-white rounded-2xl shadow-sm">
+              <Loader2 className="w-4 h-4 animate-spin text-terra-500" />
+              <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
+            </div>
+          )}
+        </div>
 
-        {error && hasGuide && (
+        {error && (
           <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
             {error}
           </div>
@@ -825,19 +990,16 @@ export default function GuideReader({ hike, onHikeUpdate }: Props) {
         {/* ── Bottom actions ──────────────────────────────────────────── */}
         {hasGuide && !generating && (
           <div className="mt-8 mb-6 pt-5 flex flex-wrap items-center justify-end gap-3" style={{ borderTop: '1px solid #dcd8cc' }}>
-            <div className="flex items-center gap-1 bg-white border rounded-xl p-1" style={{ borderColor: '#dcd8cc' }}>
-              {LENGTH_OPTS.map(opt => (
-                <button key={opt.key} onClick={() => setGuideLength(opt.key)}
-                  className={`text-xs px-2.5 py-1 rounded-lg transition-colors font-medium ${
-                    guideLength === opt.key
-                      ? 'bg-terra-500 text-white'
-                      : 'text-stone-400 hover:text-stone-700'
-                  }`}
-                >{opt.label}</button>
-              ))}
-            </div>
+            {effectiveTier === 'breve' && (
+              <button onClick={() => generate('approfondita')}
+                className="flex items-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Approfondisci
+              </button>
+            )}
 
-            <button onClick={() => generate(guideLength)} disabled={generating}
+            <button onClick={() => generate(effectiveTier)} disabled={generating}
               className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-terra-600 transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" />

@@ -99,8 +99,12 @@ export interface RouteHubProps {
    *  lifting the whole reducer out of RouteHub. */
   onSectionChange?: (section: SectionKind | null) => void
   /** Score/rating chips (CTS, Sicurezza, Bellezza…) shown floating over the map at all times — not
-   *  gated behind any open section. `onTap` opens the 'dati' tab. */
+   *  gated behind any open section. `onTap` opens `scoreBadgesTargetSection` (default 'dati'). */
   scoreBadges?: (item: RouteHubItem, onTap: () => void) => ReactNode
+  /** Tab opened by the score badges' `onTap` — Guida folded punteggi/sicurezza into the 'featured'
+   *  guide article, so it targets that instead of the ('dati' tab no longer exists there);
+   *  Resoconto still has a standalone 'dati' tab and doesn't need to override this. */
+  scoreBadgesTargetSection?: SectionKind
   /** Resoconto only: horizontal photo strip shown above every tab's content. */
   heroPhotos?: ReactNode
   /** Extra chip(s) shown in the sheet's docking strip next to the 3D button (e.g. POI layer toggle). */
