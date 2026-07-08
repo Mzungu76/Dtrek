@@ -11,6 +11,7 @@
  */
 import { supabase } from '@/lib/supabase'
 import { GBIF_BASE, fetchWithTimeout, type GbifOccurrence, type GbifSearchResponse, canonicalSpeciesName } from '@/lib/gbifShared'
+import { timingSafeCompare } from '@/lib/timingSafeCompare'
 
 export const maxDuration = 60 // Vercel Pro timeout
 
@@ -101,7 +102,7 @@ export async function GET(req: Request) {
   // Protezione: prime 32 lettere del service role key
   const serviceKey = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
   const expected = serviceKey.slice(0, 32)
-  if (!expected || searchParams.get('secret') !== expected) {
+  if (!expected || !timingSafeCompare(searchParams.get('secret') ?? '', expected)) {
     return new Response('Unauthorized', { status: 401 })
   }
 

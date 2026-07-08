@@ -21,6 +21,7 @@
  * approssimati invece di nomi fissi.
  */
 import { supabase } from '@/lib/supabase'
+import { timingSafeCompare } from '@/lib/timingSafeCompare'
 
 export const maxDuration = 300 // file da ~25MB, parsing CSV pesante
 
@@ -93,7 +94,7 @@ export async function GET(req: Request) {
 
   const serviceKey = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
   const provided = searchParams.get('secret') ?? ''
-  const authorized = Boolean(serviceKey) && provided === serviceKey.slice(0, 32)
+  const authorized = Boolean(serviceKey) && timingSafeCompare(provided, serviceKey.slice(0, 32))
   if (!authorized) {
     return new Response('Unauthorized', { status: 401 })
   }
