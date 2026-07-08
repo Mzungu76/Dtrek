@@ -50,7 +50,7 @@ import { useDtmProfile } from './useDtmProfile'
 import { useTerrainProfile } from './useTerrainProfile'
 import { useProtectedAreaCheck } from './useProtectedAreaCheck'
 import { useDrivingDistance } from './useDrivingDistance'
-import { useUserPrefs } from './useUserPrefs'
+import { useUserPrefs } from '@/lib/useUserPrefs'
 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })

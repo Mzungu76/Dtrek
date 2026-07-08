@@ -13,17 +13,12 @@ import {
   getAllPlanned, getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type PlannedHikeMeta,
 } from '@/lib/plannedStore'
-import { type SafetyScore } from '@/lib/safetyScore'
-import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { type BeautyScore } from '@/lib/beautyScore'
-import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
-import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
-import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
@@ -33,8 +28,15 @@ import {
   Navigation,
   Calendar as CalendarIcon,
 } from 'lucide-react'
-import { fetchDrivingInfo, getUserStartingPoint, getTrailStartPoint, originMatches } from '@/lib/drivingInfo'
 import PdfExportButton from '@/components/PdfExportButton'
+import { useUserPrefs } from '@/lib/useUserPrefs'
+import { useHasAiAccess } from './useHasAiAccess'
+import { useEnrichmentTimeout } from './useEnrichmentTimeout'
+import { useDtmProfile } from './useDtmProfile'
+import { useTerrainProfile } from './useTerrainProfile'
+import { useProtectedAreaCheck } from './useProtectedAreaCheck'
+import { useDrivingDistance } from './useDrivingDistance'
+import { useSafetyScore } from './useSafetyScore'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -93,9 +95,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [editNotes, setEditNotes] = useState(false)
   const [showGradient, setShowGradient] = useState(false)
   const [showAspect,   setShowAspect]   = useState(false)
-  const [dtmProfile,     setDtmProfile]     = useState<TrailDtmProfile | undefined>(undefined)
-  const [terrainProfile, setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
-  const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [showStreetView, setShowStreetView] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
   const [, setWikiPages] = useState<WikiPage[]>([])
@@ -103,20 +102,11 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
   const [ctsResult,      setCtsResult]     = useState<TrailScoreResult | null>(null)
   const [ctsComputing,   setCtsComputing]  = useState(false)
-  const [prefsLoaded,    setPrefsLoaded]   = useState(false)
-  const [prefSforzo,     setPrefSforzo]    = useState(50)
-  const [prefDurata,     setPrefDurata]    = useState(270)
-  const [hrRest,         setHrRest]        = useState<number | undefined>(undefined)
-  const [hrMax,          setHrMax]         = useState<number | undefined>(undefined)
-  const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
-  const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
   const [show3D, setShow3D] = useState(false)
   const [showFloraGallery, setShowFloraGallery] = useState(false)
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [ctsSettled, setCtsSettled] = useState(false)
-  const [enrichmentTimedOut, setEnrichmentTimedOut] = useState(false)
-  const [hasAiAccess, setHasAiAccess] = useState<boolean | null>(null)
   const [pendingScrollSection, setPendingScrollSection] = useState<GuideSectionKey | null>(null)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
 
@@ -124,20 +114,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
 
-  // Whether this account has AI access (own Claude key or premium) — fetched once so the guide
-  // can decide between auto-generating the Breve guide or showing the "configura accesso AI" state.
-  useEffect(() => {
-    fetch('/api/guide').then(r => r.json()).then(d => setHasAiAccess(!!d.hasAccess)).catch(() => setHasAiAccess(false))
-  }, [])
-
-  // Safety-net so the guide never waits forever for enrichment that failed silently somewhere
-  // (Overpass/satellite APIs down, etc.) — after 90s it's generated anyway with whatever landed.
-  useEffect(() => {
-    setEnrichmentTimedOut(false)
-    if (!hike?.id) return
-    const t = setTimeout(() => setEnrichmentTimedOut(true), 90_000)
-    return () => clearTimeout(t)
-  }, [hike?.id])
+  const hasAiAccess = useHasAiAccess()
+  const enrichmentTimedOut = useEnrichmentTimeout(hike?.id)
+  const dtmProfile = useDtmProfile(hike)
+  const terrainProfile = useTerrainProfile(hike)
+  const inProtectedArea = useProtectedAreaCheck(hike)
+  const driving = useDrivingDistance(hike)
+  const safetyScore = useSafetyScore(hike, setHike)
+  const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   // All the data the auto-generated Breve guide should be able to draw on: POIs/Wikipedia,
   // CL/Sentinel2, flora, Safety and CTS scores. True once every source has settled (resolved or
@@ -200,29 +184,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   }, [currentId, router])
 
   useEffect(() => {
-    if (!hike) return
-    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-    if (gps.length < 2) return
-    fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`)
-      .then(r => r.json()).then((p: TrailDtmProfile) => setDtmProfile(p)).catch(() => {})
-  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!hike) return
-    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-    if (gps.length < 2) return
-    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`)
-      .then(r => r.json()).then((p: TrailTerrainProfile) => setTerrainProfile(p)).catch(() => {})
-  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!hike) return
-    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-    if (gps.length < 2) return
-    checkProtectedArea(gps).then(r => setInProtectedArea(r.inProtectedArea)).catch(() => {})
-  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
     // Persists to the backend only — nothing in this component reads hike.cachedPois again
     // after the initial load (line ~164 always re-fetches the hike fresh from the store), so
     // mirroring it into the in-memory `hike` state here would just force an extra re-render
@@ -230,46 +191,6 @@ export default function GuidaHub({ id }: { id?: string }) {
     if (!poisFullyLoaded || !hike || (hike.cachedPois?.length ?? 0) > 0 || !pois.length) return
     updatePlannedMeta(hike.id, { cachedPois: pois, cachedPoiWiki: poiWikiEntries }).catch(() => {})
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    fetch('/api/user-settings').then(r => r.json()).then(d => {
-      if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
-      if (d.prefDurata != null) setPrefDurata(d.prefDurata)
-      if (d.hrRest != null) setHrRest(d.hrRest)
-      if (d.hrMax != null) setHrMax(d.hrMax)
-    }).catch(() => {}).finally(() => setPrefsLoaded(true))
-  }, [])
-
-  useEffect(() => {
-    if (!hike) return
-    const trailStart = getTrailStartPoint(hike)
-    if (!trailStart) return
-    const cachedLat  = hike.cachedDrivingOriginLat
-    const cachedLon  = hike.cachedDrivingOriginLon
-    const cachedDist = hike.cachedDrivingDistanceMeters
-    const cachedDur  = hike.cachedDrivingDurationSeconds
-    let cancelled = false
-    getUserStartingPoint().then(pt => {
-      if (cancelled || !pt) return
-      if (originMatches(cachedLat, cachedLon, pt.lat, pt.lon) && cachedDist != null && cachedDur != null) {
-        setDriving({ distanceMeters: cachedDist, durationSeconds: cachedDur })
-        return
-      }
-      fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
-        if (cancelled) return
-        setDriving(info)
-        if (info) {
-          updatePlannedMeta(hike.id, {
-            cachedDrivingDistanceMeters: info.distanceMeters,
-            cachedDrivingDurationSeconds: info.durationSeconds,
-            cachedDrivingOriginLat: pt.lat,
-            cachedDrivingOriginLon: pt.lon,
-          }).catch(() => {})
-        }
-      })
-    })
-    return () => { cancelled = true }
-  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const bs = hike?.cachedBeautyScore
@@ -281,23 +202,6 @@ export default function GuidaHub({ id }: { id?: string }) {
     })
     setCtsResult({ ...computed, ts: hike.cachedTrailScore ?? computed.ts })
   }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Safety: shows the cached value immediately if there is one (even a stale one, to avoid a
-  // flash of "no data"), then refreshes in the background if it's missing or older than
-  // SCORE_STALE_DAYS — normally that background refresh already happened at import time
-  // (app/upload/page.tsx), so this is the "reopen it later" half of the same policy.
-  useEffect(() => {
-    if (!hike) return
-    if (hike.cachedSafetyScore) setSafetyScore(hike.cachedSafetyScore)
-    if (hike.cachedSafetyScore && isScoreFresh(hike.cachedSafetyComputedAt)) return
-    let cancelled = false
-    computeSafetyForHike(hike).then(safety => {
-      if (cancelled) return
-      setSafetyScore(safety)
-      setHike(prev => prev ? { ...prev, cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() } : prev)
-    }).catch(() => {})
-    return () => { cancelled = true }
-  }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // CTS+Beauty: same policy as Safety above — computed once at import, and re-verified here
   // only if missing (an older hike, imported before this policy existed) or stale. Reuses the
