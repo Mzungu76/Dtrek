@@ -363,8 +363,11 @@ export function computeSafetyScore(params: {
   let wildlifeScore = 85
   let wildlifeItems: SafetyRiskItem[] = []
 
+  // Was `!== 'alta'`, which backwards-excluded the animals most likely to actually be
+  // encountered from the high-danger bucket instead of flagging them — only 'bassa'
+  // (low encounter probability) should be excluded here.
   const hasHighDangerWildlife = wildlifeRisks.some(
-    w => w.dangerLevel === 'alto' && w.encounterProbability !== 'alta'
+    w => w.dangerLevel === 'alto' && w.encounterProbability !== 'bassa'
   )
   const hasModDangerWildlife = wildlifeRisks.some(
     w => w.dangerLevel === 'moderato' && w.encounterProbability === 'media'

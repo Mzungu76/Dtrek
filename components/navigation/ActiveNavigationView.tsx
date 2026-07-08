@@ -385,6 +385,11 @@ export default function ActiveNavigationView({ hike }: Props) {
         setGpsLostPermissionDenied(false)
       })
 
+      // The component can unmount while the awaits above are still pending — engineRef.current
+      // is only set once we reach here, so the cleanup below has nothing to call .stop() on yet.
+      // Without this check, engine.start() (which kicks off navigator.geolocation.watchPosition)
+      // would still run after unmount, leaking a GPS watch nobody will ever stop.
+      if (cancelled) return
       engine.start()
     })()
 

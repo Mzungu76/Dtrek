@@ -133,10 +133,12 @@ export function parseTcx(xmlText: string): TcxActivity {
   const altitudes = trackPoints.filter(p => p.altitudeMeters !== undefined).map(p => p.altitudeMeters!)
   const speeds = trackPoints.filter(p => p.speedMs !== undefined).map(p => p.speedMs!)
 
-  const altMin = altitudes.length ? Math.min(...altitudes) : 0
-  const altMax = altitudes.length ? Math.max(...altitudes) : 0
+  // reduce(), not Math.min/max(...arr) — a very long recording (100k+ points) would blow the
+  // call stack spreading the whole array as arguments.
+  const altMin = altitudes.length ? altitudes.reduce((a, b) => Math.min(a, b)) : 0
+  const altMax = altitudes.length ? altitudes.reduce((a, b) => Math.max(a, b)) : 0
   const avgSpeed = speeds.length ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0
-  const maxSpeed = speeds.length ? Math.max(...speeds) : 0
+  const maxSpeed = speeds.length ? speeds.reduce((a, b) => Math.max(a, b)) : 0
 
   // Calcola dislivello positivo e negativo
   let elevGain = 0
