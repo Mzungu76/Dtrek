@@ -14,7 +14,7 @@ const SHEET_TRANSITION_MS = 220
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, renderStageMap, tabs, renderSection,
   tabScrollRef, primaryAction, summaryBanner, weatherIcon, onOpenMap3D, onSectionChange,
-  scoreBadges, heroPhotos, mapHeaderActions, importLabel, onImport,
+  scoreBadges, scoreBadgesTargetSection, heroPhotos, mapHeaderActions, importLabel, onImport,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
@@ -190,7 +190,7 @@ export default function RouteHub({
           itemKey={item.id}
           title={item.title} statPills={item.statPills}
           weatherIcon={weatherIcon?.(item)} onOpenWeather={() => dispatch({ type: 'OPEN_SECTION', section: 'meteo', snap: 'half' })}
-          scoreBadges={scoreBadges?.(item, () => dispatch({ type: 'OPEN_SECTION', section: 'dati', snap: 'half' }))}
+          scoreBadges={scoreBadges?.(item, () => dispatch({ type: 'OPEN_SECTION', section: scoreBadgesTargetSection ?? 'dati', snap: 'half' }))}
         />
       </div>
 

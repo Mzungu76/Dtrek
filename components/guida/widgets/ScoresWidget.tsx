@@ -1,0 +1,48 @@
+'use client'
+import { Compass, Layers } from 'lucide-react'
+import { ScoreRing, type CLProps, type CtsProps, type ShadeWaterProps } from '@/components/ScoreRing'
+import type { SafetyScore } from '@/lib/safetyScore'
+import { glassTile, textMuted } from '@/components/routehub/overlayTheme'
+
+interface Props {
+  cl: CLProps
+  safety: SafetyScore | null
+  cts: CtsProps
+  shadeWater: ShadeWaterProps
+  showAspectToggle: boolean
+  showGradientToggle: boolean
+  showAspect: boolean
+  showGradient: boolean
+  onToggleAspect: () => void
+  onToggleGradient: () => void
+}
+
+/** Punteggi (CL/Sicurezza/Comfort Trail Score/ombra-acqua) — spostati dalla vecchia tab
+ *  "Dati & punteggi" nella sezione "Dati e sicurezza" della guida magazine. */
+export default function ScoresWidget({
+  cl, safety, cts, shadeWater,
+  showAspectToggle, showGradientToggle, showAspect, showGradient, onToggleAspect, onToggleGradient,
+}: Props) {
+  return (
+    <div className="space-y-3">
+      <ScoreRing cl={cl} safety={safety} cts={cts} shadeWater={shadeWater} />
+
+      {(showAspectToggle || showGradientToggle) && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {showAspectToggle && (
+            <button onClick={onToggleAspect}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-500 text-white border-sky-500' : `${glassTile} ${textMuted}`}`}>
+              <Compass className="w-3 h-3" /> Esposizione
+            </button>
+          )}
+          {showGradientToggle && (
+            <button onClick={onToggleGradient}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-500 text-white border-sky-500' : `${glassTile} ${textMuted}`}`}>
+              <Layers className="w-3 h-3" /> Pendenza
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

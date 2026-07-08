@@ -4,13 +4,18 @@ import { supabase }     from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
+import { GUIDE_SECTIONS, sanitizeBreveSections, type GuideSectionKey } from '@/lib/guideSections'
 
-export const maxDuration = 300  // "lunga" can take well over 120s to stream fully; avoid cutting it off mid-guide
+export const maxDuration = 300  // "approfondita" can take well over 120s to stream fully; avoid cutting it off mid-guide
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format }          from 'date-fns'
 import { it }              from 'date-fns/locale'
 import { fetchNatureContext, formatNatureContextBlock, type NatureContext } from '@/lib/aiNatureContext'
+import type { HikeAssessment } from '@/lib/hikeAssessment'
+import type { SafetyScore } from '@/lib/safetyScore'
+import type { BeautyScore } from '@/lib/beautyScore'
+import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,8 +31,12 @@ una curiosità sorprendente, un fatto insolito legato al sito. I dettagli che la
 ordinarie sono il tuo punto di forza.
 
 Usa la seconda persona singolare (tu/ti). Scrivi in italiano vivace, mai pedante.
-Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio). Non usare asterischi per il grassetto.
+Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio), esattamente come indicato più sotto —
+non aggiungere sezioni diverse da quelle richieste. Non usare asterischi per il grassetto.
 Non usare bullet point eccessivi: preferisci frasi di narrazione fluida.
+La mappa, il profilo altimetrico, i punteggi (Trail Score, Sicurezza, Bellezza) e le card dei punti di interesse
+sono già mostrati nell'app accanto al tuo testo: non elencare numeri o coordinate, commentali e dai loro un
+significato — l'app si occupa dei dati "grezzi", tu ci metti la voce narrante.
 Nella sezione "I luoghi da non perdere", usa ### (tre cancelletti e spazio) come sottotitolo per ogni luogo specifico prima di descriverlo (es: ### Castello di Calcata).
 Per le curiosità e aneddoti più memorabili, racchiudili in un riquadro speciale usando il formato esatto su una riga separata: [curiosita] testo della curiosità [/curiosita]
 
@@ -62,24 +71,60 @@ function poiDistance(m: number) {
   return m < 1000 ? `${m.toFixed(0)} m dal percorso` : `${(m / 1000).toFixed(1)} km dal percorso`
 }
 
-type GuideLength = 'breve' | 'media' | 'lunga'
+export type GuideTier = 'breve' | 'approfondita'
 
-const LENGTH_CONFIG: Record<GuideLength, { maxTokens: number; instruction: string }> = {
+const TIER_CONFIG: Record<GuideTier, { maxTokens: number; instruction: string }> = {
   breve: {
-    maxTokens: 1800,
-    instruction: 'Scrivi in modo conciso: 2-3 paragrafi brevi per sezione, massimo 150 parole per sezione.',
+    maxTokens: 1200,
+    instruction: 'Scrivi in modo molto conciso: 2-4 frasi, massimo 80-100 parole per sezione.',
   },
-  media: {
-    maxTokens: 6000,
-    instruction: 'Scrivi con buon equilibrio di dettagli: 3-4 paragrafi per sezione, circa 300 parole per sezione.',
-  },
-  lunga: {
+  approfondita: {
     maxTokens: 16000,
     instruction: 'Scrivi con grande ricchezza di dettagli: 5-6 paragrafi per sezione, circa 500-600 parole per sezione, con aneddoti, curiosità e descrizioni vivide.',
   },
 }
 
-function buildPrompt(hike: PlannedHike, length: GuideLength = 'media', nature?: NatureContext): string {
+/** Contenuto (istruzioni + intestazione) per una singola sezione dello scheletro. */
+const SECTION_BRIEF: Record<GuideSectionKey, string> = {
+  prima_di_partire: `## Prima di partire
+Consigli pratici: equipaggiamento, abbigliamento, cosa mettere nello zaino, orario ideale di partenza.
+Sii specifica rispetto alla stagione ideale, al tipo di terreno, all'acqua disponibile lungo il percorso.`,
+  il_percorso: `## Il percorso
+Narrazione vivace del tracciato dall'inizio alla fine. Descrivi l'atmosfera, i panorami, i cambi di paesaggio,
+i momenti più belli. Dai l'idea di cosa si prova davvero a camminare lì.`,
+  dati_sicurezza: `## Dati e sicurezza
+Commenta (senza elencare i numeri, già visibili nell'app) quanto il percorso è adatto a chi lo affronta, i rischi
+principali indicati nella VALUTAZIONE PERSONALIZZATA e i punteggi di Trail Score/Sicurezza/Bellezza forniti sotto:
+dai un consiglio pratico su come affrontarli.`,
+  luoghi: `## I luoghi da non perdere
+Approfondimento sui punti di interesse più significativi. Racconta la loro storia, le leggende,
+le curiosità che la maggior parte dei turisti non conosce. Rendi ogni luogo memorabile.`,
+  natura: `## La natura intorno a te
+Flora, fauna e geologia della zona. Cosa potresti incontrare (animali, fiori, rocce particolari).
+Aggiungi curiosità naturalistiche legate alla stagione.`,
+  sapori: `## Sapori e tradizioni
+Gastronomia locale, prodotti tipici del territorio, piatti da assaggiare dopo l'escursione.
+Tradizioni e feste locali, artigianato, cultura popolare della zona.`,
+  consigli: `## Consigli finali
+Sicurezza, segnaletica, varianti del percorso, cosa fare in caso di maltempo,
+contatti utili (soccorso alpino, rifugi, app di navigazione).`,
+}
+
+interface DataScores {
+  cachedTrailScore?: number
+  cachedSafetyScore?: SafetyScore
+  cachedTsTotal?: number
+  cachedBeautyScore?: BeautyScore
+  difficultyMarkers?: ClassifiedDifficultyMarker[]
+}
+
+function buildPrompt(
+  hike: PlannedHike,
+  tier: GuideTier,
+  nature: NatureContext | undefined,
+  breveSections: GuideSectionKey[],
+  scores: DataScores,
+): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
 
@@ -99,11 +144,36 @@ function buildPrompt(hike: PlannedHike, length: GuideLength = 'media', nature?: 
     ? format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })
     : null
 
-  const diffStr = (hike.assessment?.difficulty ?? '')
+  const assessment: HikeAssessment | undefined = hike.assessment
+  const diffStr = assessment?.difficulty ?? ''
 
   const natureBlock = nature ? formatNatureContextBlock(nature) : ''
 
-  return `Crea una guida escursionistica completa e coinvolgente per questo percorso:
+  const assessmentBlock = assessment
+    ? [
+        `VALUTAZIONE PERSONALIZZATA: ${assessment.summary}`,
+        assessment.risks.length ? `Rischi:\n${assessment.risks.map(r => `- [${r.type}] ${r.text}`).join('\n')}` : '',
+        assessment.suggestions.length ? `Suggerimenti:\n${assessment.suggestions.map(s => `- ${s.text}`).join('\n')}` : '',
+      ].filter(Boolean).join('\n')
+    : ''
+
+  const scoresBlock = [
+    scores.cachedTsTotal != null ? `Trail Score complessivo: ${Math.round(scores.cachedTsTotal)}/100` : '',
+    scores.cachedTrailScore != null ? `Comfort/Trail Score: ${Math.round(scores.cachedTrailScore)}/100` : '',
+    scores.cachedSafetyScore ? `Punteggio Sicurezza: ${Math.round(scores.cachedSafetyScore.overall)}/100 (${scores.cachedSafetyScore.label})` : '',
+    scores.cachedSafetyScore?.allRisks?.length ? `Rischi di sicurezza rilevati: ${scores.cachedSafetyScore.allRisks.map(r => r.text).join('; ')}` : '',
+    scores.cachedBeautyScore ? `Punteggio Bellezza percorso disponibile.` : '',
+    scores.difficultyMarkers?.length ? `Segnalazioni difficoltà dal tracciato: ${scores.difficultyMarkers.map(m => m.text).join('; ')}` : '',
+  ].filter(Boolean).join('\n')
+
+  const sectionsToWrite = tier === 'approfondita'
+    ? GUIDE_SECTIONS.map(s => s.key)
+    : GUIDE_SECTIONS.map(s => s.key).filter(k => breveSections.includes(k))
+
+  const sectionsBlock = sectionsToWrite.map(k => SECTION_BRIEF[k]).join('\n\n')
+  const sectionTitles = sectionsToWrite.map(k => GUIDE_SECTIONS.find(s => s.key === k)!.title).join(', ')
+
+  return `Crea una guida escursionistica per questo percorso, analizzando tutti i dati disponibili qui sotto:
 
 NOME: ${hike.title}
 ${dateStr ? `DATA: ${dateStr}` : ''}
@@ -114,7 +184,11 @@ QUOTA MASSIMA: ${Math.round(hike.altitudeMax)} m slm
 QUOTA MINIMA: ${Math.round(hike.altitudeMin)} m slm
 DURATA STIMATA: ${formatDuration(hike.estimatedTimeSeconds)}
 ${diffStr ? `DIFFICOLTÀ: ${diffStr}` : ''}
-${hike.assessment?.suitabilityScore ? `ADATTA A: ${hike.assessment.suitabilityScore}% degli escursionisti` : ''}
+${assessment?.suitabilityScore ? `ADATTA A: ${assessment.suitabilityScore}% degli escursionisti` : ''}
+
+${assessmentBlock}
+
+${scoresBlock ? `PUNTEGGI E SEGNALAZIONI (già mostrati graficamente nell'app, usali solo per commentare):\n${scoresBlock}` : ''}
 
 LUOGHI CON VOCE WIKIPEDIA (usa questi come base per la narrazione storico-culturale):
 ${wikiBlock}
@@ -122,41 +196,45 @@ ${rawOnly ? `\nALTRI PUNTI DI INTERESSE OSM:\n${rawOnly}` : ''}
 ${hike.userNotes ? `\nNOTE DEL PROPRIETARIO DEL PERCORSO:\n${hike.userNotes}` : ''}
 ${natureBlock ? `\nDATI NATURALISTICI E FENOLOGICI REALI (usa questi dati per la sezione "La natura intorno a te" — non inventare flora/fauna in contraddizione con questi dati):\n${natureBlock}` : ''}
 
-Scrivi la guida strutturata esattamente in queste sei sezioni (usa ## per ogni titolo):
+Scrivi la guida strutturata ESATTAMENTE in queste sezioni, in quest'ordine, senza aggiungerne altre (usa ## per ogni titolo):
 
-## Prima di partire
-Consigli pratici: equipaggiamento, abbigliamento, cosa mettere nello zaino, orario ideale di partenza.
-Sii specifica rispetto alla stagione ideale, al tipo di terreno, all'acqua disponibile lungo il percorso.
+${sectionsBlock}
 
-## Il percorso
-Narrazione vivace del tracciato dall'inizio alla fine. Descrivi l'atmosfera, i panorami, i cambi di paesaggio,
-i momenti più belli. Dai l'idea di cosa si prova davvero a camminare lì.
+La guida deve essere ricca di vita ma mai ridondante coi dati che l'app già mostra. Scrivi come se raccontassi in persona, con calore ed entusiasmo genuino.
 
-## I luoghi da non perdere
-Approfondimento sui punti di interesse più significativi. Racconta la loro storia, le leggende,
-le curiosità che la maggior parte dei turisti non conosce. Rendi ogni luogo memorabile.
+LUNGHEZZA: ${TIER_CONFIG[tier].instruction}
 
-## La natura intorno a te
-Flora, fauna e geologia della zona. Cosa potresti incontrare (animali, fiori, rocce particolari).
-Aggiungi curiosità naturalistiche legate alla stagione.${natureBlock ? ' Fonda questa sezione sui DATI NATURALISTICI E FENOLOGICI REALI forniti sopra (specie osservate, tipo di bosco, picco di fioritura, copertura d\'ombra): cita le specie con il loro nome comune dove possibile, e usa il periodo dell\'anno indicato per dire cosa si può vedere fiorito o in foglia in questo momento.' : ''}
+IMPORTANTE: Completa obbligatoriamente tutte le sezioni richieste (${sectionTitles}). Non terminare prima dell'ultima.`
+}
 
-## Sapori e tradizioni
-Gastronomia locale, prodotti tipici del territorio, piatti da assaggiare dopo l'escursione.
-Tradizioni e feste locali, artigianato, cultura popolare della zona.
+async function resolveApiKeyAndSettings(userId: string) {
+  const { data: settings } = await supabase
+    .from('user_settings')
+    .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections')
+    .eq('user_id', userId)
+    .maybeSingle()
 
-## Consigli finali
-Sicurezza, segnaletica, varianti del percorso, cosa fare in caso di maltempo,
-contatti utili (soccorso alpino, rifugi, app di navigazione).
+  const userKey = settings?.claude_api_key as string | null | undefined
+  const hasSub  = (settings?.subscription_tier as string) === 'premium'
+  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
+  const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
+  const breveSections = sanitizeBreveSections(settings?.guide_breve_sections)
 
-La guida deve essere ricca, coinvolgente, piena di vita. Scrivi come se raccontassi in persona, con calore ed entusiasmo genuino.
+  return { apiKey, userGender, breveSections }
+}
 
-LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}
+// ── GET /api/guide?hikeId=X → pre-flight AI-access check, no generation ───────
+export async function GET(req: NextRequest) {
+  const user = await getUserFromRequest(req)
+  if (!user) return new Response('{"error":"Non autenticato"}', { status: 401, headers: { 'Content-Type': 'application/json' } })
 
-IMPORTANTE: Completa obbligatoriamente tutte e sei le sezioni. Non terminare prima dell'ultima sezione "## Consigli finali".`
+  const { apiKey } = await resolveApiKeyAndSettings(user.id)
+  return new Response(JSON.stringify({ hasAccess: !!apiKey }), {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  })
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) {
@@ -165,17 +243,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Resolve API key: user's personal key → else subscription (future) → else 402
-  const { data: settings } = await supabase
-    .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_gender')
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  const userKey = settings?.claude_api_key as string | null | undefined
-  const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
-  const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
+  const { apiKey, userGender, breveSections } = await resolveApiKeyAndSettings(user.id)
 
   if (!apiKey) {
     return new Response(
@@ -188,14 +256,14 @@ export async function POST(req: NextRequest) {
   }
 
   let hikeId: string
-  let length: GuideLength = 'media'
+  let tier: GuideTier = 'breve'
   try {
     const body = await req.json()
     hikeId = body.hikeId
     if (!hikeId) throw new Error('hikeId mancante')
-    if (body.length && ['breve', 'media', 'lunga'].includes(body.length)) {
-      length = body.length as GuideLength
-    }
+    // 'media'/'lunga' sono valori legacy dal vecchio picker a 3 livelli — trattati come 'approfondita'.
+    if (body.length === 'breve' || body.tier === 'breve') tier = 'breve'
+    else tier = 'approfondita'
   } catch {
     return new Response('{"error":"Body non valido"}', {
       status: 400, headers: { 'Content-Type': 'application/json' },
@@ -216,6 +284,14 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  const { data: markersRows } = await supabase
+    .from('trail_difficulty_markers')
+    .select('lat, lon, source, source_text, severity, keywords')
+    .eq('planned_hike_id', hikeId)
+  const difficultyMarkers: ClassifiedDifficultyMarker[] = (markersRows ?? []).map(m => ({
+    lat: m.lat, lon: m.lon, source: m.source, text: m.source_text, severity: m.severity, keywords: m.keywords ?? [],
+  }))
+
   const hike: PlannedHike = {
     id:                   data.id,
     title:                data.title,
@@ -234,6 +310,14 @@ export async function POST(req: NextRequest) {
     cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,
   }
 
+  const scores: DataScores = {
+    cachedTrailScore:  data.cached_trail_score  ?? undefined,
+    cachedSafetyScore: data.cached_safety_score ?? undefined,
+    cachedTsTotal:     data.cached_ts_total      ?? undefined,
+    cachedBeautyScore: data.cached_beauty_score  ?? undefined,
+    difficultyMarkers,
+  }
+
   const trackPoints: TrackPoint[] = Array.isArray(data.track_points) ? data.track_points : []
   const nature = await fetchNatureContext({
     trackPoints,
@@ -250,8 +334,8 @@ export async function POST(req: NextRequest) {
   })
 
   const client = new Anthropic({ apiKey })
-  const prompt = buildPrompt(hike, length, nature)
-  const { maxTokens } = LENGTH_CONFIG[length]
+  const prompt = buildPrompt(hike, tier, nature, breveSections, scores)
+  const { maxTokens } = TIER_CONFIG[tier]
   const system = SYSTEM + genderInstruction(userGender)
 
   // Stream Claude response
@@ -285,6 +369,7 @@ export async function POST(req: NextRequest) {
       'Content-Type':  'text/plain; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Accel-Buffering': 'no',
+      'X-Guide-Tier': tier,
     },
   })
 }

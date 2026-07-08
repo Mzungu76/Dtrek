@@ -27,6 +27,10 @@ interface Props {
   interactive?: boolean
   /** Index into `pois` to draw larger/highlighted and pan the map to (used by the route hub's POI section, synced to scroll position). */
   highlightedPoiIndex?: number | null
+  /** Fired when a POI marker is tapped — lets the caller scroll/highlight the matching paragraph
+   *  in the tourist guide (e.g. "I luoghi da non perdere"). Doesn't replace the existing
+   *  zoom-in-on-click behavior, just runs alongside it. */
+  onPoiTap?: (poi: PoiItem) => void
   /** Index into `difficultyMarkers` to draw larger/highlighted and pan the map to (used by the route hub's Sicurezza section). */
   highlightedDifficultyIndex?: number | null
   /** Whether the POI markers are actually mounted on the map — off by default, turned on by the
@@ -86,6 +90,7 @@ export default function MapView({
   activeIndex = null,
   interactive = true,
   highlightedPoiIndex = null,
+  onPoiTap,
   highlightedDifficultyIndex = null,
   showPoiLayer = false,
   showTourControls = false,
@@ -338,7 +343,10 @@ export default function MapView({
         const popup = buildPoiPopupHtml(poi)
 
         const m = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 }).addTo(mapInstance.current).bindPopup(popup, { maxWidth: 250 })
-        m.on('click', () => mapInstance.current.setView([poi.lat, poi.lon], Math.max(mapInstance.current.getZoom(), 16), { animate: true }))
+        m.on('click', () => {
+          mapInstance.current.setView([poi.lat, poi.lon], Math.max(mapInstance.current.getZoom(), 16), { animate: true })
+          onPoiTap?.(poi)
+        })
         poiLayer.current.push(m)
         poiMarkersRef.current.set(poi.id, m)
       })
@@ -347,7 +355,7 @@ export default function MapView({
         mapInstance.current.panTo([pois[highlightedPoiIndex].lat, pois[highlightedPoiIndex].lon])
       }
     })
-  }, [pois, mapReady, highlightedPoiIndex, showPoiLayer])
+  }, [pois, mapReady, highlightedPoiIndex, showPoiLayer]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {

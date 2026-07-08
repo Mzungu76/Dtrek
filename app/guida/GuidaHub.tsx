@@ -5,17 +5,11 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import RouteHub from '@/components/routehub/RouteHub'
 import RouteThumb from '@/components/RouteThumb'
-import { useCenteredItem } from '@/components/routehub/useCenteredItem'
-import { AssessmentPanel } from '@/components/routehub/AssessmentPanel'
 import GuideReader from '@/components/guida/GuideReader'
-import { glassTile, glassTileHover, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
+import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from '@/components/routehub/types'
-import ElevationProfileChart from '@/components/ElevationProfileChart'
 import WeatherWidget from '@/components/WeatherWidget'
-import WikiCards from '@/components/WikiCards'
-import { ScoreRing, computeTrailScoreTotal, MiniScoreRing, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
-import { CurrentConditionsNotice } from '@/components/CurrentConditionsNotice'
-import { PhenologyPanel } from '@/components/PhenologyPanel'
+import { computeTrailScoreTotal, MiniScoreRing, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import {
@@ -26,7 +20,7 @@ import { type SafetyScore } from '@/lib/safetyScore'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { isScoreFresh } from '@/lib/scoreFreshness'
-import { type PoiItem, POI_META } from '@/lib/overpass'
+import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { type BeautyScore } from '@/lib/beautyScore'
@@ -36,10 +30,11 @@ import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
 import { fetchForecastWeather, wmoInfo } from '@/lib/openmeteo'
+import type { GuideSectionKey } from '@/lib/guideSections'
 import {
-  Mountain, Route, TrendingUp, Clock, Loader2, BookOpen, Leaf, PawPrint,
-  Car, Layers, Compass, Images, Trash2, Pencil, Check,
-  MapPin, BarChart2, ShieldAlert, Wrench, Navigation,
+  Mountain, Route, TrendingUp, Clock, Loader2, BookOpen,
+  Car, Trash2, Pencil, Check, Images,
+  MapPin, Wrench, Navigation,
   Calendar as CalendarIcon,
 } from 'lucide-react'
 import { fetchDrivingInfo, getUserStartingPoint, getTrailStartPoint, originMatches } from '@/lib/drivingInfo'
@@ -128,12 +123,36 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
   const [weatherIcon, setWeatherIcon] = useState<{ emoji: string; label: string } | null>(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
+  const [ctsSettled, setCtsSettled] = useState(false)
+  const [enrichmentTimedOut, setEnrichmentTimedOut] = useState(false)
+  const [hasAiAccess, setHasAiAccess] = useState<boolean | null>(null)
+  const [pendingScrollSection, setPendingScrollSection] = useState<GuideSectionKey | null>(null)
+  const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
 
   const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
-  const poiCenter = useCenteredItem(pois.length)
-  const sicurezzaCenter = useCenteredItem(hike?.difficultyMarkers?.length ?? 0)
+
+  // Whether this account has AI access (own Claude key or premium) — fetched once so the guide
+  // can decide between auto-generating the Breve guide or showing the "configura accesso AI" state.
+  useEffect(() => {
+    fetch('/api/guide').then(r => r.json()).then(d => setHasAiAccess(!!d.hasAccess)).catch(() => setHasAiAccess(false))
+  }, [])
+
+  // Safety-net so the guide never waits forever for enrichment that failed silently somewhere
+  // (Overpass/satellite APIs down, etc.) — after 90s it's generated anyway with whatever landed.
+  useEffect(() => {
+    setEnrichmentTimedOut(false)
+    if (!hike?.id) return
+    const t = setTimeout(() => setEnrichmentTimedOut(true), 90_000)
+    return () => clearTimeout(t)
+  }, [hike?.id])
+
+  // All the data the auto-generated Breve guide should be able to draw on: POIs/Wikipedia,
+  // CL/Sentinel2, flora, Safety and CTS scores. True once every source has settled (resolved or
+  // deliberately skipped, e.g. no GPS) — or once the 90s watchdog above fires regardless.
+  const enrichmentReady = enrichmentTimedOut ||
+    (poisFullyLoaded && !si.loading && !s2.loading && !flora.loading && safetyScore != null && ctsSettled)
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
   // order (most recent first) — backs the carousel/gallery. Resolves the bare
@@ -314,19 +333,21 @@ export default function GuidaHub({ id }: { id?: string }) {
   // it can hand their results to computeCtsForHike as `prefetched` instead of having it repeat
   // the exact same /api/pois, /api/tei-dtm, /api/tei-terrain and /api/natura2000 calls this
   // component is already making for its own map/UI state.
+  useEffect(() => { setCtsSettled(false) }, [hike?.id])
+
   useEffect(() => {
     if (!hike) return
     const fresh = hike.cachedTrailScore != null && isScoreFresh(hike.cachedScoresComputedAt)
-    if (fresh) return
+    if (fresh) { setCtsSettled(true); return }
     const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
-    if (gps.length < 2) return
+    if (gps.length < 2) { setCtsSettled(true); return }
     if (!poisFullyLoaded || dtmProfile === undefined || terrainProfile === undefined || inProtectedArea === undefined || !prefsLoaded) return
     let cancelled = false
     setCtsComputing(true)
     computeCtsForHike(hike, { pois, dtmProfile, terrainProfile, inProtectedArea, prefs: { prefSforzo, prefDurata, hrRest, hrMax } })
       .then(result => { if (!cancelled && result) setHike(prev => prev ? { ...prev, ...result } : prev) })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setCtsComputing(false) })
+      .finally(() => { if (!cancelled) { setCtsComputing(false); setCtsSettled(true) } })
     return () => { cancelled = true }
   }, [hike?.id, poisFullyLoaded, dtmProfile, terrainProfile, inProtectedArea, prefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -483,9 +504,10 @@ export default function GuidaHub({ id }: { id?: string }) {
         trackPoints={hike.trackPoints ?? []} height="100%" interactive={interactive}
         showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
         pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned
-        highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : null}
-        highlightedDifficultyIndex={openSection === 'sicurezza' ? sicurezzaCenter.centeredIndex : null}
-        activeIndex={openSection === 'profilo' ? altActiveIndex : null}
+        highlightedPoiIndex={highlightedPoiId != null ? pois.findIndex(p => p.id === highlightedPoiId) : null}
+        onPoiTap={(poi) => setHighlightedPoiId(poi.id)}
+        highlightedDifficultyIndex={null}
+        activeIndex={openSection === 'featured' ? altActiveIndex : null}
         showPoiLayer={showPoiLayer}
         showTourControls={interactive}
         obscuredBottomPx={obscuredBottomPx}
@@ -548,7 +570,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
     if (!scoreLoading && trailScoreTotal <= 0) return null
     return (
-      <button onClick={onTap} title="Trail Score" className="pointer-events-auto shrink-0">
+      <button onClick={() => { setPendingScrollSection('dati_sicurezza'); onTap() }} title="Trail Score" className="pointer-events-auto shrink-0">
         <MiniScoreRing value={trailScoreTotal} loading={scoreLoading} />
       </button>
     )
@@ -559,61 +581,6 @@ export default function GuidaHub({ id }: { id?: string }) {
       return <div className={`py-10 text-center text-sm ${textMuted}`}>Caricamento…</div>
     }
 
-    if (section === 'dati') return (
-      <div className="px-4 py-4 space-y-5">
-        {hike.pendingExpiresAt && !hike.archivedAt && (() => {
-          const expired = new Date(hike.pendingExpiresAt!).getTime() < Date.now()
-          const daysLeft = Math.ceil((new Date(hike.pendingExpiresAt!).getTime() - Date.now()) / 86400000)
-          return (
-            <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${expired ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
-              <p className={`text-sm font-medium ${expired ? 'text-amber-800' : 'text-sky-800'}`}>
-                {expired ? 'Questa guida è scaduta: la proroghi o la archivi?' : `In attesa — scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}`}
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={handleExtendPending} className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold transition-colors">Proroga</button>
-                {expired && <button onClick={handleArchive} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:border-amber-400 text-amber-800 text-xs font-semibold transition-colors">Archivia</button>}
-              </div>
-            </div>
-          )
-        })()}
-
-        {hasGps && (
-          <ScoreRing
-            cl={{ si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError }}
-            safety={safetyScore}
-            cts={{ result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts }}
-            shadeWater={{ data: s2.data, loading: s2.loading }}
-          />
-        )}
-
-        {hasGps && dtmProfile?.source === 'dtm' && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button onClick={() => setShowAspect(a => !a)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-500 text-white border-sky-500' : `${glassTile} ${textMuted}`}`}>
-              <Compass className="w-3 h-3" /> Esposizione
-            </button>
-            {hike.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
-              <button onClick={() => setShowGradient(g => !g)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-500 text-white border-sky-500' : `${glassTile} ${textMuted}`}`}>
-                <Layers className="w-3 h-3" /> Pendenza
-              </button>
-            )}
-          </div>
-        )}
-
-      </div>
-    )
-
-    if (section === 'profilo') return (
-      <div className="px-4 py-4">
-        {hasGps && hike.trackPoints?.length ? (
-          <ElevationProfileChart trackPoints={hike.trackPoints} onHover={setAltActiveIndex} />
-        ) : (
-          <p className={`text-sm italic text-center py-8 ${textMuted}`}>Profilo altimetrico non disponibile senza un tracciato GPS.</p>
-        )}
-      </div>
-    )
-
     if (section === 'meteo') return (
       <div className="px-4 py-4">
         {hasGps
@@ -622,101 +589,58 @@ export default function GuidaHub({ id }: { id?: string }) {
       </div>
     )
 
-    if (section === 'natura') return (
-      <div className="px-4 py-4 space-y-5">
-        {hasGps && hike.routePolyline && hike.routePolyline.length >= 2 && (
-          <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />
-        )}
-        <div className="flex gap-2">
-          <button onClick={() => setShowFloraGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
-            <Leaf className="w-4 h-4 text-emerald-400" /> Galleria Verde
-          </button>
-          <button onClick={() => setShowAnimalGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
-            <PawPrint className="w-4 h-4 text-amber-500" /> Galleria Animali
-          </button>
-        </div>
-      </div>
-    )
-
-    if (section === 'poi') return (
-      <div className="px-4 py-4 space-y-3">
-        <p className={sectionHeading}>Sul percorso</p>
-        {pois.length === 0 && (
-          <p className={`text-sm italic text-center py-8 ${textMuted}`}>Nessun punto di interesse trovato lungo il tracciato.</p>
-        )}
-        {pois.map((poi, i) => {
-          const meta = POI_META[poi.type]
-          const wiki = poiWikiEntries.find(e => e.poi.id === poi.id)?.wiki
-          const highlighted = i === poiCenter.centeredIndex
-          const cardClass = `${glassTile} p-4 flex gap-3 transition-colors ${highlighted ? 'bg-sky-400/15 border-sky-400/40' : ''} ${wiki ? glassTileHover : ''}`
-          const cardContent = (
-            <>
-              {wiki?.thumbnail
-                ? <Image src={wiki.thumbnail} alt={wiki.title} width={64} height={64} className="w-16 h-16 object-cover rounded-xl shrink-0" />
-                : <span className="w-16 h-16 rounded-xl bg-stone-100 flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-1"><span className="text-base leading-none">{meta.emoji}</span><span className={`text-[10px] font-semibold uppercase tracking-wide ${textMuted}`}>{meta.label}</span>
-                  <span className="text-[10px] text-stone-400/50 ml-auto shrink-0">{poi.distFromTrack === 0 ? 'sul tracciato' : `${poi.distFromTrack} m`}</span>
-                </div>
-                <p className={`text-sm font-semibold leading-tight mb-1 ${textPrimary}`}>{wiki?.title ?? poi.name ?? meta.label}</p>
-                {wiki && <p className={`text-xs leading-relaxed line-clamp-3 ${textMuted}`}>{wiki.extract.slice(0, 160)}{wiki.extract.length > 160 ? '…' : ''}</p>}
-              </div>
-            </>
-          )
-          return wiki ? (
-            <a key={poi.id} ref={poiCenter.setItemRef(i)} href={wiki.url} target="_blank" rel="noopener noreferrer" className={cardClass}>
-              {cardContent}
-            </a>
-          ) : (
-            <div key={poi.id} ref={poiCenter.setItemRef(i)} className={cardClass}>
-              {cardContent}
-            </div>
-          )
-        })}
-        {hasGps && (
-          <>
-            <p className={`${sectionHeading} pt-2`}>Wikipedia nei dintorni</p>
-            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
-          </>
-        )}
-      </div>
-    )
-
-    if (section === 'sicurezza') {
+    // Same reader previously at the standalone /guida/[id]/leggi page — now also hosts (as
+    // widgets embedded in the article) everything that used to live in the dati/profilo/natura/
+    // poi/sicurezza tabs, folded into one scrollable magazine guide reachable by dragging the
+    // sheet open like any other tab instead of navigating to a separate page.
+    if (section === 'featured') {
       const markers = hike.difficultyMarkers ?? []
-      return (
-        <div className="px-4 py-4 space-y-5">
-          {hike.assessment && <AssessmentPanel a={hike.assessment} />}
-          {hasGps && !si.notMatched && (
-            <CurrentConditionsNotice osmId={hike.osmId} polyline={hike.routePolyline} plannedId={hike.id} signals={si.result?.signals} />
-          )}
-          {markers.length > 0 && (
-            <div className="space-y-2">
-              <p className={sectionHeading}>Segnalazioni dal tracciato</p>
-              {markers.map((m, i) => {
-                const highlighted = i === sicurezzaCenter.centeredIndex
-                const colors = m.severity === 'danger' ? 'bg-red-50 border-red-200 text-red-700' : m.severity === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-sky-50 border-sky-200 text-sky-700'
-                return (
-                  <div key={i} ref={sicurezzaCenter.setItemRef(i)} className={`rounded-xl border px-3 py-2.5 text-sm transition-colors ${colors} ${highlighted ? 'ring-2 ring-offset-1 ring-offset-black/50 ring-current' : ''}`}>
-                    {m.text}
-                  </div>
-                )
-              })}
+      const pendingBanner = hike.pendingExpiresAt && !hike.archivedAt ? (() => {
+        const expired = new Date(hike.pendingExpiresAt!).getTime() < Date.now()
+        const daysLeft = Math.ceil((new Date(hike.pendingExpiresAt!).getTime() - Date.now()) / 86400000)
+        return (
+          <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${expired ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
+            <p className={`text-sm font-medium ${expired ? 'text-amber-800' : 'text-sky-800'}`}>
+              {expired ? 'Questa guida è scaduta: la proroghi o la archivi?' : `In attesa — scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}`}
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={handleExtendPending} className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold transition-colors">Proroga</button>
+              {expired && <button onClick={handleArchive} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:border-amber-400 text-amber-800 text-xs font-semibold transition-colors">Archivia</button>}
             </div>
-          )}
-          {!hike.assessment && markers.length === 0 && (
-            <p className={`text-sm italic ${textMuted}`}>Nessuna valutazione disponibile per questo percorso.</p>
-          )}
-        </div>
+          </div>
+        )
+      })() : null
+
+      return (
+        <GuideReader
+          hike={hike}
+          onHikeUpdate={patch => setHike(prev => prev ? { ...prev, ...patch } : prev)}
+          topBanner={pendingBanner}
+          enrichmentReady={enrichmentReady}
+          hasAiAccess={hasAiAccess}
+          scrollToSectionKey={pendingScrollSection}
+          onScrollToSectionConsumed={() => setPendingScrollSection(null)}
+          highlightedPoiId={highlightedPoiId}
+          onPoiTap={setHighlightedPoiId}
+          weather={hasGps ? { lat: centerPt.lat!, lon: centerPt.lon!, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const } : undefined}
+          elevation={{ trackPoints: hike.trackPoints, onHover: setAltActiveIndex }}
+          scores={{
+            cl: { si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError },
+            safety: safetyScore,
+            cts: { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts },
+            shadeWater: { data: s2.data, loading: s2.loading },
+            showAspectToggle: hasGps && dtmProfile?.source === 'dtm',
+            showGradientToggle: hasGps && dtmProfile?.source === 'dtm' && !!hike.trackPoints?.some(p => p.altitudeMeters !== undefined),
+            showAspect, showGradient,
+            onToggleAspect: () => setShowAspect(a => !a),
+            onToggleGradient: () => setShowGradient(g => !g),
+          }}
+          safetyDetails={{ assessment: hike.assessment, hasGps, notMatched: si.notMatched, osmId: hike.osmId, polyline: hike.routePolyline, plannedId: hike.id, signals: si.result?.signals, markers, highlightedMarkerIndex: null }}
+          poiList={{ pois, poiWikiEntries, hasGps, centerLat: centerPt?.lat, centerLon: centerPt?.lon, onWikiLoaded: setWikiPages }}
+          natura={{ hasGps: hasGps && !!hike.routePolyline && hike.routePolyline.length >= 2, data: s2.data, loading: s2.loading, flora: flora.data, floraLoading: flora.loading, onOpenFloraGallery: () => setShowFloraGallery(true), onOpenAnimalGallery: () => setShowAnimalGallery(true) }}
+        />
       )
     }
-
-    // Same reader previously at the standalone /guida/[id]/leggi page — full features (sections,
-    // TTS, PDF export, hero/stats/mosaic) live here now, reachable by dragging the sheet open
-    // like any other tab instead of navigating to a separate page.
-    if (section === 'featured') return (
-      <GuideReader hike={hike} onHikeUpdate={patch => setHike(prev => prev ? { ...prev, ...patch } : prev)} />
-    )
 
     // strumenti
     return (
@@ -755,18 +679,6 @@ export default function GuidaHub({ id }: { id?: string }) {
 
   const tabs: TabDef[] = [
     { key: 'featured', label: 'Guida Turistica', icon: BookOpen },
-    {
-      key: 'dati', label: 'Dati & punteggi', icon: BarChart2,
-      badge: hike?.cachedTrailScore != null ? (
-        <span className="inline-flex items-center justify-center min-w-[16px] h-[15px] px-1 rounded-full bg-sky-500 text-[9px] font-bold text-white leading-none">
-          {Math.round(hike.cachedTrailScore)}
-        </span>
-      ) : undefined,
-    },
-    { key: 'profilo', label: 'Profilo altimetrico', icon: Mountain },
-    { key: 'natura', label: 'Natura', icon: Leaf },
-    { key: 'poi', label: 'Punti di interesse', icon: MapPin },
-    { key: 'sicurezza', label: 'Sicurezza & segnalazioni', icon: ShieldAlert },
     { key: 'strumenti', label: 'Strumenti', icon: Wrench },
   ]
 
@@ -776,12 +688,6 @@ export default function GuidaHub({ id }: { id?: string }) {
     onClick: () => router.push(`/guida/${encodeURIComponent(routeItem.id)}/naviga`),
     variant: 'terra',
   })
-
-  const tabScrollRef = (section: SectionKind) => {
-    if (section === 'poi') return poiCenter.containerRef
-    if (section === 'sicurezza') return sicurezzaCenter.containerRef
-    return undefined
-  }
 
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))
@@ -803,10 +709,10 @@ export default function GuidaHub({ id }: { id?: string }) {
         renderStageMap={renderStageMap}
         tabs={tabs}
         renderSection={renderSection}
-        tabScrollRef={tabScrollRef}
         primaryAction={primaryAction}
-        onSectionChange={(section) => { setOpenSection(section); if (section === 'poi') setShowPoiLayer(true) }}
+        onSectionChange={setOpenSection}
         scoreBadges={scoreBadges}
+        scoreBadgesTargetSection="featured"
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
         weatherIcon={(routeItem) => hike && routeItem.id === hike.id ? weatherIcon : undefined}
         onOpenMap3D={hasGps ? () => setShow3D(true) : undefined}

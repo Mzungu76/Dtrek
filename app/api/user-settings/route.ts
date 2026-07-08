@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase }            from '@/lib/supabase'
 import { getUserFromRequest }  from '@/lib/supabaseAuth'
+import { sanitizeBreveSections, DEFAULT_BREVE_SECTIONS } from '@/lib/guideSections'
 
 /** Tanaka formula for max heart rate: 211 − 0.64 × age */
 function deriveFCmax(age: number): number {
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections')
     .eq('user_id', user.id)
     .single()
 
@@ -72,6 +73,7 @@ export async function GET(req: NextRequest) {
     startingLat:              (data?.starting_lat               as number) ?? null,
     startingLon:              (data?.starting_lon               as number) ?? null,
     guidePendingDays:         (data?.guide_pending_days         as number) ?? 30,
+    guideBreveSections:       data?.guide_breve_sections ? sanitizeBreveSections(data.guide_breve_sections) : DEFAULT_BREVE_SECTIONS,
   })
 }
 
@@ -104,6 +106,7 @@ export async function POST(req: NextRequest) {
     startingLat?: number | null
     startingLon?: number | null
     guidePendingDays?: number
+    guideBreveSections?: string[]
   }
 
   const upsertData: Record<string, unknown> = {
@@ -224,6 +227,10 @@ export async function POST(req: NextRequest) {
     upsertData.guide_pending_days = d
   }
 
+  if (body.guideBreveSections !== undefined) {
+    upsertData.guide_breve_sections = sanitizeBreveSections(body.guideBreveSections)
+  }
+
   let { error } = await supabase
     .from('user_settings')
     .upsert(upsertData, { onConflict: 'user_id' })
@@ -249,6 +256,7 @@ export async function POST(req: NextRequest) {
     delete safe.starting_lat
     delete safe.starting_lon
     delete safe.guide_pending_days
+    delete safe.guide_breve_sections
     const { error: e2 } = await supabase
       .from('user_settings')
       .upsert(safe, { onConflict: 'user_id' })
