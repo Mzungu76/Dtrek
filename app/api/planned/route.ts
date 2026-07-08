@@ -208,6 +208,15 @@ export async function POST(req: NextRequest) {
 
     const hike = (await req.json()) as PlannedHike
 
+    const { data: existingHike } = await supabase
+      .from('planned_hikes')
+      .select('user_id')
+      .eq('id', hike.id)
+      .maybeSingle()
+    if (existingHike && existingHike.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     if (!hike.routePolyline && hike.trackPoints) {
       hike.routePolyline = downsamplePolyline(hike.trackPoints)
     }

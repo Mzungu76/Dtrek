@@ -144,6 +144,16 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const activity = (await req.json()) as StoredActivity
+
+    const { data: existing } = await supabase
+      .from('activities')
+      .select('user_id')
+      .eq('id', activity.id)
+      .maybeSingle()
+    if (existing && existing.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { error } = await supabase
       .from('activities')
       .upsert({ ...activityToRow(activity), user_id: user.id }, { onConflict: 'id' })

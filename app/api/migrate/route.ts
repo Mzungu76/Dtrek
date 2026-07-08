@@ -36,9 +36,11 @@ function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] 
 }
 
 export async function GET(req: NextRequest) {
-  // Simple secret guard — set MIGRATE_SECRET in Vercel env vars
+  // Simple secret guard — set MIGRATE_SECRET in Vercel env vars.
+  // Fails closed: an unset/empty secret means the endpoint refuses every request,
+  // rather than skipping the check entirely.
   const secret = process.env.MIGRATE_SECRET
-  if (secret && req.nextUrl.searchParams.get('secret') !== secret) {
+  if (!secret || req.nextUrl.searchParams.get('secret') !== secret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

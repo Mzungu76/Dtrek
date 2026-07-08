@@ -15,6 +15,7 @@
 // still replies { matched: false } (200, not an error).
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { computeSentinel2, computeSentinel2ForPlannedHike, fetchS2Cache, toSentinel2Data, SERIES_TTL_MS } from '@/lib/sentinel2/computeSentinel2'
 import { resolveTrailGeometry } from '@/lib/cl/computeCL'
 import { findTrailForPolyline } from '@/lib/cl/matchTrail'
@@ -31,6 +32,9 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 export async function GET(req: NextRequest) {
+  const user = await getUserFromRequest(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const osmIdParam = req.nextUrl.searchParams.get('osm_relation_id')
   const polylineParam = req.nextUrl.searchParams.get('polyline')
   const plannedId = req.nextUrl.searchParams.get('planned_id')
@@ -38,6 +42,16 @@ export async function GET(req: NextRequest) {
 
   if (!osmIdParam && !polylineParam) {
     return NextResponse.json({ error: 'osm_relation_id o polyline richiesto' }, { status: 400 })
+  }
+
+  if (plannedId) {
+    const { data: owned } = await supabase
+      .from('planned_hikes')
+      .select('id')
+      .eq('id', plannedId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!owned) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
   let osmRelationId: number | null = null
@@ -71,7 +85,8 @@ export async function GET(req: NextRequest) {
     if (matchedId) {
       osmRelationId = matchedId
       if (plannedId) {
-        supabase.from('planned_hikes').update({ osm_relation_id: matchedId }).eq('id', plannedId)
+        supabase.from('planned_hikes').update({ osm_relation_id: matchedId })
+          .eq('id', plannedId).eq('user_id', user.id)
           .then(({ error }) => { if (error) console.error('[trails/sentinel2] failed to persist osm_relation_id', error) })
       }
     }
@@ -111,6 +126,7 @@ export async function GET(req: NextRequest) {
         .from('planned_hikes')
         .select('distance_meters, elevation_gain, elevation_loss')
         .eq('id', plannedId)
+        .eq('user_id', user.id)
         .maybeSingle()
       const distanceKm = plannedRow?.distance_meters != null ? plannedRow.distance_meters / 1000 : null
       const result = await withTimeout(
