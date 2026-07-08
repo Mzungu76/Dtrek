@@ -1,8 +1,8 @@
 /**
- * Token di stile condivisi per il contenuto delle tab del bottom-sheet
- * (RouteSheet): card bianca stile Google Maps. `glassChip` resta scuro
- * apposta — è l'unico token usato anche fuori dallo sheet (i punteggi
- * CTS/Sicurezza/Bellezza di TopOverlay, che restano sopra la mappa).
+ * Token di stile condivisi per il contenuto di Screen 2 (RoutePage): pagina
+ * bianca stile magazine. `glassChip` resta scuro apposta — è l'unico token
+ * usato anche fuori dalla pagina (i punteggi CTS/Sicurezza/Bellezza di
+ * TopOverlay, che restano sopra la copertina).
  */
 export const glassTile   = 'bg-stone-50 border border-stone-200 rounded-2xl'
 export const glassTileHover = 'hover:bg-stone-100 hover:border-stone-300 transition-colors'

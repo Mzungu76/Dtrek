@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
-import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -17,10 +16,11 @@ import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
+import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { GUIDE_SECTIONS, sectionDefForTitle, type GuideSectionKey } from '@/lib/guideSections'
 import WeatherWidget from '@/components/WeatherWidget'
+import RouteMapSection from '@/components/RouteMapSection'
 import ScoresWidget from './widgets/ScoresWidget'
-import ElevationWidget from './widgets/ElevationWidget'
 import SafetyWidget from './widgets/SafetyWidget'
 import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
@@ -30,8 +30,7 @@ import type { HikeAssessment } from '@/lib/hikeAssessment'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import type { CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { FloraResult } from '@/lib/floraTypes'
-
-const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
+import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -109,7 +108,13 @@ interface Props {
   highlightedPoiId?: number | null
   onPoiTap?: (poiId: number) => void
   weather?: { lat: number; lon: number; mode: 'planned' | 'forecast' }
-  elevation: { trackPoints?: PlannedHike['trackPoints']; onHover?: (i: number | null) => void }
+  /** Opens the fullscreen 3D map view for the route — forwarded to the "Il percorso" map section. */
+  onOpenMap3D?: () => void
+  /** Pendenza/esposizione overlay state — forwarded to the "Il percorso" map section (the toggle
+   *  buttons themselves live in ScoresWidget, part of the "Dati e sicurezza" section below). */
+  showGradient?: boolean
+  showAspect?: boolean
+  dtmProfile?: TrailDtmProfile
   scores?: ScoresBundle
   safetyDetails?: SafetyDetailsBundle
   poiList?: PoiListBundle
@@ -118,14 +123,16 @@ interface Props {
 
 // ── Section styling (fixed skeleton) ────────────────────────────────────────────
 
+// Colori presi dalla palette terra/forest/stone dell'app (tailwind.config.ts), non più tonalità
+// ad-hoc estranee al resto dell'interfaccia.
 const SECTION_STYLE: Record<GuideSectionKey, { icon: ReactNode; color: string }> = {
-  prima_di_partire: { icon: <Compass     className="w-4 h-4" />, color: '#d97706' },
-  il_percorso:      { icon: <Route       className="w-4 h-4" />, color: '#16a34a' },
-  dati_sicurezza:   { icon: <BarChart2   className="w-4 h-4" />, color: '#0ea5e9' },
-  luoghi:           { icon: <MapPin      className="w-4 h-4" />, color: '#7c3aed' },
-  natura:           { icon: <Leaf        className="w-4 h-4" />, color: '#0f766e' },
-  sapori:           { icon: <Utensils    className="w-4 h-4" />, color: '#b45309' },
-  consigli:         { icon: <ShieldCheck className="w-4 h-4" />, color: '#0369a1' },
+  prima_di_partire: { icon: <Compass     className="w-4 h-4" />, color: '#c05a17' }, // terra-600
+  il_percorso:      { icon: <Route       className="w-4 h-4" />, color: '#277134' }, // forest-600
+  dati_sicurezza:   { icon: <BarChart2   className="w-4 h-4" />, color: '#73695c' }, // stone-700
+  luoghi:           { icon: <MapPin      className="w-4 h-4" />, color: '#813619' }, // terra-800
+  natura:           { icon: <Leaf        className="w-4 h-4" />, color: '#378d44' }, // forest-500
+  sapori:           { icon: <Utensils    className="w-4 h-4" />, color: '#d97220' }, // terra-500
+  consigli:         { icon: <ShieldCheck className="w-4 h-4" />, color: '#5e564c' }, // stone-800
 }
 const LEGACY_STYLE = { icon: <BookOpen className="w-4 h-4" />, color: '#978e7a' }
 
@@ -381,7 +388,7 @@ type GuideTier = 'breve' | 'approfondita'
 export default function GuideReader({
   hike, onHikeUpdate, topBanner, enrichmentReady, hasAiAccess,
   scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
-  weather, elevation, scores, safetyDetails, poiList, natura,
+  weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura,
 }: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
   const [generating,   setGenerating]   = useState(false)
@@ -510,11 +517,15 @@ export default function GuideReader({
         setGuideText(acc)
       }
 
+      const { subtitle, cleanedText } = extractCoverSubtitle(acc)
+      acc = cleanedText
+      setGuideText(acc)
+
       const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
       const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
       const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
       const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
-      const patch = { cachedGuide: acc, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
+      const patch = { cachedGuide: acc, cachedGuideSubtitle: subtitle, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)
     } catch (e) {
@@ -666,8 +677,6 @@ export default function GuideReader({
 
   // ── Widgets per section ───────────────────────────────────────────────────
 
-  const hasGps = (hike.trackPoints ?? []).some(p => p.lat && p.lon)
-
   function renderWidget(key: DisplaySection['key']): ReactNode {
     switch (key) {
       case 'prima_di_partire':
@@ -676,19 +685,17 @@ export default function GuideReader({
           : null
       case 'il_percorso':
         return (
-          <div className="space-y-4">
-            {hasGps && (
-              <div className="rounded-2xl overflow-hidden border" style={{ borderColor: '#dcd8cc', height: 260 }}>
-                <MapView
-                  trackPoints={hike.trackPoints ?? []} height="100%" interactive
-                  pois={poiList?.pois ?? []} planned showPoiLayer
-                  highlightedPoiIndex={highlightedPoiIndex}
-                  onPoiTap={poi => onPoiTap?.(poi.id)}
-                />
-              </div>
-            )}
-            <ElevationWidget trackPoints={elevation.trackPoints} onHover={elevation.onHover} />
-          </div>
+          <RouteMapSection
+            trackPoints={hike.trackPoints}
+            pois={poiList?.pois ?? []}
+            highlightedPoiIndex={highlightedPoiIndex}
+            onPoiTap={poi => onPoiTap?.(poi.id)}
+            onOpenMap3D={onOpenMap3D}
+            showGradient={showGradient}
+            showAspect={showAspect}
+            dtmProfile={dtmProfile}
+            planned
+          />
         )
       case 'dati_sicurezza':
         return (
@@ -736,14 +743,14 @@ export default function GuideReader({
         ) : (
           <div
             className="absolute inset-0"
-            style={{ background: 'linear-gradient(135deg, #78350f 0%, #1c4532 50%, #0c1a0f 100%)' }}
+            style={{ background: 'linear-gradient(135deg, #813619 0%, #1c4724 50%, #4d4740 100%)' }}
           >
             <RouteSvg hike={hike} />
           </div>
         )}
 
         <div className="absolute inset-0" style={{
-          background: 'linear-gradient(to top, rgba(5,5,5,0.9) 0%, rgba(5,5,5,0.5) 40%, rgba(0,0,0,0.15) 80%, transparent 100%)',
+          background: 'linear-gradient(to top, rgba(31,22,15,0.88) 0%, rgba(31,22,15,0.45) 40%, rgba(31,22,15,0.12) 80%, transparent 100%)',
         }} />
 
         <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 pb-5">

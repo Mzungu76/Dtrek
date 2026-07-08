@@ -228,8 +228,8 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 min-w-0">
             <BookOpen className="w-4 h-4 text-forest-600 shrink-0" />
-            <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
-              Racconto
+            <span className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
+              Resoconto
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -252,7 +252,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
             {sharePdfUrl ? (
               <>
                 <a href={`/leggi/r/${encodeURIComponent(id)}`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-display font-bold uppercase tracking-wide transition-colors">
                   <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
                 </a>
                 <button
@@ -261,11 +261,11 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                     await navigator.clipboard.writeText(viewerUrl)
                     setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-display font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
                   <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
                 </button>
                 <a href={sharePdfUrl} target="_blank" rel="noopener noreferrer" download
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-display font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
                   <ExternalLink className="w-3.5 h-3.5" /> PDF diretto
                 </a>
                 <button
@@ -273,13 +273,13 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                     await fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`, { method: 'DELETE' })
                     setSharePdfUrl(null)
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-red-50 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-display font-bold uppercase tracking-wide hover:bg-red-50 transition-colors">
                   <Link2Off className="w-3.5 h-3.5" /> Disattiva
                 </button>
               </>
             ) : (
               <>
-                <p className="text-xs text-stone-500 font-lora italic">
+                <p className="text-xs text-stone-500 font-body italic">
                   Genera un PDF con le foto e pubblicalo online.
                 </p>
                 {publishError && (
@@ -332,7 +332,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                       setPublishing(false)
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-display font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
                   {publishing
                     ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione PDF…</>
                     : <><Share2 className="w-3.5 h-3.5" /> Genera e pubblica</>
@@ -352,13 +352,13 @@ export default function RacconContent({ activityId }: { activityId: string }) {
               className="absolute inset-0 w-full h-full object-cover" />
           : <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />
         }
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(31,22,15,0.75) 0%, rgba(31,22,15,0.25) 45%, transparent 100%)' }} />
         <div className="absolute inset-x-0 bottom-0 p-6 max-w-5xl mx-auto">
-          <h1 className="font-barlow text-3xl sm:text-5xl font-black text-white leading-tight uppercase tracking-tight drop-shadow-lg mb-2">
+          <h1 className="font-display text-3xl sm:text-5xl font-black text-white leading-tight uppercase tracking-tight drop-shadow-lg mb-2">
             {activity.title ?? activity.notes ?? 'Escursione'}
           </h1>
           {dateStr && (
-            <p className="font-lora text-sm italic text-white/80">{dateStr}</p>
+            <p className="font-body text-sm italic text-white/80">{dateStr}</p>
           )}
           <div className="flex flex-wrap gap-2 mt-3">
             {[
@@ -367,7 +367,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
               { icon: <Clock className="w-3 h-3" />, v: formatDuration(activity.totalTimeSeconds) },
               ...(activity.calories > 0 ? [{ icon: <Flame className="w-3 h-3" />, v: `${activity.calories} kcal` }] : []),
             ].map(({ icon, v }) => (
-              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white font-barlow tracking-wide">
+              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white font-display tracking-wide">
                 {icon} {v}
               </span>
             ))}
@@ -397,7 +397,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         {/* ── Controls ── */}
         {editorMode === 'view' && content && (
           <button onClick={() => setShowAiPanel(s => !s)}
-            className="flex items-center gap-1.5 mb-3 text-xs font-barlow font-bold uppercase tracking-wide text-stone-500 hover:text-stone-700 transition-colors print:hidden">
+            className="flex items-center gap-1.5 mb-3 text-xs font-display font-bold uppercase tracking-wide text-stone-500 hover:text-stone-700 transition-colors print:hidden">
             Genera / rigenera con AI {showAiPanel ? '▲' : '▼'}
           </button>
         )}
@@ -406,10 +406,10 @@ export default function RacconContent({ activityId }: { activityId: string }) {
           <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                <p className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm mb-1">
+                <p className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm mb-1">
                   {content ? 'Genera nuovo resoconto' : 'Genera il tuo resoconto'}
                 </p>
-                <p className="text-xs text-stone-400 font-lora italic">
+                <p className="text-xs text-stone-400 font-body italic">
                   {photos.length > 0
                     ? `${photos.length} foto disponibili · L'AI userà le tue immagini`
                     : 'Aggiungi foto dalla mappa 3D per un resoconto più ricco'}
@@ -420,7 +420,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                 <div className="flex rounded-xl overflow-hidden border border-stone-200">
                   {(['breve', 'media', 'lunga'] as const).map(l => (
                     <button key={l} onClick={() => setLength(l)}
-                      className={`px-3 py-1.5 text-xs font-barlow font-bold uppercase tracking-wide transition-colors
+                      className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-wide transition-colors
                         ${length === l
                           ? 'bg-forest-600 text-white'
                           : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
@@ -431,20 +431,20 @@ export default function RacconContent({ activityId }: { activityId: string }) {
 
                 {/* 3D map button */}
                 <button onClick={() => setShow3D(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-display font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
                   <Images className="w-3.5 h-3.5" /> Mappa 3D
                 </button>
 
                 {/* Guided questionnaire entry point */}
                 <button onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}/racconta`)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-forest-200 text-xs font-barlow font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-forest-200 text-xs font-display font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
                   <Pencil className="w-3.5 h-3.5" />
                   {questionnaireStatus === 'in_progress' ? 'Riprendi il racconto guidato' : 'Racconta il tuo percorso'}
                 </button>
 
                 {/* Generate button */}
                 <button onClick={generateReport} disabled={generating}
-                  className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                  className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
                   {generating
                     ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</>
                     : <><BookOpen className="w-4 h-4" /> Genera</>
@@ -462,7 +462,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
             {/* Cover photo picker */}
             {photos.length > 0 && (
               <div className="border-t border-stone-100 pt-4 mt-4">
-                <p className="font-barlow text-xs font-bold uppercase tracking-wide text-stone-500 mb-2">
+                <p className="font-display text-xs font-bold uppercase tracking-wide text-stone-500 mb-2">
                   Immagine di copertina
                 </p>
                 <div className="flex gap-2 overflow-x-auto pb-1">
@@ -492,8 +492,8 @@ export default function RacconContent({ activityId }: { activityId: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-8 print:hidden">
             <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col items-start">
               <Pencil className="w-10 h-10 text-stone-400 mb-3" />
-              <p className="font-barlow font-bold uppercase tracking-wide text-stone-700 mb-2">Scrivi tu</p>
-              <p className="text-sm text-stone-500 font-lora italic mb-4">
+              <p className="font-display font-bold uppercase tracking-wide text-stone-700 mb-2">Scrivi tu</p>
+              <p className="text-sm text-stone-500 font-body italic mb-4">
                 Costruisci il resoconto sezione per sezione, con le tue parole. Puoi richiedere aiuto
                 all&apos;AI su singoli paragrafi e associare le tue foto.
               </p>
@@ -503,14 +503,14 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                   setReportAuthoredBy('manual')
                   setEditorMode('manual')
                 }}
-                className="mt-auto flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                className="mt-auto flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
                 Inizia a scrivere
               </button>
             </div>
             <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col items-start">
               <BookOpen className="w-10 h-10 text-forest-400 mb-3" />
-              <p className="font-barlow font-bold uppercase tracking-wide text-stone-700 mb-2">Genera con AI</p>
-              <p className="text-sm text-stone-500 font-lora italic mb-4">
+              <p className="font-display font-bold uppercase tracking-wide text-stone-700 mb-2">Genera con AI</p>
+              <p className="text-sm text-stone-500 font-body italic mb-4">
                 L&apos;AI scrive un reportage giornalistico completo basato sui tuoi dati GPS,
                 biometrici e foto.
               </p>
@@ -518,14 +518,14 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                 <div className="flex rounded-xl overflow-hidden border border-stone-200">
                   {(['breve', 'media', 'lunga'] as const).map(l => (
                     <button key={l} onClick={() => setLength(l)}
-                      className={`px-3 py-1.5 text-xs font-barlow font-bold uppercase tracking-wide transition-colors
+                      className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-wide transition-colors
                         ${length === l ? 'bg-forest-600 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
                       {l}
                     </button>
                   ))}
                 </div>
                 <button onClick={generateReport} disabled={generating}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                  className="flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
                   {generating
                     ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</>
                     : <><BookOpen className="w-4 h-4" /> Genera</>
@@ -555,7 +555,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         {editorMode === 'view' && generating && !sections.length && (
           <div className="flex items-center gap-3 py-8 text-stone-500 print:hidden">
             <Loader2 className="w-5 h-5 animate-spin text-forest-500" />
-            <span className="font-lora italic text-sm">Giulia sta scrivendo il tuo resoconto…</span>
+            <span className="font-body italic text-sm">Giulia sta scrivendo il tuo resoconto…</span>
           </div>
         )}
 
@@ -564,17 +564,17 @@ export default function RacconContent({ activityId }: { activityId: string }) {
           <div className="flex items-center justify-between mb-5 print:hidden">
             <div className="flex items-center gap-2">
               {report?.updated_at && (
-                <span className="font-lora text-xs italic text-stone-400">
+                <span className="font-body text-xs italic text-stone-400">
                   Salvato {format(new Date(report.updated_at), "d MMM · HH:mm", { locale: it })}
                 </span>
               )}
               {saving && (
-                <span className="flex items-center gap-1 font-lora text-xs italic text-stone-400">
+                <span className="flex items-center gap-1 font-body text-xs italic text-stone-400">
                   <Loader2 className="w-3 h-3 animate-spin" /> Salvataggio…
                 </span>
               )}
               {saveOk && (
-                <span className="flex items-center gap-1 font-lora text-xs text-forest-600">
+                <span className="flex items-center gap-1 font-body text-xs text-forest-600">
                   <Check className="w-3 h-3" /> Salvato
                 </span>
               )}
@@ -590,7 +590,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                     setEditorMode('manual')
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-barlow font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-display font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
                 <Pencil className="w-3.5 h-3.5" /> Editor strutturato
               </button>
               <button
@@ -598,7 +598,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                   if (isEditing) { saveContent(content); setIsEditing(false) }
                   else setIsEditing(true)
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-display font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
                 {isEditing
                   ? <><Check className="w-3.5 h-3.5" /> Fatto</>
                   : <><Pencil className="w-3.5 h-3.5" /> Modifica</>
@@ -635,10 +635,10 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                   <div className="px-2 pt-1 pb-2 space-y-0.5">
                     {photos.slice(0, 7).map((ph, i) => (
                       <div key={ph.id} className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0 font-barlow">
+                        <span className="w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0 font-display">
                           {i + 1}
                         </span>
-                        <span className="font-lora text-[9px] text-stone-500 truncate">{ph.caption}</span>
+                        <span className="font-body text-[9px] text-stone-500 truncate">{ph.caption}</span>
                       </div>
                     ))}
                   </div>
@@ -666,7 +666,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
               {/* ── Elevation profile with photo markers — end of report ── */}
               {sections.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-5 print:rounded-none print:shadow-none print:border-0 print:border-t print:border-stone-200">
-                  <h3 className="font-barlow font-bold uppercase tracking-[2px] text-xs text-stone-400 mb-3">
+                  <h3 className="font-display font-bold uppercase tracking-[2px] text-xs text-stone-400 mb-3">
                     Profilo altimetrico
                   </h3>
                   <RouteTimeline trackPoints={activity.trackPoints} photos={photos} />
@@ -679,14 +679,14 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         {/* ── Raw streaming text (before first section parsed) ── */}
         {editorMode === 'view' && generating && !sections.length && content && (
           <div className="bg-white rounded-2xl shadow-sm p-6 print:hidden">
-            <p className="font-lora text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{content}</p>
+            <p className="font-body text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{content}</p>
           </div>
         )}
 
         {/* ── Photo gallery (screen only) ── */}
         {editorMode === 'view' && photos.length > 0 && content && (
           <section className="mt-8 print:hidden">
-            <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
+            <h3 className="font-display font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
               Le tue foto
             </h3>
             <div className="flex gap-3 overflow-x-auto pb-3">
@@ -696,12 +696,12 @@ export default function RacconContent({ activityId }: { activityId: string }) {
                   <div className="relative">
                     <img src={ph.url} alt={ph.caption}
                       className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
-                    <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-barlow">
+                    <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-display">
                       {i + 1}
                     </span>
                   </div>
                   {ph.caption && (
-                    <p className="px-2 py-1.5 font-lora text-[10px] italic text-stone-500 leading-snug bg-white">
+                    <p className="px-2 py-1.5 font-body text-[10px] italic text-stone-500 leading-snug bg-white">
                       {i + 1}. {ph.caption}
                     </p>
                   )}
@@ -714,7 +714,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         {/* ── Print-only photo grid ── */}
         {editorMode === 'view' && photos.length > 0 && content && (
           <section className="hidden print:block mt-6 pt-4 border-t border-stone-200">
-            <h3 className="font-barlow font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
+            <h3 className="font-display font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
               Documentazione fotografica
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
@@ -767,9 +767,9 @@ export default function RacconContent({ activityId }: { activityId: string }) {
           <div className="pdf-block" style={{ position: 'relative', width: '100%', height: 220, overflow: 'hidden', marginBottom: 0 }}>
             {heroPhoto
               ? <img src={heroPhoto.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#1b4332,#40916c)' }} />
+              : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#193b20,#277134)' }} />
             }
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%)' }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(31,22,15,0.7) 0%, transparent 60%)' }} />
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '20px 32px' }}>
               <h1 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 28, fontWeight: 900, color: 'white', margin: 0, textTransform: 'uppercase', letterSpacing: 1 }}>
                 {activity.title ?? activity.notes ?? 'Escursione'}
@@ -846,7 +846,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
             <img src={lightbox.url} alt={lightbox.caption}
               className="w-full rounded-2xl shadow-2xl" />
             {lightbox.caption && (
-              <p className="font-lora text-sm italic text-white/70 text-center mt-3">
+              <p className="font-body text-sm italic text-white/70 text-center mt-3">
                 {lightbox.caption}
               </p>
             )}

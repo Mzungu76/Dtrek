@@ -12,12 +12,16 @@ interface Props {
   onOpenWeather?: () => void
   /** Score/rating chips (CTS, Sicurezza, Bellezza…), floating persistently over the map. */
   scoreBadges?: ReactNode
+  /** Ad-hoc/heuristic tagline shown under the title — only rendered in variant="magazine". */
+  subtitle?: string | null
+  /** 'magazine' bumps the title to a cover-sized treatment and shows the subtitle line. */
+  variant?: 'default' | 'magazine'
 }
 
 const FADE_OUT_MS = 120
 const FADE_IN_MS = 150
 
-export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges }: Props) {
+export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, subtitle, variant = 'default' }: Props) {
   const [visible, setVisible] = useState(true)
   const prevKey = useRef(itemKey)
 
@@ -50,7 +54,14 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           </div>
 
           <div className="mt-3 flex items-start gap-2.5">
-            <p className="flex-1 font-display text-xl sm:text-2xl font-bold text-white" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+            <p
+              className={
+                variant === 'magazine'
+                  ? 'flex-1 font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05]'
+                  : 'flex-1 font-display text-xl sm:text-2xl font-bold text-white'
+              }
+              style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}
+            >
               {title}
             </p>
             {weatherIcon && onOpenWeather && (
@@ -64,6 +75,14 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
               </button>
             )}
           </div>
+          {variant === 'magazine' && subtitle && (
+            <p
+              className="font-body text-[13px] sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md"
+              style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}
+            >
+              {subtitle}
+            </p>
+          )}
         </div>
       </div>
     </div>

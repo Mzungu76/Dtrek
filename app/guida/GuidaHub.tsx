@@ -2,13 +2,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
 import RouteHub from '@/components/routehub/RouteHub'
-import RouteThumb from '@/components/RouteThumb'
 import GuideReader from '@/components/guida/GuideReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
-import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from '@/components/routehub/types'
-import WeatherWidget from '@/components/WeatherWidget'
+import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
 import { computeTrailScoreTotal, MiniScoreRing, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
@@ -29,18 +26,16 @@ import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { formatDuration } from '@/lib/tcxParser'
-import { fetchForecastWeather, wmoInfo } from '@/lib/openmeteo'
 import type { GuideSectionKey } from '@/lib/guideSections'
 import {
-  Mountain, Route, TrendingUp, Clock, Loader2, BookOpen,
+  Mountain, Route, TrendingUp, Clock, Loader2,
   Car, Trash2, Pencil, Check, Images,
-  MapPin, Wrench, Navigation,
+  Navigation,
   Calendar as CalendarIcon,
 } from 'lucide-react'
 import { fetchDrivingInfo, getUserStartingPoint, getTrailStartPoint, originMatches } from '@/lib/drivingInfo'
 import PdfExportButton from '@/components/PdfExportButton'
 
-const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const FloraGallery     = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
@@ -103,7 +98,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [showStreetView, setShowStreetView] = useState(false)
   const [pois,           setPois]          = useState<PoiItem[]>([])
-  const [wikiPages,      setWikiPages]     = useState<WikiPage[]>([])
+  const [, setWikiPages] = useState<WikiPage[]>([])
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [poisFullyLoaded, setPoisFullyLoaded] = useState(false)
   const [ctsResult,      setCtsResult]     = useState<TrailScoreResult | null>(null)
@@ -115,13 +110,9 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [hrMax,          setHrMax]         = useState<number | undefined>(undefined)
   const [safetyScore,    setSafetyScore]   = useState<SafetyScore | null>(null)
   const [driving, setDriving] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
-  const [altActiveIndex, setAltActiveIndex] = useState<number | null>(null)
-  const [openSection, setOpenSection] = useState<SectionKind | null>(null)
-  const [showPoiLayer, setShowPoiLayer] = useState(false)
   const [show3D, setShow3D] = useState(false)
   const [showFloraGallery, setShowFloraGallery] = useState(false)
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
-  const [weatherIcon, setWeatherIcon] = useState<{ emoji: string; label: string } | null>(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [ctsSettled, setCtsSettled] = useState(false)
   const [enrichmentTimedOut, setEnrichmentTimedOut] = useState(false)
@@ -230,22 +221,6 @@ export default function GuidaHub({ id }: { id?: string }) {
     if (gps.length < 2) return
     checkProtectedArea(gps).then(r => setInProtectedArea(r.inProtectedArea)).catch(() => {})
   }, [hike?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Weather icon for the top overlay — matches the forecast for the planned date (or today).
-  useEffect(() => {
-    if (!hike) { setWeatherIcon(null); return }
-    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
-    const mid = gps[Math.floor(gps.length / 2)]
-    if (!mid?.lat || !mid?.lon) { setWeatherIcon(null); return }
-    let cancelled = false
-    fetchForecastWeather(mid.lat, mid.lon, 7).then(days => {
-      if (cancelled || !days.length) return
-      const target = hike.plannedDate ? (days.find(d => d.date === hike.plannedDate) ?? days[0]) : days[0]
-      const info = wmoInfo(target.weathercode)
-      setWeatherIcon({ emoji: info.emoji, label: info.label })
-    }).catch(() => setWeatherIcon(null))
-    return () => { cancelled = true }
-  }, [hike?.id, hike?.plannedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Persists to the backend only — nothing in this component reads hike.cachedPois again
@@ -490,41 +465,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
 
-  const renderStageMap = (item: RouteHubItem, interactive: boolean, obscuredBottomPx: number) => {
-    if (!hike || item.id !== hike.id) return (
-      <div className="absolute inset-0 bg-gradient-to-br from-[#123448] via-[#0b2333] to-[#071824]">
-        {item.polyline && item.polyline.length > 1 && (
-          <div className="absolute inset-[10%]"><RouteThumb polyline={item.polyline} color="#38bdf8" strokeWidth={2} /></div>
-        )}
-      </div>
-    )
-    if (!hasGps) return <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-sm">Tracciato non disponibile</div>
-    return (
-      <MapView
-        trackPoints={hike.trackPoints ?? []} height="100%" interactive={interactive}
-        showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
-        pois={pois} wikiPages={wikiPages} difficultyMarkers={hike.difficultyMarkers} planned
-        highlightedPoiIndex={highlightedPoiId != null ? pois.findIndex(p => p.id === highlightedPoiId) : null}
-        onPoiTap={(poi) => setHighlightedPoiId(poi.id)}
-        highlightedDifficultyIndex={null}
-        activeIndex={openSection === 'featured' ? altActiveIndex : null}
-        showPoiLayer={showPoiLayer}
-        showTourControls={interactive}
-        obscuredBottomPx={obscuredBottomPx}
-      />
-    )
-  }
-
-  const poiToggleChip = (
-    <button
-      onClick={() => setShowPoiLayer(v => !v)}
-      title="Punti di interesse"
-      className={`flex items-center justify-center w-9 h-9 rounded-full border transition-colors ${showPoiLayer ? 'bg-fuchsia-500/80 border-fuchsia-300/40 text-white' : 'bg-black/50 border-white/15 text-white/80'} backdrop-blur-md`}
-    >
-      <MapPin className="w-4 h-4" />
-    </button>
-  )
-
   // Lets the user set/change the planned outing date directly over the map, without a separate
   // page — only relevant for a hike not yet done (Guida), so this stays out of Resoconto.
   const dateChip = (
@@ -581,18 +521,12 @@ export default function GuidaHub({ id }: { id?: string }) {
       return <div className={`py-10 text-center text-sm ${textMuted}`}>Caricamento…</div>
     }
 
-    if (section === 'meteo') return (
-      <div className="px-4 py-4">
-        {hasGps
-          ? <WeatherWidget mode={hike.plannedDate ? 'planned' : 'forecast'} lat={centerPt.lat!} lon={centerPt.lon!} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />
-          : <p className={`text-sm italic text-center py-8 ${textMuted}`}>Meteo non disponibile senza un tracciato GPS.</p>}
-      </div>
-    )
-
     // Same reader previously at the standalone /guida/[id]/leggi page — now also hosts (as
     // widgets embedded in the article) everything that used to live in the dati/profilo/natura/
     // poi/sicurezza tabs, folded into one scrollable magazine guide reachable by dragging the
-    // sheet open like any other tab instead of navigating to a separate page.
+    // closed card open like any other route instead of navigating to a separate page. The
+    // weather quick-view is gone too — "Prima di partire" already has the full widget, one
+    // scroll away, so there's no separate icon/section for it anymore.
     if (section === 'featured') {
       const markers = hike.difficultyMarkers ?? []
       const pendingBanner = hike.pendingExpiresAt && !hike.archivedAt ? (() => {
@@ -623,7 +557,10 @@ export default function GuidaHub({ id }: { id?: string }) {
           highlightedPoiId={highlightedPoiId}
           onPoiTap={setHighlightedPoiId}
           weather={hasGps ? { lat: centerPt.lat!, lon: centerPt.lon!, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const } : undefined}
-          elevation={{ trackPoints: hike.trackPoints, onHover: setAltActiveIndex }}
+          onOpenMap3D={hasGps ? () => setShow3D(true) : undefined}
+          showGradient={showGradient}
+          showAspect={showAspect}
+          dtmProfile={dtmProfile}
           scores={{
             cl: { si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError },
             safety: safetyScore,
@@ -677,11 +614,6 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
   }
 
-  const tabs: TabDef[] = [
-    { key: 'featured', label: 'Guida Turistica', icon: BookOpen },
-    { key: 'strumenti', label: 'Strumenti', icon: Wrench },
-  ]
-
   const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
     label: 'Naviga',
     icon: Navigation,
@@ -706,17 +638,15 @@ export default function GuidaHub({ id }: { id?: string }) {
           // this is a purely cosmetic address-bar sync, so it doesn't need a real navigation.
           window.history.replaceState(null, '', `/guida/${encodeURIComponent(item.id)}`)
         }}
-        renderStageMap={renderStageMap}
-        tabs={tabs}
+        bodyMode="continuous"
         renderSection={renderSection}
         primaryAction={primaryAction}
-        onSectionChange={setOpenSection}
         scoreBadges={scoreBadges}
         scoreBadgesTargetSection="featured"
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
-        weatherIcon={(routeItem) => hike && routeItem.id === hike.id ? weatherIcon : undefined}
-        onOpenMap3D={hasGps ? () => setShow3D(true) : undefined}
-        mapHeaderActions={<>{dateChip}{poiToggleChip}</>}
+        subtitle={(routeItem) => hike && routeItem.id === hike.id ? hike.cachedGuideSubtitle : undefined}
+        topOverlayVariant="magazine"
+        headerActions={dateChip}
         importLabel="Importa"
         onImport={() => router.push('/upload?tab=gpx')}
       />

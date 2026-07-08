@@ -86,7 +86,7 @@ export default function SectionEditor({
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-stone-50 border-b border-stone-200">
         <GripVertical className="w-4 h-4 text-stone-300 shrink-0" />
-        <span className="text-[10px] font-barlow font-bold uppercase tracking-wide text-stone-400 shrink-0">
+        <span className="text-[10px] font-display font-bold uppercase tracking-wide text-stone-400 shrink-0">
           Sezione {sectionIndex + 1}
         </span>
         {editingTitle ? (
@@ -96,11 +96,11 @@ export default function SectionEditor({
             onChange={e => setTitleDraft(e.target.value)}
             onBlur={commitTitle}
             onKeyDown={e => { if (e.key === 'Enter') commitTitle() }}
-            className="flex-1 min-w-0 bg-white border border-forest-300 rounded px-2 py-0.5 text-sm font-barlow font-bold text-stone-700 outline-none"
+            className="flex-1 min-w-0 bg-white border border-forest-300 rounded px-2 py-0.5 text-sm font-display font-bold text-stone-700 outline-none"
           />
         ) : (
           <button onClick={() => setEditingTitle(true)}
-            className="flex-1 min-w-0 text-left truncate font-barlow font-bold text-sm text-stone-700 hover:text-forest-700 transition-colors">
+            className="flex-1 min-w-0 text-left truncate font-display font-bold text-sm text-stone-700 hover:text-forest-700 transition-colors">
             {section.title}
           </button>
         )}
@@ -156,12 +156,12 @@ export default function SectionEditor({
               rows={8}
               disabled={aiAssistLoading}
               placeholder={PLACEHOLDERS[section.title] ?? 'Scrivi qui il testo della sezione…'}
-              className="w-full font-lora text-sm text-stone-700 leading-relaxed border border-stone-200 rounded-xl p-3 outline-none focus:border-forest-400 resize-none disabled:opacity-50 disabled:bg-stone-50"
+              className="w-full font-body text-sm text-stone-700 leading-relaxed border border-stone-200 rounded-xl p-3 outline-none focus:border-forest-400 resize-none disabled:opacity-50 disabled:bg-stone-50"
             />
             {aiAssistLoading && (
               <div className="absolute inset-0 bg-white/70 rounded-xl flex items-center justify-center gap-2 text-stone-500">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="font-lora italic text-sm">L&apos;AI sta riscrivendo…</span>
+                <span className="font-body italic text-sm">L&apos;AI sta riscrivendo…</span>
               </div>
             )}
           </div>
@@ -169,7 +169,7 @@ export default function SectionEditor({
           {/* AI assist panel */}
           <div className="mt-2">
             <button onClick={() => setShowAi(s => !s)}
-              className="flex items-center gap-1.5 text-xs font-barlow font-bold uppercase tracking-wide text-forest-600 hover:text-forest-800 transition-colors">
+              className="flex items-center gap-1.5 text-xs font-display font-bold uppercase tracking-wide text-forest-600 hover:text-forest-800 transition-colors">
               <Sparkles className="w-3.5 h-3.5" /> Assistenza AI {showAi ? '▲' : '▼'}
             </button>
             {showAi && (
@@ -194,12 +194,12 @@ export default function SectionEditor({
                     onChange={e => setCustomInstruction(e.target.value)}
                     rows={2}
                     placeholder="Oppure scrivi un'istruzione libera…"
-                    className="flex-1 text-xs font-lora border border-stone-200 rounded-lg p-2 outline-none focus:border-forest-400 resize-none"
+                    className="flex-1 text-xs font-body border border-stone-200 rounded-lg p-2 outline-none focus:border-forest-400 resize-none"
                   />
                   <button
                     disabled={aiAssistLoading || !customInstruction.trim()}
                     onClick={() => { onAiAssist(section.id, customInstruction.trim()); setCustomInstruction('') }}
-                    className="px-3 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-lg text-xs font-barlow font-bold uppercase tracking-wide transition-colors shrink-0">
+                    className="px-3 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-lg text-xs font-display font-bold uppercase tracking-wide transition-colors shrink-0">
                     Applica
                   </button>
                 </div>
@@ -210,14 +210,14 @@ export default function SectionEditor({
 
         {/* Right: photo panel */}
         <div className="w-full md:w-64 shrink-0">
-          <p className="font-barlow text-xs font-bold uppercase tracking-wide text-stone-500 mb-2 flex items-center gap-1.5">
+          <p className="font-display text-xs font-bold uppercase tracking-wide text-stone-500 mb-2 flex items-center gap-1.5">
             Foto associata
           </p>
 
           {!photo || showPhotoGrid ? (
             <div>
               {!photo && (
-                <p className="text-xs text-stone-400 font-lora italic mb-2">
+                <p className="text-xs text-stone-400 font-body italic mb-2">
                   Nessuna foto associata a questa sezione
                 </p>
               )}
@@ -245,7 +245,7 @@ export default function SectionEditor({
                 <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover" />
               </div>
               {photo.caption && (
-                <p className="font-lora text-xs italic text-stone-500 mt-1">{photo.caption}</p>
+                <p className="font-body text-xs italic text-stone-500 mt-1">{photo.caption}</p>
               )}
               <div className="flex items-center justify-between mt-1">
                 <span className="text-[10px] text-stone-400">📍 {progressLabel(photo)}</span>
