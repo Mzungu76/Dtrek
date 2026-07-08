@@ -14,7 +14,6 @@ import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import { ScoreRing, MiniScoreRing } from '@/components/ScoreRing'
-import { fetchDrivingInfo, getUserStartingPoint, getTrailStartPoint } from '@/lib/drivingInfo'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
 import SpeedChart from '@/components/SpeedChart'
@@ -30,9 +29,6 @@ import { exportActivityToGpx } from '@/utils/exportGpx'
 import { exportActivityPdf } from '@/utils/pdfExport'
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
-import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
-import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { computeDEP, depLabel, findSimilarActivities } from '@/lib/stats'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
@@ -50,6 +46,11 @@ import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
 import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
+import { useDtmProfile } from './useDtmProfile'
+import { useTerrainProfile } from './useTerrainProfile'
+import { useProtectedAreaCheck } from './useProtectedAreaCheck'
+import { useDrivingDistance } from './useDrivingDistance'
+import { useUserPrefs } from './useUserPrefs'
 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
@@ -99,9 +100,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [editNotes,  setEditNotes]  = useState(false)
   const [showGradient, setShowGradient] = useState(false)
   const [showAspect,   setShowAspect]   = useState(false)
-  const [dtmProfile,      setDtmProfile]     = useState<TrailDtmProfile | undefined>(undefined)
-  const [terrainProfile,  setTerrainProfile] = useState<TrailTerrainProfile | undefined>(undefined)
-  const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [pois,            setPois]           = useState<PoiItem[]>([])
   const [poisLoaded,      setPoisLoaded]     = useState(false)
   const [, setWikiPages] = useState<WikiPage[]>([])
@@ -118,12 +116,12 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [showCoverPicker, setShowCoverPicker] = useState(false)
   const [ctsResult,       setCtsResult]       = useState<TrailScoreResult | null>(null)
   const [ctsComputing,    setCtsComputing]    = useState(false)
-  const [prefsLoaded,     setPrefsLoaded]     = useState(false)
-  const [prefSforzo,      setPrefSforzo]      = useState(50)
-  const [prefDurata,      setPrefDurata]      = useState(270)
-  const [hrRest,          setHrRest]          = useState<number | undefined>(undefined)
-  const [hrMax,           setHrMax]           = useState<number | undefined>(undefined)
-  const [driving,         setDriving]         = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
+
+  const dtmProfile      = useDtmProfile(activity)
+  const terrainProfile  = useTerrainProfile(activity)
+  const inProtectedArea = useProtectedAreaCheck(activity)
+  const driving         = useDrivingDistance(activity)
+  const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -220,43 +218,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
     return () => { cancelled = true }
   }, [currentId])
 
-  useEffect(() => {
-    if (!activity) return
-    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-    if (gps.length < 2) return
-    fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()).then((p: TrailDtmProfile) => setDtmProfile(p)).catch(() => {})
-  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!activity) return
-    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-    if (gps.length < 2) return
-    fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()).then((p: TrailTerrainProfile) => setTerrainProfile(p)).catch(() => {})
-  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!activity) return
-    const gps = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-    if (gps.length < 2) return
-    checkProtectedArea(gps).then(r => setInProtectedArea(r.inProtectedArea)).catch(() => {})
-  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Distance from the user's home address (if set) to the trailhead — no caching column exists
-  // for completed activities (unlike planned hikes), so this is just refetched live each time.
-  useEffect(() => {
-    if (!activity) return
-    const trailStart = getTrailStartPoint({ routePolyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]) })
-    if (!trailStart) return
-    let cancelled = false
-    getUserStartingPoint().then(pt => {
-      if (cancelled || !pt) return
-      fetchDrivingInfo(pt.lat, pt.lon, trailStart[0], trailStart[1]).then(info => {
-        if (!cancelled) setDriving(info)
-      })
-    })
-    return () => { cancelled = true }
-  }, [activity?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // CTS+Beauty: computed once at import (lib/activitySave.ts) and re-verified here only if
   // missing (an older activity, saved before that policy existed) or older than
   // SCORE_STALE_DAYS — same policy as the planned-hike side in GuidaHub.
@@ -279,15 +240,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
       .finally(() => { if (!cancelled) setCtsComputing(false) })
     return () => { cancelled = true }
   }, [activity?.id, poisLoaded, dtmProfile, terrainProfile, inProtectedArea, prefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    fetch('/api/user-settings').then(r => r.json()).then(d => {
-      if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
-      if (d.prefDurata != null) setPrefDurata(d.prefDurata)
-      if (d.hrRest != null) setHrRest(d.hrRest)
-      if (d.hrMax != null) setHrMax(d.hrMax)
-    }).catch(() => {}).finally(() => setPrefsLoaded(true))
-  }, [])
 
   useEffect(() => {
     const bs = activity?.linkedBeautyScore
