@@ -250,6 +250,11 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_pending_days SMALLINT D
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS guide_tier TEXT CHECK (guide_tier IN ('breve','approfondita'));
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS guide_generated_at TIMESTAMPTZ;
 
+-- Sottotitolo da copertina scritto dall'AI al momento della generazione della guida (tag
+-- [sottotitolo] nel prompt di app/api/guide/route.ts, estratto in lib/coverSubtitle.ts) — NULL
+-- sulle guide generate prima di questa colonna o non ancora rigenerate.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide_subtitle TEXT;
+
 -- Sezioni (massimo 2) per cui la guida Breve genera testo AI — le altre restano solo-widget.
 -- NULL/vuoto ⇒ default applicato lato server: prima_di_partire + il_percorso.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_breve_sections TEXT[];

@@ -1,16 +1,12 @@
 import { useReducer } from 'react'
 import type { SectionKind } from './types'
 
-export type SheetSnap = 'peek' | 'half' | 'full'
-
 export interface RouteHubState {
   index: number
   dragging: boolean
   dragDeltaPx: number
-  /** Non-null ⇒ Screen 2 (RouteSheet) is open, showing this tab. */
+  /** Non-null ⇒ Screen 2 (RoutePage) is open, showing this tab. */
   openSection: SectionKind | null
-  /** Meaningful only while openSection is set. */
-  snap: SheetSnap
 }
 
 export type RouteHubAction =
@@ -18,9 +14,8 @@ export type RouteHubAction =
   | { type: 'DRAG_MOVE'; deltaPx: number }
   | { type: 'DRAG_END'; count: number }
   | { type: 'JUMP_TO'; index: number }
-  | { type: 'OPEN_SECTION'; section: SectionKind; snap: SheetSnap }
+  | { type: 'OPEN_SECTION'; section: SectionKind }
   | { type: 'SELECT_TAB'; section: SectionKind }
-  | { type: 'SET_SNAP'; snap: SheetSnap }
   | { type: 'CLOSE_SECTION' }
 
 function clampIndex(i: number, count: number): number {
@@ -43,13 +38,11 @@ function reducer(state: RouteHubState, action: RouteHubAction): RouteHubState {
     case 'JUMP_TO':
       return { ...state, index: action.index, openSection: null }
     case 'OPEN_SECTION':
-      return { ...state, openSection: action.section, snap: action.snap }
+      return { ...state, openSection: action.section }
     case 'SELECT_TAB':
-      return { ...state, openSection: action.section, snap: state.snap === 'peek' ? 'half' : state.snap }
-    case 'SET_SNAP':
-      return { ...state, snap: action.snap }
+      return { ...state, openSection: action.section }
     case 'CLOSE_SECTION':
-      return { ...state, openSection: null, snap: 'peek' }
+      return { ...state, openSection: null }
     default:
       return state
   }
@@ -61,6 +54,5 @@ export function useRouteHubState(initialIndex: number) {
     dragging: false,
     dragDeltaPx: 0,
     openSection: null,
-    snap: 'peek',
   })
 }

@@ -128,7 +128,7 @@ export default function RacconaPage() {
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-stone-200">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <BackLink className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors" />
-          <span className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
+          <span className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
             Racconta il tuo percorso
           </span>
           <span className="w-20" />
@@ -139,17 +139,17 @@ export default function RacconaPage() {
 
         {error && (
           <div className="max-w-md mx-auto text-center py-16">
-            <p className="font-barlow font-bold uppercase tracking-wide text-red-600 mb-2">
+            <p className="font-display font-bold uppercase tracking-wide text-red-600 mb-2">
               Non riesco a preparare le domande
             </p>
-            <p className="font-lora text-sm text-stone-500 italic mb-6">{error}</p>
+            <p className="font-body text-sm text-stone-500 italic mb-6">{error}</p>
             <div className="flex items-center justify-center gap-3">
               <button onClick={() => loadQuestionnaire(photos)}
-                className="px-5 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                className="px-5 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
                 Riprova
               </button>
               <button onClick={goToResoconto}
-                className="px-5 py-2 border border-stone-200 rounded-xl text-sm font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                className="px-5 py-2 border border-stone-200 rounded-xl text-sm font-display font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
                 Usa la generazione rapida
               </button>
             </div>
@@ -163,21 +163,21 @@ export default function RacconaPage() {
           if (isFinished) {
             return (
               <div className="max-w-md mx-auto text-center py-16">
-                <p className="font-barlow font-bold uppercase tracking-wide text-stone-700 mb-2">
+                <p className="font-display font-bold uppercase tracking-wide text-stone-700 mb-2">
                   {questionnaire.status === 'skipped' ? 'Questionario saltato' : 'Questionario completato'}
                 </p>
-                <p className="font-lora text-sm text-stone-500 italic mb-6">
+                <p className="font-body text-sm text-stone-500 italic mb-6">
                   {questionnaire.status === 'skipped'
                     ? 'Puoi generare il resoconto rapido, oppure ricominciare il racconto guidato.'
                     : 'Le tue risposte sono pronte per essere fuse nel resoconto. Torna alla pagina del resoconto per generarlo.'}
                 </p>
                 <div className="flex items-center justify-center gap-3">
                   <button onClick={goToResoconto}
-                    className="px-5 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-barlow font-bold uppercase tracking-wide transition-colors">
+                    className="px-5 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
                     Torna al resoconto
                   </button>
                   <button onClick={restart}
-                    className="px-5 py-2 border border-stone-200 rounded-xl text-sm font-barlow font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                    className="px-5 py-2 border border-stone-200 rounded-xl text-sm font-display font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
                     Ricomincia
                   </button>
                 </div>

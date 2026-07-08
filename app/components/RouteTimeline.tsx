@@ -97,11 +97,11 @@ export default function RouteTimeline({
               <div className="relative">
                 <img src={photo.url} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
-                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
+                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-display">
                   {number}
                 </span>
               </div>
-              <p className="text-[8px] text-stone-500 font-lora mt-0.5 max-w-[60px] text-center leading-tight">
+              <p className="text-[8px] text-stone-500 font-body mt-0.5 max-w-[60px] text-center leading-tight">
                 {photo.caption}
               </p>
               {row > 0 && (
@@ -167,11 +167,11 @@ export default function RouteTimeline({
               <div className="relative">
                 <img src={photo.url} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
-                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-barlow">
+                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-display">
                   {number}
                 </span>
               </div>
-              <p className="text-[8px] text-stone-500 font-lora mt-0.5 max-w-[60px] text-center leading-tight">
+              <p className="text-[8px] text-stone-500 font-body mt-0.5 max-w-[60px] text-center leading-tight">
                 {photo.caption}
               </p>
             </div>

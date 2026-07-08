@@ -274,6 +274,21 @@ export default function MapView({
     handlers.forEach(h => { if (h) interactive ? h.enable() : h.disable() })
   }, [interactive, mapReady])
 
+  // Keeps Leaflet's internal size cache in sync when the container is resized by CSS alone (e.g.
+  // toggling a "schermo intero" wrapper class) instead of a React remount — without this, tiles
+  // stay clipped/offset to whatever size the map had when it was first created.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current || !mapRef.current) return
+    const map = mapInstance.current
+    let raf = 0
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => map.invalidateSize())
+    })
+    observer.observe(mapRef.current)
+    return () => { cancelAnimationFrame(raf); observer.disconnect() }
+  }, [mapReady])
+
   // Tracks whichever LatLng currently sits at the *visible* (unobscured) center — every user
   // pan/zoom (and our own corrective pans below) updates it, so "the point centered before the
   // change" always means the right thing, whether that's the route's initial center or somewhere

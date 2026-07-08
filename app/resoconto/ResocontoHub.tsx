@@ -9,7 +9,8 @@ import { useCenteredItem } from '@/components/routehub/useCenteredItem'
 import { glassTile, glassTileHover, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from '@/components/routehub/types'
 import { wmoInfo } from '@/lib/openmeteo'
-import ElevationProfileChart from '@/components/ElevationProfileChart'
+import RouteMapSection from '@/components/RouteMapSection'
+import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
 import { ScoreRing, MiniScoreRing } from '@/components/ScoreRing'
@@ -50,7 +51,6 @@ import { PhenologyPanel } from '@/components/PhenologyPanel'
 import { useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 
-const MapView         = dynamic(() => import('@/components/MapView'),         { ssr: false })
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const FloraGallery    = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
@@ -104,7 +104,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [inProtectedArea, setInProtectedArea] = useState<boolean | undefined>(undefined)
   const [pois,            setPois]           = useState<PoiItem[]>([])
   const [poisLoaded,      setPoisLoaded]     = useState(false)
-  const [wikiPages,       setWikiPages]      = useState<WikiPage[]>([])
+  const [, setWikiPages] = useState<WikiPage[]>([])
   const [ratingVal,       setRatingVal]      = useState(0)
   const [ratingNote,      setRatingNote]     = useState('')
   const [savingRating,    setSavingRating]   = useState(false)
@@ -123,8 +123,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [prefDurata,      setPrefDurata]      = useState(270)
   const [hrRest,          setHrRest]          = useState<number | undefined>(undefined)
   const [hrMax,           setHrMax]           = useState<number | undefined>(undefined)
-  const [openSection,     setOpenSection]     = useState<SectionKind | null>(null)
-  const [showPoiLayer,    setShowPoiLayer]    = useState(false)
   const [driving,         setDriving]         = useState<{ distanceMeters: number; durationSeconds: number } | null>(null)
 
   const heroPolyline = useMemo((): [number, number][] => {
@@ -137,7 +135,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const s2    = useSentinel2({ polyline: heroPolyline })
   const flora = useFlora(heroPolyline, activity?.altitudeMax)
   const poiCenter = useCenteredItem(pois.length)
-  const [altActiveIndex, setAltActiveIndex] = useState<number | null>(null)
   const [showFloraGallery, setShowFloraGallery] = useState(false)
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
 
@@ -207,6 +204,21 @@ export default function ResocontoHub({ id }: { id?: string }) {
     const savedCover = localStorage.getItem(`dtrek_cover_${currentId}`)
     if (savedCover) setCoverPhotoId(savedCover)
   }, [currentId, router])
+
+  // Cover subtitle for the magazine closed-card — heuristic (not AI-authored like Guida's, see
+  // lib/extractLeadSubtitle.ts) lead-paragraph extraction from the resoconto narrativo, if one has
+  // already been generated (app/resoconto/[id]/RacconContent.tsx owns that generation flow).
+  const [coverSubtitle, setCoverSubtitle] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    setCoverSubtitle(undefined)
+    if (!currentId) return
+    let cancelled = false
+    fetch(`/api/resoconto?activityId=${encodeURIComponent(currentId)}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setCoverSubtitle(extractLeadSubtitle(d?.content)) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [currentId])
 
   useEffect(() => {
     if (!activity) return
@@ -411,30 +423,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const rated     = (activity?.userRating ?? 0) > 0
   const dateISO   = activity ? activity.startTime.slice(0, 10) : undefined
 
-  const renderStageMap = (item: RouteHubItem, interactive: boolean, obscuredBottomPx: number) => {
-    if (!activity || item.id !== activity.id) return <div className="absolute inset-0 bg-gradient-to-br from-forest-900 to-forest-950" />
-    if (!hasGps) return <div className="absolute inset-0 flex items-center justify-center text-stone-400 text-sm">Tracciato non disponibile</div>
-    return (
-      <MapView trackPoints={activity.trackPoints} height="100%" interactive={interactive}
-        showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile} pois={pois} wikiPages={wikiPages}
-        highlightedPoiIndex={openSection === 'poi' ? poiCenter.centeredIndex : null}
-        activeIndex={openSection === 'profilo' ? altActiveIndex : null}
-        showPoiLayer={showPoiLayer}
-        obscuredBottomPx={obscuredBottomPx}
-      />
-    )
-  }
-
-  const poiToggleChip = (
-    <button
-      onClick={() => setShowPoiLayer(v => !v)}
-      title="Punti di interesse"
-      className={`flex items-center justify-center w-9 h-9 rounded-full border transition-colors ${showPoiLayer ? 'bg-fuchsia-500/80 border-fuchsia-300/40 text-white' : 'bg-black/50 border-white/15 text-white/80'} backdrop-blur-md`}
-    >
-      <MapPin className="w-4 h-4" />
-    </button>
-  )
-
   const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!activity || routeItem.id !== activity.id || !rated) return null
     return (
@@ -562,7 +550,15 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (section === 'profilo') return (
       <div className="px-4 py-4 space-y-5">
         {hasGps && activity.trackPoints.length ? (
-          <ElevationProfileChart trackPoints={activity.trackPoints} onHover={setAltActiveIndex} />
+          <RouteMapSection
+            trackPoints={activity.trackPoints}
+            pois={pois}
+            highlightedPoiIndex={poiCenter.centeredIndex}
+            onOpenMap3D={() => setShow3D(true)}
+            showGradient={showGradient}
+            showAspect={showAspect}
+            dtmProfile={dtmProfile}
+          />
         ) : (
           <p className={`text-sm italic text-center py-8 ${textMuted}`}>Profilo altimetrico non disponibile senza un tracciato GPS.</p>
         )}
@@ -639,7 +635,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     return (
       <div className="px-4 py-4 space-y-1">
         <button onClick={() => router.push(`/resoconto/${encodeURIComponent(activity.id)}/leggi`)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
-          <BookOpen className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Racconto</span>
+          <BookOpen className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Resoconto</span>
         </button>
         <button onClick={() => setShowStreetView(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
           <Images className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Foto zona (street view)</span>
@@ -757,16 +753,15 @@ export default function ResocontoHub({ id }: { id?: string }) {
           // double-render — this is a purely cosmetic address-bar sync, not a real navigation.
           window.history.replaceState(null, '', `/resoconto/${encodeURIComponent(item.id)}`)
         }}
-        renderStageMap={renderStageMap}
+        bodyMode="tabbed"
         tabs={tabs}
         renderSection={renderSection}
         tabScrollRef={tabScrollRef}
         primaryAction={primaryAction}
-        onSectionChange={(section) => { setOpenSection(section); if (section === 'poi') setShowPoiLayer(true) }}
         scoreBadges={scoreBadges}
         weatherIcon={(routeItem) => activity && routeItem.id === activity.id ? weatherIcon : undefined}
-        onOpenMap3D={hasGps ? () => setShow3D(true) : undefined}
-        mapHeaderActions={poiToggleChip}
+        subtitle={(routeItem) => activity && routeItem.id === activity.id ? coverSubtitle : undefined}
+        topOverlayVariant="magazine"
         heroPhotos={heroPhotos}
         importLabel="Carica"
         onImport={() => router.push('/upload?tab=activity')}
@@ -808,7 +803,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCoverPicker(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-barlow font-bold text-stone-700 uppercase tracking-wide text-sm">Scegli la copertina</h3>
+              <h3 className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm">Scegli la copertina</h3>
               <button onClick={() => setShowCoverPicker(false)} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4" /></button>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-80 overflow-y-auto">
