@@ -9,7 +9,20 @@ import { computeTrailDtmProfile, type TrailDtmProfile } from '@/lib/dtm/trailDtm
 
 export const dynamic = 'force-dynamic'
 
+// Was previously unset, same issue cf8b28d fixed for /api/tei-terrain: a stalled upstream
+// (OpenTopography, Supabase cache lookup) could run this function all the way out to the
+// account's max duration (300s) on every bad invocation. Same cap as the other trails routes.
+export const maxDuration = 30
+const COMPUTE_TIMEOUT_MS = 25000
+
 const UNAVAILABLE: TrailDtmProfile = { source: 'unavailable', points: [], avgSlopeDeg: null, maxSlopeDeg: null }
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ])
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +41,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'track must be an array of [lat,lon] pairs' }, { status: 400 })
     }
 
-    const profile = await computeTrailDtmProfile(track as [number, number][])
+    const profile = await withTimeout(computeTrailDtmProfile(track as [number, number][]), COMPUTE_TIMEOUT_MS)
     return NextResponse.json(profile)
   } catch (e) {
     console.error('GET /api/tei-dtm:', e)

@@ -929,11 +929,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       .filter(p => p.lat && p.lon)
       .map(p => [p.lon!, p.lat!] as [number, number])
     if (coords.length < 2) return
-    if (!map.getSource('planned-route')) {
-      map.addSource('planned-route', {
-        type: 'geojson',
-        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} },
-      })
+    const data = { type: 'Feature' as const, geometry: { type: 'LineString' as const, coordinates: coords }, properties: {} }
+    if (map.getSource('planned-route')) {
+      ;(map.getSource('planned-route') as any).setData(data)
+    } else {
+      map.addSource('planned-route', { type: 'geojson', data })
       map.addLayer({
         id: 'planned-route-line',
         type: 'line',

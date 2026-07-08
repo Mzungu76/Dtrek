@@ -52,13 +52,17 @@ export default function InstallPWA() {
     }
     window.addEventListener('beforeinstallprompt', handler)
 
-    window.addEventListener('appinstalled', () => {
+    const installedHandler = () => {
       setInstalled(true)
       setShowBanner(false)
       setDeferredPrompt(null)
-    })
+    }
+    window.addEventListener('appinstalled', installedHandler)
 
-    return () => window.removeEventListener('beforeinstallprompt', handler)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler)
+      window.removeEventListener('appinstalled', installedHandler)
+    }
   }, [])
 
   const handleInstall = async () => {

@@ -114,8 +114,10 @@ export function parseGpx(xmlText: string): GpxActivity {
   const alts = rawPoints
     .filter(p => p.altitudeMeters !== undefined)
     .map(p => p.altitudeMeters!)
-  const altitudeMax = alts.length ? Math.max(...alts) : 0
-  const altitudeMin = alts.length ? Math.min(...alts) : 0
+  // reduce(), not Math.min/max(...arr) — a very long recording (100k+ points) would blow the
+  // call stack spreading the whole array as arguments.
+  const altitudeMax = alts.length ? alts.reduce((a, b) => Math.max(a, b)) : 0
+  const altitudeMin = alts.length ? alts.reduce((a, b) => Math.min(a, b)) : 0
 
   // Naismith's rule: 1h per 4 km + 1h per 300 m D+
   const distKm = distanceMeters / 1000

@@ -58,13 +58,21 @@ export function minDistToTrack(lat: number, lon: number, track: [number, number]
 
 /** Returns "s,w,n,e" string with 0.01° padding around the track bounding box. */
 export function computeBbox(track: [number, number][], pad = 0.01): string {
-  const lats = track.map(p => p[0])
-  const lons = track.map(p => p[1])
+  // reduce(), not Math.min/max(...arr) — a very long recording (100k+ points) would blow the
+  // call stack spreading the whole array as arguments. Matches Math.min/max(...[])'s original
+  // Infinity/-Infinity behavior on an empty track instead of throwing on track[0].
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity
+  for (const [lat, lon] of track) {
+    if (lat < minLat) minLat = lat
+    if (lat > maxLat) maxLat = lat
+    if (lon < minLon) minLon = lon
+    if (lon > maxLon) maxLon = lon
+  }
   return [
-    (Math.min(...lats) - pad).toFixed(5),
-    (Math.min(...lons) - pad).toFixed(5),
-    (Math.max(...lats) + pad).toFixed(5),
-    (Math.max(...lons) + pad).toFixed(5),
+    (minLat - pad).toFixed(5),
+    (minLon - pad).toFixed(5),
+    (maxLat + pad).toFixed(5),
+    (maxLon + pad).toFixed(5),
   ].join(',')
 }
 

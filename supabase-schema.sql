@@ -560,6 +560,21 @@ CREATE TABLE IF NOT EXISTS uso_suolo_cache (
 
 CREATE INDEX IF NOT EXISTS idx_uso_suolo_cache_expires_at ON uso_suolo_cache (expires_at);
 
+-- ── Cache DTM (OpenTopography Global DEM, bbox-keyed) ─────────────────────────
+-- Stesso blocco anche in supabase/migrations/add_dtm_cache.sql. tile serializza
+-- DtmTile con elevations come number[] (jsonb non supporta TypedArray) — vedi
+-- lib/dtm/dtmCache.ts per il round-trip. TTL lungo (180gg): il terreno non
+-- cambia nel tempo a parità di bbox.
+CREATE TABLE IF NOT EXISTS dtm_cache (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  bbox_key      text NOT NULL UNIQUE,
+  tile          jsonb,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dtm_cache_expires_at ON dtm_cache (expires_at);
+
 
 -- ═══════════════════════════════════════════════════════════
 -- Geoportale Nazionale MASE/ISPRA — Fase 5 (Rete Natura 2000)

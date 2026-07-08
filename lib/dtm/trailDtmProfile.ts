@@ -7,7 +7,7 @@
 // fetchDtmTile/parseDtmGeoTiff already establish between "not configured" and "no coverage here".
 import { sampleEveryNMeters } from '@/lib/trailStats'
 import { bboxBufferMeters } from '@/lib/geo/bufferUtils'
-import { fetchDtmTile } from '@/lib/dtm/dtmClient'
+import { fetchDtmTileCached } from '@/lib/dtm/dtmCache'
 import { sampleSlopeAspectAtPoint } from '@/lib/dtm/slopeAspect'
 
 export interface DtmProfilePoint {
@@ -35,7 +35,7 @@ export async function computeTrailDtmProfile(track: [number, number][]): Promise
   const sampled = sampleEveryNMeters(track, SAMPLE_INTERVAL_M)
   const bbox = bboxBufferMeters(track, TILE_BUFFER_M)
 
-  const tile = await fetchDtmTile(bbox)
+  const tile = await fetchDtmTileCached(bbox)
   if (!tile) return UNAVAILABLE
 
   const points: DtmProfilePoint[] = []
