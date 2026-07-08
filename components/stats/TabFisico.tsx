@@ -149,7 +149,7 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
                    'Stabile rispetto al recente'}
                 </p>
               </div>
-              <p className="text-xs text-stone-400 mt-2 leading-tight">Basato sull'efficienza aerobica (velocità/FC) confrontata con il tuo storico.</p>
+              <p className="text-xs text-stone-400 mt-2 leading-tight">Basato sull&apos;efficienza aerobica (velocità/FC) confrontata con il tuo storico.</p>
               <div className="mt-3 h-2 bg-stone-100 rounded-full overflow-hidden">
                 <div className="h-2 rounded-full bg-forest-400 transition-all" style={{ width: `${fitnessInfo.score}%` }} />
               </div>
@@ -344,9 +344,9 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
       <div className="bg-sky-50 rounded-2xl border border-sky-100 p-5 text-sm text-sky-800 space-y-2">
         <p className="font-semibold">Come interpretare le metriche fisiche</p>
         <p><strong>Recovery Score</strong>: derivato dal TSB (Training Stress Balance). Un valore alto indica che sei riposato e pronto per uno sforzo intenso.</p>
-        <p><strong>Fitness Score</strong>: confronta l'efficienza aerobica recente (EF) con il tuo massimo storico. Non è una scala assoluta — misura la tua evoluzione personale.</p>
+        <p><strong>Fitness Score</strong>: confronta l&apos;efficienza aerobica recente (EF) con il tuo massimo storico. Non è una scala assoluta — misura la tua evoluzione personale.</p>
         <p><strong>EF (Efficiency Factor)</strong>: velocità / FC, normalizzato per il dislivello. Un EF che cresce nel tempo è il segnale più affidabile di un miglioramento aerobico.</p>
-        <p><strong>VO₂max</strong>: stima dalla formula Uth-Sørensen (FC max / FC riposo × 15,3). È un'approssimazione — per valori precisi serve un test da laboratorio.</p>
+        <p><strong>VO₂max</strong>: stima dalla formula Uth-Sørensen (FC max / FC riposo × 15,3). È un&apos;approssimazione — per valori precisi serve un test da laboratorio.</p>
         <p className="text-xs text-sky-600">Imposta FC massima e FC a riposo nel tuo profilo per calcoli più accurati.</p>
       </div>
     </div>

@@ -53,7 +53,7 @@ export default function SpeciesIdentifySheet({ position, onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-display font-bold text-stone-800 flex items-center gap-1.5"><Leaf className="w-4 h-4 text-forest-600" /> Cos'è questo?</h3>
+          <h3 className="font-display font-bold text-stone-800 flex items-center gap-1.5"><Leaf className="w-4 h-4 text-forest-600" /> Cos&apos;è questo?</h3>
           <button onClick={onClose} className="p-1.5 rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200" aria-label="Chiudi">
             <X size={16} />
           </button>

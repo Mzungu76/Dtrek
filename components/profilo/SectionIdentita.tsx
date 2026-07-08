@@ -121,7 +121,7 @@ export default function SectionIdentita() {
           </div>
           <div className="flex-1">
             <p className="text-sm text-stone-600 leading-relaxed">
-              Carica una foto frontale. Verrà ritagliata circolare e applicata sull'escursionista nei video 3D.
+              Carica una foto frontale. Verrà ritagliata circolare e applicata sull&apos;escursionista nei video 3D.
             </p>
             {faceUrl && (
               <button

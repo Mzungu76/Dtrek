@@ -70,9 +70,9 @@ export default function TabGuida({ initialAnchor }: Props) {
           <h2 className="text-xl font-bold font-display">Guida alle Statistiche</h2>
         </div>
         <p className="text-forest-200 text-sm leading-relaxed">
-          Spiegazione di ogni indice, grafico e metrica. Clicca l'icona
+          Spiegazione di ogni indice, grafico e metrica. Clicca l&apos;icona
           <span className="inline-flex w-4 h-4 rounded-full bg-white/20 text-white text-[10px] font-bold items-center justify-center mx-1.5 align-middle">i</span>
-          accanto a qualsiasi dato nell'app per arrivare direttamente alla sezione corrispondente.
+          accanto a qualsiasi dato nell&apos;app per arrivare direttamente alla sezione corrispondente.
         </p>
       </div>
 
@@ -80,7 +80,7 @@ export default function TabGuida({ initialAnchor }: Props) {
       <Card title="Panoramica" icon={<Activity className="w-4 h-4 text-forest-600" />}>
 
         <Section id="kpi" icon={<BarChart2 className="w-4 h-4" />} title="Indicatori Chiave (KPI)">
-          <p>I sei riquadri in cima mostrano i valori cumulativi dell'intera carriera:</p>
+          <p>I sei riquadri in cima mostrano i valori cumulativi dell&apos;intera carriera:</p>
           <ul className="list-disc list-inside space-y-1 pl-1">
             <li><strong>Distanza totale</strong> — somma di tutti i km percorsi.</li>
             <li><strong>Tempo totale</strong> — ore e minuti complessivi in movimento.</li>
@@ -92,14 +92,14 @@ export default function TabGuida({ initialAnchor }: Props) {
         </Section>
 
         <Section id="streak" icon={<Activity className="w-4 h-4" />} title="Continuità (Streak)">
-          <p>Una <strong>streak</strong> è una serie consecutiva di giorni o settimane con almeno un'uscita.</p>
+          <p>Una <strong>streak</strong> è una serie consecutiva di giorni o settimane con almeno un&apos;uscita.</p>
           <ul className="list-disc list-inside space-y-1 pl-1">
             <li><strong>Streak attuale (giorni)</strong> — quanti giorni di fila stai uscendo fino ad oggi.</li>
             <li><strong>Record streak</strong> — la serie più lunga mai raggiunta.</li>
-            <li><strong>Streak settimanale</strong> — settimane consecutive con almeno un'uscita (criterio più accessibile).</li>
+            <li><strong>Streak settimanale</strong> — settimane consecutive con almeno un&apos;uscita (criterio più accessibile).</li>
             <li><strong>Giorni/settimane attivi totali</strong> — conteggio complessivo, non necessariamente consecutivo.</li>
           </ul>
-          <Tip>La streak settimanale è più sostenibile: punta ad almeno un'uscita ogni 7 giorni invece di ogni giorno.</Tip>
+          <Tip>La streak settimanale è più sostenibile: punta ad almeno un&apos;uscita ogni 7 giorni invece di ogni giorno.</Tip>
         </Section>
 
         <Section id="records" icon={<Trophy className="w-4 h-4" />} title="Record Personali">
@@ -115,7 +115,7 @@ export default function TabGuida({ initialAnchor }: Props) {
         </Section>
 
         <Section id="passo" icon={<Zap className="w-4 h-4" />} title="Passo (min/km)">
-          <p>Quanti minuti e secondi impieghi mediamente per percorrere 1 km. È l'inverso della velocità.</p>
+          <p>Quanti minuti e secondi impieghi mediamente per percorrere 1 km. È l&apos;inverso della velocità.</p>
           <Formula>Passo = Durata totale (min) ÷ Distanza (km)</Formula>
           <p>Per il trekking un passo tipico è 12–20 min/km; in salita ripida può superare i 30 min/km.</p>
         </Section>
@@ -137,7 +137,7 @@ export default function TabGuida({ initialAnchor }: Props) {
       <Card title="Grafici" icon={<BarChart2 className="w-4 h-4 text-forest-600" />}>
 
         <Section id="heatmap" icon={<CalendarIcon />} title="Calendario Attività (Heatmap)">
-          <p>Ogni cella è un giorno dell'anno. Il colore si intensifica con i km percorsi:</p>
+          <p>Ogni cella è un giorno dell&apos;anno. Il colore si intensifica con i km percorsi:</p>
           <ul className="list-disc list-inside space-y-1 pl-1">
             <li>Grigio chiaro — nessuna uscita</li>
             <li>Verde chiaro → verde scuro — 1 km → ≥ 20 km</li>
@@ -153,8 +153,8 @@ export default function TabGuida({ initialAnchor }: Props) {
           <p>Andamento dei tre punteggi soggettivi nel tempo:</p>
           <ul className="list-disc list-inside space-y-1 pl-1">
             <li><strong>Trail Score (0–100)</strong> — qualità complessiva del percorso.</li>
-            <li><strong>Soddisfazione (×10)</strong> — come ti sei sentito nell'uscita.</li>
-            <li><strong>Rating (×10)</strong> — valutazione personale dell'escursione.</li>
+            <li><strong>Soddisfazione (×10)</strong> — come ti sei sentito nell&apos;uscita.</li>
+            <li><strong>Rating (×10)</strong> — valutazione personale dell&apos;escursione.</li>
           </ul>
           <p>La <strong>linea continua</strong> è la media mobile a 5 uscite (riduce il rumore dei singoli valori). La descrizione testuale indica il trend della regressione lineare:</p>
           <Formula>Regressione lineare: y = a·x + b → slope a {'>'} 0 = miglioramento nel tempo</Formula>
@@ -169,7 +169,7 @@ export default function TabGuida({ initialAnchor }: Props) {
             <li>❄️ <strong>Inverno</strong> — dicembre, gennaio, febbraio</li>
           </ul>
           <p>Per ogni stagione: numero di uscite, km medi, D+ medio, FC media e soddisfazione media.</p>
-          <Tip>La FC media estiva è spesso più alta a parità di sforzo, per il calore. L'autunno è tipicamente il periodo di forma fisica migliore.</Tip>
+          <Tip>La FC media estiva è spesso più alta a parità di sforzo, per il calore. L&apos;autunno è tipicamente il periodo di forma fisica migliore.</Tip>
         </Section>
 
         <Section id="altimetrica" icon={<Mountain className="w-4 h-4" />} title="Distribuzione Altimetrica">
@@ -189,11 +189,11 @@ export default function TabGuida({ initialAnchor }: Props) {
           <p>Il modello di <strong>Training Load</strong> — usato da coach professionisti e piattaforme come TrainingPeaks — descrive la tua forma tramite tre indici:</p>
           <ul className="list-disc list-outside pl-4 space-y-3 mt-2">
             <li>
-              <strong>CTL — Fitness (verde)</strong>: media esponenziale del carico su 42 giorni. Rappresenta la capacità aerobica accumulata. Sale lentamente con l'allenamento costante.
+              <strong>CTL — Fitness (verde)</strong>: media esponenziale del carico su 42 giorni. Rappresenta la capacità aerobica accumulata. Sale lentamente con l&apos;allenamento costante.
               <Formula>CTL(oggi) = CTL(ieri) × e^(−1/42) + TSS × (1 − e^(−1/42))</Formula>
             </li>
             <li>
-              <strong>ATL — Fatica (arancione)</strong>: media esponenziale su 7 giorni. Sale rapidamente dopo un'uscita intensa e scende in pochi giorni di riposo.
+              <strong>ATL — Fatica (arancione)</strong>: media esponenziale su 7 giorni. Sale rapidamente dopo un&apos;uscita intensa e scende in pochi giorni di riposo.
               <Formula>ATL(oggi) = ATL(ieri) × e^(−1/7) + TSS × (1 − e^(−1/7))</Formula>
             </li>
             <li>
@@ -206,7 +206,7 @@ export default function TabGuida({ initialAnchor }: Props) {
               </ul>
             </li>
           </ul>
-          <Tip>Il picco di prestazione si raggiunge quando CTL è alto e TSB è leggermente positivo (5–15). Per un'uscita importante, riduci il carico 7–10 giorni prima.</Tip>
+          <Tip>Il picco di prestazione si raggiunge quando CTL è alto e TSB è leggermente positivo (5–15). Per un&apos;uscita importante, riduci il carico 7–10 giorni prima.</Tip>
         </Section>
 
         <Section id="tss" icon={<Zap className="w-4 h-4" />} title="TSS — Training Stress Score">
@@ -256,7 +256,7 @@ export default function TabGuida({ initialAnchor }: Props) {
             <li><strong>Speciale</strong> — performance particolari (passo rapido, rating perfetto, Trail Score elevato)</li>
           </ul>
           <p>I badge bloccati mostrano una barra di avanzamento con la percentuale già completata verso il prossimo obiettivo.</p>
-          <Tip>Il bollino "NEW" compare sui badge sbloccati dall'ultima visita a questa pagina — non li perderai.</Tip>
+          <Tip>Il bollino &quot;NEW&quot; compare sui badge sbloccati dall&apos;ultima visita a questa pagina — non li perderai.</Tip>
         </Section>
 
       </Card>
@@ -277,14 +277,14 @@ export default function TabGuida({ initialAnchor }: Props) {
         </Section>
 
         <Section id="fitness-score" icon={<TrendingUp className="w-4 h-4" />} title="Fitness Score">
-          <p>Misura l'efficienza aerobica attuale rispetto al <strong>picco personale storico</strong>. È una scala relativa — 100/100 significa che sei nella migliore forma mai registrata su DTrek.</p>
+          <p>Misura l&apos;efficienza aerobica attuale rispetto al <strong>picco personale storico</strong>. È una scala relativa — 100/100 significa che sei nella migliore forma mai registrata su DTrek.</p>
           <Formula>Fitness Score = EF_recente ÷ EF_max_storico × 100</Formula>
           <p>La freccia accanto al valore indica il trend rispetto alle ultime 3 uscite con dati di FC.</p>
           <Tip>Un Fitness Score che sale gradualmente nei mesi è il segnale più chiaro di un miglioramento aerobico.</Tip>
         </Section>
 
         <Section id="vo2max" icon={<Heart className="w-4 h-4" />} title="VO₂max Stimato">
-          <p>Il VO₂max è la quantità massima di ossigeno consumabile per minuto per kg di peso. È il parametro più importante della capacità aerobica. L'app usa la <strong>formula Uth-Sørensen</strong>:</p>
+          <p>Il VO₂max è la quantità massima di ossigeno consumabile per minuto per kg di peso. È il parametro più importante della capacità aerobica. L&apos;app usa la <strong>formula Uth-Sørensen</strong>:</p>
           <Formula>VO₂max ≈ (FCmax ÷ FC_riposo) × 15,3  [ml/kg/min]</Formula>
           <ul className="list-disc list-inside space-y-1 pl-1 mt-1">
             <li>{'<'} 35 — basso</li>
@@ -305,18 +305,18 @@ export default function TabGuida({ initialAnchor }: Props) {
         </Section>
 
         <Section id="distribuzione-polarizzata" icon={<BarChart2 className="w-4 h-4" />} title="Distribuzione Polarizzata dell'Allenamento">
-          <p>La ricerca scientifica (Seiler, 2010) mostra che gli atleti di endurance d'élite distribuiscono il tempo di allenamento così:</p>
+          <p>La ricerca scientifica (Seiler, 2010) mostra che gli atleti di endurance d&apos;élite distribuiscono il tempo di allenamento così:</p>
           <ul className="list-disc list-inside space-y-1 pl-1">
             <li><strong>~80% bassa intensità (Z1+Z2)</strong> — costruisce la base aerobica e favorisce il recupero</li>
             <li><strong>~10% media intensità (Z3)</strong> — soglia aerobica</li>
             <li><strong>~10% alta intensità (Z4+Z5)</strong> — qualità e velocità</li>
           </ul>
-          <p>L'app stima la distribuzione dalla <strong>FC media</strong> di ogni attività (approssimazione — per dati precisi servirebbe la traccia HR secondo per secondo).</p>
-          <Tip>Troppa Z3 ("zona grigia") è l'errore più comune: stancante come la Z4 ma con ritorno inferiore. Rendi le uscite facili davvero facili e quelle dure davvero dure.</Tip>
+          <p>L&apos;app stima la distribuzione dalla <strong>FC media</strong> di ogni attività (approssimazione — per dati precisi servirebbe la traccia HR secondo per secondo).</p>
+          <Tip>Troppa Z3 (&quot;zona grigia&quot;) è l&apos;errore più comune: stancante come la Z4 ma con ritorno inferiore. Rendi le uscite facili davvero facili e quelle dure davvero dure.</Tip>
         </Section>
 
         <Section id="calorie-metabolismo" icon={<Flame className="w-4 h-4" />} title="Efficienza Metabolica (kcal/kg/h)">
-          <p>Normalizza le calorie per peso corporeo e durata, permettendo di confrontare l'intensità metabolica tra uscite diverse. Corrisponde al concetto di <strong>MET (Metabolic Equivalent)</strong>:</p>
+          <p>Normalizza le calorie per peso corporeo e durata, permettendo di confrontare l&apos;intensità metabolica tra uscite diverse. Corrisponde al concetto di <strong>MET (Metabolic Equivalent)</strong>:</p>
           <Formula>Efficienza = Calorie (kcal) ÷ Peso (kg) ÷ Durata (h)</Formula>
           <p>Valori tipici per il trekking:</p>
           <ul className="list-disc list-inside space-y-1 pl-1">
