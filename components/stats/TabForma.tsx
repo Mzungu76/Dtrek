@@ -218,8 +218,8 @@ export default function TabForma({ activities, onGuideLink }: Props) {
 
       <div className="bg-sky-50 rounded-2xl border border-sky-100 p-5 text-sm text-sky-800 space-y-2">
         <p className="font-semibold">Come leggere questi grafici</p>
-        <p><strong>CTL (Fitness)</strong> sale lentamente con l'allenamento costante — rappresenta la capacità aerobica accumulata.</p>
-        <p><strong>ATL (Fatica)</strong> sale velocemente dopo un'uscita impegnativa e scende in pochi giorni di riposo.</p>
+        <p><strong>CTL (Fitness)</strong> sale lentamente con l&apos;allenamento costante — rappresenta la capacità aerobica accumulata.</p>
+        <p><strong>ATL (Fatica)</strong> sale velocemente dopo un&apos;uscita impegnativa e scende in pochi giorni di riposo.</p>
         <p><strong>TSB (Forma)</strong> = CTL − ATL. Positivo significa che sei fresco e pronto; negativo che sei affaticato. Il picco di forma si ottiene dopo alcuni giorni di recupero prima di un evento importante.</p>
         <p className="text-xs text-sky-600">I valori TSS sono stimati da distanza, dislivello e durata.</p>
       </div>

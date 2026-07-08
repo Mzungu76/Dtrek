@@ -240,7 +240,7 @@ export default function ActivityPhotoManager({
           : <>
               <Upload className="w-5 h-5 text-stone-400" />
               <span className="text-sm text-stone-500">Trascina le foto qui o <span className="text-forest-600 font-medium">clicca per scegliere</span></span>
-              <span className="text-xs text-stone-400">GPS automatico se presente nell'EXIF · più file supportati</span>
+              <span className="text-xs text-stone-400">GPS automatico se presente nell&apos;EXIF · più file supportati</span>
             </>
         }
         <input

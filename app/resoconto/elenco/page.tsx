@@ -326,14 +326,14 @@ export default function ResocontoIndexPage() {
             </div>
             <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessuna escursione conclusa</h2>
             <p className="text-stone-400 text-sm max-w-sm mb-6 px-4">
-              Il resoconto di un'escursione si genera automaticamente quando concludi una navigazione
-              dal tab Guida, oppure carica direttamente un'attività registrata.
+              Il resoconto di un&apos;escursione si genera automaticamente quando concludi una navigazione
+              dal tab Guida, oppure carica direttamente un&apos;attività registrata.
             </p>
             <Link
               href="/upload?tab=activity"
               className="flex items-center gap-2 px-6 py-3 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium transition-colors"
             >
-              <Upload className="w-5 h-5" /> Carica un'escursione
+              <Upload className="w-5 h-5" /> Carica un&apos;escursione
             </Link>
           </div>
 

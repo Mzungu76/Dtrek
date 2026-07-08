@@ -311,7 +311,7 @@ export default function TabConfronto({ activities, onGuideLink }: Props) {
               )}
             </div>
             {!allFullLoaded ? (
-              <p className="text-sm text-stone-400 text-center py-8">Clicca "Carica dati GPS" per visualizzare i profili altimetrici e le zone cardiache.</p>
+              <p className="text-sm text-stone-400 text-center py-8">Clicca &quot;Carica dati GPS&quot; per visualizzare i profili altimetrici e le zone cardiache.</p>
             ) : (
               <div className="space-y-6">
                 {elevMerged.length > 0 && (
