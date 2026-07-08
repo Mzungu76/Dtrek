@@ -1,28 +1,30 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import PhotoMosaic from '@/components/PhotoMosaic'
-import RouteTimeline from '@/app/components/RouteTimeline'
 import { getActivityById, type StoredActivity } from '@/lib/blobStore'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
-import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   parseSections, markdownToSections, sectionsToMarkdown, SCAFFOLD_SECTIONS,
   type ReportSection, type ReportAuthoredBy,
 } from '@/lib/reportStore'
-import SectionCard from '@/app/components/ResocontoSectionCard'
 import ManualEditor from '@/app/components/ManualEditor'
 import {
-  FileDown, Pencil, Check, Loader2, Mountain, Clock, Route, Flame,
-  Images, X, BookOpen, Share2, Copy, Link2Off, ExternalLink,
+  FileDown, Pencil, Check, Loader2,
+  Images, BookOpen, Share2, Copy, Link2Off, ExternalLink,
 } from 'lucide-react'
+import { HeroSection } from './HeroSection'
+import { ReportSections } from './ReportSections'
+import { PhotoGallery } from './PhotoGallery'
+import { PrintPhotoGrid } from './PrintPhotoGrid'
+import { HiddenPdfRoot } from './HiddenPdfRoot'
+import { PhotoLightbox } from './PhotoLightbox'
 
-const RouteMap3D    = dynamic(() => import('@/components/RouteMap3D'),    { ssr: false })
-const RoutePhotoMap = dynamic(() => import('@/app/components/RoutePhotoMap'), { ssr: false })
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -39,20 +41,6 @@ interface HikeReport {
 }
 
 type ResocontoLength = 'breve' | 'media' | 'lunga'
-
-// Photo slot is keyed by section title (not array position) so that omitting
-// "Cronaca" (no questionnaire answered) doesn't shift the photos bound to the
-// sections that follow it.
-const SECTION_PHOTO_SLOT: Record<string, number> = {
-  'Il percorso':     0,
-  'Cronaca':         1,
-  'Natura e storia': 2,
-  'In sintesi':      3,
-}
-
-function slotFor(title: string, fallbackIndex: number): number {
-  return SECTION_PHOTO_SLOT[title] ?? fallbackIndex
-}
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
@@ -344,36 +332,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         </div>
       )}
 
-      {/* ── Hero ── */}
-      <div className="relative w-full overflow-hidden print:h-[220px]"
-        style={{ height: 'clamp(220px, 38vw, 420px)' }}>
-        {heroPhoto
-          ? <img src={heroPhoto.url} alt=""
-              className="absolute inset-0 w-full h-full object-cover" />
-          : <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />
-        }
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(31,22,15,0.75) 0%, rgba(31,22,15,0.25) 45%, transparent 100%)' }} />
-        <div className="absolute inset-x-0 bottom-0 p-6 max-w-5xl mx-auto">
-          <h1 className="font-display text-3xl sm:text-5xl font-black text-white leading-tight uppercase tracking-tight drop-shadow-lg mb-2">
-            {activity.title ?? activity.notes ?? 'Escursione'}
-          </h1>
-          {dateStr && (
-            <p className="font-body text-sm italic text-white/80">{dateStr}</p>
-          )}
-          <div className="flex flex-wrap gap-2 mt-3">
-            {[
-              { icon: <Route className="w-3 h-3" />, v: `${(activity.distanceMeters / 1000).toFixed(1)} km` },
-              { icon: <Mountain className="w-3 h-3" />, v: `${activity.elevationGain.toFixed(0)} m D+` },
-              { icon: <Clock className="w-3 h-3" />, v: formatDuration(activity.totalTimeSeconds) },
-              ...(activity.calories > 0 ? [{ icon: <Flame className="w-3 h-3" />, v: `${activity.calories} kcal` }] : []),
-            ].map(({ icon, v }) => (
-              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white font-display tracking-wide">
-                {icon} {v}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+      <HeroSection activity={activity} heroPhoto={heroPhoto} dateStr={dateStr} />
 
       {photosError && (
         <div className="max-w-5xl mx-auto px-4 pt-4 print:hidden">
@@ -622,59 +581,9 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         )}
 
         {/* ── Rendered sections ── */}
-        {editorMode === 'view' && !isEditing && (() => {
-          const miniMapNode = activity.trackPoints.length > 4 ? (
-            <div className="float-right ml-5 mb-4 w-52 shrink-0 hidden md:block print:block">
-              <div className="bg-stone-50 rounded-xl border border-stone-200 overflow-hidden shadow-sm">
-                <RoutePhotoMap
-                  trackPoints={activity.trackPoints}
-                  photos={photos}
-                  height="170px"
-                />
-                {photos.length > 0 && (
-                  <div className="px-2 pt-1 pb-2 space-y-0.5">
-                    {photos.slice(0, 7).map((ph, i) => (
-                      <div key={ph.id} className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0 font-display">
-                          {i + 1}
-                        </span>
-                        <span className="font-body text-[9px] text-stone-500 truncate">{ph.caption}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : undefined
-
-          return (
-            <>
-              {sections.map((section, i) => {
-                const slot = slotFor(section.title, i)
-                return (
-                  <SectionCard
-                    key={i}
-                    section={section}
-                    index={i}
-                    photo={slot === 0 ? undefined : photos[slot]}
-                    photoIndex={slot === 0 ? undefined : slot + 1}
-                    floatNode={slot === 0 ? miniMapNode : undefined}
-                  />
-                )
-              })}
-
-              {/* ── Elevation profile with photo markers — end of report ── */}
-              {sections.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-5 print:rounded-none print:shadow-none print:border-0 print:border-t print:border-stone-200">
-                  <h3 className="font-display font-bold uppercase tracking-[2px] text-xs text-stone-400 mb-3">
-                    Profilo altimetrico
-                  </h3>
-                  <RouteTimeline trackPoints={activity.trackPoints} photos={photos} />
-                </div>
-              )}
-            </>
-          )
-        })()}
+        {editorMode === 'view' && !isEditing && (
+          <ReportSections activity={activity} photos={photos} sections={sections} />
+        )}
 
         {/* ── Raw streaming text (before first section parsed) ── */}
         {editorMode === 'view' && generating && !sections.length && content && (
@@ -685,64 +594,12 @@ export default function RacconContent({ activityId }: { activityId: string }) {
 
         {/* ── Photo gallery (screen only) ── */}
         {editorMode === 'view' && photos.length > 0 && content && (
-          <section className="mt-8 print:hidden">
-            <h3 className="font-display font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
-              Le tue foto
-            </h3>
-            <div className="flex gap-3 overflow-x-auto pb-3">
-              {photos.map((ph, i) => (
-                <button key={ph.id} onClick={() => setLightbox(ph)}
-                  className="shrink-0 w-36 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-                  <div className="relative">
-                    <img src={ph.url} alt={ph.caption}
-                      className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
-                    <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-display">
-                      {i + 1}
-                    </span>
-                  </div>
-                  {ph.caption && (
-                    <p className="px-2 py-1.5 font-body text-[10px] italic text-stone-500 leading-snug bg-white">
-                      {i + 1}. {ph.caption}
-                    </p>
-                  )}
-                </button>
-              ))}
-            </div>
-          </section>
+          <PhotoGallery photos={photos} onPhotoClick={setLightbox} />
         )}
 
         {/* ── Print-only photo grid ── */}
         {editorMode === 'view' && photos.length > 0 && content && (
-          <section className="hidden print:block mt-6 pt-4 border-t border-stone-200">
-            <h3 className="font-display font-bold uppercase tracking-[2px] text-sm text-stone-500 mb-4">
-              Documentazione fotografica
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
-              {photos.map((ph, i) => (
-                <div key={ph.id} style={{ breakInside: 'avoid' }}>
-                  <div style={{ position: 'relative' }}>
-                    <img src={ph.url} alt={ph.caption}
-                      style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8 }} />
-                    <span style={{
-                      position: 'absolute', top: 6, left: 6,
-                      width: 18, height: 18, background: '#f59e0b', color: 'white',
-                      borderRadius: '50%', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', fontSize: 8, fontWeight: 'bold',
-                      border: '2px solid white',
-                    }}>
-                      {i + 1}
-                    </span>
-                  </div>
-                  {ph.caption && (
-                    <p style={{ fontSize: 9, color: '#78716c', fontStyle: 'italic',
-                      marginTop: 4, textAlign: 'center', lineHeight: 1.4 }}>
-                      {i + 1}. {ph.caption}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
+          <PrintPhotoGrid photos={photos} />
         )}
 
       </main>
@@ -761,98 +618,11 @@ export default function RacconContent({ activityId }: { activityId: string }) {
 
       {/* ── Hidden PDF root (for html2pdf capture) ── */}
       {content && (
-        <div id="resoconto-print-root"
-          style={{ position: 'fixed', left: '-9999px', top: 0, width: 794, background: 'white', fontFamily: 'Georgia, serif' }}>
-          {/* Hero */}
-          <div className="pdf-block" style={{ position: 'relative', width: '100%', height: 220, overflow: 'hidden', marginBottom: 0 }}>
-            {heroPhoto
-              ? <img src={heroPhoto.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#193b20,#277134)' }} />
-            }
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(31,22,15,0.7) 0%, transparent 60%)' }} />
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '20px 32px' }}>
-              <h1 style={{ fontFamily: 'Arial Black, sans-serif', fontSize: 28, fontWeight: 900, color: 'white', margin: 0, textTransform: 'uppercase', letterSpacing: 1 }}>
-                {activity.title ?? activity.notes ?? 'Escursione'}
-              </h1>
-              {dateStr && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', fontStyle: 'italic' }}>{dateStr}</p>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                {[
-                  `${(activity.distanceMeters / 1000).toFixed(1)} km`,
-                  `${activity.elevationGain.toFixed(0)} m D+`,
-                  formatDuration(activity.totalTimeSeconds),
-                ].map(v => (
-                  <span key={v} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontFamily: 'Arial, sans-serif' }}>{v}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-          {/* Sections */}
-          <div style={{ padding: '32px 32px 0' }}>
-            {sections.map((section, i) => {
-              const slot = slotFor(section.title, i)
-              const sectionPhoto = photos[slot]
-              return (
-                <div key={i} className="pdf-block" style={{ marginBottom: 24 }}>
-                  <div style={{ background: ['#2d6a4f','#40916c','#74c69d','#b7e4c7','#d8f3dc'][i % 5], padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: 'Arial, sans-serif', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i+1).padStart(2,'0')}</span>
-                    <span style={{ fontSize: 14, fontFamily: 'Arial Black, sans-serif', fontWeight: 900, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>{section.title}</span>
-                  </div>
-                  <div style={{ padding: '12px 16px', background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
-                    {sectionPhoto && slot > 0 && (
-                      <div style={{ float: 'right', marginLeft: 12, marginBottom: 8, width: 120 }}>
-                        <div style={{ position: 'relative' }}>
-                          <img src={sectionPhoto.url} alt={sectionPhoto.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                          <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{slot+1}</span>
-                        </div>
-                        <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{sectionPhoto.caption}</p>
-                      </div>
-                    )}
-                    {section.body.split(/\n\n+/).map((p, j) => (
-                      <p key={j} style={{ fontSize: 11, lineHeight: 1.7, color: '#374151', margin: '0 0 8px' }}>{p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()}</p>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-            {/* Photo grid */}
-            {photos.length > 0 && (
-              <div className="pdf-block" style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, marginTop: 8 }}>
-                <h3 style={{ fontFamily: 'Arial, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: '#9ca3af', marginBottom: 12 }}>Documentazione fotografica</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                  {photos.map((ph, i) => (
-                    <div key={ph.id} className="pdf-block">
-                      <div style={{ position: 'relative' }}>
-                        <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#f59e0b', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', fontFamily: 'Arial, sans-serif', textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
-                      </div>
-                      {ph.caption && <p style={{ fontSize: 8, color: '#78716c', textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i+1}. {ph.caption}</p>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <HiddenPdfRoot activity={activity} heroPhoto={heroPhoto} dateStr={dateStr} sections={sections} photos={photos} />
       )}
 
       {/* ── Lightbox ── */}
-      {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 print:hidden"
-          onClick={() => setLightbox(null)}>
-          <button className="absolute top-4 right-4 text-white/70 hover:text-white">
-            <X className="w-6 h-6" />
-          </button>
-          <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-            <img src={lightbox.url} alt={lightbox.caption}
-              className="w-full rounded-2xl shadow-2xl" />
-            {lightbox.caption && (
-              <p className="font-body text-sm italic text-white/70 text-center mt-3">
-                {lightbox.caption}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
 
     </div>
   )
