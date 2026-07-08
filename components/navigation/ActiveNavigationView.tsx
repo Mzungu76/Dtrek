@@ -6,18 +6,16 @@ import Sheet from '@/components/ui/Sheet'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
 import type { HikeNote } from '@/lib/blobStore'
-import { fetchNearbyTrailPaths, type PoiItem } from '@/lib/overpass'
+import type { PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
 import { buildElevationProfile, remainingElevation } from '@/lib/navigation/elevationProfile'
 import type { PaceUpdateResult } from '@/lib/navigation/paceAssistant'
 import { altitudeTerrainMultiplier } from '@/lib/trailScore'
-import { getSunTimes, daylightMarginMinutes, type SunTimes } from '@/lib/daylight'
-import { fetchDayHourly } from '@/lib/openmeteo'
+import { daylightMarginMinutes } from '@/lib/daylight'
 import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
-import { haversineM, computeBbox } from '@/lib/geoUtils'
-import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
+import { haversineM } from '@/lib/geoUtils'
 import { extractCuriosita } from '@/lib/guideText'
 import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
 import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
@@ -48,6 +46,10 @@ import NavBottomSheet from './NavBottomSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
+import { useNearbyTrails } from './useNearbyTrails'
+import { useNatura2000Overlay } from './useNatura2000Overlay'
+import { useWeatherRefresh } from './useWeatherRefresh'
+import { useSunTimes } from './useSunTimes'
 
 interface Props {
   hike: PlannedHike
@@ -88,7 +90,6 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [isOnline, setIsOnline] = useState(true)
   const [mapMode, setMapMode] = useState<MapMode>('offline')
   const [is3D, setIs3D] = useState(false)
-  const [nearbyTrails, setNearbyTrails] = useState<[number, number][][]>([])
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
   const [gpsLostPermissionDenied, setGpsLostPermissionDenied] = useState(false)
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
@@ -103,10 +104,8 @@ export default function ActiveNavigationView({ hike }: Props) {
   // independent of anything in our request), so the toggle and its error notice were removed
   // rather than leave a control that can't currently do anything. The map component, the proxy
   // route, and the wiring all still work — this is a silent, ready-to-re-enable predisposition.
-  const [natura2000Features, setNatura2000Features] = useState<Natura2000Feature[]>([])
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
-  const [sunTimes, setSunTimes] = useState<SunTimes | null>(null)
   const [turnBackDismissed, setTurnBackDismissed] = useState(false)
   // Fino a 3 avvisi "bottom" (off-route/gps-lost, batteria scarica, rientro per
   // il buio) potevano impilarsi contemporaneamente con offset manuali a pixel
@@ -181,78 +180,14 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [activeEpochCallout, setActiveEpochCallout] = useState<EpochPoi | null>(null)
   const guideExcerpts = useMemo(() => extractCuriosita(hike.cachedGuide ?? ''), [hike.cachedGuide])
 
-  // Best-effort, non-blocking: gives the offline basemap some sense of
-  // "what other paths pass near here" instead of just a bare tile layer
-  // with one highlighted line — an explicit complaint ("la mappa offline
-  // mi sembra troppo generica"). Silently does nothing if offline or if
-  // Overpass is unreachable; the route/POIs already on the map still work.
-  useEffect(() => {
-    if (routePolyline.length < 2) return
-    fetchNearbyTrailPaths(routePolyline).then(setNearbyTrails).catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hike.id])
-
-  // Same "fetch once for the route's bbox" pattern as lib/natura2000/checkProtectedArea.ts,
-  // minus the point-in-polygon step — the raw polygons are drawn as a map overlay here, not
-  // reduced to a boolean. Best-effort: an empty/failed fetch just means the toggle shows nothing.
-  useEffect(() => {
-    if (routePolyline.length < 2) return
-    const bbox = computeBbox(routePolyline)
-    fetch(`/api/natura2000?bbox=${bbox}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((features) => setNatura2000Features(Array.isArray(features) ? features : []))
-      .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hike.id])
+  const nearbyTrails = useNearbyTrails(hike.id, routePolyline)
+  const natura2000Features = useNatura2000Overlay(hike.id, routePolyline)
 
   const positionRef = useRef(position)
   positionRef.current = position
 
-  // Feeds PaceAssistant's weather correction (lib/navigation/paceAssistant.ts) — the engine
-  // itself makes no network calls, so this owns the periodic Open-Meteo refresh and pushes
-  // the result in. Refreshed every 20min, not per GPS fix: hourly weather doesn't need
-  // finer granularity, and re-fetching on every fix would hammer the API for no benefit.
-  useEffect(() => {
-    if (routePolyline.length === 0) return
-    let cancelled = false
-    const WEATHER_REFRESH_MS = 20 * 60 * 1000
-
-    function refreshWeather() {
-      const [lat, lon] = positionRef.current ? [positionRef.current.lat, positionRef.current.lon] : routePolyline[0]
-      const today = new Date().toISOString().slice(0, 10)
-      fetchDayHourly(lat, lon, today).then((hours) => {
-        if (cancelled || !hours.length) return
-        const nowMs = Date.now()
-        const closest = hours.reduce((best, h) =>
-          Math.abs(new Date(h.time).getTime() - nowMs) < Math.abs(new Date(best.time).getTime() - nowMs) ? h : best)
-        engineRef.current?.setWeatherConditions({ tempC: closest.temperature, windKmh: closest.windspeed, precipMm: closest.precipitation })
-      }).catch(() => {})
-    }
-
-    refreshWeather()
-    const id = setInterval(refreshWeather, WEATHER_REFRESH_MS)
-    return () => { cancelled = true; clearInterval(id) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hike.id])
-
-  // Sunset/dusk for the daylight countdown + turn-back advisory — recomputed every 10min
-  // (stable to the minute over small position deltas, no need for per-fix precision).
-  useEffect(() => {
-    if (routePolyline.length === 0) return
-    let cancelled = false
-    const SUN_REFRESH_MS = 10 * 60 * 1000
-
-    function refreshSunTimes() {
-      const [lat, lon] = positionRef.current ? [positionRef.current.lat, positionRef.current.lon] : routePolyline[0]
-      const times = getSunTimes(lat, lon, new Date())
-      if (!cancelled) setSunTimes(times)
-    }
-
-    refreshSunTimes()
-    const id = setInterval(refreshSunTimes, SUN_REFRESH_MS)
-    return () => { cancelled = true; clearInterval(id) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hike.id])
+  useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef)
+  const sunTimes = useSunTimes(hike.id, routePolyline, positionRef)
 
   const remainingPois = useMemo(() => {
     if (!position) return pois.map((p) => ({ id: p.id, name: p.name, distanceM: 0 }))
