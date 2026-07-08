@@ -5,7 +5,12 @@
 // lib/geo/datasetConfig.ts.
 import { GEOLOGIA_DATASET } from '@/lib/geo/datasetConfig'
 import { wmsGetFeatureInfo } from '@/lib/geo/wmsClient'
+import { isCircuitOpen, recordFailure, recordSuccess } from '@/lib/geo/circuitBreaker'
 import { lithologyCodeToRockfallRisk, type RockfallRisk } from '@/lib/geologia/lithologyRiskMap'
+
+// Breaker key for sinacloud.isprambiente.it — this ArcGIS Server is the endpoint observed
+// cycling through 502/503/522 for extended periods (see lib/geo/circuitBreaker.ts).
+const BREAKER_KEY = 'geologia-wms'
 
 export interface GeologiaFeature {
   lithologyCode: string | null
@@ -55,18 +60,27 @@ export async function fetchGeologiaAtPoint(lat: number, lon: number): Promise<Ge
     throw new GeologiaUnavailableError('Geologia dataset endpoint not yet configured (see lib/geo/datasetConfig.ts)')
   }
 
-  const body = await wmsGetFeatureInfo({
-    baseUrl: GEOLOGIA_DATASET.baseUrl,
-    layerName: GEOLOGIA_DATASET.layerName,
-    lat,
-    lon,
-    // This ArcGIS Server (sinacloud.isprambiente.it) doesn't support plain application/json
-    // for GetFeatureInfo — confirmed against its real GetCapabilities format list (only
-    // application/geo+json among the JSON-ish options). Response shape is still standard
-    // GeoJSON, so extractProperties() below doesn't need to change.
-    infoFormat: 'application/geo+json',
-    timeoutMs: GEOLOGIA_TIMEOUT_MS,
-  })
+  if (isCircuitOpen(BREAKER_KEY)) return null
+
+  let body: unknown
+  try {
+    body = await wmsGetFeatureInfo({
+      baseUrl: GEOLOGIA_DATASET.baseUrl,
+      layerName: GEOLOGIA_DATASET.layerName,
+      lat,
+      lon,
+      // This ArcGIS Server (sinacloud.isprambiente.it) doesn't support plain application/json
+      // for GetFeatureInfo — confirmed against its real GetCapabilities format list (only
+      // application/geo+json among the JSON-ish options). Response shape is still standard
+      // GeoJSON, so extractProperties() below doesn't need to change.
+      infoFormat: 'application/geo+json',
+      timeoutMs: GEOLOGIA_TIMEOUT_MS,
+    })
+  } catch (e) {
+    recordFailure(BREAKER_KEY)
+    throw e
+  }
+  recordSuccess(BREAKER_KEY)
 
   const props = extractProperties(body)
   const lithologyCode = extractLithologyCode(props)
