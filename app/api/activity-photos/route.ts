@@ -65,6 +65,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    const { data: existingPhoto } = await supabase
+      .from('activity_photos')
+      .select('user_id')
+      .eq('id', body.id)
+      .maybeSingle()
+    if (existingPhoto && existingPhoto.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { error } = await supabase
       .from('activity_photos')
       .upsert({
