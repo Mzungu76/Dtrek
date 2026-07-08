@@ -44,6 +44,31 @@ export function pointInPolygon(lat: number, lon: number, geometry: AnyPolygonGeo
   return geometry.coordinates.some(rings => pointInRings(lat, lon, rings))
 }
 
+/**
+ * Cheap bbox-overlap pre-check for a risk-overlay geometry (PAI, Natura2000) against a track's
+ * bounding box, meant to run before the O(track.length) pointInPolygon/segmentIntersectsPolygon
+ * scan below — a geometry whose own bbox doesn't overlap the track's bbox at all can't contain
+ * or be crossed by any point on the track, so callers can skip the expensive scan entirely.
+ */
+export function geometryOverlapsBbox(
+  geometry: AnyPolygonGeometry,
+  minLat: number, minLon: number, maxLat: number, maxLon: number,
+): boolean {
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+  let gMinLat = Infinity, gMaxLat = -Infinity, gMinLon = Infinity, gMaxLon = -Infinity
+  for (const polygon of polygons) {
+    for (const ring of polygon) {
+      for (const [lon, lat] of ring) {
+        if (lat < gMinLat) gMinLat = lat
+        if (lat > gMaxLat) gMaxLat = lat
+        if (lon < gMinLon) gMinLon = lon
+        if (lon > gMaxLon) gMaxLon = lon
+      }
+    }
+  }
+  return gMinLat <= maxLat && gMaxLat >= minLat && gMinLon <= maxLon && gMaxLon >= minLon
+}
+
 // Cross-product orientation test (>0 / <0 distinguishes which side of p->q the point r is on).
 function orientation(p: LonLat, q: LonLat, r: LonLat): number {
   return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
