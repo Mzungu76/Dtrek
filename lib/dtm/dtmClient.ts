@@ -8,6 +8,11 @@
 // (2) — HTTP error, rate limit, undecodable GeoTIFF — into null.
 import { fetchGlobalDem } from '@/lib/dtm/openTopographyClient'
 import { parseDtmGeoTiff } from '@/lib/dtm/slopeAspect'
+import { isCircuitOpen, recordFailure, recordSuccess } from '@/lib/geo/circuitBreaker'
+
+// Breaker key for portal.opentopography.org — same reasoning as geologiaClient.ts's
+// 'geologia-wms' breaker: repeated failures shouldn't each wait out the full fetch timeout.
+const BREAKER_KEY = 'dtm-opentopography'
 
 export class DtmUnavailableError extends Error {}
 
@@ -30,10 +35,15 @@ export async function fetchDtmTile(bbox: string): Promise<DtmTile | null> {
     throw new DtmUnavailableError('OPENTOPOGRAPHY_API_KEY not set (see .env.example)')
   }
 
+  if (isCircuitOpen(BREAKER_KEY)) return null
+
   try {
     const buf = await fetchGlobalDem(bbox, { timeoutMs: DTM_TIMEOUT_MS })
-    return await parseDtmGeoTiff(buf)
+    const tile = await parseDtmGeoTiff(buf)
+    recordSuccess(BREAKER_KEY)
+    return tile
   } catch {
+    recordFailure(BREAKER_KEY)
     return null
   }
 }

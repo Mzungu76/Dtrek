@@ -21,6 +21,12 @@ import { resolveTrailGeometry } from '@/lib/cl/computeCL'
 import { findTrailForPolyline } from '@/lib/cl/matchTrail'
 import type { Sentinel2ApiResponse } from '@/lib/cl/types'
 
+// Was previously unset, unlike the sibling /api/trails/cl route — a stalled Planetary
+// Computer call (this route's own comment above calls its worst case "well past a
+// comfortable edge request budget") could otherwise run the invocation out to the account's
+// max duration (300s) despite the internal COMPUTE_TIMEOUT_MS below.
+export const maxDuration = 30
+
 const COMPUTE_TIMEOUT_MS = 20000
 const MATCH_TIMEOUT_MS = 4000
 
