@@ -20,7 +20,7 @@ import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
-import { AlertTriangle, Link2 } from 'lucide-react'
+import { AlertTriangle, Link2, Car } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
 import { GUIDE_SECTIONS, sectionDefForTitle, type GuideSectionKey } from '@/lib/guideSections'
 import WeatherWidget from '@/components/WeatherWidget'
@@ -113,6 +113,10 @@ interface Props {
   highlightedPoiId?: number | null
   onPoiTap?: (poiId: number) => void
   weather?: { lat: number; lon: number; mode: 'planned' | 'forecast' }
+  /** Distanza/durata in auto dall'indirizzo salvato nelle impostazioni fino al trailhead — vedi
+   *  app/guida/useDrivingDistance.ts. Undefined finché l'indirizzo non è geocodificato o non c'è
+   *  un punto di partenza noto per questo percorso. mapsUrl apre le indicazioni su Google Maps. */
+  driving?: { distanceMeters: number; durationSeconds: number; mapsUrl?: string } | null
   /** Opens the fullscreen 3D map view for the route — forwarded to the "Il percorso" map section. */
   onOpenMap3D?: () => void
   /** Pendenza/esposizione overlay state — forwarded to the "Il percorso" map section (the toggle
@@ -417,7 +421,7 @@ type GuideTier = 'breve' | 'approfondita'
 export default function GuideReader({
   hike, onHikeUpdate, topBanner, enrichmentReady, hasAiAccess,
   scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
-  weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura,
+  weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura, driving,
 }: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
   const [guideNotices, setGuideNotices] = useState<string[]>(hike.cachedGuideNotices ?? [])
@@ -816,23 +820,38 @@ export default function GuideReader({
       </div>
 
       {/* ── Stats strip ─────────────────────────────────────────────────── */}
-      <div className="flex bg-stone-50 border-b border-stone-200">
+      <div data-hscroll className="flex bg-stone-50 border-b border-stone-200 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
         {[
           { icon: <Route    className="w-3.5 h-3.5" />, value: `${(hike.distanceMeters/1000).toFixed(1)} km`,         label: 'Distanza' },
           { icon: <Mountain className="w-3.5 h-3.5" />, value: `+${Math.round(hike.elevationGain)} m`,               label: 'Dislivello' },
           { icon: <Mountain className="w-3.5 h-3.5" />, value: `${Math.round(hike.altitudeMax)} m`,                  label: 'Quota max' },
           { icon: <Clock    className="w-3.5 h-3.5" />, value: formatDuration(hike.estimatedTimeSeconds),            label: 'Durata' },
-        ].map(({ icon, value, label }, i, arr) => (
-          <div key={label} className="flex-1 flex flex-col items-center justify-center py-3 gap-1"
-            style={{ borderRight: i < arr.length - 1 ? '1px solid #dcd8cc' : 'none' }}
-          >
-            <span className="flex items-center gap-1.5 text-[14px] font-bold text-stone-800 leading-none">
-              <span className="text-terra-600 hidden sm:block">{icon}</span>
-              {value}
-            </span>
-            <span className="font-display text-[7px] font-semibold tracking-[1.6px] uppercase text-stone-400">{label}</span>
-          </div>
-        ))}
+          ...(driving ? [{
+            icon: <Car className="w-3.5 h-3.5" />,
+            value: `${Math.round(driving.distanceMeters / 1000)} km`,
+            label: 'Da te (auto)',
+            href: driving.mapsUrl,
+          }] : []),
+        ].map(({ icon, value, label, href }, i, arr) => {
+          const content = (
+            <>
+              <span className="flex items-center gap-1.5 text-[14px] font-bold text-stone-800 leading-none">
+                <span className="text-terra-600 hidden sm:block">{icon}</span>
+                {value}
+              </span>
+              <span className="font-display text-[7px] font-semibold tracking-[1.6px] uppercase text-stone-400">{label}</span>
+            </>
+          )
+          const className = 'flex-1 min-w-[25%] shrink-0 flex flex-col items-center justify-center py-3 gap-1'
+          const style = { borderRight: i < arr.length - 1 ? '1px solid #dcd8cc' : 'none' }
+          return href ? (
+            <a key={label} href={href} target="_blank" rel="noopener noreferrer" className={`${className} hover:bg-stone-100 transition-colors`} style={style}>
+              {content}
+            </a>
+          ) : (
+            <div key={label} className={className} style={style}>{content}</div>
+          )
+        })}
       </div>
 
       {/* ── Photo mosaic strip ─────────────────────────────────────────── */}

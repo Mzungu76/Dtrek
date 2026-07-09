@@ -31,6 +31,7 @@ import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeDEP, depLabel, findSimilarActivities } from '@/lib/stats'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { getUserStartingPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
 import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import {
@@ -122,6 +123,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const inProtectedArea = useProtectedAreaCheck(activity)
   const driving         = useDrivingDistance(activity)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
+
+  const [userOrigin, setUserOrigin] = useState<{ lat: number; lon: number } | null>(null)
+  // Indirizzo/punto di partenza salvato nelle impostazioni — usato per la distanza in linea
+  // d'aria mostrata tra i dati di ogni scheda e come filtro di ordinamento della galleria.
+  useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -269,28 +275,49 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }, [activity])
 
   const displayItems = useMemo(() => {
-    const pillsFor = (a: StoredActivity) => [
-      { icon: Route,      label: `${(a.distanceMeters / 1000).toFixed(1)} km` },
-      { icon: TrendingUp, label: `+${Math.round(a.elevationGain)} m` },
-      { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
-      ...((a.calories ?? 0) > 0 ? [{ icon: Flame, label: `${a.calories} kcal` }] : []),
-      ...(driving ? [{ icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }] : []),
-    ]
+    // Distanza in auto REALE (OSRM, via useDrivingDistance) — non in linea d'aria. A differenza
+    // di planned_hikes, un'activity completata non ha una colonna cache per questo valore (vedi
+    // app/resoconto/useDrivingDistance.ts), quindi qui è disponibile solo per quella aperta ora;
+    // le altre schede semplicemente non mostrano la pillola finché non vengono aperte a loro volta.
+    const distancePillFor = (polyline: [number, number][] | undefined, isActive: boolean) => {
+      if (!isActive || !driving) return null
+      const trailStart = polyline?.[0]
+      const href = userOrigin && trailStart
+        ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
+        : undefined
+      return { icon: Car, label: `${Math.round(driving.distanceMeters / 1000)} km in auto`, href }
+    }
+    const pillsFor = (a: StoredActivity) => {
+      const polyline = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+      const distPill = distancePillFor(polyline, true)
+      return [
+        { icon: Route,      label: `${(a.distanceMeters / 1000).toFixed(1)} km` },
+        { icon: TrendingUp, label: `+${Math.round(a.elevationGain)} m` },
+        { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
+        ...((a.calories ?? 0) > 0 ? [{ icon: Flame, label: `${a.calories} kcal` }] : []),
+        ...(distPill ? [distPill] : []),
+      ]
+    }
     const sortValuesFor = (a: StoredActivity) => ({
       date: new Date(a.startTime).getTime(), km: a.distanceMeters, dplus: a.elevationGain, cts: a.trailScore, rating: a.userRating,
+      distance: driving?.distanceMeters,
     })
     const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? photos[0]?.url : undefined)
     // Otherwise the gallery thumbnail's rating ring stays at whatever it was when the list first
     // loaded, so voting while the hike is open never reaches its own thumbnail once the user swipes away.
     const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
-    const mapped = items.map(it => it.id === activity?.id
-      ? { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }
-      : (cover(it.id) ? { ...it, coverPhotoUrl: cover(it.id) } : it))
+    const mapped = items.map(it => {
+      if (it.id === activity?.id) {
+        return { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }
+      }
+      const coverUrl = cover(it.id)
+      return coverUrl ? { ...it, coverPhotoUrl: coverUrl } : it
+    })
     if (activity && !mapped.some(it => it.id === activity.id)) {
       return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }, ...mapped]
     }
     return mapped
-  }, [items, covers, activity, photos, coverPhotoId, driving])
+  }, [items, covers, activity, photos, coverPhotoId, driving, userOrigin])
 
   if (!listLoaded) {
     return (
