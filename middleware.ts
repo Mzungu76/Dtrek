@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { getUserCached } from '@/lib/authTokenCache'
 
 const AUTH_PATHS = ['/login', '/signup', '/auth/']
 
@@ -48,9 +49,13 @@ export async function middleware(request: NextRequest) {
   // mode local — a slow/unreachable Auth service degrades to "let the page load" instead of
   // taking the entire app down, since every API route already re-validates the session itself
   // (getUserFromRequest) and returns 401 independently of what this middleware decided.
+  //
+  // getUserCached also means a page navigation and the burst of API calls it triggers right
+  // after (POIs, punteggi, Sentinel-2, …) share one validated result for a few seconds instead
+  // of each re-hitting Supabase Auth for the exact same still-valid session cookie.
   const TIMED_OUT = Symbol('auth-timeout')
   const result = await Promise.race([
-    supabase.auth.getUser(),
+    getUserCached(request, async () => (await supabase.auth.getUser()).data.user),
     new Promise<typeof TIMED_OUT>(resolve => setTimeout(() => resolve(TIMED_OUT), 8000)),
   ])
 
@@ -59,7 +64,7 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  const { data: { user } } = result
+  const user = result
 
   if (!user) {
     const loginUrl = new URL('/login', request.url)

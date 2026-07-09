@@ -5,6 +5,7 @@ import InstallPWA from '@/components/InstallPWA'
 import OfflineBanner from '@/components/OfflineBanner'
 import OfflineSync from '@/components/OfflineSync'
 import GlobalBackInterceptor from '@/app/components/GlobalBackInterceptor'
+import SplashScreen from '@/components/SplashScreen'
 
 export const metadata: Metadata = {
   title: 'Diario Trekking',
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="it">
       <body className="antialiased">
+        <SplashScreen />
         <GlobalBackInterceptor />
         {children}
         <OfflineBanner />

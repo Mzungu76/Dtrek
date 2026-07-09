@@ -9,6 +9,7 @@
 import { createServerClient } from '@supabase/ssr'
 import type { NextRequest } from 'next/server'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
+import { getUserCached } from './authTokenCache'
 
 function anonClientForRequest(request: NextRequest): SupabaseClient {
   return createServerClient(
@@ -24,9 +25,11 @@ function anonClientForRequest(request: NextRequest): SupabaseClient {
 }
 
 export async function getUserFromRequest(request: NextRequest): Promise<User | null> {
-  const supabase = anonClientForRequest(request)
-  const { data: { user } } = await supabase.auth.getUser()
-  return user ?? null
+  return getUserCached(request, async () => {
+    const supabase = anonClientForRequest(request)
+    const { data: { user } } = await supabase.auth.getUser()
+    return user ?? null
+  })
 }
 
 /**
@@ -41,7 +44,10 @@ export async function getUserFromRequest(request: NextRequest): Promise<User | n
  */
 export async function getUserScopedClient(request: NextRequest): Promise<{ user: User; supabase: SupabaseClient } | null> {
   const supabase = anonClientForRequest(request)
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getUserCached(request, async () => {
+    const { data } = await supabase.auth.getUser()
+    return data.user ?? null
+  })
   if (!user) return null
   return { user, supabase }
 }
