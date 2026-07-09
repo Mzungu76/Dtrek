@@ -18,7 +18,8 @@ import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices } from '@/lib/guideNotices'
-import { AlertTriangle } from 'lucide-react'
+import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
+import { AlertTriangle, Link2 } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
 import { GUIDE_SECTIONS, sectionDefForTitle, type GuideSectionKey } from '@/lib/guideSections'
 import WeatherWidget from '@/components/WeatherWidget'
@@ -419,6 +420,7 @@ export default function GuideReader({
 }: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
   const [guideNotices, setGuideNotices] = useState<string[]>(hike.cachedGuideNotices ?? [])
+  const [guideSources, setGuideSources] = useState<GuideSource[]>(hike.cachedGuideSources ?? [])
   const [generating,   setGenerating]   = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
@@ -474,7 +476,8 @@ export default function GuideReader({
   useEffect(() => {
     setGuideText(hike.cachedGuide ?? '')
     setGuideNotices(hike.cachedGuideNotices ?? [])
-  }, [hike.id, hike.cachedGuide, hike.cachedGuideNotices])
+    setGuideSources(hike.cachedGuideSources ?? [])
+  }, [hike.id, hike.cachedGuide, hike.cachedGuideNotices, hike.cachedGuideSources])
 
   // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
   useEffect(() => {
@@ -519,6 +522,7 @@ export default function GuideReader({
     setError(null)
     setGuideText('')
     setGuideNotices([])
+    setGuideSources([])
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
     setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(0)
@@ -549,15 +553,17 @@ export default function GuideReader({
 
       const { subtitle, cleanedText } = extractCoverSubtitle(acc)
       const { notices, cleanedText: cleanedText2 } = extractGuideNotices(cleanedText)
-      acc = cleanedText2
+      const { sources, cleanedText: cleanedText3 } = extractGuideSources(cleanedText2)
+      acc = cleanedText3
       setGuideText(acc)
       setGuideNotices(notices)
+      setGuideSources(sources)
 
       const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
       const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
       const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
       const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
-      const patch = { cachedGuide: acc, cachedGuideSubtitle: subtitle, cachedGuideNotices: notices, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
+      const patch = { cachedGuide: acc, cachedGuideSubtitle: subtitle, cachedGuideNotices: notices, cachedGuideSources: sources, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)
     } catch (e) {
@@ -1035,6 +1041,29 @@ export default function GuideReader({
         {error && (
           <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
             {error}
+          </div>
+        )}
+
+        {hasGuide && !generating && guideSources.length > 0 && (
+          <div className="mt-4 mb-2">
+            <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
+              Fonti consultate online
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {guideSources.map((s, i) => (
+                <a
+                  key={i}
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-600"
+                  title={s.url}
+                >
+                  <Link2 className="w-3 h-3 shrink-0 text-stone-400" />
+                  <span className="truncate">{s.title}</span>
+                </a>
+              ))}
+            </div>
           </div>
         )}
 

@@ -128,15 +128,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Errore Claude' }, { status: 502 })
   }
 
-  const rawText = message.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as { text: string }).text)
-    .join('\n')
-    .trim()
+  const textBlocks = message.content.filter(
+    (b): b is Extract<typeof message.content[number], { type: 'text' }> => b.type === 'text',
+  )
+  const rawText = textBlocks.map(b => b.text).join('\n').trim()
+
+  // Fonti web citate da Claude nella risposta (popolate automaticamente quando usa web_search) —
+  // stessa logica di app/api/guide/route.ts, ma qui il messaggio non è in streaming: le citazioni
+  // sono già presenti su ogni blocco di testo, non serve ricostruirle da eventi incrementali.
+  const sourcesMap = new Map<string, string>()
+  for (const b of textBlocks) {
+    for (const c of b.citations ?? []) {
+      if (c.type === 'web_search_result_location' && c.url && !sourcesMap.has(c.url)) {
+        sourcesMap.set(c.url, c.title ?? c.url)
+      }
+    }
+  }
+  const sources = Array.from(sourcesMap, ([url, title]) => ({ url, title }))
 
   const match = PERTINENZA_RE.exec(rawText)
   const pertinent = match ? match[1].toLowerCase() === 'si' : true
   const answer = match ? rawText.slice(match[0].length).trim() : rawText
 
-  return NextResponse.json({ answer, pertinent })
+  return NextResponse.json({ answer, pertinent, sources })
 }

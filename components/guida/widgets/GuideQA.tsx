@@ -1,11 +1,14 @@
 'use client'
 import { useState, useRef, type FormEvent } from 'react'
-import { MessageCircleQuestion, Send, Loader2 } from 'lucide-react'
+import { MessageCircleQuestion, Send, Loader2, Link2 } from 'lucide-react'
+
+interface QASource { url: string; title: string }
 
 interface QAEntry {
   question: string
   answer?: string
   pertinent?: boolean
+  sources?: QASource[]
   error?: string
 }
 
@@ -39,7 +42,7 @@ export default function GuideQA({ hikeId }: { hikeId: string }) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.message ?? json.error ?? `HTTP ${res.status}`)
       setEntries(prev => prev.map((entry, i) => i === idx
-        ? { ...entry, answer: json.answer, pertinent: json.pertinent }
+        ? { ...entry, answer: json.answer, pertinent: json.pertinent, sources: json.sources }
         : entry))
     } catch (err) {
       setEntries(prev => prev.map((entry, i) => i === idx
@@ -83,6 +86,23 @@ export default function GuideQA({ hikeId }: { hikeId: string }) {
                   <p className={`text-[14px] leading-relaxed ${entry.pertinent === false ? 'italic text-stone-400' : 'text-stone-600'}`}>
                     {entry.answer}
                   </p>
+                )}
+                {entry.sources && entry.sources.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {entry.sources.map((s, si) => (
+                      <a
+                        key={si}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 max-w-full px-2.5 py-1 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[10px] text-stone-500"
+                        title={s.url}
+                      >
+                        <Link2 className="w-2.5 h-2.5 shrink-0 text-stone-400" />
+                        <span className="truncate">{s.title}</span>
+                      </a>
+                    ))}
+                  </div>
                 )}
               </div>
             ))}
