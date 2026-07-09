@@ -185,10 +185,18 @@ export default function GuidaHub({ id }: { id?: string }) {
   // privo (o il cui valore cachato risale a un indirizzo diverso da quello attuale) — così il dato
   // compare senza dover aprire ciascun percorso, ma senza nemmeno richiamare il routing due volte
   // per lo stesso indirizzo. Il percorso aperto è già gestito, live, da useDrivingDistance.
+  //
+  // I risultati si accumulano e vengono applicati con un UNICO setDriveCache a fine giro, non uno
+  // per percorso: con l'ordinamento "Distanza" attivo ogni aggiornamento di driveCache può far
+  // risistemare la galleria, e applicarne uno per ciascuna scheda (magari una decina, una ogni
+  // ~300ms) produceva un vistoso sfarfallio — la scheda aperta veniva ridisposta ripetutamente
+  // mentre i valori arrivavano uno alla volta. Un solo aggiornamento finale risolve tutto in un
+  // unico riassestamento.
   useEffect(() => {
     if (!userOrigin || items.length === 0) return
     let cancelled = false
     ;(async () => {
+      const resolved = new Map<string, { distanceMeters: number; durationSeconds: number; originLat: number; originLon: number }>()
       for (const it of items) {
         if (cancelled) return
         if (it.id === hike?.id) continue
@@ -201,18 +209,24 @@ export default function GuidaHub({ id }: { id?: string }) {
         attemptedDriveRef.current.add(attemptKey)
         const info = await fetchDrivingInfo(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
         if (cancelled) return
-        if (info) {
-          setDriveCache(prev => new Map(prev).set(it.id, { ...info, originLat: userOrigin.lat, originLon: userOrigin.lon }))
-          updatePlannedMeta(it.id, {
-            cachedDrivingDistanceMeters: info.distanceMeters,
-            cachedDrivingDurationSeconds: info.durationSeconds,
-            cachedDrivingOriginLat: userOrigin.lat,
-            cachedDrivingOriginLon: userOrigin.lon,
-          }).catch(() => {})
-        }
+        if (info) resolved.set(it.id, { ...info, originLat: userOrigin.lat, originLon: userOrigin.lon })
         // Un piccolo respiro tra una chiamata e l'altra — il routing gira su un server demo
         // pubblico (OSRM), non va martellato con richieste parallele per l'intera galleria.
         await new Promise(r => setTimeout(r, 300))
+      }
+      if (cancelled || resolved.size === 0) return
+      setDriveCache(prev => {
+        const next = new Map(prev)
+        for (const [id, v] of Array.from(resolved)) next.set(id, v)
+        return next
+      })
+      for (const [id, v] of Array.from(resolved)) {
+        updatePlannedMeta(id, {
+          cachedDrivingDistanceMeters: v.distanceMeters,
+          cachedDrivingDurationSeconds: v.durationSeconds,
+          cachedDrivingOriginLat: v.originLat,
+          cachedDrivingOriginLon: v.originLon,
+        }).catch(() => {})
       }
     })()
     return () => { cancelled = true }
