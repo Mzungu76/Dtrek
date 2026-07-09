@@ -41,18 +41,42 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  // getUser() validates the JWT server-side (not just reading the cookie) — but it's a network
-  // call to Supabase Auth on EVERY page navigation, and this middleware has no built-in timeout:
-  // if Supabase Auth is slow or briefly unreachable, the request just hangs until the platform
-  // itself kills it, surfacing as a 504 MIDDLEWARE_INVOCATION_TIMEOUT for the whole app (every
-  // route goes through this same middleware). Racing it against a timeout keeps that failure
-  // mode local — a slow/unreachable Auth service degrades to "let the page load" instead of
-  // taking the entire app down, since every API route already re-validates the session itself
-  // (getUserFromRequest) and returns 401 independently of what this middleware decided.
-  //
-  // getUserCached also means a page navigation and the burst of API calls it triggers right
-  // after (POIs, punteggi, Sentinel-2, …) share one validated result for a few seconds instead
-  // of each re-hitting Supabase Auth for the exact same still-valid session cookie.
+  // No session cookie at all ⇒ definitely logged out, no need to ask Supabase — redirect
+  // straight away without touching the network. This is the common case on a cold PWA launch
+  // for a logged-out user, and previously paid for a full getUser() round trip just to learn
+  // what the absence of a cookie already told us for free.
+  const hasSessionCookie = request.cookies.getAll().some(c => c.name.startsWith('sb-') && c.name.includes('auth-token'))
+  if (!hasSessionCookie) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // getSession() only decodes the session already sitting in the cookie (via the SDK's own
+  // storage layer) — no network call, which is exactly why Supabase's docs warn not to trust it
+  // for anything security-sensitive. That's fine here: this middleware is a UX redirect, not the
+  // security boundary (every API route re-validates authoritatively via getUserFromRequest and
+  // returns 401 independently of what this middleware decided). It's used purely to read
+  // expires_at locally and skip the expensive getUser() network validation for the common case
+  // of a token that still has plenty of life left.
+  const EXPIRY_BUFFER_S = 60
+  let expiresAt: number | null = null
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    expiresAt = session?.expires_at ?? null
+  } catch {
+    expiresAt = null
+  }
+
+  if (expiresAt != null && expiresAt - EXPIRY_BUFFER_S > Date.now() / 1000) {
+    return response
+  }
+
+  // Token missing/unparsed or within a minute of (or past) expiry — fall back to the real
+  // network validation, which also transparently refreshes the access token cookie via the
+  // refresh token if needed (the one thing getSession() above can't do). Same safety net as
+  // before: an unreachable/slow Auth service degrades to "let the page load" via the timeout
+  // race instead of taking the whole app down, since API routes re-validate independently.
   const TIMED_OUT = Symbol('auth-timeout')
   const result = await Promise.race([
     getUserCached(request, async () => (await supabase.auth.getUser()).data.user),

@@ -8,6 +8,9 @@ import type { ClassifiedDifficultyMarker } from './difficultyMarkers'
 import type { HikeNote } from './blobStore'
 import type { TrailRiddle } from './riddles'
 import type { EpochPoi } from './epochPois'
+import type { TrailDtmProfile } from './dtm/trailDtmProfile'
+import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
+import type { CLSignals } from './cl/types'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -80,6 +83,32 @@ export interface PlannedHike {
   // guide_pending_days) e stato di archiviazione manuale post-scadenza.
   pendingExpiresAt?:             string
   archivedAt?:                   string
+  // Profilo DTM (pendenza/esposizione) — calcolato dalla sola traccia GPS, che non cambia mai
+  // dopo l'import: dtmTrackHash (lib/geoUtils.ts hashTrack) invalida la cache se la traccia
+  // dovesse comunque cambiare, al posto di una scadenza temporale. Vedi app/guida/useDtmProfile.ts.
+  dtmProfile?:                   TrailDtmProfile
+  dtmTrackHash?:                 string
+  dtmComputedAt?:                string
+  // Stesso pattern di dtmProfile — vedi app/guida/useTerrainProfile.ts.
+  terrainProfile?:               TrailTerrainProfile
+  terrainTrackHash?:             string
+  terrainComputedAt?:            string
+  // Stesso pattern di dtmProfile — vedi app/guida/useProtectedAreaCheck.ts.
+  cachedInProtectedArea?:        boolean
+  cachedProtectedAreaTrackHash?: string
+  cachedProtectedAreaComputedAt?: string
+  // Punteggio CL/SI — a differenza dei campi sopra questi sono già scritti da
+  // lib/cl/computeCL.ts (computeCLForPlannedHike) con TTL a 3 livelli (statico/dinamico/
+  // satellite, lib/cl/label.ts), non tramite updatePlannedMeta: qui vengono solo letti, per
+  // permettere a lib/cl/useCL.ts di saltare del tutto la chiamata a /api/trails/cl quando tutti
+  // e tre i livelli sono già freschi.
+  siScore?:                      number
+  siSignals?:                    CLSignals
+  siStaticComputedAt?:           string
+  siDynamicComputedAt?:          string
+  siSatelliteComputedAt?:        string
+  isGhostTrail?:                 boolean
+  dominantWarning?:              string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -156,7 +185,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt'>>,
 ): Promise<void> {
   // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {

@@ -17,10 +17,11 @@ import { collectSatelliteSignal } from '@/lib/cl/signals/satelliteSignals'
 import { collectActivitySignal } from '@/lib/cl/signals/activitySignals'
 import { collectCommunitySignal } from '@/lib/cl/signals/communitySignals'
 import { findMatchingActivity } from '@/lib/cl/matchTrail'
+import { SI_STATIC_TTL_MS, SI_DYNAMIC_TTL_MS, SI_SATELLITE_TTL_MS, labelForSiScore } from '@/lib/cl/label'
 
-const STATIC_TTL_MS = 30 * 24 * 60 * 60 * 1000
-const DYNAMIC_TTL_MS = 1 * 24 * 60 * 60 * 1000
-const SATELLITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const STATIC_TTL_MS = SI_STATIC_TTL_MS
+const DYNAMIC_TTL_MS = SI_DYNAMIC_TTL_MS
+const SATELLITE_TTL_MS = SI_SATELLITE_TTL_MS
 const COLLECTOR_TIMEOUT_MS = 5000
 const FORCE_REFRESH_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
@@ -123,14 +124,6 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     p,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error('collector timeout')), ms)),
   ])
-}
-
-function labelFor(score: number): CLLabel {
-  if (score >= 80) return { text: 'Alta affidabilità', color: 'green', tailwind: 'bg-forest-700' }
-  if (score >= 60) return { text: 'Affidabile', color: 'lime', tailwind: 'bg-lime-600' }
-  if (score >= 40) return { text: 'Da verificare', color: 'amber', tailwind: 'bg-amber-500' }
-  if (score >= 20) return { text: 'Dati incerti', color: 'red', tailwind: 'bg-red-600' }
-  return { text: 'Dati inaffidabili', color: 'black', tailwind: 'bg-gray-800' }
 }
 
 function computeScore(s: CLSignals): number {
@@ -322,7 +315,7 @@ async function runClPipeline(
   }
 
   const score = computeScore(signals)
-  const label = labelFor(score)
+  const label = labelForSiScore(score)
   const dominantWarning = dominantWarningFor(signals)
 
   return { signals, score, label, dominantWarning, isGhostTrail, partial, staticExpired, dynamicExpired, satelliteExpired }
