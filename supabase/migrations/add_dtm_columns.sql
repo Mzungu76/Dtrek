@@ -4,12 +4,13 @@
 -- Esegui nel Supabase SQL Editor (idempotente, IF NOT EXISTS).
 -- Stesso blocco è anche presente in fondo a supabase-schema.sql.
 --
--- Schema-only in questa fase: nessun codice applicativo legge/scrive
--- ancora queste colonne (vedi lib/dtm/trailDtmProfile.ts, ricalcolato
--- ad ogni CTS via /api/tei-dtm, stesso schema "nessuna persistenza" di
--- /api/tei-overpass). dtm_track_hash invece di un TTL temporale: un
--- rilievo DTM non cambia nel tempo a parità di traccia, l'invalidazione
--- naturale è un hash della traccia densa, non una scadenza.
+-- planned_hikes.dtm_profile/dtm_track_hash/dtm_computed_at sono lette/scritte da
+-- app/guida/useDtmProfile.ts (via PATCH /api/planned): al primo open che calcola con successo
+-- il profilo, il risultato viene persistito; alle aperture successive si legge da qui invece di
+-- richiamare /api/tei-dtm, finché dtm_track_hash coincide con l'hash della traccia corrente
+-- (lib/geoUtils.ts hashTrack) — nessun TTL temporale: un rilievo DTM non cambia nel tempo a
+-- parità di traccia. Le colonne gemelle su `trails` (cache condivisa per traccia OSM, tra
+-- utenti diversi che percorrono lo stesso sentiero) restano invece schema-only per ora.
 -- ═══════════════════════════════════════════════════════════
 
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS dtm_profile jsonb;

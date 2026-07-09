@@ -124,7 +124,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
   useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
-  const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
+  const si = useCL({
+    osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id,
+    siCache: hike ? {
+      siScore: hike.siScore, siSignals: hike.siSignals,
+      siStaticComputedAt: hike.siStaticComputedAt, siDynamicComputedAt: hike.siDynamicComputedAt, siSatelliteComputedAt: hike.siSatelliteComputedAt,
+      isGhostTrail: hike.isGhostTrail, dominantWarning: hike.dominantWarning,
+    } : undefined,
+  })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
 

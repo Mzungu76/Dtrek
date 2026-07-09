@@ -4,11 +4,19 @@
 // so it doesn't duplicate the same fetch+useEffect plumbing or the { matched: false } branching.
 import { useEffect, useState } from 'react'
 import type { CLResult, Sentinel2Data } from '@/lib/cl/types'
+import { SI_STATIC_TTL_MS, SI_DYNAMIC_TTL_MS, SI_SATELLITE_TTL_MS, labelForSiScore } from '@/lib/cl/label'
+import type { PlannedHike } from '@/lib/plannedStore'
 
 interface Params {
   osmId?: number
   polyline?: [number, number][]
   plannedId?: string
+  // Planned-hike-only fallback cache (lib/cl/computeCL.ts's computeCLForPlannedHike writes
+  // these columns directly, not via updatePlannedMeta) — lets this hook reconstruct a CLResult
+  // without a network round trip when every TTL bucket is still fresh. Meaningless (and
+  // ignored) when osmId is set: an OSM-matched trail scores against the shared `trails` cache
+  // instead, which isn't exposed to the client at all — that path always fetches live.
+  siCache?: Pick<PlannedHike, 'siScore' | 'siSignals' | 'siStaticComputedAt' | 'siDynamicComputedAt' | 'siSatelliteComputedAt' | 'isGhostTrail' | 'dominantWarning'>
 }
 
 function queryFor({ osmId, polyline, plannedId }: Params): string | null {
@@ -18,7 +26,29 @@ function queryFor({ osmId, polyline, plannedId }: Params): string | null {
   return null
 }
 
-export function useCL({ osmId, polyline, plannedId }: Params): {
+function freshSiCacheResult(plannedId: string, cache: Params['siCache']): CLResult | null {
+  if (!cache || cache.siScore == null || !cache.siSignals) return null
+  const now = Date.now()
+  // Same "expired if timestamp missing/too old" check computeCL.ts's runClPipeline does
+  // server-side (per-bucket), just phrased as "still fresh" here — all three must hold for the
+  // cached row to stand in for a live call.
+  const staticFresh    = !!cache.siStaticComputedAt    && now - new Date(cache.siStaticComputedAt).getTime()    < SI_STATIC_TTL_MS
+  const dynamicFresh   = !!cache.siDynamicComputedAt   && now - new Date(cache.siDynamicComputedAt).getTime()   < SI_DYNAMIC_TTL_MS
+  const satelliteFresh = !!cache.siSatelliteComputedAt && now - new Date(cache.siSatelliteComputedAt).getTime() < SI_SATELLITE_TTL_MS
+  if (!staticFresh || !dynamicFresh || !satelliteFresh) return null
+  return {
+    plannedHikeId: plannedId,
+    si: cache.siScore,
+    label: labelForSiScore(cache.siScore),
+    isGhostTrail: cache.isGhostTrail ?? false,
+    dominantWarning: cache.dominantWarning ?? null,
+    signals: cache.siSignals,
+    partial: false,
+    cachedAt: cache.siDynamicComputedAt ?? new Date().toISOString(),
+  }
+}
+
+export function useCL({ osmId, polyline, plannedId, siCache }: Params): {
   result: CLResult | null
   loading: boolean
   notMatched: boolean
@@ -32,10 +62,19 @@ export function useCL({ osmId, polyline, plannedId }: Params): {
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const polylineKey = polyline ? JSON.stringify(polyline) : null
+  const siCacheKey = siCache ? `${siCache.siScore}|${siCache.siStaticComputedAt}|${siCache.siDynamicComputedAt}|${siCache.siSatelliteComputedAt}` : null
 
   useEffect(() => {
     const qs = queryFor({ osmId, polyline, plannedId })
     if (!qs) { setResult(null); setNotMatched(false); return }
+
+    // osmId set ⇒ this scores against the shared `trails` cache, which isn't exposed to the
+    // client — always fetch live for that path (still fast: computeCL only recomputes whatever
+    // TTL bucket is actually expired, server-side).
+    if (osmId == null && plannedId) {
+      const cached = freshSiCacheResult(plannedId, siCache)
+      if (cached) { setResult(cached); setNotMatched(false); setLoading(false); return }
+    }
 
     let cancelled = false
     setLoading(true)
@@ -54,7 +93,7 @@ export function useCL({ osmId, polyline, plannedId }: Params): {
 
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [osmId, polylineKey, plannedId])
+  }, [osmId, polylineKey, plannedId, siCacheKey])
 
   const refresh = () => {
     const qs = queryFor({ osmId, polyline, plannedId })

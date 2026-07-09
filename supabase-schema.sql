@@ -517,12 +517,13 @@ CREATE INDEX IF NOT EXISTS idx_psinsar_point_cache_expires_at ON psinsar_point_c
 -- lib/geo/datasetConfig.ts's DTM_DATASET per il pivot dal LiDAR 1m PST-A)
 -- Stesso blocco anche in supabase/migrations/add_dtm_columns.sql
 --
--- Schema-only in questa fase: nessun codice applicativo legge/scrive
--- ancora queste colonne (vedi lib/dtm/trailDtmProfile.ts, ricalcolato
--- ad ogni CTS via /api/tei-dtm, stesso schema "nessuna persistenza" di
--- /api/tei-overpass). dtm_track_hash invece di un TTL temporale: un
--- rilievo DTM non cambia nel tempo a parità di traccia, l'invalidazione
--- naturale è un hash della traccia densa, non una scadenza.
+-- planned_hikes.dtm_profile/dtm_track_hash/dtm_computed_at sono lette/scritte da
+-- app/guida/useDtmProfile.ts (via PATCH /api/planned): al primo open che calcola con successo
+-- il profilo, il risultato viene persistito; alle aperture successive si legge da qui invece di
+-- richiamare /api/tei-dtm, finché dtm_track_hash coincide con l'hash della traccia corrente
+-- (lib/geoUtils.ts hashTrack) — nessun TTL temporale: un rilievo DTM non cambia nel tempo a
+-- parità di traccia. Le colonne gemelle su `trails` (cache condivisa per traccia OSM, tra
+-- utenti diversi che percorrono lo stesso sentiero) restano invece schema-only per ora.
 -- ═══════════════════════════════════════════════════════════
 
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS dtm_profile jsonb;
@@ -532,6 +533,32 @@ ALTER TABLE trails ADD COLUMN IF NOT EXISTS dtm_computed_at timestamptz;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS dtm_profile jsonb;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS dtm_track_hash text;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS dtm_computed_at timestamptz;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- Profilo terreno (uso del suolo + geologia lungo la traccia) — persistenza per-escursione,
+-- stesso pattern del blocco DTM sopra. Stesso blocco anche in
+-- supabase/migrations/add_terrain_columns.sql. Lette/scritte da app/guida/useTerrainProfile.ts
+-- (via PATCH /api/planned); terrain_track_hash (lib/geoUtils.ts hashTrack) al posto di un TTL
+-- temporale, per lo stesso motivo del DTM: il terreno non cambia nel tempo a parità di traccia.
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS terrain_profile jsonb;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS terrain_track_hash text;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS terrain_computed_at timestamptz;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- Check area protetta (Rete Natura 2000) — persistenza per-escursione del solo booleano
+-- risultato, stesso pattern dei blocchi DTM/terreno sopra. Stesso blocco anche in
+-- supabase/migrations/add_protected_area_columns.sql. Lette/scritte da
+-- app/guida/useProtectedAreaCheck.ts (via PATCH /api/planned); il poligono Natura 2000 è già
+-- cacheato per bbox (natura2000_cache, TTL 270gg) — questa colonna evita comunque la fetch +
+-- scansione point-in-polygon sulla traccia ad ogni apertura, invarianti quanto la traccia stessa
+-- (cached_protected_area_track_hash, lib/geoUtils.ts hashTrack).
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_in_protected_area boolean;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_protected_area_track_hash text;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_protected_area_computed_at timestamptz;
 
 
 -- ═══════════════════════════════════════════════════════════

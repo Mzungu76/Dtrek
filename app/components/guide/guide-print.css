@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
+/* Barlow Condensed / Lora are self-hosted via next/font (app/layout.tsx) and exposed as
+   --font-barlow / --font-lora custom properties on <html> — see the font-family rules below. */
 
 /* ============================================
    DTREK GUIDE — Magazine Layout CSS
@@ -7,7 +8,7 @@
 
 /* ROOT */
 .guide-root {
-  font-family: 'Lora', Georgia, serif;
+  font-family: var(--font-lora), Georgia, serif;
   color: #1C1C1C;
   background: white;
 }
@@ -74,7 +75,7 @@
   gap: 6px;
   background: #d97706;
   color: white;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 4px;
@@ -86,7 +87,7 @@
 }
 
 .guide-cover-title {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 56px;
   font-weight: 900;
   color: white;
@@ -98,7 +99,7 @@
 }
 
 .guide-cover-date {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 13px;
   font-weight: 400;
   font-style: normal;
@@ -131,7 +132,7 @@
 .guide-cover-stat:last-child { border-right: none; }
 
 .guide-cover-stat-value {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 20px;
   font-weight: 700;
   color: white;
@@ -140,7 +141,7 @@
 }
 
 .guide-cover-stat-label {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 9px;
   font-weight: 600;
   color: rgba(255,255,255,0.75);
@@ -173,7 +174,7 @@
   position: absolute;
   top: 44px;
   left: 52px;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 10px;
   font-weight: 700;
   color: white;
@@ -192,11 +193,11 @@
   padding-bottom: 10px;
   border-bottom: 2px solid #d97706;
   margin-bottom: 32px;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
 }
 
 .guide-page-header-brand {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 9px;
   font-weight: 700;
   color: #E07B39;
@@ -206,7 +207,7 @@
 }
 
 .guide-page-header-title {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 8px;
   font-weight: 400;
   color: #888;
@@ -216,7 +217,7 @@
 }
 
 .guide-page-header-num {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 8px;
   font-weight: 600;
   color: #888;
@@ -236,7 +237,7 @@
   justify-content: space-between;
   border-top: 0.5px solid #e5e0d8;
   padding-top: 7px;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 7.5px;
   font-weight: 400;
   color: #888;
@@ -274,7 +275,7 @@
 }
 
 .guide-section-title {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 22px;
   font-weight: 700;
   color: white;
@@ -300,7 +301,7 @@
 
 /* Lead paragraph — Lora italic */
 .guide-section-lead {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-style: italic;
   font-size: 13px;
   font-weight: 400;
@@ -313,7 +314,7 @@
 /* Standard paragraph */
 .guide-section-body-full p,
 .guide-section-text-col p {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 10.5px;
   font-weight: 400;
   line-height: 1.70;
@@ -325,7 +326,7 @@
 /* Subsection heading inside body */
 .guide-section-body-full h3,
 .guide-section-text-col h3 {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -356,7 +357,7 @@
 }
 
 .guide-section-photo-credit {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 8px;
   font-weight: 400;
   font-style: italic;
@@ -387,7 +388,7 @@
 }
 
 .guide-section-text-3col p {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 10.5px;
   font-weight: 400;
   line-height: 1.70;
@@ -421,7 +422,7 @@
 }
 
 .guide-curiosita-inline-label {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 8px;
   font-weight: 700;
   color: #E07B39;
@@ -432,7 +433,7 @@
 }
 
 .guide-curiosita-inline-text {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 9.5px;
   font-weight: 400;
   line-height: 1.6;
@@ -487,7 +488,7 @@
 .guide-poi-card-badge {
   display: inline-block;
   color: white;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -498,7 +499,7 @@
 }
 
 .guide-poi-card-distance {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 8px;
   font-weight: 400;
   font-style: italic;
@@ -515,7 +516,7 @@
 }
 
 .guide-poi-card-name {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -525,7 +526,7 @@
 }
 
 .guide-poi-card-desc {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 9.5px;
   font-weight: 400;
   line-height: 1.65;
@@ -566,7 +567,7 @@
 .guide-knowbox-icon { color: #d97706; font-size: 11px; }
 
 .guide-knowbox-label {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 7px;
   font-weight: 700;
   color: #d97706;
@@ -575,7 +576,7 @@
 }
 
 .guide-knowbox-title {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
@@ -585,7 +586,7 @@
 }
 
 .guide-knowbox-text {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 9px;
   font-weight: 400;
   line-height: 1.6;
@@ -598,7 +599,7 @@
    POI INDEX PAGE (final)
    ============================================================ */
 .guide-poi-index-title {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 22px;
   font-weight: 700;
   color: white;
@@ -631,7 +632,7 @@
 .guide-poi-grid-icon { font-size: 22px; }
 
 .guide-poi-grid-name {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 9px;
   font-weight: 700;
   color: #1C1C1C;
@@ -641,7 +642,7 @@
 .guide-poi-grid-badge {
   display: inline-block;
   color: white;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-barlow), sans-serif;
   font-size: 7px;
   font-weight: 700;
   padding: 2px 7px;
@@ -652,7 +653,7 @@
 }
 
 .guide-poi-grid-dist {
-  font-family: 'Lora', serif;
+  font-family: var(--font-lora), serif;
   font-size: 7.5px;
   font-weight: 400;
   font-style: italic;

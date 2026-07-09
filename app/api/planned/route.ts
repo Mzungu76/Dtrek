@@ -74,6 +74,22 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedDrivingOriginLon:       row.cached_driving_origin_lon      as number | undefined,
     pendingExpiresAt:             row.pending_expires_at             as string | undefined,
     archivedAt:                   row.archived_at                    as string | undefined,
+    dtmProfile:                   row.dtm_profile                    as PlannedHike['dtmProfile'],
+    dtmTrackHash:                 row.dtm_track_hash                 as string | undefined,
+    dtmComputedAt:                row.dtm_computed_at                as string | undefined,
+    terrainProfile:               row.terrain_profile                as PlannedHike['terrainProfile'],
+    terrainTrackHash:             row.terrain_track_hash             as string | undefined,
+    terrainComputedAt:            row.terrain_computed_at            as string | undefined,
+    cachedInProtectedArea:         row.cached_in_protected_area          as boolean | undefined,
+    cachedProtectedAreaTrackHash:  row.cached_protected_area_track_hash  as string | undefined,
+    cachedProtectedAreaComputedAt: row.cached_protected_area_computed_at as string | undefined,
+    siScore:                      row.si_score                       as number | undefined,
+    siSignals:                    row.si_signals                     as PlannedHike['siSignals'],
+    siStaticComputedAt:           row.si_static_computed_at          as string | undefined,
+    siDynamicComputedAt:          row.si_dynamic_computed_at         as string | undefined,
+    siSatelliteComputedAt:        row.si_satellite_computed_at       as string | undefined,
+    isGhostTrail:                 row.is_ghost_trail                 as boolean | undefined,
+    dominantWarning:              row.dominant_warning               as string | undefined,
   }
 }
 
@@ -329,6 +345,15 @@ export async function PATCH(req: NextRequest) {
       cachedDrivingOriginLon?: number
       pendingExpiresAt?: string | null
       archivedAt?: string | null
+      dtmProfile?: PlannedHike['dtmProfile']
+      dtmTrackHash?: string
+      dtmComputedAt?: string
+      terrainProfile?: PlannedHike['terrainProfile']
+      terrainTrackHash?: string
+      terrainComputedAt?: string
+      cachedInProtectedArea?: boolean
+      cachedProtectedAreaTrackHash?: string
+      cachedProtectedAreaComputedAt?: string
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -360,6 +385,15 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedDrivingOriginLon       !== undefined) dbPatch.cached_driving_origin_lon      = patch.cachedDrivingOriginLon
     if (patch.pendingExpiresAt             !== undefined) dbPatch.pending_expires_at             = patch.pendingExpiresAt
     if (patch.archivedAt                   !== undefined) dbPatch.archived_at                    = patch.archivedAt
+    if (patch.dtmProfile                   !== undefined) dbPatch.dtm_profile                    = patch.dtmProfile
+    if (patch.dtmTrackHash                 !== undefined) dbPatch.dtm_track_hash                 = patch.dtmTrackHash
+    if (patch.dtmComputedAt                !== undefined) dbPatch.dtm_computed_at                = patch.dtmComputedAt
+    if (patch.terrainProfile               !== undefined) dbPatch.terrain_profile                = patch.terrainProfile
+    if (patch.terrainTrackHash             !== undefined) dbPatch.terrain_track_hash             = patch.terrainTrackHash
+    if (patch.terrainComputedAt            !== undefined) dbPatch.terrain_computed_at            = patch.terrainComputedAt
+    if (patch.cachedInProtectedArea        !== undefined) dbPatch.cached_in_protected_area        = patch.cachedInProtectedArea
+    if (patch.cachedProtectedAreaTrackHash !== undefined) dbPatch.cached_protected_area_track_hash = patch.cachedProtectedAreaTrackHash
+    if (patch.cachedProtectedAreaComputedAt !== undefined) dbPatch.cached_protected_area_computed_at = patch.cachedProtectedAreaComputedAt
 
     const { error } = await supabase
       .from('planned_hikes')

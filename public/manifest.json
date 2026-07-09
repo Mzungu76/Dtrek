@@ -2,7 +2,7 @@
   "name": "Diario Trekking",
   "short_name": "DTrek",
   "description": "Il tuo diario personale di escursioni e trekking",
-  "start_url": "/",
+  "start_url": "/guida",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

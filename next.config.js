@@ -1,3 +1,7 @@
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+})
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -10,6 +14,12 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.supabase.co' },
     ],
   },
+  experimental: {
+    // Per-module tree-shaking for icon/chart libraries imported broadly across the app
+    // (lucide-react in ~90 files, recharts in the stats tabs) instead of relying on the
+    // bundler to infer it from named ESM imports alone.
+    optimizePackageImports: ['lucide-react', 'recharts'],
+  },
 }
 
-module.exports = nextConfig
+module.exports = withBundleAnalyzer(nextConfig)

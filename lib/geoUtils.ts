@@ -81,6 +81,25 @@ export function normalizeBboxKey(bbox: string): string {
   return bbox.split(',').map(v => (Math.round(parseFloat(v) * 100) / 100).toFixed(2)).join('_')
 }
 
+/**
+ * Deterministic, isomorphic (client + server, no crypto module) fingerprint of a GPS track, used
+ * to invalidate track-derived caches (DTM profile, terrain profile, protected-area check) without
+ * a temporal TTL: this data only needs recomputing if the track itself changes, which for an
+ * imported hike essentially never happens — a plain FNV-1a 32-bit hash is more than enough, this
+ * isn't a security boundary. Coordinates are rounded to 6 decimals (~11cm) before hashing so
+ * float round-tripping through JSON (client → API → Supabase → client) can't flip the hash for an
+ * unchanged track.
+ */
+export function hashTrack(track: [number, number][]): string {
+  let h = 0x811c9dc5
+  const s = track.length + '|' + track.map(([lat, lon]) => `${lat.toFixed(6)},${lon.toFixed(6)}`).join(';')
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16)
+}
+
 interface GeoJsonGeometry {
   type: string
   coordinates: unknown
