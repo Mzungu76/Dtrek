@@ -192,8 +192,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   // ~300ms) produceva un vistoso sfarfallio — la scheda aperta veniva ridisposta ripetutamente
   // mentre i valori arrivavano uno alla volta. Un solo aggiornamento finale risolve tutto in un
   // unico riassestamento.
+  //
+  // Parte solo a `enrichmentReady`, non al mount: è lavoro puramente accessorio (le altre schede
+  // della galleria, non quella aperta) e prima le fetch critiche del percorso attivo (POI/wiki,
+  // punteggi, sicurezza…) affollavano la stessa finestra di rete con questa — competendo per le
+  // ~6 connessioni concorrenti del browser e allungando il tempo prima che il percorso aperto
+  // fosse effettivamente pronto, cioè esattamente l'"apertura lenta" percepita dall'utente.
   useEffect(() => {
-    if (!userOrigin || items.length === 0) return
+    if (!userOrigin || items.length === 0 || !enrichmentReady) return
     let cancelled = false
     ;(async () => {
       const resolved = new Map<string, { distanceMeters: number; durationSeconds: number; originLat: number; originLon: number }>()
@@ -231,7 +237,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     })()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userOrigin, items, hike?.id])
+  }, [userOrigin, items, hike?.id, enrichmentReady])
 
   useEffect(() => {
     if (currentId || items.length === 0) return
