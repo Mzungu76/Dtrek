@@ -35,7 +35,7 @@ const TAXON_GROUP_MAP: Record<string, string> = {
   amphibians: 'Amphibians',
   plants: 'Plants',
   invertebrates: 'Invertebrates',
-  fish: 'Invertebrates',
+  fish: 'Fish',
 }
 
 function normalizeTaxonGroup(raw: string | undefined): string | null {
