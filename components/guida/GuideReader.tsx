@@ -17,6 +17,9 @@ import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
+import { extractGuideNotices } from '@/lib/guideNotices'
+import { AlertTriangle } from 'lucide-react'
+import GuideQA from './widgets/GuideQA'
 import { GUIDE_SECTIONS, sectionDefForTitle, type GuideSectionKey } from '@/lib/guideSections'
 import WeatherWidget from '@/components/WeatherWidget'
 import RouteMapSection from '@/components/RouteMapSection'
@@ -192,11 +195,14 @@ function RouteSvg({ hike }: { hike: PlannedHike }) {
 // ── Magazine section body renderer ────────────────────────────────────────────
 
 function MagazineBody({ body, color, sectionPhoto }: { body: string; color: string; sectionPhoto?: string }) {
-  interface Block { type: 'lead' | 'para' | 'curiosita' | 'subsection'; text: string }
+  interface Block { type: 'lead' | 'para' | 'curiosita' | 'avviso' | 'subsection'; text: string }
 
   const blocks = useMemo<Block[]>(() => {
     const out: Block[] = []
-    const cRe = /\[curiosita\]([\s\S]*?)\[\/curiosita\]/g
+    // [curiosita] e [avviso] sono blocchi delimitati su una riga dedicata (stessa convenzione di
+    // [sottotitolo]/[indovinello]/[epoca], vedi app/api/guide/route.ts) — [avviso] segnala una
+    // criticità reale e specifica trovata dalla ricerca web di Giulia sullo stato del percorso.
+    const blockRe = /\[(curiosita|avviso)\]([\s\S]*?)\[\/\1\]/g
     let last = 0
     let m: RegExpExecArray | null
     let paraCount = 0
@@ -220,9 +226,9 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
       flush()
     }
 
-    while ((m = cRe.exec(body)) !== null) {
+    while ((m = blockRe.exec(body)) !== null) {
       flushText(body.slice(last, m.index))
-      out.push({ type: 'curiosita', text: m[1].trim().replace(/\n/g, ' ') })
+      out.push({ type: m[1] as 'curiosita' | 'avviso', text: m[2].trim().replace(/\n/g, ' ') })
       last = m.index + m[0].length
     }
     flushText(body.slice(last))
@@ -264,6 +270,27 @@ function MagazineBody({ body, color, sectionPhoto }: { body: string; color: stri
                       ◆ Lo sapevi?
                     </p>
                     <p className="italic text-[14px] leading-relaxed text-stone-700">
+                      {b.text}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+          if (b.type === 'avviso') {
+            return (
+              <div
+                key={i}
+                className="my-5 rounded-sm overflow-hidden shadow-sm border border-amber-200"
+                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
+              >
+                <div className="flex">
+                  <div className="w-1 flex-shrink-0 bg-amber-500" />
+                  <div className="flex-1 px-4 py-3 bg-amber-50">
+                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5 text-amber-700">
+                      ⚠ Stato del percorso
+                    </p>
+                    <p className="text-[14px] leading-relaxed text-amber-900">
                       {b.text}
                     </p>
                   </div>
@@ -391,6 +418,7 @@ export default function GuideReader({
   weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura,
 }: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
+  const [guideNotices, setGuideNotices] = useState<string[]>(hike.cachedGuideNotices ?? [])
   const [generating,   setGenerating]   = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
@@ -445,7 +473,8 @@ export default function GuideReader({
   // while this tab stays open, or the cached guide arriving from elsewhere).
   useEffect(() => {
     setGuideText(hike.cachedGuide ?? '')
-  }, [hike.id, hike.cachedGuide])
+    setGuideNotices(hike.cachedGuideNotices ?? [])
+  }, [hike.id, hike.cachedGuide, hike.cachedGuideNotices])
 
   // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
   useEffect(() => {
@@ -489,6 +518,7 @@ export default function GuideReader({
     setGenerating(true)
     setError(null)
     setGuideText('')
+    setGuideNotices([])
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
     setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(0)
@@ -518,14 +548,16 @@ export default function GuideReader({
       }
 
       const { subtitle, cleanedText } = extractCoverSubtitle(acc)
-      acc = cleanedText
+      const { notices, cleanedText: cleanedText2 } = extractGuideNotices(cleanedText)
+      acc = cleanedText2
       setGuideText(acc)
+      setGuideNotices(notices)
 
       const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
       const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
       const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
       const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
-      const patch = { cachedGuide: acc, cachedGuideSubtitle: subtitle, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
+      const patch = { cachedGuide: acc, cachedGuideSubtitle: subtitle, cachedGuideNotices: notices, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)
     } catch (e) {
@@ -906,6 +938,18 @@ export default function GuideReader({
           </div>
         )}
 
+        {/* ── Stato del percorso — avvisi trovati dalla ricerca web di Giulia ──────────── */}
+        {guideNotices.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {guideNotices.map((notice, i) => (
+              <div key={i} className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-[13px] leading-relaxed text-amber-900">{notice}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ── Guide sections — always rendered (widgets), text where available ────────── */}
         <div className="mt-4 space-y-0">
           {displaySections.map((s, i) => {
@@ -992,6 +1036,10 @@ export default function GuideReader({
           <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
             {error}
           </div>
+        )}
+
+        {hasGuide && !generating && hasAiAccess === true && (
+          <GuideQA hikeId={hike.id} />
         )}
 
         {/* ── Bottom actions ──────────────────────────────────────────── */}

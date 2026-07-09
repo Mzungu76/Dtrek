@@ -4,7 +4,7 @@ import { supabase }     from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
-import { GUIDE_SECTIONS, sanitizeBreveSections, type GuideSectionKey } from '@/lib/guideSections'
+import { GUIDE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
 
 export const maxDuration = 300  // "approfondita" can take well over 120s to stream fully; avoid cutting it off mid-guide
 import type { WikiPage }   from '@/lib/wikipedia'
@@ -16,6 +16,7 @@ import type { HikeAssessment } from '@/lib/hikeAssessment'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
+import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,12 +30,28 @@ con un tono da amica esperta che non smette mai di stupirsi della bellezza dei l
 Sulla primissima riga della tua risposta, prima di qualunque sezione ##, scrivi un sottotitolo da
 copertina per questo percorso specifico, nel formato esatto su una riga separata:
 [sottotitolo]testo del sottotitolo[/sottotitolo]
-Dev'essere una frase breve (massimo 120 caratteri circa), come il sottotitolo di un articolo di
-una rivista specialistica di trekking: evocativa e specifica per QUESTO percorso (mai generica o
-intercambiabile con un altro), ma mai da annuncio pubblicitario — niente superlativi vuoti tipo
-"un'esperienza indimenticabile" o punti esclamativi. Deve dare un'idea concreta del carattere del
-percorso (es. il tipo di paesaggio, un dettaglio che lo contraddistingue, l'atmosfera). Dopo questa
-riga, prosegui normalmente con le sezioni richieste.
+Dev'essere una frase più articolata di un semplice slogan (indicativamente 140-200 caratteri), come
+il sommario di un articolo di una rivista specialistica di trekking: evocativa e specifica per
+QUESTO percorso (mai generica o intercambiabile con un altro), ma mai da annuncio pubblicitario —
+niente superlativi vuoti tipo "un'esperienza indimenticabile" o punti esclamativi. Deve cogliere al
+volo le caratteristiche principali del percorso: il tipo di paesaggio, uno o due dettagli concreti
+che lo contraddistinguono (un luogo, un panorama, una difficoltà), e l'atmosfera generale. Dopo
+questa riga, prosegui normalmente con le sezioni richieste.
+
+Prima di scrivere, usa lo strumento di ricerca web per verificare lo stato attuale e aggiornato del
+percorso: chiusure temporanee o permanenti di tratti, deviazioni, frane, lavori in corso, divieti
+stagionali, eventuali allerte meteo/incendi. Cerca su fonti ufficiali quando possibile (enti parco,
+comuni, CAI, sezioni locali, siti di sentieristica regionale) e integra, se utili, resoconti recenti
+di altri escursionisti (community di trekking, forum, blog) per capire come si presenta il percorso
+di recente. Se non trovi nulla di rilevante o specifico su questo percorso, non inventare: è normale,
+significa solo che non ci sono criticità note al momento.
+Se dalla ricerca emergono informazioni concrete e specifiche su un problema reale in corso (chiusura,
+deviazione, frana, lavori, divieto), racchiudile in un riquadro dedicato, una riga per ciascun avviso,
+usando il formato esatto:
+[avviso]testo dell'avviso, conciso e pratico, con indicazione della fonte se disponibile[/avviso]
+Metti questi avvisi (se presenti) subito dopo il sottotitolo, prima della prima sezione ##.
+Non creare avvisi generici o precauzionali di circostanza ("presta attenzione al meteo"): solo se hai
+trovato un'informazione concreta e specifica per QUESTO percorso.
 
 Per ogni luogo significativo includi almeno uno tra: un aneddoto storico poco noto, una leggenda locale,
 una curiosità sorprendente, un fatto insolito legato al sito. I dettagli che la gente non trova sulle guide
@@ -217,22 +234,6 @@ LUNGHEZZA: ${TIER_CONFIG[tier].instruction}
 IMPORTANTE: Completa obbligatoriamente tutte le sezioni richieste (${sectionTitles}). Non terminare prima dell'ultima.`
 }
 
-async function resolveApiKeyAndSettings(userId: string) {
-  const { data: settings } = await supabase
-    .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  const userKey = settings?.claude_api_key as string | null | undefined
-  const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
-  const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
-  const breveSections = sanitizeBreveSections(settings?.guide_breve_sections)
-
-  return { apiKey, userGender, breveSections }
-}
-
 // ── GET /api/guide?hikeId=X → pre-flight AI-access check, no generation ───────
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
@@ -348,12 +349,14 @@ export async function POST(req: NextRequest) {
   const { maxTokens } = TIER_CONFIG[tier]
   const system = SYSTEM + genderInstruction(userGender)
 
-  // Stream Claude response
+  // Stream Claude response — web_search abilita Giulia a verificare online lo stato aggiornato
+  // del percorso (chiusure, deviazioni, lavori) prima di scrivere, vedi istruzioni in SYSTEM.
   const stream = client.messages.stream({
     model:      'claude-sonnet-4-6',
     max_tokens: maxTokens,
     system,
     messages:   [{ role: 'user', content: prompt }],
+    tools:      [{ type: 'web_search_20250305', name: 'web_search', max_uses: tier === 'approfondita' ? 8 : 4 }],
   })
 
   const readable = new ReadableStream({

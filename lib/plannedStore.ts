@@ -38,6 +38,10 @@ export interface PlannedHike {
   // lib/coverSubtitle.ts, tag [sottotitolo] in app/api/guide/route.ts) — non presente sulle
   // guide generate prima di questo campo.
   cachedGuideSubtitle?: string
+  // Avvisi sullo stato aggiornato del percorso (chiusure, deviazioni, lavori) trovati dalla
+  // ricerca web di Giulia al momento della generazione (tag [avviso], vedi lib/guideNotices.ts) —
+  // vuoto/assente se nessuna criticità nota o su guide generate prima di questo campo.
+  cachedGuideNotices?: string[]
   // Livello dell'ultima generazione: 'breve' (auto, testo AI solo su guideBreveSections) o
   // 'approfondita' (via "Approfondisci", testo AI su tutte le sezioni). Undefined con
   // cachedGuide già valorizzato ⇒ guida generata prima di questa colonna (formato legacy).
@@ -149,7 +153,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt'>>,
 ): Promise<void> {
   // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {
