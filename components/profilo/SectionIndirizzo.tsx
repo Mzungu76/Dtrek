@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { MapPin, Loader2, Search, Crosshair, AlertTriangle, Trash2 } from 'lucide-react'
+import { invalidateUserStartingPoint } from '@/lib/drivingInfo'
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), { ssr: false })
 
@@ -138,6 +139,10 @@ export default function SectionIndirizzo() {
       setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
     } else {
       setSavedAddr(address)
+      // Senza questo, ogni schermata che ha già chiamato getUserStartingPoint() in questa
+      // sessione (gallerie Guida/Resoconto) continuerebbe a usare il vecchio indirizzo finché
+      // non si ricarica la pagina — vedi lib/drivingInfo.ts.
+      invalidateUserStartingPoint()
       setStatus({
         ok: true,
         msg: coords
@@ -157,6 +162,7 @@ export default function SectionIndirizzo() {
     setSaving(false)
     if (res.ok) {
       setAddress(''); setSavedAddr(null); setCoords(null); setShowMap(false)
+      invalidateUserStartingPoint()
       setStatus({ ok: true, msg: 'Indirizzo rimosso.' })
     } else {
       setStatus({ ok: false, msg: 'Errore durante la rimozione.' })

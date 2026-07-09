@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import RouteHub from '@/components/routehub/RouteHub'
@@ -20,7 +20,7 @@ import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
-import { getUserStartingPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
+import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, originMatches } from '@/lib/drivingInfo'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
 import {
@@ -79,10 +79,9 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
       // cachedTrailScore here would silently sort by the old single-dimension CTS while the
       // badge displays the 5-segment total, so a route's rank and its own badge would disagree.
       cts: previewTotal,
-      // Real driving distance (OSRM), persisted the first time this hike was open (see
-      // app/guida/useDrivingDistance.ts) — undefined for a hike never opened yet, not a
-      // straight-line guess; that's the whole point of caching the real routed value.
-      distance: h.cachedDrivingDistanceMeters,
+      // Filled in by displayItems from the driving-distance cache (see the background sync
+      // effect below), which also checks the cached value hasn't gone stale (saved address
+      // changed since) — not baked in here to avoid two places disagreeing on freshness.
     },
     scorePreview: previewTotal > 0 ? { value: previewTotal, max: TRAIL_SCORE_MAX } : undefined,
   }
@@ -115,10 +114,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [pendingScrollSection, setPendingScrollSection] = useState<GuideSectionKey | null>(null)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
   const [userOrigin, setUserOrigin] = useState<{ lat: number; lon: number } | null>(null)
+  // Distanza/durata in auto (OSRM) + l'origine con cui sono state calcolate, per ogni percorso
+  // della lista — inizializzato dalla cache già persistita (planned_hikes.cached_driving_*),
+  // poi tenuto aggiornato dall'effetto di sync qui sotto quando manca o l'indirizzo è cambiato.
+  const [driveCache, setDriveCache] = useState<Map<string, { distanceMeters: number; durationSeconds: number; originLat: number; originLon: number }>>(new Map())
+  const attemptedDriveRef = useRef<Set<string>>(new Set())
 
-  // Indirizzo/punto di partenza salvato nelle impostazioni utente — usato per mostrare la
-  // distanza (in linea d'aria, senza dover richiamare un servizio di routing per ogni percorso
-  // della galleria) tra i dati principali di ogni scheda e come filtro di ordinamento.
+  // Indirizzo/punto di partenza salvato nelle impostazioni utente — usato per la distanza in
+  // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
   useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
   const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
@@ -161,9 +164,60 @@ export default function GuidaHub({ id }: { id?: string }) {
       const active = list.filter(h => !h.archivedAt)
       const sorted = active.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setItems(sorted.map(metaToItem))
+      setDriveCache(prev => {
+        const next = new Map(prev)
+        for (const h of sorted) {
+          if (h.cachedDrivingDistanceMeters == null || h.cachedDrivingOriginLat == null || h.cachedDrivingOriginLon == null) continue
+          next.set(h.id, {
+            distanceMeters: h.cachedDrivingDistanceMeters,
+            durationSeconds: h.cachedDrivingDurationSeconds ?? 0,
+            originLat: h.cachedDrivingOriginLat,
+            originLon: h.cachedDrivingOriginLon,
+          })
+        }
+        return next
+      })
     }
     getAllPlanned(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
   }, [])
+
+  // Riempie in background la distanza in auto per ogni percorso della galleria che ne è ancora
+  // privo (o il cui valore cachato risale a un indirizzo diverso da quello attuale) — così il dato
+  // compare senza dover aprire ciascun percorso, ma senza nemmeno richiamare il routing due volte
+  // per lo stesso indirizzo. Il percorso aperto è già gestito, live, da useDrivingDistance.
+  useEffect(() => {
+    if (!userOrigin || items.length === 0) return
+    let cancelled = false
+    ;(async () => {
+      for (const it of items) {
+        if (cancelled) return
+        if (it.id === hike?.id) continue
+        const trailStart = it.polyline?.[0]
+        if (!trailStart) continue
+        const cached = driveCache.get(it.id)
+        if (cached && originMatches(cached.originLat, cached.originLon, userOrigin.lat, userOrigin.lon)) continue
+        const attemptKey = `${it.id}:${userOrigin.lat},${userOrigin.lon}`
+        if (attemptedDriveRef.current.has(attemptKey)) continue
+        attemptedDriveRef.current.add(attemptKey)
+        const info = await fetchDrivingInfo(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
+        if (cancelled) return
+        if (info) {
+          setDriveCache(prev => new Map(prev).set(it.id, { ...info, originLat: userOrigin.lat, originLon: userOrigin.lon }))
+          updatePlannedMeta(it.id, {
+            cachedDrivingDistanceMeters: info.distanceMeters,
+            cachedDrivingDurationSeconds: info.durationSeconds,
+            cachedDrivingOriginLat: userOrigin.lat,
+            cachedDrivingOriginLon: userOrigin.lon,
+          }).catch(() => {})
+        }
+        // Un piccolo respiro tra una chiamata e l'altra — il routing gira su un server demo
+        // pubblico (OSRM), non va martellato con richieste parallele per l'intera galleria.
+        await new Promise(r => setTimeout(r, 300))
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userOrigin, items, hike?.id])
 
   useEffect(() => {
     if (currentId || items.length === 0) return
@@ -320,9 +374,15 @@ export default function GuidaHub({ id }: { id?: string }) {
     })
     const mapped = items.map(it => {
       if (it.id !== hike?.id) {
-        const distPill = distancePillFor(it.polyline, it.sortValues?.distance)
+        // Il valore cachato conta solo se calcolato con l'indirizzo attuale — altrimenti
+        // l'effetto di sync qui sopra lo sta già ricalcolando in background.
+        const cached = driveCache.get(it.id)
+        const distanceMeters = cached && (!userOrigin || originMatches(cached.originLat, cached.originLon, userOrigin.lat, userOrigin.lon))
+          ? cached.distanceMeters
+          : undefined
+        const distPill = distancePillFor(it.polyline, distanceMeters)
         if (!distPill) return it
-        return { ...it, statPills: [...it.statPills, distPill] }
+        return { ...it, statPills: [...it.statPills, distPill], sortValues: it.sortValues ? { ...it.sortValues, distance: distanceMeters } : it.sortValues }
       }
       const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
       const preview = scorePreviewFor(hike)
@@ -336,7 +396,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview }, ...mapped]
     }
     return mapped
-  }, [items, hike, driving, userOrigin])
+  }, [items, hike, driving, userOrigin, driveCache])
 
   if (!listLoaded) {
     return (

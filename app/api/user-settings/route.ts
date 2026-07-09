@@ -32,10 +32,13 @@ export async function GET(req: NextRequest) {
   if (!e1) {
     data = d1 as Record<string, unknown> | null
   } else {
-    // Retry without CTS + hr columns (they may not be migrated yet)
+    // Retry without CTS + hr columns (they may not be migrated yet) — starting_address/lat/lon
+    // stay in this fallback select too: dropping them here would make a correctly saved address
+    // silently disappear from the response whenever any *other* column in the full select above
+    // isn't migrated yet, even though the address itself was never touched.
     const { data: d2, error: e2 } = await supabase
       .from('user_settings')
-      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, hiker_face_data_url, display_name')
+      .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, hiker_face_data_url, display_name, starting_address, starting_lat, starting_lon')
       .eq('user_id', user.id)
       .single()
     if (!e2) data = d2 as Record<string, unknown> | null
@@ -235,32 +238,19 @@ export async function POST(req: NextRequest) {
     .from('user_settings')
     .upsert(upsertData, { onConflict: 'user_id' })
 
-  if (error?.message?.includes('column') || error?.message?.includes('schema cache')) {
-    // CTS columns not yet migrated — retry without them
-    const safe = { ...upsertData }
-    delete safe.beauty_natura_weight
-    delete safe.beauty_paesaggio_weight
-    delete safe.beauty_archeologia_weight
-    delete safe.beauty_architettura_weight
-    delete safe.beauty_interesse_weight
-    delete safe.beauty_natura_cultura
-    delete safe.beauty_natura_type
-    delete safe.beauty_cultura_type
-    delete safe.pref_sforzo
-    delete safe.pref_durata
-    delete safe.personal_delta
-    delete safe.hr_hike_count
-    delete safe.hr_rest
-    delete safe.hr_max
-    delete safe.starting_address
-    delete safe.starting_lat
-    delete safe.starting_lon
-    delete safe.guide_pending_days
-    delete safe.guide_breve_sections
-    const { error: e2 } = await supabase
-      .from('user_settings')
-      .upsert(safe, { onConflict: 'user_id' })
-    error = e2
+  // A column not yet migrated on this environment fails the whole upsert — retry dropping only
+  // the specific column PostgREST actually complained about (its error names it directly),
+  // instead of blanket-deleting a fixed list of "newer" columns. The old blanket approach could
+  // silently drop a column that DOES exist (e.g. starting_lat/lon) just because some unrelated
+  // column in the same request didn't, making a save request report success while quietly not
+  // persisting the address at all.
+  let attempts = 0
+  while (error && attempts < 8) {
+    const missingCol = /column ['"]?([a-z0-9_]+)['"]?/i.exec(error.message)?.[1]
+    if (!missingCol || !(missingCol in upsertData)) break
+    delete upsertData[missingCol]
+    attempts++
+    ;({ error } = await supabase.from('user_settings').upsert(upsertData, { onConflict: 'user_id' }))
   }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
