@@ -30,7 +30,8 @@ import { exportActivityPdf } from '@/utils/pdfExport'
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeDEP, depLabel, findSimilarActivities } from '@/lib/stats'
-import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { computeBbox, minDistToTrack, haversineM } from '@/lib/geoUtils'
+import { getUserStartingPoint } from '@/lib/drivingInfo'
 import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import {
@@ -122,6 +123,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const inProtectedArea = useProtectedAreaCheck(activity)
   const driving         = useDrivingDistance(activity)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
+
+  const [userOrigin, setUserOrigin] = useState<{ lat: number; lon: number } | null>(null)
+  // Indirizzo/punto di partenza salvato nelle impostazioni — usato per la distanza in linea
+  // d'aria mostrata tra i dati di ogni scheda e come filtro di ordinamento della galleria.
+  useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -269,28 +275,57 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }, [activity])
 
   const displayItems = useMemo(() => {
-    const pillsFor = (a: StoredActivity) => [
-      { icon: Route,      label: `${(a.distanceMeters / 1000).toFixed(1)} km` },
-      { icon: TrendingUp, label: `+${Math.round(a.elevationGain)} m` },
-      { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
-      ...((a.calories ?? 0) > 0 ? [{ icon: Flame, label: `${a.calories} kcal` }] : []),
-      ...(driving ? [{ icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }] : []),
-    ]
+    // Distanza in linea d'aria dall'indirizzo salvato — per ogni scheda della galleria (una vera
+    // chiamata di routing OSRM, via useDrivingDistance, ha senso solo per quella aperta qui sotto).
+    const straightLineMetersFor = (polyline?: [number, number][]) => {
+      if (!userOrigin || !polyline?.length) return undefined
+      const [lat, lon] = polyline[0]
+      return haversineM(userOrigin.lat, userOrigin.lon, lat, lon)
+    }
+    const distancePillFor = (polyline: [number, number][] | undefined, isActive: boolean) => {
+      if (isActive && driving) return { icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }
+      const dist = straightLineMetersFor(polyline)
+      return dist != null ? { icon: MapPin, label: `~${(dist / 1000).toFixed(0)} km da te` } : null
+    }
+    const pillsFor = (a: StoredActivity) => {
+      const polyline = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+      const distPill = distancePillFor(polyline, true)
+      return [
+        { icon: Route,      label: `${(a.distanceMeters / 1000).toFixed(1)} km` },
+        { icon: TrendingUp, label: `+${Math.round(a.elevationGain)} m` },
+        { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
+        ...((a.calories ?? 0) > 0 ? [{ icon: Flame, label: `${a.calories} kcal` }] : []),
+        ...(distPill ? [distPill] : []),
+      ]
+    }
     const sortValuesFor = (a: StoredActivity) => ({
       date: new Date(a.startTime).getTime(), km: a.distanceMeters, dplus: a.elevationGain, cts: a.trailScore, rating: a.userRating,
+      distance: straightLineMetersFor(a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])),
     })
     const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? photos[0]?.url : undefined)
     // Otherwise the gallery thumbnail's rating ring stays at whatever it was when the list first
     // loaded, so voting while the hike is open never reaches its own thumbnail once the user swipes away.
     const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
-    const mapped = items.map(it => it.id === activity?.id
-      ? { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }
-      : (cover(it.id) ? { ...it, coverPhotoUrl: cover(it.id) } : it))
+    const mapped = items.map(it => {
+      if (it.id === activity?.id) {
+        return { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }
+      }
+      const distPill = distancePillFor(it.polyline, false)
+      const distance = straightLineMetersFor(it.polyline)
+      const coverUrl = cover(it.id)
+      if (!distPill && distance == null && !coverUrl) return it
+      return {
+        ...it,
+        statPills: distPill ? [...it.statPills, distPill] : it.statPills,
+        sortValues: it.sortValues ? { ...it.sortValues, distance } : it.sortValues,
+        ...(coverUrl ? { coverPhotoUrl: coverUrl } : {}),
+      }
+    })
     if (activity && !mapped.some(it => it.id === activity.id)) {
       return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }, ...mapped]
     }
     return mapped
-  }, [items, covers, activity, photos, coverPhotoId, driving])
+  }, [items, covers, activity, photos, coverPhotoId, driving, userOrigin])
 
   if (!listLoaded) {
     return (

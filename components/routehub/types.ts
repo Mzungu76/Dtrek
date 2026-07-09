@@ -22,6 +22,9 @@ export interface SortValues {
   dplus: number
   cts?: number
   rating?: number
+  /** Straight-line (haversine) meters from the user's saved starting address to the trailhead —
+   *  undefined until the address is known/geocoded, which just hides the "Distanza" sort option. */
+  distance?: number
 }
 
 /** Mode-agnostic normalized item RouteHub operates on — one per route in the carousel/gallery. */

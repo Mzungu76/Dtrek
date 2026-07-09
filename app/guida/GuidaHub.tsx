@@ -19,13 +19,14 @@ import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { type BeautyScore } from '@/lib/beautyScore'
-import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { computeBbox, minDistToTrack, haversineM } from '@/lib/geoUtils'
+import { getUserStartingPoint } from '@/lib/drivingInfo'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2,
   Car, Trash2, Pencil, Check, Images,
-  Navigation,
+  Navigation, MapPin,
   Calendar as CalendarIcon,
 } from 'lucide-react'
 import PdfExportButton from '@/components/PdfExportButton'
@@ -109,6 +110,12 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [ctsSettled, setCtsSettled] = useState(false)
   const [pendingScrollSection, setPendingScrollSection] = useState<GuideSectionKey | null>(null)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
+  const [userOrigin, setUserOrigin] = useState<{ lat: number; lon: number } | null>(null)
+
+  // Indirizzo/punto di partenza salvato nelle impostazioni utente — usato per mostrare la
+  // distanza (in linea d'aria, senza dover richiamare un servizio di routing per ogni percorso
+  // della galleria) tra i dati principali di ogni scheda e come filtro di ordinamento.
+  useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
   const si = useCL({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
@@ -273,18 +280,44 @@ export default function GuidaHub({ id }: { id?: string }) {
   }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore, hike?.cachedTsTotal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const displayItems = useMemo(() => {
-    const pillsFor = (h: PlannedHike) => [
-      { icon: Route,      label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
-      { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
-      { icon: Mountain,   label: `${Math.round(h.altitudeMax)} m` },
-      { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
-      ...(driving ? [{ icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }] : []),
-    ]
+    // Distanza in linea d'aria dall'indirizzo salvato nelle impostazioni — calcolata per ogni
+    // scheda della galleria (nessuna chiamata di routing per ogni percorso, solo per quello
+    // aperto qui sotto ha senso spendere una vera chiamata OSRM tramite useDrivingDistance).
+    const straightLineMetersFor = (polyline?: [number, number][]) => {
+      if (!userOrigin || !polyline?.length) return undefined
+      const [lat, lon] = polyline[0]
+      return haversineM(userOrigin.lat, userOrigin.lon, lat, lon)
+    }
+    const distancePillFor = (polyline: [number, number][] | undefined, isActive: boolean) => {
+      if (isActive && driving) return { icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }
+      const dist = straightLineMetersFor(polyline)
+      return dist != null ? { icon: MapPin, label: `~${(dist / 1000).toFixed(0)} km da te` } : null
+    }
+    const pillsFor = (h: PlannedHike) => {
+      const distPill = distancePillFor(h.routePolyline, true)
+      return [
+        { icon: Route,      label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
+        { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
+        { icon: Mountain,   label: `${Math.round(h.altitudeMax)} m` },
+        { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
+        ...(distPill ? [distPill] : []),
+      ]
+    }
     const sortValuesFor = (h: PlannedHike, previewValue: number) => ({
       date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: previewValue,
+      distance: straightLineMetersFor(h.routePolyline),
     })
     const mapped = items.map(it => {
-      if (it.id !== hike?.id) return it
+      if (it.id !== hike?.id) {
+        const distPill = distancePillFor(it.polyline, false)
+        const distance = straightLineMetersFor(it.polyline)
+        if (!distPill && distance == null) return it
+        return {
+          ...it,
+          statPills: distPill ? [...it.statPills, distPill] : it.statPills,
+          sortValues: it.sortValues ? { ...it.sortValues, distance } : it.sortValues,
+        }
+      }
       const preview = scorePreviewFor(hike)
       return { ...it, statPills: pillsFor(hike), sortValues: sortValuesFor(hike, preview?.value ?? 0), scorePreview: preview }
     })
@@ -295,7 +328,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike), sortValues: sortValuesFor(hike, preview?.value ?? 0), scorePreview: preview }, ...mapped]
     }
     return mapped
-  }, [items, hike, driving])
+  }, [items, hike, driving, userOrigin])
 
   if (!listLoaded) {
     return (
@@ -465,6 +498,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           showGradient={showGradient}
           showAspect={showAspect}
           dtmProfile={dtmProfile}
+          driving={driving}
           scores={{
             cl: { si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError },
             safety: safetyScore,
