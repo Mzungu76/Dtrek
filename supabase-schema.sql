@@ -255,6 +255,12 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS guide_generated_at TIMESTAMPT
 -- sulle guide generate prima di questa colonna o non ancora rigenerate.
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide_subtitle TEXT;
 
+-- Avvisi sullo stato aggiornato del percorso (chiusure, deviazioni, lavori) trovati dalla ricerca
+-- web di Giulia al momento della generazione della guida (tag [avviso] nel prompt di
+-- app/api/guide/route.ts, estratto in lib/guideNotices.ts) — NULL/vuoto se nessuna criticità nota
+-- o su guide generate prima di questa colonna.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide_notices JSONB;
+
 -- Sezioni (massimo 2) per cui la guida Breve genera testo AI — le altre restano solo-widget.
 -- NULL/vuoto ⇒ default applicato lato server: prima_di_partire + il_percorso.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_breve_sections TEXT[];
