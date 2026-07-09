@@ -68,6 +68,37 @@ type QaEvent =
   | { type: 'done'; pertinent: boolean; sources: { url: string; title: string }[] }
   | { type: 'error'; message: string }
 
+// ── GET /api/guide/qa?hikeId=X → cronologia domande già poste su questo percorso ─────────────
+export async function GET(req: NextRequest) {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+
+    const hikeId = req.nextUrl.searchParams.get('hikeId')
+    if (!hikeId) return NextResponse.json({ error: 'hikeId mancante' }, { status: 400 })
+
+    const { data, error } = await supabase
+      .from('guide_questions')
+      .select('question, answer, pertinent, sources, created_at')
+      .eq('planned_hike_id', hikeId)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+
+    if (error) throw error
+
+    return NextResponse.json({
+      entries: (data ?? []).map(r => ({
+        question:  r.question,
+        answer:    r.answer,
+        pertinent: r.pertinent,
+        sources:   r.sources ?? [],
+      })),
+    })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Errore interno' }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
@@ -144,7 +175,9 @@ export async function POST(req: NextRequest) {
         let pertinent = true
         let resolved = false
         let prefixBuf = ''
+        let answerAcc = ''
         const sourcesMap = new Map<string, string>()
+        const emitDelta = (text: string) => { answerAcc += text; send({ type: 'delta', text }) }
 
         try {
           for await (const event of stream) {
@@ -165,14 +198,14 @@ export async function POST(req: NextRequest) {
                   pertinent = m[1].toLowerCase() === 'si'
                   resolved = true
                   const rest = prefixBuf.slice(m[0].length)
-                  if (rest) send({ type: 'delta', text: rest })
+                  if (rest) emitDelta(rest)
                 } else if (prefixBuf.length > PERTINENZA_MAX_PREFIX_LEN) {
                   // Il tag non è mai arrivato (risposta malformata) — non blocchiamo oltre l'utente.
                   resolved = true
-                  send({ type: 'delta', text: prefixBuf })
+                  emitDelta(prefixBuf)
                 }
               } else {
-                send({ type: 'delta', text: event.delta.text })
+                emitDelta(event.delta.text)
               }
             }
 
@@ -186,13 +219,30 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          if (!resolved && prefixBuf) send({ type: 'delta', text: prefixBuf })
+          if (!resolved && prefixBuf) emitDelta(prefixBuf)
 
-          send({
-            type: 'done',
-            pertinent,
-            sources: Array.from(sourcesMap, ([url, title]) => ({ url, title })),
-          })
+          const sources = Array.from(sourcesMap, ([url, title]) => ({ url, title }))
+
+          // Persistita PRIMA di chiudere lo stream: una volta chiamato controller.close() la
+          // piattaforma può terminare l'invocazione della function in qualunque momento, quindi
+          // un salvataggio "fire and forget" dopo la chiusura rischierebbe di non completare mai.
+          // Un fallimento qui non deve però intaccare la risposta già mostrata all'utente.
+          if (answerAcc.trim()) {
+            try {
+              await supabase.from('guide_questions').insert({
+                planned_hike_id: hikeId,
+                user_id:         user.id,
+                question,
+                answer:           answerAcc.trim(),
+                pertinent,
+                sources,
+              })
+            } catch (e) {
+              console.error('Salvataggio guide_questions fallito:', e)
+            }
+          }
+
+          send({ type: 'done', pertinent, sources })
           controller.close()
         } catch (e) {
           send({ type: 'error', message: e instanceof Error ? e.message : 'Errore Claude' })

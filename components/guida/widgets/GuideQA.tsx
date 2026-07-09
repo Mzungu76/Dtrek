@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, type FormEvent } from 'react'
+import { useState, useRef, useEffect, type FormEvent } from 'react'
 import { MessageCircleQuestion, Send, Loader2, Link2 } from 'lucide-react'
 
 interface QASource { url: string; title: string }
@@ -19,12 +19,25 @@ const MAX_QUESTION_LENGTH = 300
  *  letta e Giulia risponde in modo sintetico, solo se la domanda è pertinente al percorso.
  *  La risposta arriva in streaming (NDJSON, vedi app/api/guide/qa/route.ts) con aggiornamenti sullo
  *  stato ("sto verificando online…") così l'attesa non è mai un semplice spinner muto.
- *  Cronologia tenuta solo in sessione (non persistita): domande diverse ad ogni lettura. */
+ *  Ogni domanda/risposta è persistita lato server (tabella guide_questions) e ricaricata qui al
+ *  primo render, così la cronologia sopravvive alla chiusura della guida. */
 export default function GuideQA({ hikeId }: { hikeId: string }) {
   const [question, setQuestion] = useState('')
   const [entries,  setEntries]  = useState<QAEntry[]>([])
   const [asking,   setAsking]   = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingHistory(true)
+    fetch(`/api/guide/qa?hikeId=${encodeURIComponent(hikeId)}`)
+      .then(res => res.ok ? res.json() : { entries: [] })
+      .then(json => { if (!cancelled) setEntries(json.entries ?? []) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingHistory(false) })
+    return () => { cancelled = true }
+  }, [hikeId])
 
   function patchEntry(idx: number, patch: Partial<QAEntry>) {
     setEntries(prev => prev.map((entry, i) => i === idx ? { ...entry, ...patch } : entry))
@@ -96,6 +109,12 @@ export default function GuideQA({ hikeId }: { hikeId: string }) {
         <p className="text-[13px] text-stone-500 mb-4">
           Hai un dubbio su questo percorso? Chiedi pure — Giulia risponde solo a domande pertinenti a questa escursione.
         </p>
+
+        {loadingHistory && entries.length === 0 && (
+          <p className="flex items-center gap-1.5 text-[13px] text-stone-400 italic mb-4">
+            <Loader2 className="w-3 h-3 animate-spin" /> Carico le domande già poste su questo percorso…
+          </p>
+        )}
 
         {entries.length > 0 && (
           <div className="space-y-4 mb-4">
