@@ -64,6 +64,15 @@ export function getUserStartingPoint(): Promise<{ lat: number; lon: number } | n
   return startingPointPromise
 }
 
+/** Drops the cached starting point so the next getUserStartingPoint() call refetches it — call
+ *  this right after saving/clearing the address in Impostazioni (components/profilo/
+ *  SectionIndirizzo.tsx), otherwise every screen that already called getUserStartingPoint() this
+ *  page load (Guida/Resoconto galleries) keeps using the address from before the change until a
+ *  full reload. */
+export function invalidateUserStartingPoint(): void {
+  startingPointPromise = null
+}
+
 interface DrivingCacheFields {
   cachedDrivingOriginLat?:       number
   cachedDrivingOriginLon?:       number
