@@ -261,6 +261,11 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide_subtitle TEXT;
 -- o su guide generate prima di questa colonna.
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide_notices JSONB;
 
+-- Fonti web citate da Giulia durante la generazione della guida (tag [fonti] nel prompt di
+-- app/api/guide/route.ts, estratto in lib/guideSources.ts) — NULL/vuoto se la ricerca web non ha
+-- prodotto citazioni o su guide generate prima di questa colonna.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide_sources JSONB;
+
 -- Sezioni (massimo 2) per cui la guida Breve genera testo AI — le altre restano solo-widget.
 -- NULL/vuoto ⇒ default applicato lato server: prima_di_partire + il_percorso.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_breve_sections TEXT[];

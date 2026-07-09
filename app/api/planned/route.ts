@@ -56,6 +56,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedGuide:           row.cached_guide as string | undefined,
     cachedGuideSubtitle:   row.cached_guide_subtitle as string | undefined,
     cachedGuideNotices:    row.cached_guide_notices as PlannedHike['cachedGuideNotices'],
+    cachedGuideSources:    row.cached_guide_sources as PlannedHike['cachedGuideSources'],
     guideTier:                    row.guide_tier                     as PlannedHike['guideTier'] | undefined,
     guideGeneratedAt:             row.guide_generated_at             as string | undefined,
     cachedBeautyScore:            row.cached_beauty_score            as PlannedHike['cachedBeautyScore'] | undefined,
@@ -101,6 +102,7 @@ function hikeToRow(h: PlannedHike) {
     cached_guide:           h.cachedGuide ?? null,
     cached_guide_subtitle:  h.cachedGuideSubtitle ?? null,
     cached_guide_notices:   h.cachedGuideNotices ?? null,
+    cached_guide_sources:   h.cachedGuideSources ?? null,
     guide_tier:                       h.guideTier ?? null,
     guide_generated_at:               h.guideGeneratedAt ?? null,
     cached_beauty_score:              h.cachedBeautyScore ?? null,
@@ -126,7 +128,7 @@ const META_COLS = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'hike_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment', 'cached_guide', 'cached_guide_subtitle', 'cached_guide_notices', 'guide_tier', 'guide_generated_at', 'osm_relation_id',
+  'route_polyline', 'assessment', 'cached_guide', 'cached_guide_subtitle', 'cached_guide_notices', 'cached_guide_sources', 'guide_tier', 'guide_generated_at', 'osm_relation_id',
   'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence', 'cached_scores_computed_at',
   'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_riddles', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
@@ -309,6 +311,7 @@ export async function PATCH(req: NextRequest) {
       cachedGuide?: string
       cachedGuideSubtitle?: string
       cachedGuideNotices?: PlannedHike['cachedGuideNotices']
+      cachedGuideSources?: PlannedHike['cachedGuideSources']
       guideTier?: PlannedHike['guideTier']
       guideGeneratedAt?: string
       cachedBeautyScore?: PlannedHike['cachedBeautyScore']
@@ -339,6 +342,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedGuide                  !== undefined) dbPatch.cached_guide                   = patch.cachedGuide
     if (patch.cachedGuideSubtitle          !== undefined) dbPatch.cached_guide_subtitle           = patch.cachedGuideSubtitle
     if (patch.cachedGuideNotices           !== undefined) dbPatch.cached_guide_notices            = patch.cachedGuideNotices
+    if (patch.cachedGuideSources           !== undefined) dbPatch.cached_guide_sources            = patch.cachedGuideSources
     if (patch.guideTier                    !== undefined) dbPatch.guide_tier                     = patch.guideTier
     if (patch.guideGeneratedAt             !== undefined) dbPatch.guide_generated_at             = patch.guideGeneratedAt
     if (patch.cachedBeautyScore            !== undefined) dbPatch.cached_beauty_score            = patch.cachedBeautyScore

@@ -359,6 +359,11 @@ export async function POST(req: NextRequest) {
     tools:      [{ type: 'web_search_20250305', name: 'web_search', max_uses: tier === 'approfondita' ? 8 : 4 }],
   })
 
+  // Raccoglie le fonti web citate da Giulia mentre scrive (citations_delta sui blocchi di testo,
+  // popolate automaticamente da Claude quando usa web_search) — appese in coda allo stream come
+  // tag [fonti], stessa convenzione di [sottotitolo]/[avviso], estratte in lib/guideSources.ts.
+  const sources = new Map<string, string>()
+
   const readable = new ReadableStream({
     async start(controller) {
       try {
@@ -369,6 +374,18 @@ export async function POST(req: NextRequest) {
           ) {
             controller.enqueue(new TextEncoder().encode(event.delta.text))
           }
+          if (
+            event.type === 'content_block_delta' &&
+            event.delta.type === 'citations_delta' &&
+            event.delta.citation.type === 'web_search_result_location'
+          ) {
+            const { url, title } = event.delta.citation
+            if (url && !sources.has(url)) sources.set(url, title ?? url)
+          }
+        }
+        if (sources.size > 0) {
+          const list = Array.from(sources, ([url, title]) => ({ url, title }))
+          controller.enqueue(new TextEncoder().encode(`\n[fonti]${JSON.stringify(list)}[/fonti]`))
         }
         controller.close()
       } catch (e) {
