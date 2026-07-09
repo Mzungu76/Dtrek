@@ -40,8 +40,26 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  // getUser() validates the JWT server-side (not just reading the cookie)
-  const { data: { user } } = await supabase.auth.getUser()
+  // getUser() validates the JWT server-side (not just reading the cookie) — but it's a network
+  // call to Supabase Auth on EVERY page navigation, and this middleware has no built-in timeout:
+  // if Supabase Auth is slow or briefly unreachable, the request just hangs until the platform
+  // itself kills it, surfacing as a 504 MIDDLEWARE_INVOCATION_TIMEOUT for the whole app (every
+  // route goes through this same middleware). Racing it against a timeout keeps that failure
+  // mode local — a slow/unreachable Auth service degrades to "let the page load" instead of
+  // taking the entire app down, since every API route already re-validates the session itself
+  // (getUserFromRequest) and returns 401 independently of what this middleware decided.
+  const TIMED_OUT = Symbol('auth-timeout')
+  const result = await Promise.race([
+    supabase.auth.getUser(),
+    new Promise<typeof TIMED_OUT>(resolve => setTimeout(() => resolve(TIMED_OUT), 8000)),
+  ])
+
+  if (result === TIMED_OUT) {
+    console.error(`middleware: supabase.auth.getUser() timed out for ${pathname} — letting the request through`)
+    return response
+  }
+
+  const { data: { user } } = result
 
   if (!user) {
     const loginUrl = new URL('/login', request.url)
