@@ -8,6 +8,8 @@ export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' 
 export interface StatPill {
   icon: LucideIcon
   label: string
+  /** Makes the pill a real link (e.g. Google Maps directions) instead of a static badge. */
+  href?: string
 }
 
 export interface WeatherIcon {
@@ -22,8 +24,9 @@ export interface SortValues {
   dplus: number
   cts?: number
   rating?: number
-  /** Straight-line (haversine) meters from the user's saved starting address to the trailhead —
-   *  undefined until the address is known/geocoded, which just hides the "Distanza" sort option. */
+  /** Real driving-route meters (OSRM, via lib/drivingInfo.ts) from the user's saved starting
+   *  address to the trailhead — undefined until known, which just hides the "Distanza" sort
+   *  option for that item (it sorts last, and the option itself stays hidden if no item has it). */
   distance?: number
 }
 

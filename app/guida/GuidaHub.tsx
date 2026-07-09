@@ -19,14 +19,14 @@ import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { type BeautyScore } from '@/lib/beautyScore'
-import { computeBbox, minDistToTrack, haversineM } from '@/lib/geoUtils'
-import { getUserStartingPoint } from '@/lib/drivingInfo'
+import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { getUserStartingPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2,
   Car, Trash2, Pencil, Check, Images,
-  Navigation, MapPin,
+  Navigation,
   Calendar as CalendarIcon,
 } from 'lucide-react'
 import PdfExportButton from '@/components/PdfExportButton'
@@ -79,6 +79,10 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
       // cachedTrailScore here would silently sort by the old single-dimension CTS while the
       // badge displays the 5-segment total, so a route's rank and its own badge would disagree.
       cts: previewTotal,
+      // Real driving distance (OSRM), persisted the first time this hike was open (see
+      // app/guida/useDrivingDistance.ts) — undefined for a hike never opened yet, not a
+      // straight-line guess; that's the whole point of caching the real routed value.
+      distance: h.cachedDrivingDistanceMeters,
     },
     scorePreview: previewTotal > 0 ? { value: previewTotal, max: TRAIL_SCORE_MAX } : undefined,
   }
@@ -127,6 +131,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   const terrainProfile = useTerrainProfile(hike)
   const inProtectedArea = useProtectedAreaCheck(hike)
   const driving = useDrivingDistance(hike)
+  const drivingWithMaps = useMemo(() => {
+    if (!driving) return driving
+    const trailStart = hike?.routePolyline?.[0]
+    const mapsUrl = userOrigin && trailStart
+      ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
+      : undefined
+    return { ...driving, mapsUrl }
+  }, [driving, userOrigin, hike?.routePolyline])
   const safetyScore = useSafetyScore(hike, setHike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
@@ -280,21 +292,20 @@ export default function GuidaHub({ id }: { id?: string }) {
   }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore, hike?.cachedTsTotal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const displayItems = useMemo(() => {
-    // Distanza in linea d'aria dall'indirizzo salvato nelle impostazioni — calcolata per ogni
-    // scheda della galleria (nessuna chiamata di routing per ogni percorso, solo per quello
-    // aperto qui sotto ha senso spendere una vera chiamata OSRM tramite useDrivingDistance).
-    const straightLineMetersFor = (polyline?: [number, number][]) => {
-      if (!userOrigin || !polyline?.length) return undefined
-      const [lat, lon] = polyline[0]
-      return haversineM(userOrigin.lat, userOrigin.lon, lat, lon)
+    // Distanza in auto REALE (OSRM) — non in linea d'aria: per l'itinerario aperto usa il valore
+    // live di useDrivingDistance (che lo ricalcola/persiste se l'indirizzo è cambiato); per gli
+    // altri usa il valore già cachato in Supabase l'ultima volta che quel percorso è stato aperto
+    // (nessuna chiamata di routing per-scheda). Il link apre le indicazioni su Google Maps.
+    const distancePillFor = (polyline: [number, number][] | undefined, distanceMeters: number | undefined) => {
+      if (distanceMeters == null) return null
+      const trailStart = polyline?.[0]
+      const href = userOrigin && trailStart
+        ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
+        : undefined
+      return { icon: Car, label: `${Math.round(distanceMeters / 1000)} km in auto`, href }
     }
-    const distancePillFor = (polyline: [number, number][] | undefined, isActive: boolean) => {
-      if (isActive && driving) return { icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }
-      const dist = straightLineMetersFor(polyline)
-      return dist != null ? { icon: MapPin, label: `~${(dist / 1000).toFixed(0)} km da te` } : null
-    }
-    const pillsFor = (h: PlannedHike) => {
-      const distPill = distancePillFor(h.routePolyline, true)
+    const pillsFor = (h: PlannedHike, distanceMeters: number | undefined) => {
+      const distPill = distancePillFor(h.routePolyline, distanceMeters)
       return [
         { icon: Route,      label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
         { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
@@ -303,29 +314,26 @@ export default function GuidaHub({ id }: { id?: string }) {
         ...(distPill ? [distPill] : []),
       ]
     }
-    const sortValuesFor = (h: PlannedHike, previewValue: number) => ({
+    const sortValuesFor = (h: PlannedHike, previewValue: number, distanceMeters: number | undefined) => ({
       date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: previewValue,
-      distance: straightLineMetersFor(h.routePolyline),
+      distance: distanceMeters,
     })
     const mapped = items.map(it => {
       if (it.id !== hike?.id) {
-        const distPill = distancePillFor(it.polyline, false)
-        const distance = straightLineMetersFor(it.polyline)
-        if (!distPill && distance == null) return it
-        return {
-          ...it,
-          statPills: distPill ? [...it.statPills, distPill] : it.statPills,
-          sortValues: it.sortValues ? { ...it.sortValues, distance } : it.sortValues,
-        }
+        const distPill = distancePillFor(it.polyline, it.sortValues?.distance)
+        if (!distPill) return it
+        return { ...it, statPills: [...it.statPills, distPill] }
       }
+      const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
       const preview = scorePreviewFor(hike)
-      return { ...it, statPills: pillsFor(hike), sortValues: sortValuesFor(hike, preview?.value ?? 0), scorePreview: preview }
+      return { ...it, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview }
     })
     // Deep link to a hike outside the active list (e.g. archived/expired) — still show it
     // standalone rather than 404, once its full record has loaded.
     if (hike && !mapped.some(it => it.id === hike.id)) {
+      const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
       const preview = scorePreviewFor(hike)
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike), sortValues: sortValuesFor(hike, preview?.value ?? 0), scorePreview: preview }, ...mapped]
+      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview }, ...mapped]
     }
     return mapped
   }, [items, hike, driving, userOrigin])
@@ -498,7 +506,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           showGradient={showGradient}
           showAspect={showAspect}
           dtmProfile={dtmProfile}
-          driving={driving}
+          driving={drivingWithMaps}
           scores={{
             cl: { si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError },
             safety: safetyScore,

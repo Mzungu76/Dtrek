@@ -30,8 +30,8 @@ import { exportActivityPdf } from '@/utils/pdfExport'
 import { type PoiItem, POI_META } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeDEP, depLabel, findSimilarActivities } from '@/lib/stats'
-import { computeBbox, minDistToTrack, haversineM } from '@/lib/geoUtils'
-import { getUserStartingPoint } from '@/lib/drivingInfo'
+import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { getUserStartingPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
 import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import {
@@ -275,17 +275,17 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }, [activity])
 
   const displayItems = useMemo(() => {
-    // Distanza in linea d'aria dall'indirizzo salvato — per ogni scheda della galleria (una vera
-    // chiamata di routing OSRM, via useDrivingDistance, ha senso solo per quella aperta qui sotto).
-    const straightLineMetersFor = (polyline?: [number, number][]) => {
-      if (!userOrigin || !polyline?.length) return undefined
-      const [lat, lon] = polyline[0]
-      return haversineM(userOrigin.lat, userOrigin.lon, lat, lon)
-    }
+    // Distanza in auto REALE (OSRM, via useDrivingDistance) — non in linea d'aria. A differenza
+    // di planned_hikes, un'activity completata non ha una colonna cache per questo valore (vedi
+    // app/resoconto/useDrivingDistance.ts), quindi qui è disponibile solo per quella aperta ora;
+    // le altre schede semplicemente non mostrano la pillola finché non vengono aperte a loro volta.
     const distancePillFor = (polyline: [number, number][] | undefined, isActive: boolean) => {
-      if (isActive && driving) return { icon: Car, label: `${(driving.distanceMeters / 1000).toFixed(0)} km in auto` }
-      const dist = straightLineMetersFor(polyline)
-      return dist != null ? { icon: MapPin, label: `~${(dist / 1000).toFixed(0)} km da te` } : null
+      if (!isActive || !driving) return null
+      const trailStart = polyline?.[0]
+      const href = userOrigin && trailStart
+        ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
+        : undefined
+      return { icon: Car, label: `${Math.round(driving.distanceMeters / 1000)} km in auto`, href }
     }
     const pillsFor = (a: StoredActivity) => {
       const polyline = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
@@ -300,7 +300,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     }
     const sortValuesFor = (a: StoredActivity) => ({
       date: new Date(a.startTime).getTime(), km: a.distanceMeters, dplus: a.elevationGain, cts: a.trailScore, rating: a.userRating,
-      distance: straightLineMetersFor(a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])),
+      distance: driving?.distanceMeters,
     })
     const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? photos[0]?.url : undefined)
     // Otherwise the gallery thumbnail's rating ring stays at whatever it was when the list first
@@ -310,16 +310,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
       if (it.id === activity?.id) {
         return { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }
       }
-      const distPill = distancePillFor(it.polyline, false)
-      const distance = straightLineMetersFor(it.polyline)
       const coverUrl = cover(it.id)
-      if (!distPill && distance == null && !coverUrl) return it
-      return {
-        ...it,
-        statPills: distPill ? [...it.statPills, distPill] : it.statPills,
-        sortValues: it.sortValues ? { ...it.sortValues, distance } : it.sortValues,
-        ...(coverUrl ? { coverPhotoUrl: coverUrl } : {}),
-      }
+      return coverUrl ? { ...it, coverPhotoUrl: coverUrl } : it
     })
     if (activity && !mapped.some(it => it.id === activity.id)) {
       return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }, ...mapped]

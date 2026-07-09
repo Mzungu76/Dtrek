@@ -46,11 +46,25 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
         >
           <div className="pointer-events-auto mt-3 flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
             {scoreBadges}
-            {statPills.map(({ icon: Icon, label }) => (
-              <span key={label} className="pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm">
-                <Icon className="w-3 h-3" /> {label}
-              </span>
-            ))}
+            {statPills.map(({ icon: Icon, label, href }) => {
+              const className = 'pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm'
+              return href ? (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  className={`${className} hover:bg-stone-50 transition-colors`}
+                >
+                  <Icon className="w-3 h-3" /> {label}
+                </a>
+              ) : (
+                <span key={label} className={className}>
+                  <Icon className="w-3 h-3" /> {label}
+                </span>
+              )
+            })}
           </div>
 
           <div className="mt-3 flex items-start gap-2.5">
