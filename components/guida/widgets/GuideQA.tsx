@@ -6,6 +6,7 @@ interface QASource { url: string; title: string }
 
 interface QAEntry {
   question: string
+  status?: string
   answer?: string
   pertinent?: boolean
   sources?: QASource[]
@@ -16,12 +17,18 @@ const MAX_QUESTION_LENGTH = 300
 
 /** Domande e risposte sul percorso — l'utente chiede qualcosa di specifico sulla guida appena
  *  letta e Giulia risponde in modo sintetico, solo se la domanda è pertinente al percorso.
+ *  La risposta arriva in streaming (NDJSON, vedi app/api/guide/qa/route.ts) con aggiornamenti sullo
+ *  stato ("sto verificando online…") così l'attesa non è mai un semplice spinner muto.
  *  Cronologia tenuta solo in sessione (non persistita): domande diverse ad ogni lettura. */
 export default function GuideQA({ hikeId }: { hikeId: string }) {
   const [question, setQuestion] = useState('')
   const [entries,  setEntries]  = useState<QAEntry[]>([])
   const [asking,   setAsking]   = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  function patchEntry(idx: number, patch: Partial<QAEntry>) {
+    setEntries(prev => prev.map((entry, i) => i === idx ? { ...entry, ...patch } : entry))
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -39,15 +46,36 @@ export default function GuideQA({ hikeId }: { hikeId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hikeId, question: q }),
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.message ?? json.error ?? `HTTP ${res.status}`)
-      setEntries(prev => prev.map((entry, i) => i === idx
-        ? { ...entry, answer: json.answer, pertinent: json.pertinent, sources: json.sources }
-        : entry))
+
+      if (!res.ok || !res.body) {
+        let message = `HTTP ${res.status}`
+        try { const j = await res.json(); message = j.message ?? j.error ?? message } catch {}
+        throw new Error(message)
+      }
+
+      const reader  = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.trim()) continue
+          const evt = JSON.parse(line)
+          if (evt.type === 'status') patchEntry(idx, { status: evt.text })
+          else if (evt.type === 'delta') setEntries(prev => prev.map((entry, i) => i === idx
+            ? { ...entry, status: undefined, answer: (entry.answer ?? '') + evt.text }
+            : entry))
+          else if (evt.type === 'done') patchEntry(idx, { pertinent: evt.pertinent, sources: evt.sources, status: undefined })
+          else if (evt.type === 'error') throw new Error(evt.message)
+        }
+      }
     } catch (err) {
-      setEntries(prev => prev.map((entry, i) => i === idx
-        ? { ...entry, error: err instanceof Error ? err.message : 'Errore durante la richiesta' }
-        : entry))
+      patchEntry(idx, { error: err instanceof Error ? err.message : 'Errore durante la richiesta', status: undefined })
     } finally {
       setAsking(false)
       inputRef.current?.focus()
@@ -77,7 +105,12 @@ export default function GuideQA({ hikeId }: { hikeId: string }) {
                 {entry.error && (
                   <p className="text-[13px] text-red-500">{entry.error}</p>
                 )}
-                {!entry.error && entry.answer === undefined && (
+                {!entry.error && entry.status && (
+                  <p className="flex items-center gap-1.5 text-[13px] text-stone-400 italic">
+                    <Loader2 className="w-3 h-3 animate-spin" /> {entry.status}
+                  </p>
+                )}
+                {!entry.error && !entry.status && entry.answer === undefined && (
                   <p className="flex items-center gap-1.5 text-[13px] text-stone-400 italic">
                     <Loader2 className="w-3 h-3 animate-spin" /> Giulia sta pensando…
                   </p>

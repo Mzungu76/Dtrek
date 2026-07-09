@@ -19,6 +19,7 @@ import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
+import { stripGuideStatus } from '@/lib/guideStatus'
 import { AlertTriangle, Link2 } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
 import { GUIDE_SECTIONS, sectionDefForTitle, type GuideSectionKey } from '@/lib/guideSections'
@@ -421,6 +422,7 @@ export default function GuideReader({
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
   const [guideNotices, setGuideNotices] = useState<string[]>(hike.cachedGuideNotices ?? [])
   const [guideSources, setGuideSources] = useState<GuideSource[]>(hike.cachedGuideSources ?? [])
+  const [genStatus,    setGenStatus]    = useState<string | undefined>(undefined)
   const [generating,   setGenerating]   = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
@@ -523,6 +525,7 @@ export default function GuideReader({
     setGuideText('')
     setGuideNotices([])
     setGuideSources([])
+    setGenStatus(undefined)
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
     setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(0)
@@ -548,8 +551,12 @@ export default function GuideReader({
         const { done, value } = await reader.read()
         if (done) break
         acc += decoder.decode(value, { stream: true })
-        setGuideText(acc)
+        const { lastStatus, cleanedText: displayText } = stripGuideStatus(acc)
+        if (lastStatus) setGenStatus(lastStatus)
+        setGuideText(displayText)
       }
+      acc = stripGuideStatus(acc).cleanedText
+      setGenStatus(undefined)
 
       const { subtitle, cleanedText } = extractCoverSubtitle(acc)
       const { notices, cleanedText: cleanedText2 } = extractGuideNotices(cleanedText)
@@ -917,7 +924,7 @@ export default function GuideReader({
               <BookOpen className="w-6 h-6 text-terra-500" />
             </div>
             <div>
-              <p className="font-display font-semibold text-stone-700">Giulia sta scrivendo…</p>
+              <p className="font-display font-semibold text-stone-700">{genStatus ?? 'Giulia sta scrivendo…'}</p>
               <p className="text-stone-400 text-sm mt-1">i dati qui sotto sono già consultabili nel frattempo</p>
             </div>
           </div>

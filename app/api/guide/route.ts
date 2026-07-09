@@ -366,13 +366,25 @@ export async function POST(req: NextRequest) {
 
   const readable = new ReadableStream({
     async start(controller) {
+      const enc = new TextEncoder()
       try {
         for await (const event of stream) {
+          // [stato] è un marcatore transitorio (stessa convenzione di [sottotitolo]/[avviso]/
+          // [fonti]) rimosso lato client man mano che arriva — dà un feedback di cosa sta facendo
+          // Giulia durante la fase di ricerca web, prima che compaia il primo testo vero.
+          if (event.type === 'content_block_start') {
+            const cb = event.content_block
+            if (cb.type === 'server_tool_use' && cb.name === 'web_search') {
+              controller.enqueue(enc.encode('[stato]Sto verificando lo stato aggiornato del percorso online…[/stato]'))
+            } else if (cb.type === 'web_search_tool_result') {
+              controller.enqueue(enc.encode('[stato]Ho trovato delle informazioni, le sto integrando…[/stato]'))
+            }
+          }
           if (
             event.type === 'content_block_delta' &&
             event.delta.type === 'text_delta'
           ) {
-            controller.enqueue(new TextEncoder().encode(event.delta.text))
+            controller.enqueue(enc.encode(event.delta.text))
           }
           if (
             event.type === 'content_block_delta' &&
@@ -385,7 +397,7 @@ export async function POST(req: NextRequest) {
         }
         if (sources.size > 0) {
           const list = Array.from(sources, ([url, title]) => ({ url, title }))
-          controller.enqueue(new TextEncoder().encode(`\n[fonti]${JSON.stringify(list)}[/fonti]`))
+          controller.enqueue(enc.encode(`\n[fonti]${JSON.stringify(list)}[/fonti]`))
         }
         controller.close()
       } catch (e) {
