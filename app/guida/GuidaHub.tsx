@@ -434,6 +434,10 @@ export default function GuidaHub({ id }: { id?: string }) {
     return <HubSkeleton />
   }
   if (!currentId) {
+    // items.length > 0 means the "pick the first item" effect above just hasn't committed its
+    // setCurrentId yet (it fires one tick after listLoaded flips true) — genuinely empty is the
+    // only case that should show the import CTA, otherwise this flashes on every single load.
+    if (items.length > 0) return <HubSkeleton />
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-4 text-center px-6">
         <p className="text-stone-300 text-sm">Nessun percorso in attesa.</p>
