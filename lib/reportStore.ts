@@ -2,6 +2,22 @@
 // `content` (Markdown) remains the source of truth for all existing rendering
 // (SectionCard, DiarioReportPage, PDF). `sections` is an optional structured
 // layer used by the manual editor; it's converted to/from Markdown on save/load.
+//
+// This module is imported by the server route app/api/resoconto/route.ts (for
+// sectionsToMarkdown), so it must stay free of browser-only I/O — the
+// cache-first/queued client access layer lives in lib/sync/hikeReportStore.ts.
+
+export interface HikeReport {
+  id: string
+  activity_id: string
+  title: string
+  content: string
+  photos: { caption: string; lat?: number; lon?: number; progress: number }[]
+  sections?: ReportSection[] | null
+  authored_by?: ReportAuthoredBy
+  created_at: string
+  updated_at: string
+}
 
 export interface ReportSection {
   id: string

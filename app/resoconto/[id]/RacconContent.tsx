@@ -10,8 +10,9 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   parseSections, markdownToSections, sectionsToMarkdown, SCAFFOLD_SECTIONS,
-  type ReportSection, type ReportAuthoredBy,
+  type ReportSection, type ReportAuthoredBy, type HikeReport,
 } from '@/lib/reportStore'
+import { getReport, saveReportContent, cacheReport } from '@/lib/sync/hikeReportStore'
 import ManualEditor from '@/app/components/ManualEditor'
 import {
   FileDown, Pencil, Check, Loader2,
@@ -27,18 +28,6 @@ import { PhotoLightbox } from './PhotoLightbox'
 const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-interface HikeReport {
-  id: string
-  activity_id: string
-  title: string
-  content: string
-  photos: { caption: string; lat?: number; lon?: number; progress: number }[]
-  sections?: ReportSection[] | null
-  authored_by?: ReportAuthoredBy
-  created_at: string
-  updated_at: string
-}
 
 type ResocontoLength = 'breve' | 'media' | 'lunga'
 
@@ -79,7 +68,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
   useEffect(() => {
     Promise.all([
       getActivityById(id),
-      fetch(`/api/resoconto?activityId=${encodeURIComponent(id)}`).then(r => r.json()).catch(() => null),
+      getReport(id).catch(() => null),
       fetch(`/api/questionnaire?activityId=${encodeURIComponent(id)}`).then(r => r.json()).catch(() => null),
     ]).then(([act, rep, questionnaire]) => {
       if (!act) { router.push('/resoconto'); return }
@@ -124,11 +113,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
     if (!text.trim()) return
     setSaving(true)
     try {
-      await fetch('/api/resoconto', {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ activityId: id, content: text }),
-      })
+      await saveReportContent(id, text)
       setSaveOk(true)
       setTimeout(() => setSaveOk(false), 2000)
     } finally {
@@ -138,12 +123,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
 
   const saveSections = useCallback(async (sections: ReportSection[], authoredBy: ReportAuthoredBy) => {
     const newContent = sectionsToMarkdown(sections)
-    const res = await fetch('/api/resoconto', {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ activityId: id, content: newContent, sections, authoredBy }),
-    })
-    if (!res.ok) { console.error('Salvataggio sezioni fallito', await res.text().catch(() => '')); return }
+    await saveReportContent(id, newContent, sections, authoredBy)
     setReportSections(sections)
     setReportAuthoredBy(authoredBy)
     setContent(newContent)
@@ -188,6 +168,21 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         full += decoder.decode(value, { stream: true })
         setContent(full)
       }
+      // The server already upserted this row (see app/api/resoconto/route.ts) — mirror it into
+      // the local cache so a cache-first getReport() on the next visit doesn't miss it.
+      const now = new Date().toISOString()
+      const generated: HikeReport = {
+        id: `report-${id}`,
+        activity_id: id,
+        title: activity.title ?? 'Escursione',
+        content: full,
+        photos: photoMeta.map(({ caption, lat, lon, progress }) => ({ caption, lat, lon, progress })),
+        authored_by: 'ai',
+        sections: null,
+        created_at: now,
+        updated_at: now,
+      }
+      await cacheReport(id, generated)
     } catch {
       setApiError('Errore di rete. Riprova.')
     } finally {
