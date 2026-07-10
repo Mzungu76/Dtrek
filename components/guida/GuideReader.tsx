@@ -1,16 +1,11 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
-import Image from 'next/image'
 import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
-import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
-  Volume2, VolumeX, Play, Pause, Square,
-  RefreshCw, Loader2, Mountain, Clock, Route,
-  Leaf, Utensils, ShieldCheck, Compass, MapPin,
-  FileDown, ExternalLink, BookOpen, BarChart2, KeyRound, Sparkles,
+  VolumeX, Loader2, RefreshCw,
+  FileDown, BookOpen, Sparkles,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
@@ -20,15 +15,22 @@ import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
-import { AlertTriangle, Link2, Car } from 'lucide-react'
+import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
 import { GUIDE_SECTIONS, sectionDefForTitle, type GuideSectionKey } from '@/lib/guideSections'
+import { SECTION_STYLE, LEGACY_STYLE } from './sectionStyle'
+import { slugifyHeading } from '@/lib/guideSlug'
 import WeatherWidget from '@/components/WeatherWidget'
 import RouteMapSection from '@/components/RouteMapSection'
 import ScoresWidget from './widgets/ScoresWidget'
 import SafetyWidget from './widgets/SafetyWidget'
 import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
+import GuideHero from './GuideHero'
+import GuideStatsStrip from './GuideStatsStrip'
+import GuideSectionNav from './GuideSectionNav'
+import VoicePlayer from './VoicePlayer'
+import SectionCard from './SectionCard'
 import type { CLProps, CtsProps, ShadeWaterProps } from '@/components/ScoreRing'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { HikeAssessment } from '@/lib/hikeAssessment'
@@ -130,25 +132,6 @@ interface Props {
   natura?: NaturaBundle
 }
 
-// ── Section styling (fixed skeleton) ────────────────────────────────────────────
-
-// Colori presi dalla palette terra/forest/stone dell'app (tailwind.config.ts), non più tonalità
-// ad-hoc estranee al resto dell'interfaccia.
-const SECTION_STYLE: Record<GuideSectionKey, { icon: ReactNode; color: string }> = {
-  prima_di_partire: { icon: <Compass     className="w-4 h-4" />, color: '#c05a17' }, // terra-600
-  il_percorso:      { icon: <Route       className="w-4 h-4" />, color: '#277134' }, // forest-600
-  dati_sicurezza:   { icon: <BarChart2   className="w-4 h-4" />, color: '#73695c' }, // stone-700
-  luoghi:           { icon: <MapPin      className="w-4 h-4" />, color: '#813619' }, // terra-800
-  natura:           { icon: <Leaf        className="w-4 h-4" />, color: '#378d44' }, // forest-500
-  sapori:           { icon: <Utensils    className="w-4 h-4" />, color: '#d97220' }, // terra-500
-  consigli:         { icon: <ShieldCheck className="w-4 h-4" />, color: '#5e564c' }, // stone-800
-}
-const LEGACY_STYLE = { icon: <BookOpen className="w-4 h-4" />, color: '#978e7a' }
-
-function slugifyHeading(text: string): string {
-  return 'poi-heading-' + text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-}
-
 interface ParsedSection { key: GuideSectionKey | null; title: string; body: string }
 
 function parseGuide(text: string): ParsedSection[] {
@@ -158,214 +141,6 @@ function parseGuide(text: string): ParsedSection[] {
     const body  = nl === -1 ? '' : part.slice(nl + 1).trim()
     return { key: sectionDefForTitle(title)?.key ?? null, title, body }
   })
-}
-
-// ── Route SVG (instant hero background fallback) ───────────────────────────────
-
-function RouteSvg({ hike }: { hike: PlannedHike }) {
-  const pts = useMemo(() => {
-    const raw = ((hike.trackPoints ?? []).filter(p => p.lat && p.lon) as { lat: number; lon: number }[])
-      .map(p => [p.lat, p.lon] as [number, number])
-    return raw.length > 1 ? raw : (hike.routePolyline ?? []) as [number, number][]
-  }, [hike])
-
-  if (pts.length < 2) return null
-
-  const lats = pts.map(p => p[0]), lons = pts.map(p => p[1])
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-  const W = 1200, H = 420
-  const pad = 40
-  const scLat = (H - 2 * pad) / (maxLat - minLat || 0.001)
-  const scLon = (W - 2 * pad) / (maxLon - minLon || 0.001)
-  const sc = Math.min(scLat, scLon)
-  const offX = pad + ((W - 2 * pad) - (maxLon - minLon) * sc) / 2
-  const offY = pad + ((H - 2 * pad) - (maxLat - minLat) * sc) / 2
-  const px = (lon: number) => offX + (lon - minLon) * sc
-  const py = (lat: number) => offY + (maxLat - lat) * sc
-  const d = pts.map(([lat, lon], i) => `${i === 0 ? 'M' : 'L'} ${px(lon).toFixed(1)} ${py(lat).toFixed(1)}`).join(' ')
-
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="absolute inset-0 w-full h-full opacity-20"
-      preserveAspectRatio="xMidYMid slice"
-    >
-      <path d={d} fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={px(pts[0][1]).toFixed(1)} cy={py(pts[0][0]).toFixed(1)} r="6" fill="#4ade80" />
-      <circle cx={px(pts[pts.length-1][1]).toFixed(1)} cy={py(pts[pts.length-1][0]).toFixed(1)} r="6" fill="#f87171" />
-    </svg>
-  )
-}
-
-// ── Magazine section body renderer ────────────────────────────────────────────
-
-function MagazineBody({ body, color, sectionPhoto }: { body: string; color: string; sectionPhoto?: string }) {
-  interface Block { type: 'lead' | 'para' | 'curiosita' | 'avviso' | 'subsection'; text: string }
-
-  const blocks = useMemo<Block[]>(() => {
-    const out: Block[] = []
-    // [curiosita] e [avviso] sono blocchi delimitati su una riga dedicata (stessa convenzione di
-    // [sottotitolo]/[indovinello]/[epoca], vedi app/api/guide/route.ts) — [avviso] segnala una
-    // criticità reale e specifica trovata dalla ricerca web di Giulia sullo stato del percorso.
-    const blockRe = /\[(curiosita|avviso)\]([\s\S]*?)\[\/\1\]/g
-    let last = 0
-    let m: RegExpExecArray | null
-    let paraCount = 0
-
-    const flushText = (chunk: string) => {
-      let buf: string[] = []
-      const flush = () => {
-        const p = buf.join(' ').trim()
-        if (p) {
-          out.push({ type: paraCount === 0 ? 'lead' : 'para', text: p })
-          paraCount++
-          buf = []
-        }
-      }
-      for (const line of chunk.split('\n')) {
-        const t = line.trim()
-        if (t.startsWith('### ')) { flush(); out.push({ type: 'subsection', text: t.slice(4) }) }
-        else if (!t) flush()
-        else buf.push(t)
-      }
-      flush()
-    }
-
-    while ((m = blockRe.exec(body)) !== null) {
-      flushText(body.slice(last, m.index))
-      out.push({ type: m[1] as 'curiosita' | 'avviso', text: m[2].trim().replace(/\n/g, ' ') })
-      last = m.index + m[0].length
-    }
-    flushText(body.slice(last))
-    return out
-  }, [body])
-
-  // First paragraph (lead) stands alone full-width; rest flow in columns
-  const lead = blocks.find(b => b.type === 'lead')
-  const rest  = blocks.filter(b => b !== lead)
-
-  return (
-    <div>
-      {lead && (
-        <p className="text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-700 mb-6">
-          {lead.text}
-        </p>
-      )}
-      <div className="md:columns-2 md:gap-8 print-columns-2">
-        {sectionPhoto && (
-          <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
-            <div className="relative w-full h-40 rounded-sm shadow-sm overflow-hidden">
-              <Image src={sectionPhoto} alt="" fill sizes="(max-width: 640px) 42vw, 38vw" className="object-cover" />
-            </div>
-            <p className="text-[9px] italic text-stone-400 mt-1">© Wikimedia Commons</p>
-          </div>
-        )}
-        {rest.map((b, i) => {
-          if (b.type === 'curiosita') {
-            return (
-              <div
-                key={i}
-                className="my-5 rounded-sm overflow-hidden shadow-sm"
-                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
-              >
-                <div className="flex">
-                  <div className="w-1 flex-shrink-0" style={{ background: color }} />
-                  <div className="flex-1 px-4 py-3" style={{ background: color + '12' }}>
-                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5" style={{ color }}>
-                      ◆ Lo sapevi?
-                    </p>
-                    <p className="italic text-[14px] leading-relaxed text-stone-700">
-                      {b.text}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )
-          }
-          if (b.type === 'avviso') {
-            return (
-              <div
-                key={i}
-                className="my-5 rounded-sm overflow-hidden shadow-sm border border-amber-200"
-                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
-              >
-                <div className="flex">
-                  <div className="w-1 flex-shrink-0 bg-amber-500" />
-                  <div className="flex-1 px-4 py-3 bg-amber-50">
-                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5 text-amber-700">
-                      ⚠ Stato del percorso
-                    </p>
-                    <p className="text-[14px] leading-relaxed text-amber-900">
-                      {b.text}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )
-          }
-          if (b.type === 'subsection') {
-            return (
-              <h3
-                key={i}
-                id={slugifyHeading(b.text)}
-                className="font-display text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2 scroll-mt-24"
-                style={{ color, breakAfter: 'avoid' }}
-              >
-                {b.text}
-              </h3>
-            )
-          }
-          return (
-            <p key={i} className="text-[15px] leading-7 text-stone-600 mb-4">
-              {b.text}
-            </p>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── POI card ──────────────────────────────────────────────────────────────────
-
-interface PoiPhoto {
-  title: string
-  thumbnail: string
-  url: string
-  description?: string
-}
-
-function PoiCard({ photo, color }: { photo: PoiPhoto; color: string }) {
-  return (
-    <a
-      href={photo.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group flex flex-col rounded-xl overflow-hidden border border-stone-100 hover:border-stone-200 shadow-sm hover:shadow-md transition-all bg-white"
-    >
-      <div className="relative h-40 overflow-hidden bg-stone-100">
-        <Image
-          src={photo.thumbnail}
-          alt={photo.title}
-          fill
-          sizes="(max-width: 640px) 100vw, 33vw"
-          className="object-cover group-hover:scale-105 transition-transform duration-500"
-        />
-      </div>
-      <div className="p-3">
-        <p className="font-display font-semibold text-stone-800 text-[16px] leading-tight line-clamp-1 tracking-wide">
-          {photo.title}
-        </p>
-        {photo.description && (
-          <p className="text-[11px] text-stone-400 mt-0.5 line-clamp-1">{photo.description}</p>
-        )}
-        <span className="flex items-center gap-0.5 text-[10px] mt-1.5" style={{ color }}>
-          <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
-        </span>
-      </div>
-    </a>
-  )
 }
 
 // ── Chunk-based TTS ───────────────────────────────────────────────────────────
@@ -417,6 +192,11 @@ type GuideTier = 'breve' | 'approfondita'
  * action) once `enrichmentReady` — every widget (mappa, profilo altimetrico, punteggi, POI,
  * natura) is always rendered regardless of whether the AI wrote text for that section, so no
  * data ever becomes unreachable just because the user hasn't pressed "Approfondisci" yet.
+ *
+ * Layout: this is the orchestrator only — hero, stats strip, section nav, voice mini-player and
+ * each section's editorial header/body live in their own components (GuideHero, GuideStatsStrip,
+ * GuideSectionNav, VoicePlayer, SectionCard/MagazineBody). State, effects and handlers for TTS,
+ * generation and scroll/nav all stay here and get threaded down as props.
  */
 export default function GuideReader({
   hike, onHikeUpdate, topBanner, enrichmentReady, hasAiAccess,
@@ -431,18 +211,6 @@ export default function GuideReader({
   const [error,        setError]        = useState<string | null>(null)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
-
-  const poiPhotos = useMemo(() => {
-    if (!hike.cachedPoiWiki) return []
-    return (hike.cachedPoiWiki as Array<{ poi: PoiItem; wiki: WikiPage }>)
-      .filter(w => w.wiki?.thumbnail)
-      .map(w => ({
-        title:       w.wiki.title,
-        thumbnail:   w.wiki.thumbnail!,
-        url:         w.wiki.url,
-        description: w.wiki.description,
-      }))
-  }, [hike.cachedPoiWiki])
 
   const parsedSections = useMemo(() => guideText ? parseGuide(guideText) : [], [guideText])
 
@@ -485,7 +253,9 @@ export default function GuideReader({
     setGuideSources(hike.cachedGuideSources ?? [])
   }, [hike.id, hike.cachedGuide, hike.cachedGuideNotices, hike.cachedGuideSources])
 
-  // Load route photos from Wikimedia Commons for hero + mosaic + section illustrations
+  // Load route photos from Wikimedia Commons for the mosaic + section illustrations (the hero
+  // itself is now a recolored map, not a photo — see GuideHero — so every photo slot here goes
+  // to the mosaic/section illustrations instead of being reserved for the hero).
   useEffect(() => {
     const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
     const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map((p: [number, number]) => ({ lat: p[0], lon: p[1] }))
@@ -769,6 +539,7 @@ export default function GuideReader({
   const effectiveTier: GuideTier = tier ?? 'approfondita'
   const hikeTitle = hike.title
   const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
+  const showApprofondisciHint = hasGuide && !generating && effectiveTier === 'breve'
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -777,361 +548,218 @@ export default function GuideReader({
 
       {topBanner && <div className="px-4 sm:px-6 pt-4">{topBanner}</div>}
 
-      {/* ── Hero ────────────────────────────────────────────────────────── */}
-      <div className="relative w-full overflow-hidden" style={{ height: 'clamp(200px, 34vw, 340px)' }}>
-        {routePhotos[0] ? (
-          <Image
-            src={routePhotos[0]}
-            alt={hikeTitle}
-            fill
-            sizes="100vw"
-            priority
-            className="object-cover"
-            style={{ objectPosition: 'center 35%' }}
-          />
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{ background: 'linear-gradient(135deg, #813619 0%, #1c4724 50%, #4d4740 100%)' }}
-          >
-            <RouteSvg hike={hike} />
-          </div>
-        )}
+      <GuideHero
+        trackPoints={hike.trackPoints}
+        routePolyline={hike.routePolyline}
+        title={hikeTitle}
+        categoryBadge={categoryBadge}
+        plannedDate={hike.plannedDate}
+      />
 
-        <div className="absolute inset-0" style={{
-          background: 'linear-gradient(to top, rgba(31,22,15,0.88) 0%, rgba(31,22,15,0.45) 40%, rgba(31,22,15,0.12) 80%, transparent 100%)',
-        }} />
+      <GuideStatsStrip
+        distanceKm={hike.distanceMeters / 1000}
+        elevationGain={hike.elevationGain}
+        altitudeMax={hike.altitudeMax}
+        durationLabel={formatDuration(hike.estimatedTimeSeconds)}
+        driving={driving}
+      />
 
-        <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 pb-5">
-          <span className="inline-block bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
-            {categoryBadge}
-          </span>
-          <h1 className="font-display text-xl sm:text-3xl font-black text-white leading-tight mb-1 max-w-2xl uppercase tracking-tight"
-            style={{ textShadow: '0 2px 12px rgba(0,0,0,0.35)' }}
-          >
-            {hikeTitle}
-          </h1>
-          {hike.plannedDate && (
-            <p className="text-[12px] italic text-white/70">
-              {format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Stats strip ─────────────────────────────────────────────────── */}
-      <div data-hscroll className="flex bg-stone-50 border-b border-stone-200 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
-        {[
-          { icon: <Route    className="w-3.5 h-3.5" />, value: `${(hike.distanceMeters/1000).toFixed(1)} km`,         label: 'Distanza' },
-          { icon: <Mountain className="w-3.5 h-3.5" />, value: `+${Math.round(hike.elevationGain)} m`,               label: 'Dislivello' },
-          { icon: <Mountain className="w-3.5 h-3.5" />, value: `${Math.round(hike.altitudeMax)} m`,                  label: 'Quota max' },
-          { icon: <Clock    className="w-3.5 h-3.5" />, value: formatDuration(hike.estimatedTimeSeconds),            label: 'Durata' },
-          ...(driving ? [{
-            icon: <Car className="w-3.5 h-3.5" />,
-            value: `${Math.round(driving.distanceMeters / 1000)} km`,
-            label: 'Da te (auto)',
-            href: driving.mapsUrl,
-          }] : []),
-        ].map(({ icon, value, label, href }, i, arr) => {
-          const content = (
-            <>
-              <span className="flex items-center gap-1.5 text-[14px] font-bold text-stone-800 leading-none">
-                <span className="text-terra-600 hidden sm:block">{icon}</span>
-                {value}
-              </span>
-              <span className="font-display text-[7px] font-semibold tracking-[1.6px] uppercase text-stone-400">{label}</span>
-            </>
-          )
-          const className = 'flex-1 min-w-[25%] shrink-0 flex flex-col items-center justify-center py-3 gap-1'
-          const style = { borderRight: i < arr.length - 1 ? '1px solid #dcd8cc' : 'none' }
-          return href ? (
-            <a key={label} href={href} target="_blank" rel="noopener noreferrer" className={`${className} hover:bg-stone-100 transition-colors`} style={style}>
-              {content}
-            </a>
-          ) : (
-            <div key={label} className={className} style={style}>{content}</div>
-          )
-        })}
-      </div>
-
-      {/* ── Photo mosaic strip ─────────────────────────────────────────── */}
       <PhotoMosaic
-        photos={routePhotos.slice(1, 5).map((url, i) => ({ id: String(i), url }))}
+        photos={routePhotos.slice(0, 4).map((url, i) => ({ id: String(i), url }))}
         heightClass="h-32"
       />
 
-      {/* ── Voice controls + pin navigation (single sticky row) — always visible, since every
-          section always has its own widget even before/without AI text. ─────────────────── */}
-      <div data-hscroll className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b px-4 py-2 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-        style={{ borderColor: '#dcd8cc', scrollbarWidth: 'none' }}
-      >
-        {hasGuide && (
-          <div className="flex items-center gap-1 shrink-0">
-            {RATES.map((r, i) => (
-              <button key={r} onClick={() => changeRate(i)}
-                className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition-colors ${
-                  rateIdx === i ? 'bg-terra-500 text-white' : 'text-stone-400 hover:text-stone-600'
-                }`}
-              >{r}×</button>
-            ))}
-            <button onClick={togglePlayPause}
-              className={`ml-1 w-7 h-7 rounded-full flex items-center justify-center transition-colors shrink-0 ${
-                isPlaying || isPaused
-                  ? 'bg-terra-500 text-white hover:bg-terra-600'
-                  : 'bg-terra-100 text-terra-700 hover:bg-terra-200'
-              }`}
-            >
-              {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
-            </button>
-            {(isPlaying || isPaused) && (
-              <button onClick={stopVoice}
-                className="w-7 h-7 rounded-full flex items-center justify-center bg-stone-100 text-stone-500 hover:bg-stone-200 transition-colors shrink-0"
-              ><Square className="w-2.5 h-2.5" /></button>
+      {/* ── Section nav (mobile: sticky pill bar / md+: sidebar) + reading column ────────── */}
+      <div className="md:px-8 md:max-w-[1180px] md:mx-auto">
+        <div className="md:grid md:grid-cols-[auto_1fr] md:gap-8 md:items-start md:pt-6">
+          <GuideSectionNav
+            sections={displaySections.map(s => ({ key: s.key, title: s.title, icon: s.icon, color: s.color }))}
+            activeIndex={visibleSec}
+            onSelect={scrollToSection}
+          />
+
+          <div className="min-w-0 px-4 sm:px-6 md:px-0 md:max-w-3xl lg:max-w-[52rem]">
+
+            {/* ── Voice mini-player ──────────────────────────────────────────── */}
+            {hasGuide && (
+              <div className="mt-4">
+                <VoicePlayer
+                  isPlaying={isPlaying}
+                  isPaused={isPaused}
+                  rateIdx={rateIdx}
+                  onTogglePlayPause={togglePlayPause}
+                  onStop={stopVoice}
+                  onChangeRate={changeRate}
+                />
+              </div>
             )}
-            <div className="w-px h-5 bg-stone-200 shrink-0" />
-          </div>
-        )}
-        <div className="flex gap-1.5 shrink-0">
-          {displaySections.map((s, i) => (
-            <button key={s.key} onClick={() => scrollToSection(i)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap"
-              style={visibleSec === i
-                ? { background: s.color, color: 'white' }
-                : { background: '#eeece5', color: '#8a7f6e' }
-              }
-            >
-              <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
-              <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* ── Main content ────────────────────────────────────────────────── */}
-      <div className="px-4 sm:px-6">
-
-        {/* ── No AI access ─────────────────────────────────────────────── */}
-        {!hasGuide && hasAiAccess === false && (
-          <div className="flex flex-col items-center py-10 gap-4 text-center">
-            <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center shadow-inner">
-              <KeyRound className="w-6 h-6 text-terra-500" />
-            </div>
-            <div className="max-w-sm">
-              <h2 className="font-display text-lg font-bold text-stone-800 mb-2">
-                Racconto di Giulia non disponibile
-              </h2>
-              <p className="text-stone-500 text-sm leading-relaxed">
-                Aggiungi la tua chiave API Claude nelle impostazioni del profilo per generare la guida narrata —
-                intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ── Preparing (waiting for enrichment) ──────────────────────── */}
-        {!hasGuide && hasAiAccess !== false && !generating && !enrichmentReady && (
-          <div className="flex items-center gap-3 py-8 justify-center text-center">
-            <Loader2 className="w-5 h-5 animate-spin text-terra-500" />
-            <p className="text-stone-500 text-sm">Sto raccogliendo i dati del percorso… la guida di Giulia arriverà tra poco.</p>
-          </div>
-        )}
-
-        {/* ── Generating spinner (no text yet) ────────────────────────── */}
-        {!hasGuide && generating && (
-          <div className="flex flex-col items-center gap-4 py-10 text-center">
-            <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center animate-pulse">
-              <BookOpen className="w-6 h-6 text-terra-500" />
-            </div>
-            <div>
-              <p className="font-display font-semibold text-stone-700">{genStatus ?? 'Giulia sta scrivendo…'}</p>
-              <p className="text-stone-400 text-sm mt-1">i dati qui sotto sono già consultabili nel frattempo</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── Voice progress bar (when playing) ──────────────────────── */}
-        {(isPlaying || isPaused) && hasGuide && (
-          <div className="mt-4 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3" style={{ borderColor: '#dcd8cc' }}>
-            <Volume2 className="w-3.5 h-3.5 text-terra-500 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-medium text-stone-600 truncate">
-                {isPlaying && activeSection !== null
-                  ? `▶ ${displaySections[activeSection]?.title ?? '…'}`
-                  : '⏸ In pausa'}
-              </p>
-              <div className="mt-1 h-0.5 bg-terra-100 rounded-full overflow-hidden">
-                <div className="h-full bg-terra-400 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round(playProgress * 100)}%` }} />
-              </div>
-            </div>
-            <button onClick={stopVoice}
-              className="text-stone-400 hover:text-stone-700 transition-colors"
-            ><Square className="w-3.5 h-3.5" /></button>
-          </div>
-        )}
-
-        {/* ── Stato del percorso — avvisi trovati dalla ricerca web di Giulia ──────────── */}
-        {guideNotices.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {guideNotices.map((notice, i) => (
-              <div key={i} className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-[13px] leading-relaxed text-amber-900">{notice}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Guide sections — always rendered (widgets), text where available ────────── */}
-        <div className="mt-4 space-y-0">
-          {displaySections.map((s, i) => {
-            const isLuoghi = s.guideKey === 'luoghi'
-            const isVoiceActive = activeSection === i && (isPlaying || isPaused)
-            const showBreveHint = hasGuide && effectiveTier === 'breve' && !s.body && !generating
-
-            return (
-              <article
-                key={s.key}
-                ref={el => { sectionRefs.current[i] = el }}
-                className={`scroll-mt-16 bg-white rounded-2xl mb-4 overflow-hidden shadow-sm transition-shadow ${
-                  isVoiceActive ? 'ring-2 ring-terra-300 shadow-terra-100 shadow-md' : 'hover:shadow-md'
-                }`}
-              >
-                <div
-                  className="flex items-center gap-3 px-5 py-3"
-                  style={{ background: s.color }}
-                >
-                  <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
-                  <div className="flex items-center gap-2 text-white">
-                    <span className="[&>svg]:w-4 [&>svg]:h-4 opacity-80">{s.icon}</span>
-                    <h2 className="font-display text-[12px] font-bold tracking-[2px] uppercase">{s.title}</h2>
+            {/* ── Voice progress (sticky while playing, so stop stays reachable) ─────── */}
+            {(isPlaying || isPaused) && hasGuide && (
+              <div className="sticky top-2 z-10 mt-3 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3 shadow-sm" style={{ borderColor: '#dcd8cc' }}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-medium text-stone-600 truncate">
+                    {isPlaying && activeSection !== null
+                      ? `▶ ${displaySections[activeSection]?.title ?? '…'}`
+                      : '⏸ In pausa'}
+                  </p>
+                  <div className="mt-1 h-0.5 bg-terra-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-terra-400 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.round(playProgress * 100)}%` }} />
                   </div>
-                  <div className="flex-1" />
-                  {s.body && (
-                    <button
-                      onClick={() => speakSection(i)}
-                      className="opacity-60 hover:opacity-100 transition-opacity"
-                      title="Ascolta questa sezione"
-                    >
-                      <Volume2 className="w-3.5 h-3.5 text-white" />
-                    </button>
-                  )}
                 </div>
+              </div>
+            )}
 
-                <div className="px-5 py-5 sm:px-6">
-                  {(() => {
-                    const widget = renderWidget(s.key)
-                    return (
-                      <>
-                        {widget}
-                        {s.body && (
-                          <div className={widget ? 'mt-5 pt-5 border-t' : ''} style={widget ? { borderColor: '#dcd8cc' } : undefined}>
-                            <MagazineBody body={s.body} color={s.color} sectionPhoto={routePhotos[i + 1]} />
-                          </div>
-                        )}
-                      </>
-                    )
-                  })()}
-
-                  {showBreveHint && (
-                    <p className="text-xs italic text-stone-400 mt-4">
-                      Premi &quot;Approfondisci&quot; per il racconto completo di questa sezione.
-                    </p>
-                  )}
-
-                  {isLuoghi && poiPhotos.length > 0 && (
-                    <div className="mt-6 pt-5 border-t" style={{ borderColor: '#dcd8cc' }}>
-                      <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-3">
-                        Luoghi e siti del percorso
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {poiPhotos.map((photo, pi) => (
-                          <PoiCard key={pi} photo={photo} color={s.color} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
+            {/* ── No AI access ─────────────────────────────────────────────── */}
+            {!hasGuide && hasAiAccess === false && (
+              <div className="flex flex-col items-center py-10 gap-4 text-center">
+                <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center shadow-inner">
+                  <KeyRound className="w-6 h-6 text-terra-500" />
                 </div>
-              </article>
-            )
-          })}
+                <div className="max-w-sm">
+                  <h2 className="font-display text-lg font-bold text-stone-800 mb-2">
+                    Racconto di Giulia non disponibile
+                  </h2>
+                  <p className="text-stone-500 text-sm leading-relaxed">
+                    Aggiungi la tua chiave API Claude nelle impostazioni del profilo per generare la guida narrata —
+                    intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.
+                  </p>
+                </div>
+              </div>
+            )}
 
-          {hasGuide && generating && (
-            <div className="flex items-center gap-2 px-5 py-4 bg-white rounded-2xl shadow-sm">
-              <Loader2 className="w-4 h-4 animate-spin text-terra-500" />
-              <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
-            </div>
-          )}
-        </div>
+            {/* ── Preparing (waiting for enrichment) ──────────────────────── */}
+            {!hasGuide && hasAiAccess !== false && !generating && !enrichmentReady && (
+              <div className="flex items-center gap-3 py-8 justify-center text-center">
+                <Loader2 className="w-5 h-5 animate-spin text-terra-500" />
+                <p className="text-stone-500 text-sm">Sto raccogliendo i dati del percorso… la guida di Giulia arriverà tra poco.</p>
+              </div>
+            )}
 
-        {error && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
-            {error}
-          </div>
-        )}
+            {/* ── Generating spinner (no text yet) ────────────────────────── */}
+            {!hasGuide && generating && (
+              <div className="flex flex-col items-center gap-4 py-10 text-center">
+                <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center animate-pulse">
+                  <BookOpen className="w-6 h-6 text-terra-500" />
+                </div>
+                <div>
+                  <p className="font-display font-semibold text-stone-700">{genStatus ?? 'Giulia sta scrivendo…'}</p>
+                  <p className="text-stone-400 text-sm mt-1">i dati qui sotto sono già consultabili nel frattempo</p>
+                </div>
+              </div>
+            )}
 
-        {hasGuide && !generating && guideSources.length > 0 && (
-          <div className="mt-4 mb-2">
-            <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
-              Fonti consultate online
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {guideSources.map((s, i) => (
-                <a
-                  key={i}
-                  href={s.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-600"
-                  title={s.url}
-                >
-                  <Link2 className="w-3 h-3 shrink-0 text-stone-400" />
-                  <span className="truncate">{s.title}</span>
-                </a>
+            {/* ── Stato del percorso — avvisi trovati dalla ricerca web di Giulia ──────────── */}
+            {guideNotices.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {guideNotices.map((notice, i) => (
+                  <div key={i} className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-[13px] leading-relaxed text-amber-900">{notice}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Guide sections — always rendered (widgets), text where available ────────── */}
+            <div className="mt-4">
+              {displaySections.map((s, i) => (
+                <SectionCard
+                  key={s.key}
+                  ref={el => { sectionRefs.current[i] = el }}
+                  title={s.title}
+                  icon={s.icon}
+                  color={s.color}
+                  body={s.body}
+                  widget={renderWidget(s.key)}
+                  sectionPhoto={routePhotos[i]}
+                  twoColumns
+                  isVoiceActive={activeSection === i && (isPlaying || isPaused)}
+                  onSpeak={() => speakSection(i)}
+                  showApprofondisciHint={showApprofondisciHint}
+                  onApprofondisci={showApprofondisciHint ? () => generate('approfondita') : undefined}
+                />
               ))}
+
+              {hasGuide && generating && (
+                <div className="flex items-center gap-2 px-5 py-4 bg-white rounded-2xl shadow-sm">
+                  <Loader2 className="w-4 h-4 animate-spin text-terra-500" />
+                  <span className="text-stone-400 text-sm">Giulia sta continuando…</span>
+                </div>
+              )}
             </div>
-          </div>
-        )}
 
-        {hasGuide && !generating && hasAiAccess === true && (
-          <GuideQA hikeId={hike.id} />
-        )}
-
-        {/* ── Bottom actions ──────────────────────────────────────────── */}
-        {hasGuide && !generating && (
-          <div className="mt-8 mb-6 pt-5 flex flex-wrap items-center justify-end gap-3" style={{ borderTop: '1px solid #dcd8cc' }}>
-            {effectiveTier === 'breve' && (
-              <button onClick={() => generate('approfondita')}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Approfondisci
-              </button>
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
+                {error}
+              </div>
             )}
 
-            <button onClick={() => generate(effectiveTier)} disabled={generating}
-              className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-terra-600 transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Rigenera
-            </button>
-
-            {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
-              <span className="flex items-center gap-1 text-xs text-stone-400">
-                <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
-              </span>
+            {hasGuide && !generating && guideSources.length > 0 && (
+              <div className="mt-4 mb-2">
+                <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
+                  Fonti consultate online
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {guideSources.map((s, i) => (
+                    <a
+                      key={i}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-600"
+                      title={s.url}
+                    >
+                      <Link2 className="w-3 h-3 shrink-0 text-stone-400" />
+                      <span className="truncate">{s.title}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
             )}
 
-            <button onClick={exportPdf} disabled={exportingPdf}
-              className="flex items-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
-            >
-              {exportingPdf
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <FileDown className="w-3.5 h-3.5" />}
-              {exportingPdf ? 'Genero PDF…' : 'Scarica PDF'}
-            </button>
+            {hasGuide && !generating && hasAiAccess === true && (
+              <GuideQA hikeId={hike.id} />
+            )}
+
+            {/* ── Bottom actions ──────────────────────────────────────────── */}
+            {hasGuide && !generating && (
+              <div className="mt-8 mb-6 pt-5 flex flex-wrap items-center justify-end gap-3" style={{ borderTop: '1px solid #dcd8cc' }}>
+                {effectiveTier === 'breve' && (
+                  <button onClick={() => generate('approfondita')}
+                    className="flex items-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Approfondisci
+                  </button>
+                )}
+
+                <button onClick={() => generate(effectiveTier)} disabled={generating}
+                  className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-terra-600 transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Rigenera
+                </button>
+
+                {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
+                  <span className="flex items-center gap-1 text-xs text-stone-400">
+                    <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
+                  </span>
+                )}
+
+                <button onClick={exportPdf} disabled={exportingPdf}
+                  className="flex items-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+                >
+                  {exportingPdf
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <FileDown className="w-3.5 h-3.5" />}
+                  {exportingPdf ? 'Genero PDF…' : 'Scarica PDF'}
+                </button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   )

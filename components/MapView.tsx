@@ -42,6 +42,19 @@ interface Props {
    *  the map re-centers so whatever point was visually centered in the *unobscured* band stays
    *  there, instead of drifting toward the half hidden behind the sheet. 0 when nothing overlaps. */
   obscuredBottomPx?: number
+  /** Overrides for the plain (non-gradient/non-aspect) route polyline — used by decorative,
+   *  non-interactive map renders (e.g. the guide hero) that want a thinner, more subdued line
+   *  than the default "active map" styling. Ignored when showGradient/showAspect is on. */
+  routeColor?: string
+  routeWeight?: number
+  routeOpacity?: number
+  /** Hides the "S"/"A" start/end pins — off by default so decorative hero renders don't show
+   *  clickable-looking labeled markers meant for the interactive map. */
+  showEndpointMarkers?: boolean
+  /** Drops the rounded corners/border/shadow the map normally has as a card floating over its
+   *  container — used for full-bleed decorative renders (e.g. the guide hero) that fill their
+   *  container edge-to-edge instead of looking like a map "widget" inset within one. */
+  bare?: boolean
 }
 
 const DTM_MATCH_RADIUS_M = 25
@@ -95,6 +108,11 @@ export default function MapView({
   showPoiLayer = false,
   showTourControls = false,
   obscuredBottomPx = 0,
+  routeColor,
+  routeWeight = 4,
+  routeOpacity = 0.85,
+  showEndpointMarkers = true,
+  bare = false,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<any>(null)
@@ -230,9 +248,9 @@ export default function MapView({
         new LegendControl({ position: 'bottomright' }).addTo(map)
       } else {
         const polyline = L.polyline(coords, {
-          color: baseColor,
-          weight: 4,
-          opacity: 0.85,
+          color: routeColor ?? baseColor,
+          weight: routeWeight,
+          opacity: routeOpacity,
           smoothFactor: 1.5,
         }).addTo(map)
         map.fitBounds(polyline.getBounds(), { padding: [20, 20], animate: false })
@@ -251,8 +269,10 @@ export default function MapView({
         iconSize: [28, 28], iconAnchor: [14, 14], className: '',
       })
 
-      L.marker(coords[0], { icon: mkIcon('S', baseColor) }).addTo(map).bindPopup('Partenza')
-      L.marker(coords[coords.length - 1], { icon: mkIcon('A', '#c05a17') }).addTo(map).bindPopup('Arrivo')
+      if (showEndpointMarkers) {
+        L.marker(coords[0], { icon: mkIcon('S', baseColor) }).addTo(map).bindPopup('Partenza')
+        L.marker(coords[coords.length - 1], { icon: mkIcon('A', '#c05a17') }).addTo(map).bindPopup('Arrivo')
+      }
     })
 
     return () => {
@@ -263,7 +283,7 @@ export default function MapView({
         setMapReady(false)
       }
     }
-  }, [trackPoints, showGradient, showAspect, planned]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
+  }, [trackPoints, showGradient, showAspect, planned, routeColor, routeWeight, routeOpacity, showEndpointMarkers]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
 
   // Lock/unlock native gestures — toggled independently of the init effect above so
   // flipping "interactive" never remounts (and re-fits bounds on) the existing map instance.
@@ -512,7 +532,7 @@ export default function MapView({
       <div
         ref={mapRef}
         style={{ height: '100%' }}
-        className="rounded-xl overflow-hidden border border-stone-200 shadow-sm"
+        className={bare ? 'overflow-hidden' : 'rounded-xl overflow-hidden border border-stone-200 shadow-sm'}
       />
       {showTourControls && tour.hasTrack && (
         <TourControls
