@@ -134,7 +134,10 @@ export default function GuidaHub({ id }: { id?: string }) {
     } : undefined,
   })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
-  const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
+  const flora = useFlora(
+    hike?.routePolyline, hike?.altitudeMax,
+    hike ? { plannedId: hike.id, data: hike.floraResult, trackHash: hike.floraTrackHash } : undefined,
+  )
 
   const hasAiAccess = useHasAiAccess()
   const enrichmentTimedOut = useEnrichmentTimeout(hike?.id)

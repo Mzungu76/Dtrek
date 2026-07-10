@@ -562,6 +562,17 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_protected_area_compute
 
 
 -- ═══════════════════════════════════════════════════════════
+-- Flora lungo la traccia — persistenza per-escursione, stesso pattern dei blocchi sopra. Stesso
+-- blocco anche in supabase/migrations/add_flora_columns.sql. Lette/scritte da lib/useFlora.ts
+-- (via PATCH /api/planned) quando chiamato con un plannedId; flora_track_hash (lib/geoUtils.ts
+-- hashTrack) al posto di un TTL temporale.
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS flora_result jsonb;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS flora_track_hash text;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS flora_computed_at timestamptz;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- Meteo storico al momento dell'escursione (Blocco 1.2 piano DTrek)
 -- ═══════════════════════════════════════════════════════════
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS weather_at_hike jsonb;

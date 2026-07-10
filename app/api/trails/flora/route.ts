@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchFloraAlongRoute } from '@/lib/overpassFlora'
 import type { FloraResult } from '@/lib/floraTypes'
+import { SUCCESS_CACHE_CONTROL } from '@/lib/apiCacheHeaders'
 
 export const maxDuration = 30
 
@@ -24,7 +25,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await withTimeout(fetchFloraAlongRoute(bbox, altitudeMax), 20_000)
-    return NextResponse.json(result satisfies FloraResult)
+    // A genuine result (even { available: false } — e.g. this bbox is above the tree line) is
+    // stable for the same bbox/altitude and safe to cache; a timeout/exception below is not.
+    return NextResponse.json(result satisfies FloraResult, { headers: { 'Cache-Control': SUCCESS_CACHE_CONTROL } })
   } catch (err) {
     console.error('[trails/flora] fetchFloraAlongRoute failed or timed out', err)
     return NextResponse.json({ available: false, leafTypeDominant: null, speciesFound: [], forestCoveragePct: null, estimatedBelt: null } satisfies FloraResult)

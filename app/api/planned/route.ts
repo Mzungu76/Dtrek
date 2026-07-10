@@ -90,6 +90,9 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     siSatelliteComputedAt:        row.si_satellite_computed_at       as string | undefined,
     isGhostTrail:                 row.is_ghost_trail                 as boolean | undefined,
     dominantWarning:              row.dominant_warning               as string | undefined,
+    floraResult:                   row.flora_result                    as PlannedHike['floraResult'],
+    floraTrackHash:                row.flora_track_hash                as string | undefined,
+    floraComputedAt:               row.flora_computed_at               as string | undefined,
   }
 }
 
@@ -354,6 +357,9 @@ export async function PATCH(req: NextRequest) {
       cachedInProtectedArea?: boolean
       cachedProtectedAreaTrackHash?: string
       cachedProtectedAreaComputedAt?: string
+      floraResult?: PlannedHike['floraResult']
+      floraTrackHash?: string
+      floraComputedAt?: string
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -394,6 +400,9 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedInProtectedArea        !== undefined) dbPatch.cached_in_protected_area        = patch.cachedInProtectedArea
     if (patch.cachedProtectedAreaTrackHash !== undefined) dbPatch.cached_protected_area_track_hash = patch.cachedProtectedAreaTrackHash
     if (patch.cachedProtectedAreaComputedAt !== undefined) dbPatch.cached_protected_area_computed_at = patch.cachedProtectedAreaComputedAt
+    if (patch.floraResult                  !== undefined) dbPatch.flora_result                   = patch.floraResult
+    if (patch.floraTrackHash               !== undefined) dbPatch.flora_track_hash               = patch.floraTrackHash
+    if (patch.floraComputedAt              !== undefined) dbPatch.flora_computed_at              = patch.floraComputedAt
 
     const { error } = await supabase
       .from('planned_hikes')

@@ -11,6 +11,7 @@ import type { EpochPoi } from './epochPois'
 import type { TrailDtmProfile } from './dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import type { CLSignals } from './cl/types'
+import type { FloraResult } from './floraTypes'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -109,6 +110,10 @@ export interface PlannedHike {
   siSatelliteComputedAt?:        string
   isGhostTrail?:                 boolean
   dominantWarning?:              string
+  // Stesso pattern di dtmProfile — vedi lib/useFlora.ts.
+  floraResult?:                  FloraResult
+  floraTrackHash?:                string
+  floraComputedAt?:              string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -185,7 +190,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Patches Supabase, then applies same patch to local cached copies. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
 ): Promise<void> {
   // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
   lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {
