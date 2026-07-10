@@ -7,6 +7,7 @@ import { checkProtectedArea } from './natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from './geoUtils'
 import { updateActivityMeta, type StoredActivity } from './blobStore'
 import type { BeautyScore } from './beautyScore'
+import { getUserSettingsCached } from './sync/userSettingsStore'
 
 const FETCH_TIMEOUT_MS = 25000
 
@@ -75,7 +76,7 @@ export async function computeCtsForActivity(activity: Pick<StoredActivity,
   const bs = teiToBeautyScore(tei)
   const confidence: CtsConfidence = tei.confidence
 
-  const prefs = prefetched?.prefs ?? await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+  const prefs = prefetched?.prefs ?? await getUserSettingsCached()
   let { ts } = computeTrailScore(bs, {
     distanceMeters: activity.distanceMeters,
     elevationGain:  activity.elevationGain,
@@ -84,7 +85,7 @@ export async function computeCtsForActivity(activity: Pick<StoredActivity,
     avgHeartRate:   activity.avgHeartRate,
     prefSforzo:     prefs.prefSforzo,
     prefDurata:     prefs.prefDurata,
-    hrRest:         prefs.hrRest,
+    hrRest:         prefs.hrRest ?? undefined,
     hrMax:          prefs.hrMax ?? undefined,
     avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
   })

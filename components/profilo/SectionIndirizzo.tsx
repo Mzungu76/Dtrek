@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { MapPin, Loader2, Search, Crosshair, AlertTriangle, Trash2 } from 'lucide-react'
 import { invalidateUserStartingPoint } from '@/lib/drivingInfo'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), { ssr: false })
 
@@ -67,8 +68,7 @@ export default function SectionIndirizzo() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    fetch('/api/user-settings')
-      .then(r => r.json())
+    getUserSettingsCached()
       .then(d => {
         if (d.startingAddress) { setAddress(d.startingAddress); setSavedAddr(d.startingAddress) }
         if (d.startingLat != null && d.startingLon != null) setCoords({ lat: d.startingLat, lon: d.startingLon })
@@ -124,49 +124,32 @@ export default function SectionIndirizzo() {
       return
     }
     setSaving(true); setStatus(null)
-    const res = await fetch('/api/user-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        startingAddress: address.trim() || null,
-        startingLat: coords?.lat ?? null,
-        startingLon: coords?.lon ?? null,
-      }),
+    await updateUserSettings({
+      startingAddress: address.trim() || null,
+      startingLat: coords?.lat ?? null,
+      startingLon: coords?.lon ?? null,
     })
-    const json = await res.json().catch(() => ({}))
     setSaving(false)
-    if (!res.ok) {
-      setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
-    } else {
-      setSavedAddr(address)
-      // Senza questo, ogni schermata che ha già chiamato getUserStartingPoint() in questa
-      // sessione (gallerie Guida/Resoconto) continuerebbe a usare il vecchio indirizzo finché
-      // non si ricarica la pagina — vedi lib/drivingInfo.ts.
-      invalidateUserStartingPoint()
-      setStatus({
-        ok: true,
-        msg: coords
-          ? 'Indirizzo di partenza salvato.'
-          : 'Indirizzo salvato, ma senza posizione geografica: distanza e tempo di guida non saranno calcolati finché non selezioni un punto sulla mappa.',
-      })
-    }
+    setSavedAddr(address)
+    // Senza questo, ogni schermata che ha già chiamato getUserStartingPoint() in questa
+    // sessione (gallerie Guida/Resoconto) continuerebbe a usare il vecchio indirizzo finché
+    // non si ricarica la pagina — vedi lib/drivingInfo.ts.
+    invalidateUserStartingPoint()
+    setStatus({
+      ok: true,
+      msg: coords
+        ? 'Indirizzo di partenza salvato.'
+        : 'Indirizzo salvato, ma senza posizione geografica: distanza e tempo di guida non saranno calcolati finché non selezioni un punto sulla mappa.',
+    })
   }
 
   async function handleClear() {
     setSaving(true); setStatus(null)
-    const res = await fetch('/api/user-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startingAddress: null, startingLat: null, startingLon: null }),
-    })
+    await updateUserSettings({ startingAddress: null, startingLat: null, startingLon: null })
     setSaving(false)
-    if (res.ok) {
-      setAddress(''); setSavedAddr(null); setCoords(null); setShowMap(false)
-      invalidateUserStartingPoint()
-      setStatus({ ok: true, msg: 'Indirizzo rimosso.' })
-    } else {
-      setStatus({ ok: false, msg: 'Errore durante la rimozione.' })
-    }
+    setAddress(''); setSavedAddr(null); setCoords(null); setShowMap(false)
+    invalidateUserStartingPoint()
+    setStatus({ ok: true, msg: 'Indirizzo rimosso.' })
   }
 
   return (

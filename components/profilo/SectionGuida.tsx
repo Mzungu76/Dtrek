@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2, CalendarClock, BookOpen } from 'lucide-react'
 import { GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, MAX_BREVE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 
 const PRESETS = [7, 14, 30, 60, 90]
 
@@ -17,11 +18,10 @@ export default function SectionGuida() {
   const [sectionsStatus, setSectionsStatus] = useState<{ ok: boolean; msg: string } | null>(null)
 
   useEffect(() => {
-    fetch('/api/user-settings')
-      .then(r => r.json())
+    getUserSettingsCached()
       .then(d => {
         if (d.guidePendingDays) setDays(d.guidePendingDays)
-        if (Array.isArray(d.guideBreveSections) && d.guideBreveSections.length) setBreveSections(d.guideBreveSections)
+        if (Array.isArray(d.guideBreveSections) && d.guideBreveSections.length) setBreveSections(d.guideBreveSections as GuideSectionKey[])
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -30,15 +30,9 @@ export default function SectionGuida() {
   async function handleSave(next: number) {
     setDays(next)
     setSaving(true); setStatus(null)
-    const res = await fetch('/api/user-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ guidePendingDays: next }),
-    })
+    await updateUserSettings({ guidePendingDays: next })
     setSaving(false)
-    setStatus(res.ok
-      ? { ok: true, msg: 'Scadenza predefinita salvata.' }
-      : { ok: false, msg: 'Errore durante il salvataggio.' })
+    setStatus({ ok: true, msg: 'Scadenza predefinita salvata.' })
   }
 
   async function toggleSection(key: GuideSectionKey) {
@@ -54,15 +48,9 @@ export default function SectionGuida() {
     }
     setBreveSections(next)
     setSavingSections(true); setSectionsStatus(null)
-    const res = await fetch('/api/user-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ guideBreveSections: next }),
-    })
+    await updateUserSettings({ guideBreveSections: next })
     setSavingSections(false)
-    setSectionsStatus(res.ok
-      ? { ok: true, msg: 'Sezioni della guida breve salvate.' }
-      : { ok: false, msg: 'Errore durante il salvataggio.' })
+    setSectionsStatus({ ok: true, msg: 'Sezioni della guida breve salvate.' })
   }
 
   return (

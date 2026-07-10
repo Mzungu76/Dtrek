@@ -5,6 +5,7 @@ import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
 import InstallPWA from '@/components/InstallPWA'
 import OfflineBanner from '@/components/OfflineBanner'
 import OfflineSync from '@/components/OfflineSync'
+import SyncEngineProvider from '@/components/SyncEngineProvider'
 import GlobalBackInterceptor from '@/app/components/GlobalBackInterceptor'
 import SplashScreen from '@/components/SplashScreen'
 import SessionKeepAlive from '@/components/SessionKeepAlive'
@@ -81,6 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ServiceWorkerRegister />
         <InstallPWA />
         <OfflineSync />
+        <SyncEngineProvider />
       </body>
     </html>
   )

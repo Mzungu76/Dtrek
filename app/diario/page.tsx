@@ -5,6 +5,7 @@ import HubNavBar from '@/components/routehub/HubNavBar'
 import { RailButton } from '@/components/routehub/SideRails'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import type { TrackPoint } from '@/lib/tcxParser'
@@ -77,7 +78,7 @@ export default function DiarioPage() {
       getAllActivities(),
       fetch('/api/resoconto?all=true').then(r => r.ok ? r.json() : []),
       fetch('/api/diary-token').then(r => r.ok ? r.json() : {}),
-      fetch('/api/user-settings').then(r => r.ok ? r.json() : {}),
+      getUserSettingsCached(),
     ]).then(async ([acts, reps, dt, us]) => {
       const sortedActs = (acts as ActivityMeta[]).sort((a, b) =>
         new Date(a.startTime).getTime() - new Date(b.startTime).getTime())

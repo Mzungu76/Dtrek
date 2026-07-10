@@ -9,6 +9,7 @@ import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { MapPin, FileText, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route } from 'lucide-react'
 
 type GpxStatus = 'idle' | 'parsed' | 'saving' | 'success' | 'error'
@@ -60,8 +61,7 @@ export default function GpxUploader() {
     if (!parsed) return
     setStatus('saving')
     try {
-      const pendingDays = await fetch('/api/user-settings')
-        .then(r => r.json())
+      const pendingDays = await getUserSettingsCached()
         .then(d => d.guidePendingDays ?? 30)
         .catch(() => 30)
 

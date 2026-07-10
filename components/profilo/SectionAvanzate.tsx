@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { recalcAllCts, recalcAllCL, recalcAllSafety, recalcAllSentinel2 } from '@/lib/recalcScores'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { Loader2, RefreshCw, ChevronDown, Wrench } from 'lucide-react'
 
 /**
@@ -29,7 +30,7 @@ export default function SectionAvanzate() {
     setCtsProgress('Recupero preferenze…')
     let computed = 0
     try {
-      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const prefs = await getUserSettingsCached()
       computed = await recalcAllCts(
         { hrRest: prefs.hrRest ?? 55, hrMax: prefs.hrMax ?? null, prefSforzo: prefs.prefSforzo ?? 50, prefDurata: prefs.prefDurata ?? 270 },
         setCtsProgress,
@@ -71,7 +72,7 @@ export default function SectionAvanzate() {
     setAllRunning(true)
     setAllProgress('CTS: recupero preferenze…')
     try {
-      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const prefs = await getUserSettingsCached()
       const ctsCount = await recalcAllCts(
         { hrRest: prefs.hrRest ?? 55, hrMax: prefs.hrMax ?? null, prefSforzo: prefs.prefSforzo ?? 50, prefDurata: prefs.prefDurata ?? 270 },
         text => setAllProgress(`CTS: ${text}`),

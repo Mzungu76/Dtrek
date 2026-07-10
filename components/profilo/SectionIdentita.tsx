@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { getAllActivities } from '@/lib/blobStore'
 import { computeStreaks } from '@/lib/stats'
 import { computeBadges, computeCurrentBadges, type ComputedBadge } from '@/lib/badges'
@@ -22,9 +23,8 @@ export default function SectionIdentita() {
     const p = getProfile()
     if (p.hikerFaceDataUrl) setFaceUrl(p.hikerFaceDataUrl)
     if (p.displayName)      setName(p.displayName)
-    // Then sync from Supabase (cross-device)
-    fetch('/api/user-settings')
-      .then(r => r.json())
+    // Then sync from Supabase (cross-device) — cache-first, only hits the network if no local copy exists
+    getUserSettingsCached()
       .then(d => {
         if (d.hikerFaceDataUrl) { setFaceUrl(d.hikerFaceDataUrl); saveProfile({ hikerFaceDataUrl: d.hikerFaceDataUrl }) }
         if (d.displayName)      { setName(d.displayName);         saveProfile({ displayName: d.displayName }) }
@@ -72,15 +72,7 @@ export default function SectionIdentita() {
     setSaving(true)
     setSaveError(null)
     try {
-      const res = await fetch('/api/user-settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hikerFaceDataUrl: faceUrl ?? null, displayName: name.trim() || null }),
-      })
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
-        throw new Error(json?.error ?? `Errore ${res.status}`)
-      }
+      await updateUserSettings({ hikerFaceDataUrl: faceUrl ?? null, displayName: name.trim() || null })
       // Mirror to localStorage so Navbar / RouteMap3D update immediately in this session
       saveProfile({ hikerFaceDataUrl: faceUrl ?? undefined, displayName: name.trim() || undefined })
       setSaved(true)

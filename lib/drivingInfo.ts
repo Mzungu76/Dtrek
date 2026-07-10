@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getUserSettingsCached } from './sync/userSettingsStore'
 
 export interface DrivingInfo {
   distanceMeters: number
@@ -56,8 +57,7 @@ let startingPointPromise: Promise<{ lat: number; lon: number } | null> | null = 
 /** Fetches the user's starting address coordinates from /api/user-settings (cached per page load). */
 export function getUserStartingPoint(): Promise<{ lat: number; lon: number } | null> {
   if (!startingPointPromise) {
-    startingPointPromise = fetch('/api/user-settings')
-      .then(r => r.json())
+    startingPointPromise = getUserSettingsCached()
       .then(d => (d.startingLat != null && d.startingLon != null) ? { lat: d.startingLat, lon: d.startingLon } : null)
       .catch(() => null)
   }

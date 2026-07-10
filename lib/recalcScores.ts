@@ -14,6 +14,7 @@ import { type PoiItem } from '@/lib/overpass'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { computeSafetyScore, type WildlifeRisk } from '@/lib/safetyScore'
 import { fetchWildlifeRiskFromGbif } from '@/lib/wildlifeRiskFromGbif'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 
 export async function batchUpdate<T>(
   items: T[],
@@ -54,7 +55,7 @@ export interface CtsPrefs {
 /** Full from-scratch CTS recompute (TEI → BeautyScore → TrailScore) for every activity and planned hike. Returns the number of CTS recomputed. */
 export async function recalcAllCts(prefs: CtsPrefs, onProgress?: (text: string) => void): Promise<number> {
   let computed = 0
-  const apiPrefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+  const apiPrefs = await getUserSettingsCached()
   const [activities, hikes] = await Promise.all([getAllActivities(), getAllPlanned()])
   const total = activities.length + hikes.length
 
