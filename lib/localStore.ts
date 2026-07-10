@@ -135,12 +135,17 @@ export async function obEnqueue(entityType: string, recordId: string, op: Outbox
           store.put({ ...existing, op: 'delete', payload: undefined, clientUpdatedAt: now })
         } else if (existing.op === 'delete') {
           store.put({ ...existing, op, payload, clientUpdatedAt: now })
-        } else if (op === 'patch' && existing.op !== 'upsert') {
+        } else if (existing.op === 'upsert') {
+          // A pending 'upsert' may not have reached the server yet — any further patch/upsert on
+          // the same record must stay 'upsert' (never downgrade to 'patch'), otherwise the flush
+          // would PATCH a row that doesn't exist server-side yet and silently do nothing, losing
+          // the record entirely instead of just losing the latest edit.
           const mergedPayload = { ...(existing.payload as object ?? {}), ...(payload as object ?? {}) }
-          store.put({ ...existing, op: 'patch', payload: mergedPayload, clientUpdatedAt: now })
+          store.put({ ...existing, op: 'upsert', payload: mergedPayload, clientUpdatedAt: now })
         } else {
-          // op === 'upsert', or merging into an existing 'upsert' — replace payload wholesale
-          const mergedPayload = existing.op === 'upsert' ? { ...(existing.payload as object ?? {}), ...(payload as object ?? {}) } : payload
+          // existing.op === 'patch': an incoming 'upsert' supersedes it with the full record;
+          // an incoming 'patch' merges into the accumulated partial payload.
+          const mergedPayload = op === 'upsert' ? payload : { ...(existing.payload as object ?? {}), ...(payload as object ?? {}) }
           store.put({ ...existing, op, payload: mergedPayload, clientUpdatedAt: now })
         }
       }
