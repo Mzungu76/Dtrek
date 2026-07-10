@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { PersonStanding, Loader2 } from 'lucide-react'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 
 type Gender = 'maschio' | 'femmina' | 'altro' | 'non_specificato'
 
@@ -25,13 +26,12 @@ export default function SectionBiometria() {
   const derivedFCmax = age >= 10 && age <= 90 ? Math.round(211 - 0.64 * age) : 0
 
   useEffect(() => {
-    fetch('/api/user-settings')
-      .then(r => r.json())
+    getUserSettingsCached()
       .then(d => {
         if (d.userAge)      setAge(d.userAge)
         if (d.userWeightKg) setWeight(d.userWeightKg)
         if (d.userHeightCm) setHeight(d.userHeightCm)
-        if (d.userGender)   setGender(d.userGender)
+        if (d.userGender)   setGender(d.userGender as Gender)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -44,18 +44,9 @@ export default function SectionBiometria() {
     if (weight > 0) body.userWeightKg = weight
     if (height > 0) body.userHeightCm = height
     body.userGender = gender
-    const res = await fetch('/api/user-settings', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    })
-    const json = await res.json().catch(() => ({}))
+    await updateUserSettings(body)
     setSaving(false)
-    if (!res.ok) {
-      setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
-    } else {
-      setStatus({ ok: true, msg: 'Dati salvati correttamente.' })
-    }
+    setStatus({ ok: true, msg: 'Dati salvati correttamente.' })
   }
 
   return (

@@ -15,6 +15,7 @@ import {
 } from 'recharts'
 import { Heart, TrendingUp, Zap, Activity, AlertCircle, ArrowUp, ArrowDown, Minus, Loader2 } from 'lucide-react'
 import InfoButton from './InfoButton'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 
 interface UserSettings {
   hrMax?: number
@@ -31,8 +32,7 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
   const [loadingSettings, setLoadingSettings] = useState(true)
 
   useEffect(() => {
-    fetch('/api/user-settings')
-      .then(r => r.ok ? r.json() : {})
+    getUserSettingsCached()
       .then((data: any) => setUserSettings({
         hrMax:       data.hrMax ?? null,
         derivedFCmax: data.derivedFCmax ?? 0,

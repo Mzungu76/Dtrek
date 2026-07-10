@@ -10,6 +10,7 @@ import { checkProtectedArea } from './natura2000/checkProtectedArea'
 import { computeTrailScore } from './trailScore'
 import { computeBbox } from './geoUtils'
 import { fetchWeatherAtHike, type WeatherAtHike } from './openmeteo'
+import { getUserSettingsCached } from './sync/userSettingsStore'
 
 export interface SaveActivityOptions {
   title?: string
@@ -83,7 +84,7 @@ export async function saveActivityWithEnrichment(
       })
       const bs = teiToBeautyScore(tei)
       const confidence = tei.confidence
-      const prefs = await fetch('/api/user-settings').then((r) => r.json()).catch(() => ({}))
+      const prefs = await getUserSettingsCached()
       let { ts } = computeTrailScore(bs, {
         distanceMeters: activity.distanceMeters,
         elevationGain: activity.elevationGain,
@@ -91,7 +92,7 @@ export async function saveActivityWithEnrichment(
         altitudeMax: activity.altitudeMax,
         avgHeartRate: activity.avgHeartRate,
         userAge: prefs.userAge,
-        personalDelta: prefs.personalDelta,
+        personalDelta: prefs.personalDelta ?? undefined,
         hrHikeCount: prefs.hrHikeCount,
         prefSforzo: prefs.prefSforzo,
         prefDurata: prefs.prefDurata,

@@ -18,6 +18,7 @@ import { isScoreFresh } from '@/lib/scoreFreshness'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, originMatches } from '@/lib/drivingInfo'
@@ -31,7 +32,6 @@ import {
 } from 'lucide-react'
 import PdfExportButton from '@/components/PdfExportButton'
 import { useUserPrefs } from '@/lib/useUserPrefs'
-import { fetchOnce } from '@/lib/sessionCache'
 import { useHasAiAccess } from './useHasAiAccess'
 import { useEnrichmentTimeout } from './useEnrichmentTimeout'
 import { useDtmProfile } from './useDtmProfile'
@@ -470,7 +470,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   }
   const handleExtendPending = async () => {
     if (!hike) return
-    const days = await fetchOnce('user-settings-guidePendingDays', () => fetch('/api/user-settings').then(r => r.json()).then(d => d.guidePendingDays ?? 30)).catch(() => 30)
+    const days = await getUserSettingsCached().then(d => d.guidePendingDays ?? 30).catch(() => 30)
     await patch({ pendingExpiresAt: new Date(Date.now() + days * 86400000).toISOString(), archivedAt: undefined })
   }
   const handleArchive = async () => { await patch({ archivedAt: new Date().toISOString() }); router.push('/guida') }

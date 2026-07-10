@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 
 export interface UserPrefs {
   prefsLoaded: boolean
@@ -17,7 +18,7 @@ export function useUserPrefs(): UserPrefs {
   const [hrMax,       setHrMax]       = useState<number | undefined>(undefined)
 
   useEffect(() => {
-    fetch('/api/user-settings').then(r => r.json()).then(d => {
+    getUserSettingsCached().then(d => {
       if (d.prefSforzo != null) setPrefSforzo(d.prefSforzo)
       if (d.prefDurata != null) setPrefDurata(d.prefDurata)
       if (d.hrRest != null) setHrRest(d.hrRest)

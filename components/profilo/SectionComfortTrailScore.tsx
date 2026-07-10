@@ -11,6 +11,7 @@ import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
 import { type PoiItem } from '@/lib/overpass'
 import { computeBbox } from '@/lib/geoUtils'
 import { batchUpdate, fetchPoisForGps } from '@/lib/recalcScores'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { Loader2, Gauge, RefreshCw } from 'lucide-react'
 
 /**
@@ -31,8 +32,7 @@ export default function SectionComfortTrailScore() {
   const [batchProgress,      setBatchProgress]      = useState('')
 
   useEffect(() => {
-    fetch('/api/user-settings')
-      .then(r => r.json())
+    getUserSettingsCached()
       .then(d => {
         if (d.hrRest  != null) setHrRest(d.hrRest)
         if (d.hrMax   != null) setHrMax(d.hrMax)
@@ -45,27 +45,17 @@ export default function SectionComfortTrailScore() {
 
   async function handleSave() {
     setSaving(true); setStatus(null)
-    const res = await fetch('/api/user-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        hrRest,
-        hrMax: hrMax ?? null,
-        prefSforzo,
-        prefDurata,
-      }),
+    await updateUserSettings({
+      hrRest,
+      hrMax: hrMax ?? null,
+      prefSforzo,
+      prefDurata,
     })
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}))
-      setSaving(false)
-      setStatus({ ok: false, msg: json?.error ?? 'Errore durante il salvataggio.' })
-      return
-    }
 
     // Lightweight recalculation — reuse cached TEI/BeautyScore, just recalculate CTS with new prefs
     let updated = 0
     try {
-      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const prefs = { hrRest, hrMax, prefSforzo, prefDurata }
       const [hikes, activities] = await Promise.all([getAllPlanned(), getAllActivities()])
 
       await Promise.all([
@@ -116,7 +106,7 @@ export default function SectionComfortTrailScore() {
     setBatchProgress('Recupero escursioni…')
     let computed = 0
     try {
-      const prefs = await fetch('/api/user-settings').then(r => r.json()).catch(() => ({}))
+      const prefs = await getUserSettingsCached()
 
       const activities = await getAllActivities()
       const missing = activities.filter(

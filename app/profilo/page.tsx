@@ -6,6 +6,8 @@ import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import { getAllActivities } from '@/lib/blobStore'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { flush, hasPendingChanges } from '@/lib/sync/syncEngine'
 import { computeStreaks } from '@/lib/stats'
 import { computeCurrentBadges } from '@/lib/badges'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
@@ -41,8 +43,7 @@ export default function ProfiloPage() {
   useEffect(() => {
     const local = getProfile().hikerFaceDataUrl
     if (local) setFaceUrl(local)
-    fetch('/api/user-settings')
-      .then(r => r.json())
+    getUserSettingsCached()
       .then(d => { if (d.hikerFaceDataUrl) setFaceUrl(d.hikerFaceDataUrl) })
       .catch(() => {})
     getAllActivities().then(acts => {
@@ -77,6 +78,17 @@ export default function ProfiloPage() {
   }
 
   async function handleLogout() {
+    if (await hasPendingChanges()) {
+      // Best-effort attempt to drain the outbox before wiping local storage — bounded so a
+      // logout attempt while offline doesn't hang indefinitely waiting for a flush that can't succeed.
+      await Promise.race([flush(), new Promise((r) => setTimeout(r, 3000))])
+      if (await hasPendingChanges()) {
+        const proceed = window.confirm(
+          'Hai modifiche non ancora sincronizzate con il cloud. Uscire comunque? Le modifiche non sincronizzate andranno perse.'
+        )
+        if (!proceed) return
+      }
+    }
     await getBrowserSupabase().auth.signOut()
     await lsClearAll()
     router.push('/login')

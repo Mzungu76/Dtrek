@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { Compass, BookMarked, BookOpen, User } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 // 3 tab principali del nuovo posizionamento: Guida (import GPX → guida turistica
@@ -39,8 +40,7 @@ function useAvatar() {
   useEffect(() => {
     const local = getProfile().hikerFaceDataUrl
     if (local) setFaceUrl(local)
-    fetch('/api/user-settings')
-      .then(r => r.json())
+    getUserSettingsCached()
       .then(d => { if (d.hikerFaceDataUrl) setFaceUrl(d.hikerFaceDataUrl) })
       .catch(() => {})
     const onProfileUpdated = () => {
