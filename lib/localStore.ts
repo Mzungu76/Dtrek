@@ -200,5 +200,6 @@ export const LS_KEYS = {
   plannedList:     'planned-list',
   planned:         (id: string) => `planned:${id}`,
   userSettings:    'user-settings',
+  report:          (activityId: string) => `report:${activityId}`,
   lastSync:        (entity: string) => `last-sync:${entity}`,
 } as const
