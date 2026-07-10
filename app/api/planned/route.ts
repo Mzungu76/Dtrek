@@ -304,7 +304,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    return NextResponse.json({ ok: true, assessment: hike.assessment })
+    // routePolyline is returned alongside assessment (not just persisted) because the client
+    // sends its own PlannedHike shape without it when it's derived purely from trackPoints
+    // (see components/upload/GpxUploader.tsx / lib/plannedFromActivity.ts, neither sets it) —
+    // without this, the cache-first getPlannedById() in lib/plannedStore.ts would keep a
+    // routePolyline-less object forever, and useCL/useSentinel2 (lib/cl/useCL.ts) need either
+    // osmId or a polyline to even attempt their /api/trails/cl and /api/trails/sentinel2 calls.
+    return NextResponse.json({ ok: true, assessment: hike.assessment, routePolyline: hike.routePolyline })
   } catch (e) {
     console.error('POST /api/planned:', e)
     return NextResponse.json({ error: errMsg(e) }, { status: 500 })
