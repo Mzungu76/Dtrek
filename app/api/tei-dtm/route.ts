@@ -6,6 +6,7 @@
 // same as any other failure — the route boundary doesn't need to distinguish the reason.
 import { NextRequest, NextResponse } from 'next/server'
 import { computeTrailDtmProfile, type TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import { SUCCESS_CACHE_CONTROL } from '@/lib/apiCacheHeaders'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,10 @@ export async function GET(req: NextRequest) {
     }
 
     const profile = await withTimeout(computeTrailDtmProfile(track as [number, number][]), COMPUTE_TIMEOUT_MS)
-    return NextResponse.json(profile)
+    // Only a genuine 'dtm' result is stable for this exact track — 'unavailable' (no coverage,
+    // dataset not configured) can change once the underlying tile/config does, so it isn't cached.
+    const headers = profile.source === 'dtm' ? { 'Cache-Control': SUCCESS_CACHE_CONTROL } : undefined
+    return NextResponse.json(profile, { headers })
   } catch (e) {
     console.error('GET /api/tei-dtm:', e)
     return NextResponse.json(UNAVAILABLE)

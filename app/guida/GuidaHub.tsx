@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import PdfExportButton from '@/components/PdfExportButton'
 import { useUserPrefs } from '@/lib/useUserPrefs'
+import { fetchOnce } from '@/lib/sessionCache'
 import { useHasAiAccess } from './useHasAiAccess'
 import { useEnrichmentTimeout } from './useEnrichmentTimeout'
 import { useDtmProfile } from './useDtmProfile'
@@ -133,7 +134,10 @@ export default function GuidaHub({ id }: { id?: string }) {
     } : undefined,
   })
   const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
-  const flora = useFlora(hike?.routePolyline, hike?.altitudeMax)
+  const flora = useFlora(
+    hike?.routePolyline, hike?.altitudeMax,
+    hike ? { plannedId: hike.id, data: hike.floraResult, trackHash: hike.floraTrackHash } : undefined,
+  )
 
   const hasAiAccess = useHasAiAccess()
   const enrichmentTimedOut = useEnrichmentTimeout(hike?.id)
@@ -466,7 +470,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   }
   const handleExtendPending = async () => {
     if (!hike) return
-    const days = await fetch('/api/user-settings').then(r => r.json()).then(d => d.guidePendingDays ?? 30).catch(() => 30)
+    const days = await fetchOnce('user-settings-guidePendingDays', () => fetch('/api/user-settings').then(r => r.json()).then(d => d.guidePendingDays ?? 30)).catch(() => 30)
     await patch({ pendingExpiresAt: new Date(Date.now() + days * 86400000).toISOString(), archivedAt: undefined })
   }
   const handleArchive = async () => { await patch({ archivedAt: new Date().toISOString() }); router.push('/guida') }
