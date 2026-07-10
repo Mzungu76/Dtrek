@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'dtrek-static-v5';
+const STATIC_CACHE = 'dtrek-static-v6';
 const API_CACHE    = 'dtrek-api-v1';
 
 // Pages / assets to pre-cache on install
@@ -13,6 +13,7 @@ const PRECACHE_URLS = [
   '/favicon.ico',
   '/icon-192.png',
   '/icon-512.png',
+  '/icon-512-maskable.png',
 ];
 
 // ── Install: pre-cache shell ──────────────────────────────────────────────────
