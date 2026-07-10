@@ -1,6 +1,7 @@
 import type { TrackPoint } from './tcxParser'
 import type { HikeAssessment } from './hikeAssessment'
-import { lsGet, lsSet, lsDel, LS_KEYS } from './localStore'
+import { lsGet, lsSet, lsDel, LS_KEYS, obEnqueue } from './localStore'
+import { registerEntityFlusher, scheduleFlush } from './sync/syncEngine'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
 import type { SafetyScore } from './safetyScore'
@@ -135,87 +136,126 @@ function toPlannedMeta(h: PlannedHike): PlannedHikeMeta {
   return meta
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+const ENTITY_TYPE = 'planned_hike'
 
-/** Stale-while-revalidate: local cache → Supabase refresh in background. */
+// ── Public API ────────────────────────────────────────────────────────────────
+// Cache-first reads, same pattern as lib/blobStore.ts's activities. Writes are
+// queued through the outbox EXCEPT savePlanned's creation path (see below).
+
+/** Returns the local list if present; only hits Supabase when there's no local copy yet. */
 export async function getAllPlanned(onRefresh?: (data: PlannedHikeMeta[]) => void): Promise<PlannedHikeMeta[]> {
   const local = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
-
-  const netFetch = apiFetch<PlannedHikeMeta[]>('/api/planned')
-    .then((data) => { lsSet(LS_KEYS.plannedList, data).catch(() => {}); onRefresh?.(data); return data })
-    .catch((): PlannedHikeMeta[] => [])
-
-  if (local && local.length > 0) {
-    netFetch.catch(() => {})
-    return local
+  if (local) return local
+  try {
+    const data = await apiFetch<PlannedHikeMeta[]>('/api/planned')
+    await lsSet(LS_KEYS.plannedList, data)
+    onRefresh?.(data)
+    return data
+  } catch {
+    return []
   }
-  return netFetch
 }
 
-/** Returns cached full planned hike immediately; refreshes from API in background. */
+/** Returns the local copy if present; only hits Supabase when there's no local copy yet. */
 export async function getPlannedById(id: string): Promise<PlannedHike | null> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
-
-  const netFetch = apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`)
-    .then((data) => { lsSet(LS_KEYS.planned(id), data).catch(() => {}); return data })
-    .catch((): null => null)
-
-  if (local) {
-    netFetch.catch(() => {})
-    return local
+  if (local) return local
+  try {
+    const data = await apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`)
+    await lsSet(LS_KEYS.planned(id), data)
+    return data
+  } catch {
+    return null
   }
-  return netFetch
 }
 
-/** Saves to Supabase, then updates local cache. */
+/**
+ * Creates/overwrites a planned hike. Unlike every other write in this module,
+ * this one still attempts the network call synchronously — the server
+ * computes a personalized `assessment` (lib/hikeAssessment.ts) that the
+ * detail page the caller navigates to right after saving needs immediately,
+ * so it can't be left for a background flush the way a routine edit can.
+ * If the network call fails (offline, transient error) the hike is queued
+ * instead, so the record isn't lost — the assessment simply arrives later,
+ * merged in by the registered flusher below once the flush succeeds.
+ */
 export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: HikeAssessment }> {
-  const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment }>('/api/planned', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(hike),
-  })
-  // Update local cache — merge in the server-computed assessment so the cache
-  // isn't stale on the very first read (cache-first getPlannedById would
-  // otherwise return the assessment-less object sent to the API).
-  const cached = result.assessment ? { ...hike, assessment: result.assessment } : hike
-  lsSet(LS_KEYS.planned(hike.id), cached).catch(() => {})
-  lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList).then((list) => {
-    const meta    = toPlannedMeta(cached)
-    const updated = [meta, ...(list ?? []).filter((h) => h.id !== hike.id)]
-    lsSet(LS_KEYS.plannedList, updated).catch(() => {})
-  }).catch(() => {})
-  return result
+  await lsSet(LS_KEYS.planned(hike.id), hike)
+  const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+  await lsSet(LS_KEYS.plannedList, [toPlannedMeta(hike), ...(list ?? []).filter((h) => h.id !== hike.id)])
+
+  try {
+    const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment }>('/api/planned', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(hike),
+    })
+    // Merge in the server-computed assessment so the cache isn't stale on the very first
+    // read (cache-first getPlannedById would otherwise return the assessment-less object).
+    const cached = result.assessment ? { ...hike, assessment: result.assessment } : hike
+    await lsSet(LS_KEYS.planned(hike.id), cached)
+    const list2 = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+    if (list2) await lsSet(LS_KEYS.plannedList, list2.map((h) => h.id === hike.id ? toPlannedMeta(cached) : h))
+    return result
+  } catch {
+    await obEnqueue(ENTITY_TYPE, hike.id, 'upsert', hike)
+    scheduleFlush()
+    return {}
+  }
 }
 
-/** Patches Supabase, then applies same patch to local cached copies. */
+/** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updatePlannedMeta(
   id: string,
   meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
 ): Promise<void> {
-  // Optimistic IDB update before API call (completes in ~5ms, long before API returns)
-  lsGet<PlannedHike>(LS_KEYS.planned(id)).then((local) => {
-    if (local) lsSet(LS_KEYS.planned(id), { ...local, ...meta }).catch(() => {})
-  }).catch(() => {})
-  lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList).then((list) => {
-    if (!list) return
-    lsSet(LS_KEYS.plannedList,
-      list.map((h) => h.id === id ? { ...h, ...meta } : h)
-    ).catch(() => {})
-  }).catch(() => {})
-  await apiFetch('/api/planned', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, ...meta }),
-  })
+  const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
+  if (local) await lsSet(LS_KEYS.planned(id), { ...local, ...meta })
+  const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+  if (list) await lsSet(LS_KEYS.plannedList, list.map((h) => h.id === id ? { ...h, ...meta } : h))
+  await obEnqueue(ENTITY_TYPE, id, 'patch', meta)
+  scheduleFlush()
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cts-updated'))
 }
 
-/** Deletes from Supabase, then removes from local cache. */
+/** Removes from the local cache immediately and queues the deletion for background sync. */
 export async function deletePlanned(id: string): Promise<void> {
-  await apiFetch(`/api/planned?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-  lsDel(LS_KEYS.planned(id)).catch(() => {})
-  lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList).then((list) => {
-    if (!list) return
-    lsSet(LS_KEYS.plannedList, list.filter((h) => h.id !== id)).catch(() => {})
-  }).catch(() => {})
+  await lsDel(LS_KEYS.planned(id))
+  const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+  if (list) await lsSet(LS_KEYS.plannedList, list.filter((h) => h.id !== id))
+  await obEnqueue(ENTITY_TYPE, id, 'delete')
+  scheduleFlush()
 }
+
+registerEntityFlusher(ENTITY_TYPE, async (rows) => {
+  const succeededIds: number[] = []
+  for (const row of rows) {
+    try {
+      if (row.op === 'delete') {
+        await apiFetch(`/api/planned?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
+      } else if (row.op === 'upsert') {
+        const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment }>('/api/planned', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(row.payload),
+        })
+        if (result.assessment) {
+          const local = await lsGet<PlannedHike>(LS_KEYS.planned(row.recordId))
+          if (local) await lsSet(LS_KEYS.planned(row.recordId), { ...local, assessment: result.assessment })
+          const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+          if (list) await lsSet(LS_KEYS.plannedList, list.map((h) => h.id === row.recordId ? { ...h, assessment: result.assessment } : h))
+        }
+      } else {
+        await apiFetch('/api/planned', {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ id: row.recordId, ...(row.payload as object ?? {}) }),
+        })
+      }
+      succeededIds.push(row.outboxId!)
+    } catch {
+      // Leave this row pending — retried on the next flush trigger.
+    }
+  }
+  return { succeededIds }
+})
