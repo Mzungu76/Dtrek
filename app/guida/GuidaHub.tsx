@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import RouteHub from '@/components/routehub/RouteHub'
+import HubSkeleton from '@/components/routehub/HubSkeleton'
 import GuideReader from '@/components/guida/GuideReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
@@ -430,11 +431,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   }, [items, hike, driving, userOrigin, driveCache])
 
   if (!listLoaded) {
-    return (
-      <div className="fixed inset-0 bg-[#0b1a24] flex items-center justify-center text-stone-300 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
-      </div>
-    )
+    return <HubSkeleton />
   }
   if (!currentId) {
     return (
@@ -447,11 +444,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
   }
   if (displayItems.length === 0) {
-    return (
-      <div className="fixed inset-0 bg-[#0b1a24] flex items-center justify-center text-stone-300 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
-      </div>
-    )
+    return <HubSkeleton />
   }
 
   const patch = async (data: Parameters<typeof updatePlannedMeta>[1]) => {

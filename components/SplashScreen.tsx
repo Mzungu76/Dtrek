@@ -5,8 +5,11 @@ import Image from 'next/image'
 // Minimum time the splash stays fully visible before it's allowed to fade — long enough that a
 // genuinely instant load doesn't flash the logo for one frame and vanish (which reads as a glitch,
 // not a splash screen), short enough not to add real delay on top of whatever the app is doing.
-const MIN_VISIBLE_MS = 350
-const FADE_MS = 280
+// Kept deliberately tiny: this only needs to bridge the gap until hydration + first paint of the
+// real app shell underneath (which now shows its own skeleton immediately, see HubSkeleton), not
+// until data has actually loaded — so it should feel like a blink, not a screen of its own.
+const MIN_VISIBLE_MS = 120
+const FADE_MS = 150
 
 /**
  * Server-rendered in the initial HTML (app/layout.tsx renders this above `children`), so it's
