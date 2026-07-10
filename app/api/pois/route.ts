@@ -6,6 +6,7 @@ import { fetchPtprPois } from '@/lib/pois/ptprSource'
 import { fetchWikidataPois } from '@/lib/pois/wikidataSource'
 import { fetchOverpassPois } from '@/lib/pois/overpassSource'
 import { deduplicateByProximity } from '@/lib/pois/dedupe'
+import { SUCCESS_CACHE_CONTROL } from '@/lib/apiCacheHeaders'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
     if (cached?.pois) {
       // Handle both legacy array format and new {pois, meta} object format
       const payload = cached.pois as PoiItem[] | { pois: PoiItem[] }
-      return NextResponse.json(Array.isArray(payload) ? payload : payload.pois)
+      return NextResponse.json(Array.isArray(payload) ? payload : payload.pois, { headers: { 'Cache-Control': SUCCESS_CACHE_CONTROL } })
     }
 
     // Fetch from all 4 sources in parallel — tolerate individual failures
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
         else console.log(`[poi_cache] cached ${pois.length} POIs for ${bboxKey}`)
       })
 
-    return NextResponse.json(pois)
+    return NextResponse.json(pois, { headers: { 'Cache-Control': SUCCESS_CACHE_CONTROL } })
   } catch (e) {
     console.error('GET /api/pois:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })

@@ -7,6 +7,7 @@
 // needs a always-parseable response, same reasoning as tei-dtm/tei-terrain.
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchNatura2000PolygonsCached } from '@/lib/natura2000/natura2000Cache'
+import { SUCCESS_CACHE_CONTROL } from '@/lib/apiCacheHeaders'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const features = await fetchNatura2000PolygonsCached(bbox)
-    return NextResponse.json(features)
+    // An empty array is a genuine, stable answer (no protected sites in this bbox) — the
+    // underlying data itself is already cached for 270 days (natura2000Cache.ts), so mirroring
+    // that here is safe regardless of whether features.length is 0 or not.
+    return NextResponse.json(features, { headers: { 'Cache-Control': SUCCESS_CACHE_CONTROL } })
   } catch (e) {
     console.error('GET /api/natura2000:', e)
     return NextResponse.json([])

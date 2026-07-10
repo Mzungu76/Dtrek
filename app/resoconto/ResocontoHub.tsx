@@ -112,6 +112,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [openVideoWizard, setOpenVideoWizard] = useState(false)
   const [showStreetView,  setShowStreetView]  = useState(false)
   const [photos,          setPhotos]          = useState<RoutePhoto[]>([])
+  const [photosError,     setPhotosError]     = useState(false)
   const [coverPhotoId,    setCoverPhotoId]    = useState<string | null>(null)
   const [showShare,       setShowShare]       = useState(false)
   const [showCoverPicker, setShowCoverPicker] = useState(false)
@@ -191,7 +192,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
         .catch(() => {})
         .finally(() => setPoisLoaded(true))
     }
-    setPois([]); setPoisLoaded(false); setPhotos([]); setCoverPhotoId(null)
+    setPois([]); setPoisLoaded(false); setPhotos([]); setPhotosError(false); setCoverPhotoId(null)
     // No onRefresh callback here: getActivityById already persists the background-revalidated
     // copy to the local cache for next time. Wiring it into setActivity too would re-apply the
     // full activity (new object/array references) a second time once the network round-trip
@@ -204,7 +205,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       setRatingNote(a.userRatingNote ?? '')
       loadPoisFor(a)
     })
-    fetchActivityPhotos(currentId).then(setPhotos).catch(() => {})
+    fetchActivityPhotos(currentId).then(setPhotos).catch(() => setPhotosError(true))
     const savedCover = localStorage.getItem(`dtrek_cover_${currentId}`)
     if (savedCover) setCoverPhotoId(savedCover)
   }, [currentId, router])
@@ -414,12 +415,25 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
 
+  const retryPhotos = () => {
+    if (!currentId) return
+    setPhotosError(false)
+    fetchActivityPhotos(currentId).then(setPhotos).catch(() => setPhotosError(true))
+  }
+
   const heroPhotos = photos.length > 0 ? (
     <div data-hscroll className="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 snap-x">
       {photos.map(ph => (
         <Image key={ph.id} src={ph.url} alt={ph.caption ?? ''} width={112} height={112} className="w-28 h-28 object-cover rounded-2xl shrink-0 snap-start border border-stone-200" />
       ))}
     </div>
+  ) : photosError ? (
+    // Distinguishes "failed to load" from "genuinely no photos" — the fetch is wrapped in a
+    // silent .catch() so without this the two looked identical (nothing rendered), which is
+    // exactly what made a transient Supabase outage indistinguishable from "no photos here".
+    <button onClick={retryPhotos} className={`flex items-center gap-2 mx-4 mt-3 px-3 py-2 rounded-xl ${glassTile} text-xs ${textMuted}`}>
+      <RefreshCw className="w-3.5 h-3.5 shrink-0" /> Impossibile caricare le foto — riprova
+    </button>
   ) : undefined
 
   const ratingBadge = (item: RouteHubItem) => {

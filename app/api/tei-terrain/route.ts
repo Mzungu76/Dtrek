@@ -6,6 +6,7 @@
 // here, same as any other failure — the route boundary doesn't need to distinguish the reason.
 import { NextRequest, NextResponse } from 'next/server'
 import { computeTrailTerrainProfile, type TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
+import { SUCCESS_CACHE_CONTROL } from '@/lib/apiCacheHeaders'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +44,10 @@ export async function GET(req: NextRequest) {
     }
 
     const profile = await withTimeout(computeTrailTerrainProfile(track as [number, number][]), COMPUTE_TIMEOUT_MS)
-    return NextResponse.json(profile)
+    // Only a genuine 'geoportale' result is stable for this exact track — see tei-dtm's route
+    // for the same reasoning re: not caching 'unavailable'.
+    const headers = profile.source === 'geoportale' ? { 'Cache-Control': SUCCESS_CACHE_CONTROL } : undefined
+    return NextResponse.json(profile, { headers })
   } catch (e) {
     console.error('GET /api/tei-terrain:', e)
     return NextResponse.json(UNAVAILABLE)
