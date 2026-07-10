@@ -4,11 +4,12 @@ import type { User } from '@supabase/supabase-js'
 /**
  * Short-lived, in-memory cache for the outcome of validating a Supabase session cookie via
  * supabase.auth.getUser() — a real network round-trip to Supabase's Auth service, not a local
- * cookie read. Opening the Guida tab fires the page navigation (validated in middleware.ts) plus
- * roughly a dozen parallel API requests (POIs, punteggio SI, Sentinel-2, DTM, terreno, area
- * protetta, accesso AI, …), each carrying the exact same session cookie and each independently
- * re-validating that identical JWT over the network via getUserFromRequest (lib/supabaseAuth.ts)
- * — that's most of what makes the app feel slow to open.
+ * cookie read. middleware.ts no longer does this validation at all (see its own comment — it's a
+ * cookie-presence-only redirect now, deliberately network-free), but opening a hike still fires
+ * a handful of parallel API requests that each carry the same session cookie and each
+ * independently re-validate that identical JWT over the network via getUserFromRequest
+ * (lib/supabaseAuth.ts) — this cache lets a burst of those share one validated result for a few
+ * seconds instead of each re-hitting Supabase Auth for the exact same still-valid token.
  *
  * Keyed by the raw session cookie value(s), not by user id, so a genuine login/logout/refresh
  * (which changes the cookie) always misses and revalidates for real — this only skips redundant

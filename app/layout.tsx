@@ -7,6 +7,7 @@ import OfflineBanner from '@/components/OfflineBanner'
 import OfflineSync from '@/components/OfflineSync'
 import GlobalBackInterceptor from '@/app/components/GlobalBackInterceptor'
 import SplashScreen from '@/components/SplashScreen'
+import SessionKeepAlive from '@/components/SessionKeepAlive'
 
 // Self-hosted via next/font (build-time download + inline @font-face), replacing the old
 // render-blocking `@import url(fonts.googleapis.com/...)` in globals.css — that import forced
@@ -73,6 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="it" className={`${playfairDisplay.variable} ${dmSans.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${lora.variable}`}>
       <body className="antialiased">
         <SplashScreen />
+        <SessionKeepAlive />
         <GlobalBackInterceptor />
         {children}
         <OfflineBanner />
