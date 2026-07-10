@@ -159,13 +159,18 @@ export async function getAllPlanned(onRefresh?: (data: PlannedHikeMeta[]) => voi
 /** Returns the local copy if present; only hits Supabase when there's no local copy yet. */
 export async function getPlannedById(id: string): Promise<PlannedHike | null> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
-  if (local) return local
+  // Self-heal a known bad cache shape from before savePlanned's response included
+  // routePolyline (see app/api/planned/route.ts POST): a cached hike with no routePolyline and
+  // no osmId can never fetch its CL/shade-water scores (lib/cl/useCL.ts's queryFor needs one of
+  // the two), so it would otherwise be stuck like that forever under a pure cache-first read.
+  const needsRepair = !!local && !local.routePolyline?.length && local.osmId == null && (local.trackPoints?.length ?? 0) > 0
+  if (local && !needsRepair) return local
   try {
     const data = await apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`)
     await lsSet(LS_KEYS.planned(id), data)
     return data
   } catch {
-    return null
+    return local ?? null
   }
 }
 
@@ -185,14 +190,21 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
   await lsSet(LS_KEYS.plannedList, [toPlannedMeta(hike), ...(list ?? []).filter((h) => h.id !== hike.id)])
 
   try {
-    const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment }>('/api/planned', {
+    const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment; routePolyline?: [number, number][] }>('/api/planned', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(hike),
     })
-    // Merge in the server-computed assessment so the cache isn't stale on the very first
-    // read (cache-first getPlannedById would otherwise return the assessment-less object).
-    const cached = result.assessment ? { ...hike, assessment: result.assessment } : hike
+    // Merge in the server-computed assessment and routePolyline (derived from trackPoints
+    // server-side when the client didn't send one, e.g. a fresh GPX import) so the cache isn't
+    // stale on the very first read — cache-first getPlannedById would otherwise return an object
+    // permanently missing routePolyline, which useCL/useSentinel2 (lib/cl/useCL.ts) need to even
+    // attempt fetching the CL/shade-water scores.
+    const cached = {
+      ...hike,
+      ...(result.assessment    ? { assessment: result.assessment } : {}),
+      ...(result.routePolyline ? { routePolyline: result.routePolyline } : {}),
+    }
     await lsSet(LS_KEYS.planned(hike.id), cached)
     const list2 = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
     if (list2) await lsSet(LS_KEYS.plannedList, list2.map((h) => h.id === hike.id ? toPlannedMeta(cached) : h))
@@ -234,16 +246,20 @@ registerEntityFlusher(ENTITY_TYPE, async (rows) => {
       if (row.op === 'delete') {
         await apiFetch(`/api/planned?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
       } else if (row.op === 'upsert') {
-        const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment }>('/api/planned', {
+        const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment; routePolyline?: [number, number][] }>('/api/planned', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify(row.payload),
         })
-        if (result.assessment) {
+        if (result.assessment || result.routePolyline) {
+          const patch = {
+            ...(result.assessment    ? { assessment: result.assessment } : {}),
+            ...(result.routePolyline ? { routePolyline: result.routePolyline } : {}),
+          }
           const local = await lsGet<PlannedHike>(LS_KEYS.planned(row.recordId))
-          if (local) await lsSet(LS_KEYS.planned(row.recordId), { ...local, assessment: result.assessment })
+          if (local) await lsSet(LS_KEYS.planned(row.recordId), { ...local, ...patch })
           const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
-          if (list) await lsSet(LS_KEYS.plannedList, list.map((h) => h.id === row.recordId ? { ...h, assessment: result.assessment } : h))
+          if (list) await lsSet(LS_KEYS.plannedList, list.map((h) => h.id === row.recordId ? { ...h, ...patch } : h))
         }
       } else {
         await apiFetch('/api/planned', {
