@@ -1,9 +1,12 @@
 'use client'
 
 import { getBrowserSupabase } from './supabaseBrowser'
+import { lsGet, lsSet, LS_KEYS, obEnqueue } from './localStore'
+import { registerEntityFlusher, scheduleFlush } from './sync/syncEngine'
 
 const BUCKET = 'dtrek-photos'
 const LEGACY_PREFIX = 'dtrek_vp_'
+const ENTITY_TYPE = 'activity_photo'
 
 export interface RoutePhoto {
   id: string
@@ -131,14 +134,33 @@ async function migrateLegacyPhotos(activityId: string): Promise<RoutePhoto[] | n
   return migrated.sort((a, b) => a.progress - b.progress)
 }
 
+/**
+ * Returns the local copy if present; only hits Supabase (and the legacy
+ * localStorage migration) when there's no local copy yet. Metadata edits
+ * (caption/position) applied while this activity's photo list isn't
+ * currently cached won't be reflected here until the next full refetch —
+ * an accepted limitation since every editor already keeps its own React
+ * state in sync for the duration of the session (see updateActivityPhoto).
+ */
 export async function fetchActivityPhotos(activityId: string): Promise<RoutePhoto[]> {
+  const local = await lsGet<RoutePhoto[]>(LS_KEYS.activityPhotos(activityId))
+  if (local) return local
+
   const serverPhotos = await fetchFromServer(activityId)
-  if (serverPhotos.length > 0) return serverPhotos
+  if (serverPhotos.length > 0) {
+    await lsSet(LS_KEYS.activityPhotos(activityId), serverPhotos)
+    return serverPhotos
+  }
 
   const migrated = await migrateLegacyPhotos(activityId)
-  return migrated ?? []
+  const result = migrated ?? []
+  await lsSet(LS_KEYS.activityPhotos(activityId), result)
+  return result
 }
 
+// The binary upload itself always requires the network (a multi-MB blob queued in IndexedDB
+// would fight the same storage-quota/eviction risk this migration is trying to reduce, not
+// help it) — addActivityPhoto stays direct-network, unlike every other write in this file.
 export async function addActivityPhoto(activityId: string, photo: {
   id: string
   dataUrl: string
@@ -162,24 +184,48 @@ export async function addActivityPhoto(activityId: string, photo: {
     lat: photo.lat,
     lon: photo.lon,
   })
-  return { id: photo.id, url, progress: photo.progress, caption: photo.caption, hasExifGps: photo.hasExifGps, lat: photo.lat, lon: photo.lon }
+  const result = { id: photo.id, url, progress: photo.progress, caption: photo.caption, hasExifGps: photo.hasExifGps, lat: photo.lat, lon: photo.lon }
+  const local = await lsGet<RoutePhoto[]>(LS_KEYS.activityPhotos(activityId))
+  await lsSet(LS_KEYS.activityPhotos(activityId), [...(local ?? []), result].sort((a, b) => a.progress - b.progress))
+  return result
 }
 
+/** Queues the metadata patch for background sync — never blocks on the network (callers already keep their own optimistic UI state, see components/RouteMap3D.tsx). */
 export async function updateActivityPhoto(id: string, patch: {
   caption?: string
   progress?: number
   lat?: number
   lon?: number
 }): Promise<void> {
-  const res = await fetch('/api/activity-photos', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, ...patch }),
-  })
-  if (!res.ok) throw new Error('Aggiornamento foto non riuscito')
+  await obEnqueue(ENTITY_TYPE, id, 'patch', { id, ...patch })
+  scheduleFlush()
 }
 
+/** Queues the deletion for background sync. */
 export async function removeActivityPhoto(id: string): Promise<void> {
-  const res = await fetch(`/api/activity-photos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('Eliminazione foto non riuscita')
+  await obEnqueue(ENTITY_TYPE, id, 'delete')
+  scheduleFlush()
 }
+
+registerEntityFlusher(ENTITY_TYPE, async (rows) => {
+  const succeededIds: number[] = []
+  for (const row of rows) {
+    try {
+      if (row.op === 'delete') {
+        const res = await fetch(`/api/activity-photos?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
+        if (!res.ok) throw new Error(`${res.status}`)
+      } else {
+        const res = await fetch('/api/activity-photos', {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(row.payload),
+        })
+        if (!res.ok) throw new Error(`${res.status}`)
+      }
+      succeededIds.push(row.outboxId!)
+    } catch {
+      // Leave this row pending — retried on the next flush trigger.
+    }
+  }
+  return { succeededIds }
+})

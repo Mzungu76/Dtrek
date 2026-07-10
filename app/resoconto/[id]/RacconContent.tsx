@@ -13,6 +13,7 @@ import {
   type ReportSection, type ReportAuthoredBy, type HikeReport,
 } from '@/lib/reportStore'
 import { getReport, saveReportContent, cacheReport } from '@/lib/sync/hikeReportStore'
+import { getQuestionnaire } from '@/lib/questionnaireStore'
 import ManualEditor from '@/app/components/ManualEditor'
 import {
   FileDown, Pencil, Check, Loader2,
@@ -69,7 +70,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
     Promise.all([
       getActivityById(id),
       getReport(id).catch(() => null),
-      fetch(`/api/questionnaire?activityId=${encodeURIComponent(id)}`).then(r => r.json()).catch(() => null),
+      getQuestionnaire(id).catch(() => null),
     ]).then(([act, rep, questionnaire]) => {
       if (!act) { router.push('/resoconto'); return }
       setActivity(act)
