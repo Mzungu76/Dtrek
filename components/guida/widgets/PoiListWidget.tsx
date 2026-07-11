@@ -201,7 +201,7 @@ export default function PoiListWidget({
       <p className={`${sectionHeading} pt-1`}>Galleria</p>
 
       {otherEntries.length > 0 && (
-        <div data-hscroll className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+        <div data-hscroll className="flex gap-2.5 overflow-x-auto pt-2 pb-1 -mx-1 -mt-2 px-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
           {otherEntries.map(entry => entry.kind === 'named' ? (
             <NamedPoiIcon
               key={`named-${entry.poi.id}`}
