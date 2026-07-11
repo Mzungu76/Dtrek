@@ -6,6 +6,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import { readIndex } from '@/lib/blobIndex'
 import { assessHike } from '@/lib/hikeAssessment'
 import type { SafetyScore } from '@/lib/safetyScore'
+import { downsamplePolyline } from '@/lib/downsamplePolyline'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,20 +16,6 @@ function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message
   if (e && typeof e === 'object' && 'message' in e) return String((e as Record<string, unknown>).message)
   try { return JSON.stringify(e) } catch { return String(e) }
-}
-
-function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
-  const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
-  if (!valid.length) return []
-  const count = Math.min(valid.length, maxPts)
-  const step  = (valid.length - 1) / (count - 1 || 1)
-  return Array.from({ length: count }, (_, i) => {
-    const idx = Math.min(Math.round(i * step), valid.length - 1)
-    return [
-      Math.round(valid[idx].lat! * 1e5) / 1e5,
-      Math.round(valid[idx].lon! * 1e5) / 1e5,
-    ]
-  })
 }
 
 function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedHike {
@@ -74,6 +61,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedDrivingOriginLon:       row.cached_driving_origin_lon      as number | undefined,
     pendingExpiresAt:             row.pending_expires_at             as string | undefined,
     archivedAt:                   row.archived_at                    as string | undefined,
+    favorite:                     row.favorite                       as boolean | undefined,
     dtmProfile:                   row.dtm_profile                    as PlannedHike['dtmProfile'],
     dtmTrackHash:                 row.dtm_track_hash                 as string | undefined,
     dtmComputedAt:                row.dtm_computed_at                as string | undefined,
@@ -139,6 +127,7 @@ function hikeToRow(h: PlannedHike) {
     cached_driving_origin_lon:        h.cachedDrivingOriginLon ?? null,
     pending_expires_at:               h.pendingExpiresAt ?? null,
     archived_at:                      h.archivedAt ?? null,
+    favorite:                         h.favorite ?? false,
   }
 }
 
@@ -152,7 +141,7 @@ const META_COLS = [
   'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_riddles', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
-  'pending_expires_at', 'archived_at',
+  'pending_expires_at', 'archived_at', 'favorite',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
@@ -354,6 +343,7 @@ export async function PATCH(req: NextRequest) {
       cachedDrivingOriginLon?: number
       pendingExpiresAt?: string | null
       archivedAt?: string | null
+      favorite?: boolean
       dtmProfile?: PlannedHike['dtmProfile']
       dtmTrackHash?: string
       dtmComputedAt?: string
@@ -397,6 +387,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedDrivingOriginLon       !== undefined) dbPatch.cached_driving_origin_lon      = patch.cachedDrivingOriginLon
     if (patch.pendingExpiresAt             !== undefined) dbPatch.pending_expires_at             = patch.pendingExpiresAt
     if (patch.archivedAt                   !== undefined) dbPatch.archived_at                    = patch.archivedAt
+    if (patch.favorite                     !== undefined) dbPatch.favorite                       = patch.favorite
     if (patch.dtmProfile                   !== undefined) dbPatch.dtm_profile                    = patch.dtmProfile
     if (patch.dtmTrackHash                 !== undefined) dbPatch.dtm_track_hash                 = patch.dtmTrackHash
     if (patch.dtmComputedAt                !== undefined) dbPatch.dtm_computed_at                = patch.dtmComputedAt

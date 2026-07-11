@@ -45,6 +45,8 @@ export interface RouteHubItem {
    *  from whatever's already cached (no live fetch per list item); Resoconto: the user's manual
    *  rating. Undefined when nothing's known yet for this item. */
   scorePreview?: { value: number; max: number; color?: string }
+  /** Guida-only "preferito" flag — undefined for Resoconto items (no favorite concept there). */
+  favorite?: boolean
 }
 
 /** One tab of the Screen 2 page's pill tab-bar — only meaningful when bodyMode === 'tabbed'. */
@@ -115,4 +117,12 @@ export interface RouteHubProps {
   /** 'magazine' bumps the closed-card title size and shows the subtitle line — opt-in so any
    *  future caller that doesn't pass it keeps today's compact look. */
   topOverlayVariant?: 'default' | 'magazine'
+  /** Guida-only "Preferiti" filter — additive with sortBy (narrows `items` down to favorites,
+   *  doesn't replace the sort), not a RouteHub-owned concept: caller owns the toggle button's
+   *  presence entirely by whether it passes these two props at all (Resoconto passes neither). */
+  favoritesFilter?: boolean
+  onToggleFavoritesFilter?: () => void
+  /** Toggles `item.favorite` — renders a star button on the closed-card cover and (if the caller
+   *  also renders one, e.g. in headerActions) anywhere else that needs the same action. */
+  onToggleFavorite?: (item: RouteHubItem) => void
 }

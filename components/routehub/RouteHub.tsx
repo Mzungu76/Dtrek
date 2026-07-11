@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronUp, Star } from 'lucide-react'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RoutePage from './RoutePage'
@@ -25,7 +25,7 @@ export default function RouteHub({
   mode, items, initialIndex, onIndexChange, bodyMode, tabs = [], renderSection,
   tabScrollRef, primaryAction, summaryBanner, weatherIcon, onSectionChange,
   scoreBadges, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
-  subtitle, topOverlayVariant,
+  subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
@@ -107,7 +107,7 @@ export default function RouteHub({
     if (!skippedFirstRun.current) { skippedFirstRun.current = true; return }
     clearTimeout(indexChangeTimer.current)
     indexChangeTimer.current = setTimeout(() => {
-      const item = sortedItems[state.index]
+      const item = visibleItems[state.index]
       if (item) onIndexChange(item, state.index)
     }, 150)
     return () => clearTimeout(indexChangeTimer.current)
@@ -126,19 +126,29 @@ export default function RouteHub({
     ))
   }, [items, sortBy, hasSortData])
 
-  // `sortedItems` can reorder for two very different reasons: the user picking a different sort
-  // (handleSortChange below), or a route's own score/date/etc. quietly updating live. Either way,
-  // `state.index` must keep pointing at the SAME route, not whatever numeric slot it used to
-  // occupy — currentRouteId tracks intent; the layout effect re-derives the index from that id
-  // every time the order changes.
+  // Preferiti — narrows the set (additive with sortBy, not a replacement for it), so it goes
+  // through the very same "visibleItems feeds carousel+gallery+index math" pipeline as sortedItems
+  // above, for the same reason: carousel and gallery must always agree on what "next"/"index N" means.
+  const visibleItems = useMemo(
+    () => favoritesFilter ? sortedItems.filter(i => i.favorite) : sortedItems,
+    [sortedItems, favoritesFilter],
+  )
+
+  // `visibleItems` can reorder/shrink for several reasons (sort change, a route's score/date
+  // quietly updating live, the favorites filter toggling). Either way, `state.index` must keep
+  // pointing at the SAME route, not whatever numeric slot it used to occupy — currentRouteId
+  // tracks intent; the layout effect re-derives the index from that id every time the set changes.
+  // If the current route got filtered out entirely (e.g. it isn't a favorite and the filter just
+  // turned on), it falls back to index 0 of whatever's left instead of leaving state.index stale.
   const currentRouteId = useRef<string | null>(null)
-  useEffect(() => { currentRouteId.current = sortedItems[state.index]?.id ?? currentRouteId.current }, [state.index]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { currentRouteId.current = visibleItems[state.index]?.id ?? currentRouteId.current }, [state.index]) // eslint-disable-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
+    if (visibleItems.length === 0) return
     const id = currentRouteId.current
-    if (id == null) return
-    const idx = sortedItems.findIndex(it => it.id === id)
-    if (idx >= 0 && idx !== state.index) dispatch({ type: 'JUMP_TO', index: idx })
-  }, [sortedItems]) // eslint-disable-line react-hooks/exhaustive-deps
+    const idx = id == null ? -1 : visibleItems.findIndex(it => it.id === id)
+    const nextIndex = idx >= 0 ? idx : 0
+    if (nextIndex !== state.index) dispatch({ type: 'JUMP_TO', index: nextIndex })
+  }, [visibleItems]) // eslint-disable-line react-hooks/exhaustive-deps
   const handleSortChange = (key: SortKey) => setSortBy(key)
 
   if (items.length === 0) {
@@ -149,7 +159,21 @@ export default function RouteHub({
     )
   }
 
-  const item = sortedItems[state.index]
+  if (visibleItems.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
+        <Star className="w-8 h-8 text-stone-600" />
+        <p>Nessun percorso preferito.</p>
+        {onToggleFavoritesFilter && (
+          <button onClick={onToggleFavoritesFilter} className="text-sky-400 font-semibold">
+            Mostra tutti i percorsi
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const item = visibleItems[state.index]
   const summary = summaryBanner?.(item)
   const chromeOpacity = 1 - openProgress
   const chromeTransitionMs = dragLive ? 0 : SHEET_TRANSITION_MS
@@ -165,14 +189,14 @@ export default function RouteHub({
           a stylized non-interactive route map (CoverMap) — never a live/interactive map anymore. */}
       <div className="absolute inset-0">
         <RouteCarousel
-          items={sortedItems}
+          items={visibleItems}
           index={state.index}
           dragging={state.dragging}
           dragDeltaPx={state.dragDeltaPx}
           swipeEnabled={!isOpen}
           onDragStart={() => dispatch({ type: 'DRAG_START' })}
           onDragMove={deltaPx => dispatch({ type: 'DRAG_MOVE', deltaPx })}
-          onDragEnd={() => dispatch({ type: 'DRAG_END', count: sortedItems.length })}
+          onDragEnd={() => dispatch({ type: 'DRAG_END', count: visibleItems.length })}
           onOpenDragMove={handleOpenDragMove}
           onOpenDragEnd={handleOpenDragEnd}
           renderSlide={(slideItem, _i, inWindow) => (
@@ -217,7 +241,7 @@ export default function RouteHub({
           <ChevronLeft className="w-4 h-4 text-white/70" />
         </div>
       )}
-      {state.index < sortedItems.length - 1 && (
+      {state.index < visibleItems.length - 1 && (
         <div className="pointer-events-none absolute right-2 top-[38%] -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/35 flex items-center justify-center transition-opacity ease-out" style={{ opacity: chromeOpacity, transitionDuration: `${chromeTransitionMs}ms` }}>
           <ChevronRight className="w-4 h-4 text-white/70" />
         </div>
@@ -231,6 +255,20 @@ export default function RouteHub({
           scoreBadges={scoreBadges?.(item, () => openWithAnimation(scoreBadgesTargetSection ?? defaultSection))}
           subtitle={subtitle?.(item)}
           variant={topOverlayVariant}
+          favoriteButton={onToggleFavorite && (
+            <button
+              onClick={() => onToggleFavorite(item)}
+              title={item.favorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
+              className="pointer-events-auto shrink-0"
+            >
+              <Star
+                className="w-6 h-6"
+                color={item.favorite ? '#e9ab64' : '#fff'}
+                fill={item.favorite ? '#e9ab64' : 'none'}
+                style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}
+              />
+            </button>
+          )}
         />
       </div>
 
@@ -244,10 +282,11 @@ export default function RouteHub({
           </p>
         )}
         <BottomGallery
-          mode={mode} items={sortedItems} currentId={item.id}
+          mode={mode} items={visibleItems} currentId={item.id}
           onSelect={index => dispatch({ type: 'JUMP_TO', index })}
           sortBy={sortBy} onSortChange={handleSortChange}
           importLabel={importLabel} onImport={onImport}
+          favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}
         />
         {/* Trascina la scheda chiusa verso l'alto per aprirla — l'icona stessa è anche un
             pulsante equivalente per chi preferisce toccare piuttosto che trascinare. */}

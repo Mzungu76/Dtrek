@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { isPublicPath } from '@/lib/publicPaths'
-import type { User as SupabaseUser, AuthChangeEvent } from '@supabase/supabase-js'
+import { isAuthRetryableFetchError, type User as SupabaseUser, type AuthChangeEvent, type AuthError } from '@supabase/supabase-js'
 
 /**
  * Two jobs, both deliberately done client → Supabase directly instead of through Vercel's
@@ -23,6 +23,13 @@ import type { User as SupabaseUser, AuthChangeEvent } from '@supabase/supabase-j
  *    silently does nothing (no redirect) rather than blocking anything — the app keeps showing
  *    whatever's already loaded/cached instead of breaking for everyone.
  *
+ *    getUser() does NOT reject on a network failure (Supabase down/unreachable, e.g. right after
+ *    a phone wakes from standby and this effect re-runs on remount) — it *resolves* with
+ *    `{ data: { user: null }, error: AuthRetryableFetchError }`, so a plain `!data.user` check
+ *    would misread "Supabase is unreachable" as "genuinely signed out" and redirect anyway,
+ *    defeating the paragraph above. isAuthRetryableFetchError(error) is what actually
+ *    distinguishes the two cases.
+ *
  * Mounted once in app/layout.tsx, outside `{children}`, so it never unmounts across client-side
  * navigations — one subscription for the whole session, not one per page.
  */
@@ -41,7 +48,9 @@ export default function SessionKeepAlive() {
     }
 
     supabase.auth.getUser()
-      .then(({ data }: { data: { user: SupabaseUser | null } }) => { if (!data.user) redirectIfProtected() })
+      .then(({ data, error }: { data: { user: SupabaseUser | null }; error: AuthError | null }) => {
+        if (!data.user && !isAuthRetryableFetchError(error)) redirectIfProtected()
+      })
       .catch(() => {})
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {

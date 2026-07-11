@@ -7,9 +7,12 @@ interface Props {
   accentColor?: string
 }
 
-function parseTextBlocks(raw: string): { type: 'paragraph' | 'curiosita' | 'subsection'; text: string }[] {
-  const blocks: { type: 'paragraph' | 'curiosita' | 'subsection'; text: string }[] = []
-  const cRe = /\[curiosita\]([\s\S]*?)\[\/curiosita\]/g
+function parseTextBlocks(raw: string): { type: 'paragraph' | 'curiosita' | 'avviso' | 'subsection'; text: string }[] {
+  const blocks: { type: 'paragraph' | 'curiosita' | 'avviso' | 'subsection'; text: string }[] = []
+  // Stessa convenzione [curiosita]/[avviso] di components/guida/MagazineBody.tsx (on-screen) —
+  // prima qui veniva riconosciuto solo [curiosita], quindi un [avviso] (stato del percorso,
+  // vedi app/api/guide/route.ts) finiva stampato come testo grezzo con le parentesi quadre.
+  const blockRe = /\[(curiosita|avviso)\]([\s\S]*?)\[\/\1\]/g
   let last = 0
   let m: RegExpExecArray | null
 
@@ -28,9 +31,9 @@ function parseTextBlocks(raw: string): { type: 'paragraph' | 'curiosita' | 'subs
     flush()
   }
 
-  while ((m = cRe.exec(raw)) !== null) {
+  while ((m = blockRe.exec(raw)) !== null) {
     flushText(raw.slice(last, m.index))
-    blocks.push({ type: 'curiosita', text: m[1].trim().replace(/\n/g, ' ') })
+    blocks.push({ type: m[1] as 'curiosita' | 'avviso', text: m[2].trim().replace(/\n/g, ' ') })
     last = m.index + m[0].length
   }
   flushText(raw.slice(last))
@@ -42,7 +45,7 @@ export default function GuideSection({
   text,
   photo,
   layout = 'full-width',
-  accentColor = '#d97706',
+  accentColor = '#c05a17',
 }: Props) {
   const effectiveLayout = photo ? layout : 'full-width'
   const blocks = parseTextBlocks(text)
@@ -60,6 +63,17 @@ export default function GuideSection({
                   ◆ LO SAPEVI?
                 </p>
                 <p className="guide-curiosita-inline-text">{b.text}</p>
+              </div>
+            </div>
+          )
+        }
+        if (b.type === 'avviso') {
+          return (
+            <div key={i} className="guide-avviso-inline">
+              <div className="guide-avviso-inline-accent" />
+              <div className="guide-avviso-inline-inner">
+                <p className="guide-avviso-inline-label">⚠ STATO DEL PERCORSO</p>
+                <p className="guide-avviso-inline-text">{b.text}</p>
               </div>
             </div>
           )
@@ -86,10 +100,13 @@ export default function GuideSection({
 
   return (
     <div className="guide-section">
-      {/* Full-bleed section header band */}
-      <div className="guide-section-header" style={{ background: accentColor }}>
-        <span className="guide-section-dot" />
+      {/* Stesso stile editoriale della guida on-screen (components/guida/SectionCard.tsx):
+          eyebrow colorata + titolo in serif + riga d'accento sottile — non più una fascia
+          piena a tutto colore. */}
+      <div className="guide-section-header">
+        <p className="guide-section-kicker" style={{ color: accentColor }}>{title}</p>
         <h2 className="guide-section-title">{title}</h2>
+        <div className="guide-section-accent-line" style={{ background: accentColor }} />
       </div>
 
       {effectiveLayout === 'full-width' && (

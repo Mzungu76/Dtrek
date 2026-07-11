@@ -5,6 +5,7 @@ import { parseGpx } from '@/lib/gpxParser'
 import { formatDuration } from '@/lib/tcxParser'
 import { classifyMarkers } from '@/lib/difficultyMarkers'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
+import { downsamplePolyline } from '@/lib/downsamplePolyline'
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
@@ -73,6 +74,11 @@ export default function GpxUploader() {
         createdAt:    new Date().toISOString(),
         difficultyMarkers: classifyMarkers(parsed.difficultyMarkerCandidates ?? []),
         pendingExpiresAt: new Date(Date.now() + pendingDays * 86400000).toISOString(),
+        // Computed client-side (not just left for the server round-trip in savePlanned) so the
+        // closed gallery card's cover map (components/routehub/CoverMap.tsx, which reads only
+        // this field, never trackPoints) has something to render immediately — otherwise it stays
+        // blank until /api/planned succeeds, which can be delayed indefinitely during an outage.
+        routePolyline: parsed.trackPoints?.length ? downsamplePolyline(parsed.trackPoints) : undefined,
       }
 
       // Prefetch POIs during save so the detail page shows them immediately.

@@ -562,7 +562,6 @@ export default function GuideReader({
         elevationGain={hike.elevationGain}
         altitudeMax={hike.altitudeMax}
         durationLabel={formatDuration(hike.estimatedTimeSeconds)}
-        driving={driving}
       />
 
       <PhotoMosaic
