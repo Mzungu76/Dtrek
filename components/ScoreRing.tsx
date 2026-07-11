@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type CSSProperties } from 'react'
 import type { CLLabel, CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { TrailScoreResult } from '@/lib/trailScore'
@@ -161,37 +161,51 @@ function useCountUp(target: number, durationMs = 700): number {
   return value
 }
 
-// Punto sul cerchio per un angolo in gradi, 0° = ore 12, in senso orario.
-function polar(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = (angleDeg - 90) * (Math.PI / 180)
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
-}
-
-function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
-  const span = endDeg - startDeg
-  if (span <= 0) return ''
-  const start = polar(cx, cy, r, startDeg)
-  const end   = polar(cx, cy, r, endDeg)
-  const largeArc = span > 180 ? 1 : 0
-  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`
-}
-
-const GAP_DEG   = 4
 const SEG_COUNT = 4
-const SEG_DEG   = 360 / SEG_COUNT
-const SIZE      = 208
-const R         = 86
-const STROKE    = 18
-const CX        = SIZE / 2
-const CY        = SIZE / 2
+
+// Radar a 4 assi — alto/destra/basso/sinistra, nello stesso ordine di `computeSegments`
+// (cl, safety, cts, shadewater). Le etichette sono <div> HTML sovrapposte all'SVG, non testo
+// SVG: a differenza di <text>, vanno a capo correttamente e non escono dal contenitore qualunque
+// sia la lunghezza (es. "OMBRA E ACQUA" contro "SICUREZZA").
+const RADAR_OUTER  = 272 // lato del contenitore quadrato, margine incluso per le etichette
+const RADAR_MARGIN = 50  // spazio riservato alle etichette su ogni lato
+const RADAR_SIZE   = RADAR_OUTER - RADAR_MARGIN * 2
+const RADAR_R      = RADAR_SIZE / 2
+const RCX = RADAR_SIZE / 2
+const RCY = RADAR_SIZE / 2
+const AXES = [
+  { dx: 0, dy: -1 },  // alto — cl (Affidabilità)
+  { dx: 1, dy: 0 },   // destra — safety (Sicurezza)
+  { dx: 0, dy: 1 },   // basso — cts (Comfort TrailScore)
+  { dx: -1, dy: 0 },  // sinistra — shadewater (Ombra e acqua)
+] as const
+
+function axisPoint(i: number, level: number) {
+  const a = AXES[i]
+  return { x: RCX + a.dx * RADAR_R * level, y: RCY + a.dy * RADAR_R * level }
+}
+
+function ringPolygonPoints(level: number): string {
+  return AXES.map((_, i) => { const p = axisPoint(i, level); return `${p.x},${p.y}` }).join(' ')
+}
+
+// Etichette compatte per gli assi del radar — la lista sotto mostra comunque il titolo per
+// esteso (`s.title`), qui serve stare in ~44px di larghezza senza wrap eccessivo.
+const RADAR_SHORT_TITLE: Record<Segment['key'], string> = {
+  cl: 'Affidabilità',
+  safety: 'Sicurezza',
+  cts: 'Comfort',
+  shadewater: 'Ombra e acqua',
+}
 
 /**
- * Grafico ad anello che sostituisce la griglia a tile di ScoresSection: un solo
- * elemento compatto invece di una dashboard a sé, coerente con l'idea che tutta
- * l'infrastruttura di valutazione (CL, Sicurezza, Comfort TrailScore — che già
- * incorpora la Bellezza/TEI come input —, Ombra e acqua) resti consultabile ma
- * non occupi una sezione propria. Click su uno spicchio apre il dettaglio del
- * punteggio corrispondente in un foglio a comparsa.
+ * Radar a 4 assi (Affidabilità/Sicurezza/Comfort TrailScore/Ombra e acqua) — un solo elemento
+ * compatto invece di una dashboard a sé, coerente con l'idea che tutta l'infrastruttura di
+ * valutazione (che già incorpora la Bellezza/TEI come input alla Comfort TrailScore) resti
+ * consultabile ma non occupi una sezione propria. Mostra anche la *forma* del punteggio, non
+ * solo la somma: un percorso ottimo ma povero d'ombra si riconosce a colpo d'occhio dal poligono
+ * "storto", cosa che l'anello precedente non comunicava. Click su un vertice/etichetta o su una
+ * riga della lista sotto apre il dettaglio del punteggio corrispondente in un foglio a comparsa.
  */
 export function ScoreRing({
   cl, safety, cts, shadeWater,
@@ -204,8 +218,8 @@ export function ScoreRing({
   const [activeKey, setActiveKey] = useState<Segment['key'] | null>(null)
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
-    // Un frame di ritardo così il primo render dipinge gli archi a 0 — poi la transizione CSS
-    // sotto li "disegna" fino al valore vero invece di comparire già pieni.
+    // Un frame di ritardo così il primo render dipinge il poligono a 0 — poi l'animazione CSS
+    // sotto lo "disegna" fino alla forma vera invece di comparire già pieno.
     const raf = requestAnimationFrame(() => setMounted(true))
     return () => cancelAnimationFrame(raf)
   }, [])
@@ -215,44 +229,81 @@ export function ScoreRing({
   const animatedTotal = useCountUp(mounted ? total : 0)
   const known   = segments.filter(s => s.value != null).length
   const active  = segments.find(s => s.key === activeKey) ?? null
-  const span    = SEG_DEG - GAP_DEG
+
+  const points = segments.map((s, i) => {
+    const pct = mounted && s.value != null ? Math.max(0, Math.min(100, s.value)) / 100 : 0
+    return { ...s, ...axisPoint(i, pct) }
+  })
+  const dataPolygon = points.map(p => `${p.x},${p.y}`).join(' ')
+
+  const LABEL_STYLE: Record<number, { className: string; style: CSSProperties }> = {
+    0: { className: 'absolute left-1/2 -translate-x-1/2 text-center', style: { bottom: RADAR_MARGIN + RADAR_SIZE, width: 140 } },
+    1: { className: 'absolute top-1/2 -translate-y-1/2 text-left', style: { left: RADAR_MARGIN + RADAR_SIZE + 4, width: RADAR_MARGIN - 6 } },
+    2: { className: 'absolute left-1/2 -translate-x-1/2 text-center', style: { top: RADAR_MARGIN + RADAR_SIZE, width: 140 } },
+    3: { className: 'absolute top-1/2 -translate-y-1/2 text-right', style: { right: RADAR_MARGIN + RADAR_SIZE + 4, width: RADAR_MARGIN - 6 } },
+  }
 
   return (
     <div>
       <div className="flex flex-col items-center gap-5">
-        <div className="relative shrink-0 mx-auto" style={{ width: SIZE, height: SIZE }}>
-          <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-            {segments.map((s, i) => {
-              const start = i * SEG_DEG + GAP_DEG / 2
-              const pct   = mounted && s.value != null ? Math.max(0, Math.min(100, s.value)) / 100 : 0
-              return (
-                <g key={s.key}>
-                  <path
-                    d={arcPath(CX, CY, R, start, start + span)}
-                    stroke="#e7e5e4" strokeWidth={STROKE} strokeLinecap="round" fill="none"
-                  />
-                  {s.value != null && (
-                    <path
-                      d={arcPath(CX, CY, R, start, start + span * pct)}
-                      stroke={s.color} strokeWidth={STROKE} strokeLinecap="round" fill="none"
-                      style={{ transition: 'd 800ms cubic-bezier(.22,.8,.25,1)', filter: `drop-shadow(0 0 5px ${s.color}aa)` }}
-                    />
-                  )}
-                  <path
-                    d={arcPath(CX, CY, R, start, start + span)}
-                    stroke="transparent" strokeWidth={STROKE + 14} fill="none"
-                    style={{ cursor: s.value != null ? 'pointer' : 'default' }}
-                    onClick={() => s.value != null && setActiveKey(s.key)}
-                  />
-                </g>
-              )
-            })}
+        <div className="relative shrink-0 mx-auto" style={{ width: RADAR_OUTER, height: RADAR_OUTER }}>
+          <svg
+            width={RADAR_SIZE} height={RADAR_SIZE} viewBox={`0 0 ${RADAR_SIZE} ${RADAR_SIZE}`}
+            style={{ position: 'absolute', left: RADAR_MARGIN, top: RADAR_MARGIN, overflow: 'visible' }}
+          >
+            {[0.25, 0.5, 0.75, 1].map(level => (
+              <polygon key={level} points={ringPolygonPoints(level)} fill="none" stroke="#e7e5e4" strokeWidth={1} />
+            ))}
+            {AXES.map((a, i) => (
+              <line key={i} x1={RCX} y1={RCY} x2={RCX + a.dx * RADAR_R} y2={RCY + a.dy * RADAR_R} stroke="#dcd8cc" strokeWidth={1} />
+            ))}
+            <polygon
+              points={dataPolygon}
+              fill="url(#radarFillGrad)"
+              stroke="#c05a17" strokeWidth={2} strokeLinejoin="round"
+              style={{
+                transformOrigin: `${RCX}px ${RCY}px`,
+                transform: mounted ? 'scale(1)' : 'scale(0)',
+                opacity: mounted ? 1 : 0,
+                transition: 'transform 800ms cubic-bezier(.22,.8,.25,1), opacity 400ms ease',
+              }}
+            />
+            <defs>
+              <linearGradient id="radarFillGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#378d44" stopOpacity={0.5} />
+                <stop offset="100%" stopColor="#d97220" stopOpacity={0.4} />
+              </linearGradient>
+            </defs>
+            {points.map((p, i) => (
+              <circle
+                key={p.key} cx={p.x} cy={p.y} r={5} fill={p.value != null ? p.color : '#c4bead'}
+                stroke="#fff" strokeWidth={1.5}
+                style={{ cursor: p.value != null ? 'pointer' : 'default', opacity: mounted ? 1 : 0, transition: 'opacity 400ms ease 500ms' }}
+                onClick={() => p.value != null && setActiveKey(p.key)}
+              />
+            ))}
           </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+
+          <div
+            className="absolute flex flex-col items-center justify-center pointer-events-none"
+            style={{ left: RADAR_MARGIN, top: RADAR_MARGIN, width: RADAR_SIZE, height: RADAR_SIZE }}
+          >
             <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Punteggio</span>
-            <span className="font-display font-black text-[30px] text-stone-900 leading-none mt-0.5 tabular-nums">{Math.round(animatedTotal)}</span>
+            <span className="font-display font-black text-[28px] text-stone-900 leading-none mt-0.5 tabular-nums">{Math.round(animatedTotal)}</span>
             <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {known * 100 || SEG_COUNT * 100}</span>
           </div>
+
+          {points.map((p, i) => (
+            <button
+              key={p.key}
+              onClick={() => p.value != null && setActiveKey(p.key)}
+              disabled={p.value == null}
+              className={`${LABEL_STYLE[i].className} font-barlow font-bold uppercase leading-tight text-[9px] tracking-[0.03em] disabled:cursor-default`}
+              style={{ ...LABEL_STYLE[i].style, color: p.value != null ? p.color : '#a9a18e' }}
+            >
+              {RADAR_SHORT_TITLE[p.key]}
+            </button>
+          ))}
         </div>
 
         <div className="w-full space-y-1.5">
