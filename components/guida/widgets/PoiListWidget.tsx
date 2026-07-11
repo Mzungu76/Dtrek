@@ -50,7 +50,7 @@ function NamedPoiIcon({ poi, highlighted, onTap }: { poi: PoiItem; highlighted: 
   return (
     <button
       onClick={onTap}
-      className="flex flex-col shrink-0 items-center w-16 gap-1.5 group"
+      className="flex flex-col shrink-0 self-start items-center w-16 gap-1.5 group"
     >
       <span
         className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm shrink-0 transition-transform group-hover:scale-105"
@@ -71,7 +71,7 @@ function GroupPoiBadge({
   const Icon = POI_ICON[type]
   const meta = POI_META[type]
   return (
-    <button onClick={onTap} title={`${meta.label} × ${pois.length}`} className="relative shrink-0 transition-transform active:scale-95">
+    <button onClick={onTap} title={`${meta.label} × ${pois.length}`} className="relative self-start shrink-0 w-[38px] h-[38px] transition-transform active:scale-95">
       <span
         className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm"
         style={{ backgroundColor: meta.color }}
