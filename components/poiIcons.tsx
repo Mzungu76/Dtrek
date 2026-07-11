@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import type { PoiType } from '@/lib/overpass'
 
-const POI_ICON: Record<PoiType, LucideIcon> = {
+export const POI_ICON: Record<PoiType, LucideIcon> = {
   peak: Mountain,
   hut: Home,
   bivouac: Tent,

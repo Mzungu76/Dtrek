@@ -51,7 +51,7 @@ function distKm(lat1: number, lon1: number, lat2: number, lon2: number): number 
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-function isSpecificName(name: string): boolean {
+export function isSpecificName(name: string): boolean {
   return !GENERIC_POI_NAMES.has(name.toLowerCase().trim()) && name.trim().length > 4
 }
 

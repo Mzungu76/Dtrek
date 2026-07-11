@@ -67,6 +67,12 @@ interface Props {
   /** Multiplies the POI marker size — used by the POI-focused map ("I luoghi da non perdere")
    *  to make pins the visual lead instead of a secondary layer over the route. */
   poiMarkerScale?: number
+  /** Coordinates to fit the view to on the next `focusSignal` bump — e.g. all POIs of one type
+   *  in a grouped gallery icon, so tapping it fits/pans the map to just that cluster instead of
+   *  the whole route. A single point pans/keeps zoom, multiple points fit their bounds. */
+  focusPoints?: { lat: number; lon: number }[] | null
+  /** Increment to re-run the `focusPoints` fit/pan — mirrors the `fitSignal` pattern. */
+  focusSignal?: number
 }
 
 const DTM_MATCH_RADIUS_M = 25
@@ -128,6 +134,8 @@ export default function MapView({
   fitSignal,
   transientGradient = false,
   poiMarkerScale = 1,
+  focusPoints = null,
+  focusSignal,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<any>(null)
@@ -313,6 +321,25 @@ export default function MapView({
     fitSignalRef.current = fitSignal
     mapInstance.current.fitBounds(boundsRef.current, { padding: [20, 20], animate: true })
   }, [fitSignal, mapReady])
+
+  // Fit/pan to an arbitrary cluster of points (e.g. all POIs of one type from a grouped gallery
+  // icon) — same "only react to the signal actually changing" guard as fitSignal above.
+  const focusSignalRef = useRef(focusSignal)
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    if (focusSignal == null || focusSignal === focusSignalRef.current) return
+    focusSignalRef.current = focusSignal
+    if (!focusPoints || focusPoints.length === 0) return
+    if (focusPoints.length === 1) {
+      mapInstance.current.panTo([focusPoints[0].lat, focusPoints[0].lon])
+      return
+    }
+    import('leaflet').then(L => {
+      if (!mapInstance.current) return
+      const bounds = L.latLngBounds(focusPoints.map(p => [p.lat, p.lon] as [number, number]))
+      mapInstance.current.fitBounds(bounds, { padding: [40, 40], animate: true })
+    })
+  }, [focusSignal, mapReady]) // eslint-disable-line react-hooks/exhaustive-deps -- focusPoints read fresh via closure, only the signal should retrigger
 
   // Overlay temporaneo colorato per pendenza — indipendente da showGradient (che rimonta l'intera
   // mappa): qui si limita ad aggiungere/rimuovere delle polyline sopra il tracciato di base,
