@@ -37,13 +37,23 @@ export function mapBoxAspect(pts: [number, number][], padFrac: number): number {
 
 /**
  * Draw a cropped region of `src` onto a new outW×outH canvas, scaling
- * uniformly (preserving aspect ratio) and letterboxing with white bars
- * instead of stretching non-uniformly to fill the target box.
+ * uniformly (preserving aspect ratio) — never stretching non-uniformly to
+ * fill the target box, which is what produced the visibly distorted PDF
+ * guide cover (a 794×630 map forced via CSS object-fit into a 794×1123
+ * portrait box, an operation html2canvas doesn't render reliably).
+ *
+ * 'contain' (default) letterboxes with white bars when the crop's aspect
+ * doesn't match the output box — used wherever the whole route must stay
+ * visible (Diario's report maps). 'cover' instead scales up until the crop
+ * fills the box completely, cropping the overflow — used for a full-bleed
+ * cover image, where a white bar would look broken but losing a sliver of
+ * map at the edges doesn't.
  */
-function drawLetterboxed(
+function drawFitted(
   src: HTMLCanvasElement,
   cropX: number, cropY: number, cropW: number, cropH: number,
   outW: number, outH: number,
+  fit: 'contain' | 'cover' = 'contain',
 ): HTMLCanvasElement {
   const out = document.createElement('canvas')
   out.width = outW; out.height = outH
@@ -51,9 +61,14 @@ function drawLetterboxed(
   octx.fillStyle = '#ffffff'
   octx.fillRect(0, 0, outW, outH)
   if (cropW > 0 && cropH > 0) {
-    const scale = Math.min(outW / cropW, outH / cropH)
+    const scale = fit === 'cover'
+      ? Math.max(outW / cropW, outH / cropH)
+      : Math.min(outW / cropW, outH / cropH)
     const drawW = cropW * scale, drawH = cropH * scale
     const dx = (outW - drawW) / 2, dy = (outH - drawH) / 2
+    // For 'cover', dx/dy go negative and part of the image lands outside the
+    // canvas — the Canvas API clips that silently, which is exactly the crop
+    // we want (no manual bounds math needed).
     octx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, drawW, drawH)
   }
   return out
@@ -78,6 +93,7 @@ export async function fetchSatMap(
   outW: number,
   outH: number,
   lineColor: string,
+  fit: 'contain' | 'cover' = 'contain',
 ): Promise<string> {
   if (pts.length < 2) return chartRouteFallback(pts, outW, outH, lineColor)
 
@@ -175,7 +191,7 @@ export async function fetchSatMap(
     const cropW = Math.min(full.width,  botRight.x) - cropX
     const cropH = Math.min(full.height, botRight.y) - cropY
 
-    const out = drawLetterboxed(full, cropX, cropY, cropW, cropH, outW, outH)
+    const out = drawFitted(full, cropX, cropY, cropW, cropH, outW, outH, fit)
 
     return out.toDataURL('image/png')
   } catch {
@@ -273,7 +289,7 @@ export async function fetchAllRoutesSatMap(activities: ActivityMeta[], outW: num
     const cropW = Math.min(full.width,  botRight.x) - cropX
     const cropH = Math.min(full.height, botRight.y) - cropY
 
-    const out = drawLetterboxed(full, cropX, cropY, cropW, cropH, outW, outH)
+    const out = drawFitted(full, cropX, cropY, cropW, cropH, outW, outH)
 
     return out.toDataURL('image/png')
   } catch {

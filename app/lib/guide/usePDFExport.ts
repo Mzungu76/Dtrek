@@ -25,8 +25,11 @@ async function toDataUrlSafe(url: string): Promise<string | undefined> {
   try { return await toDataUrl(url) } catch { return undefined }
 }
 
-/** Re-use the OSM tile stitcher already in utils/pdfExport.ts */
-async function buildMapImage(hike: PlannedHike): Promise<string> {
+/** Re-use the OSM tile stitcher already in utils/pdfExport.ts. Builds two crops from the
+ *  same route: a full-bleed cover (fit:'cover', exact A4 page aspect — no CSS object-fit left
+ *  to html2canvas at capture time, which is what produced the vertically-stretched cover) and
+ *  a small "whole route visible" overview mini-map (fit:'contain'). */
+async function buildMapImages(hike: PlannedHike): Promise<{ cover: string; mini: string }> {
   const pts = (hike.trackPoints ?? [])
     .filter(p => p.lat && p.lon)
     .map(p => [p.lat!, p.lon!] as [number, number])
@@ -35,11 +38,17 @@ async function buildMapImage(hike: PlannedHike): Promise<string> {
     ? pts.filter((_, i) => i % step === 0)
     : (hike.routePolyline ?? []) as [number, number][]
 
-  if (sampled.length < 2) return ''
+  if (sampled.length < 2) return { cover: '', mini: '' }
 
   const { fetchSatMap } = await import('@/utils/pdfExport')
-  // 794×630: matches cover CSS (794px wide, 630≈56% of A4 height) at 2× for quality
-  return fetchSatMap(sampled, 794 * 2, 630 * 2, '#f59e0b')
+  const [cover, mini] = await Promise.all([
+    // 794×1123 (A4 page @2x): fit:'cover' crops to fill the whole cover, never stretched.
+    fetchSatMap(sampled, 794 * 2, 1123 * 2, '#f59e0b', 'cover'),
+    // Small landscape overview map for the "a colpo d'occhio" page: fit:'contain' keeps the
+    // whole route visible instead of cropping it.
+    fetchSatMap(sampled, 680 * 2, 260 * 2, '#c05a17', 'contain'),
+  ])
+  return { cover, mini }
 }
 
 /** Fetch Wikimedia Commons landscape photos near the route midpoint */
@@ -76,13 +85,13 @@ async function prefetchThumbs(hike: PlannedHike): Promise<Map<number, string>> {
 }
 
 export async function exportGuidePdfHtml(hike: PlannedHike, guideText: string): Promise<void> {
-  const [mapImage, thumbs, coverPhotos] = await Promise.all([
-    buildMapImage(hike),
+  const [{ cover, mini }, thumbs, coverPhotos] = await Promise.all([
+    buildMapImages(hike),
     prefetchThumbs(hike),
     fetchCoverPhotos(hike),
   ])
 
-  const data = buildGuideContent(hike, guideText, mapImage, thumbs, coverPhotos)
+  const data = buildGuideContent(hike, guideText, cover, thumbs, coverPhotos, mini || undefined)
 
   // Create a hidden off-screen container
   const container = document.createElement('div')
@@ -105,67 +114,21 @@ export async function exportGuidePdfHtml(hike: PlannedHike, guideText: string): 
   ))
 
   try {
-    const html2pdf = (await import('html2pdf.js')).default
+    // lib/pdfPaginate.ts (already used by Diario) instead of html2pdf.js: it measures each
+    // top-level page and only ever slices at safe .pdf-block boundaries, which is what avoids
+    // the blank-page bug html2pdf's own CSS pagebreak mode has when combined with fixed-height
+    // canvas slicing on variable-height content.
+    const { paginateToPdf, nextLayout } = await import('@/lib/pdfPaginate')
+    const pages = Array.from(container.querySelectorAll<HTMLElement>('.guide-print-page'))
+    await nextLayout()
+    const blob = await paginateToPdf(pages, '.pdf-block', { diaryTitle: hike.title })
 
     const filename = `dtrek-guida-${hike.title.replace(/\s+/g, '-').replace(/[^a-z0-9-]/gi, '').slice(0, 40)}.pdf`
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (html2pdf() as any)
-      .set({
-        margin:      0,
-        filename,
-        image:       { type: 'jpeg', quality: 0.95 },
-        html2canvas: {
-          scale:           2,
-          useCORS:         true,
-          letterRendering: true,
-          logging:         false,
-        },
-        jsPDF: {
-          unit:        'px',
-          format:      [794, 1123],
-          orientation: 'portrait',
-        },
-        pagebreak: {
-          mode:   'css',
-          before: '.guide-page',
-        },
-      })
-      .from(container.querySelector('.guide-root') as HTMLElement)
-      .save()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = filename
+    a.click(); URL.revokeObjectURL(url)
   } finally {
     root.unmount()
     document.body.removeChild(container)
   }
-}
-
-/** Simple element-ID based export (for preview page usage) */
-export async function exportGuidePDF(elementId: string, filename: string): Promise<void> {
-  const html2pdf = (await import('html2pdf.js')).default
-  const element  = document.getElementById(elementId)
-  if (!element) throw new Error('Guide element not found')
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (html2pdf() as any)
-    .set({
-      margin:      0,
-      filename:    `${filename}.pdf`,
-      image:       { type: 'jpeg', quality: 0.95 },
-      html2canvas: {
-        scale:    2,
-        useCORS:  true,
-        logging:  false,
-      },
-      jsPDF: {
-        unit:        'px',
-        format:      [794, 1123],
-        orientation: 'portrait',
-      },
-      pagebreak: {
-        mode:   'css',
-        before: '.guide-page',
-      },
-    })
-    .from(element)
-    .save()
 }

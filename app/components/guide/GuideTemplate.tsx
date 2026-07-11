@@ -1,6 +1,8 @@
 import GuideCover from './GuideCover'
+import GuideOverview from './GuideOverview'
 import GuideSection from './GuideSection'
 import GuidePOICard, { type POICardData } from './GuidePOICard'
+import GuidePOISpotlight from './GuidePOISpotlight'
 import GuidePOIIndex from './GuidePOIIndex'
 import './guide-print.css'
 
@@ -9,8 +11,17 @@ export interface GuideData {
   date?: string
   author?: string
   categoryTag: string
-  coverPhoto?: string
+  /** Mappa di copertina, full-bleed — pre-ritagliata (fit: 'cover') alle dimensioni esatte della
+   *  copertina, vedi usePDFExport.ts. Mai una foto Wikimedia a caso, stessa scelta dell'hero
+   *  on-screen. */
   mapImage: string
+  /** Mappa più piccola (fit: 'contain', tutto il percorso visibile) per la pagina "a colpo
+   *  d'occhio". */
+  miniMapImage?: string
+  /** Serie altimetrica campionata — usata come fascia decorativa al posto di una foto mancante
+   *  nella sezione "Il percorso" (vedi GuideSection.tsx). */
+  elevationProfile: number[]
+  difficultyLevel: number
   stats: {
     km: number
     dplus: number
@@ -21,7 +32,7 @@ export interface GuideData {
   sections: {
     primadiPartire: { text: string; photo?: string }
     ilPercorso:     { text: string; photo?: string }
-    iLuoghi?:       { text: string; photo?: string }
+    iLuoghi?:       { text: string }
     laNatura?:      { text: string; photo?: string }
     sapori?:        { text: string; photo?: string }
     consigliFinali: { text: string }
@@ -34,29 +45,19 @@ interface Props {
   forPrint?: boolean
 }
 
-function PageHeader({ title, page }: { title: string; page: number }) {
-  return (
-    <div className="guide-page-header">
-      <span className="guide-page-header-brand">DTREK</span>
-      <span className="guide-page-header-title">{title}</span>
-      <span className="guide-page-header-num">{page}</span>
-    </div>
-  )
-}
-
-function PageFooter({ title }: { title: string }) {
-  return (
-    <div className="guide-page-footer">
-      <span>Guida escursionistica · {title}</span>
-      <span>dtrek.app</span>
-    </div>
-  )
-}
-
+/**
+ * Ogni `.guide-print-page` qui sotto è un blocco di contenuto candidato a diventare una o più
+ * pagine PDF — non più un contenitore a altezza fissa 794×1123 con page-break CSS (quella
+ * combinazione, con html2pdf.js, è quello che produceva le pagine bianche): l'altezza reale la
+ * misura e la pagina lib/pdfPaginate.ts (la stessa che già usa il Diario), che spezza solo ai
+ * confini `.pdf-block` sicuri, e inietta testata/piè di pagina da sé — non servono più
+ * PageHeader/PageFooter qui.
+ */
 export default function GuideTemplate({ data, forPrint = false }: Props) {
   const { sections, pois } = data
-  const wikiPois = pois.filter(p => p.description)
-  const allPois  = pois
+  const wikiPois  = pois.filter(p => p.description)
+  const spotlight = wikiPois.find(p => p.photo)
+  const gallery   = pois.filter(p => p !== spotlight)
 
   return (
     <div
@@ -64,14 +65,15 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
       data-for-print={forPrint}
       style={{ width: forPrint ? '794px' : '100%' }}
     >
-      {/* PAGE 1 — Cover */}
-      <div className="guide-page" style={{ padding: 0 }}>
+      <div className="guide-print-page" style={{ padding: 0 }}>
         <GuideCover data={data} />
       </div>
 
-      {/* PAGE 2 — Prima di partire + Il percorso */}
-      <div className="guide-page">
-        <PageHeader title={data.title} page={2} />
+      <div className="guide-print-page">
+        <GuideOverview data={data} />
+      </div>
+
+      <div className="guide-print-page">
         <GuideSection
           title="PRIMA DI PARTIRE"
           text={sections.primadiPartire.text}
@@ -79,79 +81,81 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
           layout="photo-left"
           accentColor="#c05a17"
         />
+      </div>
+
+      <div className="guide-print-page">
         <GuideSection
           title="IL PERCORSO"
           text={sections.ilPercorso.text}
           photo={sections.ilPercorso.photo}
           layout="photo-right"
           accentColor="#277134"
+          elevationProfile={data.elevationProfile}
         />
-        <PageFooter title={data.title} />
       </div>
 
-      {/* PAGE 3 — I luoghi da non perdere (POI cards) */}
-      {(wikiPois.length > 0 || sections.iLuoghi) && (
-        <div className="guide-page">
-          <PageHeader title={data.title} page={3} />
-          {sections.iLuoghi && (
-            <GuideSection
-              title="I LUOGHI DA NON PERDERE"
-              text={sections.iLuoghi.text}
-              layout="full-width"
-              accentColor="#813619"
-            />
-          )}
-          {wikiPois.slice(0, 3).map((poi, i) => (
-            <GuidePOICard key={i} poi={poi} />
-          ))}
-          <PageFooter title={data.title} />
+      {sections.iLuoghi && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="I LUOGHI DA NON PERDERE"
+            text={sections.iLuoghi.text}
+            layout="full-width"
+            accentColor="#813619"
+          />
         </div>
       )}
 
-      {/* PAGE 4 — La natura + Sapori */}
-      {(sections.laNatura || sections.sapori) && (
-        <div className="guide-page">
-          <PageHeader title={data.title} page={4} />
-          {sections.laNatura && (
-            <GuideSection
-              title="LA NATURA INTORNO A TE"
-              text={sections.laNatura.text}
-              photo={sections.laNatura.photo}
-              layout="photo-right"
-              accentColor="#378d44"
-            />
-          )}
-          {sections.sapori && (
-            <GuideSection
-              title="SAPORI E TRADIZIONI"
-              text={sections.sapori.text}
-              photo={sections.sapori.photo}
-              layout="photo-left"
-              accentColor="#d97220"
-            />
-          )}
-          <PageFooter title={data.title} />
+      {spotlight && (
+        <div className="guide-print-page" style={{ padding: 0 }}>
+          <GuidePOISpotlight poi={spotlight} />
         </div>
       )}
 
-      {/* PAGE 5 — Consigli finali */}
-      <div className="guide-page">
-        <PageHeader title={data.title} page={5} />
+      {gallery.length > 0 && (
+        <div className="guide-print-page">
+          <p className="guide-continuation-label" style={{ color: '#813619' }}>I luoghi da non perdere — continua</p>
+          <div className="guide-poi-grid2">
+            {gallery.slice(0, 6).map((poi, i) => <GuidePOICard key={i} poi={poi} />)}
+          </div>
+        </div>
+      )}
+
+      {sections.laNatura && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="LA NATURA INTORNO A TE"
+            text={sections.laNatura.text}
+            photo={sections.laNatura.photo}
+            layout="photo-right"
+            accentColor="#378d44"
+          />
+        </div>
+      )}
+
+      {sections.sapori && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="SAPORI E TRADIZIONI"
+            text={sections.sapori.text}
+            photo={sections.sapori.photo}
+            layout="photo-left"
+            accentColor="#d97220"
+          />
+        </div>
+      )}
+
+      <div className="guide-print-page">
         <GuideSection
           title="CONSIGLI FINALI"
           text={sections.consigliFinali.text}
           layout="full-width"
           accentColor="#5e564c"
         />
-        <PageFooter title={data.title} />
       </div>
 
-      {/* FINAL PAGE — All POIs grid */}
-      {allPois.length > 0 && (
-        <div className="guide-page">
-          <PageHeader title={data.title} page={6} />
-          <GuidePOIIndex pois={allPois} />
-          <PageFooter title={data.title} />
+      {pois.length > 0 && (
+        <div className="guide-print-page">
+          <GuidePOIIndex pois={pois} />
         </div>
       )}
     </div>
