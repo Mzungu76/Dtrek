@@ -1,12 +1,12 @@
 'use client'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl, { Map as MLMap, Marker, Popup } from 'maplibre-gl'
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
   Download, Share2, ChevronLeft, ChevronRight, ImagePlus,
-  Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy, MapPin, Compass,
+  Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy, MapPin, Compass, ChevronUp,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
@@ -646,6 +646,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [dtmColorMode,       setDtmColorMode]      = useState<'none' | 'slope' | 'aspect'>('none')
   const [streetViewPos,  setStreetViewPos] = useState<[number,number]|null>(null)
 
+  // Pannello statistiche/altimetria/controlli — trascinabile invece di un blocco fisso sempre
+  // aperto, così su mobile la mappa 3D vera e propria resta il protagonista dello schermo invece
+  // di essere schiacciata tra HUD in alto e profilo+controlli in basso (stesso pattern di
+  // components/navigation/NavBottomSheet.tsx, qui a due sole altezze anziché tre).
+  const [sheetExpanded,   setSheetExpanded]   = useState(false)
+  const [sheetDragHeight, setSheetDragHeight] = useState<number | null>(null)
+  const sheetDragStart = useRef<{ y: number; height: number } | null>(null)
+
   // Video config
   const [videoState,        setVideoState]       = useState<VideoState>(initialVideoState ?? 'idle')
   const [videoDuration,     setVideoDuration]    = useState(30)
@@ -1070,6 +1078,34 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   },[])
 
   const handlePlay=()=>{if(progressRef.current>=1)reset();setIsPlaying(v=>!v)}
+
+  const SHEET_COLLAPSED_PX = 118
+  const sheetHeightFor = (expanded: boolean): number => {
+    if (typeof window === 'undefined') return SHEET_COLLAPSED_PX
+    return expanded ? Math.round(window.innerHeight * 0.6) : SHEET_COLLAPSED_PX
+  }
+  const clampSheetHeight = (v: number): number => {
+    if (typeof window === 'undefined') return v
+    return Math.min(Math.max(v, SHEET_COLLAPSED_PX), window.innerHeight * 0.85)
+  }
+  const handleSheetPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    sheetDragStart.current = { y: e.clientY, height: sheetHeightFor(sheetExpanded) }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const handleSheetPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!sheetDragStart.current) return
+    const delta = sheetDragStart.current.y - e.clientY
+    setSheetDragHeight(clampSheetHeight(sheetDragStart.current.height + delta))
+  }
+  const handleSheetPointerUp = () => {
+    if (!sheetDragStart.current) return
+    const current = sheetDragHeight ?? sheetHeightFor(sheetExpanded)
+    const collapsedH = sheetHeightFor(false), expandedH = sheetHeightFor(true)
+    setSheetExpanded(Math.abs(current - expandedH) < Math.abs(current - collapsedH))
+    setSheetDragHeight(null)
+    sheetDragStart.current = null
+  }
+  const sheetCurrentHeight = sheetDragHeight ?? sheetHeightFor(sheetExpanded)
 
   const handleCapture=useCallback(async()=>{
     const map=mapRef.current; if(!map) return
@@ -2118,21 +2154,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               ))}
             </div>
             {title&&<p className="text-white text-sm font-semibold drop-shadow-md ml-1 max-w-[280px] truncate">{title}</p>}
-            {/* Stats HUD — in normal flow right after the style switcher/title (not a hardcoded
-                top offset) so it never ends up overlapped when the right-side icon row wraps to a
-                second line or the title takes its own line on narrow phones. */}
-            <div className="bg-black/50 backdrop-blur-md rounded-2xl px-4 py-3 text-white space-y-2 min-w-[148px] shadow-xl border border-white/10">
-              <div className="flex items-center gap-2"><Mountain className="w-3.5 h-3.5 text-terra-300 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Quota</span><span className="text-sm font-bold tabular-nums">{currentAlt} m</span></div>
-              <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Percorso</span><span className="text-sm font-bold tabular-nums">{coveredKm} km</span></div>
-              <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Totale</span><span className="text-sm font-bold tabular-nums text-white/70">{totalKm} km</span></div>
-              {weatherBadge&&(
-                <div className="flex items-center gap-2 pt-1 border-t border-white/10">
-                  <span className="text-base leading-none shrink-0">{weatherBadge.emoji}</span>
-                  <span className="text-[11px] text-white/55 flex-1 truncate">{weatherBadge.label}</span>
-                  <span className="text-sm font-bold tabular-nums">{weatherBadge.temp}°</span>
-                </div>
-              )}
-            </div>
           </div>
           <div className="flex items-center flex-wrap justify-end gap-2 pointer-events-auto mt-0.5">
             <button onClick={handleStreetViewHere} title="Foto della zona"
@@ -2183,67 +2204,112 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         </div>
       </div>
 
-      {/* Elevation profile + bottom controls — grouped in one flex column so spacing
-          stays correct even if the controls below wrap/grow on narrow screens. */}
-      <div className="absolute bottom-0 inset-x-0 flex flex-col">
-      <div className="px-3 mb-2">
-        <div className="relative">
-          {altitudeSeries.length>1?(()=>{
-            const minA=Math.min(...altitudeSeries),maxA=Math.max(...altitudeSeries),range=maxA-minA||1,H=56
-            const pp=altitudeSeries.map((a,i)=>`${((i/(altitudeSeries.length-1))*1000).toFixed(0)},${(H-((a-minA)/range)*(H-6)).toFixed(1)}`).join(' ')
-            const cx=(progress*1000).toFixed(1)
-            return(
-              <div className="w-full rounded-xl overflow-hidden backdrop-blur-sm bg-black/30 border border-white/10" style={{height:`${H}px`}}>
-                <svg viewBox={`0 0 1000 ${H}`} preserveAspectRatio="none" className="w-full h-full">
-                  <defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e08d3c" stopOpacity="0.5"/><stop offset="100%" stopColor="#d97220" stopOpacity="0.08"/></linearGradient></defs>
-                  <polygon points={`0,${H} ${pp} 1000,${H}`} fill="url(#eg)"/>
-                  <polyline points={pp} fill="none" stroke="#f2cd9d" strokeWidth="2.5" strokeLinejoin="round"/>
-                  <line x1={cx} y1="0" x2={cx} y2={H} stroke="white" strokeWidth="2" strokeDasharray="4,3" opacity="0.75"/>
-                </svg>
+      {/* Pannello statistiche/altimetria/controlli — trascinabile: parte come una striscia
+          minima (quota/km/meteo + play) e si trascina verso l'alto per il resto, lasciando la
+          mappa 3D vera e propria come protagonista dello schermo su mobile. */}
+      <div
+        className={`absolute bottom-0 inset-x-0 z-10 bg-black/60 backdrop-blur-md rounded-t-2xl shadow-2xl border-t border-white/10 overflow-hidden ${
+          sheetDragHeight === null ? 'transition-[height] duration-200 ease-out' : ''
+        }`}
+        style={{ height: `${sheetCurrentHeight}px` }}
+      >
+        <div
+          onPointerDown={handleSheetPointerDown}
+          onPointerMove={handleSheetPointerMove}
+          onPointerUp={handleSheetPointerUp}
+          onPointerCancel={handleSheetPointerUp}
+          onClick={() => { if (sheetDragHeight === null) setSheetExpanded(v => !v) }}
+          className="w-full flex flex-col items-center gap-2 pt-2 pb-3 px-4 touch-none cursor-grab active:cursor-grabbing select-none"
+        >
+          <span className="w-9 h-1 rounded-full bg-white/30" />
+          <div className="w-full flex items-center gap-3">
+            <button
+              onClick={e=>{e.stopPropagation();handlePlay()}} onPointerDown={e=>e.stopPropagation()}
+              disabled={!mapReady}
+              className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-stone-900 shadow-lg hover:bg-stone-100 active:scale-95 transition-all disabled:opacity-35 shrink-0"
+            >
+              {isPlaying?<Pause className="w-4 h-4"/>:<Play className="w-4 h-4 translate-x-0.5"/>}
+            </button>
+            <div className="flex-1 min-w-0 text-white">
+              <div className="flex items-center gap-1.5 text-sm font-bold tabular-nums">
+                <Mountain className="w-3.5 h-3.5 text-terra-300 shrink-0"/>
+                <span>{currentAlt} m</span>
+                <span className="text-white/40 font-normal">·</span>
+                <span>{coveredKm}/{totalKm} km</span>
               </div>
-            )
-          })():(
-            <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
-              <div className="h-full rounded-full" style={{width:`${progress*100}%`,background:'linear-gradient(90deg,#d97220,#e9ab64)'}}/>
+              {weatherBadge&&(
+                <div className="flex items-center gap-1 text-[11px] text-white/60 mt-0.5">
+                  <span className="leading-none">{weatherBadge.emoji}</span>
+                  <span className="truncate">{weatherBadge.label}</span>
+                  <span>{weatherBadge.temp}°</span>
+                </div>
+              )}
             </div>
-          )}
-          <input type="range" min={0} max={1} step={0.0005} value={progress} onChange={e=>handleScrub(+e.target.value)}
-            className="absolute w-full opacity-0 cursor-pointer" style={{height:'64px',top:'50%',transform:'translateY(-50%)'}}/>
+            <ChevronUp className={`w-4 h-4 text-white/50 transition-transform shrink-0 ${sheetExpanded?'rotate-180':''}`} />
+          </div>
         </div>
-        <div className="flex justify-between mt-1 text-[10px] font-medium px-0.5">
-          <span className="text-white/50">0 km</span>
-          {altitudeSeries.length>0&&<span className="text-terra-300">{currentAlt} m slm</span>}
-          <span className="text-white/50">{totalKm} km</span>
-        </div>
-      </div>
 
-      {/* Bottom controls */}
-      <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-8 pb-5 px-4">
-        <div className="max-w-sm mx-auto flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <button onClick={reset} className="w-11 h-11 rounded-full bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-colors border border-white/10">
-              <RotateCcw className="w-4 h-4"/>
-            </button>
-            <button onClick={handlePlay} disabled={!mapReady}
-              className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-stone-900 shadow-2xl hover:bg-stone-100 active:scale-95 transition-all disabled:opacity-35">
-              {isPlaying?<Pause className="w-7 h-7"/>:<Play className="w-7 h-7 translate-x-0.5"/>}
-            </button>
-            <div className="flex gap-0.5 bg-white/15 rounded-xl p-1 border border-white/10">
-              {SPEEDS.map((s,i)=>(
-                <button key={s.label} onClick={()=>setSpeedIdx(i)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${speedIdx===i?'bg-white text-stone-900 shadow':'text-white/70 hover:bg-white/20'}`}>
-                  {s.label}
+        {sheetExpanded && (
+          <div
+            className="overflow-y-auto px-4 pb-6"
+            style={{ height: `calc(${sheetCurrentHeight}px - 78px)` }}
+            onPointerDown={e=>e.stopPropagation()}
+          >
+            <div className="relative mb-2">
+              {altitudeSeries.length>1?(()=>{
+                const minA=Math.min(...altitudeSeries),maxA=Math.max(...altitudeSeries),range=maxA-minA||1,H=56
+                const pp=altitudeSeries.map((a,i)=>`${((i/(altitudeSeries.length-1))*1000).toFixed(0)},${(H-((a-minA)/range)*(H-6)).toFixed(1)}`).join(' ')
+                const cx=(progress*1000).toFixed(1)
+                return(
+                  <div className="w-full rounded-xl overflow-hidden backdrop-blur-sm bg-black/30 border border-white/10" style={{height:`${H}px`}}>
+                    <svg viewBox={`0 0 1000 ${H}`} preserveAspectRatio="none" className="w-full h-full">
+                      <defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e08d3c" stopOpacity="0.5"/><stop offset="100%" stopColor="#d97220" stopOpacity="0.08"/></linearGradient></defs>
+                      <polygon points={`0,${H} ${pp} 1000,${H}`} fill="url(#eg)"/>
+                      <polyline points={pp} fill="none" stroke="#f2cd9d" strokeWidth="2.5" strokeLinejoin="round"/>
+                      <line x1={cx} y1="0" x2={cx} y2={H} stroke="white" strokeWidth="2" strokeDasharray="4,3" opacity="0.75"/>
+                    </svg>
+                  </div>
+                )
+              })():(
+                <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+                  <div className="h-full rounded-full" style={{width:`${progress*100}%`,background:'linear-gradient(90deg,#d97220,#e9ab64)'}}/>
+                </div>
+              )}
+              <input type="range" min={0} max={1} step={0.0005} value={progress} onChange={e=>handleScrub(+e.target.value)}
+                className="absolute w-full opacity-0 cursor-pointer" style={{height:'64px',top:'50%',transform:'translateY(-50%)'}}/>
+            </div>
+            <div className="flex justify-between mb-4 text-[10px] font-medium px-0.5">
+              <span className="text-white/50">0 km</span>
+              {altitudeSeries.length>0&&<span className="text-terra-300">{currentAlt} m slm</span>}
+              <span className="text-white/50">{totalKm} km</span>
+            </div>
+
+            <div className="max-w-sm mx-auto flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <button onClick={reset} className="w-11 h-11 rounded-full bg-white/15 hover:bg-white/30 flex items-center justify-center text-white transition-colors border border-white/10">
+                  <RotateCcw className="w-4 h-4"/>
                 </button>
-              ))}
+                <button onClick={handlePlay} disabled={!mapReady}
+                  className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-stone-900 shadow-2xl hover:bg-stone-100 active:scale-95 transition-all disabled:opacity-35">
+                  {isPlaying?<Pause className="w-7 h-7"/>:<Play className="w-7 h-7 translate-x-0.5"/>}
+                </button>
+                <div className="flex gap-0.5 bg-white/15 rounded-xl p-1 border border-white/10">
+                  {SPEEDS.map((s,i)=>(
+                    <button key={s.label} onClick={()=>setSpeedIdx(i)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${speedIdx===i?'bg-white text-stone-900 shadow':'text-white/70 hover:bg-white/20'}`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-white/50 whitespace-nowrap font-medium">Rilievo</span>
+                <input type="range" min={1} max={3} step={0.1} value={exaggeration} onChange={e=>setExaggeration(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-[#e08d3c] cursor-pointer"/>
+                <span className="text-[11px] text-white font-bold w-8 text-right">{exaggeration.toFixed(1)}×</span>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] text-white/50 whitespace-nowrap font-medium">Rilievo</span>
-            <input type="range" min={1} max={3} step={0.1} value={exaggeration} onChange={e=>setExaggeration(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-[#e08d3c] cursor-pointer"/>
-            <span className="text-[11px] text-white font-bold w-8 text-right">{exaggeration.toFixed(1)}×</span>
-          </div>
-        </div>
-      </div>
+        )}
       </div>
 
       {/* Loading */}

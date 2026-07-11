@@ -112,6 +112,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [showFloraGallery, setShowFloraGallery] = useState(false)
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showPendingActions, setShowPendingActions] = useState(false)
   const [ctsSettled, setCtsSettled] = useState(false)
   const [pendingScrollSection, setPendingScrollSection] = useState<GuideSectionKey | null>(null)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
@@ -526,6 +527,55 @@ export default function GuidaHub({ id }: { id?: string }) {
     </div>
   )
 
+  // Compact "scadenza" pill next to the title, replacing the full-width banner that used to sit
+  // above the hero — same Proroga/Archivia actions, now tucked into a popover so a pending hike
+  // doesn't push a whole extra block above the guide every time it's opened.
+  const pendingChip = hike?.pendingExpiresAt && !hike.archivedAt ? (() => {
+    const expiresAt = hike.pendingExpiresAt!
+    const expired = new Date(expiresAt).getTime() < Date.now()
+    const daysLeft = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000)
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setShowPendingActions(v => !v)}
+          title={expired ? 'Guida scaduta' : `Scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}`}
+          className={`flex items-center gap-1 h-9 px-2.5 rounded-full border transition-colors backdrop-blur-md text-xs font-semibold ${
+            expired ? 'bg-amber-500/85 border-amber-300/40 text-white' : 'bg-black/50 border-white/15 text-white/80'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          {expired ? 'Scaduta' : `${daysLeft}g`}
+        </button>
+        {showPendingActions && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setShowPendingActions(false)} />
+            <div className="absolute right-0 top-11 z-20 p-3 rounded-xl bg-white shadow-2xl border border-stone-200 w-56 space-y-2">
+              <p className="text-xs text-stone-600 leading-snug">
+                {expired ? 'Questa guida è scaduta.' : `In attesa — scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}.`}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { handleExtendPending(); setShowPendingActions(false) }}
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold transition-colors"
+                >
+                  Proroga
+                </button>
+                {expired && (
+                  <button
+                    onClick={() => { handleArchive(); setShowPendingActions(false) }}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:border-amber-400 text-amber-800 text-xs font-semibold transition-colors"
+                  >
+                    Archivia
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  })() : null
+
   const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
     // Mirrors previewScoreValue(): if the aggregate is already cached in Supabase, show it
@@ -562,27 +612,11 @@ export default function GuidaHub({ id }: { id?: string }) {
     // scroll away, so there's no separate icon/section for it anymore.
     if (section === 'featured') {
       const markers = hike.difficultyMarkers ?? []
-      const pendingBanner = hike.pendingExpiresAt && !hike.archivedAt ? (() => {
-        const expired = new Date(hike.pendingExpiresAt!).getTime() < Date.now()
-        const daysLeft = Math.ceil((new Date(hike.pendingExpiresAt!).getTime() - Date.now()) / 86400000)
-        return (
-          <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${expired ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
-            <p className={`text-sm font-medium ${expired ? 'text-amber-800' : 'text-sky-800'}`}>
-              {expired ? 'Questa guida è scaduta: la proroghi o la archivi?' : `In attesa — scade tra ${daysLeft} giorn${daysLeft === 1 ? 'o' : 'i'}`}
-            </p>
-            <div className="flex items-center gap-2">
-              <button onClick={handleExtendPending} className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold transition-colors">Proroga</button>
-              {expired && <button onClick={handleArchive} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:border-amber-400 text-amber-800 text-xs font-semibold transition-colors">Archivia</button>}
-            </div>
-          </div>
-        )
-      })() : null
 
       return (
         <GuideReader
           hike={hike}
           onHikeUpdate={patch => setHike(prev => prev ? { ...prev, ...patch } : prev)}
-          topBanner={pendingBanner}
           enrichmentReady={enrichmentReady}
           hasAiAccess={hasAiAccess}
           scrollToSectionKey={pendingScrollSection}
@@ -680,7 +714,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
         subtitle={(routeItem) => hike && routeItem.id === hike.id ? hike.cachedGuideSubtitle : undefined}
         topOverlayVariant="magazine"
-        headerActions={dateChip}
+        headerActions={<>{pendingChip}{dateChip}</>}
         importLabel="Importa"
         onImport={() => router.push('/upload?tab=gpx')}
       />
