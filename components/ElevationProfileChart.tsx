@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { bigNumber, textMuted } from '@/components/routehub/overlayTheme'
-import { slopeColorSigned } from '@/lib/slopeColor'
+import { slopeColorSigned, computeSignedSlopeSeries } from '@/lib/slopeColor'
 
 interface Props {
   trackPoints: TrackPoint[]
@@ -37,9 +37,14 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
     .map((p, i) => ({ p, i }))
     .filter((_, i) => i % step === 0)
 
+  // Pendenza segnata calcolata sulla traccia completa (stessa finestra/funzione usata
+  // dall'overlay sulla mappa, vedi components/MapView.tsx) — così i colori qui e sul tracciato
+  // coincidono esattamente per lo stesso punto, invece di derivare da due medie diverse.
+  const slopeSeries = computeSignedSlopeSeries(trackPoints)
+
   // Compute cumulative distance for x-axis
   let cumDist = 0
-  const data: { km: string; kmNum: number; alt: number; idx: number }[] = []
+  const data: { km: string; kmNum: number; alt: number; idx: number; slope: number }[] = []
   for (let i = 0; i < pts.length; i++) {
     if (i > 0) {
       const { p } = pts[i - 1], { p: c } = pts[i]
@@ -47,7 +52,7 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
         cumDist += haversineM(p.lat, p.lon, c.lat, c.lon)
     }
     if (pts[i].p.altitudeMeters !== undefined)
-      data.push({ km: (cumDist / 1000).toFixed(1), kmNum: cumDist / 1000, alt: Math.round(pts[i].p.altitudeMeters!), idx: pts[i].i })
+      data.push({ km: (cumDist / 1000).toFixed(1), kmNum: cumDist / 1000, alt: Math.round(pts[i].p.altitudeMeters!), idx: pts[i].i, slope: slopeSeries[pts[i].i] ?? 0 })
   }
 
   if (data.length === 0) {
@@ -65,20 +70,6 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
 
   const maxAlt = Math.max(...data.map(d => d.alt))
   const displayAlt = hovered?.alt ?? maxAlt
-
-  // Pendenza locale ad ogni punto (media dei due tratti adiacenti) — pilota il colore salita/
-  // discesa lungo tutto il profilo, sempre visibile (non solo durante l'interazione, a
-  // differenza dell'overlay sulla mappa). L'asse X è a categorie (dataKey stringa), quindi i
-  // punti sono spaziati in modo uniforme nel grafico renderizzato: l'offset i/(n-1) del gradiente
-  // coincide esattamente con la posizione orizzontale di ciascun punto.
-  const slopeAt = (i: number): number => {
-    if (data.length < 2) return 0
-    const a = data[Math.max(0, i - 1)]
-    const b = data[Math.min(data.length - 1, i + 1)]
-    const distKm = b.kmNum - a.kmNum
-    if (distKm <= 0) return 0
-    return ((b.alt - a.alt) / (distKm * 1000)) * 100
-  }
 
   const clearActive = () => { onHover?.(null); onActivePoint?.(null); setHovered(null) }
 
@@ -109,12 +100,12 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
             <defs>
               <linearGradient id="elevSlopeStroke" x1="0" y1="0" x2="1" y2="0">
                 {data.map((d, i) => (
-                  <stop key={i} offset={`${(i / Math.max(1, data.length - 1)) * 100}%`} stopColor={slopeColorSigned(slopeAt(i))} />
+                  <stop key={i} offset={`${(i / Math.max(1, data.length - 1)) * 100}%`} stopColor={slopeColorSigned(d.slope)} />
                 ))}
               </linearGradient>
               <linearGradient id="elevSlopeFill" x1="0" y1="0" x2="1" y2="0">
                 {data.map((d, i) => (
-                  <stop key={i} offset={`${(i / Math.max(1, data.length - 1)) * 100}%`} stopColor={slopeColorSigned(slopeAt(i))} stopOpacity={0.3} />
+                  <stop key={i} offset={`${(i / Math.max(1, data.length - 1)) * 100}%`} stopColor={slopeColorSigned(d.slope)} stopOpacity={0.3} />
                 ))}
               </linearGradient>
             </defs>

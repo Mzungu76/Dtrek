@@ -20,10 +20,6 @@ interface Props extends Params {
 
 interface SignalRow { icon: '✅' | '⚠️' | 'ℹ️'; text: string; kind: keyof typeof CL_PARAM_DESCRIPTIONS }
 
-function signedNum(v: number): string {
-  return `${v > 0 ? '+' : ''}${v}`
-}
-
 function queryFor({ osmId, polyline, plannedId }: Params): string | null {
   const plannedSuffix = plannedId ? `&planned_id=${encodeURIComponent(plannedId)}` : ''
   if (osmId != null) return `osm_relation_id=${osmId}${plannedSuffix}`
@@ -36,16 +32,16 @@ function queryFor({ osmId, polyline, plannedId }: Params): string | null {
 function currentRows(weather: WeatherSignal, climate: ClimateSignal): SignalRow[] {
   const rows: SignalRow[] = []
   if (weather.totalPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'weather', text: `${signedNum(Math.round(weather.totalPenalty))} Condizioni meteo/suolo sfavorevoli negli ultimi 7 giorni` })
+    rows.push({ icon: '⚠️', kind: 'weather', text: 'Condizioni meteo/suolo sfavorevoli negli ultimi 7 giorni' })
   }
   if (climate.tempPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'climateTemp', text: `${signedNum(climate.tempPenalty)} Temperature attuali sfavorevoli` })
+    rows.push({ icon: '⚠️', kind: 'climateTemp', text: 'Temperature attuali sfavorevoli' })
   }
   if (climate.altitudeSeason < 0) {
-    rows.push({ icon: '⚠️', kind: 'climateAltitude', text: `${signedNum(climate.altitudeSeason)} Quota elevata in stagione invernale` })
+    rows.push({ icon: '⚠️', kind: 'climateAltitude', text: 'Quota elevata in stagione invernale' })
   }
   if (climate.seasonBonus > 0) {
-    rows.push({ icon: '✅', kind: 'climateSeason', text: `${signedNum(climate.seasonBonus)} Stagione favorevole per questo sentiero` })
+    rows.push({ icon: '✅', kind: 'climateSeason', text: 'Stagione favorevole per questo sentiero' })
   }
   return rows
 }
@@ -54,13 +50,13 @@ function currentRows(weather: WeatherSignal, climate: ClimateSignal): SignalRow[
 function permanentRows(s: CLSignals): SignalRow[] {
   const rows: SignalRow[] = []
   if (s.satellite.rockfallPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'rockfall', text: `${signedNum(s.satellite.rockfallPenalty)} Rischio crollo roccioso da litologia CARG (classe ${s.satellite.rockfallClass})` })
+    rows.push({ icon: '⚠️', kind: 'rockfall', text: `Rischio crollo roccioso da litologia CARG (classe ${s.satellite.rockfallClass})` })
   }
   if (s.osm.visibilityPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'osmVisibility', text: `${signedNum(s.osm.visibilityPenalty)} Scarsa visibilità del sentiero su OSM` })
+    rows.push({ icon: '⚠️', kind: 'osmVisibility', text: 'Scarsa visibilità del sentiero su OSM' })
   }
   if (s.satellite.ndviAbsolutePenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'satelliteNdviAbs', text: `${signedNum(s.satellite.ndviAbsolutePenalty)} Vegetazione molto fitta (satellite)` })
+    rows.push({ icon: '⚠️', kind: 'satelliteNdviAbs', text: 'Vegetazione molto fitta (satellite)' })
   }
   return rows
 }
