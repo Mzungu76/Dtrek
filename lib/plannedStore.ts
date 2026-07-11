@@ -85,6 +85,9 @@ export interface PlannedHike {
   // guide_pending_days) e stato di archiviazione manuale post-scadenza.
   pendingExpiresAt?:             string
   archivedAt?:                   string
+  // Preferito nella galleria Guida — vedi components/routehub/BottomGallery.tsx (stella sulla
+  // scheda chiusa) e app/guida/GuidaHub.tsx (filtro "Preferiti", additivo rispetto all'ordinamento).
+  favorite?:                     boolean
   // Profilo DTM (pendenza/esposizione) — calcolato dalla sola traccia GPS, che non cambia mai
   // dopo l'import: dtmTrackHash (lib/geoUtils.ts hashTrack) invalida la cache se la traccia
   // dovesse comunque cambiare, al posto di una scadenza temporale. Vedi app/guida/useDtmProfile.ts.
@@ -231,7 +234,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedRiddles' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
 ): Promise<void> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
   if (local) await lsSet(LS_KEYS.planned(id), { ...local, ...meta })

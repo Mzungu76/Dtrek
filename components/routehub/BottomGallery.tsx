@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
-import { Mountain, ArrowUpDown, Upload } from 'lucide-react'
+import { Mountain, ArrowUpDown, Upload, Star } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import type { HubMode, RouteHubItem, SortValues } from './types'
@@ -136,9 +136,16 @@ interface Props {
    *  always reachable from the gallery, even when there's only one route (and no "others"). */
   importLabel?: string
   onImport?: () => void
+  /** Guida-only "Preferiti" filter toggle — additive with sortBy, not part of the SortKey radio
+   *  group. Absent (both undefined) hides the star button entirely, e.g. in Resoconto. */
+  favoritesFilter?: boolean
+  onToggleFavoritesFilter?: () => void
 }
 
-export default function BottomGallery({ mode, items, currentId, onSelect, sortBy, onSortChange, importLabel, onImport }: Props) {
+export default function BottomGallery({
+  mode, items, currentId, onSelect, sortBy, onSortChange, importLabel, onImport,
+  favoritesFilter, onToggleFavoritesFilter,
+}: Props) {
   const hasSortData = items.some(i => i.sortValues)
   const hasDistance = items.some(i => i.sortValues?.distance != null)
   // "Distanza" stays hidden until the user's saved address has actually been geocoded for at
@@ -162,9 +169,20 @@ export default function BottomGallery({ mode, items, currentId, onSelect, sortBy
 
   return (
     <div>
-      {hasSortData && (
+      {(hasSortData || onToggleFavoritesFilter) && (
         <div className="flex items-center justify-center gap-1.5 overflow-x-auto px-4 mb-2 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
-          <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />
+          {onToggleFavoritesFilter && (
+            <button
+              onClick={onToggleFavoritesFilter}
+              title="Solo preferiti"
+              className={`shrink-0 flex items-center justify-center w-6 h-6 rounded-full border backdrop-blur-md transition-colors ${
+                favoritesFilter ? 'bg-terra-400 border-terra-300 text-white' : 'bg-black/40 text-stone-200 border-white/20'
+              }`}
+            >
+              <Star className="w-3 h-3" fill={favoritesFilter ? 'currentColor' : 'none'} />
+            </button>
+          )}
+          {hasSortData && <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />}
           {sortOptions.map(s => (
             <button
               key={s.id}

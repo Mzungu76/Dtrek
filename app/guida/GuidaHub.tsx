@@ -86,6 +86,7 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
       // changed since) — not baked in here to avoid two places disagreeing on freshness.
     },
     scorePreview: previewTotal > 0 ? { value: previewTotal, max: TRAIL_SCORE_MAX } : undefined,
+    favorite: h.favorite,
   }
 }
 
@@ -113,6 +114,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [showPendingActions, setShowPendingActions] = useState(false)
+  const [favoritesFilter, setFavoritesFilter] = useState(false)
   const [ctsSettled, setCtsSettled] = useState(false)
   const [pendingScrollSection, setPendingScrollSection] = useState<GuideSectionKey | null>(null)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
@@ -426,7 +428,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     if (hike && !mapped.some(it => it.id === hike.id)) {
       const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
       const preview = scorePreviewFor(hike)
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview }, ...mapped]
+      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite }, ...mapped]
     }
     return mapped
   }, [items, hike, driving, userOrigin, driveCache])
@@ -457,6 +459,17 @@ export default function GuidaHub({ id }: { id?: string }) {
     setSaving(true)
     try { await updatePlannedMeta(hike.id, data); setHike(prev => prev ? { ...prev, ...data } : prev) }
     finally { setSaving(false) }
+  }
+
+  // Non legata a `hike` (a differenza di patch sopra) — la stella va toccabile su qualunque
+  // scheda della galleria, anche quella non ancora "aperta" (currentId/hike si aggiornano solo
+  // dopo lo swipe, con un ritardo). Aggiorna items (stella sulla card) e hike se coincide (stella
+  // nell'intestazione), poi persiste in background con lo stesso meccanismo di patch().
+  const handleToggleFavorite = (routeItem: RouteHubItem) => {
+    const next = !routeItem.favorite
+    setItems(prev => prev.map(it => it.id === routeItem.id ? { ...it, favorite: next } : it))
+    setHike(prev => prev && prev.id === routeItem.id ? { ...prev, favorite: next } : prev)
+    updatePlannedMeta(routeItem.id, { favorite: next })
   }
   const saveNotes = async () => { await patch({ userNotes: notesVal }); setEditNotes(false) }
 
@@ -698,6 +711,9 @@ export default function GuidaHub({ id }: { id?: string }) {
         mode="guida"
         items={displayItems}
         initialIndex={initialIndex}
+        favoritesFilter={favoritesFilter}
+        onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
+        onToggleFavorite={handleToggleFavorite}
         onIndexChange={(item) => {
           setCurrentId(item.id)
           // Plain History API, not router.replace: `/guida` and `/guida/[id]` are different

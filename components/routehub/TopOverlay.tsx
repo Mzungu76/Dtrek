@@ -16,12 +16,15 @@ interface Props {
   subtitle?: string | null
   /** 'magazine' bumps the title to a cover-sized treatment and shows the subtitle line. */
   variant?: 'default' | 'magazine'
+  /** Guida-only "preferito" star, shown next to the title — undefined elsewhere (Resoconto has
+   *  no favorite concept, see RouteHubProps.onToggleFavorite). */
+  favoriteButton?: ReactNode
 }
 
 const FADE_OUT_MS = 120
 const FADE_IN_MS = 150
 
-export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, subtitle, variant = 'default' }: Props) {
+export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, subtitle, variant = 'default', favoriteButton }: Props) {
   const [visible, setVisible] = useState(true)
   const prevKey = useRef(itemKey)
 
@@ -88,6 +91,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
                 {weatherIcon.emoji}
               </button>
             )}
+            {favoriteButton}
           </div>
           {variant === 'magazine' && subtitle && (
             <p
