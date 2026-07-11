@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { Car } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
@@ -13,6 +14,9 @@ interface Props {
   title: string
   categoryBadge: string
   plannedDate?: string
+  /** Distanza in auto dall'indirizzo salvato nelle impostazioni fino al trailhead — mostrata
+   *  sotto la data, apre le indicazioni Google Maps al tap. */
+  driving?: { distanceMeters: number; mapsUrl?: string } | null
 }
 
 /**
@@ -22,7 +26,7 @@ interface Props {
  * TUO percorso, non una foto generica trovata online, e non dipende dalla disponibilità di foto.
  * Le foto Wikimedia restano usate più sotto (mosaico e foto per-sezione), solo non più qui.
  */
-export default function GuideHero({ trackPoints, routePolyline, title, categoryBadge, plannedDate }: Props) {
+export default function GuideHero({ trackPoints, routePolyline, title, categoryBadge, plannedDate, driving }: Props) {
   const points = useMemo(() => {
     const fromTrack = (trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
     if (fromTrack.length > 1) return fromTrack
@@ -77,6 +81,24 @@ export default function GuideHero({ trackPoints, routePolyline, title, categoryB
           <p className="text-[12px] italic text-white/70">
             {format(new Date(plannedDate + 'T12:00'), 'EEEE d MMMM yyyy', { locale: it })}
           </p>
+        )}
+        {driving && (
+          driving.mapsUrl ? (
+            <a
+              href={driving.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90 hover:text-white underline decoration-white/40 hover:decoration-white/80 underline-offset-2 transition-colors"
+            >
+              <Car className="w-3.5 h-3.5" />
+              {Math.round(driving.distanceMeters / 1000)} km dal tuo punto di partenza
+            </a>
+          ) : (
+            <p className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90">
+              <Car className="w-3.5 h-3.5" />
+              {Math.round(driving.distanceMeters / 1000)} km dal tuo punto di partenza
+            </p>
+          )
         )}
       </div>
     </div>

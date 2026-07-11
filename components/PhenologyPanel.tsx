@@ -99,35 +99,36 @@ function FloraSection({ flora, loading }: { flora: FloraResult | null; loading?:
   }
 
   const belt = flora.estimatedBelt
+  // Tipologie riscontrate: quelle confermate (tipo foglia dominante + specie annotate) e, solo
+  // in mancanza di dati confermati, la fascia vegetazionale stimata da quota/posizione — marcata
+  // con un asterisco invece di spiegare in prosa da dove viene la stima.
+  const confirmed = [
+    ...(flora.leafTypeDominant ? [LEAF_TYPE_LABEL[flora.leafTypeDominant]] : []),
+    ...flora.speciesFound,
+  ]
+  const estimated = confirmed.length === 0 && belt ? [belt.label] : []
+  const hasEstimate = estimated.length > 0
 
   return (
     <div className="space-y-2">
       <p className={`text-sm font-semibold flex items-center gap-1.5 ${textPrimary}`}><Leaf className="w-4 h-4 text-emerald-400" /> Specie arboree e flora</p>
-      {flora.leafTypeDominant ? (
-        <p className={`text-xs ${textMuted}`}>
-          Bosco prevalente: <span className={`font-semibold ${textPrimary}`}>{LEAF_TYPE_LABEL[flora.leafTypeDominant]}</span>
-          {flora.forestCoveragePct != null && <span> · copertura boschiva ~{flora.forestCoveragePct}%</span>}
-        </p>
-      ) : belt ? (
-        <p className={`text-xs ${textMuted}`}>
-          <span className="text-[10px] font-semibold uppercase text-amber-600 mr-1">Stima</span>
-          Tipo di bosco non mappato su OSM — in base a quota e posizione è probabile la <span className={`font-semibold ${textPrimary}`}>{belt.label}</span>.
-        </p>
-      ) : (
-        <p className={`text-xs ${textMuted}`}>Nessuna area boschiva rilevata via OSM lungo il percorso.</p>
+      {flora.forestCoveragePct != null && (
+        <p className={`text-xs ${textMuted}`}>Copertura boschiva ~{flora.forestCoveragePct}%</p>
       )}
-      {flora.speciesFound.length > 0 ? (
+      {confirmed.length + estimated.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 pt-1">
-          {flora.speciesFound.map(s => (
+          {confirmed.map(s => (
             <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{s}</span>
           ))}
+          {estimated.map(s => (
+            <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-stone-50 text-stone-500 border border-stone-200">{s} *</span>
+          ))}
         </div>
-      ) : belt ? (
-        <p className="text-[11px] text-stone-500 leading-snug">
-          <span className="italic">Specie non annotate su OSM. </span>{belt.description}
-        </p>
       ) : (
-        <p className="text-[11px] text-stone-500 italic">Nessuna specie o genere arboreo specifico annotato su OSM per quest&apos;area.</p>
+        <p className={`text-xs italic ${textMuted}`}>Nessuna tipologia specifica riscontrata per quest&apos;area.</p>
+      )}
+      {hasEstimate && (
+        <p className="text-[10px] text-stone-400 italic pt-0.5">* stimato in base a quota e posizione, non confermato</p>
       )}
     </div>
   )

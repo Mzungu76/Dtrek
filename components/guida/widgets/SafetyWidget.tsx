@@ -4,7 +4,8 @@ import { CurrentConditionsNotice } from '@/components/CurrentConditionsNotice'
 import type { HikeAssessment } from '@/lib/hikeAssessment'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import type { CLSignals } from '@/lib/cl/types'
-import { sectionHeading, textMuted } from '@/components/routehub/overlayTheme'
+import { textMuted } from '@/components/routehub/overlayTheme'
+import Kicker from '@/components/ui/Kicker'
 
 interface Props {
   assessment?: HikeAssessment
@@ -28,11 +29,13 @@ export default function SafetyWidget({
     <div className="space-y-5">
       {assessment && <AssessmentPanel a={assessment} />}
       {hasGps && !notMatched && (
-        <CurrentConditionsNotice osmId={osmId} polyline={polyline} plannedId={plannedId} signals={signals} />
+        <div className={assessment ? 'pt-5 border-t border-stone-100' : ''}>
+          <CurrentConditionsNotice osmId={osmId} polyline={polyline} plannedId={plannedId} signals={signals} />
+        </div>
       )}
       {markers.length > 0 && (
-        <div className="space-y-2">
-          <p className={sectionHeading}>Segnalazioni dal tracciato</p>
+        <div className={`space-y-2 ${assessment || (hasGps && !notMatched) ? 'pt-5 border-t border-stone-100' : ''}`}>
+          <Kicker>Segnalazioni dal tracciato</Kicker>
           {markers.map((m, i) => {
             const highlighted = i === highlightedMarkerIndex
             const colors = m.severity === 'danger' ? 'bg-red-50 border-red-200 text-red-700' : m.severity === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-sky-50 border-sky-200 text-sky-700'

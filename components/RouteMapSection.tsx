@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Lock, LockOpen, Maximize2, Minimize2, Box } from 'lucide-react'
+import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed } from 'lucide-react'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
@@ -21,6 +21,9 @@ interface Props {
   dtmProfile?: TrailDtmProfile
   /** Track color: blue (planned, not yet hiked) vs green (completed) — mirrors MapView's own default. */
   planned?: boolean
+  /** Mostra i pin dei POI sulla mappa — disattivato nella sezione "Il percorso" della guida (i
+   *  POI hanno una mappa dedicata in "I luoghi da non perdere"), attivo per default altrove. */
+  showPois?: boolean
 }
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
@@ -36,11 +39,12 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  */
 export default function RouteMapSection({
   trackPoints, pois = [], highlightedPoiIndex = null, onPoiTap, onOpenMap3D,
-  showGradient, showAspect, dtmProfile, planned,
+  showGradient, showAspect, dtmProfile, planned, showPois = true,
 }: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const [fitTick, setFitTick] = useState(0)
 
   const hasGps = !!trackPoints?.some(p => p.lat && p.lon)
   if (!hasGps) return null
@@ -53,6 +57,10 @@ export default function RouteMapSection({
     })
   }
 
+  // Pendenza mostrata sul tracciato solo mentre l'utente sposta il dito/mouse sul grafico
+  // altimetrico (activeIndex valorizzato) — non un secondo toggle persistente come showGradient.
+  const transientGradient = !showGradient && activeIndex != null
+
   return (
     <div className="space-y-4">
       <div
@@ -61,11 +69,13 @@ export default function RouteMapSection({
       >
         <MapView
           trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
-          pois={pois} planned={planned} showPoiLayer
+          pois={pois} planned={planned} showPoiLayer={showPois}
           highlightedPoiIndex={highlightedPoiIndex}
           onPoiTap={poi => onPoiTap?.(poi)}
           activeIndex={activeIndex}
           showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
+          transientGradient={transientGradient}
+          fitSignal={fitTick}
         />
         <div
           className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
@@ -76,6 +86,9 @@ export default function RouteMapSection({
               <Box className="w-4 h-4" />
             </button>
           )}
+          <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutto il percorso" className={chipIdle}>
+            <LocateFixed className="w-4 h-4" />
+          </button>
           <button
             onClick={toggleFullscreen}
             title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}

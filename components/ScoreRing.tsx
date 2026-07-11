@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { CLLabel, CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { TrailScoreResult } from '@/lib/trailScore'
@@ -137,6 +137,30 @@ function colorForCL(label?: CLLabel): string {
   }
 }
 
+// Conta da 0 fino a `target` con easing — usato per il numero centrale del ring, così si "anima"
+// anche quando i punteggi arrivano via via (CL/Sicurezza/CTS/Ombra e acqua si popolano in tempi
+// diversi), non solo al primo mount.
+function useCountUp(target: number, durationMs = 700): number {
+  const [value, setValue] = useState(0)
+  const fromRef = useRef(0)
+  useEffect(() => {
+    const from = fromRef.current
+    const start = performance.now()
+    let raf = 0
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setValue(from + (target - from) * eased)
+      if (t < 1) raf = requestAnimationFrame(tick)
+      else fromRef.current = target
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target])
+  return value
+}
+
 // Punto sul cerchio per un angolo in gradi, 0° = ore 12, in senso orario.
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = (angleDeg - 90) * (Math.PI / 180)
@@ -178,9 +202,17 @@ export function ScoreRing({
   shadeWater: ShadeWaterProps
 }) {
   const [activeKey, setActiveKey] = useState<Segment['key'] | null>(null)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    // Un frame di ritardo così il primo render dipinge gli archi a 0 — poi la transizione CSS
+    // sotto li "disegna" fino al valore vero invece di comparire già pieni.
+    const raf = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
 
   const segments = computeSegments(cl, safety, cts, shadeWater)
   const total   = segments.reduce((sum, s) => sum + (s.value ?? 0), 0)
+  const animatedTotal = useCountUp(mounted ? total : 0)
   const known   = segments.filter(s => s.value != null).length
   const active  = segments.find(s => s.key === activeKey) ?? null
   const span    = SEG_DEG - GAP_DEG
@@ -192,7 +224,7 @@ export function ScoreRing({
           <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
             {segments.map((s, i) => {
               const start = i * SEG_DEG + GAP_DEG / 2
-              const pct   = s.value != null ? Math.max(0, Math.min(100, s.value)) / 100 : 0
+              const pct   = mounted && s.value != null ? Math.max(0, Math.min(100, s.value)) / 100 : 0
               return (
                 <g key={s.key}>
                   <path
@@ -203,7 +235,7 @@ export function ScoreRing({
                     <path
                       d={arcPath(CX, CY, R, start, start + span * pct)}
                       stroke={s.color} strokeWidth={STROKE} strokeLinecap="round" fill="none"
-                      style={{ transition: 'stroke-dasharray 300ms ease', filter: `drop-shadow(0 0 5px ${s.color}aa)` }}
+                      style={{ transition: 'd 800ms cubic-bezier(.22,.8,.25,1)', filter: `drop-shadow(0 0 5px ${s.color}aa)` }}
                     />
                   )}
                   <path
@@ -218,7 +250,7 @@ export function ScoreRing({
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Punteggio</span>
-            <span className="font-display font-black text-[30px] text-stone-900 leading-none mt-0.5">{Math.round(total)}</span>
+            <span className="font-display font-black text-[30px] text-stone-900 leading-none mt-0.5 tabular-nums">{Math.round(animatedTotal)}</span>
             <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {known * 100 || SEG_COUNT * 100}</span>
           </div>
         </div>
