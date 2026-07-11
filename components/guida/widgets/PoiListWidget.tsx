@@ -78,7 +78,7 @@ function GroupPoiBadge({
       >
         <Icon width={16} height={16} color="#fff" strokeWidth={2.25} />
       </span>
-      <span className="absolute -top-1.5 -left-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-stone-800 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
+      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-forest-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-sm">
         {pois.length}
       </span>
     </button>
