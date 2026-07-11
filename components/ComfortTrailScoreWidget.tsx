@@ -1,10 +1,32 @@
 'use client'
 import { useState } from 'react'
+import {
+  Leaf, Mountain, Landmark, Castle, BookOpen, BarChart3, Building2,
+  Footprints, TrendingUp, Map, Watch, Dumbbell, Timer, Trophy, type LucideIcon,
+} from 'lucide-react'
 import { ctsLabel, type TrailScoreResult } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { ScoreTile } from '@/components/ScoreTile'
 import { CTS_PARAM_DESCRIPTIONS } from '@/lib/ctsParamDescriptions'
+
+// Le categorie Bellezza/TEI arrivano da lib/beautyScore.ts/lib/tei.ts con un campo `emoji` (reso
+// in modo incoerente tra piattaforme, come già risolto per i pin POI in components/poiIcons.tsx)
+// — qui si mappa la stessa chiave a un'icona lucide-react senza toccare quei dati condivisi.
+const CAT_ICON: Record<string, LucideIcon> = {
+  natura: Leaf,
+  paesaggio: Mountain,
+  archeologia: Landmark,
+  architettura: Castle,
+  interesse: BookOpen,
+  tei_raw: BarChart3,
+  f_antr: Building2,
+}
+
+function CatIcon({ catKey }: { catKey: string }) {
+  const Icon = CAT_ICON[catKey] ?? Leaf
+  return <Icon className="w-3.5 h-3.5 text-stone-500 shrink-0" strokeWidth={2.25} />
+}
 
 // ── mini bar ──────────────────────────────────────────────────────────────────
 
@@ -32,7 +54,7 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
       {mainCats.map(cat => (
         <div key={cat.key}>
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-xs w-4 text-center">{cat.emoji}</span>
+            <span className="w-4 flex justify-center"><CatIcon catKey={cat.key} /></span>
             <span className="text-xs text-stone-600 flex-1">{cat.label}</span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS[cat.key] ?? CTS_PARAM_DESCRIPTIONS.beautyCategory} />
             <span className="text-[11px] font-semibold" style={{ color: cat.color }}>{cat.score.toFixed(1)}</span>
@@ -53,13 +75,13 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
         <div className="mt-1 pt-2 border-t border-stone-100 space-y-1">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Penalità ambiente</p>
           <div className="flex items-center gap-2">
-            <span className="text-xs w-4 text-center">{rawCat.emoji}</span>
+            <span className="w-4 flex justify-center"><CatIcon catKey={rawCat.key} /></span>
             <span className="text-xs text-stone-500 flex-1">{rawCat.label}</span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.anthropicRaw} />
             <span className="text-[11px] text-stone-600">{rawCat.score.toFixed(1)} / 10</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs w-4 text-center">{antrCat.emoji}</span>
+            <span className="w-4 flex justify-center"><CatIcon catKey={antrCat.key} /></span>
             <span className="text-xs text-stone-500 flex-1">{antrCat.label}</span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.anthropicPenalty} />
             <span className="text-[11px] font-semibold" style={{ color: antrCat.color }}>{antrCat.gradeLabel}</span>
@@ -92,27 +114,26 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
     return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60 ? (m % 60) + 'min' : ''}`
   }
 
-  const rows: [string, string, string, string][] = [
-    ['🏃', 'Distanza',         fmtH(bd.tNaismith), 'effortDistance'],
-    ['⛰',  'Dislivello +',    fmtH(bd.tDesc), 'effortGain'],
+  const rows: [LucideIcon, string, string, string][] = [
+    [Footprints, 'Distanza',         fmtH(bd.tNaismith), 'effortDistance'],
+    [TrendingUp, 'Dislivello +',    fmtH(bd.tDesc), 'effortGain'],
   ]
   if (bd.altPhysioMult > 1.01)
-    rows.push(['🏔', `Quota alta (×${bd.altPhysioMult.toFixed(2)})`, '', 'effortAltitude'])
+    rows.push([Mountain, `Quota alta (×${bd.altPhysioMult.toFixed(2)})`, '', 'effortAltitude'])
   if (bd.terrainMult > 1.01)
-    rows.push(['🗺', `Terreno: ${bd.terrainLabel} (×${bd.terrainMult.toFixed(2)})`, '', 'effortTerrain'])
+    rows.push([Map, `Terreno: ${bd.terrainLabel} (×${bd.terrainMult.toFixed(2)})`, '', 'effortTerrain'])
 
-  const deltaLabel =
-    bd.deltaSource === 'hr'       ? '⌚ FC attività' :
-    bd.deltaSource === 'personal' ? '📊 Profilo storico' : null
+  const DeltaIcon  = bd.deltaSource === 'hr' ? Watch : bd.deltaSource === 'personal' ? BarChart3 : null
+  const deltaLabel = bd.deltaSource === 'hr' ? 'FC attività' : bd.deltaSource === 'personal' ? 'Profilo storico' : null
 
   return (
     <div className="space-y-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Dettaglio Fatica</p>
 
       <div className="space-y-1.5">
-        {rows.map(([icon, label, val, kind]) => (
+        {rows.map(([Icon, label, val, kind]) => (
           <div key={label} className="flex items-center gap-2">
-            <span className="text-xs w-4 text-center">{icon}</span>
+            <span className="w-4 flex justify-center"><Icon className="w-3.5 h-3.5 text-stone-500 shrink-0" strokeWidth={2.25} /></span>
             <span className="text-xs text-stone-600 flex-1">{label}</span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS[kind]} />
             {val && <span className="text-[11px] text-stone-500">{val}</span>}
@@ -130,9 +151,11 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
           <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.effortStandard} />
           <span className="text-[11px] font-semibold text-orange-600">{bd.fStd.toFixed(1)} / 10</span>
         </div>
-        {deltaLabel && (
+        {deltaLabel && DeltaIcon && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-stone-500 flex-1">Correzione {deltaLabel}</span>
+            <span className="text-xs text-stone-500 flex-1 flex items-center gap-1">
+              Correzione <DeltaIcon className="w-3 h-3 shrink-0" strokeWidth={2.25} /> {deltaLabel}
+            </span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.effortDelta} />
             <span className="text-[11px] font-semibold" style={{ color: bd.delta >= 0 ? '#dc2626' : '#16a34a' }}>
               {bd.delta >= 0 ? '+' : ''}{(bd.delta * 100).toFixed(0)}%
@@ -151,7 +174,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Bonus preferenze</p>
           {bd.sfidaBonus !== 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-stone-500 flex-1">💪 Sfida</span>
+              <span className="text-xs text-stone-500 flex-1 flex items-center gap-1.5"><Dumbbell className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} /> Sfida</span>
               <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.bonusSfida} />
               <span className="text-[11px]" style={{ color: bd.sfidaBonus >= 0 ? '#059669' : '#dc2626' }}>
                 {bd.sfidaBonus >= 0 ? '+' : ''}{Math.round(bd.sfidaBonus)} pt
@@ -160,7 +183,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
           )}
           {bd.duraBonus !== 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-stone-500 flex-1">⏱ Durata</span>
+              <span className="text-xs text-stone-500 flex-1 flex items-center gap-1.5"><Timer className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} /> Durata</span>
               <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.bonusDurata} />
               <span className="text-[11px]" style={{ color: bd.duraBonus >= 0 ? '#059669' : '#dc2626' }}>
                 {bd.duraBonus >= 0 ? '+' : ''}{Math.round(bd.duraBonus)} pt
@@ -207,7 +230,10 @@ export function ComfortTrailScoreWidget({
             {/* Beauty / TEI bar */}
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-stone-500">
-                <span>{beautyScore?.version === 2 ? '🏆 TEI' : '🌄 Bellezza'}</span>
+                <span className="flex items-center gap-1.5">
+                  {beautyScore?.version === 2 ? <Trophy className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} /> : <Mountain className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />}
+                  {beautyScore?.version === 2 ? 'TEI' : 'Bellezza'}
+                </span>
                 <span className="font-semibold">{result!.b.toFixed(1)}/10</span>
               </div>
               <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
@@ -217,7 +243,7 @@ export function ComfortTrailScoreWidget({
             {/* Effort bar */}
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-stone-500">
-                <span>💪 Fatica</span>
+                <span className="flex items-center gap-1.5"><Dumbbell className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} /> Fatica</span>
                 <span className="font-semibold">{bd.fFinal.toFixed(1)}/10</span>
               </div>
               <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
@@ -226,9 +252,9 @@ export function ComfortTrailScoreWidget({
             </div>
             {/* Delta source note */}
             {bd.deltaSource !== 'none' && (
-              <p className="text-[10px] text-stone-400 italic">
-                {bd.deltaSource === 'hr' ? '⌚ Corretto con FC attività' :
-                 bd.deltaSource === 'personal' ? '📊 Corretto con profilo storico' : ''}
+              <p className="text-[10px] text-stone-400 italic flex items-center gap-1">
+                {bd.deltaSource === 'hr' ? <Watch className="w-3 h-3 shrink-0" strokeWidth={2.25} /> : <BarChart3 className="w-3 h-3 shrink-0" strokeWidth={2.25} />}
+                {bd.deltaSource === 'hr' ? 'Corretto con FC attività' : 'Corretto con profilo storico'}
               </p>
             )}
           </div>

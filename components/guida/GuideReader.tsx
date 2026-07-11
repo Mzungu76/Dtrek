@@ -100,8 +100,6 @@ interface Props {
    *  caller's own hike state, so the rest of the app (map riddles, epoch POIs) sees a freshly
    *  generated guide without waiting for a refetch. */
   onHikeUpdate: (patch: Partial<PlannedHike>) => void
-  /** Proroga/archivia banner for a "pending" hike — rendered above everything else. */
-  topBanner?: ReactNode
   /** True once every enrichment source (POI/Wikipedia, scores, sicurezza, natura) has settled (or
    *  a safety timeout fired) — gates the automatic Breve generation. */
   enrichmentReady: boolean
@@ -199,7 +197,7 @@ type GuideTier = 'breve' | 'approfondita'
  * generation and scroll/nav all stay here and get threaded down as props.
  */
 export default function GuideReader({
-  hike, onHikeUpdate, topBanner, enrichmentReady, hasAiAccess,
+  hike, onHikeUpdate, enrichmentReady, hasAiAccess,
   scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
   weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura, driving,
 }: Props) {
@@ -556,8 +554,6 @@ export default function GuideReader({
   return (
     <div style={{ background: '#fdfcfa' }}>
 
-      {topBanner && <div className="px-4 sm:px-6 pt-4">{topBanner}</div>}
-
       <GuideHero
         trackPoints={hike.trackPoints}
         routePolyline={hike.routePolyline}
@@ -736,37 +732,45 @@ export default function GuideReader({
 
             {/* ── Bottom actions ──────────────────────────────────────────── */}
             {hasGuide && !generating && (
-              <div className="mt-8 mb-6 pt-5 flex flex-wrap items-center justify-end gap-3" style={{ borderTop: '1px solid #dcd8cc' }}>
-                {effectiveTier === 'breve' && (
-                  <button onClick={() => generate('approfondita')}
-                    className="flex items-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+              <div className="mt-8 mb-6 pt-5 space-y-3" style={{ borderTop: '1px solid #dcd8cc' }}>
+                {/* Azioni secondarie — sempre su una riga a sé, allineate a sinistra, così non
+                    finiscono a fare compagnia solitaria a un pulsante pieno quando lo spazio manca. */}
+                <div className="flex items-center flex-wrap gap-x-4 gap-y-2">
+                  <button onClick={() => generate(effectiveTier)} disabled={generating}
+                    className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-terra-600 transition-colors"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Approfondisci
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Rigenera
                   </button>
-                )}
 
-                <button onClick={() => generate(effectiveTier)} disabled={generating}
-                  className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-terra-600 transition-colors"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Rigenera
-                </button>
+                  {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
+                    <span className="flex items-center gap-1 text-xs text-stone-400">
+                      <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
+                    </span>
+                  )}
+                </div>
 
-                {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
-                  <span className="flex items-center gap-1 text-xs text-stone-400">
-                    <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
-                  </span>
-                )}
+                {/* Azioni principali — impilate a piena larghezza su mobile, affiancate da sm in
+                    su, sempre come coppia coerente invece di andare a capo l'una senza l'altra. */}
+                <div className="flex flex-col sm:flex-row sm:justify-end gap-2.5">
+                  {effectiveTier === 'breve' && (
+                    <button onClick={() => generate('approfondita')}
+                      className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Approfondisci
+                    </button>
+                  )}
 
-                <button onClick={exportPdf} disabled={exportingPdf}
-                  className="flex items-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
-                >
-                  {exportingPdf
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <FileDown className="w-3.5 h-3.5" />}
-                  {exportingPdf ? 'Genero PDF…' : 'Scarica PDF'}
-                </button>
+                  <button onClick={exportPdf} disabled={exportingPdf}
+                    className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+                  >
+                    {exportingPdf
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <FileDown className="w-3.5 h-3.5" />}
+                    {exportingPdf ? 'Genero PDF…' : 'Scarica PDF'}
+                  </button>
+                </div>
               </div>
             )}
           </div>

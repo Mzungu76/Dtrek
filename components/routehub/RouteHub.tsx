@@ -249,10 +249,16 @@ export default function RouteHub({
           sortBy={sortBy} onSortChange={handleSortChange}
           importLabel={importLabel} onImport={onImport}
         />
-        {/* Trascina la scheda chiusa verso l'alto per aprirla — unico invito visivo rimasto
-            dopo la rimozione dell'icona dedicata. */}
+        {/* Trascina la scheda chiusa verso l'alto per aprirla — l'icona stessa è anche un
+            pulsante equivalente per chi preferisce toccare piuttosto che trascinare. */}
         <div className="flex justify-center">
-          <ChevronUp className="w-5 h-5 text-white/60 animate-bounce pointer-events-none" strokeWidth={2.5} />
+          <button
+            onClick={() => openWithAnimation(defaultSection)}
+            aria-label="Apri il percorso"
+            className="p-1.5 -m-1.5 rounded-full"
+          >
+            <ChevronUp className="w-5 h-5 text-white/60 animate-bounce" strokeWidth={2.5} />
+          </button>
         </div>
       </div>
 

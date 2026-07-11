@@ -6,7 +6,7 @@ import type { PoiItem, PoiType } from '@/lib/overpass'
 import { POI_META } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { sectionHeading, textFaint } from '@/components/routehub/overlayTheme'
+import { sectionHeading } from '@/components/routehub/overlayTheme'
 import { ExternalLink } from 'lucide-react'
 import { POI_ICON } from '@/components/poiIcons'
 import PoiMap from '../PoiMap'
@@ -44,10 +44,6 @@ function otherEntryDist(entry: OtherEntry): number {
   return entry.kind === 'named' ? entry.poi.distFromTrack : Math.min(...entry.pois.map(p => p.distFromTrack))
 }
 
-function formatDist(m: number): string {
-  return m < 1000 ? `a ${Math.round(m)} m dal percorso` : `a ${(m / 1000).toFixed(1)} km dal percorso`
-}
-
 function NamedPoiIcon({ poi, highlighted, onTap }: { poi: PoiItem; highlighted: boolean; onTap?: () => void }) {
   const Icon = POI_ICON[poi.type]
   const meta = POI_META[poi.type]
@@ -70,15 +66,15 @@ function NamedPoiIcon({ poi, highlighted, onTap }: { poi: PoiItem; highlighted: 
 }
 
 function GroupPoiBadge({
-  type, pois, expanded, onTap,
-}: { type: PoiType; pois: PoiItem[]; expanded: boolean; onTap: () => void }) {
+  type, pois, onTap,
+}: { type: PoiType; pois: PoiItem[]; onTap: () => void }) {
   const Icon = POI_ICON[type]
   const meta = POI_META[type]
   return (
-    <button onClick={onTap} title={`${meta.label} × ${pois.length}`} className="relative shrink-0">
+    <button onClick={onTap} title={`${meta.label} × ${pois.length}`} className="relative shrink-0 transition-transform active:scale-95">
       <span
-        className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm transition-transform hover:scale-105"
-        style={{ backgroundColor: meta.color, boxShadow: expanded ? '0 0 0 3px #d6d3d1' : undefined }}
+        className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm"
+        style={{ backgroundColor: meta.color }}
       >
         <Icon width={16} height={16} color="#fff" strokeWidth={2.25} />
       </span>
@@ -131,7 +127,6 @@ export default function PoiListWidget({
   pois, poiWikiEntries, hasGps, centerLat, centerLon, onWikiLoaded, highlightedPoiId, onItemTap, trackPoints, onOpenMap3D,
 }: Props) {
   const [nearbyPages, setNearbyPages] = useState<WikiPage[]>([])
-  const [expandedGroup, setExpandedGroup] = useState<PoiType | null>(null)
   const [focusPoints, setFocusPoints] = useState<{ lat: number; lon: number }[] | null>(null)
   const [focusSignal, setFocusSignal] = useState(0)
 
@@ -186,8 +181,7 @@ export default function PoiListWidget({
     return out.sort((a, b) => otherEntryDist(a) - otherEntryDist(b))
   }, [pois, galleryEntries])
 
-  const toggleGroup = (type: PoiType, groupPois: PoiItem[]) => {
-    setExpandedGroup(t => (t === type ? null : type))
+  const focusOnGroup = (groupPois: PoiItem[]) => {
     setFocusPoints(groupPois.map(p => ({ lat: p.lat, lon: p.lon })))
     setFocusSignal(s => s + 1)
   }
@@ -220,25 +214,11 @@ export default function PoiListWidget({
               key={`group-${entry.type}`}
               type={entry.type}
               pois={entry.pois}
-              expanded={expandedGroup === entry.type}
-              onTap={() => toggleGroup(entry.type, entry.pois)}
+              onTap={() => focusOnGroup(entry.pois)}
             />
           ))}
         </div>
       )}
-      {expandedGroup && (() => {
-        const group = otherEntries.find(e => e.kind === 'group' && e.type === expandedGroup) as
-          { kind: 'group'; type: PoiType; pois: PoiItem[] } | undefined
-        if (!group) return null
-        return (
-          <div className="rounded-xl bg-stone-50 border border-stone-200 px-3 py-2 space-y-1">
-            <p className="text-[11px] font-semibold text-stone-600">{POI_META[group.type].label} — {group.pois.length} lungo il percorso</p>
-            {group.pois.slice().sort((a, b) => a.distFromTrack - b.distFromTrack).map(p => (
-              <p key={p.id} className={`text-[11px] ${textFaint}`}>{formatDist(p.distFromTrack)}</p>
-            ))}
-          </div>
-        )
-      })()}
 
       {galleryEntries.length === 0 ? (
         otherEntries.length === 0 && (

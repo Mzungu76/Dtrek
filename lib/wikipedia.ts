@@ -22,7 +22,11 @@ const WIKI_WORTHY = new Set<PoiItem['type']>([
   'castle', 'monument', 'tower', 'hut', 'bivouac',
 ])
 
-// Generic names that are just the category word — no specific article exists for them
+// Generic names that are just the category word — no specific article exists for them. Includes
+// the exact default labels lib/pois/overpassSource.ts's OVERPASS_DEFAULT_NAMES assigns to
+// unnamed OSM features (e.g. "Acqua potabile" for an unnamed drinking_water point) — those aren't
+// duplicated by importing that module (server-oriented, would drag its Overpass fetch logic into
+// the client bundle here), just kept in sync by hand since the set rarely changes.
 const GENERIC_POI_NAMES = new Set([
   'cascata', 'cascate', 'cascatella', 'cascatelle',
   'grotta', 'grotte', 'caverna', 'caverne',
@@ -31,6 +35,7 @@ const GENERIC_POI_NAMES = new Set([
   'fontana', 'fontanile', 'rifugio', 'bivacco',
   'monumento', 'monastero', 'chiesa', 'cappella',
   'valico', 'passo', 'cima', 'vetta', 'monte',
+  'acqua potabile', 'area picnic', 'belvedere', 'riparo', 'croce',
 ])
 
 // Max distance (km) between POI and the Wikipedia article's own coordinates
