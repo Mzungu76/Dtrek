@@ -173,7 +173,11 @@ export default function RouteHub({
     )
   }
 
-  const item = visibleItems[state.index]
+  // visibleItems can shrink (sort/filter change, background refetch) a render before the
+  // useLayoutEffect above re-derives state.index — this fallback keeps `item` always defined
+  // for that one intermediate render instead of indexing out of bounds (was crashing summaryBanner
+  // and several unguarded item.* reads below).
+  const item = visibleItems[state.index] ?? visibleItems[visibleItems.length - 1]
   const summary = summaryBanner?.(item)
   const chromeOpacity = 1 - openProgress
   const chromeTransitionMs = dragLive ? 0 : SHEET_TRANSITION_MS
