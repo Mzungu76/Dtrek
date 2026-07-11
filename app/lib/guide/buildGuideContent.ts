@@ -3,48 +3,10 @@ import { it }     from 'date-fns/locale'
 import { formatDuration } from '@/lib/tcxParser'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }     from '@/lib/overpass'
+import { POI_META }         from '@/lib/overpass'
 import type { WikiPage }    from '@/lib/wikipedia'
 import type { GuideData }   from '@/app/components/guide/GuideTemplate'
 import type { POICardData } from '@/app/components/guide/GuidePOICard'
-
-const SECTION_COLOR: Record<string, string> = {
-  'prima di partire': '#d97706',
-  'il percorso':      '#16a34a',
-  'i luoghi':         '#7c3aed',
-  'la natura':        '#0f766e',
-  'sapori':           '#b45309',
-  'consigli':         '#0369a1',
-}
-
-const POI_COLORS: Record<string, string> = {
-  peak:          '#6346cc',
-  hut:           '#166534',
-  bivouac:       '#166534',
-  castle:        '#7c3aed',
-  archaeological:'#782d0a',
-  ruins:         '#782d0a',
-  waterfall:     '#0369a1',
-  cave:          '#44403c',
-  viewpoint:     '#0f766e',
-}
-
-const POI_LABELS: Record<string, string> = {
-  peak: 'Cima', hut: 'Rifugio', bivouac: 'Bivacco', spring: 'Sorgente',
-  viewpoint: 'Belvedere', cross: 'Croce', pass: 'Valico', waterfall: 'Cascata',
-  cave: 'Grotta', shelter: 'Riparo', ruins: 'Rovine', archaeological: 'Sito arch.',
-  castle: 'Castello', fountain: 'Fontana', chapel: 'Cappella',
-  tower: 'Torre', monument: 'Monumento',
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function sectionColor(title: string): string {
-  const lc = title.toLowerCase()
-  const entries = Object.entries(SECTION_COLOR)
-  for (let i = 0; i < entries.length; i++) {
-    if (lc.includes(entries[i][0])) return entries[i][1]
-  }
-  return '#d97706'
-}
 
 /** Parse the raw markdown guide into a section map keyed by title prefix */
 function parseSections(guideText: string): Array<[string, string]> {
@@ -83,8 +45,9 @@ export function buildGuideContent(
   const pois: POICardData[] = [
     ...wikiEntries.map(({ poi, wiki }): POICardData => ({
       name:              wiki.title,
-      type:              POI_LABELS[poi.type] ?? poi.type,
-      typeColor:         POI_COLORS[poi.type] ?? '#d97706',
+      type:              POI_META[poi.type]?.label ?? poi.type,
+      typeColor:         POI_META[poi.type]?.color ?? '#978e7a',
+      emoji:             POI_META[poi.type]?.emoji,
       distanceFromTrail: distLabel(poi.distFromTrack),
       photo:             thumbs.get(wiki.pageid),
       description:       (wiki.extract ?? '').slice(0, 300).replace(/\n/g, ' '),
@@ -93,8 +56,9 @@ export function buildGuideContent(
       .filter(p => !wikiEntries.some(e => e.poi.id === p.id) && p.name)
       .map((p): POICardData => ({
         name:              p.name!,
-        type:              POI_LABELS[p.type] ?? p.type,
-        typeColor:         POI_COLORS[p.type] ?? '#d97706',
+        type:              POI_META[p.type]?.label ?? p.type,
+        typeColor:         POI_META[p.type]?.color ?? '#978e7a',
+        emoji:             POI_META[p.type]?.emoji,
         distanceFromTrail: distLabel(p.distFromTrack),
         description:       '',
       })),

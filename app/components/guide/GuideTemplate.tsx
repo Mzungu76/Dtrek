@@ -77,12 +77,14 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
           text={sections.primadiPartire.text}
           photo={sections.primadiPartire.photo}
           layout="photo-left"
+          accentColor="#c05a17"
         />
         <GuideSection
           title="IL PERCORSO"
           text={sections.ilPercorso.text}
           photo={sections.ilPercorso.photo}
           layout="photo-right"
+          accentColor="#277134"
         />
         <PageFooter title={data.title} />
       </div>
@@ -96,7 +98,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
               title="I LUOGHI DA NON PERDERE"
               text={sections.iLuoghi.text}
               layout="full-width"
-              accentColor="#7c3aed"
+              accentColor="#813619"
             />
           )}
           {wikiPois.slice(0, 3).map((poi, i) => (
@@ -116,7 +118,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
               text={sections.laNatura.text}
               photo={sections.laNatura.photo}
               layout="photo-right"
-              accentColor="#0f766e"
+              accentColor="#378d44"
             />
           )}
           {sections.sapori && (
@@ -125,7 +127,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
               text={sections.sapori.text}
               photo={sections.sapori.photo}
               layout="photo-left"
-              accentColor="#b45309"
+              accentColor="#d97220"
             />
           )}
           <PageFooter title={data.title} />
@@ -139,7 +141,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
           title="CONSIGLI FINALI"
           text={sections.consigliFinali.text}
           layout="full-width"
-          accentColor="#0369a1"
+          accentColor="#5e564c"
         />
         <PageFooter title={data.title} />
       </div>

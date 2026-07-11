@@ -4,6 +4,10 @@ export interface POICardData {
   name: string
   type: string
   typeColor: string
+  /** lib/overpass.ts POI_META[type].emoji — usato dalla griglia finale (GuidePOIIndex), che non
+   *  ha altrimenti modo di risalire al tipo grezzo del POI da `type` (già localizzato in etichetta
+   *  leggibile, es. "Cima", non la chiave "peak"). */
+  emoji?: string
   distanceFromTrail: string
   photo?: string
   description: string
@@ -49,7 +53,7 @@ export default function GuidePOICard({ poi }: { poi: POICardData }) {
         </div>
         <p className="guide-poi-card-desc">{poi.description}</p>
         {poi.curiosityTitle && poi.curiosityText && (
-          <GuideKnowBox title={poi.curiosityTitle} text={poi.curiosityText} />
+          <GuideKnowBox title={poi.curiosityTitle} text={poi.curiosityText} color={poi.typeColor} />
         )}
       </div>
     </div>
