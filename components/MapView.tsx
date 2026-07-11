@@ -9,7 +9,7 @@ import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { colorSegmentsByDtm, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { poiBadgeMarkup } from '@/components/poiIcons'
-import { slopeColorSigned } from '@/lib/slopeColor'
+import { slopeColorSigned, computeSignedSlopeSeries } from '@/lib/slopeColor'
 import { useRouteTour, SPEEDS } from './mapview/useRouteTour'
 import TourControls from './mapview/TourControls'
 
@@ -87,15 +87,6 @@ const SEVERITY_EMOJI: Record<ClassifiedDifficultyMarker['severity'], string> = {
   danger: '⚠️',
   warning: '⚠️',
   info: 'ℹ️',
-}
-
-// Slope → color (green=easy, yellow=moderate, orange=steep, red=extreme)
-function slopeColor(pct: number): string {
-  const a = Math.abs(pct)
-  if (a < 8)  return '#22c55e'
-  if (a < 15) return '#eab308'
-  if (a < 25) return '#f97316'
-  return '#ef4444'
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -228,17 +219,23 @@ export default function MapView({
         })
         new AspectLegend({ position: 'bottomright' }).addTo(map)
       } else if (showGradient && points.some(p => p.altitudeMeters !== undefined)) {
-        // Draw per-segment colored polylines — DTM slope where a sample is close enough,
-        // GPX net-elevation-delta fallback per pair otherwise (degrades per-segment, not the whole toggle)
+        // Draw per-segment colored polylines — DTM slope where a sample is close enough (terrain
+        // steepness in degrees, direction-agnostic by design, see lib/trailScore.ts's
+        // slopeTerrainMult), GPX signed-slope fallback per pair otherwise (degrades per-segment,
+        // not the whole toggle) — the two intentionally use different, non-mixable color
+        // languages, so the GPX fallback only switches to the signed ascent/descent palette
+        // (matching the elevation chart/transient overlay) when DTM isn't active at all; when it
+        // is, the whole line stays on the unsigned DTM scale for visual consistency within itself.
         const slopeColors = dtmActive ? colorSegmentsByDtm(latLons, dtmProfile!, 'slope', DTM_MATCH_RADIUS_M) : null
+        const signedSeries = dtmActive ? null : computeSignedSlopeSeries(points)
         for (let i = 0; i < coords.length - 1; i++) {
           let color = slopeColors?.[i] ?? null
           if (!color) {
             const p1 = points[i], p2 = points[i + 1]
             const dist = haversineM(p1.lat!, p1.lon!, p2.lat!, p2.lon!)
             const dEle = ((p2.altitudeMeters ?? p1.altitudeMeters ?? 0) - (p1.altitudeMeters ?? 0))
-            const slopePct = dist > 0 ? (dEle / dist) * 100 : 0
-            color = slopeColor(slopePct)
+            const slopePct = signedSeries ? (signedSeries[i] + signedSeries[i + 1]) / 2 : (dist > 0 ? (dEle / dist) * 100 : 0)
+            color = slopeColorSigned(slopePct)
           }
           L.polyline([coords[i], coords[i + 1]], {
             color,
@@ -246,8 +243,6 @@ export default function MapView({
             opacity: 0.9,
           }).addTo(map)
         }
-        // Legend: degree buckets (matching lib/trailScore.ts's slopeTerrainMult) when DTM is
-        // live, otherwise the existing percent buckets used by the GPX-only fallback.
         const LegendControl = L.Control.extend({
           onAdd(): HTMLElement {
             const d = L.DomUtil.create('div', '')
@@ -263,10 +258,11 @@ export default function MapView({
                 ].join('<br>')
               : [
                   '<b>Pendenza</b>',
-                  '<span style="color:#22c55e">■</span> &lt;8%',
-                  '<span style="color:#eab308">■</span> 8-15%',
-                  '<span style="color:#f97316">■</span> 15-25%',
-                  '<span style="color:#ef4444">■</span> &gt;25%',
+                  '<span style="color:#b91c1c">■</span> Salita ripida',
+                  '<span style="color:#f97316">■</span> Salita',
+                  '<span style="color:#a8a29e">■</span> Pianeggiante',
+                  '<span style="color:#22d3ee">■</span> Discesa',
+                  '<span style="color:#1d4ed8">■</span> Discesa ripida',
                 ].join('<br>')
             return d
           },
@@ -358,13 +354,12 @@ export default function MapView({
 
       // Qui serve la direzione di marcia (salita/discesa reale lungo il percorso), non la
       // pendenza "assoluta" del terreno da DTM — per questo si calcola sempre dal dislivello
-      // segnato tra punti consecutivi del tracciato, indipendentemente dalla disponibilità DTM.
+      // segnato del tracciato, indipendentemente dalla disponibilità DTM. Usa la stessa serie
+      // "a finestra" del profilo altimetrico (non il delta punto-a-punto grezzo, troppo rumoroso
+      // per un altimetro GPS/barometrico) così le due rappresentazioni combaciano.
+      const series = computeSignedSlopeSeries(points)
       for (let i = 0; i < coords.length - 1; i++) {
-        const p1 = points[i], p2 = points[i + 1]
-        const dist = haversineM(p1.lat!, p1.lon!, p2.lat!, p2.lon!)
-        const dEle = ((p2.altitudeMeters ?? p1.altitudeMeters ?? 0) - (p1.altitudeMeters ?? 0))
-        const slopePct = dist > 0 ? (dEle / dist) * 100 : 0
-        const color = slopeColorSigned(slopePct)
+        const color = slopeColorSigned((series[i] + series[i + 1]) / 2)
         const pl = L.polyline([coords[i], coords[i + 1]], { color, weight: 5, opacity: 0.95 }).addTo(mapInstance.current)
         transientGradientLayer.current.push(pl)
       }

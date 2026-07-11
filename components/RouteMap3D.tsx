@@ -2118,6 +2118,21 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               ))}
             </div>
             {title&&<p className="text-white text-sm font-semibold drop-shadow-md ml-1 max-w-[280px] truncate">{title}</p>}
+            {/* Stats HUD — in normal flow right after the style switcher/title (not a hardcoded
+                top offset) so it never ends up overlapped when the right-side icon row wraps to a
+                second line or the title takes its own line on narrow phones. */}
+            <div className="bg-black/50 backdrop-blur-md rounded-2xl px-4 py-3 text-white space-y-2 min-w-[148px] shadow-xl border border-white/10">
+              <div className="flex items-center gap-2"><Mountain className="w-3.5 h-3.5 text-terra-300 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Quota</span><span className="text-sm font-bold tabular-nums">{currentAlt} m</span></div>
+              <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Percorso</span><span className="text-sm font-bold tabular-nums">{coveredKm} km</span></div>
+              <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Totale</span><span className="text-sm font-bold tabular-nums text-white/70">{totalKm} km</span></div>
+              {weatherBadge&&(
+                <div className="flex items-center gap-2 pt-1 border-t border-white/10">
+                  <span className="text-base leading-none shrink-0">{weatherBadge.emoji}</span>
+                  <span className="text-[11px] text-white/55 flex-1 truncate">{weatherBadge.label}</span>
+                  <span className="text-sm font-bold tabular-nums">{weatherBadge.temp}°</span>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex items-center flex-wrap justify-end gap-2 pointer-events-auto mt-0.5">
             <button onClick={handleStreetViewHere} title="Foto della zona"
@@ -2165,22 +2180,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <X className="w-5 h-5"/>
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Stats HUD */}
-      <div className="absolute top-20 left-3 pointer-events-none">
-        <div className="bg-black/50 backdrop-blur-md rounded-2xl px-4 py-3 text-white space-y-2 min-w-[148px] shadow-xl border border-white/10">
-          <div className="flex items-center gap-2"><Mountain className="w-3.5 h-3.5 text-terra-300 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Quota</span><span className="text-sm font-bold tabular-nums">{currentAlt} m</span></div>
-          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Percorso</span><span className="text-sm font-bold tabular-nums">{coveredKm} km</span></div>
-          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Totale</span><span className="text-sm font-bold tabular-nums text-white/70">{totalKm} km</span></div>
-          {weatherBadge&&(
-            <div className="flex items-center gap-2 pt-1 border-t border-white/10">
-              <span className="text-base leading-none shrink-0">{weatherBadge.emoji}</span>
-              <span className="text-[11px] text-white/55 flex-1 truncate">{weatherBadge.label}</span>
-              <span className="text-sm font-bold tabular-nums">{weatherBadge.temp}°</span>
-            </div>
-          )}
         </div>
       </div>
 

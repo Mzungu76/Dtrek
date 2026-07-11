@@ -165,6 +165,18 @@ export async function getPlannedById(id: string): Promise<PlannedHike | null> {
   // the two), so it would otherwise be stuck like that forever under a pure cache-first read.
   const needsRepair = !!local && !local.routePolyline?.length && local.osmId == null && (local.trackPoints?.length ?? 0) > 0
   if (local && !needsRepair) return local
+  if (local && needsRepair) {
+    // The local copy is already fully usable for display (title, trackPoints, guide text…) — only
+    // the CL/shade-water fetch needs routePolyline/osmId, and that hasn't even run yet at this
+    // point. Repair in the background instead of blocking on the network: awaiting the fetch here
+    // used to leave the caller stuck showing "Caricamento" for as long as the request took to
+    // fail, which during a Supabase outage could be a long time instead of the instant fallback a
+    // cache-first read is supposed to give.
+    apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`)
+      .then(data => lsSet(LS_KEYS.planned(id), data))
+      .catch(() => {})
+    return local
+  }
   try {
     const data = await apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`)
     await lsSet(LS_KEYS.planned(id), data)

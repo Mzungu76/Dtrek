@@ -1,3 +1,41 @@
+import { haversineM } from './geoUtils'
+
+interface SlopeSamplePoint {
+  lat?: number
+  lon?: number
+  altitudeMeters?: number
+}
+
+/** Pendenza segnata (%) in ciascun punto della traccia, calcolata su una finestra di `windowM`
+ *  metri centrata sul punto invece che tra due punti grezzi adiacenti — un altimetro GPS/
+ *  barometrico è rumoroso da un campione al successivo, quindi il calcolo punto-a-punto produceva
+ *  un tratteggio di colori "sparpagliati" sulla mappa che non corrispondeva alle bande più pulite
+ *  disegnate sul grafico altimetrico (che già mediava su più campioni). Usata da entrambi così
+ *  producono esattamente gli stessi colori per lo stesso tratto. */
+export function computeSignedSlopeSeries(points: SlopeSamplePoint[], windowM = 80): number[] {
+  const n = points.length
+  const out = new Array<number>(n).fill(0)
+  if (n < 2) return out
+
+  const cum = new Array<number>(n).fill(0)
+  for (let i = 1; i < n; i++) {
+    const a = points[i - 1], b = points[i]
+    cum[i] = cum[i - 1] + (a.lat != null && a.lon != null && b.lat != null && b.lon != null
+      ? haversineM(a.lat, a.lon, b.lat, b.lon) : 0)
+  }
+
+  let lo = 0, hi = 0
+  for (let i = 0; i < n; i++) {
+    const target = cum[i]
+    while (lo < i && target - cum[lo] > windowM / 2) lo++
+    while (hi < n - 1 && cum[hi + 1] - target <= windowM / 2) hi++
+    const distM = cum[hi] - cum[lo]
+    const altLo = points[lo].altitudeMeters, altHi = points[hi].altitudeMeters
+    if (distM > 0 && altLo != null && altHi != null) out[i] = ((altHi - altLo) / distM) * 100
+  }
+  return out
+}
+
 /** Colore per un tratto in base alla pendenza SEGNATA (percento, positiva = salita, negativa =
  *  discesa) — condiviso da profilo altimetrico (sempre visibile) e overlay pendenza transitorio
  *  sulla mappa "Il percorso" (solo durante l'interazione), così i due si leggono allo stesso
