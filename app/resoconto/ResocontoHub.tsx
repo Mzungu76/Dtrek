@@ -754,6 +754,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
         scoreBadges={scoreBadges}
         weatherIcon={(routeItem) => activity && routeItem.id === activity.id ? weatherIcon : undefined}
         subtitle={(routeItem) => activity && routeItem.id === activity.id ? coverSubtitle : undefined}
+        onCompare={(routeItem) => router.push(`/statistiche?tab=confronta&pre=${encodeURIComponent(`c:${routeItem.id}`)}`)}
         topOverlayVariant="magazine"
         heroPhotos={heroPhotos}
         importLabel="Carica"

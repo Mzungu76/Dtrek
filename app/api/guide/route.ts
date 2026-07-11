@@ -239,8 +239,8 @@ export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return new Response('{"error":"Non autenticato"}', { status: 401, headers: { 'Content-Type': 'application/json' } })
 
-  const { apiKey } = await resolveApiKeyAndSettings(user.id)
-  return new Response(JSON.stringify({ hasAccess: !!apiKey }), {
+  const { apiKey, lookupFailed } = await resolveApiKeyAndSettings(user.id)
+  return new Response(JSON.stringify({ hasAccess: !!apiKey, unavailable: lookupFailed }), {
     status: 200, headers: { 'Content-Type': 'application/json' },
   })
 }
@@ -254,15 +254,22 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const { apiKey, userGender, breveSections } = await resolveApiKeyAndSettings(user.id)
+  const { apiKey, userGender, breveSections, lookupFailed } = await resolveApiKeyAndSettings(user.id)
 
   if (!apiKey) {
     return new Response(
-      JSON.stringify({
-        error:   'no_ai_access',
-        message: 'Aggiungi la tua chiave API Claude nelle impostazioni del profilo per generare guide turistiche.',
-      }),
-      { status: 402, headers: { 'Content-Type': 'application/json' } },
+      JSON.stringify(
+        lookupFailed
+          ? {
+              error:   'ai_temporarily_unavailable',
+              message: 'Non riesco a verificare la tua chiave AI in questo momento (Supabase non raggiungibile) — riprova tra poco.',
+            }
+          : {
+              error:   'no_ai_access',
+              message: 'Aggiungi la tua chiave API Claude nelle impostazioni del profilo per generare guide turistiche.',
+            },
+      ),
+      { status: lookupFailed ? 503 : 402, headers: { 'Content-Type': 'application/json' } },
     )
   }
 

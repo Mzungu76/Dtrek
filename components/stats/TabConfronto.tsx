@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { ActivityMeta, StoredActivity, getActivityById } from '@/lib/blobStore'
 import { getAllPlanned, getPlannedById, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import type { TrackPoint } from '@/lib/tcxParser'
@@ -12,8 +12,11 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import ShareModal from '@/components/ShareModal'
-import { Check, GitCommitHorizontal, Mountain, Loader2, Share2, Shuffle } from 'lucide-react'
+import { Check, GitCommitHorizontal, Mountain, Loader2, Share2, Shuffle, Sparkles, Trophy } from 'lucide-react'
 import InfoButton from './InfoButton'
+
+interface CompareRanking { id: string; title: string; type: 'completata' | 'pianificata'; position: number; reason: string }
+interface CompareAiResult { narrative: string; ranking: CompareRanking[] }
 
 // ── Unified compare entry: works for both registered & planned hikes ──────────
 
@@ -71,9 +74,9 @@ function buildElevProfile(trackPoints: TrackPoint[] | undefined, samples = 60): 
   })
 }
 
-interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void }
+interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void; preselectId?: string | null }
 
-export default function TabConfronto({ activities, onGuideLink }: Props) {
+export default function TabConfronto({ activities, onGuideLink, preselectId }: Props) {
   const [selectedIds,     setSelectedIds]     = useState(new Set<string>())
   const [plannedMetas,    setPlannedMetas]    = useState<PlannedHikeMeta[]>([])
   const [loadingPlanned,  setLoadingPlanned]  = useState(false)
@@ -82,6 +85,9 @@ export default function TabConfronto({ activities, onGuideLink }: Props) {
   const [fullPlanned,     setFullPlanned]     = useState(new Map<string, PlannedHike>())
   const [loadingFull,     setLoadingFull]     = useState(false)
   const [showShare,       setShowShare]       = useState(false)
+  const [aiResult,        setAiResult]        = useState<CompareAiResult | null>(null)
+  const [aiLoading,       setAiLoading]       = useState(false)
+  const [aiError,         setAiError]         = useState<string | null>(null)
 
   const loadPlanned = useCallback(() => {
     if (plannedLoaded) return
@@ -89,12 +95,24 @@ export default function TabConfronto({ activities, onGuideLink }: Props) {
     getAllPlanned().then(metas => { setPlannedMetas(metas); setPlannedLoaded(true) }).finally(() => setLoadingPlanned(false))
   }, [plannedLoaded])
 
-  const toggleSelect = (combinedId: string) => setSelectedIds(prev => {
-    const next = new Set(prev)
-    if (next.has(combinedId)) next.delete(combinedId)
-    else if (next.size < 4) next.add(combinedId)
-    return next
-  })
+  // Deep-link dalla scheda percorso in Guida/Resoconto (pulsante "Confronta") — preseleziona il
+  // percorso da cui si è partiti; se è una escursione pianificata serve anche caricare
+  // plannedMetas, che qui non è attivo di default (a differenza delle attività completate).
+  useEffect(() => {
+    if (!preselectId) return
+    setSelectedIds(prev => prev.has(preselectId) ? prev : new Set(prev).add(preselectId))
+    if (preselectId.startsWith('p:')) loadPlanned()
+  }, [preselectId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleSelect = (combinedId: string) => {
+    setAiResult(null); setAiError(null)
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(combinedId)) next.delete(combinedId)
+      else if (next.size < 4) next.add(combinedId)
+      return next
+    })
+  }
 
   const allEntries = useMemo(() => [
     ...activities.map(fromActivity),
@@ -121,6 +139,27 @@ export default function TabConfronto({ activities, onGuideLink }: Props) {
     setFullPlanned(planMap)
     setLoadingFull(false)
   }, [selected, fullActivities, fullPlanned])
+
+  // Il confronto AI valuta fino a 3 percorsi alla volta (oltre diventa poco leggibile e più
+  // costoso) — il confronto numerico/grafico sopra resta comunque libero fino a 4.
+  const canAiCompare = selected.length >= 2 && selected.length <= 3
+  const runAiCompare = useCallback(async () => {
+    setAiLoading(true); setAiError(null); setAiResult(null)
+    try {
+      const res = await fetch('/api/route-compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: selected.map(e => ({ id: e.id, type: e.type })) }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message ?? data.error ?? 'Errore durante il confronto AI')
+      setAiResult(data as CompareAiResult)
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : 'Errore durante il confronto AI')
+    } finally {
+      setAiLoading(false)
+    }
+  }, [selected])
 
   const allFullLoaded = selected.length >= 2 && selected.every(e =>
     e.type === 'completata' ? fullActivities.has(e.id) : fullPlanned.has(e.id),
@@ -222,6 +261,70 @@ export default function TabConfronto({ activities, onGuideLink }: Props) {
 
       {selected.length >= 2 && (
         <div className="space-y-6">
+          {/* Resoconto AI */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+            {!aiResult && !aiLoading && (
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-full bg-terra-100 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-terra-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-stone-700">Resoconto AI</h3>
+                    <p className="text-xs text-stone-400 mt-0.5">
+                      {canAiCompare
+                        ? 'Giulia confronta questi percorsi e li ordina in base al tuo profilo e al tuo storico.'
+                        : 'Seleziona al massimo 3 percorsi per chiedere un resoconto AI.'}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={runAiCompare} disabled={!canAiCompare}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-terra-600 text-white rounded-lg text-sm hover:bg-terra-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
+                  <Sparkles className="w-4 h-4" /> Chiedi un resoconto AI
+                </button>
+              </div>
+            )}
+
+            {aiLoading && (
+              <div className="flex items-center gap-3 py-4 justify-center text-stone-500">
+                <Loader2 className="w-5 h-5 animate-spin text-terra-500" />
+                <p className="text-sm">Giulia sta confrontando i percorsi…</p>
+              </div>
+            )}
+
+            {aiError && !aiLoading && (
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-sm text-red-600">{aiError}</p>
+                <button onClick={runAiCompare} className="text-xs text-terra-600 hover:text-terra-700 font-medium shrink-0">Riprova</button>
+              </div>
+            )}
+
+            {aiResult && !aiLoading && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-medium text-stone-700 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-terra-600" /> Resoconto AI
+                  </h3>
+                  <button onClick={runAiCompare} className="text-xs text-terra-600 hover:text-terra-700 font-medium shrink-0">Rigenera</button>
+                </div>
+                <p className="text-sm text-stone-600 leading-relaxed">{aiResult.narrative}</p>
+                <div className="space-y-2">
+                  {aiResult.ranking.map(r => (
+                    <div key={r.id} className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 border border-stone-100">
+                      <div className="w-7 h-7 rounded-full bg-terra-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        {r.position === 1 ? <Trophy className="w-3.5 h-3.5" /> : r.position}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-stone-700 truncate">{r.title}</p>
+                        {r.reason && <p className="text-xs text-stone-500 mt-0.5 leading-relaxed">{r.reason}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Stats table */}
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">

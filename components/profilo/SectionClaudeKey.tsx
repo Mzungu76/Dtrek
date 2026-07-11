@@ -1,23 +1,27 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Key, Trash2, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
+import { Key, Trash2, Eye, EyeOff, Loader2, ShieldCheck, WifiOff } from 'lucide-react'
 
 /** Gestione della chiave API Claude personale per la generazione delle guide AI. Piano di ristrutturazione, Parte 2.4. */
 export default function SectionClaudeKey() {
-  const [hasKey,   setHasKey]   = useState(false)
-  const [keyHint,  setKeyHint]  = useState<string | null>(null)
-  const [input,    setInput]    = useState('')
-  const [showKey,  setShowKey]  = useState(false)
-  const [loading,  setLoading]  = useState(true)
-  const [saving,   setSaving]   = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [status,   setStatus]   = useState<{ ok: boolean; msg: string } | null>(null)
+  const [hasKey,      setHasKey]      = useState(false)
+  const [keyHint,     setKeyHint]     = useState<string | null>(null)
+  const [input,       setInput]       = useState('')
+  const [showKey,     setShowKey]     = useState(false)
+  const [loading,     setLoading]     = useState(true)
+  const [saving,      setSaving]      = useState(false)
+  const [deleting,    setDeleting]    = useState(false)
+  const [status,      setStatus]      = useState<{ ok: boolean; msg: string } | null>(null)
+  // true quando /api/user-settings non è riuscito a leggere le impostazioni (es. Supabase
+  // irraggiungibile) — va distinto da "hasKey: false", altrimenti una chiave già salvata
+  // sparirebbe dalla vista durante un blackout, inducendo a incollarla di nuovo inutilmente.
+  const [unavailable, setUnavailable] = useState(false)
 
   useEffect(() => {
     fetch('/api/user-settings')
       .then(r => r.json())
-      .then(d => { setHasKey(d.hasKey); setKeyHint(d.keyHint) })
-      .catch(() => {})
+      .then(d => { setHasKey(d.hasKey); setKeyHint(d.keyHint); setUnavailable(!!d.settingsUnavailable) })
+      .catch(() => setUnavailable(true))
       .finally(() => setLoading(false))
   }, [])
 
@@ -65,6 +69,15 @@ export default function SectionClaudeKey() {
       {loading ? (
         <div className="flex items-center gap-2 text-stone-400 text-xs ml-7">
           <Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…
+        </div>
+      ) : unavailable && !hasKey ? (
+        /* Non sappiamo se una chiave esiste già (lookup fallito, non "nessuna chiave") — non
+           mostrare il form di inserimento, sarebbe fuorviante per chi l'ha già salvata. */
+        <div className="ml-7 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-stone-50 border border-stone-200">
+          <WifiOff className="w-4 h-4 text-stone-400 shrink-0" />
+          <span className="text-xs text-stone-500">
+            Non riesco a verificare la tua chiave in questo momento — riprova tra poco.
+          </span>
         </div>
       ) : hasKey ? (
         /* Key already saved */

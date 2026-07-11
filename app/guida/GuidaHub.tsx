@@ -143,7 +143,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     hike ? { plannedId: hike.id, data: hike.floraResult, trackHash: hike.floraTrackHash } : undefined,
   )
 
-  const hasAiAccess = useHasAiAccess()
+  const { hasAiAccess, aiUnavailable } = useHasAiAccess()
   const enrichmentTimedOut = useEnrichmentTimeout(hike?.id)
   const dtmProfile = useDtmProfile(hike)
   const terrainProfile = useTerrainProfile(hike)
@@ -632,6 +632,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           onHikeUpdate={patch => setHike(prev => prev ? { ...prev, ...patch } : prev)}
           enrichmentReady={enrichmentReady}
           hasAiAccess={hasAiAccess}
+          aiUnavailable={aiUnavailable}
           scrollToSectionKey={pendingScrollSection}
           onScrollToSectionConsumed={() => setPendingScrollSection(null)}
           highlightedPoiId={highlightedPoiId}
@@ -714,6 +715,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         favoritesFilter={favoritesFilter}
         onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
         onToggleFavorite={handleToggleFavorite}
+        onCompare={(routeItem) => router.push(`/statistiche?tab=confronta&pre=${encodeURIComponent(`p:${routeItem.id}`)}`)}
         onIndexChange={(item) => {
           setCurrentId(item.id)
           // Plain History API, not router.replace: `/guida` and `/guida/[id]` are different

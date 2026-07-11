@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, ChevronUp, Star } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronUp, Star, GitCompare } from 'lucide-react'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RoutePage from './RoutePage'
@@ -25,7 +25,7 @@ export default function RouteHub({
   mode, items, initialIndex, onIndexChange, bodyMode, tabs = [], renderSection,
   tabScrollRef, primaryAction, summaryBanner, weatherIcon, onSectionChange,
   scoreBadges, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
-  subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite,
+  subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite, onCompare,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
@@ -269,6 +269,18 @@ export default function RouteHub({
                 className="w-6 h-6"
                 color={item.favorite ? '#e9ab64' : '#fff'}
                 fill={item.favorite ? '#e9ab64' : 'none'}
+                style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}
+              />
+            </button>
+          )}
+          compareButton={onCompare && (
+            <button
+              onClick={() => onCompare(item)}
+              title="Confronta con altri percorsi"
+              className="pointer-events-auto shrink-0"
+            >
+              <GitCompare
+                className="w-6 h-6 text-white"
                 style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}
               />
             </button>
