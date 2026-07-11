@@ -15,6 +15,10 @@ interface Props {
   highlightedPoiId?: number | null
   onPoiTap?: (poi: PoiItem) => void
   onOpenMap3D?: () => void
+  /** Coordinate su cui inquadrare la mappa al prossimo `focusSignal` — usato dalle icone
+   *  raggruppate della griglia sotto la Galleria per zoomare sui pin di un singolo tipo. */
+  focusPoints?: { lat: number; lon: number }[] | null
+  focusSignal?: number
 }
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
@@ -28,7 +32,9 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  * da cornici o etichette aggiuntive. Sincronizzata bidirezionalmente con le card della lista
  * tramite `highlightedPoiId`/`onPoiTap`.
  */
-export default function PoiMap({ trackPoints, pois, highlightedPoiId = null, onPoiTap, onOpenMap3D }: Props) {
+export default function PoiMap({
+  trackPoints, pois, highlightedPoiId = null, onPoiTap, onOpenMap3D, focusPoints, focusSignal,
+}: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
   const [fitTick, setFitTick] = useState(0)
@@ -57,10 +63,12 @@ export default function PoiMap({ trackPoints, pois, highlightedPoiId = null, onP
       <MapView
         trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
         pois={pois} showPoiLayer poiMarkerScale={1.25}
-        routeColor="#a9a18e" routeWeight={3} routeOpacity={0.55} showEndpointMarkers={false}
+        routeColor="#8a6d3b" routeWeight={4} routeOpacity={0.85} showEndpointMarkers={false}
         highlightedPoiIndex={highlightedIndex}
         onPoiTap={poi => onPoiTap?.(poi)}
         fitSignal={fitTick}
+        focusPoints={focusPoints}
+        focusSignal={focusSignal}
       />
       <div
         className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
