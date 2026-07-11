@@ -12,7 +12,7 @@ import { readIndex, readBlobText } from '@/lib/blobIndex'
 import { readPlannedIndex, readPlannedBlobText } from '@/lib/plannedIndex'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { PlannedHike } from '@/lib/plannedStore'
-import type { TrackPoint } from '@/lib/tcxParser'
+import { downsamplePolyline } from '@/lib/downsamplePolyline'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 min — la migrazione può essere lenta
@@ -22,17 +22,6 @@ function idToActivityPath(id: string) {
 }
 function idToPlannedPath(id: string) {
   return `planned/${id.replace(/[^a-zA-Z0-9\-_.]/g, '_')}.json`
-}
-
-function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
-  const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
-  if (!valid.length) return []
-  const count = Math.min(valid.length, maxPts)
-  const step  = (valid.length - 1) / (count - 1 || 1)
-  return Array.from({ length: count }, (_, i) => {
-    const idx = Math.min(Math.round(i * step), valid.length - 1)
-    return [Math.round(valid[idx].lat! * 1e5) / 1e5, Math.round(valid[idx].lon! * 1e5) / 1e5]
-  })
 }
 
 export async function GET(req: NextRequest) {

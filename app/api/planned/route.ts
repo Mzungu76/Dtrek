@@ -6,6 +6,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import { readIndex } from '@/lib/blobIndex'
 import { assessHike } from '@/lib/hikeAssessment'
 import type { SafetyScore } from '@/lib/safetyScore'
+import { downsamplePolyline } from '@/lib/downsamplePolyline'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,20 +16,6 @@ function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message
   if (e && typeof e === 'object' && 'message' in e) return String((e as Record<string, unknown>).message)
   try { return JSON.stringify(e) } catch { return String(e) }
-}
-
-function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
-  const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
-  if (!valid.length) return []
-  const count = Math.min(valid.length, maxPts)
-  const step  = (valid.length - 1) / (count - 1 || 1)
-  return Array.from({ length: count }, (_, i) => {
-    const idx = Math.min(Math.round(i * step), valid.length - 1)
-    return [
-      Math.round(valid[idx].lat! * 1e5) / 1e5,
-      Math.round(valid[idx].lon! * 1e5) / 1e5,
-    ]
-  })
 }
 
 function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedHike {

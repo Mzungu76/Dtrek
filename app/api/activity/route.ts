@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { TrackPoint } from '@/lib/tcxParser'
+import { downsamplePolyline } from '@/lib/downsamplePolyline'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,20 +15,6 @@ function downsampleTrackPoints(pts: TrackPoint[], maxPts = 1500): TrackPoint[] {
   return Array.from({ length: maxPts }, (_, i) =>
     pts[Math.min(Math.round(i * step), pts.length - 1)]
   )
-}
-
-function downsamplePolyline(pts: TrackPoint[], maxPts = 60): [number, number][] {
-  const valid = pts.filter(p => p.lat !== undefined && p.lon !== undefined)
-  if (!valid.length) return []
-  const count = Math.min(valid.length, maxPts)
-  const step  = (valid.length - 1) / (count - 1 || 1)
-  return Array.from({ length: count }, (_, i) => {
-    const idx = Math.min(Math.round(i * step), valid.length - 1)
-    return [
-      Math.round(valid[idx].lat! * 1e5) / 1e5,
-      Math.round(valid[idx].lon! * 1e5) / 1e5,
-    ]
-  })
 }
 
 function rowToActivity(row: Record<string, unknown>): StoredActivity {

@@ -1,5 +1,6 @@
 import type { StoredActivity } from './blobStore'
 import type { PlannedHike } from './plannedStore'
+import { downsamplePolyline } from './downsamplePolyline'
 
 /**
  * Clona il tracciato e le statistiche di un'attività già conclusa in una
@@ -20,6 +21,9 @@ export function plannedFromActivity(activity: StoredActivity, pendingExpiresAt?:
     altitudeMin: activity.altitudeMin,
     estimatedTimeSeconds: activity.totalTimeSeconds,
     trackPoints: activity.trackPoints,
+    // See GpxUploader.tsx — computed here too so the closed gallery card's cover map has
+    // something to render right away instead of waiting on a server round-trip.
+    routePolyline: activity.trackPoints?.length ? downsamplePolyline(activity.trackPoints) : undefined,
     pendingExpiresAt,
   }
 }
