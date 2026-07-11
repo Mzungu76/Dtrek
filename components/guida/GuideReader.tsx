@@ -227,10 +227,6 @@ export default function GuideReader({
     return [...fixed, ...legacy]
   }, [parsedSections])
 
-  const highlightedPoiIndex = useMemo(() => (
-    highlightedPoiId != null && poiList ? poiList.pois.findIndex(p => p.id === highlightedPoiId) : null
-  ), [highlightedPoiId, poiList])
-
   // Voice state
   const [isPlaying,     setIsPlaying]     = useState(false)
   const [isPaused,      setIsPaused]      = useState(false)
@@ -268,19 +264,27 @@ export default function GuideReader({
     }).catch(() => {})
   }, [hike.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // IntersectionObserver: track which section is in view for pin-nav highlighting
+  // IntersectionObserver: track which section is in view for pin-nav highlighting. Uses a thin
+  // "activation band" near the top of the viewport (threshold 0, shrunk rootMargin) rather than
+  // a ratio threshold — a ratio threshold (e.g. 0.3) requires 30% of the *target's own* height to
+  // be visible, which tall sections (mappa+profilo altimetrico in "Il percorso", mappa+lista+
+  // galleria in "I luoghi da non perdere") could fail to ever reach, leaving their nav pill never
+  // highlighted. A thin band only needs any overlap, so it works regardless of section height.
+  // Intersection state per section is tracked across callback batches (not just the entries in
+  // the current batch) since enter/exit events for different sections don't always land together.
   useEffect(() => {
     if (!displaySections.length) return
+    const state = new Map<number, boolean>()
     const obs = new IntersectionObserver(
       entries => {
         for (const e of entries) {
-          if (e.isIntersecting) {
-            const idx = sectionRefs.current.indexOf(e.target as HTMLElement)
-            if (idx >= 0) setVisibleSec(idx)
-          }
+          const idx = sectionRefs.current.indexOf(e.target as HTMLElement)
+          if (idx >= 0) state.set(idx, e.isIntersecting)
         }
+        const activeIdxs = Array.from(state.entries()).filter(([, v]) => v).map(([k]) => k)
+        if (activeIdxs.length > 0) setVisibleSec(Math.max(...activeIdxs))
       },
-      { threshold: 0.3, rootMargin: '-48px 0px -40% 0px' },
+      { threshold: 0, rootMargin: '-96px 0px -70% 0px' },
     )
     sectionRefs.current.forEach(el => el && obs.observe(el))
     return () => obs.disconnect()
@@ -506,9 +510,7 @@ export default function GuideReader({
         return (
           <RouteMapSection
             trackPoints={hike.trackPoints}
-            pois={poiList?.pois ?? []}
-            highlightedPoiIndex={highlightedPoiIndex}
-            onPoiTap={poi => onPoiTap?.(poi.id)}
+            showPois={false}
             onOpenMap3D={onOpenMap3D}
             showGradient={showGradient}
             showAspect={showAspect}
@@ -525,7 +527,15 @@ export default function GuideReader({
         )
       case 'luoghi':
         return poiList
-          ? <PoiListWidget {...poiList} highlightedIndex={highlightedPoiIndex} onItemTap={poi => onPoiTap?.(poi.id)} />
+          ? (
+            <PoiListWidget
+              {...poiList}
+              highlightedPoiId={highlightedPoiId}
+              onItemTap={poi => onPoiTap?.(poi.id)}
+              trackPoints={hike.trackPoints}
+              onOpenMap3D={onOpenMap3D}
+            />
+          )
           : null
       case 'natura':
         return natura ? <NaturaWidget {...natura} /> : null
@@ -554,6 +564,7 @@ export default function GuideReader({
         title={hikeTitle}
         categoryBadge={categoryBadge}
         plannedDate={hike.plannedDate}
+        driving={driving}
       />
 
       <GuideStatsStrip

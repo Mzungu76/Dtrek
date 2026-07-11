@@ -2134,7 +2134,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             {plannedTrackPoints && plannedTrackPoints.filter(p=>p.lat&&p.lon).length >= 2 && (
               <button onClick={()=>setShowPlannedRoute(v=>!v)} title="Percorso pianificato"
                 className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
-                  showPlannedRoute ? 'bg-violet-500/80 hover:bg-violet-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
+                  showPlannedRoute ? 'bg-terra-500/90 hover:bg-terra-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
                 }`}>
                 <Layers style={{width:'1.1rem',height:'1.1rem'}}/>
               </button>
@@ -2142,7 +2142,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             {pois && pois.length > 0 && (
               <button onClick={()=>setShowPois(v=>!v)} title="Punti di interesse"
                 className={`w-10 h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-colors shadow-lg ${
-                  showPois ? 'bg-violet-500/80 hover:bg-violet-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
+                  showPois ? 'bg-terra-500/90 hover:bg-terra-600 text-white' : 'bg-black/50 hover:bg-black/75 text-white'
                 }`}>
                 <MapPin style={{width:'1.1rem',height:'1.1rem'}}/>
               </button>
@@ -2170,7 +2170,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       {/* Stats HUD */}
       <div className="absolute top-20 left-3 pointer-events-none">
         <div className="bg-black/50 backdrop-blur-md rounded-2xl px-4 py-3 text-white space-y-2 min-w-[148px] shadow-xl border border-white/10">
-          <div className="flex items-center gap-2"><Mountain className="w-3.5 h-3.5 text-blue-300 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Quota</span><span className="text-sm font-bold tabular-nums">{currentAlt} m</span></div>
+          <div className="flex items-center gap-2"><Mountain className="w-3.5 h-3.5 text-terra-300 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Quota</span><span className="text-sm font-bold tabular-nums">{currentAlt} m</span></div>
           <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Percorso</span><span className="text-sm font-bold tabular-nums">{coveredKm} km</span></div>
           <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 shrink-0"/><span className="text-[11px] text-white/55 flex-1">Totale</span><span className="text-sm font-bold tabular-nums text-white/70">{totalKm} km</span></div>
           {weatherBadge&&(
@@ -2195,16 +2195,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             return(
               <div className="w-full rounded-xl overflow-hidden backdrop-blur-sm bg-black/30 border border-white/10" style={{height:`${H}px`}}>
                 <svg viewBox={`0 0 1000 ${H}`} preserveAspectRatio="none" className="w-full h-full">
-                  <defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity="0.45"/><stop offset="100%" stopColor="#3b82f6" stopOpacity="0.08"/></linearGradient></defs>
+                  <defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e08d3c" stopOpacity="0.5"/><stop offset="100%" stopColor="#d97220" stopOpacity="0.08"/></linearGradient></defs>
                   <polygon points={`0,${H} ${pp} 1000,${H}`} fill="url(#eg)"/>
-                  <polyline points={pp} fill="none" stroke="#93c5fd" strokeWidth="2.5" strokeLinejoin="round"/>
+                  <polyline points={pp} fill="none" stroke="#f2cd9d" strokeWidth="2.5" strokeLinejoin="round"/>
                   <line x1={cx} y1="0" x2={cx} y2={H} stroke="white" strokeWidth="2" strokeDasharray="4,3" opacity="0.75"/>
                 </svg>
               </div>
             )
           })():(
             <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
-              <div className="h-full rounded-full" style={{width:`${progress*100}%`,background:'linear-gradient(90deg,#3b82f6,#60a5fa)'}}/>
+              <div className="h-full rounded-full" style={{width:`${progress*100}%`,background:'linear-gradient(90deg,#d97220,#e9ab64)'}}/>
             </div>
           )}
           <input type="range" min={0} max={1} step={0.0005} value={progress} onChange={e=>handleScrub(+e.target.value)}
@@ -2212,7 +2212,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         </div>
         <div className="flex justify-between mt-1 text-[10px] font-medium px-0.5">
           <span className="text-white/50">0 km</span>
-          {altitudeSeries.length>0&&<span className="text-blue-300">{currentAlt} m slm</span>}
+          {altitudeSeries.length>0&&<span className="text-terra-300">{currentAlt} m slm</span>}
           <span className="text-white/50">{totalKm} km</span>
         </div>
       </div>
@@ -2239,7 +2239,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-white/50 whitespace-nowrap font-medium">Rilievo</span>
-            <input type="range" min={1} max={3} step={0.1} value={exaggeration} onChange={e=>setExaggeration(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+            <input type="range" min={1} max={3} step={0.1} value={exaggeration} onChange={e=>setExaggeration(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-[#e08d3c] cursor-pointer"/>
             <span className="text-[11px] text-white font-bold w-8 text-right">{exaggeration.toFixed(1)}×</span>
           </div>
         </div>

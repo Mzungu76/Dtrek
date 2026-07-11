@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import type { CLSignals, WeatherSignal, ClimateSignal } from '@/lib/cl/types'
 import { CL_PARAM_DESCRIPTIONS } from '@/lib/cl/paramDescriptions'
 import { InfoTooltip } from '@/components/InfoTooltip'
+import Kicker from '@/components/ui/Kicker'
 
 interface Params {
   osmId?: number
@@ -107,27 +108,25 @@ export function CurrentConditionsNotice({ osmId, polyline, plannedId, signals }:
   }, [osmId, polylineKey, plannedId])
 
   return (
-    <div className="rounded-2xl border border-stone-200 shadow-sm overflow-hidden bg-white">
-      <div className="px-5 py-4 space-y-4">
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-stone-700">Condizioni attuali</h3>
-          {loading ? (
-            <p className="text-xs text-stone-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…</p>
-          ) : conditions ? (
-            <RowList rows={currentRows(conditions.weather, conditions.climate)} />
-          ) : (
-            <p className="text-xs text-stone-400 leading-tight">Condizioni attuali non disponibili.</p>
-          )}
-        </div>
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Kicker>Condizioni attuali</Kicker>
+        {loading ? (
+          <p className="text-xs text-stone-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…</p>
+        ) : conditions ? (
+          <RowList rows={currentRows(conditions.weather, conditions.climate)} />
+        ) : (
+          <p className="text-xs text-stone-400 leading-tight">Condizioni attuali non disponibili.</p>
+        )}
+      </div>
 
-        <div className="space-y-2 pt-3 border-t border-stone-200">
-          <h3 className="text-sm font-semibold text-stone-700">Rischi permanenti del luogo</h3>
-          {signals ? (
-            <RowList rows={permanentRows(signals)} />
-          ) : (
-            <p className="text-xs text-stone-400 leading-tight">Dati non disponibili.</p>
-          )}
-        </div>
+      <div className="space-y-2 pt-4 border-t border-stone-100">
+        <Kicker>Rischi permanenti del luogo</Kicker>
+        {signals ? (
+          <RowList rows={permanentRows(signals)} />
+        ) : (
+          <p className="text-xs text-stone-400 leading-tight">Dati non disponibili.</p>
+        )}
       </div>
     </div>
   )

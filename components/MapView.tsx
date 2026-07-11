@@ -55,6 +55,16 @@ interface Props {
    *  container — used for full-bleed decorative renders (e.g. the guide hero) that fill their
    *  container edge-to-edge instead of looking like a map "widget" inset within one. */
   bare?: boolean
+  /** Increment to re-run fitBounds on the route's original extent — lets a caller offer a
+   *  "torna alla vista d'insieme" button without remounting the map. */
+  fitSignal?: number
+  /** Draws a temporary per-segment slope-colored overlay on top of the base route, independent
+   *  of `showGradient` (which fully remounts the map) — used while the user is actively
+   *  scrubbing the elevation chart, cleared as soon as they let go. */
+  transientGradient?: boolean
+  /** Multiplies the POI marker size — used by the POI-focused map ("I luoghi da non perdere")
+   *  to make pins the visual lead instead of a secondary layer over the route. */
+  poiMarkerScale?: number
 }
 
 const DTM_MATCH_RADIUS_M = 25
@@ -113,6 +123,9 @@ export default function MapView({
   routeOpacity = 0.85,
   showEndpointMarkers = true,
   bare = false,
+  fitSignal,
+  transientGradient = false,
+  poiMarkerScale = 1,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<any>(null)
@@ -127,6 +140,8 @@ export default function MapView({
   const difficultyLayer = useRef<any[]>([])
   const floraLayer      = useRef<any[]>([])
   const activeMarker    = useRef<any>(null)
+  const boundsRef       = useRef<any>(null)
+  const transientGradientLayer = useRef<any[]>([])
   const [mapReady, setMapReady] = useState(false)
 
   const tour = useRouteTour({
@@ -157,6 +172,7 @@ export default function MapView({
       })
 
       const coords: [number, number][] = points.map(p => [p.lat!, p.lon!])
+      boundsRef.current = L.latLngBounds(coords)
       // No initial setView here — the map gets its one and only view from fitBounds
       // below (all branches call it). Setting an initial center first and then
       // fitBounds right after produced a visible "double centering" jump.
@@ -285,6 +301,51 @@ export default function MapView({
     }
   }, [trackPoints, showGradient, showAspect, planned, routeColor, routeWeight, routeOpacity, showEndpointMarkers]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
 
+  // "Torna alla vista d'insieme" — re-fits the route's original extent without touching pan/zoom
+  // locks or remounting the map. Only reacts to fitSignal actually changing (not its initial
+  // value), so mounting never triggers a redundant animated fit right after the first one.
+  const fitSignalRef = useRef(fitSignal)
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current || !boundsRef.current) return
+    if (fitSignal == null || fitSignal === fitSignalRef.current) return
+    fitSignalRef.current = fitSignal
+    mapInstance.current.fitBounds(boundsRef.current, { padding: [20, 20], animate: true })
+  }, [fitSignal, mapReady])
+
+  // Overlay temporaneo colorato per pendenza — indipendente da showGradient (che rimonta l'intera
+  // mappa): qui si limita ad aggiungere/rimuovere delle polyline sopra il tracciato di base,
+  // pensato per accendersi/spegnersi molte volte mentre l'utente scorre il grafico altimetrico.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+
+    import('leaflet').then(L => {
+      transientGradientLayer.current.forEach((p: any) => p.remove())
+      transientGradientLayer.current = []
+      if (!transientGradient) return
+
+      const points = trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
+      if (points.length < 2) return
+      const coords: [number, number][] = points.map(p => [p.lat!, p.lon!])
+      const latLons = coords.map(([lat, lon]) => ({ lat, lon }))
+      const dtmProfile = dtmProfileRef.current
+      const dtmActive = dtmProfile?.source === 'dtm'
+      const slopeColors = dtmActive ? colorSegmentsByDtm(latLons, dtmProfile!, 'slope', DTM_MATCH_RADIUS_M) : null
+
+      for (let i = 0; i < coords.length - 1; i++) {
+        let color = slopeColors?.[i] ?? null
+        if (!color) {
+          const p1 = points[i], p2 = points[i + 1]
+          const dist = haversineM(p1.lat!, p1.lon!, p2.lat!, p2.lon!)
+          const dEle = ((p2.altitudeMeters ?? p1.altitudeMeters ?? 0) - (p1.altitudeMeters ?? 0))
+          const slopePct = dist > 0 ? (dEle / dist) * 100 : 0
+          color = slopeColor(slopePct)
+        }
+        const pl = L.polyline([coords[i], coords[i + 1]], { color, weight: 5, opacity: 0.95 }).addTo(mapInstance.current)
+        transientGradientLayer.current.push(pl)
+      }
+    })
+  }, [transientGradient, mapReady, trackPoints])
+
   // Lock/unlock native gestures — toggled independently of the init effect above so
   // flipping "interactive" never remounts (and re-fits bounds on) the existing map instance.
   useEffect(() => {
@@ -359,7 +420,8 @@ export default function MapView({
         const meta = POI_META[poi.type]
         const isHighlighted = i === highlightedPoiIndex
         const hasLink = poiHasLink(poi)
-        const size = isHighlighted ? 40 : 28
+        const size = Math.round((isHighlighted ? 40 : 28) * poiMarkerScale)
+        const emojiSize = Math.round((isHighlighted ? 30 : 22) * poiMarkerScale)
         // POIs with a Wikipedia/website link get a blue ring + badge, so they stand out on the
         // map itself (before the popup is even opened) — same blue used for Wikipedia markers.
         const ring = hasLink
@@ -369,7 +431,7 @@ export default function MapView({
         const icon = L.divIcon({
           html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center">
                    ${ring}
-                   <div style="font-size:${isHighlighted ? 30 : 22}px;line-height:1;filter:drop-shadow(0 1px ${isHighlighted ? 4 : 2}px rgba(0,0,0,0.5));transition:font-size .2s">${meta.emoji}</div>
+                   <div style="font-size:${emojiSize}px;line-height:1;filter:drop-shadow(0 1px ${isHighlighted ? 4 : 2}px rgba(0,0,0,0.5));transition:font-size .2s">${meta.emoji}</div>
                  </div>`,
           iconSize: [size, size],
           iconAnchor: [size / 2, size / 2],
@@ -390,7 +452,7 @@ export default function MapView({
         mapInstance.current.panTo([pois[highlightedPoiIndex].lat, pois[highlightedPoiIndex].lon])
       }
     })
-  }, [pois, mapReady, highlightedPoiIndex, showPoiLayer]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pois, mapReady, highlightedPoiIndex, showPoiLayer, poiMarkerScale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {

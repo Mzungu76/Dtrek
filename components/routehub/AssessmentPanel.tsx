@@ -1,6 +1,7 @@
 import { ShieldAlert, AlertTriangle, Info } from 'lucide-react'
 import type { HikeAssessment } from '@/lib/plannedStore'
-import { glassTile, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
+import { glassTile, textPrimary, textMuted } from '@/components/routehub/overlayTheme'
+import Kicker from '@/components/ui/Kicker'
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
@@ -39,6 +40,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
   const summaryBorder = hasDanger ? 'border-red-400' : hasWarning ? 'border-amber-400' : 'border-emerald-400'
   return (
     <div className="space-y-5">
+      <Kicker>La tua valutazione</Kicker>
       {a.summary && (
         <div className={`border-l-4 ${summaryBorder} bg-stone-50 rounded-r-lg px-4 py-3 text-sm font-medium ${textPrimary}`}>
           {a.summary}
@@ -93,7 +95,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
 
       {a.risks.length > 0 && (
         <div>
-          <p className={`${sectionHeading} mb-2`}>Fattori di rischio</p>
+          <Kicker className="mb-2">Fattori di rischio</Kicker>
           <div className="space-y-2">
             {a.risks.map((r, i) => <RiskItem key={i} type={r.type} text={r.text} />)}
           </div>
@@ -102,7 +104,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
 
       {a.suggestions.length > 0 && (
         <div>
-          <p className={`${sectionHeading} mb-2`}>Consigli pratici</p>
+          <Kicker className="mb-2">Consigli pratici</Kicker>
           <div className="space-y-2">
             {a.suggestions.map((s, i) => <RiskItem key={i} type={s.type} text={s.text} />)}
           </div>

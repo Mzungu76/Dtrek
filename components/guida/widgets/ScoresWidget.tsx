@@ -3,6 +3,7 @@ import { Compass, Layers } from 'lucide-react'
 import { ScoreRing, type CLProps, type CtsProps, type ShadeWaterProps } from '@/components/ScoreRing'
 import type { SafetyScore } from '@/lib/safetyScore'
 import { glassTile, textMuted } from '@/components/routehub/overlayTheme'
+import Kicker from '@/components/ui/Kicker'
 
 interface Props {
   cl: CLProps
@@ -25,6 +26,7 @@ export default function ScoresWidget({
 }: Props) {
   return (
     <div className="space-y-3">
+      <Kicker>Punteggio complessivo</Kicker>
       <ScoreRing cl={cl} safety={safety} cts={cts} shadeWater={shadeWater} />
 
       {(showAspectToggle || showGradientToggle) && (

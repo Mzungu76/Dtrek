@@ -368,47 +368,6 @@ export default function WeatherWidget(props: Props) {
           <DayStrip daily={daily.slice(0, 7)} />
         </div>
       )}
-
-      {/* ── External links ── */}
-      {plannedDate && (
-        <div className="rounded-xl border border-stone-100 bg-stone-50 px-4 py-3">
-          <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-2">Altre fonti meteo</p>
-          <div className="flex flex-wrap gap-2">
-            {[
-              {
-                name: 'Yr.no',
-                emoji: '🇳🇴',
-                note: 'Ottime previsioni montagna',
-                url: `https://www.yr.no/en/forecast/daily-table/${(props as PlannedProps).lat.toFixed(4)},${(props as PlannedProps).lon.toFixed(4)}`,
-              },
-              {
-                name: 'Open-Meteo',
-                emoji: '📡',
-                note: 'Dati grezzi gratuiti',
-                url: `https://open-meteo.com/en/docs#latitude=${(props as PlannedProps).lat.toFixed(4)}&longitude=${(props as PlannedProps).lon.toFixed(4)}`,
-              },
-              {
-                name: 'Google Meteo',
-                emoji: '🔍',
-                note: '',
-                url: `https://www.google.com/search?q=weather+${(props as PlannedProps).lat.toFixed(4)},${(props as PlannedProps).lon.toFixed(4)}`,
-              },
-            ].map(link => (
-              <a
-                key={link.name}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-medium text-stone-600 hover:border-sky-300 hover:text-sky-700 transition-colors"
-              >
-                <span>{link.emoji}</span>
-                <span>{link.name}</span>
-                {link.note && <span className="text-stone-400">· {link.note}</span>}
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
