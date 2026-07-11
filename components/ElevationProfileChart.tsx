@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { bigNumber, textMuted } from '@/components/routehub/overlayTheme'
+import { slopeColorSigned } from '@/lib/slopeColor'
 
 interface Props {
   trackPoints: TrackPoint[]
@@ -65,6 +66,22 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
   const maxAlt = Math.max(...data.map(d => d.alt))
   const displayAlt = hovered?.alt ?? maxAlt
 
+  // Pendenza locale ad ogni punto (media dei due tratti adiacenti) — pilota il colore salita/
+  // discesa lungo tutto il profilo, sempre visibile (non solo durante l'interazione, a
+  // differenza dell'overlay sulla mappa). L'asse X è a categorie (dataKey stringa), quindi i
+  // punti sono spaziati in modo uniforme nel grafico renderizzato: l'offset i/(n-1) del gradiente
+  // coincide esattamente con la posizione orizzontale di ciascun punto.
+  const slopeAt = (i: number): number => {
+    if (data.length < 2) return 0
+    const a = data[Math.max(0, i - 1)]
+    const b = data[Math.min(data.length - 1, i + 1)]
+    const distKm = b.kmNum - a.kmNum
+    if (distKm <= 0) return 0
+    return ((b.alt - a.alt) / (distKm * 1000)) * 100
+  }
+
+  const clearActive = () => { onHover?.(null); onActivePoint?.(null); setHovered(null) }
+
   return (
     <div>
       <div className="flex items-baseline gap-2 mb-1">
@@ -73,7 +90,14 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
         </span>
         <span className={`text-sm font-semibold ${textMuted}`}>m {hovered ? `· ${hovered.km} km` : '· quota max'}</span>
       </div>
-      <div className="h-52">
+      <div
+        className="h-52"
+        // Recharts non emette un equivalente di onMouseLeave per il touch (sollevare il dito non
+        // è geometricamente un "leave") — senza questo, su mobile la pendenza mostrata sulla
+        // mappa restava colorata anche dopo aver lasciato il grafico.
+        onTouchEnd={clearActive}
+        onTouchCancel={clearActive}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} syncId={syncId}
             onMouseMove={(e: any) => {
@@ -81,12 +105,17 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
               if (point?.idx != null) onHover?.(point.idx)
               if (point) { onActivePoint?.({ alt: point.alt, kmNum: point.kmNum }); setHovered(point) }
             }}
-            onMouseLeave={() => { onHover?.(null); onActivePoint?.(null); setHovered(null) }}>
+            onMouseLeave={clearActive}>
             <defs>
-              <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor="#f97316" stopOpacity={0.45} />
-                <stop offset="55%"  stopColor="#eab308" stopOpacity={0.22} />
-                <stop offset="100%" stopColor="#34d399" stopOpacity={0.06} />
+              <linearGradient id="elevSlopeStroke" x1="0" y1="0" x2="1" y2="0">
+                {data.map((d, i) => (
+                  <stop key={i} offset={`${(i / Math.max(1, data.length - 1)) * 100}%`} stopColor={slopeColorSigned(slopeAt(i))} />
+                ))}
+              </linearGradient>
+              <linearGradient id="elevSlopeFill" x1="0" y1="0" x2="1" y2="0">
+                {data.map((d, i) => (
+                  <stop key={i} offset={`${(i / Math.max(1, data.length - 1)) * 100}%`} stopColor={slopeColorSigned(slopeAt(i))} stopOpacity={0.3} />
+                ))}
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
@@ -106,19 +135,24 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
             />
             <Area
               type="monotone" dataKey="alt"
-              stroke="#f59e0b" strokeWidth={2.5} strokeLinecap="round"
-              fill="url(#elevGrad)" dot={false} activeDot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 1.5 }}
+              stroke="url(#elevSlopeStroke)" strokeWidth={2.75} strokeLinecap="round"
+              fill="url(#elevSlopeFill)" dot={false} activeDot={{ r: 4, fill: '#44403c', stroke: '#fff', strokeWidth: 1.5 }}
             />
             {currentPoint && (
               <ReferenceDot
                 x={currentPoint.km} y={currentPoint.alt}
-                r={6} fill="#f59e0b" stroke="#fff" strokeWidth={2}
+                r={6} fill="#44403c" stroke="#fff" strokeWidth={2}
                 isFront
-                label={{ value: 'Sei qui', position: 'top', fontSize: 11, fontWeight: 600, fill: '#78350f' }}
+                label={{ value: 'Sei qui', position: 'top', fontSize: 11, fontWeight: 600, fill: '#44403c' }}
               />
             )}
           </AreaChart>
         </ResponsiveContainer>
+      </div>
+      <div className="flex items-center gap-2 mt-1.5 px-1">
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-sky-600">Discesa</span>
+        <div className="flex-1 h-1 rounded-full" style={{ background: 'linear-gradient(90deg,#1d4ed8,#5eead4,#a8a29e,#fbbf24,#b91c1c)' }} />
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-red-700">Salita</span>
       </div>
     </div>
   )
