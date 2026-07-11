@@ -7,8 +7,14 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
   apiKey: string | null
   userGender: string
   breveSections: GuideSectionKey[]
+  /** true quando la lettura di user_settings è fallita (es. Supabase irraggiungibile) — a
+   *  differenza di una lettura riuscita che conferma semplicemente l'assenza di una chiave.
+   *  .maybeSingle() non genera mai errore per "nessuna riga", quindi qualunque errore qui è un
+   *  vero problema di lookup, non un utente senza chiave. I chiamanti devono mostrare
+   *  "temporaneamente non disponibile", non "aggiungi la tua chiave". */
+  lookupFailed: boolean
 }> {
-  const { data: settings } = await supabase
+  const { data: settings, error } = await supabase
     .from('user_settings')
     .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections')
     .eq('user_id', userId)
@@ -20,5 +26,5 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
   const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
   const breveSections = sanitizeBreveSections(settings?.guide_breve_sections)
 
-  return { apiKey, userGender, breveSections }
+  return { apiKey, userGender, breveSections, lookupFailed: !!error }
 }

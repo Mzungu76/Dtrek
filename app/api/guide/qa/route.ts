@@ -115,12 +115,20 @@ export async function POST(req: NextRequest) {
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
 
-    const { apiKey } = await resolveApiKeyAndSettings(user.id)
+    const { apiKey, lookupFailed } = await resolveApiKeyAndSettings(user.id)
     if (!apiKey) {
-      return NextResponse.json({
-        error: 'no_ai_access',
-        message: 'Aggiungi la tua chiave API Claude nelle impostazioni del profilo per fare domande sul percorso.',
-      }, { status: 402 })
+      return NextResponse.json(
+        lookupFailed
+          ? {
+              error:   'ai_temporarily_unavailable',
+              message: 'Non riesco a verificare la tua chiave AI in questo momento (Supabase non raggiungibile) — riprova tra poco.',
+            }
+          : {
+              error:   'no_ai_access',
+              message: 'Aggiungi la tua chiave API Claude nelle impostazioni del profilo per fare domande sul percorso.',
+            },
+        { status: lookupFailed ? 503 : 402 },
+      )
     }
 
     let hikeId: string

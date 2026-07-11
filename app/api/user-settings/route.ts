@@ -22,6 +22,10 @@ export async function GET(req: NextRequest) {
 
   // Try full select (all columns); progressively fall back if newer columns don't exist yet
   let data: Record<string, unknown> | null = null
+  // .single() errors both on "no row yet" (PGRST116 — a brand new user, expected/harmless) and
+  // on a genuine lookup failure (e.g. Supabase unreachable) — only the latter should be surfaced
+  // as "unavailable", otherwise every new user would wrongly see a "try again later" message.
+  let settingsUnavailable = false
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
@@ -42,6 +46,7 @@ export async function GET(req: NextRequest) {
       .eq('user_id', user.id)
       .single()
     if (!e2) data = d2 as Record<string, unknown> | null
+    else if (e2.code !== 'PGRST116') settingsUnavailable = true
   }
 
   const key = data?.claude_api_key as string | null | undefined
@@ -50,6 +55,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     hasKey:             !!key,
     keyHint:            key ? maskKey(key) : null,
+    settingsUnavailable,
     subscriptionTier:   (data?.subscription_tier as string) ?? 'free',
     userAge:            age,
     userWeightKg:       (data?.user_weight_kg as number) ?? 0,

@@ -104,6 +104,10 @@ interface Props {
   enrichmentReady: boolean
   /** null while the pre-flight check is in flight, then whether this account can call Claude at all. */
   hasAiAccess: boolean | null
+  /** true when the check itself failed (e.g. Supabase irraggiungibile) rather than confirming the
+   *  account genuinely has no key — shows a "riprova più tardi" message instead of "aggiungi la
+   *  tua chiave" (which would be misleading for someone who already saved one). */
+  aiUnavailable: boolean
   /** Set by the caller (e.g. tapping the Trail Score badge) to scroll to a specific section once. */
   scrollToSectionKey?: GuideSectionKey | null
   onScrollToSectionConsumed?: () => void
@@ -196,7 +200,7 @@ type GuideTier = 'breve' | 'approfondita'
  * generation and scroll/nav all stay here and get threaded down as props.
  */
 export default function GuideReader({
-  hike, onHikeUpdate, enrichmentReady, hasAiAccess,
+  hike, onHikeUpdate, enrichmentReady, hasAiAccess, aiUnavailable,
   scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
   weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura, driving,
 }: Props) {
@@ -611,8 +615,26 @@ export default function GuideReader({
               </div>
             )}
 
+            {/* ── AI temporaneamente non verificabile (es. blackout Supabase) ─── */}
+            {!hasGuide && hasAiAccess === false && aiUnavailable && (
+              <div className="flex flex-col items-center py-10 gap-4 text-center">
+                <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center shadow-inner">
+                  <Loader2 className="w-6 h-6 text-terra-500" />
+                </div>
+                <div className="max-w-sm">
+                  <h2 className="font-display text-lg font-bold text-stone-800 mb-2">
+                    Racconto di Giulia temporaneamente non disponibile
+                  </h2>
+                  <p className="text-stone-500 text-sm leading-relaxed">
+                    Non riusciamo a verificare la tua chiave AI in questo momento — riprova tra poco.
+                    Intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* ── No AI access ─────────────────────────────────────────────── */}
-            {!hasGuide && hasAiAccess === false && (
+            {!hasGuide && hasAiAccess === false && !aiUnavailable && (
               <div className="flex flex-col items-center py-10 gap-4 text-center">
                 <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center shadow-inner">
                   <KeyRound className="w-6 h-6 text-terra-500" />
