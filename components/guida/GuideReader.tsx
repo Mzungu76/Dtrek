@@ -22,8 +22,7 @@ import { SECTION_STYLE, LEGACY_STYLE } from './sectionStyle'
 import { slugifyHeading } from '@/lib/guideSlug'
 import WeatherWidget from '@/components/WeatherWidget'
 import RouteMapSection from '@/components/RouteMapSection'
-import ScoresWidget from './widgets/ScoresWidget'
-import SafetyWidget from './widgets/SafetyWidget'
+import DatiSicurezzaTabs from './widgets/DatiSicurezzaTabs'
 import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
 import GuideHero from './GuideHero'
@@ -517,12 +516,7 @@ export default function GuideReader({
           />
         )
       case 'dati_sicurezza':
-        return (
-          <div className="space-y-5">
-            {scores && <ScoresWidget {...scores} />}
-            {safetyDetails && <SafetyWidget {...safetyDetails} />}
-          </div>
-        )
+        return <DatiSicurezzaTabs scores={scores} safetyDetails={safetyDetails} />
       case 'luoghi':
         return poiList
           ? (
