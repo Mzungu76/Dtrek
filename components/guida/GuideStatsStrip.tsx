@@ -8,22 +8,18 @@ interface Props {
   elevationGain: number
   altitudeMax: number
   durationLabel: string
-  driving?: { distanceMeters: number; mapsUrl?: string } | null
 }
 
 /** Cifre editoriali (StatFigure, vedi components/ui/StatFigure.tsx) al posto dei vecchi badge
- *  scritti a mano — pillole scorrevoli su mobile, riga fissa senza scroll da `md` in su. */
-export default function GuideStatsStrip({ distanceKm, elevationGain, altitudeMax, durationLabel, driving }: Props) {
+ *  scritti a mano — pillole scorrevoli su mobile, riga fissa senza scroll da `md` in su. La
+ *  distanza in auto dal punto di partenza vive solo in copertina (sotto la data, vedi
+ *  GuideHero.tsx) — ripeterla anche qui accanto a Durata era ridondante. */
+export default function GuideStatsStrip({ distanceKm, elevationGain, altitudeMax, durationLabel }: Props) {
   const stats: Stat[] = [
     { value: `${distanceKm.toFixed(1)} km`, label: 'Distanza' },
     { value: `+${Math.round(elevationGain)} m`, label: 'Dislivello' },
     { value: `${Math.round(altitudeMax)} m`, label: 'Quota max' },
     { value: durationLabel, label: 'Durata' },
-    ...(driving ? [{
-      value: `${Math.round(driving.distanceMeters / 1000)} km`,
-      label: 'Da te (auto)',
-      href: driving.mapsUrl,
-    }] : []),
   ]
 
   return (
