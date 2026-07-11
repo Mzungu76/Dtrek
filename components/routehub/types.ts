@@ -125,4 +125,8 @@ export interface RouteHubProps {
   /** Toggles `item.favorite` — renders a star button on the closed-card cover and (if the caller
    *  also renders one, e.g. in headerActions) anywhere else that needs the same action. */
   onToggleFavorite?: (item: RouteHubItem) => void
+  /** "Confronta" shortcut, shown next to the favorite star on the closed-card cover — the caller
+   *  navigates to /statistiche?tab=confronta&pre=<combinedId> (Guida: `p:${item.id}`, Resoconto:
+   *  `c:${item.id}`). Optional so any future RouteHub caller keeps today's look by omitting it. */
+  onCompare?: (item: RouteHubItem) => void
 }

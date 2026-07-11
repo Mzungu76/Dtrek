@@ -38,6 +38,9 @@ function StatisticheContent() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const initialTab: Tab = (tabParam && (TAB_IDS as string[]).includes(tabParam)) ? tabParam as Tab : 'panoramica'
+  // Deep-link from the Guida/Resoconto gallery cards' "Confronta" button — combinedId to
+  // preselect once TabConfronto mounts (`p:<id>` pianificata, `c:<id>` completata).
+  const preselectId = searchParams.get('pre')
 
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -120,7 +123,7 @@ function StatisticheContent() {
 
             {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} onGuideLink={openGuide} />}
             {tab === 'andamento'  && <TabAndamento   activities={activities} onGuideLink={openGuide} />}
-            {tab === 'confronta'  && <TabConfronto   activities={activities} onGuideLink={openGuide} />}
+            {tab === 'confronta'  && <TabConfronto   activities={activities} onGuideLink={openGuide} preselectId={preselectId} />}
             {tab === 'traguardi'  && <TabTraguardi   activities={activities} streaks={streaks} onGuideLink={openGuide} />}
           </>
         )}

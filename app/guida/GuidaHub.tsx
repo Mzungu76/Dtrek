@@ -715,6 +715,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         favoritesFilter={favoritesFilter}
         onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
         onToggleFavorite={handleToggleFavorite}
+        onCompare={(routeItem) => router.push(`/statistiche?tab=confronta&pre=${encodeURIComponent(`p:${routeItem.id}`)}`)}
         onIndexChange={(item) => {
           setCurrentId(item.id)
           // Plain History API, not router.replace: `/guida` and `/guida/[id]` are different

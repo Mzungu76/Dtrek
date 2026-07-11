@@ -19,12 +19,15 @@ interface Props {
   /** Guida-only "preferito" star, shown next to the title — undefined elsewhere (Resoconto has
    *  no favorite concept, see RouteHubProps.onToggleFavorite). */
   favoriteButton?: ReactNode
+  /** "Confronta" shortcut into Statistiche → Confronto, shown next to the favorite star —
+   *  undefined unless the caller passes RouteHubProps.onCompare (both Guida and Resoconto do). */
+  compareButton?: ReactNode
 }
 
 const FADE_OUT_MS = 120
 const FADE_IN_MS = 150
 
-export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, subtitle, variant = 'default', favoriteButton }: Props) {
+export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, subtitle, variant = 'default', favoriteButton, compareButton }: Props) {
   const [visible, setVisible] = useState(true)
   const prevKey = useRef(itemKey)
 
@@ -92,6 +95,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
               </button>
             )}
             {favoriteButton}
+            {compareButton}
           </div>
           {variant === 'magazine' && subtitle && (
             <p
