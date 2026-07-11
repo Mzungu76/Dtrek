@@ -17,19 +17,20 @@
   background: white;
 }
 
-/* PAGE */
-.guide-page {
+/* PAGE — height is no longer fixed/clipped: lib/pdfPaginate.ts (not html2pdf.js's CSS
+   pagebreak mode) measures the real rendered height of each page and slices it into as many
+   physical PDF pages as needed at safe .pdf-block boundaries, injecting its own header/footer.
+   Top/bottom padding here just clears room for that injected header (28px) and footer (24px). */
+.guide-print-page {
   width: 794px;
-  min-height: 1123px;
-  padding: 52px 52px 64px;
+  padding: 40px 52px 44px;
   box-sizing: border-box;
   position: relative;
   background: white;
-  overflow: hidden;
 }
 
-/* Page separator in preview */
-.guide-page + .guide-page {
+/* Page separator in on-screen preview only */
+.guide-print-page + .guide-print-page {
   border-top: 3px solid #d97220;
   margin-top: 32px;
 }
@@ -154,25 +155,6 @@
   text-transform: uppercase;
 }
 
-/* ── Mini-map inset (top-right) ── */
-.guide-cover-minimap {
-  position: absolute;
-  top: 44px;
-  right: 52px;
-  width: 120px;
-  height: 92px;
-  border: 2px solid rgba(255,255,255,0.85);
-  overflow: hidden;
-  border-radius: 2px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-}
-
-.guide-cover-minimap img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 /* ── DTrek logo ── */
 .guide-cover-logo {
   position: absolute;
@@ -188,65 +170,212 @@
 }
 
 /* ============================================================
-   RUNNING HEADER — content pages
+   OVERVIEW PAGE — "a colpo d'occhio", non esisteva prima
    ============================================================ */
-.guide-page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #d97220;
-  margin-bottom: 32px;
+.guide-overview-kicker {
   font-family: var(--font-barlow), sans-serif;
-}
-
-.guide-page-header-brand {
-  font-family: var(--font-barlow), sans-serif;
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
   color: #c05a17;
-  letter-spacing: 2px;
-  line-height: 1.0;
-  text-transform: uppercase;
+  margin: 0 0 5px;
+  line-height: 1.2;
 }
 
-.guide-page-header-title {
+.guide-overview-title {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1C1C1C;
+  margin: 0 0 22px;
+  line-height: 1.2;
+}
+
+.guide-overview-minimap {
+  width: 100%;
+  height: 220px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 0.5px solid #e8e4de;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+}
+
+.guide-overview-minimap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.guide-overview-statgrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 0.5px solid #e8e4de;
+  border-bottom: 0.5px solid #e8e4de;
+  margin-bottom: 22px;
+}
+
+.guide-overview-statgrid > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 14px 4px;
+  border-right: 0.5px solid #e8e4de;
+}
+
+.guide-overview-statgrid > div:last-child { border-right: none; }
+
+.guide-overview-statgrid b {
   font-family: var(--font-barlow), sans-serif;
-  font-size: 8px;
-  font-weight: 400;
-  color: #888;
-  letter-spacing: 1px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #1C1C1C;
   line-height: 1.0;
-  text-transform: uppercase;
 }
 
-.guide-page-header-num {
+.guide-overview-statgrid span {
   font-family: var(--font-barlow), sans-serif;
   font-size: 8px;
   font-weight: 600;
   color: #888;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
   line-height: 1.0;
-  font-variant-numeric: tabular-nums;
+}
+
+.guide-overview-gauge-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 26px;
+}
+
+.guide-overview-gauge-label {
+  font-family: var(--font-barlow), sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #1C1C1C;
+  white-space: nowrap;
+}
+
+.guide-overview-gauge {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #efece5;
+  overflow: hidden;
+}
+
+.guide-overview-gauge > div {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #378d44, #d97220, #813619);
+}
+
+.guide-overview-toc {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+  padding: 18px 0;
+  border-top: 0.5px solid #e8e4de;
+  margin-bottom: 22px;
+}
+
+.guide-overview-toc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guide-overview-toc-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.guide-overview-toc-text {
+  font-family: var(--font-body), sans-serif;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #2D2D2D;
+}
+
+.guide-overview-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 18px;
+  border-top: 0.5px solid #e8e4de;
+}
+
+.guide-overview-hlchip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #fafaf8;
+  border: 0.5px solid #e8e4de;
+  border-radius: 20px;
+  padding: 5px 12px 5px 5px;
+}
+
+.guide-overview-hlchip-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.guide-overview-hlchip span:last-child {
+  font-family: var(--font-body), sans-serif;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #1C1C1C;
 }
 
 /* ============================================================
-   FOOTER — content pages
+   TERRAIN BAND — fascia decorativa con il profilo altimetrico,
+   al posto di una foto mancante nella sezione "Il percorso".
    ============================================================ */
-.guide-page-footer {
-  position: absolute;
-  bottom: 28px;
-  left: 52px;
-  right: 52px;
+.guide-terrainband {
+  width: 100%;
+  height: 130px;
+  border-radius: 3px;
+  background: #fafaf8;
+  border: 0.5px solid #e8e4de;
+  margin-bottom: 16px;
+  padding: 10px 0 8px;
+  box-sizing: border-box;
   display: flex;
-  justify-content: space-between;
-  border-top: 0.5px solid #e5e0d8;
-  padding-top: 7px;
+  flex-direction: column;
+}
+
+.guide-terrainband-svg {
+  flex: 1;
+  width: 100%;
+}
+
+.guide-terrainband-caption {
   font-family: var(--font-barlow), sans-serif;
-  font-size: 7.5px;
-  font-weight: 400;
-  color: #888;
-  letter-spacing: 1px;
-  line-height: 1.0;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #a8a29e;
+  text-align: center;
+  margin-top: 4px;
 }
 
 /* ============================================================
@@ -294,16 +423,20 @@
    BODY TEXT
    ============================================================ */
 
-/* Lead paragraph — DM Sans italic, come il primo paragrafo di MagazineBody.tsx on-screen */
+/* Lead paragraph — trattamento "pull-quote" da rivista: riga d'accento a sinistra nel colore
+   della sezione (border-left-color impostato inline, vedi GuideSection.tsx) invece di un
+   semplice corsivo in linea col resto del testo. */
 .guide-section-lead {
   font-family: var(--font-body), sans-serif;
   font-style: italic;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 400;
-  line-height: 1.75;
+  line-height: 1.7;
   color: #44403c;
-  margin: 0 0 14px 0;
-  text-align: justify;
+  margin: 0 0 18px 0;
+  text-align: left;
+  border-left: 2.5px solid #c05a17;
+  padding-left: 16px;
 }
 
 /* Standard paragraph */
@@ -482,59 +615,176 @@
 }
 
 /* ============================================================
-   POI CARD
+   POI SPOTLIGHT — trattamento a piena pagina per il luogo più
+   rilevante (GuidePOISpotlight.tsx), foto grande in alto, testo
+   sotto. La pagina che lo ospita ha padding:0 (foto full-bleed).
    ============================================================ */
-.guide-poi-card {
-  display: grid;
-  grid-template-columns: 36% 61%;
-  gap: 3%;
-  align-items: start;
-  margin-bottom: 28px;
-  padding-bottom: 28px;
-  border-bottom: 0.5px solid #e8e4de;
-  break-inside: avoid;
+.guide-spotlight-photo {
+  position: relative;
+  width: 794px;
+  height: 460px;
 }
 
-.guide-poi-card:last-child { border-bottom: none; }
-
-.guide-poi-card-left {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
-}
-
-.guide-poi-card-photo {
+.guide-spotlight-photo img {
   width: 100%;
-  height: 130px;
+  height: 100%;
   object-fit: cover;
-  border-radius: 3px;
   display: block;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.14);
 }
 
-.guide-poi-card-photo-placeholder {
+.guide-spotlight-photo-placeholder {
   width: 100%;
-  height: 130px;
-  background: linear-gradient(135deg, #f0ede7, #e8e4de);
-  border-radius: 3px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28px;
+  height: 100%;
 }
 
-.guide-poi-card-badge {
-  display: inline-block;
+.guide-spotlight-badge {
+  position: absolute;
+  top: 24px;
+  left: 52px;
   color: white;
   font-family: var(--font-barlow), sans-serif;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 2px;
   line-height: 1.0;
   text-transform: uppercase;
-  padding: 3px 9px;
+  padding: 5px 12px;
   border-radius: 2px;
+}
+
+.guide-spotlight-dist {
+  position: absolute;
+  bottom: 20px;
+  right: 52px;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  font-family: var(--font-body), sans-serif;
+  font-size: 9px;
+  font-weight: 400;
+  font-style: italic;
+  padding: 5px 12px;
+  border-radius: 20px;
+  line-height: 1.0;
+}
+
+.guide-spotlight-body {
+  padding: 32px 52px 0;
+}
+
+.guide-spotlight-kicker {
+  font-family: var(--font-barlow), sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #813619;
+  margin: 0 0 8px;
+  line-height: 1.2;
+}
+
+.guide-spotlight-name {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 30px;
+  font-weight: 700;
+  color: #1C1C1C;
+  margin: 0 0 16px;
+  line-height: 1.15;
+}
+
+.guide-spotlight-text {
+  font-family: var(--font-body), sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.75;
+  text-align: justify;
+  color: #2D2D2D;
+  margin: 0 0 16px;
+}
+
+/* ============================================================
+   POI GALLERY — griglia a 2 colonne per gli altri luoghi
+   (GuideTemplate.tsx "gallery"), continua dopo lo spotlight.
+   ============================================================ */
+.guide-continuation-label {
+  font-family: var(--font-barlow), sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin: 0 0 20px;
+}
+
+.guide-poi-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.guide-poi-card {
+  break-inside: avoid;
+  border: 0.5px solid #e8e4de;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.guide-poi-card-photo {
+  position: relative;
+  width: 100%;
+  height: 130px;
+}
+
+.guide-poi-card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.guide-poi-card-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.guide-poi-card-badge {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  color: white;
+  font-family: var(--font-barlow), sans-serif;
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  line-height: 1.0;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 2px;
+}
+
+.guide-poi-card-body {
+  padding: 12px 14px 14px;
+}
+
+.guide-poi-card-name {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1C1C1C;
+  margin: 0 0 5px;
+  line-height: 1.2;
+}
+
+.guide-poi-card-desc {
+  font-family: var(--font-body), sans-serif;
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1.55;
+  text-align: justify;
+  color: #3D3D3D;
+  margin: 0 0 8px;
 }
 
 .guide-poi-card-distance {
@@ -546,33 +796,11 @@
   line-height: 1.0;
 }
 
-.guide-poi-card-right { display: flex; flex-direction: column; }
-
-.guide-poi-card-name-bar {
-  border-left: 3px solid #d97220;
-  padding-left: 9px;
-  margin-bottom: 10px;
+.guide-poi-card-knowbox {
+  padding: 0 14px 14px;
 }
 
-.guide-poi-card-name {
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: #1C1C1C;
-  margin: 0;
-  line-height: 1.2;
-}
-
-.guide-poi-card-desc {
-  font-family: var(--font-body), sans-serif;
-  font-size: 9.5px;
-  font-weight: 400;
-  line-height: 1.65;
-  text-align: justify;
-  color: #3D3D3D;
-  margin: 0;
-}
+.guide-poi-card-knowbox .guide-knowbox { margin-top: 0; }
 
 /* ============================================================
    KNOW BOX
@@ -693,13 +921,13 @@
 @media print {
   @page { size: A4; margin: 0; }
 
-  .guide-page {
+  .guide-print-page {
     page-break-after: always;
     break-after: page;
     margin: 0;
   }
 
-  .guide-page + .guide-page {
+  .guide-print-page + .guide-print-page {
     border-top: none;
     margin-top: 0;
   }

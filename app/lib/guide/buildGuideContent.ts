@@ -29,12 +29,32 @@ function distLabel(m: number): string {
   return m < 1000 ? `${m.toFixed(0)} m` : `${(m / 1000).toFixed(1)} km`
 }
 
+// 0..1 fill for the overview page's difficulty gauge — same 4 labels used
+// throughout the app (components/routehub/AssessmentPanel.tsx).
+const DIFFICULTY_LEVEL: Record<string, number> = {
+  facile: 0.22, moderata: 0.48, impegnativa: 0.74, estrema: 0.96,
+}
+
+/** Downsampled altitude series for the "terrain band" decorative chart shown
+ *  in place of a missing section photo — same idea as lib/downsamplePolyline.ts
+ *  but for elevation instead of lat/lon. */
+function downsampleElevation(hike: PlannedHike, maxPts = 40): number[] {
+  const alts = (hike.trackPoints ?? [])
+    .map(p => p.altitudeMeters)
+    .filter((a): a is number => a !== undefined)
+  if (alts.length === 0) return []
+  if (alts.length <= maxPts) return alts
+  const step = (alts.length - 1) / (maxPts - 1)
+  return Array.from({ length: maxPts }, (_, i) => alts[Math.round(i * step)])
+}
+
 export function buildGuideContent(
   hike: PlannedHike,
   guideText: string,
   mapImage: string,
   thumbs: Map<number, string>,
   coverPhotos: string[] = [],
+  miniMapImage?: string,
 ): GuideData {
   const sections = parseSections(guideText)
 
@@ -72,36 +92,40 @@ export function buildGuideContent(
     .slice(0, 30)
     .toUpperCase()
 
-  // First wiki thumbnail as fallback section photo
-  const firstWikiThumb = wikiEntries.find(e => thumbs.has(e.wiki.pageid))
-  const wikiThumbUrl = firstWikiThumb ? thumbs.get(firstWikiThumb.wiki.pageid) : undefined
+  // Cover uses the route map (fit: 'cover', see usePDFExport.ts), not a Wikimedia photo —
+  // same call already made for the on-screen hero (GuideHero.tsx): always the route, never
+  // dependent on whether a decent nearby photo happens to exist. That frees every fetched
+  // photo below for the sections/POI spotlight that actually use them.
+  const p = coverPhotos  // shorthand: p[0]=prima di partire, p[1]=il percorso, p[2]=natura, p[3]=sapori
 
-  const p = coverPhotos  // shorthand: p[0]=cover, p[1..]=sections
+  const difficulty = hike.assessment?.difficulty ?? ''
 
   return {
     title:       hike.title,
     date:        dateStr,
     categoryTag,
-    coverPhoto:  p[0],
     mapImage,
+    miniMapImage,
+    elevationProfile: downsampleElevation(hike),
+    difficultyLevel: DIFFICULTY_LEVEL[difficulty] ?? 0.3,
     stats: {
       km:         parseFloat((hike.distanceMeters / 1000).toFixed(1)),
       dplus:      Math.round(hike.elevationGain),
       duration:   formatDuration(hike.estimatedTimeSeconds),
-      difficulty: hike.assessment?.difficulty ?? '',
+      difficulty,
       maxEle:     Math.round(hike.altitudeMax),
     },
     sections: {
-      primadiPartire: { text: findSection(sections, 'prima di partire'), photo: p[1] },
-      ilPercorso:     { text: findSection(sections, 'il percorso'),       photo: p[2] },
+      primadiPartire: { text: findSection(sections, 'prima di partire'), photo: p[0] },
+      ilPercorso:     { text: findSection(sections, 'il percorso'),       photo: p[1] },
       iLuoghi:        findSection(sections, 'i luoghi')
-        ? { text: findSection(sections, 'i luoghi'), photo: p[3] ?? wikiThumbUrl }
+        ? { text: findSection(sections, 'i luoghi') }
         : undefined,
       laNatura:       findSection(sections, 'la natura')
-        ? { text: findSection(sections, 'la natura'), photo: p[4] }
+        ? { text: findSection(sections, 'la natura'), photo: p[2] }
         : undefined,
       sapori:         findSection(sections, 'sapori')
-        ? { text: findSection(sections, 'sapori'), photo: p[5] }
+        ? { text: findSection(sections, 'sapori'), photo: p[3] }
         : undefined,
       consigliFinali: { text: findSection(sections, 'consigli') },
     },
