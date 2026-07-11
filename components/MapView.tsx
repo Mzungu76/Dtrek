@@ -8,6 +8,8 @@ import type { WikiPage } from '@/lib/wikipedia'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { colorSegmentsByDtm, aspectDegToColor } from '@/lib/dtm/dtmColors'
+import { poiBadgeMarkup } from '@/components/poiIcons'
+import { slopeColorSigned } from '@/lib/slopeColor'
 import { useRouteTour, SPEEDS } from './mapview/useRouteTour'
 import TourControls from './mapview/TourControls'
 
@@ -326,20 +328,16 @@ export default function MapView({
       const points = trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
       if (points.length < 2) return
       const coords: [number, number][] = points.map(p => [p.lat!, p.lon!])
-      const latLons = coords.map(([lat, lon]) => ({ lat, lon }))
-      const dtmProfile = dtmProfileRef.current
-      const dtmActive = dtmProfile?.source === 'dtm'
-      const slopeColors = dtmActive ? colorSegmentsByDtm(latLons, dtmProfile!, 'slope', DTM_MATCH_RADIUS_M) : null
 
+      // Qui serve la direzione di marcia (salita/discesa reale lungo il percorso), non la
+      // pendenza "assoluta" del terreno da DTM — per questo si calcola sempre dal dislivello
+      // segnato tra punti consecutivi del tracciato, indipendentemente dalla disponibilità DTM.
       for (let i = 0; i < coords.length - 1; i++) {
-        let color = slopeColors?.[i] ?? null
-        if (!color) {
-          const p1 = points[i], p2 = points[i + 1]
-          const dist = haversineM(p1.lat!, p1.lon!, p2.lat!, p2.lon!)
-          const dEle = ((p2.altitudeMeters ?? p1.altitudeMeters ?? 0) - (p1.altitudeMeters ?? 0))
-          const slopePct = dist > 0 ? (dEle / dist) * 100 : 0
-          color = slopeColor(slopePct)
-        }
+        const p1 = points[i], p2 = points[i + 1]
+        const dist = haversineM(p1.lat!, p1.lon!, p2.lat!, p2.lon!)
+        const dEle = ((p2.altitudeMeters ?? p1.altitudeMeters ?? 0) - (p1.altitudeMeters ?? 0))
+        const slopePct = dist > 0 ? (dEle / dist) * 100 : 0
+        const color = slopeColorSigned(slopePct)
         const pl = L.polyline([coords[i], coords[i + 1]], { color, weight: 5, opacity: 0.95 }).addTo(mapInstance.current)
         transientGradientLayer.current.push(pl)
       }
@@ -421,7 +419,6 @@ export default function MapView({
         const isHighlighted = i === highlightedPoiIndex
         const hasLink = poiHasLink(poi)
         const size = Math.round((isHighlighted ? 40 : 28) * poiMarkerScale)
-        const emojiSize = Math.round((isHighlighted ? 30 : 22) * poiMarkerScale)
         // POIs with a Wikipedia/website link get a blue ring + badge, so they stand out on the
         // map itself (before the popup is even opened) — same blue used for Wikipedia markers.
         const ring = hasLink
@@ -429,9 +426,9 @@ export default function MapView({
              <div style="position:absolute;bottom:-1px;right:-1px;width:11px;height:11px;border-radius:50%;background:#2563eb;border:1.5px solid white"></div>`
           : ''
         const icon = L.divIcon({
-          html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center">
+          html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;transition:width .2s,height .2s">
                    ${ring}
-                   <div style="font-size:${emojiSize}px;line-height:1;filter:drop-shadow(0 1px ${isHighlighted ? 4 : 2}px rgba(0,0,0,0.5));transition:font-size .2s">${meta.emoji}</div>
+                   ${poiBadgeMarkup(poi.type, meta.color, size, isHighlighted ? 4 : 2)}
                  </div>`,
           iconSize: [size, size],
           iconAnchor: [size / 2, size / 2],

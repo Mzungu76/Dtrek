@@ -12,6 +12,7 @@ import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
 import { getProfile } from '@/lib/userProfile'
 import { type PoiItem, type PoiType, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
+import { poiBadgeMarkup } from '@/components/poiIcons'
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
@@ -795,8 +796,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     ;(pois ?? []).forEach(poi => {
       const meta = POI_META[poi.type]
       const el = document.createElement('div')
-      el.style.cssText = 'font-size:22px;line-height:1;cursor:pointer;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))'
-      el.textContent = meta.emoji
+      el.style.cssText = 'cursor:pointer'
+      el.innerHTML = poiBadgeMarkup(poi.type, meta.color, 28, 3)
       el.style.display = showPois ? '' : 'none'
       const popup = new maplibregl.Popup({ maxWidth: '250px', offset: 14 }).setHTML(buildPoiPopupHtml(poi))
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
