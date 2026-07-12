@@ -22,8 +22,12 @@ const RIDDLE_BLOCK_RE = /\[indovinello\s+poi="([^"]+)"\]([\s\S]*?)\[\/indovinell
  * generated guide markdown, same bracket-tag convention as extractCuriosita's [curiosita].
  * Blocks whose poi name doesn't match a known POI, or without a question|answer split,
  * are dropped rather than kept with a guessed/missing field.
+ *
+ * Also returns `cleanedText` with every `[indovinello]` block removed — riddles are meant to
+ * surface only as the interactive widget during live navigation (RiddleSheet), never as raw
+ * bracket markup in the guide text itself (was leaking through unstripped, see GuideReader.tsx).
  */
-export function extractRiddles(guideText: string, cachedPois: PoiItem[], cachedPoiWiki: { poi: PoiItem; wiki: WikiPage }[]): TrailRiddle[] {
+export function extractRiddles(guideText: string, cachedPois: PoiItem[], cachedPoiWiki: { poi: PoiItem; wiki: WikiPage }[]): { riddles: TrailRiddle[]; cleanedText: string } {
   const riddles: TrailRiddle[] = []
   let match: RegExpExecArray | null
   let i = 0
@@ -39,5 +43,6 @@ export function extractRiddles(guideText: string, cachedPois: PoiItem[], cachedP
     if (!coords) continue
     riddles.push({ id: `riddle-${i++}`, lat: coords.lat, lon: coords.lon, question, answer })
   }
-  return riddles
+  const cleanedText = guideText.replace(RIDDLE_BLOCK_RE, '').replace(/\n{3,}/g, '\n\n')
+  return { riddles, cleanedText }
 }

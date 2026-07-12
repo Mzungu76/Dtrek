@@ -354,7 +354,12 @@ export default function GuideReader({
         acc += decoder.decode(value, { stream: true })
         const { lastStatus, cleanedText: displayText } = stripGuideStatus(acc)
         if (lastStatus) setGenStatus(lastStatus)
-        setGuideText(displayText)
+        // Stesso taglio del commento libero pre-prima-sezione applicato in anteprima live, non
+        // solo a fine generazione — altrimenti per qualche istante, prima che il modello scriva il
+        // primo "## ", quel testo appare come una finta sezione a sé (si "aggiusta" da solo appena
+        // arriva il primo titolo vero, ma nel frattempo si vede).
+        const firstHeadingIdx = displayText.search(/^## /m)
+        setGuideText(firstHeadingIdx > 0 ? displayText.slice(firstHeadingIdx) : displayText)
       }
       acc = stripGuideStatus(acc).cleanedText
       setGenStatus(undefined)
@@ -363,14 +368,24 @@ export default function GuideReader({
       const { notices, cleanedText: cleanedText2 } = extractGuideNotices(cleanedText)
       const { sources, cleanedText: cleanedText3 } = extractGuideSources(cleanedText2)
       acc = cleanedText3
+
+      const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
+      const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+      const { riddles, cleanedText: cleanedText4 } = extractRiddles(acc, cachedPois, cachedPoiWiki)
+      const { epochPois, cleanedText: cleanedText5 } = extractEpochPois(cleanedText4, cachedPois, cachedPoiWiki)
+      acc = cleanedText5
+
+      // Ogni tanto il modello scrive una riga di commento libero ("Ho tutte le informazioni che
+      // mi servono, ora scrivo la guida...") prima del primo titolo di sezione, non racchiusa in
+      // nessun tag riconosciuto — senza questo taglio diventa una finta sezione "legacy" con
+      // titolo posticcio (parseGuide tratta il testo prima del primo "## " come una sezione a sé).
+      const firstHeadingIdx = acc.search(/^## /m)
+      if (firstHeadingIdx > 0) acc = acc.slice(firstHeadingIdx)
+
       setGuideText(acc)
       setGuideNotices(notices)
       setGuideSources(sources)
 
-      const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
-      const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
-      const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
-      const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
       const patch = { cachedGuide: acc, cachedGuideSubtitle: subtitle, cachedGuideNotices: notices, cachedGuideSources: sources, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)

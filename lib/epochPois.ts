@@ -31,8 +31,12 @@ const EPOCH_BLOCK_RE = /\[epoca\s+poi="([^"]+)"\s+periodo="(etrusca|romana|medie
  * Parses `[epoca poi="Nome esatto" periodo="etrusca|romana|medievale|oggi"]testo[/epoca]`
  * blocks out of the generated guide markdown. A block whose poi name doesn't match a known
  * POI is dropped, same discipline as extractRiddles.
+ *
+ * Also returns `cleanedText` with every `[epoca]` block removed — same reasoning as
+ * extractRiddles's cleanedText: this content is meant to surface as its own widget, never as
+ * raw bracket markup in the guide text (was leaking through unstripped, see GuideReader.tsx).
  */
-export function extractEpochPois(guideText: string, cachedPois: PoiItem[], cachedPoiWiki: { poi: PoiItem; wiki: WikiPage }[]): EpochPoi[] {
+export function extractEpochPois(guideText: string, cachedPois: PoiItem[], cachedPoiWiki: { poi: PoiItem; wiki: WikiPage }[]): { epochPois: EpochPoi[]; cleanedText: string } {
   const epochPois: EpochPoi[] = []
   let match: RegExpExecArray | null
   let i = 0
@@ -45,5 +49,6 @@ export function extractEpochPois(guideText: string, cachedPois: PoiItem[], cache
     if (!coords) continue
     epochPois.push({ id: `epoch-${i++}`, lat: coords.lat, lon: coords.lon, epoch: epoch as Epoch, poiName, text })
   }
-  return epochPois
+  const cleanedText = guideText.replace(EPOCH_BLOCK_RE, '').replace(/\n{3,}/g, '\n\n')
+  return { epochPois, cleanedText }
 }

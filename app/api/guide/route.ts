@@ -52,6 +52,11 @@ usando il formato esatto:
 Metti questi avvisi (se presenti) subito dopo il sottotitolo, prima della prima sezione ##.
 Non creare avvisi generici o precauzionali di circostanza ("presta attenzione al meteo"): solo se hai
 trovato un'informazione concreta e specifica per QUESTO percorso.
+IMPORTANTE: non scrivere mai commenti sul tuo processo di ricerca o di scrittura ("Ho tutte le
+informazioni che mi servono", "Ora scrivo la guida completa", "Sto verificando...") fuori dai tag
+[avviso]/[curiosita]/[indovinello]/[epoca] previsti: quel testo finirebbe visualizzato come se fosse
+un contenuto vero e proprio della guida. Dopo l'eventuale [sottotitolo] e gli eventuali [avviso], il
+testo deve proseguire direttamente con la prima sezione (##), senza nessuna riga di transizione prima.
 
 Per ogni luogo significativo includi almeno uno tra: un aneddoto storico poco noto, una leggenda locale,
 una curiosità sorprendente, un fatto insolito legato al sito. I dettagli che la gente non trova sulle guide
