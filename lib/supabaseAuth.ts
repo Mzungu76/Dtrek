@@ -43,6 +43,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   })
 }
 
+function hasSupabaseSessionCookie(request: NextRequest): boolean {
+  return request.cookies.getAll().some(c => c.name.startsWith('sb-') && c.name.includes('auth-token'))
+}
+
 /**
  * Core resolution shared by every exported helper below. supabase.auth.getUser() (a live network
  * round-trip to Supabase's Auth server) is always tried first and is the source of truth whenever
@@ -53,12 +57,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
  * keys. getSession() just decodes the cookie (no network call of its own in the common case,
  * unlike getUser()); pairing it with our own signature verification is exactly the pattern
  * Supabase's own docs describe for using getSession() safely server-side.
+ *
+ * `degraded: true` is a further, explicit fallback for when even the JWKS-based verification is
+ * unavailable (e.g. a total Supabase outage, JWKS included) — a session cookie is present but
+ * cannot be cryptographically verified at all right now. Callers that know how to operate without
+ * a confirmed per-user identity (the AI routes, via the shared emergency key — an explicit,
+ * user-approved tradeoff, see lib/aiKeyCache.ts's isEmergencySharedKeyEnabled) may treat this as
+ * "proceed in emergency mode"; everything else must keep treating it as unauthenticated.
  */
-async function resolveUser(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean }> {
-  return withTimeout(resolveUserInner(request), RESOLVE_TIMEOUT_MS, { user: null, authUnavailable: true })
+async function resolveUser(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean; degraded: boolean }> {
+  return withTimeout(resolveUserInner(request), RESOLVE_TIMEOUT_MS, { user: null, authUnavailable: true, degraded: hasSupabaseSessionCookie(request) })
 }
 
-async function resolveUserInner(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean }> {
+async function resolveUserInner(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean; degraded: boolean }> {
   const supabase = anonClientForRequest(request)
   let data: { user: User | null }, error: unknown
   try {
@@ -71,21 +82,21 @@ async function resolveUserInner(request: NextRequest): Promise<{ user: User | nu
     // Percorso "tutto ok" — tiene pronta la copia di riserva delle chiavi JWKS (lib/supabaseJwt.ts)
     // per quando servirà davvero. Fire-and-forget: non deve mai rallentare una richiesta riuscita.
     void refreshJwksCache()
-    return { user: data.user, authUnavailable: false }
+    return { user: data.user, authUnavailable: false, degraded: false }
   }
-  if (!isAuthRetryableFetchError(error)) return { user: null, authUnavailable: false }
+  if (!isAuthRetryableFetchError(error)) return { user: null, authUnavailable: false, degraded: false }
 
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.access_token) {
       const local = await verifySupabaseJwtLocally(session.access_token)
-      if (local) return { user: { id: local.id, email: local.email } as User, authUnavailable: false }
+      if (local) return { user: { id: local.id, email: local.email } as User, authUnavailable: false, degraded: false }
     }
   } catch {
     // getSession()/la verifica locale hanno fallito in modo imprevisto — considerato comunque
     // "non disponibile" sotto, non un errore da propagare al chiamante.
   }
-  return { user: null, authUnavailable: true }
+  return { user: null, authUnavailable: true, degraded: hasSupabaseSessionCookie(request) }
 }
 
 export async function getUserFromRequest(request: NextRequest): Promise<User | null> {
@@ -100,7 +111,7 @@ export async function getUserFromRequest(request: NextRequest): Promise<User | n
  * routes use this variant so far) — see components/SessionKeepAlive.tsx for the client-side
  * counterpart of this same live-vs-unavailable distinction.
  */
-export async function getUserFromRequestDetailed(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean }> {
+export async function getUserFromRequestDetailed(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean; degraded: boolean }> {
   return resolveUser(request)
 }
 

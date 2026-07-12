@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { sanitizeBreveSections, type GuideSectionKey } from '@/lib/guideSections'
-import { readCachedAiSettings, writeCachedAiSettings, deleteCachedAiSettings } from '@/lib/aiKeyCache'
+import { readCachedAiSettings, writeCachedAiSettings, deleteCachedAiSettings, isEmergencySharedKeyEnabled } from '@/lib/aiKeyCache'
 
 /** Chiave API Claude + preferenze utente rilevanti per la Guida — condiviso tra la generazione
  *  della guida (app/api/guide/route.ts) e le domande e risposte sul percorso (app/api/guide/qa/route.ts). */
@@ -50,4 +50,29 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
   }
 
   return { apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined), lookupFailed: true }
+}
+
+/**
+ * Percorso di emergenza esplicito, scelto dall'utente: quando Supabase è del tutto irraggiungibile
+ * — JWKS incluse, quindi impossibile verificare CHI sta chiedendo (vedi
+ * lib/supabaseAuth.ts's resolveUser, campo `degraded`) — l'identificazione per-utente viene
+ * abbandonata e si usa la stessa chiave (pagata dal gestore dell'app) per chiunque abbia una
+ * sessione presente, anche non verificabile in questo momento. Spegnibile su Upstash, vedi
+ * lib/aiKeyCache.ts's isEmergencySharedKeyEnabled. Mai chiamata quando la verifica normale o
+ * quella via JWKS riescono — solo come ultima risorsa.
+ */
+export async function resolveEmergencySharedKey(): Promise<{
+  apiKey: string | null
+  userGender: string
+  breveSections: GuideSectionKey[]
+  lookupFailed: boolean
+}> {
+  const sharedKey = process.env.ANTHROPIC_API_KEY ?? null
+  const enabled = sharedKey ? await isEmergencySharedKeyEnabled() : false
+  return {
+    apiKey:        enabled ? sharedKey : null,
+    userGender:    'non_specificato',
+    breveSections: sanitizeBreveSections(undefined),
+    lookupFailed:  !enabled,
+  }
 }
