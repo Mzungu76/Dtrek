@@ -12,7 +12,7 @@ import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
-import { extractGuideNotices } from '@/lib/guideNotices'
+import { extractGuideNotices, parseNoticeSource } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
@@ -717,12 +717,29 @@ export default function GuideReader({
             {/* ── Stato del percorso — avvisi trovati dalla ricerca web di Giulia ──────────── */}
             {guideNotices.length > 0 && (
               <div className="mt-4 space-y-2">
-                {guideNotices.map((notice, i) => (
-                  <div key={i} className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-[13px] leading-relaxed text-amber-900">{notice}</p>
-                  </div>
-                ))}
+                {guideNotices.map((notice, i) => {
+                  const { text, url } = parseNoticeSource(notice)
+                  return (
+                    <div key={i} className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[13px] leading-relaxed text-amber-900">{text}</p>
+                        {url && (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors text-[11px] text-amber-800"
+                            title={url}
+                          >
+                            <Link2 className="w-3 h-3 shrink-0 text-amber-600" />
+                            <span className="truncate">Vai alla fonte</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
