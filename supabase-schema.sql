@@ -278,6 +278,14 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_concerns TEXT[];
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_environment_prefs TEXT[];
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ;
 
+-- Storico aggregato delle escursioni completate (lib/hikerHistory.ts) — usato dalla sezione guida
+-- "Su misura per te" (app/api/guide/route.ts) per confrontare un percorso programmato con le
+-- capacità/abitudini reali dell'utente. Aggiornato in modo incrementale (somme + ultime 5 uscite,
+-- non un ricalcolo completo) ad ogni escursione completata (Resoconto), con un backfill una tantum
+-- da tutte le attività già esistenti la prima volta che serve e non c'è ancora nulla. NULL finché
+-- non è mai stato calcolato.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_history_stats JSONB;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

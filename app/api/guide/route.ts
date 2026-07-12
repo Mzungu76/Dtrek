@@ -24,6 +24,8 @@ import { extractGuideNotices } from '@/lib/guideNotices'
 import { extractGuideSources } from '@/lib/guideSources'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
+import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
+import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,6 +152,36 @@ function poiDistance(m: number) {
   return m < 1000 ? `${m.toFixed(0)} m dal percorso` : `${(m / 1000).toFixed(1)} km dal percorso`
 }
 
+// ── Profilo + storico per la sezione "Su misura per te" ───────────────────────
+
+async function fetchHikerProfileForComfort(userId: string): Promise<{ experienceLevel: string | null; concerns: string[]; environmentPrefs: string[] }> {
+  const { data } = await supabase
+    .from('user_settings')
+    .select('hiker_experience_level, hiker_concerns, hiker_environment_prefs')
+    .eq('user_id', userId)
+    .maybeSingle()
+  return {
+    experienceLevel: (data?.hiker_experience_level as string | null) ?? null,
+    concerns: (data?.hiker_concerns as string[] | null) ?? [],
+    environmentPrefs: (data?.hiker_environment_prefs as string[] | null) ?? [],
+  }
+}
+
+/** Testo pronto per il prompt della sezione 'comfort' — vedi buildPrompt's comfortContext. */
+async function buildComfortContext(userId: string): Promise<string> {
+  const [profile, history] = await Promise.all([
+    fetchHikerProfileForComfort(userId),
+    readOrBackfillHistoryStats(userId),
+  ])
+  const lines = [
+    `Livello di esperienza dichiarato: ${profile.experienceLevel ?? 'non indicato'}`,
+    profile.concerns.length ? `Attenzioni indicate dall'utente: ${profile.concerns.map(concernLabel).join('; ')}` : `Nessuna attenzione particolare indicata`,
+    profile.environmentPrefs.length ? `Preferenze ambientali: ${profile.environmentPrefs.map(environmentPrefLabel).join('; ')}` : `Nessuna preferenza ambientale indicata`,
+    formatHistoryStatsBlock(history),
+  ]
+  return lines.join('\n')
+}
+
 export type GuideTier = 'breve' | 'approfondita'
 
 const TIER_CONFIG: Record<GuideTier, { maxTokens: number; instruction: string }> = {
@@ -175,6 +207,15 @@ i momenti più belli. Dai l'idea di cosa si prova davvero a camminare lì.`,
 Commenta (senza elencare i numeri, già visibili nell'app) quanto il percorso è adatto a chi lo affronta, i rischi
 principali indicati nella VALUTAZIONE PERSONALIZZATA e i punteggi di Trail Score/Sicurezza/Bellezza forniti sotto:
 dai un consiglio pratico su come affrontarli.`,
+  comfort: `## Su misura per te
+Usa il PROFILO E STORICO DI QUESTO ESCURSIONISTA fornito più sotto (se presente) per valutare a parole,
+in modo specifico e concreto, quanto QUESTO percorso è in linea con le sue capacità reali e le sue
+preferenze dichiarate — un'interpretazione razionale ed emotiva che affianca, non ripete, i punteggi
+numerici già mostrati (Trail Score, Comfort TrailScore, punteggio Sicurezza). Cita un confronto reale
+con il suo storico quando disponibile (es. "rispetto alle tue ultime uscite, che si aggirano su...") ed
+eventuali attenzioni legate alle sue limitazioni indicate, mai un consiglio generico valido per chiunque.
+Se il PROFILO E STORICO non è disponibile o è vuoto, dillo onestamente in una riga e continua comunque
+a essere utile commentando il percorso in assoluto, senza inventare dati sull'escursionista.`,
   luoghi: `## I luoghi da non perdere
 Approfondimento sui punti di interesse più significativi. Racconta la loro storia, le leggende,
 le curiosità che la maggior parte dei turisti non conosce. Rendi ogni luogo memorabile.`,
@@ -226,6 +267,10 @@ function buildPrompt(
   /** Quando presente, "Approfondisci" richiesto su UNA sola sezione (vedi POST sotto) — il resto
    *  della guida già scritta non viene toccato, quindi qui si chiede solo quella sezione. */
   sectionKeyOverride?: GuideSectionKey,
+  /** Profilo + storico dell'escursionista (lib/hikerProfile.ts + lib/hikerHistory.ts), già
+   *  formattato — solo per la sezione 'comfort' ("Su misura per te"), undefined quando quella
+   *  sezione non viene scritta in questa richiesta (risparmia la lettura Supabase altrimenti). */
+  comfortContext?: string,
 ): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
@@ -295,6 +340,8 @@ ${assessment?.suitabilityScore ? `ADATTA A: ${assessment.suitabilityScore}% degl
 ${assessmentBlock}
 
 ${scoresBlock ? `PUNTEGGI E SEGNALAZIONI (già mostrati graficamente nell'app, usali solo per commentare):\n${scoresBlock}` : ''}
+
+${comfortContext ? `PROFILO E STORICO DI QUESTO ESCURSIONISTA (usali SOLO per la sezione "Su misura per te"):\n${comfortContext}` : ''}
 
 LUOGHI CON VOCE WIKIPEDIA (usa questi come base per la narrazione storico-culturale):
 ${wikiBlock}
@@ -388,6 +435,11 @@ export async function POST(req: NextRequest) {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
+
+  // Va letta solo quando la sezione 'comfort' ("Su misura per te") è davvero tra quelle richieste
+  // in questa generazione — evita una lettura Supabase in più su ogni altra chiamata.
+  const needsComfortSection = sectionKey === 'comfort' || (!sectionKey && (tier === 'approfondita' || breveSections.includes('comfort')))
+  const comfortContext = needsComfortSection && user ? await buildComfortContext(user.id) : undefined
 
   let hike: PlannedHike
   let scores: DataScores
@@ -502,7 +554,7 @@ export async function POST(req: NextRequest) {
   })
 
   const client = new Anthropic({ apiKey })
-  const prompt = buildPrompt(hike, tier, nature, breveSections, scores, sectionKey)
+  const prompt = buildPrompt(hike, tier, nature, breveSections, scores, sectionKey, comfortContext)
   const { maxTokens } = TIER_CONFIG[tier]
   // sectionKey: niente [sottotitolo]/[avviso] (valgono solo per l'inizio di una guida intera) né
   // ricerca web di verifica (già fatta alla generazione iniziale) — vedi SYSTEM_SECTION.
