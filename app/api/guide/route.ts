@@ -115,9 +115,10 @@ viene sempre prima dell'entusiasmo: non minimizzare mai un rischio, una difficol
 nei dati solo per sembrare più incoraggiante, e non aggiungere previsioni o rassicurazioni ("ti piacerà
 sicuramente", "hai ottime probabilità di amarlo") quando non hai elementi concreti per affermarlo.
 
-Ti viene chiesto di riscrivere in maniera più ricca e approfondita UNA SOLA sezione già esistente di
-una guida che hai già scritto per questo percorso — le altre sezioni non fanno parte di questa
-richiesta e non vanno menzionate né riassunte. Scrivi direttamente il contenuto della sezione,
+Ti viene chiesto di scrivere UNA SOLA sezione, finora rimasta senza testo, di una guida che hai già
+scritto per questo percorso — le altre sezioni non fanno parte di questa richiesta e non vanno
+menzionate né riassunte. Rispetta la lunghezza indicata più sotto esattamente come faresti per
+qualunque altra sezione della stessa guida. Scrivi direttamente il contenuto della sezione,
 cominciando con il suo titolo preceduto da ## (due cancelletti e uno spazio), senza nessun commento
 sul tuo processo prima o dopo.
 
@@ -340,7 +341,7 @@ function buildPrompt(
   const sectionTitles = sectionsToWrite.map(k => GUIDE_SECTIONS.find(s => s.key === k)!.title).join(', ')
 
   return `${sectionKeyOverride
-    ? `Scrivi in maniera più approfondita e ricca UNA singola sezione già esistente di una guida escursionistica per questo percorso (le altre sezioni sono già scritte e non vanno toccate), analizzando tutti i dati disponibili qui sotto:`
+    ? `Scrivi UNA singola sezione, finora senza testo, di una guida escursionistica già esistente per questo percorso (le altre sezioni sono già scritte e non vanno toccate), analizzando tutti i dati disponibili qui sotto:`
     : `Crea una guida escursionistica per questo percorso, analizzando tutti i dati disponibili qui sotto:`}
 
 NOME: ${hike.title}
@@ -444,9 +445,12 @@ export async function POST(req: NextRequest) {
     if (body.length === 'breve' || body.tier === 'breve') tier = 'breve'
     else tier = 'approfondita'
     hikeFallback = body.hikeFallback && typeof body.hikeFallback === 'object' ? body.hikeFallback : undefined
-    // "Approfondisci" su una sola sezione (vedi buildPrompt/SYSTEM_SECTION) — forza tier
-    // 'approfondita' per lo stile di scrittura, ma la generazione riguarda solo quella sezione.
-    if (isGuideSectionKey(body.sectionKey)) { sectionKey = body.sectionKey; tier = 'approfondita' }
+    // "Approfondisci" su una sola sezione (vedi buildPrompt/SYSTEM_SECTION) — stessa lunghezza
+    // "breve" delle altre sezioni automatiche (tier deciso normalmente sopra, di solito 'breve'
+    // dato che il client lo manda esplicitamente): riguarda solo quella sezione, non la rende
+    // improvvisamente una sezione lunghissima. La versione integrale resta un'azione a sé (il
+    // pulsante "Sblocca la guida integrale", che manda tier 'approfondita' su tutte le sezioni).
+    if (isGuideSectionKey(body.sectionKey)) sectionKey = body.sectionKey
   } catch {
     return new Response('{"error":"Body non valido"}', {
       status: 400, headers: { 'Content-Type': 'application/json' },
