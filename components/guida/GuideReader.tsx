@@ -334,7 +334,9 @@ export default function GuideReader({
 
       if (!res.ok) {
         const j = await res.json().catch(() => ({ error: 'Errore sconosciuto' }))
-        throw new Error(j.error ?? `HTTP ${res.status}`)
+        // message (se presente) è il testo pensato per l'utente — error è solo il codice
+        // macchina (es. "ai_temporarily_unavailable"), non va mostrato direttamente.
+        throw new Error(j.message ?? j.error ?? `HTTP ${res.status}`)
       }
 
       const reader  = res.body!.getReader()
@@ -434,7 +436,9 @@ export default function GuideReader({
 
       if (!res.ok) {
         const j = await res.json().catch(() => ({ error: 'Errore sconosciuto' }))
-        throw new Error(j.error ?? `HTTP ${res.status}`)
+        // message (se presente) è il testo pensato per l'utente — error è solo il codice
+        // macchina (es. "ai_temporarily_unavailable"), non va mostrato direttamente.
+        throw new Error(j.message ?? j.error ?? `HTTP ${res.status}`)
       }
 
       const reader  = res.body!.getReader()

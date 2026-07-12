@@ -482,7 +482,21 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id)
       .single()
 
-    if (error || !data) {
+    // PGRST116 = .single() non ha trovato righe: genuinamente "non esiste" (o non è di questo
+    // utente). Qualunque ALTRO errore (Supabase irraggiungibile, timeout...) non è la stessa cosa
+    // — dire "percorso non trovato" per un blackout temporaneo farebbe pensare all'utente di aver
+    // perso il percorso, quando basta riprovare tra poco. Stesso principio già usato altrove
+    // (es. app/api/user-settings/route.ts) per distinguere i due casi.
+    if (error && error.code !== 'PGRST116') {
+      return new Response(
+        JSON.stringify({
+          error: 'ai_temporarily_unavailable',
+          message: 'Non riesco a recuperare il percorso in questo momento (Supabase non raggiungibile) — riprova tra poco.',
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    if (!data) {
       return new Response('{"error":"Percorso non trovato"}', {
         status: 404, headers: { 'Content-Type': 'application/json' },
       })
