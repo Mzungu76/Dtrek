@@ -6,6 +6,7 @@ import { normalizeBboxKey } from '@/lib/geoUtils'
 import { supabase } from '@/lib/supabase'
 import { NATURA2000_DATASET } from '@/lib/geo/datasetConfig'
 import { fetchNatura2000Polygons, Natura2000UnavailableError, type Natura2000Feature } from '@/lib/natura2000/natura2000Client'
+import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
 // Designations change on a scale of years, not days — same reasoning as PAI's 90-day TTL but
 // longer, since Natura2000 site boundaries are even more stable than hydrogeological risk plans.
@@ -17,8 +18,10 @@ export async function fetchNatura2000PolygonsCached(bbox: string): Promise<Natur
   }
   const bboxKey = normalizeBboxKey(bbox)
 
-  supabase.from('natura2000_cache').delete().lt('expires_at', new Date().toISOString())
-    .then(({ error }) => { if (error) console.warn('[natura2000_cache] cleanup error:', error.message) })
+  if (shouldRunCleanup('natura2000_cache')) {
+    supabase.from('natura2000_cache').delete().lt('expires_at', new Date().toISOString())
+      .then(({ error }) => { if (error) console.warn('[natura2000_cache] cleanup error:', error.message) })
+  }
 
   const { data: cached } = await supabase
     .from('natura2000_cache')

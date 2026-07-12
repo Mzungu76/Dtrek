@@ -6,6 +6,7 @@ import { normalizeBboxKey } from '@/lib/geoUtils'
 import { supabase } from '@/lib/supabase'
 import { GEOLOGIA_DATASET } from '@/lib/geo/datasetConfig'
 import { fetchGeologiaAtPoint, GeologiaUnavailableError, type GeologiaFeature } from '@/lib/geologia/geologiaClient'
+import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
 // Litologia non cambia nel tempo a parità di punto — TTL lungo, quasi permanente.
 const GEOLOGIA_CACHE_TTL_MS = 180 * 24 * 60 * 60 * 1000
@@ -32,8 +33,10 @@ export async function fetchGeologiaAtPointCached(lat: number, lon: number): Prom
   // for its own sake.
   const pointKey = normalizeBboxKey(`${lat},${lon}`)
 
-  supabase.from('geologia_cache').delete().lt('expires_at', new Date().toISOString())
-    .then(({ error }) => { if (error) console.warn('[geologia_cache] cleanup error:', error.message) })
+  if (shouldRunCleanup('geologia_cache')) {
+    supabase.from('geologia_cache').delete().lt('expires_at', new Date().toISOString())
+      .then(({ error }) => { if (error) console.warn('[geologia_cache] cleanup error:', error.message) })
+  }
 
   const { data: cached } = await withTimeout(
     supabase

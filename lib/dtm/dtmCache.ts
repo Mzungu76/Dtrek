@@ -6,6 +6,7 @@
 import { normalizeBboxKey } from '@/lib/geoUtils'
 import { supabase } from '@/lib/supabase'
 import { fetchDtmTile, DtmUnavailableError, type DtmTile } from '@/lib/dtm/dtmClient'
+import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
 // Terrain elevation doesn't change over time — same reasoning as geologia's 180-day TTL,
 // treated as quasi-permanent rather than uso-suolo's shorter 30-day (land cover) TTL.
@@ -35,8 +36,10 @@ export async function fetchDtmTileCached(bbox: string): Promise<DtmTile | null> 
   }
   const bboxKey = normalizeBboxKey(bbox)
 
-  supabase.from('dtm_cache').delete().lt('expires_at', new Date().toISOString())
-    .then(({ error }) => { if (error) console.warn('[dtm_cache] cleanup error:', error.message) })
+  if (shouldRunCleanup('dtm_cache')) {
+    supabase.from('dtm_cache').delete().lt('expires_at', new Date().toISOString())
+      .then(({ error }) => { if (error) console.warn('[dtm_cache] cleanup error:', error.message) })
+  }
 
   const { data: cached } = await withTimeout(
     supabase

@@ -7,6 +7,7 @@ import { fetchWikidataPois } from '@/lib/pois/wikidataSource'
 import { fetchOverpassPois } from '@/lib/pois/overpassSource'
 import { deduplicateByProximity } from '@/lib/pois/dedupe'
 import { SUCCESS_CACHE_CONTROL } from '@/lib/apiCacheHeaders'
+import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,9 +28,12 @@ export async function GET(req: NextRequest) {
 
     const bboxKey = normalizeBboxKey(bbox)
 
-    // Lazy cleanup of expired entries (fire-and-forget — .then() triggers lazy execution)
-    supabase.from('poi_cache').delete().lt('expires_at', new Date().toISOString())
-      .then(({ error }) => { if (error) console.warn('[poi_cache] cleanup error:', error.message) })
+    // Lazy cleanup of expired entries (fire-and-forget — .then() triggers lazy execution),
+    // throttled across requests — see lib/cacheCleanupThrottle.ts
+    if (shouldRunCleanup('poi_cache')) {
+      supabase.from('poi_cache').delete().lt('expires_at', new Date().toISOString())
+        .then(({ error }) => { if (error) console.warn('[poi_cache] cleanup error:', error.message) })
+    }
 
     // Check cache
     const { data: cached } = await supabase
