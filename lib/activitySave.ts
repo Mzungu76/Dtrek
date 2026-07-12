@@ -136,5 +136,20 @@ export async function saveActivityWithEnrichment(
     await deletePlanned(opts.linkedPlannedId).catch(() => {})
   }
 
+  // Aggiorna lo storico aggregato (lib/hikerHistory.ts) usato dalla sezione guida "Su misura per
+  // te" — fire-and-forget, non deve mai bloccare o far fallire il salvataggio dell'escursione.
+  // Unico punto in cui una NUOVA escursione completata viene salvata (vedi commento sopra sulla
+  // funzione condivisa), quindi il posto giusto per incrementare, non un'edit successiva.
+  fetch('/api/user-settings/history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      distanceMeters: stored.distanceMeters,
+      elevationGain: stored.elevationGain,
+      totalTimeSeconds: stored.totalTimeSeconds,
+      completedAt: stored.startTime,
+    }),
+  }).catch(() => {})
+
   return stored
 }

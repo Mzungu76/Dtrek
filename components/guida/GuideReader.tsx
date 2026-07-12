@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
 import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
@@ -475,16 +476,30 @@ export default function GuideReader({
     onHikeUpdate,
   ])
 
+  // null finché non si sa ancora (in caricamento) — in quel caso l'effetto sotto aspetta invece
+  // di generare comunque, ma un fallimento del fetch non deve bloccare la generazione automatica
+  // per sempre: in quel caso si assume "sì" (comportamento di prima di questa impostazione).
+  const [autoGenEnabled, setAutoGenEnabled] = useState<boolean | null>(null)
+  useEffect(() => {
+    getUserSettingsCached()
+      .then(d => setAutoGenEnabled(!Array.isArray(d.guideBreveSections) || d.guideBreveSections.length > 0))
+      .catch(() => setAutoGenEnabled(true))
+  }, [])
+
   // Auto-generate the Breve guide the moment enrichment data has settled — no button, no user
   // action. Only fires once per hike (guarded by the ref) and only if this account can call
   // Claude at all; otherwise the "no access" card below invites the user to add a key instead.
+  // Salta del tutto se l'utente ha scelto zero sezioni automatiche in Impostazioni (vedi
+  // components/profilo/SectionGuida.tsx) — evita una chiamata AI per una guida che non
+  // scriverebbe comunque nessun testo.
   useEffect(() => {
     if (hike.cachedGuide || generating) return
     if (!enrichmentReady || hasAiAccess !== true) return
+    if (autoGenEnabled !== true) return
     if (autoTriggeredForRef.current === hike.id) return
     autoTriggeredForRef.current = hike.id
     generate('breve')
-  }, [hike.id, hike.cachedGuide, enrichmentReady, hasAiAccess]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike.id, hike.cachedGuide, enrichmentReady, hasAiAccess, autoGenEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function scrollToSection(idx: number) {
     sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Loader2, CalendarClock, BookOpen } from 'lucide-react'
-import { GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, MAX_BREVE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
+import { GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 
 const PRESETS = [7, 14, 30, 60, 90]
@@ -21,7 +21,10 @@ export default function SectionGuida() {
     getUserSettingsCached()
       .then(d => {
         if (d.guidePendingDays) setDays(d.guidePendingDays)
-        if (Array.isArray(d.guideBreveSections) && d.guideBreveSections.length) setBreveSections(d.guideBreveSections as GuideSectionKey[])
+        // Anche un array vuoto è uno stato valido e intenzionale (nessuna sezione automatica) —
+        // non va scambiato per "non ancora caricato", altrimenti l'interfaccia mostrerebbe il
+        // default invece della scelta esplicita dell'utente.
+        if (Array.isArray(d.guideBreveSections)) setBreveSections(d.guideBreveSections as GuideSectionKey[])
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -37,15 +40,8 @@ export default function SectionGuida() {
 
   async function toggleSection(key: GuideSectionKey) {
     const already = breveSections.includes(key)
-    let next: GuideSectionKey[]
-    if (already) {
-      next = breveSections.filter(k => k !== key)
-    } else if (breveSections.length >= MAX_BREVE_SECTIONS) {
-      // Al limite: la nuova scelta sostituisce la meno recente (prima selezionata).
-      next = [...breveSections.slice(1), key]
-    } else {
-      next = [...breveSections, key]
-    }
+    // Nessun tetto massimo: l'utente può automatizzare da zero a tutte le sezioni.
+    const next = already ? breveSections.filter(k => k !== key) : [...breveSections, key]
     setBreveSections(next)
     setSavingSections(true); setSectionsStatus(null)
     await updateUserSettings({ guideBreveSections: next })
@@ -102,9 +98,11 @@ export default function SectionGuida() {
           <div>
             <h2 className="text-sm font-semibold text-stone-800">Sezioni della guida breve</h2>
             <p className="text-xs text-stone-400">
-              La guida breve viene generata da sola all&apos;import di un percorso. Scegli al massimo {MAX_BREVE_SECTIONS} sezioni
-              per cui Giulia scrive un testo narrativo — le altre restano visibili con i loro dati (mappa, punteggi, POI…)
-              ma senza racconto, finché non premi &quot;Approfondisci&quot;.
+              La guida breve viene generata da sola all&apos;import di un percorso. Scegli per quali sezioni
+              Giulia scrive subito un testo narrativo — da nessuna a tutte, a tua scelta: più ne scegli,
+              più lunga (e più costosa in token AI) sarà ogni generazione automatica. Le sezioni non scelte
+              restano comunque visibili con i loro dati (mappa, punteggi, POI…) ma senza racconto, finché
+              non premi &quot;Approfondisci&quot; su quella specifica sezione.
             </p>
           </div>
         </div>
