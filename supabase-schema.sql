@@ -90,6 +90,10 @@ CREATE TABLE IF NOT EXISTS trail_difficulty_markers (
 CREATE INDEX IF NOT EXISTS idx_difficulty_markers_planned_hike ON trail_difficulty_markers (planned_hike_id);
 CREATE INDEX IF NOT EXISTS idx_difficulty_markers_latlon       ON trail_difficulty_markers (lat, lon);
 
+ALTER TABLE trail_difficulty_markers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "trail_difficulty_markers_public_read" ON trail_difficulty_markers;
+CREATE POLICY "trail_difficulty_markers_public_read" ON trail_difficulty_markers FOR SELECT USING (true);
+
 
 -- ── Impostazioni utente (chiave API Claude, abbonamento) ────
 CREATE TABLE IF NOT EXISTS user_settings (
