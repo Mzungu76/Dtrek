@@ -15,13 +15,27 @@ interface QAEntry {
 
 const MAX_QUESTION_LENGTH = 300
 
+/** Copia minima dei dati del percorso già disponibili qui in locale (hike è cache-first, vedi
+ *  lib/plannedStore.ts) — mandata al server solo come fallback per quando la sua lettura Supabase
+ *  fresca fallisse (blackout), non sostituisce mai quella lettura quando riesce. */
+export interface GuideQAHikeFallback {
+  title?: string
+  distanceMeters?: number
+  elevationGain?: number
+  estimatedTimeSeconds?: number
+  assessment?: unknown
+  cachedPois?: unknown
+  cachedPoiWiki?: unknown
+  cachedGuide?: string
+}
+
 /** Domande e risposte sul percorso — l'utente chiede qualcosa di specifico sulla guida appena
  *  letta e Giulia risponde in modo sintetico, solo se la domanda è pertinente al percorso.
  *  La risposta arriva in streaming (NDJSON, vedi app/api/guide/qa/route.ts) con aggiornamenti sullo
  *  stato ("sto verificando online…") così l'attesa non è mai un semplice spinner muto.
  *  Ogni domanda/risposta è persistita lato server (tabella guide_questions) e ricaricata qui al
  *  primo render, così la cronologia sopravvive alla chiusura della guida. */
-export default function GuideQA({ hikeId }: { hikeId: string }) {
+export default function GuideQA({ hikeId, hikeFallback }: { hikeId: string; hikeFallback?: GuideQAHikeFallback }) {
   const [question, setQuestion] = useState('')
   const [entries,  setEntries]  = useState<QAEntry[]>([])
   const [asking,   setAsking]   = useState(false)
@@ -57,7 +71,7 @@ export default function GuideQA({ hikeId }: { hikeId: string }) {
       const res = await fetch('/api/guide/qa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hikeId, question: q }),
+        body: JSON.stringify({ hikeId, question: q, hikeFallback }),
       })
 
       if (!res.ok || !res.body) {

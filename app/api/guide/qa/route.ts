@@ -13,6 +13,21 @@ export const maxDuration = 120  // ricerca web + risposta può richiedere più d
 
 const MAX_QUESTION_LENGTH = 300
 
+// Copia dei campi rilevanti del percorso, mandata dal client (che li ha già in locale, vedi
+// lib/plannedStore.ts) come fallback SOLO quando la lettura Supabase per questo hikeId fallisce —
+// non verificata/non affidabile quanto la lettura dal DB, usata solo per non bloccare del tutto
+// la domanda durante un blackout Supabase.
+interface HikeFallback {
+  title?: string
+  distanceMeters?: number
+  elevationGain?: number
+  estimatedTimeSeconds?: number
+  assessment?: PlannedHike['assessment']
+  cachedPois?: PlannedHike['cachedPois']
+  cachedPoiWiki?: PlannedHike['cachedPoiWiki']
+  cachedGuide?: string
+}
+
 // Stessa convenzione a tag delimitati usata dal resto della Guida (vedi [sottotitolo]/[curiosita]
 // in app/api/guide/route.ts): la prima riga della risposta segnala se la domanda era pertinente,
 // così l'UI può distinguere una risposta vera da un rifiuto educato senza un'altra chiamata AI.
@@ -141,10 +156,12 @@ export async function POST(req: NextRequest) {
 
     let hikeId: string
     let question: string
+    let hikeFallback: HikeFallback | undefined
     try {
       const body = await req.json()
       hikeId = body.hikeId
       question = typeof body.question === 'string' ? body.question.trim() : ''
+      hikeFallback = body.hikeFallback && typeof body.hikeFallback === 'object' ? body.hikeFallback : undefined
       if (!hikeId) throw new Error('hikeId mancante')
       if (!question) throw new Error('Domanda mancante')
       if (question.length > MAX_QUESTION_LENGTH) {
@@ -161,26 +178,50 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id)
       .single()
 
-    if (error || !data) {
+    let hike: PlannedHike
+    let guideSource: string
+
+    if (!error && data) {
+      hike = {
+        id:                   hikeId,
+        title:                data.title,
+        createdAt:            '',
+        distanceMeters:       data.distance_meters,
+        elevationGain:        data.elevation_gain,
+        elevationLoss:        0,
+        altitudeMax:          0,
+        altitudeMin:          0,
+        estimatedTimeSeconds: data.estimated_time_seconds,
+        assessment:           data.assessment      ?? undefined,
+        cachedPois:           data.cached_pois     ?? undefined,
+        cachedPoiWiki:        data.cached_poi_wiki ?? undefined,
+      }
+      guideSource = (data.cached_guide as string | null) ?? ''
+    } else if (hikeFallback) {
+      // Supabase irraggiungibile per questo percorso — usa la copia che il client ha già in
+      // locale (lib/plannedStore.ts, cache-first) invece di bloccare del tutto la domanda. Meno
+      // affidabile (non verificata, potenzialmente non aggiornatissima) ma limitata a costruire
+      // il prompt di QUESTA richiesta: nessun dato di altri utenti coinvolto, nessuna scrittura.
+      hike = {
+        id:                   hikeId,
+        title:                hikeFallback.title ?? 'Percorso',
+        createdAt:            '',
+        distanceMeters:       hikeFallback.distanceMeters ?? 0,
+        elevationGain:        hikeFallback.elevationGain ?? 0,
+        elevationLoss:        0,
+        altitudeMax:          0,
+        altitudeMin:          0,
+        estimatedTimeSeconds: hikeFallback.estimatedTimeSeconds ?? 0,
+        assessment:           hikeFallback.assessment,
+        cachedPois:           hikeFallback.cachedPois,
+        cachedPoiWiki:        hikeFallback.cachedPoiWiki,
+      }
+      guideSource = hikeFallback.cachedGuide ?? ''
+    } else {
       return NextResponse.json({ error: 'Percorso non trovato' }, { status: 404 })
     }
 
-    const hike: PlannedHike = {
-      id:                   hikeId,
-      title:                data.title,
-      createdAt:            '',
-      distanceMeters:       data.distance_meters,
-      elevationGain:        data.elevation_gain,
-      elevationLoss:        0,
-      altitudeMax:          0,
-      altitudeMin:          0,
-      estimatedTimeSeconds: data.estimated_time_seconds,
-      assessment:           data.assessment      ?? undefined,
-      cachedPois:           data.cached_pois     ?? undefined,
-      cachedPoiWiki:        data.cached_poi_wiki ?? undefined,
-    }
-
-    const guideExcerpt = ((data.cached_guide as string | null) ?? '').slice(0, 6000)
+    const guideExcerpt = guideSource.slice(0, 6000)
     const context = buildContext(hike, guideExcerpt)
     const system  = `${SYSTEM_BASE}\n\n${context}`
 

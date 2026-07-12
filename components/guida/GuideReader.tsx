@@ -742,7 +742,19 @@ export default function GuideReader({
             )}
 
             {hasGuide && !generating && hasAiAccess === true && (
-              <GuideQA hikeId={hike.id} />
+              <GuideQA
+                hikeId={hike.id}
+                hikeFallback={{
+                  title:                hike.title,
+                  distanceMeters:       hike.distanceMeters,
+                  elevationGain:        hike.elevationGain,
+                  estimatedTimeSeconds: hike.estimatedTimeSeconds,
+                  assessment:           hike.assessment,
+                  cachedPois:           hike.cachedPois,
+                  cachedPoiWiki:        hike.cachedPoiWiki,
+                  cachedGuide:          guideText,
+                }}
+              />
             )}
 
             {/* ── Bottom actions ──────────────────────────────────────────── */}
