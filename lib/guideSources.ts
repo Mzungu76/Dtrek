@@ -7,6 +7,10 @@ const SOURCES_RE = /\s*\[fonti\]([\s\S]*?)\[\/fonti\]\s*$/i
 export interface GuideSource {
   url: string
   title: string
+  // Foto di riferimento del percorso letta dal meta tag og:image della pagina fonte (vedi
+  // lib/sourceImageFetch.ts) — presente al massimo su UNA fonte per guida, quella la cui pagina
+  // ne espone una. Assente sulle guide generate prima di questo campo.
+  imageUrl?: string
 }
 
 export interface ExtractedGuideSources {
@@ -22,7 +26,9 @@ export function extractGuideSources(rawGuideText: string): ExtractedGuideSources
   try {
     const parsed = JSON.parse(match[1])
     if (Array.isArray(parsed)) {
-      sources = parsed.filter((s): s is GuideSource => typeof s?.url === 'string' && typeof s?.title === 'string')
+      sources = parsed
+        .filter((s): s is GuideSource => typeof s?.url === 'string' && typeof s?.title === 'string')
+        .map(s => typeof s.imageUrl === 'string' ? s : { url: s.url, title: s.title })
     }
   } catch {
     sources = []
