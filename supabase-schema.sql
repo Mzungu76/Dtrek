@@ -270,6 +270,14 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_guide_sources JSONB;
 -- NULL/vuoto ⇒ default applicato lato server: prima_di_partire + il_percorso.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_breve_sections TEXT[];
 
+-- Profilo escursionista raccolto dal wizard di onboarding (app/components/onboarding) — usato
+-- dalla valutazione di comfort AI nella ricerca percorsi con l'AI (vedi app/api/route-search/route.ts).
+-- Facoltativo in ogni sua parte: NULL ⇒ l'utente non ha ancora completato/aperto il wizard.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_experience_level TEXT CHECK (hiker_experience_level IN ('principiante','intermedio','esperto'));
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_concerns TEXT[];
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_environment_prefs TEXT[];
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

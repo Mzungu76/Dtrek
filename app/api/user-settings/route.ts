@@ -3,6 +3,7 @@ import { supabase }            from '@/lib/supabase'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { sanitizeBreveSections, DEFAULT_BREVE_SECTIONS } from '@/lib/guideSections'
 import { writeCachedAiSettings, deleteCachedAiSettings } from '@/lib/aiKeyCache'
+import { isHikerExperienceLevel, sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
 
 /** Tanaka formula for max heart rate: 211 − 0.64 × age */
 function deriveFCmax(age: number): number {
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at')
     .eq('user_id', user.id)
     .single()
 
@@ -88,6 +89,10 @@ export async function GET(req: NextRequest) {
     startingLon:              (data?.starting_lon               as number) ?? null,
     guidePendingDays:         (data?.guide_pending_days         as number) ?? 30,
     guideBreveSections:       data?.guide_breve_sections ? sanitizeBreveSections(data.guide_breve_sections) : DEFAULT_BREVE_SECTIONS,
+    hikerExperienceLevel:     (data?.hiker_experience_level     as string) ?? null,
+    hikerConcerns:            sanitizeHikerConcerns(data?.hiker_concerns),
+    hikerEnvironmentPrefs:    sanitizeHikerEnvironmentPrefs(data?.hiker_environment_prefs),
+    onboardingCompletedAt:    (data?.onboarding_completed_at    as string) ?? null,
   })
 }
 
@@ -125,6 +130,10 @@ export async function POST(req: NextRequest) {
     startingLon?: number | null
     guidePendingDays?: number
     guideBreveSections?: string[]
+    hikerExperienceLevel?: string | null
+    hikerConcerns?: string[]
+    hikerEnvironmentPrefs?: string[]
+    onboardingCompletedAt?: string | null
   }
 
   const upsertData: Record<string, unknown> = {
@@ -247,6 +256,23 @@ export async function POST(req: NextRequest) {
 
   if (body.guideBreveSections !== undefined) {
     upsertData.guide_breve_sections = sanitizeBreveSections(body.guideBreveSections)
+  }
+
+  // Profilo escursionista (wizard di onboarding / sezione profilo) — vedi lib/hikerProfile.ts
+  if (body.hikerExperienceLevel !== undefined) {
+    if (body.hikerExperienceLevel !== null && !isHikerExperienceLevel(body.hikerExperienceLevel)) {
+      return NextResponse.json({ error: 'hikerExperienceLevel non valido' }, { status: 400 })
+    }
+    upsertData.hiker_experience_level = body.hikerExperienceLevel
+  }
+  if (body.hikerConcerns !== undefined) {
+    upsertData.hiker_concerns = sanitizeHikerConcerns(body.hikerConcerns)
+  }
+  if (body.hikerEnvironmentPrefs !== undefined) {
+    upsertData.hiker_environment_prefs = sanitizeHikerEnvironmentPrefs(body.hikerEnvironmentPrefs)
+  }
+  if (body.onboardingCompletedAt !== undefined) {
+    upsertData.onboarding_completed_at = body.onboardingCompletedAt
   }
 
   let { error } = await supabase

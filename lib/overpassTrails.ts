@@ -58,15 +58,8 @@ function displayName(tags: Record<string, string> | undefined, id: number): { na
 // Deliberately does NOT require a `name` tag — many real, maintained CAI/
 // regional hiking relations carry only a `ref` (e.g. "CAI 302"), and
 // excluding them was the main cause of too-few-results in an area.
-export async function queryHikingRelationsInBbox(
-  minLat: number, minLon: number, maxLat: number, maxLon: number, limit: number,
-): Promise<HikingRouteCandidate[]> {
-  const query = `[out:json][timeout:25][maxsize:8388608];
-relation["type"="route"]["route"="hiking"](${minLat},${minLon},${maxLat},${maxLon});
-out tags ${limit};`
-
-  const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
-  const candidates: HikingRouteCandidate[] = (json.elements ?? [])
+function mapAndSortCandidates(elements: (OsmRelation | OsmWay)[]): HikingRouteCandidate[] {
+  const candidates: HikingRouteCandidate[] = elements
     .filter((e): e is OsmRelation => e.type === 'relation')
     .map(e => {
       const { name, hasName } = displayName(e.tags, e.id)
@@ -81,6 +74,73 @@ out tags ${limit};`
   })
 
   return candidates
+}
+
+export async function queryHikingRelationsInBbox(
+  minLat: number, minLon: number, maxLat: number, maxLon: number, limit: number,
+): Promise<HikingRouteCandidate[]> {
+  const query = `[out:json][timeout:25][maxsize:8388608];
+relation["type"="route"]["route"="hiking"](${minLat},${minLon},${maxLat},${maxLon});
+out tags ${limit};`
+
+  const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
+  return mapAndSortCandidates(json.elements ?? [])
+}
+
+const NOMINATIM_USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
+
+/**
+ * Risolve un testo libero (regione/provincia/comune/parco) in un bbox via Nominatim — usato
+ * dalla ricerca percorsi con l'AI (app/api/route-search/route.ts) per restringere la successiva
+ * ricerca Overpass per nome a una zona plausibile, invece di cercare su tutta Italia.
+ * Nessuna chiave richiesta (endpoint pubblico OSM), ma un solo risultato per non fare scelte
+ * ambigue al posto dell'utente — se il testo è troppo vago, ritorna null e il chiamante procede
+ * senza filtro geografico (ricerca per nome su scala nazionale, più lenta ma non bloccante).
+ */
+export async function resolveAreaBbox(areaText: string): Promise<[number, number, number, number] | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
+      q: areaText, format: 'json', limit: '1', countrycodes: 'it',
+    })}`
+    const res = await fetch(url, {
+      headers: { 'User-Agent': NOMINATIM_USER_AGENT },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) return null
+    const results = (await res.json()) as Array<{ boundingbox: [string, string, string, string] }>
+    const hit = results[0]
+    if (!hit) return null
+    const [minLatS, maxLatS, minLonS, maxLonS] = hit.boundingbox
+    return [parseFloat(minLatS), parseFloat(minLonS), parseFloat(maxLatS), parseFloat(maxLonS)]
+  } catch {
+    return null
+  }
+}
+
+// Bbox approssimativo dell'Italia — usato come limite quando resolveAreaBbox non ha risolto
+// nulla, per tenere la query Overpass comunque limitata invece che davvero globale.
+const ITALY_BBOX: [number, number, number, number] = [35.2, 6.6, 47.1, 18.6]
+
+/**
+ * Cerca relazioni escursionistiche OSM il cui nome contiene (case-insensitive) `nameQuery`,
+ * entro un bbox (di solito quello di resolveAreaBbox). Usata dalla ricerca AI per verificare se
+ * un percorso proposto dal modello ha davvero una traccia GPS reale su OpenStreetMap.
+ */
+export async function searchHikingRoutesByName(
+  nameQuery: string,
+  bbox?: [number, number, number, number] | null,
+  limit = 8,
+): Promise<HikingRouteCandidate[]> {
+  const [minLat, minLon, maxLat, maxLon] = bbox ?? ITALY_BBOX
+  // Overpass regex value — solo lettere/cifre/spazi arrivano da nameQuery in pratica (nomi di
+  // percorsi), ma i caratteri regex-speciali vengono comunque neutralizzati per sicurezza.
+  const escaped = nameQuery.replace(/[[\]{}()*+?.,\\^$|#\s]/g, s => s === ' ' ? '.*' : `\\${s}`)
+  const query = `[out:json][timeout:25][maxsize:8388608];
+relation["type"="route"]["route"="hiking"]["name"~"${escaped}",i](${minLat},${minLon},${maxLat},${maxLon});
+out tags ${limit};`
+
+  const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
+  return mapAndSortCandidates(json.elements ?? [])
 }
 
 export function parseOsmDistance(s?: string): number | null {

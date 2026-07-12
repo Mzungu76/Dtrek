@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
-import ManualPlanUploader from '@/components/upload/ManualPlanUploader'
+import ManualImportChoice from '@/components/upload/ManualImportChoice'
 import FromActivityUploader from '@/components/upload/FromActivityUploader'
 import { Upload, Mountain, MapPin, PencilLine, History } from 'lucide-react'
 
@@ -90,7 +90,7 @@ function UploadPageInner() {
 
         {tab === 'activity' && <ActivityUploader />}
         {tab === 'gpx' && gpxSource === 'file' && <GpxUploader />}
-        {tab === 'gpx' && gpxSource === 'manual' && <ManualPlanUploader />}
+        {tab === 'gpx' && gpxSource === 'manual' && <ManualImportChoice />}
         {tab === 'gpx' && gpxSource === 'from-activity' && <FromActivityUploader />}
       </main>
     </div>
