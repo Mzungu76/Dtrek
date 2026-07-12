@@ -27,6 +27,15 @@ parco, il nome anche solo parziale di un percorso. Usa lo strumento di ricerca w
 percorsi reali ed esistenti che corrispondono. Preferisci fonti ufficiali quando possibili (enti
 parco, CAI, comuni, siti di sentieristica regionale).
 
+Fin dalla PRIMA ricerca (non solo se l'escursionista te lo richiede di nuovo) cerca la combinazione
+migliore tra pertinenza e disponibilità di una traccia scaricabile: la prima pagina che trovi su un
+percorso è spesso Wikiloc, che mostra la traccia solo come mappa interattiva senza download diretto
+— non fermarti lì. Per ciascun percorso che stai per proporre, prova anche una ricerca mirata tipo
+"nome del percorso gpx download" o "nome del percorso traccia CAI/parco" per vedere se esiste una
+fonte con download diretto, PRIMA di scrivere la risposta finale, non dopo. Quando due percorsi sono
+ugualmente pertinenti alla richiesta, preferisci nell'ordine quello per cui hai trovato una fonte
+scaricabile.
+
 Devi rispondere SEMPRE ed ESCLUSIVAMENTE in uno di questi due formati, senza nessun testo fuori dai
 tag (niente commenti sul tuo processo di ricerca, niente introduzioni):
 
@@ -38,7 +47,8 @@ Le opzioni sono facoltative (omettile se non hai suggerimenti concreti da propor
 massimo 4, brevi (poche parole ciascuna), pensate come risposte rapide cliccabili.
 
 2) Se hai abbastanza informazioni, restituisci un elenco di percorsi candidati reali (da 1 a 4), in
-   ordine di pertinenza rispetto alla richiesta:
+   ordine di pertinenza rispetto alla richiesta — a parità di pertinenza, quelli con una fonte GPX
+   scaricabile (vedi gpxCandidateUrls più sotto) vengono prima:
 [risultati][{"name":"...","zone":"...","searchName":"...","searchArea":"...","distanceKm":12.4,"elevationGainM":180,"difficulty":"facile","description":"...","sourceUrl":"...","gpxCandidateUrls":[],"comfortVerdict":"adatto","comfortNote":"..."}][/risultati]
 Dove il valore tra [risultati] e [/risultati] è un array JSON valido su una sola riga (senza a capo
 dentro il JSON), con questi campi per ogni candidato:
@@ -265,9 +275,20 @@ export async function POST(req: NextRequest) {
     response = await client.messages.create({
       model: MODEL,
       max_tokens: 2000,
-      system: `${SYSTEM}\n\nPROFILO E STORICO DI QUESTO ESCURSIONISTA (usali per comfortVerdict/comfortNote):\n${profileBlock}`,
+      // Blocco unico con cache_control: il profilo/storico non cambia da un turno all'altro della
+      // STESSA conversazione (es. il giro di chiarimento "trova anche altri"), quindi Anthropic
+      // riusa il prefisso già processato invece di ripagarlo per intero ad ogni turno — l'unico
+      // caso in cui questo endpoint viene richiamato più volte a distanza di pochi secondi.
+      system: [{
+        type: 'text',
+        text: `${SYSTEM}\n\nPROFILO E STORICO DI QUESTO ESCURSIONISTA (usali per comfortVerdict/comfortNote):\n${profileBlock}`,
+        cache_control: { type: 'ephemeral' },
+      }],
       messages: messages.map(m => ({ role: m.role, content: m.text })),
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
+      // max_uses più alto di prima (era 6): ora chiediamo esplicitamente a Giulia di verificare
+      // anche fonti GPX alternative per ogni candidato fin dalla prima ricerca, non solo su
+      // richiesta esplicita — serve margine per le ricerche aggiuntive senza troncarle a metà.
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
     })
   } catch (e) {
     console.error('[route-search] Anthropic error:', e)
