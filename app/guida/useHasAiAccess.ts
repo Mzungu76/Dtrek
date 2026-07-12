@@ -18,9 +18,9 @@ export function useHasAiAccess(): AiAccessState {
 
   useEffect(() => {
     let cancelled = false
-    fetchOnce('ai-access', () => fetch('/api/guide').then(r => r.json()).then(d => ({
-      hasAiAccess: !!d.hasAccess, aiUnavailable: !!d.unavailable,
-    })))
+    fetchOnce('ai-access', () => fetch('/api/guide').then(r => r.json().then(d => ({
+      hasAiAccess: !!d.hasAccess, aiUnavailable: !!d.unavailable || (!r.ok && r.status !== 401),
+    }))))
       .then(v => { if (!cancelled) setState(v) })
       .catch(() => { if (!cancelled) setState({ hasAiAccess: false, aiUnavailable: true }) })
     return () => { cancelled = true }

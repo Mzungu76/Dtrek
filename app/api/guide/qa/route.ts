@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic    from '@anthropic-ai/sdk'
 import { supabase } from '@/lib/supabase'
-import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
 import type { WikiPage }   from '@/lib/wikipedia'
@@ -82,8 +82,12 @@ type QaEvent =
 // ── GET /api/guide/qa?hikeId=X → cronologia domande già poste su questo percorso ─────────────
 export async function GET(req: NextRequest) {
   try {
-    const user = await getUserFromRequest(req)
-    if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+    const { user, authUnavailable } = await getUserFromRequestDetailed(req)
+    if (!user) {
+      return authUnavailable
+        ? NextResponse.json({ error: 'ai_temporarily_unavailable', message: 'Supabase non raggiungibile — riprova tra poco.' }, { status: 503 })
+        : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+    }
 
     const hikeId = req.nextUrl.searchParams.get('hikeId')
     if (!hikeId) return NextResponse.json({ error: 'hikeId mancante' }, { status: 400 })
@@ -112,8 +116,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getUserFromRequest(req)
-    if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+    const { user, authUnavailable } = await getUserFromRequestDetailed(req)
+    if (!user) {
+      return authUnavailable
+        ? NextResponse.json({ error: 'ai_temporarily_unavailable', message: 'Non riesco a verificare la tua sessione in questo momento (Supabase non raggiungibile) — riprova tra poco.' }, { status: 503 })
+        : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+    }
 
     const { apiKey, lookupFailed } = await resolveApiKeyAndSettings(user.id)
     if (!apiKey) {

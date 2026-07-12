@@ -19,8 +19,10 @@ export default function SectionClaudeKey() {
 
   useEffect(() => {
     fetch('/api/user-settings')
-      .then(r => r.json())
-      .then(d => { setHasKey(d.hasKey); setKeyHint(d.keyHint); setUnavailable(!!d.settingsUnavailable) })
+      .then(r => r.json().then(d => {
+        if (!r.ok) { setUnavailable(true); return }
+        setHasKey(d.hasKey); setKeyHint(d.keyHint); setUnavailable(!!d.settingsUnavailable)
+      }))
       .catch(() => setUnavailable(true))
       .finally(() => setLoading(false))
   }, [])

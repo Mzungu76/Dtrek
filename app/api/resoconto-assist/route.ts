@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server'
 import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
-import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { formatDuration }    from '@/lib/tcxParser'
 import { format }            from 'date-fns'
 import { it }                from 'date-fns/locale'
+import { readCachedAiSettings } from '@/lib/aiKeyCache'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -28,30 +29,38 @@ interface OtherSection {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUserFromRequest(req)
+  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
   if (!user) {
-    return new Response('{"error":"Non autenticato"}', {
-      status: 401, headers: { 'Content-Type': 'application/json' },
-    })
+    return new Response(
+      JSON.stringify(
+        authUnavailable
+          ? { error: 'ai_temporarily_unavailable', message: 'Non riesco a verificare la tua sessione in questo momento (Supabase non raggiungibile) — riprova tra poco.' }
+          : { error: 'Non autenticato' },
+      ),
+      { status: authUnavailable ? 503 : 401, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 
-  const { data: settings } = await supabase
+  const { data: settings, error: settingsErr } = await supabase
     .from('user_settings')
     .select('claude_api_key, subscription_tier')
     .eq('user_id', user.id)
     .maybeSingle()
 
+  const lookupFailed = !!settingsErr
   const userKey = settings?.claude_api_key as string | null | undefined
   const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
+  const cachedKey = lookupFailed ? (await readCachedAiSettings(user.id))?.apiKey ?? null : null
+  const apiKey  = userKey ?? cachedKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
 
   if (!apiKey) {
     return new Response(
-      JSON.stringify({
-        error:   'no_ai_access',
-        message: 'Aggiungi la tua chiave API Claude nelle impostazioni per usare l\'assistente AI.',
-      }),
-      { status: 402, headers: { 'Content-Type': 'application/json' } },
+      JSON.stringify(
+        lookupFailed
+          ? { error: 'ai_temporarily_unavailable', message: 'Non riesco a verificare la tua chiave AI in questo momento (Supabase non raggiungibile) — riprova tra poco.' }
+          : { error: 'no_ai_access', message: 'Aggiungi la tua chiave API Claude nelle impostazioni per usare l\'assistente AI.' },
+      ),
+      { status: lookupFailed ? 503 : 402, headers: { 'Content-Type': 'application/json' } },
     )
   }
 

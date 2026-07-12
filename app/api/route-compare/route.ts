@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
-import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { formatDuration } from '@/lib/tcxParser'
 import { difficultyIndex, formatPaceMinkm } from '@/lib/stats'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { readCachedAiSettings } from '@/lib/aiKeyCache'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -37,8 +38,12 @@ function buildEntryBlock(title: string, type: 'completata' | 'pianificata', line
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUserFromRequest(req)
-  if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
+  if (!user) {
+    return authUnavailable
+      ? NextResponse.json({ error: 'ai_temporarily_unavailable', message: 'Non riesco a verificare la tua sessione in questo momento (Supabase non raggiungibile) — riprova tra poco.' }, { status: 503 })
+      : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+  }
 
   const { data: settings, error: settingsErr } = await supabase
     .from('user_settings')
@@ -49,7 +54,11 @@ export async function POST(req: NextRequest) {
   const lookupFailed = !!settingsErr
   const userKey = settings?.claude_api_key as string | null | undefined
   const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null) ?? null
+  // Supabase irraggiungibile — prova la copia di riserva (lib/aiKeyCache.ts, Upstash Redis) prima
+  // di arrenderti: solo la chiave viene mirrorata lì, non età/preferenze/FC, quindi il resoconto
+  // resta possibile ma un po' meno personalizzato quando arriva da questo percorso di riserva.
+  const cachedKey = lookupFailed ? (await readCachedAiSettings(user.id))?.apiKey ?? null : null
+  const apiKey  = userKey ?? cachedKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null) ?? null
 
   if (!apiKey) {
     return NextResponse.json(
