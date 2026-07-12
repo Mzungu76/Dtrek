@@ -23,3 +23,13 @@ CREATE TABLE IF NOT EXISTS trail_difficulty_markers (
 
 CREATE INDEX IF NOT EXISTS idx_difficulty_markers_planned_hike ON trail_difficulty_markers (planned_hike_id);
 CREATE INDEX IF NOT EXISTS idx_difficulty_markers_latlon       ON trail_difficulty_markers (lat, lon);
+
+-- Public-read like the other cache/reference tables (enable_rls_public_cache_tables.sql):
+-- fetchNearbyDifficultyMarkers (lib/cl/signals/communitySignals.ts) deliberately reads
+-- cross-user by bbox, not scoped to the requesting user's own hikes — that's the point of the
+-- "Community" SI signal. Writes still only ever happen via the service-role client
+-- (app/api/planned/route.ts), which bypasses RLS regardless, so this only blocks direct
+-- anon/authenticated writes via PostgREST.
+ALTER TABLE trail_difficulty_markers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "trail_difficulty_markers_public_read" ON trail_difficulty_markers;
+CREATE POLICY "trail_difficulty_markers_public_read" ON trail_difficulty_markers FOR SELECT USING (true);
