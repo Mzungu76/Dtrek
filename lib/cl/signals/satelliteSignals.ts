@@ -17,7 +17,7 @@ import { PaiUnavailableError, type PaiFeature, type PaiRiskType } from '@/lib/pa
 import { fetchPaiPolygonsCached } from '@/lib/pai/paiCache'
 import { segmentIntersectsPolygon } from '@/lib/geo/pointInPolygon'
 import { GeologiaUnavailableError } from '@/lib/geologia/geologiaClient'
-import { fetchGeologiaAtPointCached } from '@/lib/geologia/geologiaCache'
+import { fetchGeologiaAtPointsCached } from '@/lib/geologia/geologiaCache'
 import type { RockfallRisk } from '@/lib/geologia/lithologyRiskMap'
 
 const COLLECTION = 'sentinel-2-l2a'
@@ -112,9 +112,7 @@ const NO_ROCKFALL: RockfallOverride = { penalty: 0, riskClass: 'unknown' }
 // stays a no-op until that mapping is populated even once the dataset is live.
 async function fetchRockfallOverride(ctx: SignalContext): Promise<RockfallOverride> {
   try {
-    const features = await Promise.all(
-      ctx.geometry.map(([lat, lon]) => fetchGeologiaAtPointCached(lat, lon))
-    )
+    const features = await fetchGeologiaAtPointsCached(ctx.geometry)
     let worst: RockfallRisk = 'unknown'
     for (const f of features) {
       const risk = f?.rockfallRisk ?? 'unknown'

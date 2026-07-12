@@ -58,3 +58,64 @@ export async function fetchGeologiaAtPointCached(lat: number, lon: number): Prom
 
   return feature
 }
+
+/**
+ * Batch counterpart of fetchGeologiaAtPointCached for callers that resolve many points from one
+ * request (trailTerrainProfile.ts's per-segment sampling, satelliteSignals.ts's rockfall scan).
+ * Doing this one point at a time turned into N parallel Supabase round trips per request — reads
+ * and writes both — which is exactly the "high volume of queries" Supabase's troubleshooting docs
+ * cite as the top cause of a project's Postgres instance crashing OOM. This collapses it to one
+ * SELECT (all cache hits via `.in`) and, at most, one UPSERT (all cache misses), regardless of
+ * how many points are requested. Live WMS fetches for misses still happen one per point — that
+ * network cost is inherent to a cache miss and isn't what was overloading Supabase.
+ */
+export async function fetchGeologiaAtPointsCached(points: [number, number][]): Promise<(GeologiaFeature | null)[]> {
+  if (!GEOLOGIA_DATASET.baseUrl || !GEOLOGIA_DATASET.layerName) {
+    throw new GeologiaUnavailableError('Geologia dataset endpoint not yet configured (see lib/geo/datasetConfig.ts)')
+  }
+  if (points.length === 0) return []
+
+  if (shouldRunCleanup('geologia_cache')) {
+    supabase.from('geologia_cache').delete().lt('expires_at', new Date().toISOString())
+      .then(({ error }) => { if (error) console.warn('[geologia_cache] cleanup error:', error.message) })
+  }
+
+  const pointKeys = points.map(([lat, lon]) => normalizeBboxKey(`${lat},${lon}`))
+  const uniqueKeys = Array.from(new Set(pointKeys))
+
+  const { data: cachedRows } = await withTimeout(
+    supabase
+      .from('geologia_cache')
+      .select('point_key, feature')
+      .in('point_key', uniqueKeys)
+      .gt('expires_at', new Date().toISOString()),
+    CACHE_LOOKUP_TIMEOUT_MS,
+  ).catch(() => ({ data: null as { point_key: string; feature: GeologiaFeature | null }[] | null }))
+
+  const cacheHits = new Map<string, GeologiaFeature | null>()
+  for (const row of cachedRows ?? []) cacheHits.set(row.point_key, row.feature as GeologiaFeature | null)
+
+  const results: (GeologiaFeature | null)[] = new Array(points.length)
+  const toUpsert = new Map<string, GeologiaFeature | null>()
+
+  await Promise.all(points.map(async ([lat, lon], i) => {
+    const key = pointKeys[i]
+    if (cacheHits.has(key)) {
+      results[i] = cacheHits.get(key) ?? null
+      return
+    }
+    const feature = await fetchGeologiaAtPoint(lat, lon)
+    results[i] = feature
+    toUpsert.set(key, feature)
+  }))
+
+  if (toUpsert.size > 0) {
+    const expiresAt = new Date(Date.now() + GEOLOGIA_CACHE_TTL_MS).toISOString()
+    const rows = Array.from(toUpsert, ([point_key, feature]) => ({ point_key, feature, expires_at: expiresAt }))
+    supabase.from('geologia_cache')
+      .upsert(rows, { onConflict: 'point_key' })
+      .then(({ error }) => { if (error) console.error('[geologia_cache] upsert error:', error.message) })
+  }
+
+  return results
+}
