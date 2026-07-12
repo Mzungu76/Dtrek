@@ -8,12 +8,27 @@ import { parseGpxServerSide, type ServerParsedGpx } from './serverGpxParser'
 const USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
 const GPX_HREF_RE = /<a\b[^>]*href=["']([^"']+\.gpx(?:[?#][^"']*)?)["']/i
 
+// Mappe interattive renderizzate via JS (nessun link statico nell'HTML servito) o che richiedono
+// un account per esportare il GPX — inutile anche solo provare a fare il fetch, vedi
+// app/api/route-search/route.ts's findBestGpxUrl (usa altre pagine trovate da Giulia per queste).
+const KNOWN_NO_DIRECT_DOWNLOAD_HOSTS = ['wikiloc.com', 'komoot.com', 'komoot.de', 'alltrails.com']
+
+function likelyHasNoDirectDownload(pageUrl: string): boolean {
+  try {
+    const host = new URL(pageUrl).hostname.replace(/^www\./, '')
+    return KNOWN_NO_DIRECT_DOWNLOAD_HOSTS.some(h => host === h || host.endsWith(`.${h}`))
+  } catch {
+    return false
+  }
+}
+
 /**
  * Controllo leggero (fetch + regex sull'HTML, nessun download del GPX stesso) usato in fase di
  * ricerca (app/api/route-search/route.ts) per decidere se un candidato ha davvero una traccia
  * scaricabile, prima ancora che l'utente scelga di importarlo.
  */
 export async function findGpxLinkOnPage(pageUrl: string): Promise<string | null> {
+  if (likelyHasNoDirectDownload(pageUrl)) return null
   try {
     const res = await fetch(pageUrl, {
       headers: { 'User-Agent': USER_AGENT },

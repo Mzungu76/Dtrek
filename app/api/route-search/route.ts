@@ -39,7 +39,7 @@ massimo 4, brevi (poche parole ciascuna), pensate come risposte rapide cliccabil
 
 2) Se hai abbastanza informazioni, restituisci un elenco di percorsi candidati reali (da 1 a 4), in
    ordine di pertinenza rispetto alla richiesta:
-[risultati][{"name":"...","zone":"...","searchName":"...","searchArea":"...","distanceKm":12.4,"elevationGainM":180,"difficulty":"facile","description":"...","sourceUrl":"...","comfortVerdict":"adatto","comfortNote":"..."}][/risultati]
+[risultati][{"name":"...","zone":"...","searchName":"...","searchArea":"...","distanceKm":12.4,"elevationGainM":180,"difficulty":"facile","description":"...","sourceUrl":"...","gpxCandidateUrls":[],"comfortVerdict":"adatto","comfortNote":"..."}][/risultati]
 Dove il valore tra [risultati] e [/risultati] è un array JSON valido su una sola riga (senza a capo
 dentro il JSON), con questi campi per ogni candidato:
 - name: nome del percorso
@@ -53,7 +53,14 @@ dentro il JSON), con questi campi per ogni candidato:
   (verranno sostituiti con dati reali se il percorso viene trovato su OpenStreetMap)
 - difficulty: "facile" | "media" | "impegnativa"
 - description: descrizione breve e concreta (1-2 frasi), cosa caratterizza il percorso
-- sourceUrl: URL esatto della pagina da cui hai tratto le informazioni, o null
+- sourceUrl: URL esatto della pagina più informativa da cui hai tratto le informazioni, o null
+- gpxCandidateUrls: fino a 3 URL di ALTRE pagine (diverse da sourceUrl) incontrate durante la
+  ricerca che potrebbero offrire il file GPX scaricabile direttamente — cerca in particolare siti
+  CAI, enti parco, comuni o blog escursionistici specializzati. Serve soprattutto quando sourceUrl
+  è Wikiloc, Komoot o AllTrails: quei siti mostrano la traccia solo come mappa interattiva, senza
+  un link di download diretto, quindi in quel caso fai una ricerca ulteriore mirata (es. "nome del
+  percorso gpx download" oppure "nome del percorso traccia scaricabile CAI") per trovare
+  un'alternativa. Array vuoto se non trovi nulla di utile, mai inventato.
 - comfortVerdict: "adatto" | "da_valutare" | "sconsigliato" — la tua valutazione di quanto il
   percorso sia adatto A QUESTO SPECIFICO escursionista, in base al profilo e allo storico che trovi
   più sotto nel messaggio
@@ -142,6 +149,7 @@ interface RawCandidate {
   difficulty?: string
   description?: string
   sourceUrl?: string | null
+  gpxCandidateUrls?: string[]
   comfortVerdict?: string
   comfortNote?: string
 }
@@ -171,6 +179,20 @@ export interface SearchResultCandidate {
 const CLARIFY_RE = /\[chiarimento\]([\s\S]*?)\[\/chiarimento\]/i
 const OPTIONS_RE = /\[opzioni\]([\s\S]*?)\[\/opzioni\]/i
 const RESULTS_RE = /\[risultati\]([\s\S]*?)\[\/risultati\]/i
+
+// sourceUrl da solo spesso non basta (vedi gpxCandidateUrls sopra): prova anche le pagine
+// alternative che Giulia ha segnalato, in parallelo — findGpxLinkOnPage scarta già da sé i domini
+// noti per non offrire download diretto (Wikiloc/Komoot/AllTrails, vedi lib/gpxSourceFetch.ts),
+// quindi qui basta provarle tutte e tenere la prima che risponde, nell'ordine di priorità dato
+// dall'array (sourceUrl per primo).
+async function findBestGpxUrl(candidate: RawCandidate): Promise<string | null> {
+  const urls = [candidate.sourceUrl, ...(Array.isArray(candidate.gpxCandidateUrls) ? candidate.gpxCandidateUrls : [])]
+    .filter((u): u is string => typeof u === 'string' && !!u)
+    .slice(0, 4)
+  if (urls.length === 0) return null
+  const results = await Promise.all(urls.map(u => findGpxLinkOnPage(u)))
+  return results.find((r): r is string => !!r) ?? null
+}
 
 async function tryMatchOsm(candidate: RawCandidate): Promise<{ osmId: number | null; hasGpsTrack: boolean }> {
   const searchName = candidate.searchName || candidate.name
@@ -281,7 +303,7 @@ export async function POST(req: NextRequest) {
     raw.slice(0, 4).filter(c => c.name && c.description).map(async c => {
       const [{ osmId, hasGpsTrack: hasOsmTrack }, gpxUrl] = await Promise.all([
         tryMatchOsm(c),
-        c.sourceUrl ? findGpxLinkOnPage(c.sourceUrl) : Promise.resolve(null),
+        findBestGpxUrl(c),
       ])
       const hasGpsTrack = hasOsmTrack || !!gpxUrl
       const verdict = c.comfortVerdict === 'adatto' || c.comfortVerdict === 'sconsigliato' ? c.comfortVerdict : 'da_valutare'
