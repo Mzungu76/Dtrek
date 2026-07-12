@@ -68,3 +68,28 @@ export async function deleteCachedAiSettings(userId: string): Promise<void> {
     // best-effort
   }
 }
+
+// ── Chiave AI di emergenza condivisa ────────────────────────────────────────
+//
+// Quando Supabase è del tutto irraggiungibile e non è nemmeno possibile verificare CHI sta
+// chiedendo (vedi lib/supabaseAuth.ts, JWKS anch'esse su Supabase quindi anch'esse irraggiungibili
+// in un blackout totale), l'identificazione per-utente va abbandonata: in emergenza, la stessa
+// chiave (process.env.ANTHROPIC_API_KEY, pagata dal gestore dell'app) viene usata per chiunque
+// abbia un cookie di sessione presente (non verificato — solo per escludere richieste del tutto
+// anonime). Scelta esplicita dell'utente: "è un'emergenza, l'app se ne assume le responsabilità".
+//
+// Interruttore manuale su Upstash, per spegnerla se il blackout si prolunga troppo:
+//   SET dtrek:emergency-shared-key-enabled false   → disabilita
+//   DEL dtrek:emergency-shared-key-enabled          (o "true") → riabilita — abilitata di default.
+const EMERGENCY_KEY_FLAG = 'dtrek:emergency-shared-key-enabled'
+
+export async function isEmergencySharedKeyEnabled(): Promise<boolean> {
+  const redis = getClient()
+  if (!redis) return true  // nessun Redis configurato: non è questo a dover bloccare l'emergenza
+  try {
+    const v = await redis.get<string>(EMERGENCY_KEY_FLAG)
+    return v !== 'false'  // abilitata di default, finché non viene spenta esplicitamente
+  } catch {
+    return true
+  }
+}

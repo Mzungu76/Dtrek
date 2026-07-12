@@ -6,7 +6,7 @@ import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration }  from '@/lib/tcxParser'
-import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
+import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/guide/resolveApiKeyAndSettings'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120  // ricerca web + risposta può richiedere più dei 60s di partenza
@@ -131,14 +131,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, authUnavailable } = await getUserFromRequestDetailed(req)
-    if (!user) {
+    const { user, authUnavailable, degraded } = await getUserFromRequestDetailed(req)
+    if (!user && !degraded) {
       return authUnavailable
         ? NextResponse.json({ error: 'ai_temporarily_unavailable', message: 'Non riesco a verificare la tua sessione in questo momento (Supabase non raggiungibile) — riprova tra poco.' }, { status: 503 })
         : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
     }
 
-    const { apiKey, lookupFailed } = await resolveApiKeyAndSettings(user.id)
+    const { apiKey, lookupFailed } = user
+      ? await resolveApiKeyAndSettings(user.id)
+      : await resolveEmergencySharedKey()
     if (!apiKey) {
       return NextResponse.json(
         lookupFailed
@@ -171,12 +173,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Body non valido' }, { status: 400 })
     }
 
-    const { data, error } = await supabase
-      .from('planned_hikes')
-      .select('title, distance_meters, elevation_gain, estimated_time_seconds, assessment, cached_pois, cached_poi_wiki, cached_guide')
-      .eq('id', hikeId)
-      .eq('user_id', user.id)
-      .single()
+    // In modalità di emergenza (degraded) non c'è uno user.id verificato con cui filtrare — si
+    // salta direttamente al fallback lato client sotto, mai una lettura Supabase senza quel filtro.
+    const { data, error } = user
+      ? await supabase
+          .from('planned_hikes')
+          .select('title, distance_meters, elevation_gain, estimated_time_seconds, assessment, cached_pois, cached_poi_wiki, cached_guide')
+          .eq('id', hikeId)
+          .eq('user_id', user.id)
+          .single()
+      : { data: null, error: new Error('degraded') }
 
     let hike: PlannedHike
     let guideSource: string
@@ -227,13 +233,15 @@ export async function POST(req: NextRequest) {
 
     // Ultimi scambi già avvenuti su questo percorso — replay come veri turni user/assistant,
     // così Giulia può seguire il filo di una conversazione invece di trattare ogni domanda isolata.
-    const { data: historyRows } = await supabase
-      .from('guide_questions')
-      .select('question, answer, pertinent')
-      .eq('planned_hike_id', hikeId)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(MAX_HISTORY_TURNS)
+    const { data: historyRows } = user
+      ? await supabase
+          .from('guide_questions')
+          .select('question, answer, pertinent')
+          .eq('planned_hike_id', hikeId)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(MAX_HISTORY_TURNS)
+      : { data: null }  // degraded: nessuna cronologia recuperabile senza Supabase
 
     const history = (historyRows ?? []).reverse()
 
@@ -317,7 +325,9 @@ export async function POST(req: NextRequest) {
           // piattaforma può terminare l'invocazione della function in qualunque momento, quindi
           // un salvataggio "fire and forget" dopo la chiusura rischierebbe di non completare mai.
           // Un fallimento qui non deve però intaccare la risposta già mostrata all'utente.
-          if (answerAcc.trim()) {
+          if (answerAcc.trim() && user) {
+            // degraded: nessuno user.id verificato, quindi nessuna scrittura da attribuire —
+            // la risposta resta comunque mostrata, solo non entra nella cronologia persistita.
             try {
               await supabase.from('guide_questions').insert({
                 planned_hike_id: hikeId,

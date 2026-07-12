@@ -314,7 +314,29 @@ export default function GuideReader({
       const res = await fetch('/api/guide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hikeId: hike.id, tier }),
+        // hikeFallback: usato dal server SOLO in modalità di emergenza (Supabase del tutto
+        // irraggiungibile, nessun utente verificabile) — la copia che il browser ha già in
+        // locale, per non bloccare la generazione in quei momenti. Ignorato in condizioni normali.
+        body: JSON.stringify({
+          hikeId: hike.id,
+          tier,
+          hikeFallback: {
+            title:                hike.title,
+            plannedDate:          hike.plannedDate,
+            userNotes:            hike.userNotes,
+            tags:                 hike.tags,
+            distanceMeters:       hike.distanceMeters,
+            elevationGain:        hike.elevationGain,
+            elevationLoss:        hike.elevationLoss,
+            altitudeMax:          hike.altitudeMax,
+            altitudeMin:          hike.altitudeMin,
+            estimatedTimeSeconds: hike.estimatedTimeSeconds,
+            assessment:           hike.assessment,
+            cachedPois:           hike.cachedPois,
+            cachedPoiWiki:        hike.cachedPoiWiki,
+            trackPoints:          hike.trackPoints,
+          },
+        }),
       })
 
       if (!res.ok) {
@@ -357,7 +379,12 @@ export default function GuideReader({
     } finally {
       setGenerating(false)
     }
-  }, [hike.id, hike.cachedPois, hike.cachedPoiWiki, onHikeUpdate])
+  }, [
+    hike.id, hike.title, hike.plannedDate, hike.userNotes, hike.tags,
+    hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
+    hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
+    onHikeUpdate,
+  ])
 
   // Auto-generate the Breve guide the moment enrichment data has settled — no button, no user
   // action. Only fires once per hike (guarded by the ref) and only if this account can call
