@@ -46,14 +46,21 @@ export async function findSourceImage(pageUrl: string): Promise<string | null> {
   }
 }
 
+// Tetto alle fonti effettivamente controllate — non alle immagini trovate (tutte quelle trovate
+// vengono tenute, per la Galleria fotografica). Solo per limitare quante pagine si visitano in
+// parallelo quando una guida cita insolitamente molte fonti.
+const MAX_SOURCES_CHECKED = 10
+
 /**
- * Prova più URL (le fonti citate da Giulia in questa guida) in parallelo, in ordine di priorità —
- * tiene la prima immagine trovata, non necessariamente la più veloce a rispondere.
+ * Prova TUTTE le fonti citate da Giulia in questa guida (fino a MAX_SOURCES_CHECKED) in parallelo
+ * e tiene ogni immagine trovata, nell'ordine di citazione — usata per la Galleria fotografica
+ * (components/guida/GuideReader.tsx): più fonti hanno un'immagine, più la galleria è ricca.
  */
-export async function findBestSourceImage(urls: string[]): Promise<{ url: string; imageUrl: string } | null> {
-  const candidates = urls.slice(0, 4)
-  if (candidates.length === 0) return null
+export async function findAllSourceImages(urls: string[]): Promise<Array<{ url: string; imageUrl: string }>> {
+  const candidates = urls.slice(0, MAX_SOURCES_CHECKED)
+  if (candidates.length === 0) return []
   const results = await Promise.all(candidates.map(u => findSourceImage(u)))
-  const idx = results.findIndex((r): r is string => !!r)
-  return idx >= 0 ? { url: candidates[idx], imageUrl: results[idx]! } : null
+  return candidates
+    .map((url, i) => ({ url, imageUrl: results[i] }))
+    .filter((r): r is { url: string; imageUrl: string } => !!r.imageUrl)
 }
