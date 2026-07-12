@@ -6,6 +6,7 @@ import { normalizeBboxKey } from '@/lib/geoUtils'
 import { supabase } from '@/lib/supabase'
 import { PAI_DATASET } from '@/lib/geo/datasetConfig'
 import { fetchPaiPolygons, PaiUnavailableError, type PaiFeature } from '@/lib/pai/paiClient'
+import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
 // Piani di bacino cambiano su scala di anni — non vale ri-interrogare il WFS ad ogni
 // calcolo SI. Stesso pattern bbox-keyed lazy-cleanup di poi_cache (app/api/pois/route.ts).
@@ -17,8 +18,10 @@ export async function fetchPaiPolygonsCached(bbox: string): Promise<PaiFeature[]
   }
   const bboxKey = normalizeBboxKey(bbox)
 
-  supabase.from('pai_polygon_cache').delete().lt('expires_at', new Date().toISOString())
-    .then(({ error }) => { if (error) console.warn('[pai_polygon_cache] cleanup error:', error.message) })
+  if (shouldRunCleanup('pai_polygon_cache')) {
+    supabase.from('pai_polygon_cache').delete().lt('expires_at', new Date().toISOString())
+      .then(({ error }) => { if (error) console.warn('[pai_polygon_cache] cleanup error:', error.message) })
+  }
 
   const { data: cached } = await supabase
     .from('pai_polygon_cache')

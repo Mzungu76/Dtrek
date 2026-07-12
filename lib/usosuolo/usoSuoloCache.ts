@@ -6,6 +6,7 @@ import { normalizeBboxKey } from '@/lib/geoUtils'
 import { supabase } from '@/lib/supabase'
 import { USO_SUOLO_DATASET } from '@/lib/geo/datasetConfig'
 import { fetchUsoSuoloTile, UsoSuoloUnavailableError, type UsoSuoloTile } from '@/lib/usosuolo/usoSuoloClient'
+import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
 // Il land cover cambia su scala stagionale/annuale (incendi, disboscamento, stagioni) — TTL
 // più corto di geologia/PAI (180gg), non vale trattarlo come quasi-permanente.
@@ -28,8 +29,10 @@ export async function fetchUsoSuoloTileCached(bbox: string): Promise<UsoSuoloTil
   }
   const bboxKey = normalizeBboxKey(bbox)
 
-  supabase.from('uso_suolo_cache').delete().lt('expires_at', new Date().toISOString())
-    .then(({ error }) => { if (error) console.warn('[uso_suolo_cache] cleanup error:', error.message) })
+  if (shouldRunCleanup('uso_suolo_cache')) {
+    supabase.from('uso_suolo_cache').delete().lt('expires_at', new Date().toISOString())
+      .then(({ error }) => { if (error) console.warn('[uso_suolo_cache] cleanup error:', error.message) })
+  }
 
   const { data: cached } = await withTimeout(
     supabase
