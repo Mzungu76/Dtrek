@@ -107,13 +107,13 @@ export default function AiRouteSearch({ onBack }: { onBack: () => void }) {
     setDate('')
     setResolved(null)
     setView('confirm')
-    if (c.hasGpsTrack && c.osmId != null) {
+    if (c.hasGpsTrack && (c.osmId != null || c.gpxUrl)) {
       setResolving(true)
       try {
         const res = await fetch('/api/route-search/resolve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ osmId: c.osmId }),
+          body: JSON.stringify({ osmId: c.osmId, gpxUrl: c.gpxUrl }),
         })
         const data = await res.json()
         if (data.ok) setResolved(data)

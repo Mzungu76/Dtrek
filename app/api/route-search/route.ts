@@ -7,6 +7,7 @@ import { readIndex } from '@/lib/blobIndex'
 import type { ActivityMeta } from '@/lib/blobStore'
 import { resolveAreaBbox, searchHikingRoutesByName } from '@/lib/overpassTrails'
 import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
+import { findGpxLinkOnPage } from '@/lib/gpxSourceFetch'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -157,6 +158,10 @@ export interface SearchResultCandidate {
   comfortNote: string
   hasGpsTrack: boolean
   osmId: number | null
+  // Link diretto a un file .gpx trovato sulla pagina sourceUrl (vedi lib/gpxSourceFetch.ts) —
+  // quando presente, ha priorità su osmId al momento della conferma import: è la traccia esatta
+  // pubblicata dalla fonte, non un match approssimato per nome.
+  gpxUrl: string | null
   // Necessari per ri-risolvere la traccia reale al momento della conferma import
   // (app/api/route-search/resolve/route.ts) — non mostrati nell'interfaccia.
   searchName: string
@@ -274,7 +279,11 @@ export async function POST(req: NextRequest) {
 
   const candidates: SearchResultCandidate[] = await Promise.all(
     raw.slice(0, 4).filter(c => c.name && c.description).map(async c => {
-      const { osmId, hasGpsTrack } = await tryMatchOsm(c)
+      const [{ osmId, hasGpsTrack: hasOsmTrack }, gpxUrl] = await Promise.all([
+        tryMatchOsm(c),
+        c.sourceUrl ? findGpxLinkOnPage(c.sourceUrl) : Promise.resolve(null),
+      ])
+      const hasGpsTrack = hasOsmTrack || !!gpxUrl
       const verdict = c.comfortVerdict === 'adatto' || c.comfortVerdict === 'sconsigliato' ? c.comfortVerdict : 'da_valutare'
       return {
         name: c.name!,
@@ -284,6 +293,7 @@ export async function POST(req: NextRequest) {
         difficulty: c.difficulty ?? 'media',
         description: c.description!,
         sourceUrl: c.sourceUrl ?? null,
+        gpxUrl,
         comfortVerdict: verdict,
         comfortNote: c.comfortNote ?? '',
         hasGpsTrack,
