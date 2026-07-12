@@ -25,6 +25,7 @@ import { extractGuideSources } from '@/lib/guideSources'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
+import { findBestSourceImage } from '@/lib/sourceImageFetch'
 import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 
 export const dynamic = 'force-dynamic'
@@ -193,8 +194,8 @@ export type GuideTier = 'breve' | 'approfondita'
 
 const TIER_CONFIG: Record<GuideTier, { maxTokens: number; instruction: string }> = {
   breve: {
-    maxTokens: 900,
-    instruction: 'Scrivi in modo molto conciso: 2-3 frasi, massimo 50-70 parole per sezione.',
+    maxTokens: 1050,
+    instruction: 'Scrivi in modo conciso ma discorsivo, non didascalico: 3-4 frasi, circa 65-85 parole per sezione.',
   },
   approfondita: {
     maxTokens: 16000,
@@ -638,7 +639,14 @@ export async function POST(req: NextRequest) {
           }
         }
         if (sources.size > 0) {
-          const list = Array.from(sources, ([url, title]) => ({ url, title }))
+          // Foto di riferimento del percorso, se una delle fonti citate ne espone una pubblicamente
+          // (meta tag og:image, vedi lib/sourceImageFetch.ts) — al massimo su UNA fonte per guida,
+          // mai sui domini che non la mostrerebbero comunque (Komoot/AllTrails/Wikiloc).
+          const bestImage = await findBestSourceImage(Array.from(sources.keys())).catch(() => null)
+          const list = Array.from(sources, ([url, title]) => ({
+            url, title,
+            ...(bestImage && bestImage.url === url ? { imageUrl: bestImage.imageUrl } : {}),
+          }))
           const tag = `\n[fonti]${JSON.stringify(list)}[/fonti]`
           fullText += tag
           safeEnqueue(tag)

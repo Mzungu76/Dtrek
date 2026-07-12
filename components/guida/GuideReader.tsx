@@ -878,6 +878,30 @@ export default function GuideReader({
 
             {hasGuide && !generating && guideSources.length > 0 && (
               <div className="mt-4 mb-2">
+                {(() => {
+                  const withImage = guideSources.find(s => s.imageUrl)
+                  if (!withImage?.imageUrl) return null
+                  return (
+                    <a
+                      href={withImage.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block mb-3 rounded-2xl overflow-hidden border border-stone-200 group"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata dalla fonte, mai copiata sui nostri server */}
+                      <img
+                        src={withImage.imageUrl}
+                        alt={withImage.title}
+                        className="w-full h-40 object-cover group-hover:opacity-90 transition-opacity"
+                        loading="lazy"
+                        onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
+                      />
+                      <p className="px-3 py-1.5 text-[10px] text-stone-400 bg-stone-50">
+                        Foto dal percorso — fonte: {withImage.title}
+                      </p>
+                    </a>
+                  )
+                })()}
                 <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
                   Fonti consultate online
                 </p>
