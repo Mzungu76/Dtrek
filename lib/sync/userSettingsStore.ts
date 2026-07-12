@@ -46,6 +46,10 @@ export interface UserSettingsData {
   startingLon: number | null
   guidePendingDays: number
   guideBreveSections: string[]
+  hikerExperienceLevel: string | null
+  hikerConcerns: string[]
+  hikerEnvironmentPrefs: string[]
+  onboardingCompletedAt: string | null
 }
 
 const ENTITY_TYPE = 'user_settings'

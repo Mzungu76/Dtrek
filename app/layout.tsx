@@ -9,6 +9,7 @@ import SyncEngineProvider from '@/components/SyncEngineProvider'
 import GlobalBackInterceptor from '@/app/components/GlobalBackInterceptor'
 import SplashScreen from '@/components/SplashScreen'
 import SessionKeepAlive from '@/components/SessionKeepAlive'
+import OnboardingGate from '@/components/onboarding/OnboardingGate'
 
 // Self-hosted via next/font (build-time download + inline @font-face), replacing the old
 // render-blocking `@import url(fonts.googleapis.com/...)` in globals.css — that import forced
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <InstallPWA />
         <OfflineSync />
         <SyncEngineProvider />
+        <OnboardingGate />
       </body>
     </html>
   )

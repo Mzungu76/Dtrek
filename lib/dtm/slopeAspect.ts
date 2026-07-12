@@ -141,3 +141,19 @@ export function sampleSlopeAspectAtPoint(tile: DtmTile, lat: number, lon: number
 
   return slopeAt(tile, row, col)
 }
+
+/**
+ * Nearest-pixel elevation (meters) at a geo point — same row/col mapping as
+ * sampleSlopeAspectAtPoint, used to attach altitudeMeters to bare OSM geometry (no elevation of
+ * its own) instead of computing a derived value like slope. Returns null outside the tile's bbox.
+ */
+export function elevationAtPoint(tile: DtmTile, lat: number, lon: number): number | null {
+  const { bbox, width, height } = tile
+  if (lat < bbox.minLat || lat > bbox.maxLat || lon < bbox.minLon || lon > bbox.maxLon) return null
+
+  const col = Math.min(width - 1, Math.max(0, Math.floor(((lon - bbox.minLon) / (bbox.maxLon - bbox.minLon)) * width)))
+  const row = Math.min(height - 1, Math.max(0, Math.floor(((bbox.maxLat - lat) / (bbox.maxLat - bbox.minLat)) * height)))
+
+  const v = elevAt(tile, row, col)
+  return Number.isFinite(v) ? v : null
+}
