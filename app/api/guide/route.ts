@@ -193,8 +193,8 @@ export type GuideTier = 'breve' | 'approfondita'
 
 const TIER_CONFIG: Record<GuideTier, { maxTokens: number; instruction: string }> = {
   breve: {
-    maxTokens: 900,
-    instruction: 'Scrivi in modo molto conciso: 2-3 frasi, massimo 50-70 parole per sezione.',
+    maxTokens: 1050,
+    instruction: 'Scrivi in modo conciso ma discorsivo, non didascalico: 3-4 frasi, circa 65-85 parole per sezione.',
   },
   approfondita: {
     maxTokens: 16000,
