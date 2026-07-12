@@ -12,7 +12,7 @@
 // app/api/tei-terrain/route.ts is the boundary that catches them.
 import { bboxBufferMeters } from '@/lib/geo/bufferUtils'
 import { segmentGpx } from '@/lib/tei'
-import { fetchGeologiaAtPointCached } from '@/lib/geologia/geologiaCache'
+import { fetchGeologiaAtPointsCached } from '@/lib/geologia/geologiaCache'
 import { fetchUsoSuoloTileCached } from '@/lib/usosuolo/usoSuoloCache'
 import { sampleLandCoverAtPoint } from '@/lib/usosuolo/usoSuoloClient'
 import { landCoverCodeToSurface, type LandCoverSurface } from '@/lib/tei/landCoverSurfaceMap'
@@ -43,8 +43,8 @@ export async function computeTrailTerrainProfile(track: [number, number][]): Pro
   const bbox = bboxBufferMeters(track, TILE_BUFFER_M)
   const usoSuoloTile = await fetchUsoSuoloTileCached(bbox)
 
-  const geologiaFeatures = await Promise.all(
-    segments.map(seg => fetchGeologiaAtPointCached(seg.centroid[0], seg.centroid[1]))
+  const geologiaFeatures = await fetchGeologiaAtPointsCached(
+    segments.map(seg => [seg.centroid[0], seg.centroid[1]])
   )
 
   const result: TerrainSegmentSample[] = segments.map((seg, i) => {
