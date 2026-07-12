@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
-import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
+import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/guide/resolveApiKeyAndSettings'
 import { readIndex } from '@/lib/blobIndex'
 import type { ActivityMeta } from '@/lib/blobStore'
 import { resolveAreaBbox, searchHikingRoutesByName } from '@/lib/overpassTrails'
@@ -124,6 +124,11 @@ function buildProfileBlock(profile: HikerProfileBlock, history: Awaited<ReturnTy
   return lines.join('\n')
 }
 
+// Blocco neutro usato in modalità degradata (vedi POST sotto): nessun utente verificato ⇒
+// nessuna lettura Supabase possibile per profilo/storico, ma la ricerca deve continuare a
+// funzionare comunque — Giulia userà semplicemente comfortVerdict "da_valutare" per ognuno.
+const DEGRADED_PROFILE_BLOCK = 'Profilo e storico non disponibili in questo momento (Supabase non raggiungibile) — nessuna personalizzazione possibile per questa ricerca.'
+
 // ── Parsing risposta ────────────────────────────────────────────────────────────
 
 interface RawCandidate {
@@ -179,8 +184,8 @@ async function tryMatchOsm(candidate: RawCandidate): Promise<{ osmId: number | n
 // ── Route ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
-  if (!user) {
+  const { user, authUnavailable, degraded } = await getUserFromRequestDetailed(req)
+  if (!user && !degraded) {
     return NextResponse.json(
       authUnavailable
         ? { error: 'auth_unavailable', message: 'Supabase non raggiungibile — riprova tra poco.' }
@@ -189,7 +194,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { apiKey, lookupFailed } = await resolveApiKeyAndSettings(user.id)
+  const { apiKey, lookupFailed } = user
+    ? await resolveApiKeyAndSettings(user.id)
+    : await resolveEmergencySharedKey()
   if (!apiKey) {
     return NextResponse.json(
       lookupFailed
@@ -215,8 +222,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
-  const [profile, history] = await Promise.all([fetchHikerProfile(user.id), fetchActivitySummary(user.id)])
-  const profileBlock = buildProfileBlock(profile, history)
+  // In modalità degradata (nessun utente verificato, Supabase JWKS incluse — vedi
+  // lib/supabaseAuth.ts's resolveUser) non c'è nessun user.id da cui leggere profilo/storico:
+  // la ricerca prosegue comunque, solo senza personalizzazione, invece di bloccarsi del tutto.
+  let profileBlock = DEGRADED_PROFILE_BLOCK
+  if (user) {
+    const [profile, history] = await Promise.all([fetchHikerProfile(user.id), fetchActivitySummary(user.id)])
+    profileBlock = buildProfileBlock(profile, history)
+  }
 
   const client = new Anthropic({ apiKey })
 
