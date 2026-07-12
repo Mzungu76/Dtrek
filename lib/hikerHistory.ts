@@ -54,11 +54,12 @@ function foldIn(stats: HikerHistoryStats, entry: RecentHikeEntry): HikerHistoryS
 /** Un solo aggregate query su tutte le attività dell'utente — mai più di una volta per utente:
  *  da qui in poi gli aggiornamenti restano incrementali (foldIn), vedi le due funzioni sotto. */
 async function backfillFromAllActivities(userId: string): Promise<HikerHistoryStats> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('activities')
     .select('distance_meters, elevation_gain, total_time_seconds, start_time')
     .eq('user_id', userId)
     .order('start_time', { ascending: false })
+  if (error) console.error('[hikerHistory] backfill read failed:', error.message)
 
   const rows = data ?? []
   if (rows.length === 0) return emptyStats()
@@ -85,7 +86,8 @@ async function backfillFromAllActivities(userId: string): Promise<HikerHistorySt
 }
 
 async function readStats(userId: string): Promise<HikerHistoryStats | null> {
-  const { data } = await supabase.from('user_settings').select('hiker_history_stats').eq('user_id', userId).maybeSingle()
+  const { data, error } = await supabase.from('user_settings').select('hiker_history_stats').eq('user_id', userId).maybeSingle()
+  if (error) console.error('[hikerHistory] read failed (probabile colonna hiker_history_stats non ancora migrata):', error.message)
   return (data?.hiker_history_stats as HikerHistoryStats | null) ?? null
 }
 
