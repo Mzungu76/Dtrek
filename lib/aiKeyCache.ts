@@ -21,11 +21,12 @@ let client: Redis | null | undefined
 
 function getClient(): Redis | null {
   if (client !== undefined) return client
-  try {
-    client = Redis.fromEnv()
-  } catch {
-    client = null
-  }
+  // Il database Redis di questo progetto è collegato tramite l'integrazione "Vercel KV" (non lo
+  // standalone Upstash Marketplace) — le variabili generate si chiamano KV_REST_API_URL/TOKEN,
+  // non le UPSTASH_REDIS_REST_* lette di default da Redis.fromEnv().
+  const url   = process.env.KV_REST_API_URL
+  const token = process.env.KV_REST_API_TOKEN
+  client = url && token ? new Redis({ url, token }) : null
   return client
 }
 

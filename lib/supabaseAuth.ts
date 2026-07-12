@@ -10,6 +10,7 @@ import { createServerClient } from '@supabase/ssr'
 import type { NextRequest } from 'next/server'
 import { isAuthRetryableFetchError, type SupabaseClient, type User } from '@supabase/supabase-js'
 import { getUserCached } from './authTokenCache'
+import { verifySupabaseJwtLocally } from './supabaseJwt'
 
 function anonClientForRequest(request: NextRequest): SupabaseClient {
   return createServerClient(
@@ -24,27 +25,45 @@ function anonClientForRequest(request: NextRequest): SupabaseClient {
   )
 }
 
+/**
+ * Core resolution shared by every exported helper below. supabase.auth.getUser() (a live network
+ * round-trip to Supabase's Auth server) is always tried first and is the source of truth whenever
+ * it's reachable — it's the only check that respects an immediate session revocation. Only when
+ * that call itself fails on a network error (isAuthRetryableFetchError, e.g. mid-outage) do we
+ * fall back to verifying the JWT already sitting in the request's cookies locally, via this
+ * project's public JWKS (lib/supabaseJwt.ts) — no network call needed once jose has cached the
+ * keys. getSession() just decodes the cookie (no network call of its own in the common case,
+ * unlike getUser()); pairing it with our own signature verification is exactly the pattern
+ * Supabase's own docs describe for using getSession() safely server-side.
+ */
+async function resolveUser(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean }> {
+  const supabase = anonClientForRequest(request)
+  const { data, error } = await supabase.auth.getUser()
+  if (data.user) return { user: data.user, authUnavailable: false }
+  if (!isAuthRetryableFetchError(error)) return { user: null, authUnavailable: false }
+
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session?.access_token) {
+    const local = await verifySupabaseJwtLocally(session.access_token)
+    if (local) return { user: { id: local.id, email: local.email } as User, authUnavailable: false }
+  }
+  return { user: null, authUnavailable: true }
+}
+
 export async function getUserFromRequest(request: NextRequest): Promise<User | null> {
-  return getUserCached(request, async () => {
-    const supabase = anonClientForRequest(request)
-    const { data: { user } } = await supabase.auth.getUser()
-    return user ?? null
-  })
+  return getUserCached(request, async () => (await resolveUser(request)).user)
 }
 
 /**
- * Same JWT validation as getUserFromRequest, but also distinguishes "genuinely no/expired
- * session" from "couldn't reach Supabase Auth to check" (e.g. mid-outage) — supabase.auth.getUser()
- * resolves with {user: null, error: AuthRetryableFetchError} on a network failure instead of
- * rejecting, so a caller checking only `if (!user)` can't tell the two apart and would otherwise
- * show "please log in" / "add your API key" during an outage instead of "try again shortly".
- * Bypasses getUserCached (kept simple; only a handful of AI routes use this variant so far) —
- * see components/SessionKeepAlive.tsx for the client-side counterpart of this same distinction.
+ * Same resolution as getUserFromRequest, but also distinguishes "genuinely no/expired session"
+ * from "couldn't verify at all, network or otherwise" (e.g. mid-outage with no usable cookie
+ * either) — so a caller checking only `if (!user)` can show "try again shortly" instead of
+ * "please log in" / "add your API key". Bypasses getUserCached (kept simple; only a handful of AI
+ * routes use this variant so far) — see components/SessionKeepAlive.tsx for the client-side
+ * counterpart of this same live-vs-unavailable distinction.
  */
 export async function getUserFromRequestDetailed(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean }> {
-  const supabase = anonClientForRequest(request)
-  const { data, error } = await supabase.auth.getUser()
-  return { user: data.user ?? null, authUnavailable: !data.user && isAuthRetryableFetchError(error) }
+  return resolveUser(request)
 }
 
 /**
