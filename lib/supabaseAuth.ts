@@ -10,7 +10,7 @@ import { createServerClient } from '@supabase/ssr'
 import type { NextRequest } from 'next/server'
 import { isAuthRetryableFetchError, type SupabaseClient, type User } from '@supabase/supabase-js'
 import { getUserCached } from './authTokenCache'
-import { verifySupabaseJwtLocally } from './supabaseJwt'
+import { verifySupabaseJwtLocally, refreshJwksCache } from './supabaseJwt'
 
 function anonClientForRequest(request: NextRequest): SupabaseClient {
   return createServerClient(
@@ -39,7 +39,12 @@ function anonClientForRequest(request: NextRequest): SupabaseClient {
 async function resolveUser(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean }> {
   const supabase = anonClientForRequest(request)
   const { data, error } = await supabase.auth.getUser()
-  if (data.user) return { user: data.user, authUnavailable: false }
+  if (data.user) {
+    // Percorso "tutto ok" — tiene pronta la copia di riserva delle chiavi JWKS (lib/supabaseJwt.ts)
+    // per quando servirà davvero. Fire-and-forget: non deve mai rallentare una richiesta riuscita.
+    void refreshJwksCache()
+    return { user: data.user, authUnavailable: false }
+  }
   if (!isAuthRetryableFetchError(error)) return { user: null, authUnavailable: false }
 
   const { data: { session } } = await supabase.auth.getSession()
