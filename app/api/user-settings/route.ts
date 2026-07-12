@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase }            from '@/lib/supabase'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { sanitizeBreveSections, DEFAULT_BREVE_SECTIONS } from '@/lib/guideSections'
+import { writeCachedAiSettings, deleteCachedAiSettings } from '@/lib/aiKeyCache'
 
 /** Tanaka formula for max heart rate: 211 − 0.64 × age */
 function deriveFCmax(age: number): number {
@@ -269,6 +270,20 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Aggiorna subito la copia di riserva (lib/aiKeyCache.ts) invece di aspettare la prossima
+  // lettura riuscita lato Guida — così una chiave appena salvata è già disponibile lì anche se
+  // Supabase smette di rispondere un attimo dopo. userGender/breveSections qui sono solo la
+  // miglior stima disponibile in questa richiesta (non una lettura fresca dell'intera riga): la
+  // prossima lettura Supabase riuscita li correggerà comunque, vedi resolveApiKeyAndSettings.ts.
+  if (body.apiKey !== undefined) {
+    const trimmed = body.apiKey.trim()
+    void writeCachedAiSettings(user.id, {
+      apiKey:        trimmed,
+      userGender:    body.userGender ?? 'non_specificato',
+      breveSections: body.guideBreveSections ? sanitizeBreveSections(body.guideBreveSections) : DEFAULT_BREVE_SECTIONS,
+    })
+  }
+
   const response: Record<string, unknown> = { ok: true }
   if (body.apiKey) response.keyHint = maskKey(body.apiKey.trim())
   if (body.userAge) response.derivedFCmax = deriveFCmax(body.userAge)
@@ -290,6 +305,10 @@ export async function DELETE(req: NextRequest) {
     .eq('user_id', user.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Invalida subito anche la copia di riserva — senza questo, un blackout Supabase iniziato
+  // subito dopo la rimozione servirebbe ancora la chiave ormai cancellata.
+  void deleteCachedAiSettings(user.id)
 
   return NextResponse.json({ ok: true })
 }

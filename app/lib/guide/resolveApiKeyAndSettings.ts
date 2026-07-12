@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { sanitizeBreveSections, type GuideSectionKey } from '@/lib/guideSections'
+import { readCachedAiSettings, writeCachedAiSettings, deleteCachedAiSettings } from '@/lib/aiKeyCache'
 
 /** Chiave API Claude + preferenze utente rilevanti per la Guida — condiviso tra la generazione
  *  della guida (app/api/guide/route.ts) e le domande e risposte sul percorso (app/api/guide/qa/route.ts). */
@@ -7,11 +8,10 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
   apiKey: string | null
   userGender: string
   breveSections: GuideSectionKey[]
-  /** true quando la lettura di user_settings è fallita (es. Supabase irraggiungibile) — a
-   *  differenza di una lettura riuscita che conferma semplicemente l'assenza di una chiave.
-   *  .maybeSingle() non genera mai errore per "nessuna riga", quindi qualunque errore qui è un
-   *  vero problema di lookup, non un utente senza chiave. I chiamanti devono mostrare
-   *  "temporaneamente non disponibile", non "aggiungi la tua chiave". */
+  /** true quando NÉ Supabase NÉ la copia di riserva (lib/aiKeyCache.ts, Upstash Redis) sono
+   *  riuscite a rispondere — a differenza di una lettura riuscita che conferma semplicemente
+   *  l'assenza di una chiave. I chiamanti devono mostrare "temporaneamente non disponibile", non
+   *  "aggiungi la tua chiave". */
   lookupFailed: boolean
 }> {
   const { data: settings, error } = await supabase
@@ -20,11 +20,34 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
     .eq('user_id', userId)
     .maybeSingle()
 
-  const userKey = settings?.claude_api_key as string | null | undefined
-  const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null) ?? null
-  const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
-  const breveSections = sanitizeBreveSections(settings?.guide_breve_sections)
+  if (!error) {
+    const userKey = settings?.claude_api_key as string | null | undefined
+    const hasSub  = (settings?.subscription_tier as string) === 'premium'
+    const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null) ?? null
+    const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
+    const breveSections = sanitizeBreveSections(settings?.guide_breve_sections)
 
-  return { apiKey, userGender, breveSections, lookupFailed: !!error }
+    // Tiene la copia di riserva sincronizzata con l'ultimo stato noto-buono di Supabase — sia
+    // quando c'è una chiave personale da (ri)salvare, sia quando è stata rimossa, così un blackout
+    // successivo non serve mai una chiave ormai cancellata. Non cachea mai la chiave condivisa
+    // (fallback premium): non ha senso duplicarla per utente, e process.env resta comunque
+    // disponibile in ogni caso.
+    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections })
+    else void deleteCachedAiSettings(userId)
+
+    return { apiKey, userGender, breveSections, lookupFailed: false }
+  }
+
+  // Supabase irraggiungibile — prova la copia di riserva, infrastruttura indipendente.
+  const cached = await readCachedAiSettings(userId)
+  if (cached) {
+    return {
+      apiKey:        cached.apiKey,
+      userGender:    cached.userGender,
+      breveSections: sanitizeBreveSections(cached.breveSections),
+      lookupFailed:  false,
+    }
+  }
+
+  return { apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined), lookupFailed: true }
 }
