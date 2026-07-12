@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { resolveGeometryFallback } from '@/lib/cl/computeCL'
 import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
@@ -10,10 +10,20 @@ export const maxDuration = 60
 // Chiamato solo per il SINGOLO candidato che l'utente ha scelto di importare (schermata di
 // conferma import) — deliberatamente non fatto per ogni candidato nei risultati di
 // app/api/route-search/route.ts, per non sprecare chiamate Overpass/DTM su percorsi che l'utente
-// non sceglierà mai.
+// non sceglierà mai. Non legge/scrive nessuna riga per-utente (solo Overpass + il DTM pubblico) —
+// a differenza degli altri endpoint quindi basta un'identità "plausibile ma non verificabile"
+// durante un blackout (stesso `degraded` di lib/supabaseAuth.ts) per proseguire comunque, non
+// serve nemmeno la chiave AI di emergenza.
 export async function POST(req: NextRequest) {
-  const user = await getUserFromRequest(req)
-  if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+  const { user, authUnavailable, degraded } = await getUserFromRequestDetailed(req)
+  if (!user && !degraded) {
+    return NextResponse.json(
+      authUnavailable
+        ? { error: 'auth_unavailable', message: 'Supabase non raggiungibile — riprova tra poco.' }
+        : { error: 'Non autenticato' },
+      { status: authUnavailable ? 503 : 401 },
+    )
+  }
 
   let osmId: number
   try {
