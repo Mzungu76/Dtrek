@@ -12,7 +12,7 @@ import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
-import { extractGuideNotices } from '@/lib/guideNotices'
+import { extractGuideNotices, parseNoticeSource } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
@@ -354,7 +354,12 @@ export default function GuideReader({
         acc += decoder.decode(value, { stream: true })
         const { lastStatus, cleanedText: displayText } = stripGuideStatus(acc)
         if (lastStatus) setGenStatus(lastStatus)
-        setGuideText(displayText)
+        // Stesso taglio del commento libero pre-prima-sezione applicato in anteprima live, non
+        // solo a fine generazione — altrimenti per qualche istante, prima che il modello scriva il
+        // primo "## ", quel testo appare come una finta sezione a sé (si "aggiusta" da solo appena
+        // arriva il primo titolo vero, ma nel frattempo si vede).
+        const firstHeadingIdx = displayText.search(/^## /m)
+        setGuideText(firstHeadingIdx > 0 ? displayText.slice(firstHeadingIdx) : displayText)
       }
       acc = stripGuideStatus(acc).cleanedText
       setGenStatus(undefined)
@@ -363,14 +368,24 @@ export default function GuideReader({
       const { notices, cleanedText: cleanedText2 } = extractGuideNotices(cleanedText)
       const { sources, cleanedText: cleanedText3 } = extractGuideSources(cleanedText2)
       acc = cleanedText3
+
+      const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
+      const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+      const { riddles, cleanedText: cleanedText4 } = extractRiddles(acc, cachedPois, cachedPoiWiki)
+      const { epochPois, cleanedText: cleanedText5 } = extractEpochPois(cleanedText4, cachedPois, cachedPoiWiki)
+      acc = cleanedText5
+
+      // Ogni tanto il modello scrive una riga di commento libero ("Ho tutte le informazioni che
+      // mi servono, ora scrivo la guida...") prima del primo titolo di sezione, non racchiusa in
+      // nessun tag riconosciuto — senza questo taglio diventa una finta sezione "legacy" con
+      // titolo posticcio (parseGuide tratta il testo prima del primo "## " come una sezione a sé).
+      const firstHeadingIdx = acc.search(/^## /m)
+      if (firstHeadingIdx > 0) acc = acc.slice(firstHeadingIdx)
+
       setGuideText(acc)
       setGuideNotices(notices)
       setGuideSources(sources)
 
-      const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
-      const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
-      const riddles = extractRiddles(acc, cachedPois, cachedPoiWiki)
-      const epochPois = extractEpochPois(acc, cachedPois, cachedPoiWiki)
       const patch = { cachedGuide: acc, cachedGuideSubtitle: subtitle, cachedGuideNotices: notices, cachedGuideSources: sources, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)
@@ -702,12 +717,29 @@ export default function GuideReader({
             {/* ── Stato del percorso — avvisi trovati dalla ricerca web di Giulia ──────────── */}
             {guideNotices.length > 0 && (
               <div className="mt-4 space-y-2">
-                {guideNotices.map((notice, i) => (
-                  <div key={i} className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-[13px] leading-relaxed text-amber-900">{notice}</p>
-                  </div>
-                ))}
+                {guideNotices.map((notice, i) => {
+                  const { text, url } = parseNoticeSource(notice)
+                  return (
+                    <div key={i} className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[13px] leading-relaxed text-amber-900">{text}</p>
+                        {url && (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors text-[11px] text-amber-800"
+                            title={url}
+                          >
+                            <Link2 className="w-3 h-3 shrink-0 text-amber-600" />
+                            <span className="truncate">Vai alla fonte</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
 

@@ -24,3 +24,20 @@ export function extractGuideNotices(rawGuideText: string): ExtractedGuideNotices
   }).trimStart()
   return { notices, cleanedText }
 }
+
+// Un avviso può chiudersi con "(https://...)" — l'URL esatto della pagina da cui Giulia ha tratto
+// quell'informazione (vedi SYSTEM prompt in app/api/guide/route.ts) — non un campo strutturato a
+// parte per restare compatibile con cachedGuideNotices (string[], già persistito così ovunque):
+// il parsing avviene solo qui, a livello di visualizzazione, non tocca lo storage.
+const TRAILING_URL_RE = /\s*\((https?:\/\/\S+?)\)\.?\s*$/
+
+export interface ParsedNotice {
+  text: string
+  url?: string
+}
+
+export function parseNoticeSource(notice: string): ParsedNotice {
+  const match = TRAILING_URL_RE.exec(notice)
+  if (!match) return { text: notice }
+  return { text: notice.slice(0, match.index).trim(), url: match[1] }
+}
