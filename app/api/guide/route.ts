@@ -4,7 +4,8 @@ import { supabase }     from '@/lib/supabase'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
-import { GUIDE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
+import { GUIDE_SECTIONS, isGuideSectionKey, type GuideSectionKey } from '@/lib/guideSections'
+import { mergeGuideSection, parseGuideSections } from '@/lib/guideParse'
 
 export const maxDuration = 300  // "approfondita" can take well over 120s to stream fully; avoid cutting it off mid-guide
 import type { WikiPage }   from '@/lib/wikipedia'
@@ -17,6 +18,12 @@ import type { SafetyScore } from '@/lib/safetyScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/guide/resolveApiKeyAndSettings'
+import { stripGuideStatus } from '@/lib/guideStatus'
+import { extractCoverSubtitle } from '@/lib/coverSubtitle'
+import { extractGuideNotices } from '@/lib/guideNotices'
+import { extractGuideSources } from '@/lib/guideSources'
+import { extractRiddles } from '@/lib/riddles'
+import { extractEpochPois } from '@/lib/epochPois'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,6 +95,42 @@ una sorgente), aggiungi una o più righe nel formato esatto:
 [epoca poi="Nome esatto del luogo" periodo="etrusca|romana|medievale|oggi"]Descrivi cosa vedresti da quel punto in quell'epoca specifica, in 2-3 frasi vivide[/epoca]
 Usa solo i periodi per cui il luogo ha davvero un racconto storico da offrire (anche uno solo va bene, non serve coprire tutte e quattro le epoche per forza). Non creare voci [epoca] per luoghi senza un vero interesse storico-stratigrafico.`
 
+// Variante usata quando l'utente chiede "Approfondisci" su UNA sola sezione già esistente (vedi
+// POST sotto, sectionKey) — stesso personaggio e stesse convenzioni [curiosita]/[indovinello]/
+// [epoca] (ancora valide dentro qualunque sezione), ma senza le istruzioni [sottotitolo]/[avviso]
+// (valgono solo per la primissima riga di una guida intera, qui non stiamo scrivendo da capo) né
+// la ricerca web di verifica (già fatta alla generazione iniziale, non serve ripeterla solo per
+// arricchire il testo narrativo di una sezione).
+const SYSTEM_SECTION = `Sei Giulia, una guida escursionistica italiana con vent'anni di esperienza sul campo.
+Conosci a menadito la storia, l'architettura, l'archeologia, la geologia e la natura del territorio italiano.
+Il tuo stile è caldo, colloquiale e contagioso: parli come se stessi camminando accanto all'escursionista,
+con un tono da amica esperta che non smette mai di stupirsi della bellezza dei luoghi.
+
+Ti viene chiesto di riscrivere in maniera più ricca e approfondita UNA SOLA sezione già esistente di
+una guida che hai già scritto per questo percorso — le altre sezioni non fanno parte di questa
+richiesta e non vanno menzionate né riassunte. Scrivi direttamente il contenuto della sezione,
+cominciando con il suo titolo preceduto da ## (due cancelletti e uno spazio), senza nessun commento
+sul tuo processo prima o dopo.
+
+Per ogni luogo significativo includi almeno uno tra: un aneddoto storico poco noto, una leggenda locale,
+una curiosità sorprendente, un fatto insolito legato al sito. I dettagli che la gente non trova sulle guide
+ordinarie sono il tuo punto di forza.
+
+Usa la seconda persona singolare (tu/ti). Scrivi in italiano vivace, mai pedante. Non usare asterischi
+per il grassetto. Non usare bullet point eccessivi: preferisci frasi di narrazione fluida.
+La mappa, il profilo altimetrico, i punteggi (Trail Score, Sicurezza, Bellezza) e le card dei punti di interesse
+sono già mostrati nell'app accanto al tuo testo: non elencare numeri o coordinate, commentali e dai loro un
+significato — l'app si occupa dei dati "grezzi", tu ci metti la voce narrante.
+Se la sezione è "I luoghi da non perdere": usa ### (tre cancelletti e spazio) come sottotitolo per ogni
+luogo specifico prima di descriverlo (es: ### Castello di Calcata); per ogni luogo che compare
+nell'elenco LUOGHI CON VOCE WIKIPEDIA (nome ESATTO, non abbreviato) aggiungi un piccolo indovinello
+su una riga separata nel formato esatto [indovinello poi="Nome esatto del luogo"]Domanda?|Risposta breve[/indovinello]
+(mai per luoghi fuori da quell'elenco); solo per i luoghi con una vera storia stratificata nel tempo
+(siti archeologici, resti etruschi o romani, castelli, borghi medievali) aggiungi anche una o più righe
+[epoca poi="Nome esatto del luogo" periodo="etrusca|romana|medievale|oggi"]cosa vedresti da quel punto in quell'epoca, 2-3 frasi vivide[/epoca].
+Per le curiosità e aneddoti più memorabili in qualunque sezione, racchiudili nel formato esatto su una
+riga separata: [curiosita] testo della curiosità [/curiosita]`
+
 function genderInstruction(gender: string): string {
   switch (gender) {
     case 'maschio':
@@ -111,8 +154,8 @@ export type GuideTier = 'breve' | 'approfondita'
 
 const TIER_CONFIG: Record<GuideTier, { maxTokens: number; instruction: string }> = {
   breve: {
-    maxTokens: 1200,
-    instruction: 'Scrivi in modo molto conciso: 2-4 frasi, massimo 80-100 parole per sezione.',
+    maxTokens: 900,
+    instruction: 'Scrivi in modo molto conciso: 2-3 frasi, massimo 50-70 parole per sezione.',
   },
   approfondita: {
     maxTokens: 16000,
@@ -180,6 +223,9 @@ function buildPrompt(
   nature: NatureContext | undefined,
   breveSections: GuideSectionKey[],
   scores: DataScores,
+  /** Quando presente, "Approfondisci" richiesto su UNA sola sezione (vedi POST sotto) — il resto
+   *  della guida già scritta non viene toccato, quindi qui si chiede solo quella sezione. */
+  sectionKeyOverride?: GuideSectionKey,
 ): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
@@ -222,14 +268,18 @@ function buildPrompt(
     scores.difficultyMarkers?.length ? `Segnalazioni difficoltà dal tracciato: ${scores.difficultyMarkers.map(m => m.text).join('; ')}` : '',
   ].filter(Boolean).join('\n')
 
-  const sectionsToWrite = tier === 'approfondita'
-    ? GUIDE_SECTIONS.map(s => s.key)
-    : GUIDE_SECTIONS.map(s => s.key).filter(k => breveSections.includes(k))
+  const sectionsToWrite = sectionKeyOverride
+    ? [sectionKeyOverride]
+    : tier === 'approfondita'
+      ? GUIDE_SECTIONS.map(s => s.key)
+      : GUIDE_SECTIONS.map(s => s.key).filter(k => breveSections.includes(k))
 
   const sectionsBlock = sectionsToWrite.map(k => SECTION_BRIEF[k]).join('\n\n')
   const sectionTitles = sectionsToWrite.map(k => GUIDE_SECTIONS.find(s => s.key === k)!.title).join(', ')
 
-  return `Crea una guida escursionistica per questo percorso, analizzando tutti i dati disponibili qui sotto:
+  return `${sectionKeyOverride
+    ? `Scrivi in maniera più approfondita e ricca UNA singola sezione già esistente di una guida escursionistica per questo percorso (le altre sezioni sono già scritte e non vanno toccate), analizzando tutti i dati disponibili qui sotto:`
+    : `Crea una guida escursionistica per questo percorso, analizzando tutti i dati disponibili qui sotto:`}
 
 NOME: ${hike.title}
 ${dateStr ? `DATA: ${dateStr}` : ''}
@@ -321,6 +371,7 @@ export async function POST(req: NextRequest) {
   let hikeId: string
   let tier: GuideTier = 'breve'
   let hikeFallback: GuideHikeFallback | undefined
+  let sectionKey: GuideSectionKey | undefined
   try {
     const body = await req.json()
     hikeId = body.hikeId
@@ -329,6 +380,9 @@ export async function POST(req: NextRequest) {
     if (body.length === 'breve' || body.tier === 'breve') tier = 'breve'
     else tier = 'approfondita'
     hikeFallback = body.hikeFallback && typeof body.hikeFallback === 'object' ? body.hikeFallback : undefined
+    // "Approfondisci" su una sola sezione (vedi buildPrompt/SYSTEM_SECTION) — forza tier
+    // 'approfondita' per lo stile di scrittura, ma la generazione riguarda solo quella sezione.
+    if (isGuideSectionKey(body.sectionKey)) { sectionKey = body.sectionKey; tier = 'approfondita' }
   } catch {
     return new Response('{"error":"Body non valido"}', {
       status: 400, headers: { 'Content-Type': 'application/json' },
@@ -339,6 +393,12 @@ export async function POST(req: NextRequest) {
   let scores: DataScores
   let s2: Parameters<typeof fetchNatureContext>[0]['s2']
   let trackPoints: TrackPoint[]
+  // Testo/indovinelli/epoche già esistenti su cui fondere il risultato di un "Approfondisci" per
+  // sezione (vedi persistenza più sotto) — vuoti quando non è una richiesta di quel tipo, o quando
+  // non c'è nulla da leggere (degraded/hikeFallback non porta questi campi, vedi GuideHikeFallback).
+  let existingGuideText = ''
+  let existingRiddles: PlannedHike['cachedRiddles'] = []
+  let existingEpochPois: PlannedHike['cachedEpochPois'] = []
 
   if (user) {
     // Fetch hike — scoped to the authenticated user
@@ -398,6 +458,9 @@ export async function POST(req: NextRequest) {
       shadeScore:         data.s2_shade_score,
       waterSources:       data.s2_water_sources,
     }
+    existingGuideText = data.cached_guide ?? ''
+    existingRiddles = data.cached_riddles ?? []
+    existingEpochPois = data.cached_epoch_pois ?? []
   } else {
     // Emergenza (degraded): Supabase irraggiungibile, nessun accesso al percorso lato server —
     // si usa solo la copia che il client ha già in locale (lib/plannedStore.ts, cache-first),
@@ -439,18 +502,22 @@ export async function POST(req: NextRequest) {
   })
 
   const client = new Anthropic({ apiKey })
-  const prompt = buildPrompt(hike, tier, nature, breveSections, scores)
+  const prompt = buildPrompt(hike, tier, nature, breveSections, scores, sectionKey)
   const { maxTokens } = TIER_CONFIG[tier]
-  const system = SYSTEM + genderInstruction(userGender)
+  // sectionKey: niente [sottotitolo]/[avviso] (valgono solo per l'inizio di una guida intera) né
+  // ricerca web di verifica (già fatta alla generazione iniziale) — vedi SYSTEM_SECTION.
+  const system = (sectionKey ? SYSTEM_SECTION : SYSTEM) + genderInstruction(userGender)
 
   // Stream Claude response — web_search abilita Giulia a verificare online lo stato aggiornato
   // del percorso (chiusure, deviazioni, lavori) prima di scrivere, vedi istruzioni in SYSTEM.
+  // Omesso del tutto per un "Approfondisci" di sezione: non serve riverificare lo stato del
+  // percorso solo per arricchire il testo narrativo, e risparmia sia costo che tempo.
   const stream = client.messages.stream({
     model:      'claude-sonnet-4-6',
     max_tokens: maxTokens,
     system,
     messages:   [{ role: 'user', content: prompt }],
-    tools:      [{ type: 'web_search_20250305', name: 'web_search', max_uses: tier === 'approfondita' ? 8 : 4 }],
+    ...(sectionKey ? {} : { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: tier === 'approfondita' ? 8 : 4 }] }),
   })
 
   // Raccoglie le fonti web citate da Giulia mentre scrive (citations_delta sui blocchi di testo,
@@ -461,6 +528,18 @@ export async function POST(req: NextRequest) {
   const readable = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder()
+      // Se il client si disconnette a metà (tab chiusa, navigazione fuori dall'app, rete caduta)
+      // controller.enqueue inizia a lanciare — senza questo try/catch quell'eccezione uscirebbe dal
+      // for-await sottostante e interromperebbe la generazione lì, PRIMA di arrivare al blocco di
+      // salvataggio server-side qui sotto. Da questo momento in poi ci si limita ad accumulare
+      // fullText dallo stream Anthropic (una connessione separata, indipendente dal client) senza
+      // più provare a inviare nulla, cosicché la generazione prosegua comunque fino alla fine.
+      let clientGone = false
+      const safeEnqueue = (chunk: string) => {
+        if (clientGone) return
+        try { controller.enqueue(enc.encode(chunk)) } catch { clientGone = true }
+      }
+      let fullText = ''
       try {
         for await (const event of stream) {
           // [stato] è un marcatore transitorio (stessa convenzione di [sottotitolo]/[avviso]/
@@ -469,16 +548,17 @@ export async function POST(req: NextRequest) {
           if (event.type === 'content_block_start') {
             const cb = event.content_block
             if (cb.type === 'server_tool_use' && cb.name === 'web_search') {
-              controller.enqueue(enc.encode('[stato]Sto verificando lo stato aggiornato del percorso online…[/stato]'))
+              safeEnqueue('[stato]Sto verificando lo stato aggiornato del percorso online…[/stato]')
             } else if (cb.type === 'web_search_tool_result') {
-              controller.enqueue(enc.encode('[stato]Ho trovato delle informazioni, le sto integrando…[/stato]'))
+              safeEnqueue('[stato]Ho trovato delle informazioni, le sto integrando…[/stato]')
             }
           }
           if (
             event.type === 'content_block_delta' &&
             event.delta.type === 'text_delta'
           ) {
-            controller.enqueue(enc.encode(event.delta.text))
+            fullText += event.delta.text
+            safeEnqueue(event.delta.text)
           }
           if (
             event.type === 'content_block_delta' &&
@@ -491,11 +571,73 @@ export async function POST(req: NextRequest) {
         }
         if (sources.size > 0) {
           const list = Array.from(sources, ([url, title]) => ({ url, title }))
-          controller.enqueue(enc.encode(`\n[fonti]${JSON.stringify(list)}[/fonti]`))
+          const tag = `\n[fonti]${JSON.stringify(list)}[/fonti]`
+          fullText += tag
+          safeEnqueue(tag)
         }
-        controller.close()
+        if (!clientGone) { try { controller.close() } catch {} }
+
+        // Salvataggio lato server, indipendente dal client che ha fatto la richiesta — la stessa
+        // pipeline di estrazione che gira anche lato client (components/guida/GuideReader.tsx),
+        // qui rifatta a fronte dello stream server-side così la generazione non va persa nemmeno
+        // se l'utente ha chiuso il percorso o la scheda prima che il client finisse di leggerlo.
+        // Solo con un utente verificato: in modalità degradata non c'è uno `user.id` con cui
+        // verificare che la riga planned_hikes appartenga davvero a chi ha fatto la richiesta.
+        if (user) {
+          try {
+            const cachedPoisArr = (hike.cachedPois ?? []) as PoiItem[]
+            const cachedPoiWikiArr = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+
+            if (sectionKey) {
+              // "Approfondisci" di UNA sezione: si fonde nel testo già esistente invece di
+              // sovrascrivere l'intera guida — vedi lib/guideParse.ts's mergeGuideSection.
+              const step1 = stripGuideStatus(fullText).cleanedText
+              const { riddles, cleanedText: step2 } = extractRiddles(step1, cachedPoisArr, cachedPoiWikiArr)
+              const { epochPois, cleanedText: step3 } = extractEpochPois(step2, cachedPoisArr, cachedPoiWikiArr)
+              const parsedSection = parseGuideSections(step3)[0]
+              if (!parsedSection) throw new Error('sezione non riconosciuta nella risposta')
+
+              const mergedText = mergeGuideSection(existingGuideText, sectionKey, parsedSection.title, parsedSection.body)
+              // Gli indovinelli/le epoche sono legati solo alla sezione "luoghi" (vedi SYSTEM_SECTION):
+              // rigenerandola i vecchi sono da sostituire, non accumulare; per ogni altra sezione
+              // restano semplicemente quelli già esistenti, invariati.
+              const mergedRiddles = sectionKey === 'luoghi' ? riddles : existingRiddles
+              const mergedEpochPois = sectionKey === 'luoghi' ? epochPois : existingEpochPois
+
+              const { error: persistError } = await supabase.from('planned_hikes').update({
+                cached_guide: mergedText,
+                cached_riddles: mergedRiddles,
+                cached_epoch_pois: mergedEpochPois,
+              }).eq('id', hikeId).eq('user_id', user.id)
+              if (persistError) console.error('[guide] server-side persist (sezione) failed:', persistError.message)
+            } else {
+              const step1 = stripGuideStatus(fullText).cleanedText
+              const { subtitle, cleanedText: step2 } = extractCoverSubtitle(step1)
+              const { notices, cleanedText: step3 } = extractGuideNotices(step2)
+              const { sources: sourcesList, cleanedText: step4 } = extractGuideSources(step3)
+              const { riddles, cleanedText: step5 } = extractRiddles(step4, cachedPoisArr, cachedPoiWikiArr)
+              const { epochPois, cleanedText: step6 } = extractEpochPois(step5, cachedPoisArr, cachedPoiWikiArr)
+              const firstHeadingIdx = step6.search(/^## /m)
+              const finalText = firstHeadingIdx > 0 ? step6.slice(firstHeadingIdx) : step6
+
+              const { error: persistError } = await supabase.from('planned_hikes').update({
+                cached_guide: finalText,
+                cached_guide_subtitle: subtitle ?? null,
+                cached_guide_notices: notices,
+                cached_guide_sources: sourcesList,
+                cached_riddles: riddles,
+                cached_epoch_pois: epochPois,
+                guide_tier: tier,
+                guide_generated_at: new Date().toISOString(),
+              }).eq('id', hikeId).eq('user_id', user.id)
+              if (persistError) console.error('[guide] server-side persist failed:', persistError.message)
+            }
+          } catch (e) {
+            console.error('[guide] server-side persist failed:', e)
+          }
+        }
       } catch (e) {
-        controller.error(e)
+        if (!clientGone) { try { controller.error(e) } catch {} }
       }
     },
   })

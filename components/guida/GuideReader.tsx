@@ -17,7 +17,8 @@ import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
-import { GUIDE_SECTIONS, sectionDefForTitle, type GuideSectionKey } from '@/lib/guideSections'
+import { GUIDE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
+import { parseGuideSections, mergeGuideSection } from '@/lib/guideParse'
 import { SECTION_STYLE, LEGACY_STYLE } from './sectionStyle'
 import { slugifyHeading } from '@/lib/guideSlug'
 import WeatherWidget from '@/components/WeatherWidget'
@@ -133,16 +134,6 @@ interface Props {
   natura?: NaturaBundle
 }
 
-interface ParsedSection { key: GuideSectionKey | null; title: string; body: string }
-
-function parseGuide(text: string): ParsedSection[] {
-  return text.split(/^## /m).filter(Boolean).map(part => {
-    const nl = part.indexOf('\n')
-    const title = (nl === -1 ? part : part.slice(0, nl)).trim()
-    const body  = nl === -1 ? '' : part.slice(nl + 1).trim()
-    return { key: sectionDefForTitle(title)?.key ?? null, title, body }
-  })
-}
 
 // ── Chunk-based TTS ───────────────────────────────────────────────────────────
 
@@ -209,11 +200,12 @@ export default function GuideReader({
   const [guideSources, setGuideSources] = useState<GuideSource[]>(hike.cachedGuideSources ?? [])
   const [genStatus,    setGenStatus]    = useState<string | undefined>(undefined)
   const [generating,   setGenerating]   = useState(false)
+  const [generatingSectionKey, setGeneratingSectionKey] = useState<GuideSectionKey | null>(null)
   const [error,        setError]        = useState<string | null>(null)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
 
-  const parsedSections = useMemo(() => guideText ? parseGuide(guideText) : [], [guideText])
+  const parsedSections = useMemo(() => guideText ? parseGuideSections(guideText) : [], [guideText])
 
   const displaySections = useMemo<DisplaySection[]>(() => {
     const byKey = new Map(parsedSections.filter(s => s.key).map(s => [s.key as GuideSectionKey, s]))
@@ -398,6 +390,88 @@ export default function GuideReader({
     hike.id, hike.title, hike.plannedDate, hike.userNotes, hike.tags,
     hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
     hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
+    onHikeUpdate,
+  ])
+
+  // "Approfondisci" su UNA sola sezione — a differenza di generate('approfondita') (che riscrive
+  // l'intera guida) qui si chiede al server solo quella sezione (app/api/guide/route.ts, sectionKey)
+  // e si fonde il risultato nel testo già visibile, senza toccare le altre sezioni già scritte.
+  const generateSection = useCallback(async (sectionKey: GuideSectionKey) => {
+    if (generating || generatingSectionKey) return
+    setGeneratingSectionKey(sectionKey)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/guide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hikeId: hike.id,
+          sectionKey,
+          hikeFallback: {
+            title:                hike.title,
+            plannedDate:          hike.plannedDate,
+            userNotes:            hike.userNotes,
+            tags:                 hike.tags,
+            distanceMeters:       hike.distanceMeters,
+            elevationGain:        hike.elevationGain,
+            elevationLoss:        hike.elevationLoss,
+            altitudeMax:          hike.altitudeMax,
+            altitudeMin:          hike.altitudeMin,
+            estimatedTimeSeconds: hike.estimatedTimeSeconds,
+            assessment:           hike.assessment,
+            cachedPois:           hike.cachedPois,
+            cachedPoiWiki:        hike.cachedPoiWiki,
+            trackPoints:          hike.trackPoints,
+          },
+        }),
+      })
+
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({ error: 'Errore sconosciuto' }))
+        throw new Error(j.error ?? `HTTP ${res.status}`)
+      }
+
+      const reader  = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let acc = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        acc += decoder.decode(value, { stream: true })
+      }
+      acc = stripGuideStatus(acc).cleanedText
+
+      const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
+      const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+      const { riddles: newRiddles, cleanedText: c1 } = extractRiddles(acc, cachedPois, cachedPoiWiki)
+      const { epochPois: newEpochPois, cleanedText: c2 } = extractEpochPois(c1, cachedPois, cachedPoiWiki)
+
+      const parsed = parseGuideSections(c2)[0]
+      if (!parsed) throw new Error('Risposta non riconosciuta, riprova.')
+
+      const merged = mergeGuideSection(guideText, sectionKey, parsed.title, parsed.body)
+      setGuideText(merged)
+
+      // Indovinelli/epoche esistono solo per la sezione "luoghi" — approfondendola sostituiscono i
+      // precedenti (evita duplicati sugli stessi POI), per ogni altra sezione restano invariati.
+      const mergedRiddles   = sectionKey === 'luoghi' ? newRiddles   : (hike.cachedRiddles ?? [])
+      const mergedEpochPois = sectionKey === 'luoghi' ? newEpochPois : (hike.cachedEpochPois ?? [])
+
+      const patch = { cachedGuide: merged, cachedRiddles: mergedRiddles, cachedEpochPois: mergedEpochPois }
+      updatePlannedMeta(hike.id, patch).catch(() => {})
+      onHikeUpdate(patch)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Errore durante la generazione')
+    } finally {
+      setGeneratingSectionKey(null)
+    }
+  }, [
+    generating, generatingSectionKey, guideText,
+    hike.id, hike.title, hike.plannedDate, hike.userNotes, hike.tags,
+    hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
+    hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
+    hike.cachedRiddles, hike.cachedEpochPois,
     onHikeUpdate,
   ])
 
@@ -587,7 +661,10 @@ export default function GuideReader({
   const effectiveTier: GuideTier = tier ?? 'approfondita'
   const hikeTitle = hike.title
   const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
-  const showApprofondisciHint = hasGuide && !generating && effectiveTier === 'breve'
+  // Non più legato a effectiveTier === 'breve': con "Approfondisci" ora per singola sezione (vedi
+  // generateSection), qualunque sezione ancora senza testo AI può mostrare l'invito, a prescindere
+  // dal tier complessivo della guida — SectionCard mostra comunque il bottone solo se !hasBody.
+  const showApprofondisciHint = hasGuide && !generating
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -745,23 +822,30 @@ export default function GuideReader({
 
             {/* ── Guide sections — always rendered (widgets), text where available ────────── */}
             <div className="mt-4">
-              {displaySections.map((s, i) => (
-                <SectionCard
-                  key={s.key}
-                  ref={el => { sectionRefs.current[i] = el }}
-                  title={s.title}
-                  icon={s.icon}
-                  color={s.color}
-                  body={s.body}
-                  widget={renderWidget(s.key)}
-                  sectionPhoto={routePhotos[i]}
-                  twoColumns
-                  isVoiceActive={activeSection === i && (isPlaying || isPaused)}
-                  onSpeak={() => speakSection(i)}
-                  showApprofondisciHint={showApprofondisciHint}
-                  onApprofondisci={showApprofondisciHint ? () => generate('approfondita') : undefined}
-                />
-              ))}
+              {displaySections.map((s, i) => {
+                // Ogni sezione può essere approfondita singolarmente (app/api/guide/route.ts,
+                // sectionKey) — a differenza del vecchio "Approfondisci" unico che riscriveva
+                // l'intera guida. Solo per le sezioni fisse (s.guideKey), non per quelle "legacy".
+                const canApprofondisciSection = showApprofondisciHint && s.guideKey != null && !generatingSectionKey
+                return (
+                  <SectionCard
+                    key={s.key}
+                    ref={el => { sectionRefs.current[i] = el }}
+                    title={s.title}
+                    icon={s.icon}
+                    color={s.color}
+                    body={s.body}
+                    widget={renderWidget(s.key)}
+                    sectionPhoto={routePhotos[i]}
+                    twoColumns
+                    isVoiceActive={activeSection === i && (isPlaying || isPaused)}
+                    onSpeak={() => speakSection(i)}
+                    showApprofondisciHint={canApprofondisciSection}
+                    onApprofondisci={canApprofondisciSection ? () => generateSection(s.guideKey!) : undefined}
+                    approfondendo={generatingSectionKey === s.guideKey}
+                  />
+                )
+              })}
 
               {hasGuide && generating && (
                 <div className="flex items-center gap-2 px-5 py-4 bg-white rounded-2xl shadow-sm">
