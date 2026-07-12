@@ -25,7 +25,7 @@ import { extractGuideSources } from '@/lib/guideSources'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
-import { findBestSourceImage } from '@/lib/sourceImageFetch'
+import { findAllSourceImages } from '@/lib/sourceImageFetch'
 import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 
 export const dynamic = 'force-dynamic'
@@ -639,13 +639,15 @@ export async function POST(req: NextRequest) {
           }
         }
         if (sources.size > 0) {
-          // Foto di riferimento del percorso, se una delle fonti citate ne espone una pubblicamente
-          // (meta tag og:image, vedi lib/sourceImageFetch.ts) — al massimo su UNA fonte per guida,
-          // mai sui domini che non la mostrerebbero comunque (Komoot/AllTrails/Wikiloc).
-          const bestImage = await findBestSourceImage(Array.from(sources.keys())).catch(() => null)
+          // Foto di riferimento del percorso, per ogni fonte citata che ne espone una pubblicamente
+          // (meta tag og:image, vedi lib/sourceImageFetch.ts) — quante più se ne trovano, meglio è
+          // per la Galleria fotografica; mai sui domini che non la mostrerebbero comunque
+          // (Komoot/AllTrails/Wikiloc).
+          const foundImages = await findAllSourceImages(Array.from(sources.keys())).catch(() => [])
+          const imageByUrl = new Map(foundImages.map(f => [f.url, f.imageUrl]))
           const list = Array.from(sources, ([url, title]) => ({
             url, title,
-            ...(bestImage && bestImage.url === url ? { imageUrl: bestImage.imageUrl } : {}),
+            ...(imageByUrl.has(url) ? { imageUrl: imageByUrl.get(url) } : {}),
           }))
           const tag = `\n[fonti]${JSON.stringify(list)}[/fonti]`
           fullText += tag

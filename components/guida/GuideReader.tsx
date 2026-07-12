@@ -876,32 +876,40 @@ export default function GuideReader({
               </div>
             )}
 
-            {hasGuide && !generating && guideSources.length > 0 && (
-              <div className="mt-4 mb-2">
-                {(() => {
-                  const withImage = guideSources.find(s => s.imageUrl)
-                  if (!withImage?.imageUrl) return null
-                  return (
+            {hasGuide && !generating && guideSources.some(s => s.imageUrl) && (
+              <div className="mt-4 mb-1">
+                <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
+                  Galleria fotografica
+                </p>
+                <div className="flex gap-2.5 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}>
+                  {guideSources.filter(s => s.imageUrl).map((s, i) => (
                     <a
-                      href={withImage.url}
+                      key={i}
+                      href={s.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block mb-3 rounded-2xl overflow-hidden border border-stone-200 group"
+                      className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group"
+                      style={{ scrollSnapAlign: 'start' }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata dalla fonte, mai copiata sui nostri server */}
                       <img
-                        src={withImage.imageUrl}
-                        alt={withImage.title}
-                        className="w-full h-40 object-cover group-hover:opacity-90 transition-opacity"
+                        src={s.imageUrl}
+                        alt={s.title}
+                        className="w-52 h-36 object-cover group-hover:opacity-90 transition-opacity"
                         loading="lazy"
                         onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
                       />
-                      <p className="px-3 py-1.5 text-[10px] text-stone-400 bg-stone-50">
-                        Foto dal percorso — fonte: {withImage.title}
+                      <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
+                        Fonte: {s.title}
                       </p>
                     </a>
-                  )
-                })()}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hasGuide && !generating && guideSources.length > 0 && (
+              <div className="mt-4 mb-2">
                 <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
                   Fonti consultate online
                 </p>
