@@ -20,3 +20,10 @@ CREATE TABLE IF NOT EXISTS dtm_cache (
 );
 
 CREATE INDEX IF NOT EXISTS idx_dtm_cache_expires_at ON dtm_cache (expires_at);
+
+-- Public cache table, no user-owned data — same reasoning as
+-- enable_rls_public_cache_tables.sql, applied here directly so this table is never
+-- created without RLS even for a fresh project.
+ALTER TABLE dtm_cache ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dtm_cache_public_read" ON dtm_cache;
+CREATE POLICY "dtm_cache_public_read" ON dtm_cache FOR SELECT USING (true);

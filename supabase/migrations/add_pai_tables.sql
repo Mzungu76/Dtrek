@@ -21,6 +21,13 @@ CREATE TABLE IF NOT EXISTS pai_polygon_cache (
 
 CREATE INDEX IF NOT EXISTS idx_pai_polygon_cache_expires_at ON pai_polygon_cache (expires_at);
 
+-- Public cache table, no user-owned data — same reasoning as
+-- enable_rls_public_cache_tables.sql, applied here directly so this table is never
+-- created without RLS even for a fresh project.
+ALTER TABLE pai_polygon_cache ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "pai_polygon_cache_public_read" ON pai_polygon_cache;
+CREATE POLICY "pai_polygon_cache_public_read" ON pai_polygon_cache FOR SELECT USING (true);
+
 -- ── Backfill: ptpr_pois (drift preesistente, mai documentata in questo file) ──
 -- Usata da app/api/pois/route.ts (fetchPtprPois) e popolata da scripts/import-ptpr.ts;
 -- la tabella esiste già nel progetto Supabase live — CREATE TABLE IF NOT EXISTS è
