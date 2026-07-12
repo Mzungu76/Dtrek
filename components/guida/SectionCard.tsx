@@ -1,6 +1,6 @@
 'use client'
 import { forwardRef, type ReactNode } from 'react'
-import { Volume2, Sparkles, ChevronRight } from 'lucide-react'
+import { Volume2, Sparkles, ChevronRight, Loader2 } from 'lucide-react'
 import MagazineBody from './MagazineBody'
 
 interface Props {
@@ -17,6 +17,9 @@ interface Props {
    *  approfondimento non ancora richiesto) — pilota il footer discreto / la riga compatta. */
   showApprofondisciHint?: boolean
   onApprofondisci?: () => void
+  /** True mentre è in corso "Approfondisci" proprio SU QUESTA sezione — mostra uno spinner al
+   *  posto del pulsante invece di lasciarlo cliccabile una seconda volta. */
+  approfondendo?: boolean
 }
 
 /**
@@ -30,7 +33,7 @@ interface Props {
  *    così la nav e lo scroll-to-section continuano a funzionare anche per lei.
  */
 const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
-  { title, icon, color, body, widget, sectionPhoto, twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci },
+  { title, icon, color, body, widget, sectionPhoto, twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo },
   ref,
 ) {
   const hasBody = !!body?.trim()
@@ -41,7 +44,11 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
       <article ref={ref} className="scroll-mt-16 flex items-center gap-3 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5">
         <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0" style={{ color }}>{icon}</span>
         <span className="flex-1 text-[13px] font-semibold text-stone-800">{title}</span>
-        {onApprofondisci && (
+        {approfondendo ? (
+          <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
+            <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
+          </span>
+        ) : onApprofondisci && (
           <button onClick={onApprofondisci} className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 shrink-0">
             Approfondisci <ChevronRight className="w-3 h-3" />
           </button>
@@ -81,7 +88,13 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
             <MagazineBody body={body!} color={color} sectionPhoto={sectionPhoto} twoColumns={twoColumns} />
           </div>
         )}
-        {!hasBody && showApprofondisciHint && (
+        {!hasBody && approfondendo && (
+          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Giulia sta approfondendo questa sezione…
+          </div>
+        )}
+        {!hasBody && !approfondendo && showApprofondisciHint && (
           <div className="flex items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
             <Sparkles className="w-3.5 h-3.5" />
             Testo narrato non ancora generato —{' '}
