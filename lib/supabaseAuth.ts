@@ -25,6 +25,24 @@ function anonClientForRequest(request: NextRequest): SupabaseClient {
   )
 }
 
+// Tetto massimo per l'intera risoluzione — una richiesta di rete rimasta appesa (né riuscita né
+// fallita, es. durante un blackout particolarmente "silenzioso") non deve mai lasciare il
+// chiamante in sospeso per sempre: meglio rispondere "non disponibile" entro pochi secondi che
+// non rispondere affatto, che lato client si traduce in una fetch che non si risolve mai e quindi
+// in nessun messaggio a schermo (né "aggiungi la chiave" né "riprova più tardi" — proprio i
+// sintomi segnalati: guida mai generata, nessun avviso, Chiedi a Giulia/fonti mai comparse).
+const RESOLVE_TIMEOUT_MS = 8000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(fallback), ms)
+    promise.then(
+      v => { clearTimeout(timer); resolve(v) },
+      () => { clearTimeout(timer); resolve(fallback) },
+    )
+  })
+}
+
 /**
  * Core resolution shared by every exported helper below. supabase.auth.getUser() (a live network
  * round-trip to Supabase's Auth server) is always tried first and is the source of truth whenever
@@ -37,8 +55,18 @@ function anonClientForRequest(request: NextRequest): SupabaseClient {
  * Supabase's own docs describe for using getSession() safely server-side.
  */
 async function resolveUser(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean }> {
+  return withTimeout(resolveUserInner(request), RESOLVE_TIMEOUT_MS, { user: null, authUnavailable: true })
+}
+
+async function resolveUserInner(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean }> {
   const supabase = anonClientForRequest(request)
-  const { data, error } = await supabase.auth.getUser()
+  let data: { user: User | null }, error: unknown
+  try {
+    ;({ data, error } = await supabase.auth.getUser())
+  } catch {
+    data = { user: null }
+    error = new Error('getUser threw')
+  }
   if (data.user) {
     // Percorso "tutto ok" — tiene pronta la copia di riserva delle chiavi JWKS (lib/supabaseJwt.ts)
     // per quando servirà davvero. Fire-and-forget: non deve mai rallentare una richiesta riuscita.
@@ -47,10 +75,15 @@ async function resolveUser(request: NextRequest): Promise<{ user: User | null; a
   }
   if (!isAuthRetryableFetchError(error)) return { user: null, authUnavailable: false }
 
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session?.access_token) {
-    const local = await verifySupabaseJwtLocally(session.access_token)
-    if (local) return { user: { id: local.id, email: local.email } as User, authUnavailable: false }
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      const local = await verifySupabaseJwtLocally(session.access_token)
+      if (local) return { user: { id: local.id, email: local.email } as User, authUnavailable: false }
+    }
+  } catch {
+    // getSession()/la verifica locale hanno fallito in modo imprevisto — considerato comunque
+    // "non disponibile" sotto, non un errore da propagare al chiamante.
   }
   return { user: null, authUnavailable: true }
 }
@@ -83,10 +116,11 @@ export async function getUserFromRequestDetailed(request: NextRequest): Promise<
  */
 export async function getUserScopedClient(request: NextRequest): Promise<{ user: User; supabase: SupabaseClient } | null> {
   const supabase = anonClientForRequest(request)
-  const user = await getUserCached(request, async () => {
-    const { data } = await supabase.auth.getUser()
-    return data.user ?? null
-  })
+  const user = await getUserCached(request, () => withTimeout(
+    supabase.auth.getUser().then(({ data }) => data.user ?? null).catch(() => null),
+    RESOLVE_TIMEOUT_MS,
+    null,
+  ))
   if (!user) return null
   return { user, supabase }
 }

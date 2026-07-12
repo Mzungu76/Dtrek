@@ -18,7 +18,10 @@ export function useHasAiAccess(): AiAccessState {
 
   useEffect(() => {
     let cancelled = false
-    fetchOnce('ai-access', () => fetch('/api/guide').then(r => r.json().then(d => ({
+    // AbortSignal.timeout: senza un tetto massimo, una richiesta rimasta appesa lascerebbe questo
+    // stato bloccato su null per sempre — niente "aggiungi la chiave", niente "riprova più tardi",
+    // solo silenzio (guida mai generata, Chiedi a Giulia/fonti mai comparse, nessun avviso).
+    fetchOnce('ai-access', () => fetch('/api/guide', { signal: AbortSignal.timeout(10000) }).then(r => r.json().then(d => ({
       hasAiAccess: !!d.hasAccess, aiUnavailable: !!d.unavailable || (!r.ok && r.status !== 401),
     }))))
       .then(v => { if (!cancelled) setState(v) })
