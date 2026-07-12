@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
-import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { formatDuration } from '@/lib/tcxParser'
 import { difficultyIndex, formatPaceMinkm } from '@/lib/stats'
 import { format } from 'date-fns'
@@ -37,8 +37,12 @@ function buildEntryBlock(title: string, type: 'completata' | 'pianificata', line
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUserFromRequest(req)
-  if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
+  if (!user) {
+    return authUnavailable
+      ? NextResponse.json({ error: 'ai_temporarily_unavailable', message: 'Non riesco a verificare la tua sessione in questo momento (Supabase non raggiungibile) — riprova tra poco.' }, { status: 503 })
+      : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+  }
 
   const { data: settings, error: settingsErr } = await supabase
     .from('user_settings')

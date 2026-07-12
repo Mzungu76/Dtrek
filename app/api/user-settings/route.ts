@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase }            from '@/lib/supabase'
-import { getUserFromRequest }  from '@/lib/supabaseAuth'
+import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { sanitizeBreveSections, DEFAULT_BREVE_SECTIONS } from '@/lib/guideSections'
 
 /** Tanaka formula for max heart rate: 211 − 0.64 × age */
@@ -17,8 +17,12 @@ function maskKey(key: string): string {
 
 // ── GET: all user settings ───────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  const user = await getUserFromRequest(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
+  if (!user) {
+    return authUnavailable
+      ? NextResponse.json({ error: 'auth_unavailable', message: 'Supabase non raggiungibile — riprova tra poco.' }, { status: 503 })
+      : NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   // Try full select (all columns); progressively fall back if newer columns don't exist yet
   let data: Record<string, unknown> | null = null
@@ -88,8 +92,12 @@ export async function GET(req: NextRequest) {
 
 // ── POST: save any combination of settings ───────────────────────────────────
 export async function POST(req: NextRequest) {
-  const user = await getUserFromRequest(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
+  if (!user) {
+    return authUnavailable
+      ? NextResponse.json({ error: 'auth_unavailable', message: 'Supabase non raggiungibile — riprova tra poco.' }, { status: 503 })
+      : NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const body = (await req.json()) as {
     apiKey?: string
@@ -269,8 +277,12 @@ export async function POST(req: NextRequest) {
 
 // ── DELETE: remove Claude API key ────────────────────────────────────────────
 export async function DELETE(req: NextRequest) {
-  const user = await getUserFromRequest(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
+  if (!user) {
+    return authUnavailable
+      ? NextResponse.json({ error: 'auth_unavailable', message: 'Supabase non raggiungibile — riprova tra poco.' }, { status: 503 })
+      : NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const { error } = await supabase
     .from('user_settings')

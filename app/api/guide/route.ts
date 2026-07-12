@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
-import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
 import { GUIDE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
@@ -236,8 +236,15 @@ IMPORTANTE: Completa obbligatoriamente tutte le sezioni richieste (${sectionTitl
 
 // ── GET /api/guide?hikeId=X → pre-flight AI-access check, no generation ───────
 export async function GET(req: NextRequest) {
-  const user = await getUserFromRequest(req)
-  if (!user) return new Response('{"error":"Non autenticato"}', { status: 401, headers: { 'Content-Type': 'application/json' } })
+  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
+  if (!user) {
+    return new Response(
+      authUnavailable
+        ? JSON.stringify({ hasAccess: false, unavailable: true })
+        : '{"error":"Non autenticato"}',
+      { status: authUnavailable ? 200 : 401, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
 
   const { apiKey, lookupFailed } = await resolveApiKeyAndSettings(user.id)
   return new Response(JSON.stringify({ hasAccess: !!apiKey, unavailable: lookupFailed }), {
@@ -247,11 +254,16 @@ export async function GET(req: NextRequest) {
 
 // ── Route ─────────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const user = await getUserFromRequest(req)
+  const { user, authUnavailable } = await getUserFromRequestDetailed(req)
   if (!user) {
-    return new Response('{"error":"Non autenticato"}', {
-      status: 401, headers: { 'Content-Type': 'application/json' },
-    })
+    return new Response(
+      JSON.stringify(
+        authUnavailable
+          ? { error: 'ai_temporarily_unavailable', message: 'Non riesco a verificare la tua sessione in questo momento (Supabase non raggiungibile) — riprova tra poco.' }
+          : { error: 'Non autenticato' },
+      ),
+      { status: authUnavailable ? 503 : 401, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 
   const { apiKey, userGender, breveSections, lookupFailed } = await resolveApiKeyAndSettings(user.id)
