@@ -5,7 +5,7 @@ import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
-  VolumeX, Loader2, RefreshCw,
+  VolumeX, Loader2,
   FileDown, BookOpen, Sparkles,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
@@ -409,6 +409,10 @@ export default function GuideReader({
         body: JSON.stringify({
           hikeId: hike.id,
           sectionKey,
+          // Stessa lunghezza "breve" delle altre sezioni automatiche — l'"Approfondisci" per
+          // sezione riempie solo il testo mancante, non lo rende una sezione lunghissima. La
+          // versione integrale resta un'azione a sé (vedi il pulsante "Sblocca la guida integrale").
+          tier: 'breve',
           hikeFallback: {
             title:                hike.title,
             plannedDate:          hike.plannedDate,
@@ -950,22 +954,13 @@ export default function GuideReader({
             {/* ── Bottom actions ──────────────────────────────────────────── */}
             {hasGuide && !generating && (
               <div className="mt-8 mb-6 pt-5 space-y-3" style={{ borderTop: '1px solid #dcd8cc' }}>
-                {/* Azioni secondarie — sempre su una riga a sé, allineate a sinistra, così non
-                    finiscono a fare compagnia solitaria a un pulsante pieno quando lo spazio manca. */}
-                <div className="flex items-center flex-wrap gap-x-4 gap-y-2">
-                  <button onClick={() => generate(effectiveTier)} disabled={generating}
-                    className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-terra-600 transition-colors"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Rigenera
-                  </button>
-
-                  {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
+                {!('speechSynthesis' in (typeof window !== 'undefined' ? window : {})) && (
+                  <div className="flex items-center flex-wrap gap-x-4 gap-y-2">
                     <span className="flex items-center gap-1 text-xs text-stone-400">
                       <VolumeX className="w-3.5 h-3.5" /> Voce non supportata
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {/* Azioni principali — impilate a piena larghezza su mobile, affiancate da sm in
                     su, sempre come coppia coerente invece di andare a capo l'una senza l'altra. */}
@@ -973,9 +968,10 @@ export default function GuideReader({
                   {effectiveTier === 'breve' && (
                     <button onClick={() => generate('approfondita')}
                       className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+                      title="Riscrive tutta la guida in una versione molto più lunga e ricca di dettagli"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      Approfondisci
+                      Sblocca la guida integrale
                     </button>
                   )}
 
