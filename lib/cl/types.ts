@@ -88,10 +88,13 @@ export interface DensitySignal {
   factor: number           // max(0.3, sqrt(dOsm * dArea)) — 0.3-1, moltiplica l'Affidabilità grezza
 }
 
+// weather/climate were removed from here (were never summed into the CL score anyway — current
+// weather isn't evidence about data trust, only about current passability — and duplicated the
+// same Open-Meteo calls the dedicated /api/trails/conditions endpoint already makes for
+// components/CurrentConditionsNotice.tsx). WeatherSignal/ClimateSignal types stay exported below,
+// still used by that endpoint and component.
 export interface CLSignals {
   osm: OsmSignal
-  weather: WeatherSignal
-  climate: ClimateSignal
   satellite: SatelliteSignal
   activity: ActivitySignal
   community: CommunitySignal

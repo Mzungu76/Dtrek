@@ -8,11 +8,9 @@ import { computeBbox } from '@/lib/geoUtils'
 import { fetchOverpass, stitchWays, type OsmRelation, type OsmWay } from '@/lib/overpassTrails'
 import type {
   CLResult, CLSignals, CLLabel, SignalContext,
-  OsmSignal, WeatherSignal, ClimateSignal, SatelliteSignal, ActivitySignal, CommunitySignal, DensitySignal,
+  OsmSignal, SatelliteSignal, ActivitySignal, CommunitySignal, DensitySignal,
 } from '@/lib/cl/types'
 import { fetchOsmTags, collectOsmSignal } from '@/lib/cl/signals/osmSignals'
-import { collectWeatherSignal } from '@/lib/cl/signals/weatherSignals'
-import { collectClimateSignal } from '@/lib/cl/signals/climateSignals'
 import { collectSatelliteSignal } from '@/lib/cl/signals/satelliteSignals'
 import { collectActivitySignal } from '@/lib/cl/signals/activitySignals'
 import { collectCommunitySignal } from '@/lib/cl/signals/communitySignals'
@@ -37,8 +35,6 @@ export class CLRateLimitError extends Error {
 }
 
 const NEUTRAL_OSM: OsmSignal = { accessPenalty: 0, visibilityPenalty: 0, freshnessScore: 0, operatorBonus: 0, lastModified: null }
-const NEUTRAL_WEATHER: WeatherSignal = { precipPenalty: 0, soilPenalty: 0, surfaceMultiplier: 1.2, slopeMultiplier: 1.0, totalPenalty: 0 }
-const NEUTRAL_CLIMATE: ClimateSignal = { tempPenalty: 0, altitudeSeason: 0, seasonBonus: 0 }
 const NEUTRAL_SATELLITE: SatelliteSignal = { available: false, ndviDeltaPenalty: 0, ndviAbsolutePenalty: 0, firePenalty: 0, floodPenalty: 0, landslidePenalty: 0, landslideSource: 'none', floodSource: 'none', rockfallPenalty: 0, rockfallSource: 'none' }
 const NEUTRAL_ACTIVITY: ActivitySignal = { dtrekBonus: 0 }
 const NEUTRAL_COMMUNITY: CommunitySignal = { osmNotesPenalty: 0, osmNotesDetails: [], difficultyMarkersPenalty: 0, difficultyMarkersDetails: [] }
@@ -134,8 +130,13 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 function computeScore(s: CLSignals): number {
   // Only a subset of the still-computed-and-persisted signals feed the CL
   // score. Excluded (calculated + stored in si_signals, but not summed here):
-  // osm.visibilityPenalty, all weather.*, all climate.*,
-  // satellite.ndviAbsolutePenalty, satellite.rockfallPenalty.
+  // osm.visibilityPenalty, satellite.ndviAbsolutePenalty, satellite.rockfallPenalty.
+  // weather/climate used to be collected here too and were already excluded from this sum
+  // (current weather/climate isn't evidence about data trust, it's about current passability) —
+  // removed entirely rather than left dead: they cost two Open-Meteo calls on every dynamic-
+  // bucket refresh for a result nothing ever read. The real "Condizioni attuali" feature
+  // (components/CurrentConditionsNotice.tsx) already gets the same data from its own dedicated,
+  // non-cached endpoint (/api/trails/conditions) — this was pure duplicate latency.
   const sum =
     s.osm.accessPenalty +
     s.osm.freshnessScore +
@@ -247,7 +248,7 @@ async function runClPipeline(
   const dynamicExpired = force || !cached.siDynamicComputedAt || now - new Date(cached.siDynamicComputedAt).getTime() > DYNAMIC_TTL_MS
   const satelliteExpired = force || !cached.siSatelliteComputedAt || now - new Date(cached.siSatelliteComputedAt).getTime() > SATELLITE_TTL_MS
 
-  const needsOsmTags = staticExpired || dynamicExpired // weather (dynamic) reads ctx.osmTags.surface
+  const needsOsmTags = staticExpired // only osmSignals (static) reads ctx.osmTags/osmLastModified
   const needsMatch = dynamicExpired // activity (dynamic) reads ctx.matchedActivity
 
   // findMatchingActivity interroga tutto lo storico attività dell'utente (fino a 3 anni) — a
@@ -277,17 +278,15 @@ async function runClPipeline(
   // is no real OSM relation.
   const collectorId = overpassRelationId ?? 0
 
-  type CollectorKey = 'osm' | 'weather' | 'climate' | 'satellite' | 'activity' | 'community' | 'density'
+  type CollectorKey = 'osm' | 'satellite' | 'activity' | 'community' | 'density'
   const tasks: Array<{ key: CollectorKey; promise: Promise<unknown>; neutral: unknown }> = []
   if (staticExpired) {
     tasks.push({ key: 'osm', promise: collectOsmSignal(collectorId, ctx), neutral: NEUTRAL_OSM })
     // Stesso bucket TTL di osm (30gg): quanti contributor/osservazioni esistono per una zona
-    // cambia lentamente, non serve ricalcolarlo alla stessa cadenza del meteo.
+    // cambia lentamente, non serve ricalcolarlo alla stessa cadenza dell'attivita.
     tasks.push({ key: 'density', promise: collectDensitySignal(collectorId, ctx), neutral: NEUTRAL_DENSITY })
   }
   if (dynamicExpired) {
-    tasks.push({ key: 'weather', promise: collectWeatherSignal(collectorId, ctx), neutral: NEUTRAL_WEATHER })
-    tasks.push({ key: 'climate', promise: collectClimateSignal(collectorId, ctx), neutral: NEUTRAL_CLIMATE })
     tasks.push({ key: 'activity', promise: collectActivitySignal(collectorId, ctx), neutral: NEUTRAL_ACTIVITY })
     tasks.push({ key: 'community', promise: collectCommunitySignal(collectorId, ctx), neutral: NEUTRAL_COMMUNITY })
   }
@@ -312,8 +311,6 @@ async function runClPipeline(
   const cachedSignals = cached.siSignals
   const signals: CLSignals = {
     osm:       (fresh.osm as OsmSignal) ?? { ...NEUTRAL_OSM, ...cachedSignals?.osm },
-    weather:   (fresh.weather as WeatherSignal) ?? { ...NEUTRAL_WEATHER, ...cachedSignals?.weather },
-    climate:   (fresh.climate as ClimateSignal) ?? { ...NEUTRAL_CLIMATE, ...cachedSignals?.climate },
     satellite: (fresh.satellite as SatelliteSignal) ?? { ...NEUTRAL_SATELLITE, ...cachedSignals?.satellite },
     activity:  (fresh.activity as ActivitySignal) ?? { ...NEUTRAL_ACTIVITY, ...cachedSignals?.activity },
     community: (fresh.community as CommunitySignal) ?? { ...NEUTRAL_COMMUNITY, ...cachedSignals?.community },

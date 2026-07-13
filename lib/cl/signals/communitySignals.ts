@@ -5,6 +5,7 @@
 // always either OSM's own community data or the hiker's own GPX track.
 import { supabase } from '@/lib/supabase'
 import { haversineM } from '@/lib/geoUtils'
+import { classifyDifficultyText } from '@/lib/difficultyMarkers'
 import type { CommunitySignal, SignalContext } from '@/lib/cl/types'
 
 const TIMEOUT_MS = 5000
@@ -59,6 +60,13 @@ async function fetchNearbyOsmNotes(ctx: SignalContext): Promise<Array<{ text: st
         }
       })
       .filter(n => n.distanceM <= NOTES_RADIUS_M)
+      // Una nota OSM è testo libero di chiunque passi di lì — la maggior parte non ha nulla a che
+      // fare col sentiero ("il bar qui ha chiuso", "manca una panchina"). Senza questo filtro
+      // pesava come una vera segnalazione di pericolo solo per essere geograficamente vicina.
+      // Stessa lista di parole chiave già usata per i commenti GPX (lib/difficultyMarkers.ts) —
+      // qui serve solo per decidere se la nota è rilevante, non per assegnarle una gravità: la
+      // penalità resta quella basata sulla recency (notePenaltyFor), invariata.
+      .filter(n => classifyDifficultyText(n.text) !== null)
   } catch {
     return []
   }
