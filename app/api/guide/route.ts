@@ -276,6 +276,33 @@ interface GuideHikeFallback {
   trackPoints?: TrackPoint[]
 }
 
+/**
+ * Costruisce un PlannedHike minimo dalla copia locale che il client manda ad ogni richiesta
+ * (hikeFallback) — usata sia in modalità degradata (nessun utente verificabile) sia quando
+ * l'utente è verificato ma la riga non è ancora arrivata su Supabase (percorso appena importato,
+ * vedi il ramo `if (!data)` più sotto). `createdAt` resta vuoto: non è mai stato letto da una riga
+ * reale, non ha senso inventarlo.
+ */
+function hikeFromFallback(hikeId: string, hikeFallback: GuideHikeFallback): PlannedHike {
+  return {
+    id:                   hikeId,
+    title:                hikeFallback.title ?? 'Percorso',
+    plannedDate:          hikeFallback.plannedDate,
+    userNotes:            hikeFallback.userNotes,
+    tags:                 hikeFallback.tags,
+    createdAt:            '',
+    distanceMeters:       hikeFallback.distanceMeters ?? 0,
+    elevationGain:        hikeFallback.elevationGain ?? 0,
+    elevationLoss:        hikeFallback.elevationLoss ?? 0,
+    altitudeMax:          hikeFallback.altitudeMax ?? 0,
+    altitudeMin:          hikeFallback.altitudeMin ?? 0,
+    estimatedTimeSeconds: hikeFallback.estimatedTimeSeconds ?? 0,
+    assessment:           hikeFallback.assessment,
+    cachedPois:           hikeFallback.cachedPois,
+    cachedPoiWiki:        hikeFallback.cachedPoiWiki,
+  }
+}
+
 function buildPrompt(
   hike: PlannedHike,
   tier: GuideTier,
@@ -482,11 +509,14 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id)
       .single()
 
-    // PGRST116 = .single() non ha trovato righe: genuinamente "non esiste" (o non è di questo
-    // utente). Qualunque ALTRO errore (Supabase irraggiungibile, timeout...) non è la stessa cosa
-    // — dire "percorso non trovato" per un blackout temporaneo farebbe pensare all'utente di aver
-    // perso il percorso, quando basta riprovare tra poco. Stesso principio già usato altrove
-    // (es. app/api/user-settings/route.ts) per distinguere i due casi.
+    // PGRST116 = .single() non ha trovato righe: o genuinamente non esiste, o — caso comune per un
+    // percorso appena importato — non è ancora arrivata su Supabase per via del debounce
+    // dell'outbox (lib/plannedStore.ts's savePlanned tenta un salvataggio sincrono con qualche
+    // retry ravvicinato, ma un blackout più lungo del previsto può comunque farla arrivare tardi).
+    // Qualunque ALTRO errore (Supabase irraggiungibile, timeout...) non è la stessa cosa — dire
+    // "percorso non trovato" per un blackout temporaneo farebbe pensare all'utente di aver perso
+    // il percorso, quando basta riprovare tra poco. Stesso principio già usato altrove (es.
+    // app/api/user-settings/route.ts) per distinguere i due casi.
     if (error && error.code !== 'PGRST116') {
       return new Response(
         JSON.stringify({
@@ -496,58 +526,71 @@ export async function POST(req: NextRequest) {
         { status: 503, headers: { 'Content-Type': 'application/json' } },
       )
     }
+
     if (!data) {
-      return new Response('{"error":"Percorso non trovato"}', {
-        status: 404, headers: { 'Content-Type': 'application/json' },
-      })
-    }
+      // Il client manda già una copia locale del percorso (hikeFallback) ad ogni richiesta, non
+      // solo in modalità degradata — se la riga non è ancora su Supabase ma il client la conosce
+      // già (l'ha appena creata lui stesso), usa quella invece di dire "non trovato": è quasi
+      // certamente solo questione di qualche secondo prima che l'outbox la sincronizzi.
+      if (!hikeFallback) {
+        return new Response('{"error":"Percorso non trovato"}', {
+          status: 404, headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      hike = hikeFromFallback(hikeId, hikeFallback)
+      scores = { difficultyMarkers: [] }
+      trackPoints = hikeFallback.trackPoints ?? []
+      s2 = undefined
+      // existingGuideText/existingRiddles/existingEpochPois restano vuoti (già inizializzati
+      // sopra) — non c'è nulla da leggere finché la riga non esiste ancora.
+    } else {
+      const { data: markersRows } = await supabase
+        .from('trail_difficulty_markers')
+        .select('lat, lon, source, source_text, severity, keywords')
+        .eq('planned_hike_id', hikeId)
+      const difficultyMarkers: ClassifiedDifficultyMarker[] = (markersRows ?? []).map(m => ({
+        lat: m.lat, lon: m.lon, source: m.source, text: m.source_text, severity: m.severity, keywords: m.keywords ?? [],
+      }))
 
-    const { data: markersRows } = await supabase
-      .from('trail_difficulty_markers')
-      .select('lat, lon, source, source_text, severity, keywords')
-      .eq('planned_hike_id', hikeId)
-    const difficultyMarkers: ClassifiedDifficultyMarker[] = (markersRows ?? []).map(m => ({
-      lat: m.lat, lon: m.lon, source: m.source, text: m.source_text, severity: m.severity, keywords: m.keywords ?? [],
-    }))
+      hike = {
+        id:                   data.id,
+        title:                data.title,
+        plannedDate:          data.planned_date ?? undefined,
+        userNotes:            data.user_notes   ?? undefined,
+        tags:                 data.tags         ?? undefined,
+        createdAt:            data.created_at,
+        distanceMeters:       data.distance_meters,
+        elevationGain:        data.elevation_gain,
+        elevationLoss:        data.elevation_loss,
+        altitudeMax:          data.altitude_max,
+        altitudeMin:          data.altitude_min,
+        estimatedTimeSeconds: data.estimated_time_seconds,
+        assessment:           data.assessment           ?? undefined,
+        cachedPois:           data.cached_pois          ?? undefined,
+        cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,
+      }
 
-    hike = {
-      id:                   data.id,
-      title:                data.title,
-      plannedDate:          data.planned_date ?? undefined,
-      userNotes:            data.user_notes   ?? undefined,
-      tags:                 data.tags         ?? undefined,
-      createdAt:            data.created_at,
-      distanceMeters:       data.distance_meters,
-      elevationGain:        data.elevation_gain,
-      elevationLoss:        data.elevation_loss,
-      altitudeMax:          data.altitude_max,
-      altitudeMin:          data.altitude_min,
-      estimatedTimeSeconds: data.estimated_time_seconds,
-      assessment:           data.assessment           ?? undefined,
-      cachedPois:           data.cached_pois          ?? undefined,
-      cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,
-    }
+      scores = {
+        cachedTrailScore:  data.cached_trail_score  ?? undefined,
+        cachedSafetyScore: data.cached_safety_score ?? undefined,
+        cachedTsTotal:     data.cached_ts_total      ?? undefined,
+        cachedBeautyScore: data.cached_beauty_score  ?? undefined,
+        difficultyMarkers,
+      }
 
-    scores = {
-      cachedTrailScore:  data.cached_trail_score  ?? undefined,
-      cachedSafetyScore: data.cached_safety_score ?? undefined,
-      cachedTsTotal:     data.cached_ts_total      ?? undefined,
-      cachedBeautyScore: data.cached_beauty_score  ?? undefined,
-      difficultyMarkers,
+      trackPoints = Array.isArray(data.track_points) ? data.track_points : []
+      s2 = {
+        available:          data.s2_available,
+        phenologyPeakMonth: data.s2_phenology_peak_month,
+        ndviDelta:          data.s2_ndvi_delta,
+        landscapeVariety:   data.s2_landscape_variety,
+        shadeScore:         data.s2_shade_score,
+        waterSources:       data.s2_water_sources,
+      }
+      existingGuideText = data.cached_guide ?? ''
+      existingRiddles = data.cached_riddles ?? []
+      existingEpochPois = data.cached_epoch_pois ?? []
     }
-
-    trackPoints = Array.isArray(data.track_points) ? data.track_points : []
-    s2 = {
-      available:          data.s2_available,
-      phenologyPeakMonth: data.s2_phenology_peak_month,
-      ndviDelta:          data.s2_ndvi_delta,
-      landscapeVariety:   data.s2_landscape_variety,
-      shadeScore:         data.s2_shade_score,
-      waterSources:       data.s2_water_sources,
-    }
-    existingGuideText = data.cached_guide ?? ''
-    existingRiddles = data.cached_riddles ?? []
-    existingEpochPois = data.cached_epoch_pois ?? []
   } else {
     // Emergenza (degraded): Supabase irraggiungibile, nessun accesso al percorso lato server —
     // si usa solo la copia che il client ha già in locale (lib/plannedStore.ts, cache-first),
@@ -559,23 +602,7 @@ export async function POST(req: NextRequest) {
         status: 404, headers: { 'Content-Type': 'application/json' },
       })
     }
-    hike = {
-      id:                   hikeId,
-      title:                hikeFallback.title ?? 'Percorso',
-      plannedDate:          hikeFallback.plannedDate,
-      userNotes:            hikeFallback.userNotes,
-      tags:                 hikeFallback.tags,
-      createdAt:            '',
-      distanceMeters:       hikeFallback.distanceMeters ?? 0,
-      elevationGain:        hikeFallback.elevationGain ?? 0,
-      elevationLoss:        hikeFallback.elevationLoss ?? 0,
-      altitudeMax:          hikeFallback.altitudeMax ?? 0,
-      altitudeMin:          hikeFallback.altitudeMin ?? 0,
-      estimatedTimeSeconds: hikeFallback.estimatedTimeSeconds ?? 0,
-      assessment:           hikeFallback.assessment,
-      cachedPois:           hikeFallback.cachedPois,
-      cachedPoiWiki:        hikeFallback.cachedPoiWiki,
-    }
+    hike = hikeFromFallback(hikeId, hikeFallback)
     scores = { difficultyMarkers: [] }
     trackPoints = hikeFallback.trackPoints ?? []
     s2 = undefined
