@@ -45,6 +45,11 @@ export interface RouteHubItem {
    *  from whatever's already cached (no live fetch per list item); Resoconto: the user's manual
    *  rating. Undefined when nothing's known yet for this item. */
   scorePreview?: { value: number; max: number; color?: string }
+  /** Guida-only: i 3 assi (0-100) che compongono il Trail Score v2 (Comfort/Sicurezza/Ombra&Acqua)
+   *  per il badge-triangolo di TopOverlay (components/TrailScoreShapeBadge.tsx) — cachati così la
+   *  forma è disponibile per ogni percorso della galleria/carosello senza una fetch per scheda.
+   *  Un asse assente disegna quel vertice al centro invece del suo valore reale. */
+  scoreShapeAxes?: { cts: number | null; safety: number | null; shade: number | null }
   /** Guida-only "preferito" flag — undefined for Resoconto items (no favorite concept there). */
   favorite?: boolean
 }
@@ -103,6 +108,10 @@ export interface RouteHubProps {
   scoreBadges?: (item: RouteHubItem, onTap: () => void) => ReactNode
   /** Section opened by the score badges' `onTap` — Guida targets 'featured' (its only page). */
   scoreBadgesTargetSection?: SectionKind
+  /** Trail Score triangle badge + archetype label, shown under the subtitle line (magazine variant
+   *  only) instead of floating over the cover like scoreBadges — Guida-only. Same onTap contract
+   *  as scoreBadges (opens scoreBadgesTargetSection). */
+  scoreShapeBadge?: (item: RouteHubItem, onTap: () => void) => ReactNode
   /** Resoconto only: horizontal photo strip shown above every tab's content. */
   heroPhotos?: ReactNode
   /** Extra chip(s) shown in RoutePage's fixed header (e.g. the "programma data" chip). */

@@ -24,7 +24,7 @@ const FLING_VELOCITY = 0.9
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, bodyMode, tabs = [], renderSection,
   tabScrollRef, primaryAction, summaryBanner, weatherIcon, onSectionChange,
-  scoreBadges, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
+  scoreBadges, scoreShapeBadge, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
   subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite, onCompare,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
@@ -257,6 +257,7 @@ export default function RouteHub({
           title={item.title} statPills={item.statPills}
           weatherIcon={weatherIcon?.(item)} onOpenWeather={() => openWithAnimation('meteo')}
           scoreBadges={scoreBadges?.(item, () => openWithAnimation(scoreBadgesTargetSection ?? defaultSection))}
+          scoreShapeBadge={scoreShapeBadge?.(item, () => openWithAnimation(scoreBadgesTargetSection ?? defaultSection))}
           subtitle={subtitle?.(item)}
           variant={topOverlayVariant}
           favoriteButton={onToggleFavorite && (
