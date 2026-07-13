@@ -45,14 +45,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'osm_relation_id o polyline richiesto' }, { status: 400 })
   }
 
+  let plannedOsmRelationId: number | null = null
   if (plannedId) {
     const { data: owned } = await supabase
       .from('planned_hikes')
-      .select('id')
+      .select('id, osm_relation_id')
       .eq('id', plannedId)
       .eq('user_id', user.id)
       .maybeSingle()
     if (!owned) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    plannedOsmRelationId = owned.osm_relation_id
   }
 
   let osmRelationId: number | null = null
@@ -75,20 +77,28 @@ export async function GET(req: NextRequest) {
     }
     polyline = parsed as [number, number][]
 
-    const matchedId = await withTimeout(
-      findTrailForPolyline(polyline),
-      MATCH_TIMEOUT_MS,
-    ).catch((err) => {
-      console.error('[trails/sentinel2] findTrailForPolyline failed or timed out', err)
-      return null
-    })
+    // Il sibling /api/trails/cl fa esattamente la stessa risoluzione polyline→trail per lo
+    // stesso percorso, nella stessa finestra temporale (i due hook lato client partono insieme) —
+    // se il match è già stato trovato e persistito (da quella gemella già completata), riusalo
+    // invece di rifare da capo la scansione paginata dell'intera tabella trails.
+    if (plannedOsmRelationId != null) {
+      osmRelationId = plannedOsmRelationId
+    } else {
+      const matchedId = await withTimeout(
+        findTrailForPolyline(polyline),
+        MATCH_TIMEOUT_MS,
+      ).catch((err) => {
+        console.error('[trails/sentinel2] findTrailForPolyline failed or timed out', err)
+        return null
+      })
 
-    if (matchedId) {
-      osmRelationId = matchedId
-      if (plannedId) {
-        supabase.from('planned_hikes').update({ osm_relation_id: matchedId })
-          .eq('id', plannedId).eq('user_id', user.id)
-          .then(({ error }) => { if (error) console.error('[trails/sentinel2] failed to persist osm_relation_id', error) })
+      if (matchedId) {
+        osmRelationId = matchedId
+        if (plannedId) {
+          supabase.from('planned_hikes').update({ osm_relation_id: matchedId })
+            .eq('id', plannedId).eq('user_id', user.id)
+            .then(({ error }) => { if (error) console.error('[trails/sentinel2] failed to persist osm_relation_id', error) })
+        }
       }
     }
   }

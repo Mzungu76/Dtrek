@@ -195,10 +195,17 @@ export async function collectSatelliteSignal(_osmRelationId: number, ctx: Signal
 
   // Both run alongside the Sentinel-2 fetch below (not awaited until needed) so neither
   // lookup adds latency on top of the MPC round-trip. Independent of whether Sentinel-2
-  // itself succeeds — see the catch block, where a PAI/rockfall hit still counts even if
-  // MPC is unreachable.
+  // itself succeeds — see the catch block, where a PAI hit still counts even if MPC is
+  // unreachable.
   const paiPromise = fetchPaiOverride(ctx)
-  const rockfallPromise = fetchRockfallOverride(ctx)
+  // Skipped, not called: lithologyCodeToRockfallRisk (lib/geologia/lithologyRiskMap.ts) is a
+  // real geological-domain gap that always returns 'unknown' today (no invented mapping — see
+  // that file's own comment), so fetchRockfallOverride's WMS GetFeatureInfo round-trip (one call
+  // per geometry vertex) is a guaranteed no-op every single time. It showed up repeatedly in
+  // production logs as "[si] Geologia fetch failed... TimeoutError" — real latency/timeout risk
+  // on an already timeout-prone route, for a result that can never be anything but NO_ROCKFALL.
+  // Re-enable by restoring `fetchRockfallOverride(ctx)` here once that mapping is populated.
+  const rockfallPromise = Promise.resolve(NO_ROCKFALL)
 
   try {
     const now = new Date()
