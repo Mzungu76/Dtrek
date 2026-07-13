@@ -199,7 +199,11 @@ const TIER_CONFIG: Record<GuideTier, { maxTokens: number; instruction: string }>
     instruction: 'Scrivi in modo conciso ma discorsivo, non didascalico: 3-4 frasi, circa 65-85 parole per sezione.',
   },
   approfondita: {
-    maxTokens: 16000,
+    // Margine di sicurezza oltre a quanto le 8 sezioni dovrebbero effettivamente richiedere (era
+    // 16000) — non pensato per "coprire" una sezione Luoghi senza tetto (risolto sopra
+    // limitando i POI trattati), solo per non tagliare una guida legittimamente ricca in un
+    // percorso con molti luoghi interessanti.
+    maxTokens: 20000,
     instruction: 'Scrivi con grande ricchezza di dettagli: 5-6 paragrafi per sezione, circa 500-600 parole per sezione, con aneddoti, curiosità e descrizioni vivide.',
   },
 }
@@ -235,8 +239,14 @@ per saperlo).
 IMPORTANTE: questa sezione resta sempre molto più breve delle altre, anche in modalità Approfondita —
 massimo 30-50 parole, 1-2 frasi, mai di più.`,
   luoghi: `## I luoghi da non perdere
-Approfondimento sui punti di interesse più significativi. Racconta la loro storia, le leggende,
-le curiosità che la maggior parte dei turisti non conosce. Rendi ogni luogo memorabile.`,
+Approfondimento sui punti di interesse più significativi (quelli nell'elenco LUOGHI CON VOCE
+WIKIPEDIA più sotto). Racconta la loro storia, le leggende, le curiosità che la maggior parte dei
+turisti non conosce. Rendi ogni luogo memorabile.
+IMPORTANTE: la lunghezza indicata più in basso (LUNGHEZZA) vale per QUESTA sezione nel suo
+complesso, non per ogni singolo luogo — se l'elenco contiene diversi luoghi, dividi lo spazio tra
+loro invece di scrivere un paragrafo integrale per ciascuno: è molto meglio finire tutte le sezioni
+richieste con un ritmo più asciutto per luogo, piuttosto che restare a metà di questa sezione senza
+mai arrivare alle successive.`,
   natura: `## La natura intorno a te
 Flora, fauna e geologia della zona. Cosa potresti incontrare (animali, fiori, rocce particolari).
 Aggiungi curiosità naturalistiche legate alla stagione.`,
@@ -320,8 +330,16 @@ function buildPrompt(
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
 
-  const wikiBlock = wiki.length > 0
-    ? wiki.map(({ poi, wiki: w }) =>
+  // Un tetto qui non è solo per limitare il prompt in ingresso: la sezione "I luoghi da non
+  // perdere" tratta OGNI luogo di questo elenco (narrazione + indovinello obbligatorio, vedi
+  // SYSTEM/SYSTEM_SECTION), quindi un tracciato con molti POI Wikipedia poteva far sforare
+  // max_tokens a metà di quella sezione, troncando tutte le sezioni successive — mai una
+  // limitazione voluta, solo un elenco senza tetto. Gli 8 più vicini al percorso restano comunque
+  // i più pertinenti (wiki arriva già ordinato per distanza dalla traccia).
+  const MAX_WIKI_POIS_IN_PROMPT = 8
+  const wikiCapped = wiki.slice(0, MAX_WIKI_POIS_IN_PROMPT)
+  const wikiBlock = wikiCapped.length > 0
+    ? wikiCapped.map(({ poi, wiki: w }) =>
         `• ${w.title} [${poi.type}${poi.ele ? `, ${poi.ele} m slm` : ''}, ${poiDistance(poi.distFromTrack)}]\n  ${(w.extract ?? '').slice(0, 500)}`
       ).join('\n\n')
     : '(nessun dato Wikipedia disponibile)'
