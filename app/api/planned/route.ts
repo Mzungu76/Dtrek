@@ -83,6 +83,9 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     floraResult:                   row.flora_result                    as PlannedHike['floraResult'],
     floraTrackHash:                row.flora_track_hash                as string | undefined,
     floraComputedAt:               row.flora_computed_at               as string | undefined,
+    s2ShadeScore:                  row.s2_shade_score                  as number | undefined,
+    s2Available:                   row.s2_available                    as boolean | undefined,
+    s2ComputedAt:                  row.s2_computed_at                  as string | undefined,
   }
 }
 

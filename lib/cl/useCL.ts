@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import type { CLResult, Sentinel2Data } from '@/lib/cl/types'
 import { SI_STATIC_TTL_MS, SI_DYNAMIC_TTL_MS, SI_SATELLITE_TTL_MS, labelForSiScore } from '@/lib/cl/label'
 import type { PlannedHike } from '@/lib/plannedStore'
+import { refreshTsForHike } from '@/lib/computeTsForHike'
 
 interface Params {
   osmId?: number
@@ -190,8 +191,10 @@ export function useSentinel2({ osmId, polyline, plannedId }: Params): {
           return
         }
         const d: Sentinel2Data | { matched: false } | { error: string } = await res.json()
-        if ('available' in d) setData(d)
-        else if ('error' in d) setRefreshError('Impossibile aggiornare i dati in questo momento.')
+        if ('available' in d) {
+          setData(d)
+          if (d.available && plannedId) refreshTsForHike(plannedId).catch(() => {})
+        } else if ('error' in d) setRefreshError('Impossibile aggiornare i dati in questo momento.')
       })
       .catch(() => { setRefreshError('Impossibile aggiornare i dati in questo momento.') })
       .finally(() => setRefreshing(false))

@@ -337,13 +337,20 @@ export default function GuidaHub({ id }: { id?: string }) {
     return () => { cancelled = true }
   }, [hike?.id, poisFullyLoaded, dtmProfile, terrainProfile, inProtectedArea, prefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Once every live input has settled (no per-item fetch needed — this only runs for the hike
-  // that's actually open), persists the *full* aggregate — including CL and ombra/acqua, which
-  // the cached-only fallback above can never see — to Supabase. From then on every gallery
-  // render (this session, next session, other devices) reads that number back instantly via
-  // previewScoreValue() instead of recomputing a partial one from scratch.
+  // Once every live input the aggregate actually needs has settled (no per-item fetch needed —
+  // this only runs for the hike that's actually open), persists the *full* aggregate — including
+  // ombra/acqua, which the cached-only fallback above can never see — to Supabase. From then on
+  // every gallery render (this session, next session, other devices) reads that number back
+  // instantly via previewScoreValue() instead of recomputing a partial one from scratch. Trail
+  // Score v2 no longer depends on Affidabilità (see lib/trailScoreV2.ts), so this doesn't wait on
+  // si.loading — CL is still passed through for its own independent badge and for the
+  // "Sicurezza non tracciata affatto" fallback (see computeTrailScoreTotal's notApplicable), not
+  // as a scoring input. lib/computeTsForHike.ts's refreshTsForHike already covers most of the
+  // "recompute after a sibling score changes" cases fire-and-forget elsewhere; this effect stays
+  // as the one that also reacts to a *local*, not-yet-persisted ctsResult (recomputed live from
+  // cachedBeautyScore + current preferences, see the effect above) and to forecastTempC.
   useEffect(() => {
-    if (!hike || si.loading || s2.loading) return
+    if (!hike || s2.loading) return
     const total = computeTrailScoreTotal(
       { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
       safetyScore,

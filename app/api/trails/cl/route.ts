@@ -36,6 +36,9 @@ export async function GET(req: NextRequest) {
   const polylineParam = req.nextUrl.searchParams.get('polyline')
   const plannedId = req.nextUrl.searchParams.get('planned_id')
   const force = req.nextUrl.searchParams.get('force') === '1'
+  // Riservato al pulsante "Ricalcola tutti i CL" di Impostazioni (lib/recalcScores.ts) — vedi il
+  // commento su bypassCooldown in lib/cl/computeCL.ts. Ignorato se force non è anche presente.
+  const bypassCooldown = req.nextUrl.searchParams.get('bypass_cooldown') === '1'
 
   if (!osmIdParam && !polylineParam) {
     return NextResponse.json({ error: 'osm_relation_id o polyline richiesto' }, { status: 400 })
@@ -102,7 +105,7 @@ export async function GET(req: NextRequest) {
 
   try {
     if (osmRelationId != null) {
-      const result = await withTimeout(computeCL(osmRelationId, undefined, { force }), COMPUTE_TIMEOUT_MS)
+      const result = await withTimeout(computeCL(osmRelationId, undefined, { force, bypassCooldown }), COMPUTE_TIMEOUT_MS)
       return NextResponse.json(result satisfies CLApiResponse)
     }
 
@@ -119,7 +122,7 @@ export async function GET(req: NextRequest) {
         computeCLForPlannedHike(
           plannedId, polyline, { minLat, minLon, maxLat, maxLon },
           distanceKm, plannedRow?.elevation_gain ?? null, plannedRow?.elevation_loss ?? null,
-          { force },
+          { force, bypassCooldown },
         ),
         COMPUTE_TIMEOUT_MS,
       )

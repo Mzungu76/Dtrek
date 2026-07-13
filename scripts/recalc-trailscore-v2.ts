@@ -1,9 +1,11 @@
 /**
  * One-time recalculation: forza il ricalcolo dell'Affidabilita (CL) di OGNI percorso pianificato
  * con la correzione di densita dati (lib/cl/signals/densitySignal.ts), poi ricalcola l'aggregato
- * Trail Score v2 (lib/trailScoreV2.ts) combinando quell'Affidabilita fresca con Sicurezza/Comfort
- * TrailScore/Ombra&Acqua gia cachati (quelle formule non sono cambiate, quindi si leggono cosi
- * come sono — non vengono ricalcolate da zero).
+ * Trail Score v2 (lib/trailScoreV2.ts) da Sicurezza/Comfort TrailScore/Ombra&Acqua gia cachati
+ * (quelle formule non sono cambiate, quindi si leggono cosi come sono — non vengono ricalcolate
+ * da zero). L'Affidabilita NON entra piu nella formula del Trail Score v2 (vedi il commento in
+ * cima a lib/trailScoreV2.ts) — il suo ricalcolo qui resta comunque utile per il badge
+ * indipendente che la mostra (components/ScoreRing.tsx), solo non alimenta piu il TS.
  *
  * A differenza di scripts/backfill-planned-si.ts (che processa solo le righe MAI calcolate
  * prima), questo script processa TUTTE le righe, azzerando le scadenze TTL invece di usare
@@ -104,13 +106,12 @@ async function processRow(row: PlannedRow) {
     cts: row.cached_trail_score ?? null,
     ombraAcqua: shadeWaterValue,
     safety: row.cached_safety_score?.overall ?? null,
-    affidabilita: cl.si,
     // Nessuna temperatura prevista qui (non e uno specifico giorno di escursione live) — Trail
     // Score v2 degrada correttamente ai pesi statici (0.78/0.22), stesso comportamento che
     // avrebbe app/guida/useForecastTemp.ts se non trovasse una data pianificata valida.
   })
 
-  const densityNote = `Affidabilita ${cl.siRaw}→${cl.si} (fattore densita ${cl.dataDensityFactor.toFixed(2)})`
+  const densityNote = `Affidabilita ${cl.siRaw}→${cl.si} (fattore densita ${cl.dataDensityFactor.toFixed(2)}, badge indipendente — non alimenta piu il TS)`
   if (ts) {
     const { error } = await supabase.from('planned_hikes').update({ cached_ts_total: ts.score }).eq('id', row.id)
     if (error) { console.error(`  [ts-persist-error] ${row.id}`, error); return }
