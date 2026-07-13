@@ -19,6 +19,24 @@ interface Params {
   siCache?: Pick<PlannedHike, 'siScore' | 'siSignals' | 'siStaticComputedAt' | 'siDynamicComputedAt' | 'siSatelliteComputedAt' | 'isGhostTrail' | 'dominantWarning'>
 }
 
+// Un percorso appena importato può non essere ancora arrivato su Supabase quando queste chiamate
+// partono (race con l'outbox di lib/plannedStore.ts's savePlanned — mitigata ma non azzerata da
+// un retry più ravvicinato lì) — l'ownership check di /api/trails/cl e /api/trails/sentinel2
+// risponde 404 "Not found" in quel caso, indistinguibile da un vero "non trovato" lato client.
+// Qualche retry ravvicinato copre la finestra tipica prima di arrendersi come prima.
+const NOT_FOUND_RETRY_DELAYS_MS = [0, 3000, 6000]
+
+async function fetchWithNotFoundRetry(url: string, isCancelled: () => boolean): Promise<Response> {
+  let res: Response | null = null
+  for (const delay of NOT_FOUND_RETRY_DELAYS_MS) {
+    if (delay > 0) await new Promise(r => setTimeout(r, delay))
+    if (isCancelled()) throw new Error('cancelled')
+    res = await fetch(url)
+    if (res.status !== 404) return res
+  }
+  return res!
+}
+
 function queryFor({ osmId, polyline, plannedId }: Params): string | null {
   const plannedSuffix = plannedId ? `&planned_id=${encodeURIComponent(plannedId)}` : ''
   if (osmId != null) return `osm_relation_id=${osmId}${plannedSuffix}`
@@ -80,7 +98,7 @@ export function useCL({ osmId, polyline, plannedId, siCache }: Params): {
     setLoading(true)
     setNotMatched(false)
 
-    fetch(`/api/trails/cl?${qs}`)
+    fetchWithNotFoundRetry(`/api/trails/cl?${qs}`, () => cancelled)
       .then(res => res.json())
       .then((data: CLResult | { matched: false } | { error: string }) => {
         if (cancelled) return
@@ -131,7 +149,7 @@ export function useSentinel2({ osmId, polyline, plannedId }: Params): { data: Se
     setLoading(true)
     setNotMatched(false)
 
-    fetch(`/api/trails/sentinel2?${qs}`)
+    fetchWithNotFoundRetry(`/api/trails/sentinel2?${qs}`, () => cancelled)
       .then(res => res.json())
       .then((d: Sentinel2Data | { matched: false } | { error: string }) => {
         if (cancelled) return

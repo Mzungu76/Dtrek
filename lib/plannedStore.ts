@@ -198,37 +198,55 @@ export async function getPlannedById(id: string): Promise<PlannedHike | null> {
  * If the network call fails (offline, transient error) the hike is queued
  * instead, so the record isn't lost — the assessment simply arrives later,
  * merged in by the registered flusher below once the flush succeeds.
+ *
+ * Un blip transitorio qui (non un vero blackout) è particolarmente costoso: la pagina guida a cui
+ * il chiamante naviga subito dopo legge/verifica questa riga da Supabase in almeno tre punti
+ * indipendenti (app/api/guide/route.ts, app/api/trails/cl/route.ts, app/api/trails/sentinel2/
+ * route.ts) — se la riga non c'è ancora, quei tre punti falliscono silenziosamente (404) senza
+ * nessun retry automatico finché la pagina non viene ricaricata da capo. Il normale fallback
+ * all'outbox aspetta ~15s di debounce (lib/sync/syncEngine.ts) prima di ritentare — troppo lento
+ * per l'attimo in cui l'utente sta già aprendo quella pagina. Un paio di retry ravvicinati qui,
+ * PRIMA di arrendersi all'outbox, coprono il caso comune (un singolo blip) senza dover cambiare
+ * quando/se il chiamante naviga.
  */
 export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: HikeAssessment }> {
   await lsSet(LS_KEYS.planned(hike.id), hike)
   const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
   await lsSet(LS_KEYS.plannedList, [toPlannedMeta(hike), ...(list ?? []).filter((h) => h.id !== hike.id)])
 
-  try {
-    const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment; routePolyline?: [number, number][] }>('/api/planned', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(hike),
-    })
-    // Merge in the server-computed assessment and routePolyline (derived from trackPoints
-    // server-side when the client didn't send one, e.g. a fresh GPX import) so the cache isn't
-    // stale on the very first read — cache-first getPlannedById would otherwise return an object
-    // permanently missing routePolyline, which useCL/useSentinel2 (lib/cl/useCL.ts) need to even
-    // attempt fetching the CL/shade-water scores.
-    const cached = {
-      ...hike,
-      ...(result.assessment    ? { assessment: result.assessment } : {}),
-      ...(result.routePolyline ? { routePolyline: result.routePolyline } : {}),
+  const RETRY_DELAYS_MS = [0, 1500, 3000]
+  for (let i = 0; i < RETRY_DELAYS_MS.length; i++) {
+    if (RETRY_DELAYS_MS[i] > 0) await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[i]))
+    try {
+      const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment; routePolyline?: [number, number][] }>('/api/planned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(hike),
+      })
+      // Merge in the server-computed assessment and routePolyline (derived from trackPoints
+      // server-side when the client didn't send one, e.g. a fresh GPX import) so the cache isn't
+      // stale on the very first read — cache-first getPlannedById would otherwise return an object
+      // permanently missing routePolyline, which useCL/useSentinel2 (lib/cl/useCL.ts) need to even
+      // attempt fetching the CL/shade-water scores.
+      const cached = {
+        ...hike,
+        ...(result.assessment    ? { assessment: result.assessment } : {}),
+        ...(result.routePolyline ? { routePolyline: result.routePolyline } : {}),
+      }
+      await lsSet(LS_KEYS.planned(hike.id), cached)
+      const list2 = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+      if (list2) await lsSet(LS_KEYS.plannedList, list2.map((h) => h.id === hike.id ? toPlannedMeta(cached) : h))
+      return result
+    } catch {
+      // Ultimo tentativo esaurito: passa all'outbox, altrimenti prova ancora.
+      if (i === RETRY_DELAYS_MS.length - 1) {
+        await obEnqueue(ENTITY_TYPE, hike.id, 'upsert', hike)
+        scheduleFlush()
+        return {}
+      }
     }
-    await lsSet(LS_KEYS.planned(hike.id), cached)
-    const list2 = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
-    if (list2) await lsSet(LS_KEYS.plannedList, list2.map((h) => h.id === hike.id ? toPlannedMeta(cached) : h))
-    return result
-  } catch {
-    await obEnqueue(ENTITY_TYPE, hike.id, 'upsert', hike)
-    scheduleFlush()
-    return {}
   }
+  return {} // irraggiungibile, soddisfa solo il controllo dei tipi
 }
 
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
