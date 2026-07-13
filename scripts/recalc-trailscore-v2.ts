@@ -116,7 +116,9 @@ async function processRow(row: PlannedRow) {
     if (error) { console.error(`  [ts-persist-error] ${row.id}`, error); return }
     console.log(`  [done] ${row.id} — ${densityNote}, TS v2 = ${ts.score.toFixed(1)}`)
   } else {
-    console.log(`  [parziale] ${row.id} — ${densityNote}, TS v2 non calcolabile (manca Sicurezza o Comfort TrailScore gia cachati)`)
+    const { error } = await supabase.from('planned_hikes').update({ cached_ts_total: null }).eq('id', row.id)
+    if (error) { console.error(`  [ts-clear-error] ${row.id}`, error); return }
+    console.log(`  [parziale] ${row.id} — ${densityNote}, TS v2 non calcolabile (manca Sicurezza o Comfort TrailScore gia cachati) — cached_ts_total azzerato`)
   }
 }
 

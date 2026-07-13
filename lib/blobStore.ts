@@ -1,6 +1,7 @@
 import { TcxActivity, type TrackPoint } from './tcxParser'
 import { lsGet, lsSet, lsDel, LS_KEYS, obEnqueue } from './localStore'
 import { registerEntityFlusher, scheduleFlush } from './sync/syncEngine'
+import { apiFetch, isPermanentClientError } from './apiFetch'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
 import type { WeatherAtHike } from './openmeteo'
@@ -71,15 +72,6 @@ export interface ActivityMeta {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options)
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`API ${url} → ${res.status}: ${text}`)
-  }
-  return res.json() as Promise<T>
-}
-
 function toMeta(a: StoredActivity): ActivityMeta {
   return {
     id:              a.id,
@@ -147,15 +139,42 @@ export async function getActivityById(
   }
 }
 
-/** Applies the activity to the local cache immediately and queues it for background sync to Supabase. */
-export async function saveActivity(activity: StoredActivity): Promise<void> {
+/**
+ * Applies the activity to the local cache immediately, then attempts a synchronous save —
+ * mirroring lib/plannedStore.ts's savePlanned(), and for the same reason: the page the caller
+ * navigates to right after saving (app/resoconto/[id]/RacconContent.tsx → app/api/resoconto/
+ * route.ts, and others) reads this row directly from Supabase, and the outbox's ~15s debounce
+ * (lib/sync/syncEngine.ts) is too slow to cover that. A permanent failure (4xx) rejects instead of
+ * silently queuing, so the UI can show an error instead of navigating to a page for a row that was
+ * never actually persisted; a transient failure (network, 5xx) still falls back to the outbox after
+ * a couple of quick retries, so the record isn't lost.
+ */
+export async function saveActivity(activity: StoredActivity): Promise<{ ok: boolean }> {
   await lsSet(LS_KEYS.activity(activity.id), activity)
   const list = await lsGet<ActivityMeta[]>(LS_KEYS.activitiesList)
   const meta = toMeta(activity)
   const updated = [meta, ...(list ?? []).filter((a) => a.id !== activity.id)]
   await lsSet(LS_KEYS.activitiesList, updated)
-  await obEnqueue(ENTITY_TYPE, activity.id, 'upsert', activity)
-  scheduleFlush()
+
+  const RETRY_DELAYS_MS = [0, 1500, 3000]
+  for (let i = 0; i < RETRY_DELAYS_MS.length; i++) {
+    if (RETRY_DELAYS_MS[i] > 0) await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[i]))
+    try {
+      return await apiFetch<{ ok: boolean }>('/api/activity', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(activity),
+      })
+    } catch (e) {
+      if (isPermanentClientError(e)) throw e
+      if (i === RETRY_DELAYS_MS.length - 1) {
+        await obEnqueue(ENTITY_TYPE, activity.id, 'upsert', activity)
+        scheduleFlush()
+        return { ok: false }
+      }
+    }
+  }
+  return { ok: false } // irraggiungibile, soddisfa solo il controllo dei tipi
 }
 
 /** Applies a partial update to the local cache immediately and queues it for background sync. */

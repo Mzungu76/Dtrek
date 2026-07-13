@@ -130,7 +130,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const si = useCL({
     osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id,
     siCache: hike ? {
-      siScore: hike.siScore, siSignals: hike.siSignals,
+      siScore: hike.siScore, siScoreRaw: hike.siScoreRaw, siDensityFactor: hike.siDensityFactor, siSignals: hike.siSignals,
       siStaticComputedAt: hike.siStaticComputedAt, siDynamicComputedAt: hike.siDynamicComputedAt, siSatelliteComputedAt: hike.siSatelliteComputedAt,
       isGhostTrail: hike.isGhostTrail, dominantWarning: hike.dominantWarning,
     } : undefined,

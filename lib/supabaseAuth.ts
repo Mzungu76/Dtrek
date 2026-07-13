@@ -33,18 +33,60 @@ function anonClientForRequest(request: NextRequest): SupabaseClient {
 // sintomi segnalati: guida mai generata, nessun avviso, Chiedi a Giulia/fonti mai comparse).
 const RESOLVE_TIMEOUT_MS = 8000
 
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+// `buildFallback` is a thunk (not a plain value) so the fallback — which may itself need to do a
+// bounded, local-only JWT check (see verifyDegradedState below) — is only ever computed when the
+// timeout actually fires, not eagerly on every call regardless of whether it's needed.
+function withTimeout<T>(promise: Promise<T>, ms: number, buildFallback: () => Promise<T> | T): Promise<T> {
   return new Promise(resolve => {
-    const timer = setTimeout(() => resolve(fallback), ms)
+    const timer = setTimeout(() => { Promise.resolve(buildFallback()).then(resolve) }, ms)
     promise.then(
       v => { clearTimeout(timer); resolve(v) },
-      () => { clearTimeout(timer); resolve(fallback) },
+      () => { clearTimeout(timer); Promise.resolve(buildFallback()).then(resolve) },
     )
   })
 }
 
-function hasSupabaseSessionCookie(request: NextRequest): boolean {
-  return request.cookies.getAll().some(c => c.name.startsWith('sb-') && c.name.includes('auth-token'))
+/**
+ * Fast, network-bounded attempt to recover an identity — or at least a well-founded "genuinely
+ * can't tell right now" — when the live getUser() path is unavailable. Used by both of
+ * resolveUser's fallback paths below.
+ *
+ * `degraded: true` is returned ONLY when the JWKS themselves couldn't be obtained at all (real
+ * outage) — never when a token was checked against reachable JWKS and simply failed to verify
+ * (forged, tampered, or expired). Conflating those two would let anyone unlock the emergency
+ * shared API key (see app/lib/guide/resolveApiKeyAndSettings.ts's resolveEmergencySharedKey) by
+ * sending a cookie with the right NAME but a garbage value, any time getUser()'s network call
+ * happens to hiccup — far more common than a full Supabase+JWKS outage.
+ *
+ * `getSessionTimeoutMs`, when given, bounds the (normally-local) cookie decode in case it
+ * unexpectedly tries a token refresh over the network; `allowLiveJwksFetch: false` must be used
+ * from a path that has already spent its time budget, to guarantee no further network call to
+ * supabase.co is attempted here.
+ */
+async function verifyDegradedState(
+  request: NextRequest,
+  opts: { allowLiveJwksFetch: boolean; getSessionTimeoutMs?: number },
+): Promise<{ user: User | null; degraded: boolean }> {
+  const supabase = anonClientForRequest(request)
+  let accessToken: string | undefined
+  try {
+    const sessionPromise = supabase.auth.getSession()
+    const { data: { session } } = opts.getSessionTimeoutMs != null
+      ? await withTimeout(sessionPromise, opts.getSessionTimeoutMs, () => ({ data: { session: null }, error: null }))
+      : await sessionPromise
+    accessToken = session?.access_token
+  } catch {
+    // getSession() ha fallito in modo imprevisto — trattato come "nessun token estraibile" sotto.
+  }
+
+  // Nessuna sessione plausibile da verificare — non c'è nulla da cui derivare "degraded: true"
+  // (a differenza di prima, non basta più il solo NOME del cookie).
+  if (!accessToken) return { user: null, degraded: false }
+
+  const { user: local, jwksAvailable } = await verifySupabaseJwtLocally(accessToken, { allowLiveFetch: opts.allowLiveJwksFetch })
+  if (local) return { user: { id: local.id, email: local.email } as User, degraded: false }
+
+  return { user: null, degraded: !jwksAvailable }
 }
 
 /**
@@ -66,7 +108,13 @@ function hasSupabaseSessionCookie(request: NextRequest): boolean {
  * "proceed in emergency mode"; everything else must keep treating it as unauthenticated.
  */
 async function resolveUser(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean; degraded: boolean }> {
-  return withTimeout(resolveUserInner(request), RESOLVE_TIMEOUT_MS, { user: null, authUnavailable: true, degraded: hasSupabaseSessionCookie(request) })
+  return withTimeout(resolveUserInner(request), RESOLVE_TIMEOUT_MS, async () => {
+    // resolveUserInner ha superato il tetto di tempo (es. getUser() rimasta appesa) — nessun
+    // ulteriore fetch di rete qui (allowLiveJwksFetch: false), solo JWKS già in cache/Redis, ed
+    // entro un tempo limitato (getSessionTimeoutMs) per non sommare un'altra attesa lunga.
+    const { user, degraded } = await verifyDegradedState(request, { allowLiveJwksFetch: false, getSessionTimeoutMs: 1500 })
+    return { user, authUnavailable: true, degraded }
+  })
 }
 
 async function resolveUserInner(request: NextRequest): Promise<{ user: User | null; authUnavailable: boolean; degraded: boolean }> {
@@ -86,17 +134,10 @@ async function resolveUserInner(request: NextRequest): Promise<{ user: User | nu
   }
   if (!isAuthRetryableFetchError(error)) return { user: null, authUnavailable: false, degraded: false }
 
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.access_token) {
-      const local = await verifySupabaseJwtLocally(session.access_token)
-      if (local) return { user: { id: local.id, email: local.email } as User, authUnavailable: false, degraded: false }
-    }
-  } catch {
-    // getSession()/la verifica locale hanno fallito in modo imprevisto — considerato comunque
-    // "non disponibile" sotto, non un errore da propagare al chiamante.
-  }
-  return { user: null, authUnavailable: true, degraded: hasSupabaseSessionCookie(request) }
+  // Questo percorso non ha ancora speso il proprio budget di tempo — via libera a un fetch JWKS
+  // dal vivo se serve (allowLiveJwksFetch: true).
+  const { user, degraded } = await verifyDegradedState(request, { allowLiveJwksFetch: true })
+  return { user, authUnavailable: true, degraded }
 }
 
 export async function getUserFromRequest(request: NextRequest): Promise<User | null> {
@@ -130,7 +171,7 @@ export async function getUserScopedClient(request: NextRequest): Promise<{ user:
   const user = await getUserCached(request, () => withTimeout(
     supabase.auth.getUser().then(({ data }) => data.user ?? null).catch(() => null),
     RESOLVE_TIMEOUT_MS,
-    null,
+    () => null,
   ))
   if (!user) return null
   return { user, supabase }

@@ -5,6 +5,7 @@
 // generico, ma sufficiente per file GPX reali (stessa struttura standard <trk><trkpt lat lon>
 // <ele>/<time></trkpt>) pubblicati da CAI/parchi/blog escursionistici.
 import type { TrackPoint } from './tcxParser'
+import { haversineM } from './geoUtils'
 
 export interface ServerParsedGpx {
   title: string
@@ -23,16 +24,6 @@ const LON_RE = /lon="([^"]+)"/i
 const ELE_RE = /<ele[^>]*>([^<]*)<\/ele>/i
 const TIME_RE = /<time[^>]*>([^<]*)<\/time>/i
 const NAME_RE = /<trk>[\s\S]*?<name>([^<]*)<\/name>/i
-
-function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000
-  const φ1 = (lat1 * Math.PI) / 180
-  const φ2 = (lat2 * Math.PI) / 180
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180
-  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
 
 // Stesso schema di lib/gpxParser.ts's downsampleTracks — mantiene leggero il payload/cache.
 function downsample(pts: TrackPoint[], max = 400): TrackPoint[] {

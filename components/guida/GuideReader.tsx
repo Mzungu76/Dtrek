@@ -294,6 +294,7 @@ export default function GuideReader({
   // ── Generate ──────────────────────────────────────────────────────────────
 
   const generate = useCallback(async (tier: GuideTier) => {
+    if (generating || generatingSectionKey) return
     setGenerating(true)
     setError(null)
     setGuideText('')
@@ -392,6 +393,7 @@ export default function GuideReader({
       setGenerating(false)
     }
   }, [
+    generating, generatingSectionKey,
     hike.id, hike.title, hike.plannedDate, hike.userNotes, hike.tags,
     hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
     hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
@@ -973,8 +975,9 @@ export default function GuideReader({
                 <div className="flex flex-col sm:flex-row sm:justify-end gap-2.5">
                   {effectiveTier === 'breve' && (
                     <button onClick={() => generate('approfondita')}
-                      className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
-                      title="Riscrive tutta la guida in una versione molto più lunga e ricca di dettagli"
+                      disabled={!!generatingSectionKey}
+                      className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
+                      title={generatingSectionKey ? 'Attendi il completamento della sezione in corso' : 'Riscrive tutta la guida in una versione molto più lunga e ricca di dettagli'}
                     >
                       <Sparkles className="w-3.5 h-3.5" />
                       Sblocca la guida integrale
