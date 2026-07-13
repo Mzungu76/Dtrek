@@ -345,11 +345,17 @@ async function runClPipeline(
 export async function computeCL(
   osmRelationId: number,
   precomputedGeometry?: { bbox: SignalContext['bbox']; geometrySimplified: [number, number][] },
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; bypassCooldown?: boolean },
 ): Promise<CLResult> {
   const trailRow = await fetchTrailSiRow(osmRelationId)
 
-  if (opts?.force && trailRow?.siDynamicComputedAt) {
+  // bypassCooldown è riservato al ricalcolo massivo di Impostazioni ("Ricalcola tutti i CL",
+  // vedi lib/recalcScores.ts) — un'azione esplicita e consapevole dell'utente, diversa dal
+  // pulsante "Aggiorna CL" per-percorso che questo cooldown protegge davvero (mash ripetuto sullo
+  // stesso sentiero). Senza questa via d'uscita, un ricalcolo di massa lanciato meno di 24h dopo
+  // l'ultimo calcolo automatico all'import risultava in un no-op silenzioso su gran parte dei
+  // percorsi — l'utente vedeva "completato" ma i valori restavano quelli di prima.
+  if (opts?.force && !opts?.bypassCooldown && trailRow?.siDynamicComputedAt) {
     const elapsed = Date.now() - new Date(trailRow.siDynamicComputedAt).getTime()
     if (elapsed < FORCE_REFRESH_COOLDOWN_MS) {
       throw new CLRateLimitError(new Date(new Date(trailRow.siDynamicComputedAt).getTime() + FORCE_REFRESH_COOLDOWN_MS).toISOString())
@@ -441,11 +447,12 @@ export async function computeCLForPlannedHike(
   distanceKm: number | null,
   elevationGain: number | null,
   elevationLoss: number | null,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; bypassCooldown?: boolean },
 ): Promise<CLResult> {
   const cached = await fetchPlannedSiCache(plannedHikeId)
 
-  if (opts?.force && cached.siDynamicComputedAt) {
+  // See computeCL's own comment on bypassCooldown above — same rationale, standalone path.
+  if (opts?.force && !opts?.bypassCooldown && cached.siDynamicComputedAt) {
     const elapsed = Date.now() - new Date(cached.siDynamicComputedAt).getTime()
     if (elapsed < FORCE_REFRESH_COOLDOWN_MS) {
       throw new CLRateLimitError(new Date(new Date(cached.siDynamicComputedAt).getTime() + FORCE_REFRESH_COOLDOWN_MS).toISOString())

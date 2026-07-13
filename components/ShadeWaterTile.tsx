@@ -103,10 +103,11 @@ export function ShadeWaterTile({
   }
 
   if (!data || !data.available) {
-    // Nessun dato disponibile: può essere un percorso senza copertura satellitare, oppure il
-    // calcolo (Overpass + raster Sentinel-2) ha fallito o è ancora in corso in background —
-    // indistinguibile lato client, quindi offriamo comunque un modo per ritentare invece di
-    // sparire silenziosamente (come faceva prima, lasciando l'utente senza alcun riscontro).
+    // Nessun dato disponibile: può essere un percorso senza copertura OSM (bosco/acqua non
+    // mappati in zona), oppure il calcolo (query Overpass, vedi lib/shadeWater/computeShadeWater.ts)
+    // ha fallito o è ancora in corso in background — indistinguibile lato client, quindi offriamo
+    // comunque un modo per ritentare invece di sparire silenziosamente (come faceva prima,
+    // lasciando l'utente senza alcun riscontro).
     if (!onRefresh) return null
     return (
       <ScoreTile title="Ombra e acqua" score="—" label="Non disponibile" color="#78716c" badge="H₂O" open={open} onToggle={() => setOpen(v => !v)}>

@@ -2,11 +2,14 @@ import { computeSafetyScore, type SafetyScore, type WildlifeRisk } from './safet
 import { fetchWildlifeRiskFromGbif } from './wildlifeRiskFromGbif'
 import { computeBbox } from './geoUtils'
 import { updatePlannedMeta, type PlannedHike } from './plannedStore'
+import { refreshTsForHike } from './computeTsForHike'
 
 /**
  * Runs the Safety Score pipeline (wildlife/guardian-dog risk lookup + computeSafetyScore) for a
- * planned hike and persists the result. Self-contained like computeCtsForHike, so it can run
- * fire-and-forget right after a hike is added, not just when the hike happens to be open.
+ * planned hike and persists the result, then triggers a Trail Score v2 recompute (see
+ * lib/computeTsForHike.ts) so the aggregate never lags behind its own Sicurezza input.
+ * Self-contained like computeCtsForHike, so it can run fire-and-forget right after a hike is
+ * added, not just when the hike happens to be open.
  */
 export async function computeSafetyForHike(hike: Pick<PlannedHike,
   'id' | 'routePolyline' | 'distanceMeters' | 'elevationGain' | 'elevationLoss' | 'altitudeMax' | 'altitudeMin' | 'estimatedTimeSeconds' | 'plannedDate'
@@ -35,5 +38,6 @@ export async function computeSafetyForHike(hike: Pick<PlannedHike,
     plannedDate: hike.plannedDate, gbifWildlifeRisks, guardianDogRisk,
   })
   await updatePlannedMeta(hike.id, { cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() })
+  refreshTsForHike(hike.id).catch(() => {})
   return safety
 }

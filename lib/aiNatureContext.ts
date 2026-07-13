@@ -84,7 +84,7 @@ export function formatNatureContextBlock(ctx: NatureContext): string {
     lines.push(ctx.landscapeVariety > 0.12 ? 'Paesaggio molto variegato lungo il percorso (dato satellitare).' : 'Paesaggio piuttosto uniforme lungo il percorso (dato satellitare).')
   }
   if (ctx.shadeScore != null) lines.push(`Copertura d'ombra stimata lungo il percorso: ${Math.round(ctx.shadeScore * 100)}%.`)
-  if (ctx.waterSourcesCount > 0) lines.push(`${ctx.waterSourcesCount} fonte/i d'acqua rilevata/e via satellite lungo il percorso.`)
+  if (ctx.waterSourcesCount > 0) lines.push(`${ctx.waterSourcesCount} fonte/i d'acqua rilevata/e (dati OpenStreetMap) lungo il percorso.`)
 
   const leafLabel: Record<string, string> = { broadleaved: 'latifoglie', needleleaved: 'conifere', mixed: 'bosco misto' }
   if (ctx.forest?.leafTypeDominant) {

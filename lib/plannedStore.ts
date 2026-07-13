@@ -125,6 +125,14 @@ export interface PlannedHike {
   floraResult?:                  FloraResult
   floraTrackHash?:                string
   floraComputedAt?:              string
+  // Ombra e Acqua — a differenza dei campi cached* sopra questi sono già scritti da
+  // lib/shadeWater/computeShadeWater.ts (computeShadeWaterForPlannedHike) direttamente sulle
+  // colonne s2_*, non tramite updatePlannedMeta: qui vengono solo letti, principalmente da
+  // lib/computeTsForHike.ts per sapere l'ultimo valore di Ombra&Acqua senza rifare la fetch a
+  // /api/trails/sentinel2 ogni volta che va ricalcolato il Trail Score aggregato.
+  s2ShadeScore?:                 number
+  s2Available?:                  boolean
+  s2ComputedAt?:                 string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)

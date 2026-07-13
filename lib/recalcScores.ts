@@ -4,14 +4,11 @@
 // lightweight PlannedHikeMeta already returned by getAllPlanned() — no per-item fetch.
 import { getAllPlanned, getPlannedById, updatePlannedMeta } from '@/lib/plannedStore'
 import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blobStore'
-import { computeTrailScore, getCtsFallback, type CtsConfidence } from '@/lib/trailScore'
-import { type BeautyScore } from '@/lib/beautyScore'
-import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
-import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
-import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
-import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
-import { type PoiItem } from '@/lib/overpass'
+import { getCtsFallback } from '@/lib/trailScore'
+import { computeCtsCore } from '@/lib/computeCtsForHike'
+import { refreshTsForHike } from '@/lib/computeTsForHike'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { type PoiItem } from '@/lib/overpass'
 import { computeSafetyScore, type WildlifeRisk } from '@/lib/safetyScore'
 import { fetchWildlifeRiskFromGbif } from '@/lib/wildlifeRiskFromGbif'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
@@ -52,82 +49,34 @@ export interface CtsPrefs {
   prefDurata: number
 }
 
-/** Full from-scratch CTS recompute (TEI → BeautyScore → TrailScore) for every activity and planned hike. Returns the number of CTS recomputed. */
+/** Full from-scratch CTS recompute (TEI → BeautyScore → TrailScore, via lib/computeCtsForHike.ts's
+ *  shared computeCtsCore — see its doc comment) for every activity and planned hike. Returns the
+ *  number of CTS recomputed. */
 export async function recalcAllCts(prefs: CtsPrefs, onProgress?: (text: string) => void): Promise<number> {
   let computed = 0
   const apiPrefs = await getUserSettingsCached()
   const [activities, hikes] = await Promise.all([getAllActivities(), getAllPlanned()])
   const total = activities.length + hikes.length
+  const corePrefs = {
+    prefSforzo: apiPrefs.prefSforzo ?? prefs.prefSforzo,
+    prefDurata: apiPrefs.prefDurata ?? prefs.prefDurata,
+    hrRest:     apiPrefs.hrRest ?? prefs.hrRest,
+    hrMax:      apiPrefs.hrMax ?? prefs.hrMax ?? undefined,
+  }
 
   let idx = 0
   await batchUpdate(activities, async meta => {
     onProgress?.(`${++idx}/${total} — ${meta.title ?? 'Escursione'}`)
     const full = await getActivityById(meta.id)
     if (!full) return
-    const gps = (full.trackPoints ?? [])
-      .filter(p => p.lat && p.lon)
-      .map(p => [p.lat!, p.lon!] as [number, number])
-
-    const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
-    const bbox = computeBbox(gps)
-    const [pois, osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
-      Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
-      Promise.race([
-        fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
-        deadline,
-      ]).then(r => r ?? undefined).catch(() => undefined),
-      Promise.race([
-        fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
-        deadline,
-      ]).then(r => r ?? undefined).catch(() => undefined),
-      Promise.race([
-        fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
-        deadline,
-      ]).then(r => r ?? undefined).catch(() => undefined),
-      Promise.race([
-        checkProtectedArea(gps).then(r => r.inProtectedArea),
-        deadline,
-      ]).then(r => r ?? undefined).catch(() => undefined),
-    ])
-
-    const elevProfile = (full.trackPoints ?? [])
-      .filter(p => p.lat && p.lon)
-      .map(p => p.altitudeMeters ?? 0)
-
-    const tei = computeTEI({
-      track: gps,
-      elevGain: full.elevationGain,
-      distanceMeters: full.distanceMeters,
-      altitudeMax: full.altitudeMax,
-      elevProfile,
-      pois,
-      osmData,
-      dtmProfile,
-      terrainProfile,
-      inProtectedArea,
+    const core = await computeCtsCore(full, { prefs: corePrefs })
+    if (!core) return
+    const finalTs = core.poisCount === 0 ? getCtsFallback(activities) : core.ts
+    await updateActivityMeta(full.id, {
+      linkedBeautyScore: core.beautyScore, trailScore: finalTs,
+      trailScoreConfidence: core.poisCount === 0 ? 'default' : core.confidence,
+      trailScoreComputedAt: new Date().toISOString(),
     })
-    const bs = teiToBeautyScore(tei)
-    const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
-
-    let finalTs: number
-    if (pois.length === 0) {
-      finalTs = getCtsFallback(activities)
-    } else {
-      const { ts } = computeTrailScore(bs, {
-        distanceMeters: full.distanceMeters,
-        elevationGain:  full.elevationGain,
-        elevationLoss:  full.elevationLoss ?? 0,
-        altitudeMax:    full.altitudeMax,
-        avgHeartRate:   full.avgHeartRate,
-        prefSforzo:     apiPrefs.prefSforzo ?? prefs.prefSforzo,
-        prefDurata:     apiPrefs.prefDurata ?? prefs.prefDurata,
-        hrRest:         apiPrefs.hrRest ?? prefs.hrRest,
-        hrMax:          apiPrefs.hrMax ?? prefs.hrMax ?? undefined,
-        avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
-      })
-      finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
-    }
-    await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence, trailScoreComputedAt: new Date().toISOString() })
     computed++
   })
 
@@ -135,69 +84,15 @@ export async function recalcAllCts(prefs: CtsPrefs, onProgress?: (text: string) 
     onProgress?.(`${++idx}/${total} — ${meta.title ?? 'Pianificata'}`)
     const full = await getPlannedById(meta.id)
     if (!full) return
-    const gps = (full.trackPoints ?? [])
-      .filter(p => p.lat && p.lon)
-      .map(p => [p.lat!, p.lon!] as [number, number])
-
-    const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
-    const bbox = computeBbox(gps)
-    const [pois, osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
-      Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
-      Promise.race([
-        fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
-        deadline,
-      ]).then(r => r ?? undefined).catch(() => undefined),
-      Promise.race([
-        fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
-        deadline,
-      ]).then(r => r ?? undefined).catch(() => undefined),
-      Promise.race([
-        fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
-        deadline,
-      ]).then(r => r ?? undefined).catch(() => undefined),
-      Promise.race([
-        checkProtectedArea(gps).then(r => r.inProtectedArea),
-        deadline,
-      ]).then(r => r ?? undefined).catch(() => undefined),
-    ])
-
-    const elevProfile = (full.trackPoints ?? [])
-      .filter(p => p.lat && p.lon)
-      .map(p => p.altitudeMeters ?? 0)
-
-    const tei = computeTEI({
-      track: gps,
-      elevGain: full.elevationGain,
-      distanceMeters: full.distanceMeters,
-      altitudeMax: full.altitudeMax,
-      elevProfile,
-      pois,
-      osmData,
-      dtmProfile,
-      terrainProfile,
-      inProtectedArea,
+    const core = await computeCtsCore(full, { prefs: corePrefs })
+    if (!core) return
+    const finalTs = core.poisCount === 0 ? getCtsFallback(activities) : core.ts
+    await updatePlannedMeta(full.id, {
+      cachedBeautyScore: core.beautyScore, cachedTrailScore: finalTs,
+      cachedTrailScoreConfidence: core.poisCount === 0 ? 'default' : core.confidence,
+      cachedScoresComputedAt: new Date().toISOString(),
     })
-    const bs = teiToBeautyScore(tei)
-    const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
-
-    let finalTs: number
-    if (pois.length === 0) {
-      finalTs = getCtsFallback(activities)
-    } else {
-      const { ts } = computeTrailScore(bs, {
-        distanceMeters: full.distanceMeters,
-        elevationGain:  full.elevationGain,
-        elevationLoss:  full.elevationLoss,
-        altitudeMax:    full.altitudeMax,
-        prefSforzo:     apiPrefs.prefSforzo ?? prefs.prefSforzo,
-        prefDurata:     apiPrefs.prefDurata ?? prefs.prefDurata,
-        hrRest:         apiPrefs.hrRest ?? prefs.hrRest,
-        hrMax:          apiPrefs.hrMax ?? prefs.hrMax ?? undefined,
-        avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
-      })
-      finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
-    }
-    await updatePlannedMeta(full.id, { cachedBeautyScore: bs, cachedTrailScore: finalTs, cachedTrailScoreConfidence: confidence, cachedScoresComputedAt: new Date().toISOString() })
+    refreshTsForHike(full.id).catch(() => {})
     computed++
   })
 
@@ -245,6 +140,7 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
       guardianDogRisk,
     })
     await updatePlannedMeta(meta.id, { cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() })
+    refreshTsForHike(meta.id).catch(() => {})
   })
   return ok
 }
@@ -258,7 +154,10 @@ function clSentinelQuery(meta: { osmId?: number; routePolyline?: [number, number
   return null
 }
 
-/** Forces a CL recompute (server-side, 24h cooldown) for every planned hike that has either an OSM match or a polyline. */
+/** Forces a CL recompute for every planned hike that has either an OSM match or a polyline.
+ *  bypass_cooldown=1 skips the 24h anti-mash cooldown meant for the per-hike "Aggiorna CL"
+ *  button — legitimate here since this is itself the explicit, consciously-triggered bulk
+ *  action (see the comment on bypassCooldown in lib/cl/computeCL.ts). */
 export async function recalcAllCL(onProgress?: (text: string) => void): Promise<{ ok: number; rateLimited: number; failed: number }> {
   const hikes = await getAllPlanned()
   let ok = 0, rateLimited = 0, failed = 0
@@ -268,7 +167,7 @@ export async function recalcAllCL(onProgress?: (text: string) => void): Promise<
     onProgress?.(`${++idx}/${eligible.length} — ${meta.title ?? 'Pianificata'}`)
     const qs = clSentinelQuery(meta)
     if (!qs) return
-    const res = await fetch(`/api/trails/cl?${qs}&force=1`)
+    const res = await fetch(`/api/trails/cl?${qs}&force=1&bypass_cooldown=1`)
     if (res.status === 429) { rateLimited++; return }
     if (!res.ok) { failed++; return }
     ok++
@@ -276,7 +175,9 @@ export async function recalcAllCL(onProgress?: (text: string) => void): Promise<
   return { ok, rateLimited, failed }
 }
 
-/** Forces a Sentinel-2 recompute (server-side, bypasses the 7-day/90-day TTL caches) for every planned hike that has either an OSM match or a polyline. */
+/** Forces an Ombra&Acqua recompute (server-side, bypasses the 30-day TTL cache) for every planned
+ *  hike that has either an OSM match or a polyline — and, when it lands, refreshes the Trail
+ *  Score v2 aggregate (lib/computeTsForHike.ts) that depends on it. */
 export async function recalcAllSentinel2(onProgress?: (text: string) => void): Promise<{ ok: number; failed: number }> {
   const hikes = await getAllPlanned()
   let idx = 0
@@ -287,6 +188,8 @@ export async function recalcAllSentinel2(onProgress?: (text: string) => void): P
     if (!qs) return
     const res = await fetch(`/api/trails/sentinel2?${qs}&force=1`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json().catch(() => null) as { available?: boolean } | null
+    if (data?.available) refreshTsForHike(meta.id).catch(() => {})
   })
   return { ok, failed }
 }

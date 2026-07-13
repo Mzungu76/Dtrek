@@ -2,15 +2,10 @@
 import { useEffect, useState } from 'react'
 import { getAllPlanned, updatePlannedMeta } from '@/lib/plannedStore'
 import { getAllActivities, getActivityById, updateActivityMeta } from '@/lib/blobStore'
-import { computeTrailScore, getCtsFallback, type CtsConfidence } from '@/lib/trailScore'
+import { computeTrailScore, getCtsFallback } from '@/lib/trailScore'
+import { computeCtsCore } from '@/lib/computeCtsForHike'
 import { type BeautyScore } from '@/lib/beautyScore'
-import { computeTEI, teiToBeautyScore, type OsmTeiData } from '@/lib/tei'
-import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
-import type { TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
-import { checkProtectedArea } from '@/lib/natura2000/checkProtectedArea'
-import { type PoiItem } from '@/lib/overpass'
-import { computeBbox } from '@/lib/geoUtils'
-import { batchUpdate, fetchPoisForGps } from '@/lib/recalcScores'
+import { batchUpdate } from '@/lib/recalcScores'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { Loader2, Gauge, RefreshCw } from 'lucide-react'
 
@@ -123,70 +118,16 @@ export default function SectionComfortTrailScore() {
         setBatchProgress(`${++i}/${missing.length} — ${meta.title ?? 'Escursione'}`)
         const full = await getActivityById(meta.id)
         if (!full) return
-        const gps = (full.trackPoints ?? [])
-          .filter(p => p.lat && p.lon)
-          .map(p => [p.lat!, p.lon!] as [number, number])
-
-        const deadline = new Promise<null>(r => setTimeout(() => r(null), 25000))
-        const bbox = computeBbox(gps)
-        const [pois, osmData, dtmProfile, terrainProfile, inProtectedArea] = await Promise.all([
-          Promise.race([fetchPoisForGps(gps), deadline]).then(r => r ?? []) as Promise<PoiItem[]>,
-          Promise.race([
-            fetch(`/api/tei-overpass?bbox=${bbox}`).then(r => r.json()) as Promise<OsmTeiData>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailDtmProfile>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            fetch(`/api/tei-terrain?track=${encodeURIComponent(JSON.stringify(gps))}`).then(r => r.json()) as Promise<TrailTerrainProfile>,
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-          Promise.race([
-            checkProtectedArea(gps).then(r => r.inProtectedArea),
-            deadline,
-          ]).then(r => r ?? undefined).catch(() => undefined),
-        ])
-
-        const elevProfile = (full.trackPoints ?? [])
-          .filter(p => p.lat && p.lon)
-          .map(p => p.altitudeMeters ?? 0)
-
-        const tei = computeTEI({
-          track: gps,
-          elevGain: full.elevationGain,
-          distanceMeters: full.distanceMeters,
-          altitudeMax: full.altitudeMax,
-          elevProfile,
-          pois,
-          osmData,
-          dtmProfile,
-          terrainProfile,
-          inProtectedArea,
+        const core = await computeCtsCore(full, {
+          prefs: { prefSforzo: prefs.prefSforzo ?? prefSforzo, prefDurata: prefs.prefDurata ?? prefDurata, hrRest: prefs.hrRest ?? hrRest, hrMax: prefs.hrMax ?? hrMax ?? undefined },
         })
-        const bs = teiToBeautyScore(tei)
-        const confidence: CtsConfidence = pois.length === 0 ? 'default' : tei.confidence
-
-        let finalTs: number
-        if (pois.length === 0) {
-          finalTs = getCtsFallback(activities)
-        } else {
-          const { ts } = computeTrailScore(bs, {
-            distanceMeters: full.distanceMeters,
-            elevationGain:  full.elevationGain,
-            elevationLoss:  full.elevationLoss ?? 0,
-            altitudeMax:    full.altitudeMax,
-            avgHeartRate:   full.avgHeartRate,
-            prefSforzo:     prefs.prefSforzo ?? prefSforzo,
-            prefDurata:     prefs.prefDurata ?? prefDurata,
-            hrRest:         prefs.hrRest ?? hrRest,
-            hrMax:          prefs.hrMax ?? hrMax ?? undefined,
-            avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
-          })
-          finalTs = confidence === 'estimated' ? Math.round(ts * 0.9) : ts
-        }
-        await updateActivityMeta(full.id, { linkedBeautyScore: bs, trailScore: finalTs, trailScoreConfidence: confidence, trailScoreComputedAt: new Date().toISOString() })
+        if (!core) return
+        const finalTs = core.poisCount === 0 ? getCtsFallback(activities) : core.ts
+        await updateActivityMeta(full.id, {
+          linkedBeautyScore: core.beautyScore, trailScore: finalTs,
+          trailScoreConfidence: core.poisCount === 0 ? 'default' : core.confidence,
+          trailScoreComputedAt: new Date().toISOString(),
+        })
         computed++
       })
     } catch {}

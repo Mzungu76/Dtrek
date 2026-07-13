@@ -2,9 +2,9 @@
 import { useState, useEffect, useRef, type CSSProperties } from 'react'
 import type { CLLabel, CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { SafetyScore } from '@/lib/safetyScore'
-import type { TrailScoreResult } from '@/lib/trailScore'
+import { ctsLabel, type TrailScoreResult } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
-import { computeTrailScoreV2, SAFETY_VETO_THRESHOLD } from '@/lib/trailScoreV2'
+import { computeTrailScoreV2, tsLabel, SAFETY_VETO_THRESHOLD } from '@/lib/trailScoreV2'
 import { CLBadge } from '@/components/CLBadge'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
@@ -46,62 +46,86 @@ export interface ShadeWaterProps {
 }
 
 interface Segment {
-  key: 'cl' | 'safety' | 'cts' | 'shadewater'
+  key: 'safety' | 'cts' | 'shadewater'
   title: string
   value: number | null
   color: string
+  sublabel: string | null
 }
 
-/** Trail Score (TS) v2 e 0-100, non piu una somma di 4 segmenti a 0-400 (vedi lib/trailScoreV2.ts).
+/** Trail Score (TS) v2 e 0-100, non piu una somma di segmenti a 0-400 (vedi lib/trailScoreV2.ts).
  *  Il nome resta cosi com'e per non dover toccare ogni chiamante che lo importa solo come
  *  denominatore del proprio MiniScoreRing. */
 export const TRAIL_SCORE_MAX = 100
 
-function computeSegments(cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps): Segment[] {
+function shadeWaterLabel(score0to100: number): string {
+  const s = score0to100 / 100
+  return s < 0.33 ? 'Poco ombreggiato' : s < 0.66 ? 'Parzialmente ombreggiato' : 'Molto ombreggiato'
+}
+
+/** I 3 segmenti che compongono davvero il Trail Score v2 (Value: Comfort/Ombra&Acqua, gate:
+ *  Sicurezza) — l'Affidabilità NON è tra questi, vedi clSegment sotto. */
+function computeSegments(safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps): Segment[] {
   const ctsValue    = cts.result?.ts ?? cts.cached ?? null
   const shadeWaterValue = shadeWater.data?.available && shadeWater.data.shadeScore != null
     ? shadeWater.data.shadeScore * 100 : null
 
   return [
-    { key: 'cl',         title: 'Livello di affidabilità', value: cl.notMatched || cl.loading ? null : cl.si ?? null, color: colorForCL(cl.label) },
-    { key: 'safety',     title: 'Sicurezza',                value: safety?.overall ?? null,                          color: safety?.color ?? '#a8a29e' },
-    { key: 'cts',        title: 'Comfort TrailScore',       value: ctsValue,                                          color: cts.result?.color ?? '#a8a29e' },
-    { key: 'shadewater', title: 'Ombra e acqua',            value: shadeWaterValue,                                   color: '#0ea5e9' },
+    { key: 'cts',        title: 'Comfort TrailScore',       value: ctsValue,     color: cts.result?.color ?? '#a8a29e', sublabel: ctsValue != null ? ctsLabel(ctsValue).label : null },
+    { key: 'safety',     title: 'Sicurezza',                value: safety?.overall ?? null, color: safety?.color ?? '#a8a29e', sublabel: safety?.label ?? null },
+    { key: 'shadewater', title: 'Ombra e acqua',            value: shadeWaterValue, color: '#0ea5e9', sublabel: shadeWaterValue != null ? shadeWaterLabel(shadeWaterValue) : null },
   ]
 }
 
-/** Trail Score (TS) v2, 0-100 — sostituisce la vecchia somma lineare dei 4 segmenti (CL,
- *  Sicurezza, Comfort TrailScore, Ombra e acqua) con il framework a 3 livelli di
- *  lib/trailScoreV2.ts: Comfort TrailScore e Ombra e acqua si combinano in un "Value" (pesi che
- *  seguono la temperatura prevista se nota), la Sicurezza fa da gate non-compensabile su quel
- *  Value, e l'Affidabilita (gia corretta per densita dati) fa collassare il risultato verso un
- *  prior neutro quando i dati sono scarsi. Restituisce 0 finche CL/Sicurezza/Comfort TrailScore
- *  non sono TUTTI disponibili — un gate o uno shrinkage "assente" non ha un default onesto (vedi
- *  computeTrailScoreV2), quindi niente numero finche non lo sono, invece di uno silenziosamente
- *  sbagliato. Ombra e acqua invece e genuinamente opzionale (Livello 1, sostituibile da CTS). */
+function colorForCL(label?: CLLabel): string {
+  switch (label?.color) {
+    case 'green': return '#277134'
+    case 'lime': return '#65a30d'
+    case 'amber': return '#d97706'
+    case 'red': return '#dc2626'
+    default: return '#a8a29e'
+  }
+}
+
+/** Affidabilità (CL) — non entra più nel Trail Score v2 (era uno shrinkage bayesiano che
+ *  penalizzava percorsi genuinamente belli/sicuri solo per scarsità di dati indipendenti, vedi
+ *  lib/trailScoreV2.ts), quindi vive come riga/badge indipendente invece che come quarto asse del
+ *  radar: informativa su "quanto ci fidiamo di questi dati", non su "quanto è bello/sicuro" il
+ *  percorso. */
+function clRow(cl: CLProps): { value: number | null; color: string; sublabel: string | null } {
+  if (cl.notMatched || cl.loading) return { value: null, color: '#a8a29e', sublabel: null }
+  return { value: cl.si ?? null, color: colorForCL(cl.label), sublabel: cl.label?.text ?? null }
+}
+
+/**
+ * Calcola il Trail Score v2, 0-100 (lib/trailScoreV2.ts): Comfort TrailScore e Ombra e acqua si
+ * combinano in un "Value" (pesi che seguono la temperatura prevista se nota), la Sicurezza fa da
+ * gate non-compensabile su quel Value. L'Affidabilità (cl) non entra nel calcolo — è usata solo
+ * per il caso "questo contesto non traccia affatto la Sicurezza" (vedi il commento su
+ * notApplicable sotto). Restituisce 0 finché Sicurezza/Comfort TrailScore non sono ENTRAMBI
+ * disponibili — un gate "assente" non ha un default onesto (vedi computeTrailScoreV2), quindi
+ * niente numero finché non lo sono, invece di uno silenziosamente sbagliato.
+ */
 export function computeTrailScoreTotal(
   cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps,
   forecastTempC?: number | null,
 ): number {
-  const segments = computeSegments(cl, safety, cts, shadeWater)
-  const clValue         = segments.find(s => s.key === 'cl')?.value ?? null
+  const segments = computeSegments(safety, cts, shadeWater)
   const safetyValue     = segments.find(s => s.key === 'safety')?.value ?? null
   const ctsValue        = segments.find(s => s.key === 'cts')?.value ?? null
   const shadeWaterValue = segments.find(s => s.key === 'shadewater')?.value ?? null
 
   // Alcuni chiamanti (es. app/resoconto/ResocontoHub.tsx, per le attività già concluse) non
-  // tracciano affatto Sicurezza/Affidabilità e passano cl.notMatched=true in modo esplicito e
-  // permanente (non "ancora in caricamento" — vedi lib/cl/useCL.ts, dove notMatched parte a
-  // false e scatta solo se una vera fetch risponde "nessun match"). Per quei contesti il gate/
-  // shrinkage non ha nulla su cui lavorare: invece di bloccare il numero (che richiederebbe
-  // sempre tutti e tre gli input), Trail Score v2 collassa al solo Value, cioè lo stesso esito
-  // che avrebbe con Sicurezza/Affidabilità perfette (gate=1, C=1). Un vero percorso pianificato
-  // non prende mai questa via: lì notMatched resta false finché la fetch non risponde davvero.
+  // tracciano affatto Sicurezza e passano cl.notMatched=true in modo esplicito e permanente (non
+  // "ancora in caricamento" — vedi lib/cl/useCL.ts, dove notMatched parte a false e scatta solo
+  // se una vera fetch risponde "nessun match"). Per quei contesti il gate non ha nulla su cui
+  // lavorare: invece di bloccare il numero, Trail Score v2 collassa al solo Value (gate=1), cioè
+  // lo stesso esito che avrebbe con Sicurezza perfetta. Un vero percorso pianificato non prende
+  // mai questa via: lì notMatched resta false finché la fetch non risponde davvero.
   const notApplicable = cl.notMatched === true && safetyValue == null
   const result = computeTrailScoreV2({
     cts: ctsValue, ombraAcqua: shadeWaterValue,
     safety: notApplicable ? 100 : safetyValue,
-    affidabilita: notApplicable ? 100 : clValue,
     forecastTempC,
   })
   return result?.score ?? 0
@@ -177,18 +201,8 @@ export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30, loading
   )
 }
 
-function colorForCL(label?: CLLabel): string {
-  switch (label?.color) {
-    case 'green': return '#277134'
-    case 'lime': return '#65a30d'
-    case 'amber': return '#d97706'
-    case 'red': return '#dc2626'
-    default: return '#a8a29e'
-  }
-}
-
 // Conta da 0 fino a `target` con easing — usato per il numero centrale del ring, così si "anima"
-// anche quando i punteggi arrivano via via (CL/Sicurezza/CTS/Ombra e acqua si popolano in tempi
+// anche quando i punteggi arrivano via via (Sicurezza/CTS/Ombra e acqua si popolano in tempi
 // diversi), non solo al primo mount.
 function useCountUp(target: number, durationMs = 700): number {
   const [value, setValue] = useState(0)
@@ -211,10 +225,11 @@ function useCountUp(target: number, durationMs = 700): number {
   return value
 }
 
-// Radar a 4 assi — alto/destra/basso/sinistra, nello stesso ordine di `computeSegments`
-// (cl, safety, cts, shadewater). Le etichette sono <div> HTML sovrapposte all'SVG, non testo
-// SVG: a differenza di <text>, vanno a capo correttamente e non escono dal contenitore qualunque
-// sia la lunghezza (es. "OMBRA E ACQUA" contro "SICUREZZA").
+// Radar a 3 assi — alto/basso-destra/basso-sinistra, nello stesso ordine di `computeSegments`
+// (cts, safety, shadewater): solo i segmenti che davvero compongono il Trail Score v2, vedi
+// clRow per l'Affidabilità (fuori dal radar). Le etichette sono <div> HTML sovrapposte all'SVG,
+// non testo SVG: a differenza di <text>, vanno a capo correttamente e non escono dal contenitore
+// qualunque sia la lunghezza (es. "OMBRA E ACQUA" contro "SICUREZZA").
 const RADAR_OUTER  = 272 // lato del contenitore quadrato, margine incluso per le etichette
 const RADAR_MARGIN = 50  // spazio riservato alle etichette su ogni lato
 const RADAR_SIZE   = RADAR_OUTER - RADAR_MARGIN * 2
@@ -222,10 +237,9 @@ const RADAR_R      = RADAR_SIZE / 2
 const RCX = RADAR_SIZE / 2
 const RCY = RADAR_SIZE / 2
 const AXES = [
-  { dx: 0, dy: -1 },  // alto — cl (Affidabilità)
-  { dx: 1, dy: 0 },   // destra — safety (Sicurezza)
-  { dx: 0, dy: 1 },   // basso — cts (Comfort TrailScore)
-  { dx: -1, dy: 0 },  // sinistra — shadewater (Ombra e acqua)
+  { dx: 0, dy: -1 },      // alto — cts (Comfort TrailScore)
+  { dx: 0.866, dy: 0.5 }, // basso-destra — safety (Sicurezza)
+  { dx: -0.866, dy: 0.5 },// basso-sinistra — shadewater (Ombra e acqua)
 ] as const
 
 function axisPoint(i: number, level: number) {
@@ -237,23 +251,26 @@ function ringPolygonPoints(level: number): string {
   return AXES.map((_, i) => { const p = axisPoint(i, level); return `${p.x},${p.y}` }).join(' ')
 }
 
-// Etichette compatte per gli assi del radar — la lista sotto mostra comunque il titolo per
-// esteso (`s.title`), qui serve stare in ~44px di larghezza senza wrap eccessivo.
 const RADAR_SHORT_TITLE: Record<Segment['key'], string> = {
-  cl: 'Affidabilità',
-  safety: 'Sicurezza',
   cts: 'Comfort',
+  safety: 'Sicurezza',
   shadewater: 'Ombra e acqua',
 }
 
+const LABEL_STYLE: Array<{ className: string; style: CSSProperties }> = [
+  { className: 'absolute left-1/2 -translate-x-1/2 text-center', style: { bottom: RADAR_MARGIN + RADAR_SIZE, width: 140 } },
+  { className: 'absolute text-left',  style: { left:  RADAR_MARGIN + RADAR_SIZE * 0.62, top: RADAR_MARGIN + RADAR_SIZE + 4, width: RADAR_SIZE * 0.4 } },
+  { className: 'absolute text-right', style: { right: RADAR_MARGIN + RADAR_SIZE * 0.62, top: RADAR_MARGIN + RADAR_SIZE + 4, width: RADAR_SIZE * 0.4 } },
+]
+
 /**
- * Radar a 4 assi (Affidabilità/Sicurezza/Comfort TrailScore/Ombra e acqua) — un solo elemento
- * compatto invece di una dashboard a sé, coerente con l'idea che tutta l'infrastruttura di
- * valutazione (che già incorpora la Bellezza/TEI come input alla Comfort TrailScore) resti
- * consultabile ma non occupi una sezione propria. Mostra anche la *forma* del punteggio, non
+ * Radar a 3 assi (Comfort TrailScore/Sicurezza/Ombra e acqua) — i soli segmenti che compongono
+ * davvero il Trail Score v2 (lib/trailScoreV2.ts). Mostra anche la *forma* del punteggio, non
  * solo la somma: un percorso ottimo ma povero d'ombra si riconosce a colpo d'occhio dal poligono
- * "storto", cosa che l'anello precedente non comunicava. Click su un vertice/etichetta o su una
- * riga della lista sotto apre il dettaglio del punteggio corrispondente in un foglio a comparsa.
+ * "storto". L'Affidabilità (CL) è mostrata separatamente sotto, come badge indipendente — non
+ * contribuisce più al punteggio (vedi il commento in cima a lib/trailScoreV2.ts). Click su un
+ * vertice/etichetta, su una riga della lista o sul badge Affidabilità apre il dettaglio
+ * corrispondente in un foglio a comparsa.
  */
 export function ScoreRing({
   cl, safety, cts, shadeWater, forecastTempC,
@@ -266,7 +283,7 @@ export function ScoreRing({
    *  Assente ⇒ Trail Score v2 usa i pesi statici (nessuna ponderazione stagionale di Ombra&Acqua). */
   forecastTempC?: number | null
 }) {
-  const [activeKey, setActiveKey] = useState<Segment['key'] | null>(null)
+  const [activeKey, setActiveKey] = useState<Segment['key'] | 'cl' | null>(null)
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     // Un frame di ritardo così il primo render dipinge il poligono a 0 — poi l'animazione CSS
@@ -275,24 +292,19 @@ export function ScoreRing({
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  const segments = computeSegments(cl, safety, cts, shadeWater)
+  const segments = computeSegments(safety, cts, shadeWater)
+  const cl_ = clRow(cl)
   const total   = computeTrailScoreTotal(cl, safety, cts, shadeWater, forecastTempC)
   const animatedTotal = useCountUp(mounted ? total : 0)
   const vetoed  = isTrailScoreVetoed(safety)
-  const active  = segments.find(s => s.key === activeKey) ?? null
+  const tier = tsLabel(Math.round(animatedTotal))
+  const active  = activeKey === 'cl' ? null : segments.find(s => s.key === activeKey) ?? null
 
   const points = segments.map((s, i) => {
     const pct = mounted && s.value != null ? Math.max(0, Math.min(100, s.value)) / 100 : 0
     return { ...s, ...axisPoint(i, pct) }
   })
   const dataPolygon = points.map(p => `${p.x},${p.y}`).join(' ')
-
-  const LABEL_STYLE: Record<number, { className: string; style: CSSProperties }> = {
-    0: { className: 'absolute left-1/2 -translate-x-1/2 text-center', style: { bottom: RADAR_MARGIN + RADAR_SIZE, width: 140 } },
-    1: { className: 'absolute top-1/2 -translate-y-1/2 text-left', style: { left: RADAR_MARGIN + RADAR_SIZE + 4, width: RADAR_MARGIN - 6 } },
-    2: { className: 'absolute left-1/2 -translate-x-1/2 text-center', style: { top: RADAR_MARGIN + RADAR_SIZE, width: 140 } },
-    3: { className: 'absolute top-1/2 -translate-y-1/2 text-right', style: { right: RADAR_MARGIN + RADAR_SIZE + 4, width: RADAR_MARGIN - 6 } },
-  }
 
   return (
     <div>
@@ -342,6 +354,14 @@ export function ScoreRing({
             <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Punteggio</span>
             <span className="font-display font-black text-[28px] text-stone-900 leading-none mt-0.5 tabular-nums">{Math.round(animatedTotal)}</span>
             <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {TRAIL_SCORE_MAX}</span>
+            {total > 0 && (
+              <span
+                className="pointer-events-none mt-1.5 px-2 py-0.5 rounded-full text-white text-[9px] font-bold uppercase tracking-wide"
+                style={{ backgroundColor: tier.color }}
+              >
+                {tier.label}
+              </span>
+            )}
             {vetoed && (
               <span className="pointer-events-auto mt-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-bold uppercase tracking-wide">
                 Sconsigliato — rischio elevato
@@ -370,16 +390,33 @@ export function ScoreRing({
               style={s.value != null ? { backgroundColor: `${s.color}1a` } : undefined}
             >
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 0 3px ${s.color}33` }} />
-              <span className="flex-1 text-xs text-stone-700 truncate">{s.title}</span>
-              <span className="text-sm font-bold" style={{ color: s.value != null ? s.color : '#78716c' }}>{s.value != null ? Math.round(s.value) : '—'}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-xs text-stone-700 truncate">{s.title}</span>
+                {s.sublabel && <span className="block text-[10px] text-stone-400 truncate">{s.sublabel}</span>}
+              </span>
+              <span className="text-sm font-bold shrink-0" style={{ color: s.value != null ? s.color : '#78716c' }}>{s.value != null ? Math.round(s.value) : '—'}</span>
             </button>
           ))}
+
+          <div className="pt-1.5 mt-1.5 border-t border-stone-100">
+            <button
+              onClick={() => setActiveKey('cl')}
+              className="w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-xl transition-colors hover:bg-stone-100"
+            >
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: cl_.color, boxShadow: `0 0 0 3px ${cl_.color}33` }} />
+              <span className="flex-1 min-w-0">
+                <span className="block text-xs text-stone-700 truncate">Affidabilità</span>
+                <span className="block text-[10px] text-stone-400 truncate">{cl_.sublabel ?? 'Non incluso nel punteggio — quanto ci fidiamo di questi dati'}</span>
+              </span>
+              <span className="text-sm font-bold shrink-0" style={{ color: cl_.value != null ? cl_.color : '#78716c' }}>{cl_.value != null ? Math.round(cl_.value) : '—'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <Sheet open={!!active} onClose={() => setActiveKey(null)} title={active?.title}>
+      <Sheet open={activeKey != null} onClose={() => setActiveKey(null)} title={activeKey === 'cl' ? 'Affidabilità' : active?.title}>
         <div className="max-h-[70vh] overflow-y-auto -mx-1 px-1">
-          {active?.key === 'cl' && (
+          {activeKey === 'cl' && (
             <CLBadge
               si={cl.si} siRaw={cl.siRaw} dataDensityFactor={cl.dataDensityFactor}
               label={cl.label} signals={cl.signals} isGhostTrail={cl.isGhostTrail}

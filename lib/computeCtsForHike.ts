@@ -6,6 +6,7 @@ import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import { checkProtectedArea } from './natura2000/checkProtectedArea'
 import { computeBbox, minDistToTrack } from './geoUtils'
 import { updatePlannedMeta, type PlannedHike } from './plannedStore'
+import { refreshTsForHike } from './computeTsForHike'
 import type { BeautyScore } from './beautyScore'
 import { getUserSettingsCached } from './sync/userSettingsStore'
 
@@ -24,17 +25,33 @@ export interface CtsPrefetched {
   prefs?: { prefSforzo?: number; prefDurata?: number; hrRest?: number; hrMax?: number }
 }
 
+export interface CtsCoreInput {
+  trackPoints?: PlannedHike['trackPoints']
+  elevationGain: number
+  distanceMeters: number
+  elevationLoss: number
+  altitudeMax: number
+  avgHeartRate?: number
+}
+
+export interface CtsCoreResult {
+  beautyScore: BeautyScore
+  ts: number
+  confidence: CtsConfidence
+  /** POIs found within 300m of the track (post-filter) — callers with their own "no POIs at all"
+   *  fallback (see lib/recalcScores.ts's getCtsFallback path) key off this instead of confidence,
+   *  which reflects cultural-POI relevance specifically, not POI presence in general. */
+  poisCount: number
+}
+
 /**
- * Runs the full CTS pipeline (POIs, OSM tags, DTM slope/aspect, terrain,
- * protected-area overlap) for a planned hike and persists the result.
- * Self-contained: fetches everything it doesn't already have rather than
- * requiring page-local state, so it can still run fire-and-forget right
- * after a hike is added (no `prefetched`), not just from a page that has
- * already loaded some of the same data for its own UI.
+ * Runs the full CTS pipeline (POIs, OSM tags, DTM slope/aspect, terrain, protected-area overlap)
+ * for a hike and returns the result WITHOUT persisting it — shared by computeCtsForHike (planned
+ * hikes, persists via updatePlannedMeta) and lib/recalcScores.ts's bulk recompute (activities +
+ * planned hikes, persists via updateActivityMeta/updatePlannedMeta respectively), so the two
+ * don't each carry their own copy of this fetch+TEI+TrailScore pipeline.
  */
-export async function computeCtsForHike(hike: Pick<PlannedHike,
-  'id' | 'trackPoints' | 'elevationGain' | 'distanceMeters' | 'elevationLoss' | 'altitudeMax'
->, prefetched?: CtsPrefetched): Promise<{ cachedBeautyScore: BeautyScore; cachedTrailScore: number; cachedTrailScoreConfidence: CtsConfidence; cachedScoresComputedAt: string } | null> {
+export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetched): Promise<CtsCoreResult | null> {
   const gps = (hike.trackPoints ?? [])
     .filter(p => p.lat && p.lon)
     .map(p => [p.lat!, p.lon!] as [number, number])
@@ -88,6 +105,7 @@ export async function computeCtsForHike(hike: Pick<PlannedHike,
     elevationGain:  hike.elevationGain,
     elevationLoss:  hike.elevationLoss,
     altitudeMax:    hike.altitudeMax,
+    avgHeartRate:   hike.avgHeartRate,
     prefSforzo:     prefs.prefSforzo,
     prefDurata:     prefs.prefDurata,
     hrRest:         prefs.hrRest ?? undefined,
@@ -96,10 +114,27 @@ export async function computeCtsForHike(hike: Pick<PlannedHike,
   })
   if (confidence === 'estimated') ts = Math.round(ts * 0.9)
 
+  return { beautyScore: bs, ts, confidence, poisCount: pois.length }
+}
+
+/**
+ * Runs computeCtsCore for a planned hike and persists the result, then triggers a Trail Score
+ * v2 recompute (lib/computeTsForHike.ts) so the aggregate never lags behind its own CTS input.
+ * Self-contained: fetches everything it doesn't already have rather than requiring page-local
+ * state, so it can still run fire-and-forget right after a hike is added (no `prefetched`), not
+ * just from a page that has already loaded some of the same data for its own UI.
+ */
+export async function computeCtsForHike(hike: Pick<PlannedHike,
+  'id' | 'trackPoints' | 'elevationGain' | 'distanceMeters' | 'elevationLoss' | 'altitudeMax'
+>, prefetched?: CtsPrefetched): Promise<{ cachedBeautyScore: BeautyScore; cachedTrailScore: number; cachedTrailScoreConfidence: CtsConfidence; cachedScoresComputedAt: string } | null> {
+  const core = await computeCtsCore(hike, prefetched)
+  if (!core) return null
+
   const result = {
-    cachedBeautyScore: bs, cachedTrailScore: ts, cachedTrailScoreConfidence: confidence,
+    cachedBeautyScore: core.beautyScore, cachedTrailScore: core.ts, cachedTrailScoreConfidence: core.confidence,
     cachedScoresComputedAt: new Date().toISOString(),
   }
   await updatePlannedMeta(hike.id, result)
+  refreshTsForHike(hike.id).catch(() => {})
   return result
 }
