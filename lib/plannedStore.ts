@@ -2,6 +2,7 @@ import type { TrackPoint } from './tcxParser'
 import type { HikeAssessment } from './hikeAssessment'
 import { lsGet, lsSet, lsDel, LS_KEYS, obEnqueue } from './localStore'
 import { registerEntityFlusher, scheduleFlush } from './sync/syncEngine'
+import { apiFetch, isPermanentClientError } from './apiFetch'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
 import type { SafetyScore } from './safetyScore'
@@ -131,15 +132,6 @@ export type PlannedHikeMeta = Omit<PlannedHike, 'trackPoints'>
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options)
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`API ${url} → ${res.status}: ${text}`)
-  }
-  return res.json() as Promise<T>
-}
-
 function toPlannedMeta(h: PlannedHike): PlannedHikeMeta {
   const { trackPoints: _, ...meta } = h
   return meta
@@ -243,7 +235,10 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
       const list2 = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
       if (list2) await lsSet(LS_KEYS.plannedList, list2.map((h) => h.id === hike.id ? toPlannedMeta(cached) : h))
       return result
-    } catch {
+    } catch (e) {
+      // Un 4xx (401/403/…) è definitivo: ritentare o accodare in outbox non lo risolverebbe, e
+      // farlo silenziosamente manderebbe l'utente avanti come se il salvataggio fosse riuscito.
+      if (isPermanentClientError(e)) throw e
       // Ultimo tentativo esaurito: passa all'outbox, altrimenti prova ancora.
       if (i === RETRY_DELAYS_MS.length - 1) {
         await obEnqueue(ENTITY_TYPE, hike.id, 'upsert', hike)
