@@ -243,9 +243,14 @@ async function runClPipeline(
   const needsOsmTags = staticExpired || dynamicExpired // weather (dynamic) reads ctx.osmTags.surface
   const needsMatch = dynamicExpired // activity (dynamic) reads ctx.matchedActivity
 
+  // findMatchingActivity interroga tutto lo storico attività dell'utente (fino a 3 anni) — a
+  // differenza dei collector veri e propri qui sotto (ognuno già avvolto in withTimeout), questa
+  // chiamata non aveva un proprio limite: su uno storico ampio poteva da sola avvicinarsi al
+  // budget totale della richiesta (COMPUTE_TIMEOUT_MS in app/api/trails/cl/route.ts), lasciando
+  // troppo poco tempo ai collector effettivi che calcolano il punteggio.
   const [tagsResult, matchResult] = await Promise.all([
     needsOsmTags && overpassRelationId != null ? fetchOsmTags(overpassRelationId) : Promise.resolve({ tags: {}, lastModified: null }),
-    needsMatch ? findMatchingActivity(geometry, bbox).catch(() => null) : Promise.resolve(null),
+    needsMatch ? withTimeout(findMatchingActivity(geometry, bbox), COLLECTOR_TIMEOUT_MS).catch(() => null) : Promise.resolve(null),
   ])
 
   const ctx: SignalContext = {

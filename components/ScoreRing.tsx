@@ -34,6 +34,9 @@ export interface CtsProps {
 export interface ShadeWaterProps {
   data: Sentinel2Data | null
   loading?: boolean
+  onRefresh?: () => void
+  refreshing?: boolean
+  refreshError?: string | null
 }
 
 interface Segment {
@@ -278,8 +281,8 @@ export function ScoreRing({
               <circle
                 key={p.key} cx={p.x} cy={p.y} r={5} fill={p.value != null ? p.color : '#c4bead'}
                 stroke="#fff" strokeWidth={1.5}
-                style={{ cursor: p.value != null ? 'pointer' : 'default', opacity: mounted ? 1 : 0, transition: 'opacity 400ms ease 500ms' }}
-                onClick={() => p.value != null && setActiveKey(p.key)}
+                style={{ cursor: 'pointer', opacity: mounted ? 1 : 0, transition: 'opacity 400ms ease 500ms' }}
+                onClick={() => setActiveKey(p.key)}
               />
             ))}
           </svg>
@@ -296,9 +299,8 @@ export function ScoreRing({
           {points.map((p, i) => (
             <button
               key={p.key}
-              onClick={() => p.value != null && setActiveKey(p.key)}
-              disabled={p.value == null}
-              className={`${LABEL_STYLE[i].className} font-barlow font-bold uppercase leading-tight text-[9px] tracking-[0.03em] disabled:cursor-default`}
+              onClick={() => setActiveKey(p.key)}
+              className={`${LABEL_STYLE[i].className} font-barlow font-bold uppercase leading-tight text-[9px] tracking-[0.03em]`}
               style={{ ...LABEL_STYLE[i].style, color: p.value != null ? p.color : '#a9a18e' }}
             >
               {RADAR_SHORT_TITLE[p.key]}
@@ -310,9 +312,8 @@ export function ScoreRing({
           {segments.map(s => (
             <button
               key={s.key}
-              onClick={() => s.value != null && setActiveKey(s.key)}
-              disabled={s.value == null}
-              className="w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-xl transition-colors disabled:opacity-40 hover:bg-stone-100"
+              onClick={() => setActiveKey(s.key)}
+              className="w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-xl transition-colors hover:bg-stone-100"
               style={s.value != null ? { backgroundColor: `${s.color}1a` } : undefined}
             >
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 0 3px ${s.color}33` }} />
@@ -337,7 +338,10 @@ export function ScoreRing({
             <ComfortTrailScoreWidget result={cts.result} cached={cts.cached} beautyScore={cts.beautyScore} defaultOpen />
           )}
           {active?.key === 'shadewater' && (
-            <ShadeWaterTile data={shadeWater.data} loading={shadeWater.loading} defaultOpen />
+            <ShadeWaterTile
+              data={shadeWater.data} loading={shadeWater.loading} defaultOpen
+              onRefresh={shadeWater.onRefresh} refreshing={shadeWater.refreshing} refreshError={shadeWater.refreshError}
+            />
           )}
         </div>
       </Sheet>

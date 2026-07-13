@@ -1,7 +1,7 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState } from 'react'
-import { Sun, Waves } from 'lucide-react'
+import { RefreshCw, Sun, Waves } from 'lucide-react'
 import type { Sentinel2Data } from '@/lib/cl/types'
 import { ScoreTile } from '@/components/ScoreTile'
 
@@ -82,7 +82,16 @@ function WaterSourcesSection({ data }: { data: Sentinel2Data }) {
   )
 }
 
-export function ShadeWaterTile({ data, loading, defaultOpen }: { data: Sentinel2Data | null; loading?: boolean; defaultOpen?: boolean }) {
+export function ShadeWaterTile({
+  data, loading, defaultOpen, onRefresh, refreshing, refreshError,
+}: {
+  data: Sentinel2Data | null
+  loading?: boolean
+  defaultOpen?: boolean
+  onRefresh?: () => void
+  refreshing?: boolean
+  refreshError?: string | null
+}) {
   const [open, setOpen] = useState(!!defaultOpen)
 
   if (loading) {
@@ -93,7 +102,29 @@ export function ShadeWaterTile({ data, loading, defaultOpen }: { data: Sentinel2
     )
   }
 
-  if (!data || !data.available) return null
+  if (!data || !data.available) {
+    // Nessun dato disponibile: può essere un percorso senza copertura satellitare, oppure il
+    // calcolo (Overpass + raster Sentinel-2) ha fallito o è ancora in corso in background —
+    // indistinguibile lato client, quindi offriamo comunque un modo per ritentare invece di
+    // sparire silenziosamente (come faceva prima, lasciando l'utente senza alcun riscontro).
+    if (!onRefresh) return null
+    return (
+      <ScoreTile title="Ombra e acqua" score="—" label="Non disponibile" color="#78716c" badge="H₂O" open={open} onToggle={() => setOpen(v => !v)}>
+        <div className="space-y-2 text-sm text-stone-500">
+          <p>Non ho ancora dati sull&apos;ombra o sull&apos;acqua per questo percorso.</p>
+          {refreshError && <p className="text-rose-600 text-xs">{refreshError}</p>}
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 text-xs font-semibold text-terra-700 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Aggiornamento…' : 'Riprova'}
+          </button>
+        </div>
+      </ScoreTile>
+    )
+  }
 
   const hasShade = data.shadeScore != null
   const score = hasShade ? Math.round(data.shadeScore! * 100) : '—'
