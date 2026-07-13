@@ -16,7 +16,7 @@ interface Params {
   // without a network round trip when every TTL bucket is still fresh. Meaningless (and
   // ignored) when osmId is set: an OSM-matched trail scores against the shared `trails` cache
   // instead, which isn't exposed to the client at all — that path always fetches live.
-  siCache?: Pick<PlannedHike, 'siScore' | 'siSignals' | 'siStaticComputedAt' | 'siDynamicComputedAt' | 'siSatelliteComputedAt' | 'isGhostTrail' | 'dominantWarning'>
+  siCache?: Pick<PlannedHike, 'siScore' | 'siScoreRaw' | 'siDensityFactor' | 'siSignals' | 'siStaticComputedAt' | 'siDynamicComputedAt' | 'siSatelliteComputedAt' | 'isGhostTrail' | 'dominantWarning'>
 }
 
 // Un percorso appena importato può non essere ancora arrivato su Supabase quando queste chiamate
@@ -57,6 +57,10 @@ function freshSiCacheResult(plannedId: string, cache: Params['siCache']): CLResu
   return {
     plannedHikeId: plannedId,
     si: cache.siScore,
+    // Puo mancare su una riga scritta prima che queste due colonne esistessero — cade indietro a
+    // "nessuna correzione visibile" invece di rompere la ricostruzione client-side.
+    siRaw: cache.siScoreRaw ?? cache.siScore,
+    dataDensityFactor: cache.siDensityFactor ?? 1,
     label: labelForSiScore(cache.siScore),
     isGhostTrail: cache.isGhostTrail ?? false,
     dominantWarning: cache.dominantWarning ?? null,

@@ -4,6 +4,7 @@ import type { CLLabel, CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { TrailScoreResult } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
+import { computeTrailScoreV2, SAFETY_VETO_THRESHOLD } from '@/lib/trailScoreV2'
 import { CLBadge } from '@/components/CLBadge'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
@@ -12,6 +13,11 @@ import Sheet from '@/components/ui/Sheet'
 
 export interface CLProps {
   si?: number
+  // Trasparenza sulla correzione di densità dati (Trail Score v2 spec §5) — vedi
+  // lib/cl/signals/densitySignal.ts. siRaw è il valore prima della correzione,
+  // dataDensityFactor il moltiplicatore applicato (0.3-1).
+  siRaw?: number
+  dataDensityFactor?: number
   label?: CLLabel
   signals?: CLSignals
   isGhostTrail?: boolean
@@ -46,12 +52,10 @@ interface Segment {
   color: string
 }
 
-/** Max possible value of the combined Trail Score (TS) — one of these 4 segments, each capped
- *  at 100, summed together. Bellezza is deliberately not its own segment: it's already one of
- *  the direct inputs computeTrailScore() uses to derive the Comfort TrailScore itself (see
- *  lib/trailScore.ts's tsBase, a log ratio of beauty vs. difficulty) — counting it a second time
- *  here as a standalone segment would double the same signal. */
-export const TRAIL_SCORE_MAX = 400
+/** Trail Score (TS) v2 e 0-100, non piu una somma di 4 segmenti a 0-400 (vedi lib/trailScoreV2.ts).
+ *  Il nome resta cosi com'e per non dover toccare ogni chiamante che lo importa solo come
+ *  denominatore del proprio MiniScoreRing. */
+export const TRAIL_SCORE_MAX = 100
 
 function computeSegments(cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps): Segment[] {
   const ctsValue    = cts.result?.ts ?? cts.cached ?? null
@@ -66,22 +70,56 @@ function computeSegments(cl: CLProps, safety: SafetyScore | null, cts: CtsProps,
   ]
 }
 
-/** Combined "TS" (Trail Score) shown as a compact badge — sum of every known segment (CL,
- *  Sicurezza, Comfort TrailScore, Ombra e acqua — Bellezza is folded into Comfort TrailScore,
- *  not counted separately), each capped at 100, out of TRAIL_SCORE_MAX (400). Same figure as
- *  ScoreRing's own central number, computed the same way so the two never disagree. */
-export function computeTrailScoreTotal(cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps): number {
-  return computeSegments(cl, safety, cts, shadeWater).reduce((sum, s) => sum + (s.value ?? 0), 0)
+/** Trail Score (TS) v2, 0-100 — sostituisce la vecchia somma lineare dei 4 segmenti (CL,
+ *  Sicurezza, Comfort TrailScore, Ombra e acqua) con il framework a 3 livelli di
+ *  lib/trailScoreV2.ts: Comfort TrailScore e Ombra e acqua si combinano in un "Value" (pesi che
+ *  seguono la temperatura prevista se nota), la Sicurezza fa da gate non-compensabile su quel
+ *  Value, e l'Affidabilita (gia corretta per densita dati) fa collassare il risultato verso un
+ *  prior neutro quando i dati sono scarsi. Restituisce 0 finche CL/Sicurezza/Comfort TrailScore
+ *  non sono TUTTI disponibili — un gate o uno shrinkage "assente" non ha un default onesto (vedi
+ *  computeTrailScoreV2), quindi niente numero finche non lo sono, invece di uno silenziosamente
+ *  sbagliato. Ombra e acqua invece e genuinamente opzionale (Livello 1, sostituibile da CTS). */
+export function computeTrailScoreTotal(
+  cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps,
+  forecastTempC?: number | null,
+): number {
+  const segments = computeSegments(cl, safety, cts, shadeWater)
+  const clValue         = segments.find(s => s.key === 'cl')?.value ?? null
+  const safetyValue     = segments.find(s => s.key === 'safety')?.value ?? null
+  const ctsValue        = segments.find(s => s.key === 'cts')?.value ?? null
+  const shadeWaterValue = segments.find(s => s.key === 'shadewater')?.value ?? null
+
+  // Alcuni chiamanti (es. app/resoconto/ResocontoHub.tsx, per le attività già concluse) non
+  // tracciano affatto Sicurezza/Affidabilità e passano cl.notMatched=true in modo esplicito e
+  // permanente (non "ancora in caricamento" — vedi lib/cl/useCL.ts, dove notMatched parte a
+  // false e scatta solo se una vera fetch risponde "nessun match"). Per quei contesti il gate/
+  // shrinkage non ha nulla su cui lavorare: invece di bloccare il numero (che richiederebbe
+  // sempre tutti e tre gli input), Trail Score v2 collassa al solo Value, cioè lo stesso esito
+  // che avrebbe con Sicurezza/Affidabilità perfette (gate=1, C=1). Un vero percorso pianificato
+  // non prende mai questa via: lì notMatched resta false finché la fetch non risponde davvero.
+  const notApplicable = cl.notMatched === true && safetyValue == null
+  const result = computeTrailScoreV2({
+    cts: ctsValue, ombraAcqua: shadeWaterValue,
+    safety: notApplicable ? 100 : safetyValue,
+    affidabilita: notApplicable ? 100 : clValue,
+    forecastTempC,
+  })
+  return result?.score ?? 0
 }
 
-/** TS tier coloring — thresholds on the raw 0-TRAIL_SCORE_MAX total, not a percentage: a route
- *  stuck at 90 reads as weak (red) the same way whether the max is 400 or drifts later, instead
- *  of a percentage-based scale where "weak" would silently shift with TRAIL_SCORE_MAX. */
+/** True quando la Sicurezza e sotto la soglia di veto assoluta (Trail Score v2 spec §2) — usato
+ *  per sovrapporre un badge di avviso al numero (non per sostituirlo: il gate sigmoide lo ha gia
+ *  schiacciato quasi a zero da solo). */
+export function isTrailScoreVetoed(safety: SafetyScore | null): boolean {
+  return safety?.overall != null && safety.overall < SAFETY_VETO_THRESHOLD
+}
+
+/** TS tier coloring — thresholds sul totale 0-100 (non piu 0-400, vedi TRAIL_SCORE_MAX). */
 export function tsColor(value: number): string {
-  if (value <= 100) return '#dc2626' // rosso
-  if (value <= 200) return '#eab308' // giallo
-  if (value <= 300) return '#0ea5e9' // celeste
-  return '#16a34a'                   // verde
+  if (value <= 25) return '#dc2626' // rosso
+  if (value <= 50) return '#eab308' // giallo
+  if (value <= 75) return '#0ea5e9' // celeste
+  return '#16a34a'                  // verde
 }
 
 const MINI_STROKE = 3
@@ -92,7 +130,7 @@ const MINI_STROKE = 3
  *  number that would otherwise jump several times before landing on its final value. `color`
  *  overrides the automatic TS-tier coloring (used by callers scoring on a different scale,
  *  e.g. Resoconto's 0-10 manual rating). */
-export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30, loading = false, color: colorOverride }: { value: number; max?: number; size?: number; loading?: boolean; color?: string }) {
+export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30, loading = false, color: colorOverride, vetoed = false }: { value: number; max?: number; size?: number; loading?: boolean; color?: string; vetoed?: boolean }) {
   const r = (size - MINI_STROKE) / 2
   const c = size / 2
   const circumference = 2 * Math.PI * r
@@ -126,6 +164,15 @@ export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30, loading
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="font-bold leading-none" style={{ color, fontSize: size * 0.32 }}>{Math.round(value)}</span>
       </div>
+      {vetoed && (
+        <span
+          title="Sconsigliato — rischio elevato"
+          className="absolute -top-1 -right-1 flex items-center justify-center rounded-full bg-red-600 text-white leading-none"
+          style={{ width: size * 0.4, height: size * 0.4, fontSize: size * 0.28 }}
+        >
+          ⚠
+        </span>
+      )}
     </div>
   )
 }
@@ -163,8 +210,6 @@ function useCountUp(target: number, durationMs = 700): number {
   }, [target])
   return value
 }
-
-const SEG_COUNT = 4
 
 // Radar a 4 assi — alto/destra/basso/sinistra, nello stesso ordine di `computeSegments`
 // (cl, safety, cts, shadewater). Le etichette sono <div> HTML sovrapposte all'SVG, non testo
@@ -211,12 +256,15 @@ const RADAR_SHORT_TITLE: Record<Segment['key'], string> = {
  * riga della lista sotto apre il dettaglio del punteggio corrispondente in un foglio a comparsa.
  */
 export function ScoreRing({
-  cl, safety, cts, shadeWater,
+  cl, safety, cts, shadeWater, forecastTempC,
 }: {
   cl: CLProps
   safety: SafetyScore | null
   cts: CtsProps
   shadeWater: ShadeWaterProps
+  /** Temperatura prevista (°C) nel giorno dell'escursione — vedi app/guida/useForecastTemp.ts.
+   *  Assente ⇒ Trail Score v2 usa i pesi statici (nessuna ponderazione stagionale di Ombra&Acqua). */
+  forecastTempC?: number | null
 }) {
   const [activeKey, setActiveKey] = useState<Segment['key'] | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -228,9 +276,9 @@ export function ScoreRing({
   }, [])
 
   const segments = computeSegments(cl, safety, cts, shadeWater)
-  const total   = segments.reduce((sum, s) => sum + (s.value ?? 0), 0)
+  const total   = computeTrailScoreTotal(cl, safety, cts, shadeWater, forecastTempC)
   const animatedTotal = useCountUp(mounted ? total : 0)
-  const known   = segments.filter(s => s.value != null).length
+  const vetoed  = isTrailScoreVetoed(safety)
   const active  = segments.find(s => s.key === activeKey) ?? null
 
   const points = segments.map((s, i) => {
@@ -293,7 +341,12 @@ export function ScoreRing({
           >
             <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Punteggio</span>
             <span className="font-display font-black text-[28px] text-stone-900 leading-none mt-0.5 tabular-nums">{Math.round(animatedTotal)}</span>
-            <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {known * 100 || SEG_COUNT * 100}</span>
+            <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {TRAIL_SCORE_MAX}</span>
+            {vetoed && (
+              <span className="pointer-events-auto mt-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-bold uppercase tracking-wide">
+                Sconsigliato — rischio elevato
+              </span>
+            )}
           </div>
 
           {points.map((p, i) => (
@@ -328,7 +381,8 @@ export function ScoreRing({
         <div className="max-h-[70vh] overflow-y-auto -mx-1 px-1">
           {active?.key === 'cl' && (
             <CLBadge
-              si={cl.si} label={cl.label} signals={cl.signals} isGhostTrail={cl.isGhostTrail}
+              si={cl.si} siRaw={cl.siRaw} dataDensityFactor={cl.dataDensityFactor}
+              label={cl.label} signals={cl.signals} isGhostTrail={cl.isGhostTrail}
               partial={cl.partial} loading={cl.loading} expanded defaultOpen
               onRefresh={cl.onRefresh} refreshing={cl.refreshing} refreshError={cl.refreshError}
             />

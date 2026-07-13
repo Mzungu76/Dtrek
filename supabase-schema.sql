@@ -160,12 +160,18 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_scores_computed_at    
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_safety_score JSONB;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_safety_computed_at TIMESTAMPTZ;
 
--- Full Trail Score (TS) aggregate cache — CL + Sicurezza + Comfort TrailScore (cached_trail_score
--- above, despite the similar name) + Ombra e acqua, each capped at 100, see
--- components/ScoreRing.tsx's TRAIL_SCORE_MAX (400). Computed once live while a hike is open
--- (app/guida/GuidaHub.tsx), then read back here so list/gallery views don't need to recompute a
--- partial version from scratch on every load.
+-- Trail Score (TS) v2 aggregate cache, 0-100 — see lib/trailScoreV2.ts. NOT a linear sum anymore
+-- (that formula was replaced): Comfort TrailScore and Ombra e acqua combine into a "Value" (their
+-- weights shift with forecast temperature), Sicurezza gates that Value via a sigmoid (non
+-- compensabile — un rischio alto non si "recupera" con più bellezza), and Affidabilità (already
+-- corrected for data density, see si_density_factor above) shrinks the result toward a neutral
+-- prior when data quality is low. Computed once live while a hike is open (app/guida/GuidaHub.tsx),
+-- then read back here so list/gallery views don't need to recompute from scratch on every load.
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_ts_total DOUBLE PRECISION;
+
+-- Trail Score v2 — stesse colonne di trasparenza di trails sopra.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS si_score_raw float;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS si_density_factor float;
 
 -- Trail riddles ("indovinelli per tappa") extracted from the generated guide text —
 -- see lib/riddles.ts. Each entry carries its own lat/lon (matched against cached_pois/
@@ -442,6 +448,12 @@ ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_satellite_computed_at timestamptz
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_ground_computed_at timestamptz;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS is_ghost_trail boolean DEFAULT false;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS dominant_warning text;
+
+-- Trail Score v2 (supabase/migrations/add_trailscore_v2_columns.sql) — si_score è già corretto
+-- per densità dati (lib/cl/signals/densitySignal.ts); si_score_raw/si_density_factor sono solo
+-- per trasparenza/debug, nessuna logica di ricalcolo dipende da loro.
+ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_score_raw float;
+ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_density_factor float;
 
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_ndvi_monthly jsonb;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_ndvi_delta float;
