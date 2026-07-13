@@ -8,7 +8,7 @@ import { computeBbox } from '@/lib/geoUtils'
 import { fetchOverpass, stitchWays, type OsmRelation, type OsmWay } from '@/lib/overpassTrails'
 import type {
   CLResult, CLSignals, CLLabel, SignalContext,
-  OsmSignal, WeatherSignal, ClimateSignal, SatelliteSignal, ActivitySignal, CommunitySignal,
+  OsmSignal, WeatherSignal, ClimateSignal, SatelliteSignal, ActivitySignal, CommunitySignal, DensitySignal,
 } from '@/lib/cl/types'
 import { fetchOsmTags, collectOsmSignal } from '@/lib/cl/signals/osmSignals'
 import { collectWeatherSignal } from '@/lib/cl/signals/weatherSignals'
@@ -16,6 +16,7 @@ import { collectClimateSignal } from '@/lib/cl/signals/climateSignals'
 import { collectSatelliteSignal } from '@/lib/cl/signals/satelliteSignals'
 import { collectActivitySignal } from '@/lib/cl/signals/activitySignals'
 import { collectCommunitySignal } from '@/lib/cl/signals/communitySignals'
+import { collectDensitySignal, NEUTRAL_DENSITY } from '@/lib/cl/signals/densitySignal'
 import { findMatchingActivity } from '@/lib/cl/matchTrail'
 import { SI_STATIC_TTL_MS, SI_DYNAMIC_TTL_MS, SI_SATELLITE_TTL_MS, labelForSiScore } from '@/lib/cl/label'
 
@@ -126,6 +127,10 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   ])
 }
 
+// Punteggio "grezzo" — la somma additiva di segnali di sempre. density NON entra qui: non è un
+// segnale come gli altri (non dice "cosa c'è di sbagliato/giusto", dice "quanti dati indipendenti
+// esistono per giudicare"), quindi corregge moltiplicativamente il risultato di questa funzione
+// invece di sommarsi con lui — vedi la correzione in runClPipeline subito dopo la chiamata.
 function computeScore(s: CLSignals): number {
   // Only a subset of the still-computed-and-persisted signals feed the CL
   // score. Excluded (calculated + stored in si_signals, but not summed here):
@@ -208,7 +213,9 @@ interface SiCacheFields {
 
 interface SiPipelineResult {
   signals: CLSignals
-  score: number
+  score: number       // corretto per densità dati (score = round(scoreRaw * dataDensityFactor))
+  scoreRaw: number    // prima della correzione — solo per trasparenza/debug
+  dataDensityFactor: number
   label: CLLabel
   dominantWarning: string | null
   isGhostTrail: boolean
@@ -270,9 +277,14 @@ async function runClPipeline(
   // is no real OSM relation.
   const collectorId = overpassRelationId ?? 0
 
-  type CollectorKey = 'osm' | 'weather' | 'climate' | 'satellite' | 'activity' | 'community'
+  type CollectorKey = 'osm' | 'weather' | 'climate' | 'satellite' | 'activity' | 'community' | 'density'
   const tasks: Array<{ key: CollectorKey; promise: Promise<unknown>; neutral: unknown }> = []
-  if (staticExpired) tasks.push({ key: 'osm', promise: collectOsmSignal(collectorId, ctx), neutral: NEUTRAL_OSM })
+  if (staticExpired) {
+    tasks.push({ key: 'osm', promise: collectOsmSignal(collectorId, ctx), neutral: NEUTRAL_OSM })
+    // Stesso bucket TTL di osm (30gg): quanti contributor/osservazioni esistono per una zona
+    // cambia lentamente, non serve ricalcolarlo alla stessa cadenza del meteo.
+    tasks.push({ key: 'density', promise: collectDensitySignal(collectorId, ctx), neutral: NEUTRAL_DENSITY })
+  }
   if (dynamicExpired) {
     tasks.push({ key: 'weather', promise: collectWeatherSignal(collectorId, ctx), neutral: NEUTRAL_WEATHER })
     tasks.push({ key: 'climate', promise: collectClimateSignal(collectorId, ctx), neutral: NEUTRAL_CLIMATE })
@@ -305,6 +317,7 @@ async function runClPipeline(
     satellite: (fresh.satellite as SatelliteSignal) ?? { ...NEUTRAL_SATELLITE, ...cachedSignals?.satellite },
     activity:  (fresh.activity as ActivitySignal) ?? { ...NEUTRAL_ACTIVITY, ...cachedSignals?.activity },
     community: (fresh.community as CommunitySignal) ?? { ...NEUTRAL_COMMUNITY, ...cachedSignals?.community },
+    density:   (fresh.density as DensitySignal) ?? { ...NEUTRAL_DENSITY, ...cachedSignals?.density },
   }
 
   // Ghost trail can only be newly *set* on the very first computation ever
@@ -319,11 +332,17 @@ async function runClPipeline(
     }
   }
 
-  const score = computeScore(signals)
+  const scoreRaw = computeScore(signals)
+  // Trail Score v2 spec §5.4 — Affidabilità_corretta = Affidabilità_grezza × fattore_densità.
+  // Un'Affidabilità grezza alta ottenuta con pochissimi dati indipendenti (poca copertura OSM,
+  // poche osservazioni naturalistiche nei dintorni) è un artefatto della scarsità di segnali
+  // negativi, non una verifica reale — il fattore di densità la riporta a una fascia più onesta.
+  const dataDensityFactor = signals.density.factor
+  const score = clamp(Math.round(scoreRaw * dataDensityFactor), 0, 100)
   const label = labelForSiScore(score)
   const dominantWarning = dominantWarningFor(signals)
 
-  return { signals, score, label, dominantWarning, isGhostTrail, partial, staticExpired, dynamicExpired, satelliteExpired }
+  return { signals, score, scoreRaw, dataDensityFactor, label, dominantWarning, isGhostTrail, partial, staticExpired, dynamicExpired, satelliteExpired }
 }
 
 export async function computeCL(
@@ -375,6 +394,8 @@ export async function computeCL(
   // only in-code symbols were renamed SI -> CL.
   const updatePayload: Record<string, unknown> = {
     si_score: result.score,
+    si_score_raw: result.scoreRaw,
+    si_density_factor: result.dataDensityFactor,
     si_label: result.label.text,
     si_signals: result.signals,
     si_computed_at: cachedAt,
@@ -389,7 +410,8 @@ export async function computeCL(
   if (error) console.error('[computeCL] update trails failed', error)
 
   return {
-    osmRelationId, si: result.score, label: result.label, isGhostTrail: result.isGhostTrail,
+    osmRelationId, si: result.score, siRaw: result.scoreRaw, dataDensityFactor: result.dataDensityFactor,
+    label: result.label, isGhostTrail: result.isGhostTrail,
     dominantWarning: result.dominantWarning, signals: result.signals, partial: result.partial, cachedAt,
   }
 }
@@ -440,6 +462,8 @@ export async function computeCLForPlannedHike(
   // only in-code symbols were renamed SI -> CL.
   const updatePayload: Record<string, unknown> = {
     si_score: result.score,
+    si_score_raw: result.scoreRaw,
+    si_density_factor: result.dataDensityFactor,
     si_label: result.label.text,
     si_signals: result.signals,
     si_computed_at: cachedAt,
@@ -454,7 +478,8 @@ export async function computeCLForPlannedHike(
   if (error) console.error('[computeCL] update planned_hikes failed', error)
 
   return {
-    plannedHikeId, si: result.score, label: result.label, isGhostTrail: result.isGhostTrail,
+    plannedHikeId, si: result.score, siRaw: result.scoreRaw, dataDensityFactor: result.dataDensityFactor,
+    label: result.label, isGhostTrail: result.isGhostTrail,
     dominantWarning: result.dominantWarning, signals: result.signals, partial: result.partial, cachedAt,
   }
 }

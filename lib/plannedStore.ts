@@ -108,6 +108,12 @@ export interface PlannedHike {
   // permettere a lib/cl/useCL.ts di saltare del tutto la chiamata a /api/trails/cl quando tutti
   // e tre i livelli sono già freschi.
   siScore?:                      number
+  // Trail Score v2 — trasparenza sulla correzione di densità dati applicata a siScore (vedi
+  // lib/cl/signals/densitySignal.ts): siScoreRaw è il valore prima della correzione,
+  // siDensityFactor il moltiplicatore applicato (0.3-1). Solo per debug/UI, nessuna logica di
+  // ricalcolo dipende da questi due.
+  siScoreRaw?:                   number
+  siDensityFactor?:              number
   siSignals?:                    CLSignals
   siStaticComputedAt?:           string
   siDynamicComputedAt?:          string

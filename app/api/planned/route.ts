@@ -72,6 +72,8 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedProtectedAreaTrackHash:  row.cached_protected_area_track_hash  as string | undefined,
     cachedProtectedAreaComputedAt: row.cached_protected_area_computed_at as string | undefined,
     siScore:                      row.si_score                       as number | undefined,
+    siScoreRaw:                   row.si_score_raw                   as number | undefined,
+    siDensityFactor:              row.si_density_factor              as number | undefined,
     siSignals:                    row.si_signals                     as PlannedHike['siSignals'],
     siStaticComputedAt:           row.si_static_computed_at          as string | undefined,
     siDynamicComputedAt:          row.si_dynamic_computed_at         as string | undefined,

@@ -56,6 +56,8 @@ export interface ScoresBundle {
   safety: SafetyScore | null
   cts: CtsProps
   shadeWater: ShadeWaterProps
+  /** Temperatura prevista (°C) nel giorno dell'escursione — vedi app/guida/useForecastTemp.ts. */
+  forecastTempC?: number | null
   showAspectToggle: boolean
   showGradientToggle: boolean
   showAspect: boolean

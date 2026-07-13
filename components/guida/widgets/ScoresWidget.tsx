@@ -10,6 +10,9 @@ interface Props {
   safety: SafetyScore | null
   cts: CtsProps
   shadeWater: ShadeWaterProps
+  /** Temperatura prevista (°C) nel giorno dell'escursione — vedi app/guida/useForecastTemp.ts.
+   *  Passata a ScoreRing per la ponderazione stagionale di Ombra&Acqua nel Trail Score v2. */
+  forecastTempC?: number | null
   showAspectToggle: boolean
   showGradientToggle: boolean
   showAspect: boolean
@@ -21,13 +24,13 @@ interface Props {
 /** Punteggi (CL/Sicurezza/Comfort Trail Score/ombra-acqua) — spostati dalla vecchia tab
  *  "Dati & punteggi" nella sezione "Dati e sicurezza" della guida magazine. */
 export default function ScoresWidget({
-  cl, safety, cts, shadeWater,
+  cl, safety, cts, shadeWater, forecastTempC,
   showAspectToggle, showGradientToggle, showAspect, showGradient, onToggleAspect, onToggleGradient,
 }: Props) {
   return (
     <div className="space-y-3">
       <Kicker>Punteggio complessivo</Kicker>
-      <ScoreRing cl={cl} safety={safety} cts={cts} shadeWater={shadeWater} />
+      <ScoreRing cl={cl} safety={safety} cts={cts} shadeWater={shadeWater} forecastTempC={forecastTempC} />
 
       {(showAspectToggle || showGradientToggle) && (
         <div className="flex items-center gap-1.5 flex-wrap">

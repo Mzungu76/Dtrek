@@ -75,6 +75,19 @@ export interface CommunitySignal {
   difficultyMarkersDetails: Array<{ text: string; severity: 'info' | 'warning' | 'danger'; distanceM: number }>
 }
 
+// Densità del dato (Trail Score v2 spec §5) — non un segnale additivo come gli altri: non entra
+// nella somma di computeScore(), corregge invece moltiplicativamente il punteggio già calcolato
+// (vedi computeCL.ts). Un'Affidabilità alta ottenuta con pochissimi dati indipendenti è fragile
+// (es. zone a bassa copertura OSM/community come gran parte della Tuscia), non equivalente a
+// un'Affidabilità alta ottenuta con molti dati concordanti.
+export interface DensitySignal {
+  osmContributors: number  // contributor OSM distinti stimati nel buffer attorno al tracciato
+  dOsm: number             // min(1, osmContributors / soglia) — 0-1
+  areaObservations: number // osservazioni GBIF+iNaturalist nel raggio attorno al percorso
+  dArea: number            // min(1, areaObservations / soglia) — 0-1
+  factor: number           // max(0.3, sqrt(dOsm * dArea)) — 0.3-1, moltiplica l'Affidabilità grezza
+}
+
 export interface CLSignals {
   osm: OsmSignal
   weather: WeatherSignal
@@ -82,6 +95,7 @@ export interface CLSignals {
   satellite: SatelliteSignal
   activity: ActivitySignal
   community: CommunitySignal
+  density: DensitySignal
 }
 
 export interface CLResult {
@@ -90,7 +104,12 @@ export interface CLResult {
   // planned hike with no OSM correspondence (see computeCLForPlannedHike).
   osmRelationId?: number
   plannedHikeId?: string
+  // si è il punteggio GIÀ corretto per densità dati (si = round(siRaw * signals.density.factor),
+  // vedi computeCL.ts) — quello mostrato all'utente e usato come Affidabilità/C nel Trail Score
+  // v2. siRaw è il punteggio prima della correzione, esposto solo per trasparenza/debug.
   si: number
+  siRaw: number
+  dataDensityFactor: number
   label: CLLabel
   isGhostTrail: boolean
   dominantWarning: string | null

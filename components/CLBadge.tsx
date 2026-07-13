@@ -8,6 +8,11 @@ import { ScoreTile } from '@/components/ScoreTile'
 
 interface Props {
   si?: number
+  // Trasparenza sulla correzione di densità dati (Trail Score v2 spec §5) — vedi
+  // lib/cl/signals/densitySignal.ts. siRaw è il valore prima della correzione,
+  // dataDensityFactor il moltiplicatore applicato (0.3-1).
+  siRaw?: number
+  dataDensityFactor?: number
   label?: CLLabel
   signals?: CLSignals
   isGhostTrail?: boolean
@@ -91,7 +96,7 @@ function colorFor(label: CLLabel): string {
   }
 }
 
-export function CLBadge({ si, label, signals, isGhostTrail, partial, loading, compact, expanded, defaultOpen, onRefresh, refreshing, refreshError }: Props) {
+export function CLBadge({ si, siRaw, dataDensityFactor, label, signals, isGhostTrail, partial, loading, compact, expanded, defaultOpen, onRefresh, refreshing, refreshError }: Props) {
   const [open, setOpen] = useState(!!defaultOpen)
 
   if (loading) {
@@ -143,6 +148,15 @@ export function CLBadge({ si, label, signals, isGhostTrail, partial, loading, co
       hasDetail={rows.length > 0 || !!onRefresh}
     >
       <div className="space-y-1.5">
+        {dataDensityFactor != null && dataDensityFactor < 0.999 && siRaw != null && (
+          <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5">
+            <span>📊</span>
+            <span className="flex-1">
+              Corretto da {Math.round(siRaw)} a {si} per bassa densità di dati indipendenti in questa zona (pochi contributor OSM o osservazioni naturalistiche nei dintorni).
+            </span>
+            <InfoTooltip text={CL_PARAM_DESCRIPTIONS.dataDensity} />
+          </p>
+        )}
         {rows.map((r, i) => (
           <p key={i} className="text-xs text-stone-600 leading-tight flex items-start gap-1.5">
             <span>{r.icon}</span>

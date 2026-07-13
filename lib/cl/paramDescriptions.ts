@@ -21,4 +21,5 @@ export const CL_PARAM_DESCRIPTIONS: Record<string, string> = {
   activityDtrek: 'Bonus per un’attività DTrek registrata di recente su questo stesso percorso — segno che è stato effettivamente percorso.',
   communityNotes: 'Segnalazioni recenti della comunità OpenStreetMap (note) nelle vicinanze del tracciato.',
   communityMarkers: 'Tratti difficili individuati automaticamente nei commenti/waypoint dei file GPX importati (Komoot/AllTrails) vicino al tracciato.',
+  dataDensity: 'Quanti dati indipendenti esistono su questa zona (numero di contributor OSM distinti e di osservazioni naturalistiche nei dintorni). Un\'Affidabilità alta ottenuta con pochissimi dati è fragile — più facile che sia alta solo perché non ci sono abbastanza segnalazioni negative, non perché sia stata davvero verificata — quindi viene corretta al ribasso in proporzione.',
 }

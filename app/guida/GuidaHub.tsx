@@ -7,7 +7,7 @@ import HubSkeleton from '@/components/routehub/HubSkeleton'
 import GuideReader from '@/components/guida/GuideReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
-import { computeTrailScoreTotal, MiniScoreRing, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
+import { computeTrailScoreTotal, isTrailScoreVetoed, MiniScoreRing, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import {
@@ -40,25 +40,23 @@ import { useTerrainProfile } from './useTerrainProfile'
 import { useProtectedAreaCheck } from './useProtectedAreaCheck'
 import { useDrivingDistance } from './useDrivingDistance'
 import { useSafetyScore } from './useSafetyScore'
+import { useForecastTemp } from './useForecastTemp'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const FloraGallery     = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
 const AnimalGallery    = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
 
-/** cachedTsTotal is the full aggregate (CL + Sicurezza + Comfort TrailScore + Ombra e acqua)
- *  persisted to Supabase once it's been computed live for this hike (see the sync effect in
- *  GuidaHub) — reading it back is instant and, unlike the fallback below, includes CL/ombra-acqua
- *  too. For a hike that's never been opened yet, fall back to a best-effort total from only
- *  what's already cached in the lightweight list metadata (no per-item live fetch). */
+/** cachedTsTotal is the Trail Score v2 (0-100, see lib/trailScoreV2.ts) persisted to Supabase once
+ *  computed live for this hike (see the sync effect in GuidaHub) — reading it back is instant.
+ *  Trail Score v2 needs CL/Sicurezza/Comfort TrailScore ALL present to mean anything (it's a gate
+ *  + shrinkage, not a sum — see computeTrailScoreV2's own doc comment on why a partial
+ *  reconstruction from only cached CTS/Safety isn't a safe approximation of it), so a hike that's
+ *  never been opened yet (no cachedTsTotal) falls back to just its raw Comfort TrailScore instead
+ *  of fabricating a full v2 number out of incomplete data. */
 function previewScoreValue(h: PlannedHikeMeta): number {
   if (h.cachedTsTotal != null) return h.cachedTsTotal
-  return computeTrailScoreTotal(
-    { notMatched: true },
-    h.cachedSafetyScore ?? null,
-    { result: null, cached: h.cachedTrailScore, beautyScore: h.cachedBeautyScore },
-    { data: null },
-  )
+  return h.cachedTrailScore ?? 0
 }
 
 function metaToItem(h: PlannedHikeMeta): RouteHubItem {
@@ -158,6 +156,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     return { ...driving, mapsUrl }
   }, [driving, userOrigin, hike?.routePolyline])
   const safetyScore = useSafetyScore(hike, setHike)
+  const forecastTempC = useForecastTemp(hike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   // All the data the auto-generated Breve guide should be able to draw on: POIs/Wikipedia,
@@ -350,11 +349,12 @@ export default function GuidaHub({ id }: { id?: string }) {
       safetyScore,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
       { data: s2.data, loading: s2.loading },
+      forecastTempC,
     )
     if (total <= 0 || total === hike.cachedTsTotal) return
     updatePlannedMeta(hike.id, { cachedTsTotal: total }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedTsTotal: total } : prev)
-  }, [hike, safetyScore, ctsResult, si.loading, si.result, si.notMatched, s2.loading, s2.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike, safetyScore, ctsResult, si.loading, si.result, si.notMatched, s2.loading, s2.data, forecastTempC]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keeps the gallery thumbnail's TS ring — and the "TS" sort key that ranks by it — in sync with
   // whatever just got cached (Calcola CTS, the auto-cached safety score, or the full aggregate
@@ -603,11 +603,12 @@ export default function GuidaHub({ id }: { id?: string }) {
       safetyScore,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
       { data: s2.data, loading: s2.loading },
+      forecastTempC,
     )
     if (!scoreLoading && trailScoreTotal <= 0) return null
     return (
       <button onClick={() => { setPendingScrollSection('dati_sicurezza'); onTap() }} title="Trail Score" className="pointer-events-auto shrink-0">
-        <MiniScoreRing value={trailScoreTotal} loading={scoreLoading} />
+        <MiniScoreRing value={trailScoreTotal} loading={scoreLoading} vetoed={isTrailScoreVetoed(safetyScore)} />
       </button>
     )
   }
@@ -644,10 +645,11 @@ export default function GuidaHub({ id }: { id?: string }) {
           dtmProfile={dtmProfile}
           driving={drivingWithMaps}
           scores={{
-            cl: { si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError },
+            cl: { si: si.result?.si, siRaw: si.result?.siRaw, dataDensityFactor: si.result?.dataDensityFactor, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError },
             safety: safetyScore,
             cts: { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts },
             shadeWater: { data: s2.data, loading: s2.loading, onRefresh: s2.refresh, refreshing: s2.refreshing, refreshError: s2.refreshError },
+            forecastTempC,
             showAspectToggle: hasGps && dtmProfile?.source === 'dtm',
             showGradientToggle: hasGps && dtmProfile?.source === 'dtm' && !!hike.trackPoints?.some(p => p.altitudeMeters !== undefined),
             showAspect, showGradient,
