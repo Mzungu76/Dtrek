@@ -11,6 +11,7 @@ import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
+import { triggerBackgroundScores } from '@/lib/cl/triggerBackgroundScores'
 import { defaultPendingExpiresAt } from './sharedHelpers'
 import type { SearchResultCandidate } from '@/app/api/route-search/route'
 
@@ -166,6 +167,7 @@ export default function AiRouteSearch({ onBack }: { onBack: () => void }) {
       await savePlanned(hike)
       computeCtsForHike(hike).catch(() => {})
       computeSafetyForHike(hike).catch(() => {})
+      triggerBackgroundScores(hike)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)

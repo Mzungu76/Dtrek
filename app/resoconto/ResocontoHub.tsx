@@ -458,7 +458,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
               cl={{ notMatched: true }}
               safety={null}
               cts={{ result: ctsResult, cached: activity.trailScore, beautyScore: activity.linkedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts }}
-              shadeWater={{ data: s2.data, loading: s2.loading }}
+              shadeWater={{ data: s2.data, loading: s2.loading, onRefresh: s2.refresh, refreshing: s2.refreshing, refreshError: s2.refreshError }}
             />
           ) : (
             <div className={`${glassTile} px-5 py-4 flex items-center justify-between gap-4`}>

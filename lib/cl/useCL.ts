@@ -135,10 +135,19 @@ export function useCL({ osmId, polyline, plannedId, siCache }: Params): {
   return { result, loading, notMatched, refreshing, refreshError, refresh }
 }
 
-export function useSentinel2({ osmId, polyline, plannedId }: Params): { data: Sentinel2Data | null; loading: boolean; notMatched: boolean } {
+export function useSentinel2({ osmId, polyline, plannedId }: Params): {
+  data: Sentinel2Data | null
+  loading: boolean
+  notMatched: boolean
+  refreshing: boolean
+  refreshError: string | null
+  refresh: () => void
+} {
   const [data, setData] = useState<Sentinel2Data | null>(null)
   const [loading, setLoading] = useState(false)
   const [notMatched, setNotMatched] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
   const polylineKey = polyline ? JSON.stringify(polyline) : null
 
   useEffect(() => {
@@ -164,5 +173,25 @@ export function useSentinel2({ osmId, polyline, plannedId }: Params): { data: Se
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [osmId, polylineKey, plannedId])
 
-  return { data, loading, notMatched }
+  const refresh = () => {
+    const qs = queryFor({ osmId, polyline, plannedId })
+    if (!qs) return
+    setRefreshing(true)
+    setRefreshError(null)
+    fetch(`/api/trails/sentinel2?${qs}&force=1`)
+      .then(async res => {
+        if (res.status === 429) {
+          const body = await res.json().catch(() => ({}))
+          setRefreshError(body.error ?? 'Aggiornamento non ancora disponibile — riprova più tardi.')
+          return
+        }
+        const d: Sentinel2Data | { matched: false } | { error: string } = await res.json()
+        if ('available' in d) setData(d)
+        else if ('error' in d) setRefreshError('Impossibile aggiornare i dati in questo momento.')
+      })
+      .catch(() => { setRefreshError('Impossibile aggiornare i dati in questo momento.') })
+      .finally(() => setRefreshing(false))
+  }
+
+  return { data, loading, notMatched, refreshing, refreshError, refresh }
 }

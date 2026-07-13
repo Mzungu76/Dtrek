@@ -647,7 +647,7 @@ export default function GuidaHub({ id }: { id?: string }) {
             cl: { si: si.result?.si, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError },
             safety: safetyScore,
             cts: { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts },
-            shadeWater: { data: s2.data, loading: s2.loading },
+            shadeWater: { data: s2.data, loading: s2.loading, onRefresh: s2.refresh, refreshing: s2.refreshing, refreshError: s2.refreshError },
             showAspectToggle: hasGps && dtmProfile?.source === 'dtm',
             showGradientToggle: hasGps && dtmProfile?.source === 'dtm' && !!hike.trackPoints?.some(p => p.altitudeMeters !== undefined),
             showAspect, showGradient,
