@@ -14,7 +14,7 @@
  */
 import { supabase } from '../lib/supabase'
 import { computeCL, computeCLForPlannedHike } from '../lib/cl/computeCL'
-import { computeSentinel2, computeSentinel2ForPlannedHike } from '../lib/sentinel2/computeSentinel2'
+import { computeShadeWater as computeSentinel2, computeShadeWaterForPlannedHike as computeSentinel2ForPlannedHike } from '../lib/shadeWater/computeShadeWater'
 import { findTrailForPolyline } from '../lib/cl/matchTrail'
 import { computeBbox } from '../lib/geoUtils'
 
