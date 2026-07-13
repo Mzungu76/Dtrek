@@ -5,7 +5,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { formatDuration }    from '@/lib/tcxParser'
 import { format }            from 'date-fns'
 import { it }                from 'date-fns/locale'
-import { readCachedAiSettings } from '@/lib/aiKeyCache'
+import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -29,6 +29,10 @@ interface OtherSection {
 }
 
 export async function POST(req: NextRequest) {
+  // `degraded` intentionally not gated on here (unlike app/api/guide/route.ts,
+  // app/api/route-search/route.ts): this route reads a user-owned activity by id, which needs a
+  // real verified user.id, not just "some session might exist" — no client-fallback data path
+  // exists yet for that, so this stays a hard 401/503 even when degraded.
   const { user, authUnavailable } = await getUserFromRequestDetailed(req)
   if (!user) {
     return new Response(
@@ -41,17 +45,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { data: settings, error: settingsErr } = await supabase
-    .from('user_settings')
-    .select('claude_api_key, subscription_tier')
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  const lookupFailed = !!settingsErr
-  const userKey = settings?.claude_api_key as string | null | undefined
-  const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  const cachedKey = lookupFailed ? (await readCachedAiSettings(user.id))?.apiKey ?? null : null
-  const apiKey  = userKey ?? cachedKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
+  const { apiKey, lookupFailed } = await resolveApiKeyAndSettings(user.id)
 
   if (!apiKey) {
     return new Response(

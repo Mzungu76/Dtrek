@@ -6,7 +6,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import { difficultyIndex, formatPaceMinkm } from '@/lib/stats'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { readCachedAiSettings } from '@/lib/aiKeyCache'
+import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -38,6 +38,10 @@ function buildEntryBlock(title: string, type: 'completata' | 'pianificata', line
 }
 
 export async function POST(req: NextRequest) {
+  // `degraded` intentionally not gated on here (unlike app/api/guide/route.ts,
+  // app/api/route-search/route.ts): this route reads user-owned planned_hikes/activities by id,
+  // which needs a real verified user.id, not just "some session might exist" — no client-fallback
+  // data path exists yet for that, so this stays a hard 401/503 even when degraded.
   const { user, authUnavailable } = await getUserFromRequestDetailed(req)
   if (!user) {
     return authUnavailable
@@ -45,20 +49,7 @@ export async function POST(req: NextRequest) {
       : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
   }
 
-  const { data: settings, error: settingsErr } = await supabase
-    .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_gender, pref_sforzo, pref_durata, hr_rest, hr_max')
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  const lookupFailed = !!settingsErr
-  const userKey = settings?.claude_api_key as string | null | undefined
-  const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  // Supabase irraggiungibile — prova la copia di riserva (lib/aiKeyCache.ts, Upstash Redis) prima
-  // di arrenderti: solo la chiave viene mirrorata lì, non età/preferenze/FC, quindi il resoconto
-  // resta possibile ma un po' meno personalizzato quando arriva da questo percorso di riserva.
-  const cachedKey = lookupFailed ? (await readCachedAiSettings(user.id))?.apiKey ?? null : null
-  const apiKey  = userKey ?? cachedKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null) ?? null
+  const { apiKey, userGender, lookupFailed } = await resolveApiKeyAndSettings(user.id)
 
   if (!apiKey) {
     return NextResponse.json(
@@ -74,6 +65,15 @@ export async function POST(req: NextRequest) {
       { status: lookupFailed ? 503 : 402 },
     )
   }
+
+  // resolveApiKeyAndSettings doesn't carry age/effort/duration preferences (only used by the
+  // guide-generation flow it was built for) — a small supplementary read for the profileBlock
+  // below. hr_rest/hr_max dropped: selected by the old inline query but never actually used here.
+  const { data: extraPrefs } = await supabase
+    .from('user_settings')
+    .select('user_age, pref_sforzo, pref_durata')
+    .eq('user_id', user.id)
+    .maybeSingle()
 
   let entries: EntryInput[]
   try {
@@ -165,13 +165,12 @@ export async function POST(req: NextRequest) {
       })()
     : 'Nessuna escursione completata ancora registrata.'
 
-  const age    = settings?.user_age as number | undefined
-  const gender = settings?.user_gender as string | undefined
-  const prefSforzo = settings?.pref_sforzo as number | undefined
-  const prefDurata = settings?.pref_durata as number | undefined
+  const age    = extraPrefs?.user_age as number | undefined
+  const prefSforzo = extraPrefs?.pref_sforzo as number | undefined
+  const prefDurata = extraPrefs?.pref_durata as number | undefined
   const profileBlock = [
     age ? `Età: ${age} anni` : null,
-    gender && gender !== 'non_specificato' ? `Genere: ${gender}` : null,
+    userGender && userGender !== 'non_specificato' ? `Genere: ${userGender}` : null,
     prefSforzo != null ? `Sforzo fisico preferito (0=leggero, 100=intenso): ${prefSforzo}/100` : null,
     prefDurata != null ? `Durata di escursione preferita: circa ${formatDuration(prefDurata * 60)}` : null,
   ].filter((l): l is string => !!l).join('\n') || 'Nessuna preferenza dichiarata nelle impostazioni.'
