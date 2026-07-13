@@ -50,10 +50,17 @@ export async function refreshJwksCache(): Promise<void> {
   if (redis) void redis.set(JWKS_CACHE_KEY, jwks, { ex: JWKS_CACHE_TTL_SECONDS }).catch(() => {})
 }
 
-async function getJwks(): Promise<JSONWebKeySet | null> {
+/**
+ * `allowLiveFetch: false` skips the direct HTTPS fetch to supabase.co and only consults the
+ * in-memory/Redis mirror — needed by callers that have already blown their own time budget
+ * (lib/supabaseAuth.ts's outer timeout-fallback) and must not risk another hanging network call.
+ */
+async function getJwks(opts: { allowLiveFetch?: boolean } = {}): Promise<JSONWebKeySet | null> {
   if (memoryJwks) return memoryJwks
-  const live = await fetchLiveJwks()
-  if (live) { memoryJwks = live; return live }
+  if (opts.allowLiveFetch !== false) {
+    const live = await fetchLiveJwks()
+    if (live) { memoryJwks = live; return live }
+  }
   const redis = getRedis()
   if (!redis) return null
   try {
@@ -70,22 +77,32 @@ export interface LocalJwtUser {
   email?: string
 }
 
+export interface LocalJwtVerifyResult {
+  user: LocalJwtUser | null
+  /** false only when the JWKS themselves couldn't be obtained at all (live fetch skipped/failed
+   *  AND the Redis mirror is empty/unreachable) — this is what distinguishes "couldn't attempt
+   *  verification" from "attempted it and this specific token failed". Callers must never treat an
+   *  invalid/forged/expired token (jwksAvailable: true, user: null) as merely "unavailable": doing
+   *  so would let a garbage token be treated the same as a genuine Supabase outage. */
+  jwksAvailable: boolean
+}
+
 /**
  * Verifica localmente la firma di un access token Supabase — usata SOLO come fallback quando la
  * verifica live (supabase.auth.getUser(), lib/supabaseAuth.ts) fallisce per un problema di rete,
  * non la sostituisce: qui un token resta valido fino alla sua scadenza naturale (non rileva una
  * revoca di sessione avvenuta nel frattempo), mentre la verifica live è sempre la fonte di verità
- * quando è raggiungibile. Ritorna null su firma non valida, scaduta, o chiavi JWKS irraggiungibili
- * sia in diretta che dalla copia di riserva — mai un errore che possa far cadere il chiamante.
+ * quando è raggiungibile. Mai un errore che possa far cadere il chiamante — un token non valido si
+ * riflette in `user: null`, non in un'eccezione.
  */
-export async function verifySupabaseJwtLocally(accessToken: string): Promise<LocalJwtUser | null> {
-  const jwks = await getJwks()
-  if (!jwks) return null
+export async function verifySupabaseJwtLocally(accessToken: string, opts: { allowLiveFetch?: boolean } = {}): Promise<LocalJwtVerifyResult> {
+  const jwks = await getJwks(opts)
+  if (!jwks) return { user: null, jwksAvailable: false }
   try {
     const { payload } = await jwtVerify(accessToken, createLocalJWKSet(jwks))
-    if (typeof payload.sub !== 'string' || payload.aud !== 'authenticated') return null
-    return { id: payload.sub, email: typeof payload.email === 'string' ? payload.email : undefined }
+    if (typeof payload.sub !== 'string' || payload.aud !== 'authenticated') return { user: null, jwksAvailable: true }
+    return { user: { id: payload.sub, email: typeof payload.email === 'string' ? payload.email : undefined }, jwksAvailable: true }
   } catch {
-    return null
+    return { user: null, jwksAvailable: true }
   }
 }
