@@ -61,7 +61,14 @@ significa solo che non ci sono criticità note al momento.
 Se dalla ricerca emergono informazioni concrete e specifiche su un problema reale in corso (chiusura,
 deviazione, frana, lavori, divieto), racchiudile in un riquadro dedicato, una riga per ciascun avviso,
 usando il formato esatto:
-[avviso]testo dell'avviso, conciso e pratico (URL esatto della fonte)[/avviso]
+[avviso:gravità]testo dell'avviso, conciso e pratico (URL esatto della fonte)[/avviso]
+dove gravità è esattamente una tra danger, warning, info, scelta così:
+- danger: il percorso (o un tratto necessario per completarlo) è chiuso, franato, interrotto, o
+  l'accesso è vietato — non è percorribile come previsto in questo momento.
+- warning: lavori in corso, deviazione segnalata, restrizione parziale, frana che restringe ma non
+  blocca il passaggio — il percorso resta fattibile ma con un ostacolo reale da conoscere prima.
+- info: divieto stagionale noto (es. periodo di caccia, chiusura invernale di un rifugio), allerta
+  meteo/incendio contestuale — utile da sapere, non un ostacolo al percorso in sé.
 Se l'avviso deriva da una pagina specifica trovata con la ricerca web, chiudi il testo con l'URL
 esatto di quella pagina tra parentesi, come nell'esempio sopra — serve per mostrare un link diretto
 alla fonte accanto all'avviso, non solo nell'elenco fonti in fondo alla guida. Se non hai un URL

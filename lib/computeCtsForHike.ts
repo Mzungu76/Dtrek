@@ -112,7 +112,10 @@ export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetc
     hrMax:          prefs.hrMax ?? undefined,
     avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
   })
-  if (confidence === 'estimated') ts = Math.round(ts * 0.9)
+  // Era -10%: penalizzava sistematicamente i sentieri lontani da siti catalogati (dove <3 POI
+  // culturali sono la norma, non l'eccezione) più che segnalare davvero un'incertezza di stima.
+  // Dimezzata a -5% — 'estimated' resta comunque visibile come etichetta, non solo come numero.
+  if (confidence === 'estimated') ts = Math.round(ts * 0.95)
 
   return { beautyScore: bs, ts, confidence, poisCount: pois.length }
 }

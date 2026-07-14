@@ -14,6 +14,7 @@ import type { TrailDtmProfile } from './dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import type { CLSignals } from './cl/types'
 import type { FloraResult } from './floraTypes'
+import type { GuideNotice } from './guideNotices'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -45,9 +46,12 @@ export interface PlannedHike {
   // guide generate prima di questo campo.
   cachedGuideSubtitle?: string
   // Avvisi sullo stato aggiornato del percorso (chiusure, deviazioni, lavori) trovati dalla
-  // ricerca web di Giulia al momento della generazione (tag [avviso], vedi lib/guideNotices.ts) —
-  // vuoto/assente se nessuna criticità nota o su guide generate prima di questo campo.
-  cachedGuideNotices?: string[]
+  // ricerca web di Giulia al momento della generazione (tag [avviso:gravità], vedi
+  // lib/guideNotices.ts) — vuoto/assente se nessuna criticità nota o su guide generate prima di
+  // questo campo. Le guide generate prima dell'introduzione della gravità hanno elementi string
+  // semplici invece di {severity,text} — normalizzare con normalizeGuideNotices() prima dell'uso,
+  // non assumere la forma nuova.
+  cachedGuideNotices?: (GuideNotice | string)[]
   // Fonti web citate da Giulia durante la generazione (tag [fonti], vedi lib/guideSources.ts) —
   // vuoto/assente se la ricerca web non ha prodotto citazioni o su guide generate prima di questo campo.
   cachedGuideSources?: { url: string; title: string }[]
