@@ -106,6 +106,7 @@ function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
   useEffect(() => {
     if (!nearView || !mapRef.current || !polyline || polyline.length < 2) return
     let cancelled = false
+    let observer: ResizeObserver | null = null
     import('leaflet').then(L => {
       if (cancelled || !mapRef.current) return
       const map = L.map(mapRef.current, {
@@ -115,10 +116,22 @@ function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
       mapInstance.current = map
       L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
       const line = L.polyline(polyline, { color: '#7dd3fc', weight: 4, opacity: 0.95 }).addTo(map)
-      map.fitBounds(line.getBounds(), { padding: [4, 4] })
+      const fit = () => map.fitBounds(line.getBounds(), { padding: [4, 4] })
+      fit()
+
+      // Stessa correzione di CoverMap.tsx: appena montata via IntersectionObserver (vedi sopra),
+      // il quadrato di galleria può non avere ancora la sua dimensione finale — senza questo la
+      // mappa carica le tile solo per il riquadro sbagliato misurato a quel momento.
+      let raf = 0
+      observer = new ResizeObserver(() => {
+        cancelAnimationFrame(raf)
+        raf = requestAnimationFrame(() => { if (!cancelled) { map.invalidateSize(); fit() } })
+      })
+      observer.observe(mapRef.current)
     })
     return () => {
       cancelled = true
+      observer?.disconnect()
       if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null }
     }
   }, [nearView, polyline])
