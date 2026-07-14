@@ -47,6 +47,22 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v))
 }
 
+// Bellezza (B) e Fatica (F), nella pratica, restano quasi sempre in una fascia centrale — un
+// percorso davvero eccezionale arriva forse a B=8-9, uno davvero anonimo scende a F=2-3, ma i
+// due estremi 0 e 10 non si toccano quasi mai. Il rapporto (B+1)/(F+1) del passo successivo
+// finiva quindi accalcato attorno a CTS≈50 anche per percorsi oggettivamente molto diversi tra
+// loro (Tuscia collinare, Dolomiti panoramiche, Appennino anonimo — tutti tra 47 e 62 su un
+// campione di verifica). Questo stiramento simmetrico attorno al centro (5) espande gli
+// scostamenti dal centro con gamma<1 mantenendo fissi gli estremi 0 e 10 — non serve assumere un
+// range "realistico" specifico, si limita ad amplificare quanto già misurato.
+const CTS_CONTRAST_GAMMA = 0.6
+function contrastStretch(x: number): number {
+  const c = clamp(x, 0, 10)
+  const dev = c - 5
+  const sign = dev >= 0 ? 1 : -1
+  return 5 + sign * 5 * Math.pow(Math.abs(dev) / 5, CTS_CONTRAST_GAMMA)
+}
+
 function deriveFCmax(age?: number): number {
   return age ? 211 - 0.64 * age : 185
 }
@@ -210,7 +226,7 @@ export function computeTrailScore(
   const b2 = (catArcheologia + catArchitettura + catInteresse) / 3
   const B  = beauty.overall                          // properly weighted by slidersToWeights
 
-  const tsBase = clamp(50 * Math.log10((B + 1) / (fFinal + 1)) + 50, 0, 100)
+  const tsBase = clamp(50 * Math.log10((contrastStretch(B) + 1) / (contrastStretch(fFinal) + 1)) + 50, 0, 100)
 
   // Preference bonuses
   const sforzaNorm = (prefSforzo - 50) / 50          // [−1, +1]

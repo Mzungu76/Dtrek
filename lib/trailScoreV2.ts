@@ -29,6 +29,13 @@ export const SEASONAL_T_MAX = 32 // °C — sopra questa soglia w_oa satura al t
 // discrepanza è solo nella frase di motivazione, non nel parametro stesso.
 export const SAFETY_GATE_S0 = 35
 export const SAFETY_GATE_K = 0.10
+// Sopra S0 il vecchio gate (lo stesso sigmoide, semplicemente proseguito) saturava quasi subito
+// verso 1.0 — già 0.92 a Sicurezza 60, 0.99 a 80: la stragrande maggioranza dei percorsi
+// pianificati normalmente, che NON sono pericolosi, finiva con un gate pressoché costante, senza
+// alcuna differenziazione reale tra "abbastanza sicuro" e "molto sicuro". Sopra la soglia il gate
+// ora sale con una curva più dolce (esponente <1, forte recupero appena sopra S0 così un percorso
+// "Moderato" non crolla, ma continua comunque a differenziare fino a "Sicuro") invece di saturare.
+export const SAFETY_GATE_RAMP_P = 0.7
 
 // Sotto questa soglia di Sicurezza assoluta ("banda Pericoloso" nella spec) il gate sigmoide ha
 // già schiacciato il Value quasi a zero (g(15)≈0.076) — in più, mostriamo un badge di veto
@@ -52,9 +59,14 @@ export function seasonalWeights(forecastTempC: number | null | undefined): Trail
   return { wCts: 1 - wOa, wOa }
 }
 
-/** Gate sigmoide della Sicurezza (Livello 2) — 1 = nessun effetto, 0 = azzera il Value. */
+/** Gate della Sicurezza (Livello 2) — 1 = nessun effetto, 0 = azzera il Value. Sotto S0 resta il
+ *  sigmoide ripido di sempre (il "veto" su un percorso davvero pericoloso non cambia); sopra S0
+ *  sale con una curva più dolce fino a 1.0 — vedi il commento su SAFETY_GATE_RAMP_P sul perché. */
 export function safetyGate(safety: number): number {
-  return 1 / (1 + Math.exp(-SAFETY_GATE_K * (safety - SAFETY_GATE_S0)))
+  if (safety <= SAFETY_GATE_S0) {
+    return 1 / (1 + Math.exp(-SAFETY_GATE_K * (safety - SAFETY_GATE_S0)))
+  }
+  return 0.5 + 0.5 * Math.pow((safety - SAFETY_GATE_S0) / (100 - SAFETY_GATE_S0), SAFETY_GATE_RAMP_P)
 }
 
 export interface TrailScoreV2Breakdown {

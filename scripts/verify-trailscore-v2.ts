@@ -12,7 +12,7 @@
 
 import {
   computeTrailScoreV2, seasonalWeights, safetyGate,
-  W_CTS_STATIC, W_OA_STATIC, W_OA_SEASONAL_CEILING, SAFETY_GATE_S0, SAFETY_VETO_THRESHOLD,
+  W_CTS_STATIC, W_OA_STATIC, W_OA_SEASONAL_CEILING, SAFETY_GATE_S0, SAFETY_GATE_RAMP_P, SAFETY_VETO_THRESHOLD,
 } from '@/lib/trailScoreV2'
 
 let failures = 0
@@ -41,8 +41,8 @@ const a = computeTrailScoreV2({ cts: 60, ombraAcqua: 20, safety: 90 })
 checkTrue('Percorso A calcolabile', a !== null)
 if (a) {
   check('A — Value', a.breakdown.value, 51.2, 0.05)
-  check('A — gate g(90)', a.breakdown.gate, 0.994, 0.01)
-  check('A — TS_finale', a.score, 50.9, 0.15)
+  check('A — gate g(90)', a.breakdown.gate, 0.945, 0.01)
+  check('A — TS_finale', a.score, 48.4, 0.15)
   checkBool('A — non vetoed', a.breakdown.vetoed, false)
 }
 
@@ -51,8 +51,8 @@ const b = computeTrailScoreV2({ cts: 80, ombraAcqua: 80, safety: 40 })
 checkTrue('Percorso B calcolabile', b !== null)
 if (b) {
   check('B — Value', b.breakdown.value, 80, 0.05)
-  check('B — gate g(40)', b.breakdown.gate, 0.622, 0.01)
-  check('B — TS_finale', b.score, 49.8, 0.15)
+  check('B — gate g(40)', b.breakdown.gate, 0.583, 0.01)
+  check('B — TS_finale', b.score, 46.6, 0.15)
   checkBool('B — non vetoed', b.breakdown.vetoed, false)
 }
 
@@ -68,12 +68,14 @@ checkTrue('W_CTS_STATIC = 0.78', W_CTS_STATIC === 0.78)
 checkTrue('W_OA_STATIC = 0.22', W_OA_STATIC === 0.22)
 checkTrue('W_OA_SEASONAL_CEILING = 0.30', W_OA_SEASONAL_CEILING === 0.30)
 checkTrue('SAFETY_GATE_S0 = 35', SAFETY_GATE_S0 === 35)
+checkTrue('SAFETY_GATE_RAMP_P = 0.7', SAFETY_GATE_RAMP_P === 0.7)
 checkTrue('SAFETY_VETO_THRESHOLD = 15', SAFETY_VETO_THRESHOLD === 15)
 
-console.log('\n--- Gate sigmoide: valori di riferimento ---')
-check('g(35) = 0.5 (soglia)', safetyGate(35), 0.5, 0.001)
-check('g(90) ≈ 0.994', safetyGate(90), 0.994, 0.01)
-check('g(15) ≈ 0.076-0.12 (banda "Pericoloso")', safetyGate(15), 0.10, 0.05)
+console.log('\n--- Gate: valori di riferimento (sigmoide sotto S0, rampa più dolce sopra) ---')
+check('g(35) = 0.5 (soglia, continuità tra i due rami)', safetyGate(35), 0.5, 0.001)
+check('g(90) ≈ 0.945 (rampa sopra S0, non più quasi-saturo a 0.99)', safetyGate(90), 0.945, 0.01)
+check('g(15) ≈ 0.076-0.12 (banda "Pericoloso", ramo sigmoide invariato)', safetyGate(15), 0.10, 0.05)
+check('g(60) ≈ 0.76 (fascia "Moderato/Basso rischio" ora differenziata)', safetyGate(60), 0.756, 0.02)
 
 console.log('\n--- Ponderazione stagionale di Ombra&Acqua ---')
 const noTemp = seasonalWeights(null)
