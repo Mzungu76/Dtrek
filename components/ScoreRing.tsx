@@ -102,14 +102,16 @@ function clRow(cl: CLProps): { value: number | null; color: string; sublabel: st
  * combinano in un "Value" (pesi che seguono la temperatura prevista se nota), la Sicurezza fa da
  * gate non-compensabile su quel Value. L'Affidabilità (cl) non entra nel calcolo — è usata solo
  * per il caso "questo contesto non traccia affatto la Sicurezza" (vedi il commento su
- * notApplicable sotto). Restituisce 0 finché Sicurezza/Comfort TrailScore non sono ENTRAMBI
+ * notApplicable sotto). `total` resta 0 finché Sicurezza/Comfort TrailScore non sono ENTRAMBI
  * disponibili — un gate "assente" non ha un default onesto (vedi computeTrailScoreV2), quindi
- * niente numero finché non lo sono, invece di uno silenziosamente sbagliato.
+ * niente numero finché non lo sono, invece di uno silenziosamente sbagliato. `value` è il Valore
+ * grezzo prima del gate (già pesato Comfort/Ombra&Acqua) — usato da TrailScoreGaugeBadge per la
+ * didascalia "Buon valore, rischio alto" ecc., non solo dal numero finale.
  */
-export function computeTrailScoreTotal(
+export function computeTrailScoreBreakdown(
   cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps,
   forecastTempC?: number | null,
-): number {
+): { total: number; value: number | null } {
   const segments = computeSegments(safety, cts, shadeWater)
   const safetyValue     = segments.find(s => s.key === 'safety')?.value ?? null
   const ctsValue        = segments.find(s => s.key === 'cts')?.value ?? null
@@ -128,7 +130,15 @@ export function computeTrailScoreTotal(
     safety: notApplicable ? 100 : safetyValue,
     forecastTempC,
   })
-  return result?.score ?? 0
+  return { total: result?.score ?? 0, value: result?.breakdown.value ?? null }
+}
+
+/** Solo il totale — la maggior parte dei chiamanti non ha bisogno del Valore grezzo. */
+export function computeTrailScoreTotal(
+  cl: CLProps, safety: SafetyScore | null, cts: CtsProps, shadeWater: ShadeWaterProps,
+  forecastTempC?: number | null,
+): number {
+  return computeTrailScoreBreakdown(cl, safety, cts, shadeWater, forecastTempC).total
 }
 
 /** True quando la Sicurezza e sotto la soglia di veto assoluta (Trail Score v2 spec §2) — usato
@@ -204,7 +214,7 @@ export function MiniScoreRing({ value, max = TRAIL_SCORE_MAX, size = 30, loading
 // Conta da 0 fino a `target` con easing — usato per il numero centrale del ring, così si "anima"
 // anche quando i punteggi arrivano via via (Sicurezza/CTS/Ombra e acqua si popolano in tempi
 // diversi), non solo al primo mount.
-function useCountUp(target: number, durationMs = 700): number {
+export function useCountUp(target: number, durationMs = 700): number {
   const [value, setValue] = useState(0)
   const fromRef = useRef(0)
   useEffect(() => {
