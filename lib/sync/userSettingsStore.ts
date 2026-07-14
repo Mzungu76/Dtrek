@@ -35,6 +35,12 @@ export interface UserSettingsData {
   beautyCulturaType: number
   prefSforzo: number
   prefDurata: number
+  teiPesoCultura: number
+  teiPesoTopografia: number
+  teiPesoIdrografia: number
+  teiPesoFondo: number
+  teiPesoGeodiversita: number
+  teiFAntrSensitivity: 'ignora' | 'normale' | 'fastidio'
   hikerFaceDataUrl: string | null
   displayName: string | null
   personalDelta: number | null

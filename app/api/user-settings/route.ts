@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at')
     .eq('user_id', user.id)
     .single()
 
@@ -78,6 +78,12 @@ export async function GET(req: NextRequest) {
     beautyCulturaType:        (data?.beauty_cultura_type        as number) ?? 50,
     prefSforzo:               (data?.pref_sforzo                as number) ?? 50,
     prefDurata:               (data?.pref_durata                as number) ?? 270,
+    teiPesoCultura:           (data?.tei_peso_cultura           as number) ?? 20,
+    teiPesoTopografia:        (data?.tei_peso_topografia        as number) ?? 30,
+    teiPesoIdrografia:        (data?.tei_peso_idrografia        as number) ?? 20,
+    teiPesoFondo:             (data?.tei_peso_fondo             as number) ?? 20,
+    teiPesoGeodiversita:      (data?.tei_peso_geodiversita      as number) ?? 10,
+    teiFAntrSensitivity:      (data?.tei_f_antr_sensitivity     as 'ignora' | 'normale' | 'fastidio') ?? 'normale',
     hikerFaceDataUrl:         (data?.hiker_face_data_url        as string) ?? null,
     displayName:              (data?.display_name               as string) ?? null,
     personalDelta:            (data?.personal_delta             as number) ?? null,
@@ -121,6 +127,12 @@ export async function POST(req: NextRequest) {
     beautyCulturaType?: number
     prefSforzo?: number
     prefDurata?: number
+    teiPesoCultura?: number
+    teiPesoTopografia?: number
+    teiPesoIdrografia?: number
+    teiPesoFondo?: number
+    teiPesoGeodiversita?: number
+    teiFAntrSensitivity?: 'ignora' | 'normale' | 'fastidio'
     hikerFaceDataUrl?: string | null
     displayName?: string | null
     hrRest?: number
@@ -227,6 +239,29 @@ export async function POST(req: NextRequest) {
     const r = Math.round(body.prefDurata)
     if (r < 60 || r > 480 || r % 30 !== 0) return NextResponse.json({ error: 'prefDurata: valore non valido (60–480 min, step 30)' }, { status: 400 })
     upsertData.pref_durata = r
+  }
+
+  // Pesi TEI "quanto ti importa" (0-100 ciascuno) — vedi normalizeTeiWeights in lib/tei.ts
+  for (const [bodyKey, dbCol] of [
+    ['teiPesoCultura',      'tei_peso_cultura'],
+    ['teiPesoTopografia',   'tei_peso_topografia'],
+    ['teiPesoIdrografia',   'tei_peso_idrografia'],
+    ['teiPesoFondo',        'tei_peso_fondo'],
+    ['teiPesoGeodiversita', 'tei_peso_geodiversita'],
+  ] as [string, string][]) {
+    const val = (body as Record<string, unknown>)[bodyKey]
+    if (val !== undefined) {
+      const w = Math.round(val as number)
+      if (w < 0 || w > 100) return NextResponse.json({ error: `${bodyKey} fuori range (0–100)` }, { status: 400 })
+      upsertData[dbCol] = w
+    }
+  }
+
+  if (body.teiFAntrSensitivity !== undefined) {
+    if (!['ignora', 'normale', 'fastidio'].includes(body.teiFAntrSensitivity)) {
+      return NextResponse.json({ error: 'teiFAntrSensitivity non valido' }, { status: 400 })
+    }
+    upsertData.tei_f_antr_sensitivity = body.teiFAntrSensitivity
   }
 
   if (body.hikerFaceDataUrl !== undefined) {

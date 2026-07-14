@@ -70,6 +70,7 @@ export async function saveActivityWithEnrichment(
       const dtmProfile = await dtmPromise
       const terrainProfile = await terrainPromise
       const inProtectedArea = await protectedAreaPromise
+      const prefs = await getUserSettingsCached()
       const tei = computeTEI({
         track: gps,
         elevGain: activity.elevationGain,
@@ -81,10 +82,15 @@ export async function saveActivityWithEnrichment(
         dtmProfile,
         terrainProfile,
         inProtectedArea,
+        prefSforzo: prefs.prefSforzo,
+        weights: {
+          cultura: prefs.teiPesoCultura, topografia: prefs.teiPesoTopografia, idrografia: prefs.teiPesoIdrografia,
+          fondo: prefs.teiPesoFondo, geodiversita: prefs.teiPesoGeodiversita,
+        },
+        fAntrSensitivity: prefs.teiFAntrSensitivity,
       })
       const bs = teiToBeautyScore(tei)
       const confidence = tei.confidence
-      const prefs = await getUserSettingsCached()
       let { ts } = computeTrailScore(bs, {
         distanceMeters: activity.distanceMeters,
         elevationGain: activity.elevationGain,
