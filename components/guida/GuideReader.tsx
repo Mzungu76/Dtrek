@@ -16,6 +16,7 @@ import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, normalizeGuideNotices, parseNoticeSource, type GuideNotice } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
+import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
 import { GUIDE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
@@ -310,50 +311,30 @@ export default function GuideReader({
     chunkIdxRef.current = 0
 
     try {
-      const res = await fetch('/api/guide', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // hikeFallback: usato dal server SOLO in modalità di emergenza (Supabase del tutto
-        // irraggiungibile, nessun utente verificabile) — la copia che il browser ha già in
-        // locale, per non bloccare la generazione in quei momenti. Ignorato in condizioni normali.
-        body: JSON.stringify({
-          hikeId: hike.id,
-          tier,
-          hikeFallback: {
-            title:                hike.title,
-            plannedDate:          hike.plannedDate,
-            userNotes:            hike.userNotes,
-            tags:                 hike.tags,
-            distanceMeters:       hike.distanceMeters,
-            elevationGain:        hike.elevationGain,
-            elevationLoss:        hike.elevationLoss,
-            altitudeMax:          hike.altitudeMax,
-            altitudeMin:          hike.altitudeMin,
-            estimatedTimeSeconds: hike.estimatedTimeSeconds,
-            assessment:           hike.assessment,
-            cachedPois:           hike.cachedPois,
-            cachedPoiWiki:        hike.cachedPoiWiki,
-            trackPoints:          hike.trackPoints,
-          },
-        }),
-      })
-
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({ error: 'Errore sconosciuto' }))
-        // message (se presente) è il testo pensato per l'utente — error è solo il codice
-        // macchina (es. "ai_temporarily_unavailable"), non va mostrato direttamente.
-        throw new Error(j.message ?? j.error ?? `HTTP ${res.status}`)
-      }
-
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let acc = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        acc += decoder.decode(value, { stream: true })
-        const { lastStatus, cleanedText: displayText } = stripGuideStatus(acc)
+      // hikeFallback: usato dal server SOLO in modalità di emergenza (Supabase del tutto
+      // irraggiungibile, nessun utente verificabile) — la copia che il browser ha già in
+      // locale, per non bloccare la generazione in quei momenti. Ignorato in condizioni normali.
+      let acc = await streamFetchText('/api/guide', {
+        hikeId: hike.id,
+        tier,
+        hikeFallback: {
+          title:                hike.title,
+          plannedDate:          hike.plannedDate,
+          userNotes:            hike.userNotes,
+          tags:                 hike.tags,
+          distanceMeters:       hike.distanceMeters,
+          elevationGain:        hike.elevationGain,
+          elevationLoss:        hike.elevationLoss,
+          altitudeMax:          hike.altitudeMax,
+          altitudeMin:          hike.altitudeMin,
+          estimatedTimeSeconds: hike.estimatedTimeSeconds,
+          assessment:           hike.assessment,
+          cachedPois:           hike.cachedPois,
+          cachedPoiWiki:        hike.cachedPoiWiki,
+          trackPoints:          hike.trackPoints,
+        },
+      }, (partial) => {
+        const { lastStatus, cleanedText: displayText } = stripGuideStatus(partial)
         if (lastStatus) setGenStatus(lastStatus)
         // Stesso taglio del commento libero pre-prima-sezione applicato in anteprima live, non
         // solo a fine generazione — altrimenti per qualche istante, prima che il modello scriva il
@@ -361,7 +342,7 @@ export default function GuideReader({
         // arriva il primo titolo vero, ma nel frattempo si vede).
         const firstHeadingIdx = displayText.search(/^## /m)
         setGuideText(firstHeadingIdx > 0 ? displayText.slice(firstHeadingIdx) : displayText)
-      }
+      })
       acc = stripGuideStatus(acc).cleanedText
       setGenStatus(undefined)
 
@@ -391,7 +372,14 @@ export default function GuideReader({
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Errore durante la generazione')
+      if (e instanceof StreamFetchError) {
+        // message (se presente) è il testo pensato per l'utente — error è solo il codice
+        // macchina (es. "ai_temporarily_unavailable"), non va mostrato direttamente.
+        const j = e.body as { error?: string; message?: string }
+        setError(j.message ?? j.error ?? `HTTP ${e.status}`)
+      } else {
+        setError(e instanceof Error ? e.message : 'Errore durante la generazione')
+      }
     } finally {
       setGenerating(false)
     }
@@ -412,50 +400,30 @@ export default function GuideReader({
     setError(null)
 
     try {
-      const res = await fetch('/api/guide', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hikeId: hike.id,
-          sectionKey,
-          // Stessa lunghezza "breve" delle altre sezioni automatiche — l'"Approfondisci" per
-          // sezione riempie solo il testo mancante, non lo rende una sezione lunghissima. La
-          // versione integrale resta un'azione a sé (vedi il pulsante "Sblocca la guida integrale").
-          tier: 'breve',
-          hikeFallback: {
-            title:                hike.title,
-            plannedDate:          hike.plannedDate,
-            userNotes:            hike.userNotes,
-            tags:                 hike.tags,
-            distanceMeters:       hike.distanceMeters,
-            elevationGain:        hike.elevationGain,
-            elevationLoss:        hike.elevationLoss,
-            altitudeMax:          hike.altitudeMax,
-            altitudeMin:          hike.altitudeMin,
-            estimatedTimeSeconds: hike.estimatedTimeSeconds,
-            assessment:           hike.assessment,
-            cachedPois:           hike.cachedPois,
-            cachedPoiWiki:        hike.cachedPoiWiki,
-            trackPoints:          hike.trackPoints,
-          },
-        }),
+      let acc = await streamFetchText('/api/guide', {
+        hikeId: hike.id,
+        sectionKey,
+        // Stessa lunghezza "breve" delle altre sezioni automatiche — l'"Approfondisci" per
+        // sezione riempie solo il testo mancante, non lo rende una sezione lunghissima. La
+        // versione integrale resta un'azione a sé (vedi il pulsante "Sblocca la guida integrale").
+        tier: 'breve',
+        hikeFallback: {
+          title:                hike.title,
+          plannedDate:          hike.plannedDate,
+          userNotes:            hike.userNotes,
+          tags:                 hike.tags,
+          distanceMeters:       hike.distanceMeters,
+          elevationGain:        hike.elevationGain,
+          elevationLoss:        hike.elevationLoss,
+          altitudeMax:          hike.altitudeMax,
+          altitudeMin:          hike.altitudeMin,
+          estimatedTimeSeconds: hike.estimatedTimeSeconds,
+          assessment:           hike.assessment,
+          cachedPois:           hike.cachedPois,
+          cachedPoiWiki:        hike.cachedPoiWiki,
+          trackPoints:          hike.trackPoints,
+        },
       })
-
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({ error: 'Errore sconosciuto' }))
-        // message (se presente) è il testo pensato per l'utente — error è solo il codice
-        // macchina (es. "ai_temporarily_unavailable"), non va mostrato direttamente.
-        throw new Error(j.message ?? j.error ?? `HTTP ${res.status}`)
-      }
-
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let acc = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        acc += decoder.decode(value, { stream: true })
-      }
       acc = stripGuideStatus(acc).cleanedText
 
       const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
@@ -478,7 +446,12 @@ export default function GuideReader({
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Errore durante la generazione')
+      if (e instanceof StreamFetchError) {
+        const j = e.body as { error?: string; message?: string }
+        setError(j.message ?? j.error ?? `HTTP ${e.status}`)
+      } else {
+        setError(e instanceof Error ? e.message : 'Errore durante la generazione')
+      }
     } finally {
       setGeneratingSectionKey(null)
     }
