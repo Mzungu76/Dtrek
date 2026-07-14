@@ -10,19 +10,11 @@
  */
 
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from '@/lib/localStore'
-import { registerEntityFlusher, scheduleFlush } from './syncEngine'
+import { registerEntityFlusher, scheduleFlush, flushRows } from './syncEngine'
+import { apiFetch } from '@/lib/apiFetch'
 import type { HikeReport, ReportSection, ReportAuthoredBy } from '@/lib/reportStore'
 
 const ENTITY_TYPE = 'hike_report'
-
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options)
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`API ${url} → ${res.status}: ${text}`)
-  }
-  return res.json() as Promise<T>
-}
 
 /** Returns the local copy if present; only hits Supabase when there's no local copy yet. */
 export async function getReport(activityId: string): Promise<HikeReport | null> {
@@ -79,20 +71,11 @@ export async function saveReportContent(
   scheduleFlush()
 }
 
-registerEntityFlusher(ENTITY_TYPE, async (rows) => {
-  const succeededIds: number[] = []
-  for (const row of rows) {
-    try {
-      const payload = row.payload as { content?: string; sections?: ReportSection[]; authoredBy?: ReportAuthoredBy } ?? {}
-      await apiFetch('/api/resoconto', {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ activityId: row.recordId, ...payload }),
-      })
-      succeededIds.push(row.outboxId!)
-    } catch {
-      // Leave this row pending — retried on the next flush trigger.
-    }
-  }
-  return { succeededIds }
-})
+registerEntityFlusher(ENTITY_TYPE, (rows) => flushRows(rows, async (row) => {
+  const payload = row.payload as { content?: string; sections?: ReportSection[]; authoredBy?: ReportAuthoredBy } ?? {}
+  await apiFetch('/api/resoconto', {
+    method:  'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ activityId: row.recordId, ...payload }),
+  })
+}))

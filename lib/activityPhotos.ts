@@ -2,7 +2,7 @@
 
 import { getBrowserSupabase } from './supabaseBrowser'
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from './localStore'
-import { registerEntityFlusher, scheduleFlush } from './sync/syncEngine'
+import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
 
 const BUCKET = 'dtrek-photos'
 const LEGACY_PREFIX = 'dtrek_vp_'
@@ -207,25 +207,16 @@ export async function removeActivityPhoto(id: string): Promise<void> {
   scheduleFlush()
 }
 
-registerEntityFlusher(ENTITY_TYPE, async (rows) => {
-  const succeededIds: number[] = []
-  for (const row of rows) {
-    try {
-      if (row.op === 'delete') {
-        const res = await fetch(`/api/activity-photos?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
-        if (!res.ok) throw new Error(`${res.status}`)
-      } else {
-        const res = await fetch('/api/activity-photos', {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify(row.payload),
-        })
-        if (!res.ok) throw new Error(`${res.status}`)
-      }
-      succeededIds.push(row.outboxId!)
-    } catch {
-      // Leave this row pending — retried on the next flush trigger.
-    }
+registerEntityFlusher(ENTITY_TYPE, (rows) => flushRows(rows, async (row) => {
+  if (row.op === 'delete') {
+    const res = await fetch(`/api/activity-photos?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error(`${res.status}`)
+  } else {
+    const res = await fetch('/api/activity-photos', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(row.payload),
+    })
+    if (!res.ok) throw new Error(`${res.status}`)
   }
-  return { succeededIds }
-})
+}))

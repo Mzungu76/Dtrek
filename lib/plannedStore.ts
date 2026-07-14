@@ -1,7 +1,7 @@
 import type { TrackPoint } from './tcxParser'
 import type { HikeAssessment } from './hikeAssessment'
 import { lsGet, lsSet, lsDel, LS_KEYS, obEnqueue } from './localStore'
-import { registerEntityFlusher, scheduleFlush } from './sync/syncEngine'
+import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
 import { apiFetch, isPermanentClientError } from './apiFetch'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
@@ -259,39 +259,30 @@ export async function deletePlanned(id: string): Promise<void> {
   scheduleFlush()
 }
 
-registerEntityFlusher(ENTITY_TYPE, async (rows) => {
-  const succeededIds: number[] = []
-  for (const row of rows) {
-    try {
-      if (row.op === 'delete') {
-        await apiFetch(`/api/planned?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
-      } else if (row.op === 'upsert') {
-        const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment; routePolyline?: [number, number][] }>('/api/planned', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify(row.payload),
-        })
-        if (result.assessment || result.routePolyline) {
-          const patch = {
-            ...(result.assessment    ? { assessment: result.assessment } : {}),
-            ...(result.routePolyline ? { routePolyline: result.routePolyline } : {}),
-          }
-          const local = await lsGet<PlannedHike>(LS_KEYS.planned(row.recordId))
-          if (local) await lsSet(LS_KEYS.planned(row.recordId), { ...local, ...patch })
-          const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
-          if (list) await lsSet(LS_KEYS.plannedList, list.map((h) => h.id === row.recordId ? { ...h, ...patch } : h))
-        }
-      } else {
-        await apiFetch('/api/planned', {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ id: row.recordId, ...(row.payload as object ?? {}) }),
-        })
+registerEntityFlusher(ENTITY_TYPE, (rows) => flushRows(rows, async (row) => {
+  if (row.op === 'delete') {
+    await apiFetch(`/api/planned?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
+  } else if (row.op === 'upsert') {
+    const result = await apiFetch<{ ok: boolean; assessment?: HikeAssessment; routePolyline?: [number, number][] }>('/api/planned', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(row.payload),
+    })
+    if (result.assessment || result.routePolyline) {
+      const patch = {
+        ...(result.assessment    ? { assessment: result.assessment } : {}),
+        ...(result.routePolyline ? { routePolyline: result.routePolyline } : {}),
       }
-      succeededIds.push(row.outboxId!)
-    } catch {
-      // Leave this row pending — retried on the next flush trigger.
+      const local = await lsGet<PlannedHike>(LS_KEYS.planned(row.recordId))
+      if (local) await lsSet(LS_KEYS.planned(row.recordId), { ...local, ...patch })
+      const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+      if (list) await lsSet(LS_KEYS.plannedList, list.map((h) => h.id === row.recordId ? { ...h, ...patch } : h))
     }
+  } else {
+    await apiFetch('/api/planned', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id: row.recordId, ...(row.payload as object ?? {}) }),
+    })
   }
-  return { succeededIds }
-})
+}))
