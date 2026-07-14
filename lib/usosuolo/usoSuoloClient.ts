@@ -9,8 +9,13 @@
 import { USO_SUOLO_DATASET } from '@/lib/geo/datasetConfig'
 import { wfsGetFeature } from '@/lib/geo/wfsClient'
 import { pointInPolygon, type AnyPolygonGeometry } from '@/lib/geo/pointInPolygon'
+import { isCircuitOpen, recordFailure, recordSuccess } from '@/lib/geo/circuitBreaker'
 
 export class UsoSuoloUnavailableError extends Error {}
+
+// Same reasoning as natura2000Client.ts's 'natura2000-wfs' breaker — same class of flaky
+// ISPRA/MASE geoportal endpoint.
+const BREAKER_KEY = 'usosuolo-wfs'
 
 export interface UsoSuoloFeature {
   geometry: AnyPolygonGeometry
@@ -46,6 +51,8 @@ export async function fetchUsoSuoloTile(bbox: string): Promise<UsoSuoloTile | nu
     throw new UsoSuoloUnavailableError('Uso suolo dataset endpoint not yet configured (see lib/geo/datasetConfig.ts)')
   }
 
+  if (isCircuitOpen(BREAKER_KEY)) return null
+
   try {
     const fc = await wfsGetFeature({
       baseUrl: USO_SUOLO_DATASET.baseUrl,
@@ -53,6 +60,7 @@ export async function fetchUsoSuoloTile(bbox: string): Promise<UsoSuoloTile | nu
       bbox,
       timeoutMs: USO_SUOLO_TIMEOUT_MS,
     })
+    recordSuccess(BREAKER_KEY)
 
     const features: UsoSuoloFeature[] = []
     for (const f of fc.features) {
@@ -64,6 +72,7 @@ export async function fetchUsoSuoloTile(bbox: string): Promise<UsoSuoloTile | nu
     }
     return { features }
   } catch {
+    recordFailure(BREAKER_KEY)
     return null
   }
 }
