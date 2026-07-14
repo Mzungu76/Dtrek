@@ -12,7 +12,6 @@ import type { TrailRiddle } from './riddles'
 import type { EpochPoi } from './epochPois'
 import type { TrailDtmProfile } from './dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
-import type { CLSignals } from './cl/types'
 import type { FloraResult } from './floraTypes'
 import type { GuideNotice } from './guideNotices'
 
@@ -69,9 +68,9 @@ export interface PlannedHike {
   cachedScoresComputedAt?:       string
   cachedSafetyScore?:            SafetyScore
   cachedSafetyComputedAt?:       string
-  // Full Trail Score aggregate (CL + Sicurezza + Comfort TrailScore + Ombra e acqua, see
-  // components/ScoreRing.tsx) — computed once live while the hike is open, then persisted so
-  // list/gallery views can read it back instantly instead of recomputing a partial version.
+  // Full Trail Score aggregate (Comfort TrailScore * gate(Sicurezza), see lib/trailScoreV2.ts) —
+  // computed once live while the hike is open, then persisted so list/gallery views can read it
+  // back instantly instead of recomputing a partial version.
   cachedTsTotal?:                number
   cachedRiddles?:                TrailRiddle[]
   cachedEpochPois?:              EpochPoi[]
@@ -107,36 +106,10 @@ export interface PlannedHike {
   cachedInProtectedArea?:        boolean
   cachedProtectedAreaTrackHash?: string
   cachedProtectedAreaComputedAt?: string
-  // Punteggio CL/SI — a differenza dei campi sopra questi sono già scritti da
-  // lib/cl/computeCL.ts (computeCLForPlannedHike) con TTL a 3 livelli (statico/dinamico/
-  // satellite, lib/cl/label.ts), non tramite updatePlannedMeta: qui vengono solo letti, per
-  // permettere a lib/cl/useCL.ts di saltare del tutto la chiamata a /api/trails/cl quando tutti
-  // e tre i livelli sono già freschi.
-  siScore?:                      number
-  // Trail Score v2 — trasparenza sulla correzione di densità dati applicata a siScore (vedi
-  // lib/cl/signals/densitySignal.ts): siScoreRaw è il valore prima della correzione,
-  // siDensityFactor il moltiplicatore applicato (0.3-1). Solo per debug/UI, nessuna logica di
-  // ricalcolo dipende da questi due.
-  siScoreRaw?:                   number
-  siDensityFactor?:              number
-  siSignals?:                    CLSignals
-  siStaticComputedAt?:           string
-  siDynamicComputedAt?:          string
-  siSatelliteComputedAt?:        string
-  isGhostTrail?:                 boolean
-  dominantWarning?:              string
   // Stesso pattern di dtmProfile — vedi lib/useFlora.ts.
   floraResult?:                  FloraResult
   floraTrackHash?:                string
   floraComputedAt?:              string
-  // Ombra e Acqua — a differenza dei campi cached* sopra questi sono già scritti da
-  // lib/shadeWater/computeShadeWater.ts (computeShadeWaterForPlannedHike) direttamente sulle
-  // colonne s2_*, non tramite updatePlannedMeta: qui vengono solo letti, principalmente da
-  // lib/computeTsForHike.ts per sapere l'ultimo valore di Ombra&Acqua senza rifare la fetch a
-  // /api/trails/sentinel2 ogni volta che va ricalcolato il Trail Score aggregato.
-  s2ShadeScore?:                 number
-  s2Available?:                  boolean
-  s2ComputedAt?:                 string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -174,14 +147,15 @@ export async function getPlannedById(id: string): Promise<PlannedHike | null> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
   // Self-heal a known bad cache shape from before savePlanned's response included
   // routePolyline (see app/api/planned/route.ts POST): a cached hike with no routePolyline and
-  // no osmId can never fetch its CL/shade-water scores (lib/cl/useCL.ts's queryFor needs one of
-  // the two), so it would otherwise be stuck like that forever under a pure cache-first read.
+  // no osmId can never resolve its trail geometry (e.g. for /api/trails/conditions, lib/
+  // trailConditions/matchTrail.ts's findTrailForPolyline needs one of the two), so it would
+  // otherwise be stuck like that forever under a pure cache-first read.
   const needsRepair = !!local && !local.routePolyline?.length && local.osmId == null && (local.trackPoints?.length ?? 0) > 0
   if (local && !needsRepair) return local
   if (local && needsRepair) {
     // The local copy is already fully usable for display (title, trackPoints, guide text…) — only
-    // the CL/shade-water fetch needs routePolyline/osmId, and that hasn't even run yet at this
-    // point. Repair in the background instead of blocking on the network: awaiting the fetch here
+    // the geometry-dependent fetches need routePolyline/osmId, and none of those have even run yet
+    // at this point. Repair in the background instead of blocking on the network: awaiting the fetch here
     // used to leave the caller stuck showing "Caricamento" for as long as the request took to
     // fail, which during a Supabase outage could be a long time instead of the instant fallback a
     // cache-first read is supposed to give.
@@ -210,10 +184,10 @@ export async function getPlannedById(id: string): Promise<PlannedHike | null> {
  * merged in by the registered flusher below once the flush succeeds.
  *
  * Un blip transitorio qui (non un vero blackout) è particolarmente costoso: la pagina guida a cui
- * il chiamante naviga subito dopo legge/verifica questa riga da Supabase in almeno tre punti
- * indipendenti (app/api/guide/route.ts, app/api/trails/cl/route.ts, app/api/trails/sentinel2/
- * route.ts) — se la riga non c'è ancora, quei tre punti falliscono silenziosamente (404) senza
- * nessun retry automatico finché la pagina non viene ricaricata da capo. Il normale fallback
+ * il chiamante naviga subito dopo legge/verifica questa riga da Supabase in più punti
+ * indipendenti (app/api/guide/route.ts, app/api/trails/conditions/route.ts) — se la riga non c'è
+ * ancora, quei punti falliscono silenziosamente (404) senza nessun retry automatico finché la
+ * pagina non viene ricaricata da capo. Il normale fallback
  * all'outbox aspetta ~15s di debounce (lib/sync/syncEngine.ts) prima di ritentare — troppo lento
  * per l'attimo in cui l'utente sta già aprendo quella pagina. Un paio di retry ravvicinati qui,
  * PRIMA di arrendersi all'outbox, coprono il caso comune (un singolo blip) senza dover cambiare
@@ -236,8 +210,8 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
       // Merge in the server-computed assessment and routePolyline (derived from trackPoints
       // server-side when the client didn't send one, e.g. a fresh GPX import) so the cache isn't
       // stale on the very first read — cache-first getPlannedById would otherwise return an object
-      // permanently missing routePolyline, which useCL/useSentinel2 (lib/cl/useCL.ts) need to even
-      // attempt fetching the CL/shade-water scores.
+      // permanently missing routePolyline, which geometry-dependent fetches (e.g.
+      // /api/trails/conditions) need to even attempt resolving a trail.
       const cached = {
         ...hike,
         ...(result.assessment    ? { assessment: result.assessment } : {}),

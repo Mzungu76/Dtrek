@@ -22,16 +22,6 @@ export interface DatasetEndpoint {
   notes?: string
 }
 
-export const PAI_DATASET: DatasetEndpoint = {
-  name: 'PAI — rischio idraulico (alluvioni, scenario P2)',
-  agency: 'ISPRA',
-  protocol: 'WFS',
-  baseUrl: 'http://sdi.isprambiente.it/geoserver/nz1/wfs',
-  typeName: 'nz1:aree_peric_idraulica_p2',
-  verifiedAt: '2026-06-25',
-  notes: 'Workspace nz1 = solo alluvioni (WFS 2.0.0, GetCapabilities verificata). P2 = pericolosità media, TR 100-200 anni (default qui); p1 (TR 30-50, alta) e p3 (TR 200-500, bassa) sono typeName alternativi disponibili sullo stesso endpoint ma non interrogati. Frane (workspace nz2, atteso "aree_peric_frana_pai") NON verificato: nessuna risposta reale ricevuta — resta fuori da questo client. Schema attributi reale non ancora ispezionato via DescribeFeatureType — vedi lib/pai/paiAttributeMap.ts.',
-}
-
 // DTM (pendenza/esposizione sentieri) NON è più in questo registro: il pivot TINITALY/INGV
 // (WCS, mai raggiunto — host negato anche da questa sandbox, nessuna GetCapabilities reale
 // mai ispezionata) e l'opzione LiDAR 1m PST-A precedente (scartata prima di scrivere codice:
@@ -70,7 +60,6 @@ export const NATURA2000_DATASET: DatasetEndpoint = {
 }
 
 export const ALL_DATASETS: DatasetEndpoint[] = [
-  PAI_DATASET,
   GEOLOGIA_DATASET,
   USO_SUOLO_DATASET,
   NATURA2000_DATASET,

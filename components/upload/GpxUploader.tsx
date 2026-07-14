@@ -10,7 +10,6 @@ import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
-import { triggerBackgroundScores } from '@/lib/cl/triggerBackgroundScores'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { MapPin, FileText, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route } from 'lucide-react'
 
@@ -105,13 +104,8 @@ export default function GpxUploader() {
       // POIs being found (computeCtsForHike degrades gracefully with an empty POI list) and not
       // deferred to whenever/if the user happens to open the hike. Fire-and-forget: the user is
       // already being routed to the detail page below, these just land in the background.
-      // CL/Sentinel2 mancavano da questo elenco nonostante il commento — la loro pipeline (query
-      // Overpass/storico attività, raster satellitari multi-banda) è la più pesante delle quattro,
-      // quindi era anche quella con più probabilità di saltare se lasciata al primo apertura
-      // della pagina guida invece che qui.
       computeCtsForHike(hike).catch(() => {})
       computeSafetyForHike(hike).catch(() => {})
-      triggerBackgroundScores(hike)
 
       setStatus('success')
       setTimeout(() => router.push(`/guida/${encodeURIComponent(parsed.id)}`), 1200)

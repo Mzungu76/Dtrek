@@ -1,8 +1,7 @@
-// Climate signal collector — Open-Meteo archive API, average temperature for
-// the current calendar month over the last 10 years (one wide-range query,
-// filtered client-side to the current month — not 10 separate requests),
-// plus altitude/season penalties and a shoulder-season bonus.
-import type { ClimateSignal, SignalContext } from '@/lib/cl/types'
+// Climate signal — Open-Meteo archive API, temperatura media del mese corrente sugli ultimi 10
+// anni (una singola query ad ampio raggio, filtrata lato client sul mese corrente, non 10
+// richieste separate), più penalità quota/stagione e bonus di mezza stagione.
+import type { ClimateSignal, SignalContext } from './types'
 
 const TIMEOUT_MS = 5000
 const WINTER_MONTHS = [12, 1, 2, 3] // Dic, Gen, Feb, Mar

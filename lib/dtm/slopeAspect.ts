@@ -1,6 +1,6 @@
-// First in-memory GeoTIFF decode in the repo — lib/sentinel2/rasterIndices.ts only ever
-// uses geotiff's fromUrl (whole pre-published COGs); this decodes raw OpenTopography
-// globaldem response bytes already held in memory via fromArrayBuffer. Horn's method
+// First in-memory GeoTIFF decode in the repo — this decodes raw OpenTopography globaldem
+// response bytes already held in memory via fromArrayBuffer, rather than geotiff's fromUrl
+// (whole pre-published COGs) used elsewhere. Horn's method
 // slope/aspect kernel (same algorithm as gdaldem slope/QGIS), pure math beyond the initial
 // decode — no network calls past parseDtmGeoTiff.
 import { fromArrayBuffer, type GeoTIFFImage } from 'geotiff'
@@ -14,7 +14,7 @@ function utmProj4(zone: number, isSouth: boolean): string {
   return `+proj=utm +zone=${zone} +datum=WGS84 +units=m${isSouth ? ' +south' : ''} +no_defs`
 }
 
-/** proj4 string for the image's native CRS from its GeoKeys, or null if geographic (degrees, no reprojection needed) — same logic as rasterIndices.ts's projForImage, duplicated here rather than imported since that module is scoped to the Sentinel-2/Planetary-Computer pipeline. */
+/** proj4 string for the image's native CRS from its GeoKeys, or null if geographic (degrees, no reprojection needed). */
 function projForImage(image: GeoTIFFImage): string | null {
   const keys = image.getGeoKeys()
   if (!keys) return null
@@ -38,8 +38,8 @@ function projForImage(image: GeoTIFFImage): string | null {
  * Handles both CRS cases: geographic (EPSG:4326, the format OpenTopography's GTiff output
  * uses — degree resolution converted to meters via metersPerDegreeAt) and projected (native
  * meter resolution — proj4 used only to reproject the tile's corners to WGS84 for
- * DtmTile.bbox, exactly like rasterIndices.ts's projForImage/projectCorner), kept for
- * robustness in case a future demtype or outputCrs choice returns a projected GeoTIFF.
+ * DtmTile.bbox), kept for robustness in case a future demtype or outputCrs choice returns a
+ * projected GeoTIFF.
  */
 export async function parseDtmGeoTiff(buf: ArrayBuffer): Promise<DtmTile | null> {
   try {
@@ -99,10 +99,9 @@ function elevAt(tile: DtmTile, row: number, col: number): number {
 }
 
 /**
- * Horn's method 3x3 kernel at (row, col). Grid convention (matches rasterIndices.ts's
- * sampleAtPoint and this module's own parseDtmGeoTiff bbox): row 0 = north edge (row
- * increases southward), col 0 = west edge (col increases eastward). Border cells are
- * replicate-clamped (elevAt), not given a special branch.
+ * Horn's method 3x3 kernel at (row, col). Grid convention (matches this module's own
+ * parseDtmGeoTiff bbox): row 0 = north edge (row increases southward), col 0 = west edge (col
+ * increases eastward). Border cells are replicate-clamped (elevAt), not given a special branch.
  *
  * aspectDeg is the compass bearing (0=N, 90=E, clockwise) of the downslope direction;
  * NaN for a perfectly flat cell, where no direction is defined. Validated against a

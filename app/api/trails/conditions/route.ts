@@ -5,13 +5,13 @@
 // so refreshing current conditions never overwrites the cached CL result.
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { resolveTrailGeometry, resolveGeometryFallback } from '@/lib/cl/computeCL'
-import { findTrailForPolyline } from '@/lib/cl/matchTrail'
+import { resolveTrailGeometry, resolveGeometryFallback } from '@/lib/trailConditions/geometry'
+import { findTrailForPolyline } from '@/lib/trailConditions/matchTrail'
 import { computeBbox } from '@/lib/geoUtils'
-import { fetchOsmTags } from '@/lib/cl/signals/osmSignals'
-import { collectWeatherSignal } from '@/lib/cl/signals/weatherSignals'
-import { collectClimateSignal } from '@/lib/cl/signals/climateSignals'
-import type { SignalContext, WeatherSignal, ClimateSignal } from '@/lib/cl/types'
+import { fetchOsmTags } from '@/lib/trailConditions/osmTags'
+import { collectWeatherSignal } from '@/lib/trailConditions/weatherSignals'
+import { collectClimateSignal } from '@/lib/trailConditions/climateSignals'
+import type { SignalContext, WeatherSignal, ClimateSignal } from '@/lib/trailConditions/types'
 
 export const maxDuration = 30
 
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Resolve geometry/bbox the same way computeCL does.
+    // Resolve geometry/bbox the same way lib/trailConditions/geometry.ts's other callers do.
     let geometry: [number, number][] | null = null
     let bbox: SignalContext['bbox'] | null = null
     let distanceKm: number | null = null
@@ -115,8 +115,6 @@ export async function GET(req: NextRequest) {
       elevationGain,
       elevationLoss,
       osmTags: tags,
-      osmLastModified: null,
-      matchedActivity: null,
     }
 
     const collectorId = osmRelationId ?? 0

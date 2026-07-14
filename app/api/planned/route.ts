@@ -71,21 +71,9 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedInProtectedArea:         row.cached_in_protected_area          as boolean | undefined,
     cachedProtectedAreaTrackHash:  row.cached_protected_area_track_hash  as string | undefined,
     cachedProtectedAreaComputedAt: row.cached_protected_area_computed_at as string | undefined,
-    siScore:                      row.si_score                       as number | undefined,
-    siScoreRaw:                   row.si_score_raw                   as number | undefined,
-    siDensityFactor:              row.si_density_factor              as number | undefined,
-    siSignals:                    row.si_signals                     as PlannedHike['siSignals'],
-    siStaticComputedAt:           row.si_static_computed_at          as string | undefined,
-    siDynamicComputedAt:          row.si_dynamic_computed_at         as string | undefined,
-    siSatelliteComputedAt:        row.si_satellite_computed_at       as string | undefined,
-    isGhostTrail:                 row.is_ghost_trail                 as boolean | undefined,
-    dominantWarning:              row.dominant_warning               as string | undefined,
     floraResult:                   row.flora_result                    as PlannedHike['floraResult'],
     floraTrackHash:                row.flora_track_hash                as string | undefined,
     floraComputedAt:               row.flora_computed_at               as string | undefined,
-    s2ShadeScore:                  row.s2_shade_score                  as number | undefined,
-    s2Available:                   row.s2_available                    as boolean | undefined,
-    s2ComputedAt:                  row.s2_computed_at                  as string | undefined,
   }
 }
 
@@ -302,8 +290,8 @@ export async function POST(req: NextRequest) {
     // sends its own PlannedHike shape without it when it's derived purely from trackPoints
     // (see components/upload/GpxUploader.tsx / lib/plannedFromActivity.ts, neither sets it) —
     // without this, the cache-first getPlannedById() in lib/plannedStore.ts would keep a
-    // routePolyline-less object forever, and useCL/useSentinel2 (lib/cl/useCL.ts) need either
-    // osmId or a polyline to even attempt their /api/trails/cl and /api/trails/sentinel2 calls.
+    // routePolyline-less object forever, and geometry-dependent fetches (e.g.
+    // /api/trails/conditions) need either osmId or a polyline to even attempt resolving a trail.
     return NextResponse.json({ ok: true, assessment: hike.assessment, routePolyline: hike.routePolyline })
   } catch (e) {
     console.error('POST /api/planned:', e)

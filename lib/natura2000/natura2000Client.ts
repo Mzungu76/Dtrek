@@ -35,9 +35,8 @@ export interface Natura2000Feature {
 // datasetConfig.ts) — callers must treat this exactly like "no data found".
 export class Natura2000UnavailableError extends Error {}
 
-// Same budget reasoning as PAI_TIMEOUT_MS/GEOLOGIA_TIMEOUT_MS, though this client is never
-// called from computeCL.ts's 5s collector budget (plan: "Nessun hook SI" for Natura2000) —
-// kept tight anyway since it does run inside computeTEI's client-side fetch path.
+// Same budget reasoning as GEOLOGIA_TIMEOUT_MS — kept tight since this runs inside computeTEI's
+// client-side fetch path.
 const NATURA2000_TIMEOUT_MS = 4000
 
 // 'site_code'/'denominazi' confirmed from this endpoint's real GetFeature response (DBF-style
