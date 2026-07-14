@@ -7,7 +7,7 @@ import HubSkeleton from '@/components/routehub/HubSkeleton'
 import GuideReader from '@/components/guida/GuideReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
-import { computeTrailScoreTotal, isTrailScoreVetoed, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
+import { computeTrailScoreTotal, computeTrailScoreBreakdown, isTrailScoreVetoed, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
@@ -619,18 +619,23 @@ export default function GuidaHub({ id }: { id?: string }) {
     // land, but only a hike that's never had a total computed needs the live loading state.
     const cached = hike.cachedTsTotal
     const scoreLoading = cached == null && (si.loading || s2.loading)
-    const trailScoreTotal = cached ?? computeTrailScoreTotal(
+    // Il Valore grezzo (per la didascalia) non è mai cachato — solo il totale finale lo è — quindi
+    // va ricalcolato comunque, anche quando il totale può usare la cache: è una formula pura sui
+    // dati già in memoria, nessuna chiamata di rete in più.
+    const breakdown = computeTrailScoreBreakdown(
       { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
       safetyScore,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
       { data: s2.data, loading: s2.loading },
       forecastTempC,
     )
+    const trailScoreTotal = cached ?? breakdown.total
     if (!scoreLoading && trailScoreTotal <= 0) return null
     return (
       <button onClick={() => { setPendingScrollSection('dati_sicurezza'); onTap() }} title="Trail Score">
         <TrailScoreGaugeBadge
           total={scoreLoading ? null : trailScoreTotal}
+          value={breakdown.value}
           safety={safetyScore}
           loading={scoreLoading}
           vetoed={isTrailScoreVetoed(safetyScore)}

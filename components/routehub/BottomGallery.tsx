@@ -9,8 +9,9 @@ import type { HubMode, RouteHubItem, SortValues } from './types'
 
 // Dimensione del badge a doppio anello nella miniatura di galleria (80×80px) — più grande del
 // vecchio MiniScoreRing (22px) perché due anelli concentrici hanno bisogno di un minimo di spazio
-// per restare leggibili, ma comunque compatta per non dominare la miniatura.
-const GALLERY_GAUGE_SIZE = 30
+// per restare leggibili, ma comunque compatta per non dominare la miniatura. Alzata da 30 a 36 —
+// a 30 il numero al centro risultava poco leggibile anche col font-size aumentato nel componente.
+const GALLERY_GAUGE_SIZE = 36
 
 export type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating' | 'distance'
 
