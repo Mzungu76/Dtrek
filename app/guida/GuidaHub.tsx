@@ -8,7 +8,7 @@ import GuideReader from '@/components/guida/GuideReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
 import { computeTrailScoreTotal, isTrailScoreVetoed, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
-import { TrailScoreShapeBadge } from '@/components/TrailScoreShapeBadge'
+import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import {
@@ -85,11 +85,11 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
       // changed since) — not baked in here to avoid two places disagreeing on freshness.
     },
     scorePreview: previewTotal > 0 ? { value: previewTotal, max: TRAIL_SCORE_MAX } : undefined,
-    // Cachati (non da una fetch per scheda) così il badge-triangolo del percorso attivo può
-    // ricostruire la sua forma anche prima che i valori live (ctsResult/safetyScore/s2.data)
-    // siano arrivati — vedi scoreShapeBadge sotto, che comunque preferisce i valori live quando
-    // ci sono.
-    scoreShapeAxes: { cts: h.cachedTrailScore ?? null, safety: h.cachedSafetyScore?.overall ?? null, shade: h.s2Available && h.s2ShadeScore != null ? h.s2ShadeScore * 100 : null },
+    // Cachata (non da una fetch per scheda) così l'anello esterno del badge a doppio anello
+    // (components/TrailScoreGaugeBadge.tsx) ha subito una Sicurezza da mostrare nella galleria/
+    // carosello per ogni percorso, anche prima che arrivi il valore live — vedi scoreGaugeBadge
+    // sotto, che per il percorso davvero aperto preferisce comunque quello.
+    safetyPreview: h.cachedSafetyScore ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label } : undefined,
     favorite: h.favorite,
   }
 }
@@ -384,11 +384,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   useEffect(() => {
     if (!hike) return
     const preview = scorePreviewFor(hike)
+    const safetyPreview = hike.cachedSafetyScore
+      ? { overall: hike.cachedSafetyScore.overall, color: hike.cachedSafetyScore.color, label: hike.cachedSafetyScore.label }
+      : undefined
     setItems(prev => {
       const idx = prev.findIndex(it => it.id === hike.id)
-      if (idx === -1 || prev[idx].scorePreview?.value === preview?.value) return prev
+      if (idx === -1 || (prev[idx].scorePreview?.value === preview?.value && prev[idx].safetyPreview?.overall === safetyPreview?.overall)) return prev
       const next = [...prev]
-      next[idx] = { ...next[idx], scorePreview: preview, sortValues: { ...next[idx].sortValues!, cts: preview?.value ?? 0 } }
+      next[idx] = { ...next[idx], scorePreview: preview, safetyPreview, sortValues: { ...next[idx].sortValues!, cts: preview?.value ?? 0 } }
       return next
     })
   }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore, hike?.cachedTsTotal]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -602,12 +605,12 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
   })() : null
 
-  // Il badge-triangolo del Trail Score — sotto il sottotitolo AI invece che nella fila di chip
-  // sopra il titolo (vedi TopOverlay). Come il vecchio scoreBadges, compare solo per l'hike
-  // davvero aperto (routeItem.id === hike.id): è l'unico per cui i 3 assi live
-  // (ctsResult/safetyScore/s2.data) sono già in memoria, quindi preferibili al fallback cachato
-  // in routeItem.scoreShapeAxes (usato invece per i thumbnail di galleria, non qui).
-  const scoreShapeBadge = (routeItem: RouteHubItem, onTap: () => void) => {
+  // Il badge a doppio anello del Trail Score — sotto il sottotitolo AI invece che nella fila di
+  // chip sopra il titolo (vedi TopOverlay). Come il vecchio scoreBadges, compare solo per l'hike
+  // davvero aperto (routeItem.id === hike.id): è l'unico per cui la Sicurezza live (safetyScore)
+  // è già in memoria, quindi preferibile al fallback cachato in routeItem.safetyPreview (usato
+  // invece per i thumbnail di galleria, non qui).
+  const scoreGaugeBadge = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
     // Mirrors previewScoreValue(): if the aggregate is already cached in Supabase, show it
     // instantly like the gallery thumbnail does — don't make the pin wait on CL/Sentinel2
@@ -624,14 +627,14 @@ export default function GuidaHub({ id }: { id?: string }) {
       forecastTempC,
     )
     if (!scoreLoading && trailScoreTotal <= 0) return null
-    const axes = {
-      cts:    ctsResult?.ts ?? hike.cachedTrailScore ?? null,
-      safety: safetyScore?.overall ?? null,
-      shade:  s2.data?.available && s2.data.shadeScore != null ? s2.data.shadeScore * 100 : null,
-    }
     return (
       <button onClick={() => { setPendingScrollSection('dati_sicurezza'); onTap() }} title="Trail Score">
-        <TrailScoreShapeBadge axes={axes} total={scoreLoading ? null : trailScoreTotal} loading={scoreLoading} vetoed={isTrailScoreVetoed(safetyScore)} />
+        <TrailScoreGaugeBadge
+          total={scoreLoading ? null : trailScoreTotal}
+          safety={safetyScore}
+          loading={scoreLoading}
+          vetoed={isTrailScoreVetoed(safetyScore)}
+        />
       </button>
     )
   }
@@ -752,7 +755,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         bodyMode="continuous"
         renderSection={renderSection}
         primaryAction={primaryAction}
-        scoreShapeBadge={scoreShapeBadge}
+        scoreGaugeBadge={scoreGaugeBadge}
         scoreBadgesTargetSection="featured"
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
         subtitle={(routeItem) => hike && routeItem.id === hike.id ? hike.cachedGuideSubtitle : undefined}

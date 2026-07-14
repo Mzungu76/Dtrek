@@ -147,11 +147,6 @@ const META_COLS = [
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
   'pending_expires_at', 'archived_at', 'favorite',
-  // Ombra&Acqua — solo i 2 campi che servono al badge-triangolo di TopOverlay
-  // (components/TrailScoreShapeBadge.tsx) per mostrare la forma vera anche nella galleria/
-  // carosello senza una fetch per scheda, non l'intera riga s2_* (vedi PlannedHike, quella resta
-  // dietro a select('*') sul singolo percorso).
-  's2_shade_score', 's2_available',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)

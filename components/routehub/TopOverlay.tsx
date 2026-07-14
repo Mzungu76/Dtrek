@@ -12,10 +12,10 @@ interface Props {
   onOpenWeather?: () => void
   /** Score/rating chips (CTS, Sicurezza, Bellezza…), floating persistently over the map. */
   scoreBadges?: ReactNode
-  /** Trail Score triangle badge + archetype label — shown under the subtitle line instead of in
-   *  the floating chip row, only rendered in variant="magazine" (same gate as subtitle, since it
-   *  visually anchors to it). */
-  scoreShapeBadge?: ReactNode
+  /** Trail Score double-ring gauge (Sicurezza fuori, TS dentro) — shown under the subtitle line
+   *  instead of in the floating chip row, only rendered in variant="magazine" (same gate as
+   *  subtitle, since it visually anchors to it). */
+  scoreGaugeBadge?: ReactNode
   /** Ad-hoc/heuristic tagline shown under the title — only rendered in variant="magazine". */
   subtitle?: string | null
   /** 'magazine' bumps the title to a cover-sized treatment and shows the subtitle line. */
@@ -31,7 +31,7 @@ interface Props {
 const FADE_OUT_MS = 120
 const FADE_IN_MS = 150
 
-export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, scoreShapeBadge, subtitle, variant = 'default', favoriteButton, compareButton }: Props) {
+export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, scoreGaugeBadge, subtitle, variant = 'default', favoriteButton, compareButton }: Props) {
   const [visible, setVisible] = useState(true)
   const prevKey = useRef(itemKey)
 
@@ -109,9 +109,9 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
               {subtitle}
             </p>
           )}
-          {variant === 'magazine' && scoreShapeBadge && (
+          {variant === 'magazine' && scoreGaugeBadge && (
             <div className="pointer-events-auto mt-2.5">
-              {scoreShapeBadge}
+              {scoreGaugeBadge}
             </div>
           )}
         </div>

@@ -4,7 +4,13 @@ import Image from 'next/image'
 import { Mountain, ArrowUpDown, Upload, Star } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
+import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import type { HubMode, RouteHubItem, SortValues } from './types'
+
+// Dimensione del badge a doppio anello nella miniatura di galleria (80×80px) — più grande del
+// vecchio MiniScoreRing (22px) perché due anelli concentrici hanno bisogno di un minimo di spazio
+// per restare leggibili, ma comunque compatta per non dominare la miniatura.
+const GALLERY_GAUGE_SIZE = 30
 
 export type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating' | 'distance'
 
@@ -50,7 +56,15 @@ function ThumbBadge({ sortBy, item }: { sortBy: SortKey; item: RouteHubItem }) {
   const sv = item.sortValues
   if (!sv) return null
   switch (sortBy) {
+    // Guida: doppio anello (Sicurezza fuori, TS dentro) — vedi components/TrailScoreGaugeBadge.tsx.
+    // safetyPreview assente (percorso non ancora aperto/calcolato) disegna comunque l'anello
+    // esterno come binario grigio invece di sparire, coerente col resto del badge.
     case 'cts':
+      return item.scorePreview
+        ? <TrailScoreGaugeBadge total={item.scorePreview.value} safety={item.safetyPreview ?? null} size={GALLERY_GAUGE_SIZE} showLabel={false} />
+        : null
+    // Resoconto: voto manuale 0-10, un solo valore — resta il cerchio semplice, non ha senso un
+    // secondo anello per una Sicurezza che qui non si traccia.
     case 'rating':
       return item.scorePreview
         ? <MiniScoreRing value={item.scorePreview.value} max={item.scorePreview.max} color={item.scorePreview.color} size={22} />
