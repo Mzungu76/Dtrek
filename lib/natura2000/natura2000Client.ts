@@ -19,6 +19,7 @@
 import { NATURA2000_DATASET } from '@/lib/geo/datasetConfig'
 import { wfsGetFeatureGml } from '@/lib/geo/wfsClient'
 import type { AnyPolygonGeometry } from '@/lib/geo/pointInPolygon'
+import { isCircuitOpen, recordFailure, recordSuccess } from '@/lib/geo/circuitBreaker'
 
 export type Natura2000Designation = 'SIC' | 'ZSC' | 'ZPS' | 'unknown'
 
@@ -34,6 +35,11 @@ export interface Natura2000Feature {
 // Thrown when NATURA2000_DATASET isn't configured yet (baseUrl/typeName still null per
 // datasetConfig.ts) — callers must treat this exactly like "no data found".
 export class Natura2000UnavailableError extends Error {}
+
+// Breaker key for wms.pcn.minambiente.it — same reasoning as geologiaClient.ts's
+// 'geologia-wms' breaker: this MapServer CGI endpoint is the same class of flaky ISPRA/MASE
+// geoportal, so repeated failures shouldn't each wait out the full fetch timeout.
+const BREAKER_KEY = 'natura2000-wfs'
 
 // Same budget reasoning as GEOLOGIA_TIMEOUT_MS — kept tight since this runs inside computeTEI's
 // client-side fetch path.
@@ -197,19 +203,33 @@ export async function fetchNatura2000Polygons(bbox: string): Promise<Natura2000F
     throw new Natura2000UnavailableError('Natura2000 dataset endpoint not yet configured (see lib/geo/datasetConfig.ts)')
   }
 
-  const xml = await wfsGetFeatureGml({
-    baseUrl: NATURA2000_DATASET.baseUrl,
-    typeName: NATURA2000_DATASET.typeName,
-    bbox,
-    // This layer's GetCapabilities declares DefaultSRS as the URN form
-    // (urn:ogc:def:crs:EPSG::4326), not the legacy "EPSG:4326" string — they imply opposite
-    // axis orders (lat,lon vs lon,lat) per WFS 1.1.0. Passing the legacy string here matched
-    // a different axis convention than the server's declared default and the server silently
-    // returned an empty (but structurally valid) FeatureCollection for every bbox.
-    srsName: 'urn:ogc:def:crs:EPSG::4326',
-    version: '1.1.0',
-    timeoutMs: NATURA2000_TIMEOUT_MS,
-  })
+  // Reuses Natura2000UnavailableError (not a new error class) so every existing caller's
+  // "treat this exactly like no data found" handling already covers a tripped breaker too,
+  // with no change needed on their side.
+  if (isCircuitOpen(BREAKER_KEY)) {
+    throw new Natura2000UnavailableError('Natura2000 WFS endpoint temporarily unavailable (circuit open)')
+  }
+
+  let xml: string
+  try {
+    xml = await wfsGetFeatureGml({
+      baseUrl: NATURA2000_DATASET.baseUrl,
+      typeName: NATURA2000_DATASET.typeName,
+      bbox,
+      // This layer's GetCapabilities declares DefaultSRS as the URN form
+      // (urn:ogc:def:crs:EPSG::4326), not the legacy "EPSG:4326" string — they imply opposite
+      // axis orders (lat,lon vs lon,lat) per WFS 1.1.0. Passing the legacy string here matched
+      // a different axis convention than the server's declared default and the server silently
+      // returned an empty (but structurally valid) FeatureCollection for every bbox.
+      srsName: 'urn:ogc:def:crs:EPSG::4326',
+      version: '1.1.0',
+      timeoutMs: NATURA2000_TIMEOUT_MS,
+    })
+  } catch (e) {
+    recordFailure(BREAKER_KEY)
+    throw e
+  }
+  recordSuccess(BREAKER_KEY)
 
   const featureBlocks = extractFeatureBlocks(xml, NATURA2000_DATASET.typeName)
   if (featureBlocks.length === 0 && xml.includes('<gml:')) {
