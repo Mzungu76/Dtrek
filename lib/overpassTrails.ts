@@ -30,19 +30,17 @@ async function fetchOverpassOnce<T>(query: string, timeoutMs: number): Promise<T
 //
 // Un singolo retry dopo una breve pausa (non un'altra corsa immediata sugli stessi 3 mirror,
 // che sarebbe stata sostanzialmente la stessa richiesta ripetuta subito) copre il caso — comune
-// durante un ricalcolo massivo (lib/recalcScores.ts, chiama questa funzione più volte al secondo
-// per sentieri diversi) — in cui tutti e tre i mirror pubblici rispondono 429/504 per throttling
-// momentaneo lato loro, non perché il servizio sia davvero giù. Senza questo, un batch di
-// ricalcolo bulk poteva veder fallire in blocco Ombra&Acqua/CL (entrambi passano da qui) proprio
-// nei minuti in cui il carico concorrente generato dal batch stesso li affollava.
+// durante un ricalcolo massivo (lib/recalcScores.ts's recalcAllCts, chiama questa funzione più
+// volte al secondo per sentieri diversi) — in cui tutti e tre i mirror pubblici rispondono
+// 429/504 per throttling momentaneo lato loro, non perché il servizio sia davvero giù.
 export async function fetchOverpass<T = unknown>(query: string, timeoutMs = 20_000): Promise<T> {
   try {
     return await fetchOverpassOnce<T>(query, timeoutMs)
   } catch {
     // Pausa breve, non un altro timeoutMs pieno: i chiamanti di questa funzione hanno spesso un
-    // proprio budget stretto attorno alla chiamata intera (vedi computeCL.ts/computeShadeWater.ts,
-    // dove timeoutMs è già tarato vicino al limite del wrapper esterno) — un retry che da solo
-    // rischia di superare quel budget varrebbe quanto nessun retry, solo scoperto più tardi.
+    // proprio budget stretto attorno alla chiamata intera, già tarato vicino al limite del
+    // wrapper esterno — un retry che da solo rischia di superare quel budget varrebbe quanto
+    // nessun retry, solo scoperto più tardi.
     await new Promise(r => setTimeout(r, 1200))
     try {
       return await fetchOverpassOnce<T>(query, timeoutMs)

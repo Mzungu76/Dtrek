@@ -38,17 +38,12 @@ function MarkerList({ markers, highlightedMarkerIndex }: Pick<SafetyDetailsBundl
  *  montaggio. */
 export default function DatiSicurezzaTabs({ scores, safetyDetails }: Props) {
   const hasAssessmentRisk = !!safetyDetails?.assessment?.risks.some(r => r.type === 'danger' || r.type === 'warning')
-  const hasPermanentRisk = !!safetyDetails?.signals && (
-    safetyDetails.signals.satellite.rockfallPenalty < 0 ||
-    safetyDetails.signals.osm.visibilityPenalty < 0 ||
-    safetyDetails.signals.satellite.ndviAbsolutePenalty < 0
-  )
-  const showCondizioni = !!safetyDetails?.hasGps && !safetyDetails?.notMatched
+  const showCondizioni = !!safetyDetails?.hasGps
 
   const tabs: { key: TabKey; label: string; icon: typeof Gauge; dot: boolean }[] = []
   if (scores) tabs.push({ key: 'punteggi', label: 'Punteggi', icon: Gauge, dot: false })
   if (safetyDetails?.assessment) tabs.push({ key: 'valutazione', label: 'Valutazione', icon: ShieldCheck, dot: hasAssessmentRisk })
-  if (showCondizioni) tabs.push({ key: 'condizioni', label: 'Condizioni', icon: CloudSun, dot: hasPermanentRisk })
+  if (showCondizioni) tabs.push({ key: 'condizioni', label: 'Condizioni', icon: CloudSun, dot: false })
   if (safetyDetails?.markers.length) tabs.push({ key: 'segnalazioni', label: 'Segnalazioni', icon: MapPin, dot: true })
 
   const [activeTab, setActiveTab] = useState<TabKey | null>(null)
@@ -83,7 +78,7 @@ export default function DatiSicurezzaTabs({ scores, safetyDetails }: Props) {
         <AssessmentPanel a={safetyDetails.assessment} />
       )}
       {active === 'condizioni' && showCondizioni && (
-        <CurrentConditionsNotice osmId={safetyDetails!.osmId} polyline={safetyDetails!.polyline} plannedId={safetyDetails!.plannedId} signals={safetyDetails!.signals} />
+        <CurrentConditionsNotice osmId={safetyDetails!.osmId} polyline={safetyDetails!.polyline} plannedId={safetyDetails!.plannedId} />
       )}
       {active === 'segnalazioni' && safetyDetails && safetyDetails.markers.length > 0 && (
         <MarkerList markers={safetyDetails.markers} highlightedMarkerIndex={safetyDetails.highlightedMarkerIndex} />

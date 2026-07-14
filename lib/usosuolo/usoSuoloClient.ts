@@ -1,8 +1,8 @@
 // Land-cover client — vector WFS, not raster WCS (corrected after real GetCapabilities
 // inspection: USO_SUOLO_DATASET's endpoint is a wfs:WFS_Capabilities document, no WCS
-// operation exists there). Mirrors lib/pai/paiClient.ts's shape (bbox GetFeature, point-
-// in-polygon classification) rather than lib/dtm/dtmClient.ts's raster-tile shape. Same
-// dual-failure-mode contract as every other geo client here: USO_SUOLO_DATASET not
+// operation exists there). Bbox GetFeature + point-in-polygon classification, rather than
+// lib/dtm/dtmClient.ts's raster-tile shape. Same dual-failure-mode contract as every other geo
+// client here: USO_SUOLO_DATASET not
 // configured (baseUrl/typeName still null per datasetConfig.ts) is a static fact ->
 // throws UsoSuoloUnavailableError; configured but no feature covers a given point is a
 // per-request fact -> sampleLandCoverAtPoint returns null.
@@ -22,7 +22,7 @@ export interface UsoSuoloTile {
 }
 
 // Same budget reasoning as DTM_TIMEOUT_MS in dtmClient.ts: this runs once per bbox inside
-// trailTerrainProfile.ts, not inside computeCL.ts's tighter 5s collector budget.
+// trailTerrainProfile.ts.
 const USO_SUOLO_TIMEOUT_MS = 8000
 
 // CLC class-code field-name candidates for the real endpoint (lc:clc18_it_4258) — provisional

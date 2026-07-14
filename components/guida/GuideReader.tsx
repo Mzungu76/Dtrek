@@ -32,11 +32,10 @@ import GuideStatsStrip from './GuideStatsStrip'
 import GuideSectionNav from './GuideSectionNav'
 import VoicePlayer from './VoicePlayer'
 import SectionCard from './SectionCard'
-import type { CLProps, CtsProps, ShadeWaterProps } from '@/components/ScoreRing'
+import type { CtsProps } from '@/components/ScoreRing'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { HikeAssessment } from '@/lib/hikeAssessment'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
-import type { CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { FloraResult } from '@/lib/floraTypes'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 
@@ -60,12 +59,8 @@ interface DisplaySection {
 }
 
 export interface ScoresBundle {
-  cl: CLProps
   safety: SafetyScore | null
   cts: CtsProps
-  shadeWater: ShadeWaterProps
-  /** Temperatura prevista (°C) nel giorno dell'escursione — vedi app/guida/useForecastTemp.ts. */
-  forecastTempC?: number | null
   showAspectToggle: boolean
   showGradientToggle: boolean
   showAspect: boolean
@@ -81,11 +76,9 @@ export interface ScoresBundle {
 export interface SafetyDetailsBundle {
   assessment?: HikeAssessment
   hasGps: boolean
-  notMatched: boolean
   osmId?: number
   polyline?: [number, number][]
   plannedId: string
-  signals?: CLSignals
   markers: ClassifiedDifficultyMarker[]
   highlightedMarkerIndex?: number | null
 }
@@ -101,8 +94,6 @@ export interface PoiListBundle {
 
 export interface NaturaBundle {
   hasGps: boolean
-  data: Sentinel2Data | null
-  loading: boolean
   flora?: FloraResult | null
   floraLoading: boolean
   onOpenFloraGallery: () => void

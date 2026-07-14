@@ -8,14 +8,14 @@ export type SafetyPreview = Pick<SafetyScore, 'overall' | 'color' | 'label'>
 export interface TrailScoreGaugeBadgeProps {
   /** Trail Score v2 aggregato, 0-100 — anello interno, spesso, e numero al centro. */
   total: number | null
-  /** Valore grezzo pre-cancello (Comfort+Ombra&Acqua già pesati, prima del taglio di Sicurezza),
-   *  0-100 — usato solo per comporre la didascalia ("Buon valore, rischio alto"), non disegnato.
-   *  Assente ⇒ la didascalia cade indietro alla sola etichetta della Sicurezza. */
+  /** Comfort TrailScore grezzo, pre-cancello (prima del taglio di Sicurezza), 0-100 — usato solo
+   *  per comporre la didascalia ("Buon valore, rischio alto"), non disegnato. Assente ⇒ la
+   *  didascalia cade indietro alla sola etichetta della Sicurezza. */
   value?: number | null
   /** Sicurezza, 0-100 — anello esterno, sottile, sulla propria scala di colore (non su quella
    *  del TS): due indicatori chiaramente separati invece di un'unica scala che li confonde. Vedi
-   *  la formula in lib/trailScoreV2.ts — la Sicurezza è un cancello moltiplicativo sul Valore, non
-   *  un componente pesato alla pari con Comfort/Ombra&Acqua, quindi merita un anello a sé. */
+   *  la formula in lib/trailScoreV2.ts — la Sicurezza è un cancello moltiplicativo sul Comfort
+   *  TrailScore, quindi merita un anello a sé. */
   safety: SafetyPreview | null
   loading?: boolean
   vetoed?: boolean
@@ -59,14 +59,13 @@ function safetyPhrase(overall: number): string {
 }
 
 /**
- * Badge compatto del Trail Score: due anelli concentrici invece di un'unica forma a peso
- * uguale — l'anello esterno sottile è la Sicurezza (il cancello che può azzerare tutto),
- * l'anello interno spesso è il TS finale (già pesato correttamente tra Comfort e Ombra&Acqua).
- * Due indicatori separati, ciascuno sulla propria scala di colore, invece di una geometria che
- * finge una parità che nella formula non esiste. Usato nella copertina del percorso aperto
- * (app/guida/GuidaHub.tsx), in versione compatta nella miniatura di galleria filtrata per TS
- * (components/routehub/BottomGallery.tsx), e nella tab "Sintesi" di Dati e sicurezza
- * (components/guida/widgets/ScoresWidget.tsx).
+ * Badge compatto del Trail Score: due anelli concentrici — l'anello esterno sottile è la
+ * Sicurezza (il cancello che può azzerare tutto), l'anello interno spesso è il TS finale
+ * (Comfort TrailScore già passato dal cancello). Due indicatori separati, ciascuno sulla propria
+ * scala di colore, invece di una geometria che finge una parità che nella formula non esiste.
+ * Usato nella copertina del percorso aperto (app/guida/GuidaHub.tsx), in versione compatta nella
+ * miniatura di galleria filtrata per TS (components/routehub/BottomGallery.tsx), e in "Dati e
+ * sicurezza" (components/guida/widgets/ScoresWidget.tsx).
  *
  * Si anima al mount (anelli che si riempiono, numero che conta) invece di comparire già pieno —
  * ogni chiamante che lo smonta/rimonta (es. un cambio di tab) fa ripartire l'animazione da zero.

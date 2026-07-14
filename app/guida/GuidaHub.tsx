@@ -10,7 +10,6 @@ import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/rout
 import { computeTrailScoreTotal, computeTrailScoreBreakdown, isTrailScoreVetoed, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
-import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import {
   getAllPlanned, getPlannedById, updatePlannedMeta, deletePlanned,
@@ -42,7 +41,6 @@ import { useTerrainProfile } from './useTerrainProfile'
 import { useProtectedAreaCheck } from './useProtectedAreaCheck'
 import { useDrivingDistance } from './useDrivingDistance'
 import { useSafetyScore } from './useSafetyScore'
-import { useForecastTemp } from './useForecastTemp'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -51,11 +49,10 @@ const AnimalGallery    = dynamic(() => import('@/components/AnimalGallery'),   {
 
 /** cachedTsTotal is the Trail Score v2 (0-100, see lib/trailScoreV2.ts) persisted to Supabase once
  *  computed live for this hike (see the sync effect in GuidaHub) — reading it back is instant.
- *  Trail Score v2 needs CL/Sicurezza/Comfort TrailScore ALL present to mean anything (it's a gate
- *  + shrinkage, not a sum — see computeTrailScoreV2's own doc comment on why a partial
- *  reconstruction from only cached CTS/Safety isn't a safe approximation of it), so a hike that's
- *  never been opened yet (no cachedTsTotal) falls back to just its raw Comfort TrailScore instead
- *  of fabricating a full v2 number out of incomplete data. */
+ *  Trail Score v2 needs Sicurezza/Comfort TrailScore BOTH present to mean anything (it's a gate,
+ *  not a sum — see computeTrailScoreV2's own doc comment), so a hike that's never been opened yet
+ *  (no cachedTsTotal) falls back to just its raw Comfort TrailScore instead of fabricating a full
+ *  v2 number out of incomplete data. */
 function previewScoreValue(h: PlannedHikeMeta): number {
   if (h.cachedTsTotal != null) return h.cachedTsTotal
   return h.cachedTrailScore ?? 0
@@ -134,15 +131,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
   useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
-  const si = useCL({
-    osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id,
-    siCache: hike ? {
-      siScore: hike.siScore, siScoreRaw: hike.siScoreRaw, siDensityFactor: hike.siDensityFactor, siSignals: hike.siSignals,
-      siStaticComputedAt: hike.siStaticComputedAt, siDynamicComputedAt: hike.siDynamicComputedAt, siSatelliteComputedAt: hike.siSatelliteComputedAt,
-      isGhostTrail: hike.isGhostTrail, dominantWarning: hike.dominantWarning,
-    } : undefined,
-  })
-  const s2 = useSentinel2({ osmId: hike?.osmId, polyline: hike?.routePolyline, plannedId: hike?.id })
   const flora = useFlora(
     hike?.routePolyline, hike?.altitudeMax,
     hike ? { plannedId: hike.id, data: hike.floraResult, trackHash: hike.floraTrackHash } : undefined,
@@ -163,14 +151,13 @@ export default function GuidaHub({ id }: { id?: string }) {
     return { ...driving, mapsUrl }
   }, [driving, userOrigin, hike?.routePolyline])
   const safetyScore = useSafetyScore(hike, setHike)
-  const forecastTempC = useForecastTemp(hike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   // All the data the auto-generated Breve guide should be able to draw on: POIs/Wikipedia,
-  // CL/Sentinel2, flora, Safety and CTS scores. True once every source has settled (resolved or
-  // deliberately skipped, e.g. no GPS) — or once the 90s watchdog above fires regardless.
+  // flora, Safety and CTS scores. True once every source has settled (resolved or deliberately
+  // skipped, e.g. no GPS) — or once the 90s watchdog above fires regardless.
   const enrichmentReady = enrichmentTimedOut ||
-    (poisFullyLoaded && !si.loading && !s2.loading && !flora.loading && safetyScore != null && ctsSettled)
+    (poisFullyLoaded && !flora.loading && safetyScore != null && ctsSettled)
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
   // order (most recent first) — backs the carousel/gallery. Resolves the bare
@@ -344,31 +331,24 @@ export default function GuidaHub({ id }: { id?: string }) {
     return () => { cancelled = true }
   }, [hike?.id, poisFullyLoaded, dtmProfile, terrainProfile, inProtectedArea, prefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Once every live input the aggregate actually needs has settled (no per-item fetch needed —
-  // this only runs for the hike that's actually open), persists the *full* aggregate — including
-  // ombra/acqua, which the cached-only fallback above can never see — to Supabase. From then on
-  // every gallery render (this session, next session, other devices) reads that number back
-  // instantly via previewScoreValue() instead of recomputing a partial one from scratch. Trail
-  // Score v2 no longer depends on Affidabilità (see lib/trailScoreV2.ts), so this doesn't wait on
-  // si.loading — CL is still passed through for its own independent badge and for the
-  // "Sicurezza non tracciata affatto" fallback (see computeTrailScoreTotal's notApplicable), not
-  // as a scoring input. lib/computeTsForHike.ts's refreshTsForHike already covers most of the
-  // "recompute after a sibling score changes" cases fire-and-forget elsewhere; this effect stays
-  // as the one that also reacts to a *local*, not-yet-persisted ctsResult (recomputed live from
-  // cachedBeautyScore + current preferences, see the effect above) and to forecastTempC.
+  // Once Sicurezza/Comfort TrailScore are both settled (no per-item fetch needed — this only runs
+  // for the hike that's actually open), persists the aggregate to Supabase. From then on every
+  // gallery render (this session, next session, other devices) reads that number back instantly
+  // via previewScoreValue() instead of recomputing it from scratch. lib/computeTsForHike.ts's
+  // refreshTsForHike already covers most of the "recompute after Safety/CTS changes" cases
+  // fire-and-forget elsewhere; this effect stays as the one that also reacts to a *local*,
+  // not-yet-persisted ctsResult (recomputed live from cachedBeautyScore + current preferences,
+  // see the effect above).
   useEffect(() => {
-    if (!hike || s2.loading) return
+    if (!hike) return
     const total = computeTrailScoreTotal(
-      { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
       safetyScore,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
-      { data: s2.data, loading: s2.loading },
-      forecastTempC,
     )
     if (total <= 0 || total === hike.cachedTsTotal) return
     updatePlannedMeta(hike.id, { cachedTsTotal: total }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedTsTotal: total } : prev)
-  }, [hike, safetyScore, ctsResult, si.loading, si.result, si.notMatched, s2.loading, s2.data, forecastTempC]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike, safetyScore, ctsResult]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keeps the gallery thumbnail's TS ring — and the "TS" sort key that ranks by it — in sync with
   // whatever just got cached (Calcola CTS, the auto-cached safety score, or the full aggregate
@@ -614,21 +594,16 @@ export default function GuidaHub({ id }: { id?: string }) {
   const scoreGaugeBadge = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
     // Mirrors previewScoreValue(): if the aggregate is already cached in Supabase, show it
-    // instantly like the gallery thumbnail does — don't make the pin wait on CL/Sentinel2
-    // network fetches that only exist to keep the cache itself fresh in the background. Those
-    // fetches still run (see the sync effect above) and will silently update the pin once they
-    // land, but only a hike that's never had a total computed needs the live loading state.
+    // instantly like the gallery thumbnail does. Only a hike that's never had a total computed
+    // needs the live loading state (waiting on Safety/CTS to settle).
     const cached = hike.cachedTsTotal
-    const scoreLoading = cached == null && (si.loading || s2.loading)
+    const scoreLoading = cached == null && (ctsComputing || safetyScore == null)
     // Il Valore grezzo (per la didascalia) non è mai cachato — solo il totale finale lo è — quindi
     // va ricalcolato comunque, anche quando il totale può usare la cache: è una formula pura sui
     // dati già in memoria, nessuna chiamata di rete in più.
     const breakdown = computeTrailScoreBreakdown(
-      { si: si.result?.si, label: si.result?.label, loading: si.loading, notMatched: si.notMatched },
       safetyScore,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
-      { data: s2.data, loading: s2.loading },
-      forecastTempC,
     )
     const trailScoreTotal = cached ?? breakdown.total
     if (!scoreLoading && trailScoreTotal <= 0) return null
@@ -678,20 +653,17 @@ export default function GuidaHub({ id }: { id?: string }) {
           dtmProfile={dtmProfile}
           driving={drivingWithMaps}
           scores={{
-            cl: { si: si.result?.si, siRaw: si.result?.siRaw, dataDensityFactor: si.result?.dataDensityFactor, label: si.result?.label, signals: si.result?.signals, partial: si.result?.partial, loading: si.loading, notMatched: si.notMatched, onRefresh: si.refresh, refreshing: si.refreshing, refreshError: si.refreshError },
             safety: safetyScore,
             cts: { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts },
-            shadeWater: { data: s2.data, loading: s2.loading, onRefresh: s2.refresh, refreshing: s2.refreshing, refreshError: s2.refreshError },
-            forecastTempC,
             showAspectToggle: hasGps && dtmProfile?.source === 'dtm',
             showGradientToggle: hasGps && dtmProfile?.source === 'dtm' && !!hike.trackPoints?.some(p => p.altitudeMeters !== undefined),
             showAspect, showGradient,
             onToggleAspect: () => setShowAspect(a => !a),
             onToggleGradient: () => setShowGradient(g => !g),
           }}
-          safetyDetails={{ assessment: hike.assessment, hasGps, notMatched: si.notMatched, osmId: hike.osmId, polyline: hike.routePolyline, plannedId: hike.id, signals: si.result?.signals, markers, highlightedMarkerIndex: null }}
+          safetyDetails={{ assessment: hike.assessment, hasGps, osmId: hike.osmId, polyline: hike.routePolyline, plannedId: hike.id, markers, highlightedMarkerIndex: null }}
           poiList={{ pois, poiWikiEntries, hasGps, centerLat: centerPt?.lat, centerLon: centerPt?.lon, onWikiLoaded: setWikiPages }}
-          natura={{ hasGps: hasGps && !!hike.routePolyline && hike.routePolyline.length >= 2, data: s2.data, loading: s2.loading, flora: flora.data, floraLoading: flora.loading, onOpenFloraGallery: () => setShowFloraGallery(true), onOpenAnimalGallery: () => setShowAnimalGallery(true) }}
+          natura={{ hasGps: hasGps && !!hike.routePolyline && hike.routePolyline.length >= 2, flora: flora.data, floraLoading: flora.loading, onOpenFloraGallery: () => setShowFloraGallery(true), onOpenAnimalGallery: () => setShowAnimalGallery(true) }}
         />
       )
     }

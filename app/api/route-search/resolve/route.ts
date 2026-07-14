@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
-import { resolveGeometryFallback } from '@/lib/cl/computeCL'
+import { resolveGeometryFallback } from '@/lib/trailConditions/geometry'
 import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
 import { downloadAndParseGpx } from '@/lib/gpxSourceFetch'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'

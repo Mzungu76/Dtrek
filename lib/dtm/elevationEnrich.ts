@@ -1,5 +1,5 @@
 // Arricchisce una geometria OSM grezza (solo lat/lon, senza quota — vedi
-// lib/cl/computeCL.ts's resolveGeometryFallback) con l'elevazione dal DTM, per costruire dei
+// lib/trailConditions/geometry.ts's resolveGeometryFallback) con l'elevazione dal DTM, per costruire dei
 // TrackPoint[] utilizzabili come una traccia GPX vera dalla ricerca percorsi con l'AI
 // (app/api/route-search/route.ts). DtmUnavailableError si propaga (dataset non configurato —
 // stesso confine già stabilito da trailDtmProfile.ts), un tile senza copertura per quel bbox

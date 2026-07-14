@@ -13,7 +13,8 @@ import RouteMapSection from '@/components/RouteMapSection'
 import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
 import WeatherWidget from '@/components/WeatherWidget'
 import WikiCards from '@/components/WikiCards'
-import { ScoreRing, MiniScoreRing } from '@/components/ScoreRing'
+import { MiniScoreRing } from '@/components/ScoreRing'
+import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
 import SpeedChart from '@/components/SpeedChart'
@@ -44,8 +45,7 @@ import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
-import { PhenologyPanel } from '@/components/PhenologyPanel'
-import { useSentinel2 } from '@/lib/cl/useCL'
+import { FloraPanel } from '@/components/FloraPanel'
 import { useFlora } from '@/lib/useFlora'
 import { useDtmProfile } from './useDtmProfile'
 import { useTerrainProfile } from './useTerrainProfile'
@@ -137,7 +137,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
     return pts.filter((_, i) => i % step === 0).map(p => [p.lat!, p.lon!])
   }, [activity])
 
-  const s2    = useSentinel2({ polyline: heroPolyline })
   const flora = useFlora(heroPolyline, activity?.altitudeMax)
   const poiCenter = useCenteredItem(pois.length)
   const [showFloraGallery, setShowFloraGallery] = useState(false)
@@ -454,11 +453,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (section === 'dati') return (
       <div className="px-4 py-4 space-y-5">
           {(ctsResult || activity.trailScore != null) ? (
-            <ScoreRing
-              cl={{ notMatched: true }}
-              safety={null}
-              cts={{ result: ctsResult, cached: activity.trailScore, beautyScore: activity.linkedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts }}
-              shadeWater={{ data: s2.data, loading: s2.loading, onRefresh: s2.refresh, refreshing: s2.refreshing, refreshError: s2.refreshError }}
+            <ComfortTrailScoreWidget
+              result={ctsResult} cached={activity.trailScore} beautyScore={activity.linkedBeautyScore} defaultOpen
             />
           ) : (
             <div className={`${glassTile} px-5 py-4 flex items-center justify-between gap-4`}>
@@ -572,7 +568,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
     if (section === 'natura') return (
       <div className="px-4 py-4 space-y-5">
-        {hasGps && heroPolyline.length > 1 && <PhenologyPanel data={s2.data} loading={s2.loading} flora={flora.data} floraLoading={flora.loading} />}
+        {hasGps && heroPolyline.length > 1 && <FloraPanel flora={flora.data} floraLoading={flora.loading} />}
         <div className="flex gap-2">
           <button onClick={() => setShowFloraGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
             <Leaf className="w-4 h-4 text-emerald-400" /> Galleria Verde

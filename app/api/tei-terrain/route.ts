@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 // Was previously unset, which let a stalled upstream (WMS ISPRA geologia, Supabase cache
 // lookups) run this function all the way out to the account's max duration (300s) on every
 // bad invocation — the single biggest driver of the account's Active CPU usage. Same cap as
-// the other trails routes (cl, sentinel2, conditions, guardian-dogs, flora).
+// the other trails routes (conditions, guardian-dogs, flora).
 export const maxDuration = 30
 const COMPUTE_TIMEOUT_MS = 25000
 

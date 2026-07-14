@@ -1,15 +1,14 @@
 // Supabase-backed cache wrapper around natura2000Client.ts's fetchNatura2000Polygons. Split
-// from the client for the same reason as lib/pai/paiCache.ts: scripts/probe-natura2000.ts must
-// be able to run without lib/supabase.ts's singleton (which throws at import time if env vars
-// are missing).
+// from the client so scripts/probe-natura2000.ts can run without lib/supabase.ts's singleton
+// (which throws at import time if env vars are missing).
 import { normalizeBboxKey } from '@/lib/geoUtils'
 import { supabase } from '@/lib/supabase'
 import { NATURA2000_DATASET } from '@/lib/geo/datasetConfig'
 import { fetchNatura2000Polygons, Natura2000UnavailableError, type Natura2000Feature } from '@/lib/natura2000/natura2000Client'
 import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
-// Designations change on a scale of years, not days — same reasoning as PAI's 90-day TTL but
-// longer, since Natura2000 site boundaries are even more stable than hydrogeological risk plans.
+// Designations change on a scale of years, not days — a long TTL, since Natura2000 site
+// boundaries are very stable.
 const NATURA2000_CACHE_TTL_MS = 270 * 24 * 60 * 60 * 1000
 
 export async function fetchNatura2000PolygonsCached(bbox: string): Promise<Natura2000Feature[]> {

@@ -1,8 +1,7 @@
-// Weather signal collector — Open-Meteo archive API, last 7 days of
-// precipitation + soil moisture at the trail's bbox centroid, modulated by
-// surface (from the OSM tags already resolved by osmSignals.ts via ctx) and
-// estimated average slope (from the trails-cache row, already in ctx).
-import type { WeatherSignal, SignalContext } from '@/lib/cl/types'
+// Weather signal — Open-Meteo archive API, ultimi 7 giorni di precipitazioni + umidità del
+// suolo al centroide del bbox del percorso, modulato dalla superficie (dai tag OSM già risolti
+// da osmTags.ts via ctx) e dalla pendenza media stimata (dalla cache trails, già in ctx).
+import type { WeatherSignal, SignalContext } from './types'
 
 const TIMEOUT_MS = 5000
 

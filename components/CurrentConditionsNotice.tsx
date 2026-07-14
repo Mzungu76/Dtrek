@@ -1,34 +1,26 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import type { CLSignals, WeatherSignal, ClimateSignal } from '@/lib/cl/types'
-import { CL_PARAM_DESCRIPTIONS } from '@/lib/cl/paramDescriptions'
+import type { WeatherSignal, ClimateSignal } from '@/lib/trailConditions/types'
+import { CONDITIONS_PARAM_DESCRIPTIONS } from '@/lib/trailConditions/paramDescriptions'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import Kicker from '@/components/ui/Kicker'
 
-interface Params {
+interface Props {
   osmId?: number
   polyline?: [number, number][]
   plannedId?: string
 }
 
-interface Props extends Params {
-  // The already-fetched CL result's signals — used for the "permanent risks"
-  // half so we don't hit the network for data the parent already has.
-  signals?: CLSignals
-}
+interface SignalRow { icon: '✅' | '⚠️' | 'ℹ️'; text: string; kind: keyof typeof CONDITIONS_PARAM_DESCRIPTIONS }
 
-interface SignalRow { icon: '✅' | '⚠️' | 'ℹ️'; text: string; kind: keyof typeof CL_PARAM_DESCRIPTIONS }
-
-function queryFor({ osmId, polyline, plannedId }: Params): string | null {
+function queryFor({ osmId, polyline, plannedId }: Props): string | null {
   const plannedSuffix = plannedId ? `&planned_id=${encodeURIComponent(plannedId)}` : ''
   if (osmId != null) return `osm_relation_id=${osmId}${plannedSuffix}`
   if (polyline && polyline.length >= 2) return `polyline=${encodeURIComponent(JSON.stringify(polyline))}${plannedSuffix}`
   return null
 }
 
-// Weather + climate rows — same copy as CLBadge's signalRows, but only the
-// live-fetched current-conditions signals belong in this section.
 function currentRows(weather: WeatherSignal, climate: ClimateSignal): SignalRow[] {
   const rows: SignalRow[] = []
   if (weather.totalPenalty < 0) {
@@ -46,21 +38,6 @@ function currentRows(weather: WeatherSignal, climate: ClimateSignal): SignalRow[
   return rows
 }
 
-// Permanent place risks — read directly from the cached CL signals.
-function permanentRows(s: CLSignals): SignalRow[] {
-  const rows: SignalRow[] = []
-  if (s.satellite.rockfallPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'rockfall', text: `Rischio crollo roccioso da litologia CARG (classe ${s.satellite.rockfallClass})` })
-  }
-  if (s.osm.visibilityPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'osmVisibility', text: 'Scarsa visibilità del sentiero su OSM' })
-  }
-  if (s.satellite.ndviAbsolutePenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'satelliteNdviAbs', text: 'Vegetazione molto fitta (satellite)' })
-  }
-  return rows
-}
-
 function RowList({ rows }: { rows: SignalRow[] }) {
   if (rows.length === 0) {
     return <p className="text-xs text-stone-400 leading-tight">Nessuna segnalazione.</p>
@@ -71,14 +48,14 @@ function RowList({ rows }: { rows: SignalRow[] }) {
         <p key={i} className="text-xs text-stone-600 leading-tight flex items-start gap-1.5">
           <span>{r.icon}</span>
           <span className="flex-1">{r.text}</span>
-          <InfoTooltip text={CL_PARAM_DESCRIPTIONS[r.kind]} />
+          <InfoTooltip text={CONDITIONS_PARAM_DESCRIPTIONS[r.kind]} />
         </p>
       ))}
     </div>
   )
 }
 
-export function CurrentConditionsNotice({ osmId, polyline, plannedId, signals }: Props) {
+export function CurrentConditionsNotice({ osmId, polyline, plannedId }: Props) {
   const [conditions, setConditions] = useState<{ weather: WeatherSignal; climate: ClimateSignal } | null>(null)
   const [loading, setLoading] = useState(false)
   const polylineKey = polyline ? JSON.stringify(polyline) : null
@@ -104,26 +81,15 @@ export function CurrentConditionsNotice({ osmId, polyline, plannedId, signals }:
   }, [osmId, polylineKey, plannedId])
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Kicker>Condizioni attuali</Kicker>
-        {loading ? (
-          <p className="text-xs text-stone-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…</p>
-        ) : conditions ? (
-          <RowList rows={currentRows(conditions.weather, conditions.climate)} />
-        ) : (
-          <p className="text-xs text-stone-400 leading-tight">Condizioni attuali non disponibili.</p>
-        )}
-      </div>
-
-      <div className="space-y-2 pt-4 border-t border-stone-100">
-        <Kicker>Rischi permanenti del luogo</Kicker>
-        {signals ? (
-          <RowList rows={permanentRows(signals)} />
-        ) : (
-          <p className="text-xs text-stone-400 leading-tight">Dati non disponibili.</p>
-        )}
-      </div>
+    <div className="space-y-2">
+      <Kicker>Condizioni attuali</Kicker>
+      {loading ? (
+        <p className="text-xs text-stone-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…</p>
+      ) : conditions ? (
+        <RowList rows={currentRows(conditions.weather, conditions.climate)} />
+      ) : (
+        <p className="text-xs text-stone-400 leading-tight">Condizioni attuali non disponibili.</p>
+      )}
     </div>
   )
 }

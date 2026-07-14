@@ -1,6 +1,5 @@
-// CARG (Carta Geologica d'Italia) — lithology lookup at a single point via WMS GetFeatureInfo.
-// Mirrors lib/pai/paiClient.ts's shape, but the query is point-based (WMS GetFeatureInfo), not
-// bbox-based (WFS GetFeature) — see lib/geo/wmsClient.ts. GEOLOGIA_DATASET.protocol confirmed
+// CARG (Carta Geologica d'Italia) — lithology lookup at a single point via WMS GetFeatureInfo
+// (not bbox-based WFS GetFeature) — see lib/geo/wmsClient.ts. GEOLOGIA_DATASET.protocol confirmed
 // WMS-only (ArcGIS Server at sinacloud.isprambiente.it, no WFS exposed for this layer) — see
 // lib/geo/datasetConfig.ts.
 import { GEOLOGIA_DATASET } from '@/lib/geo/datasetConfig'
@@ -19,17 +18,13 @@ export interface GeologiaFeature {
 }
 
 // Thrown when GEOLOGIA_DATASET isn't configured yet (baseUrl/layerName still null per
-// datasetConfig.ts) — callers must treat this exactly like "no data found", never let it
-// interrupt the existing satellite signal pipeline in satelliteSignals.ts.
+// datasetConfig.ts) — callers must treat this exactly like "no data found".
 export class GeologiaUnavailableError extends Error {}
 
-// Same budget reasoning as paiClient.ts's PAI_TIMEOUT_MS: stays inside computeCL.ts's 5s
-// per-collector budget (COLLECTOR_TIMEOUT_MS).
 const GEOLOGIA_TIMEOUT_MS = 4000
 
-// Attribute-name guesses for the lithology code field in a CARG GetFeatureInfo response — as
-// provisional as paiAttributeMap.ts's field lists, per-sheet legends vary the same way, just
-// for a single code value instead of a risk class.
+// Attribute-name guesses for the lithology code field in a CARG GetFeatureInfo response —
+// per-sheet legends vary, so this list is provisional rather than confirmed.
 const LITHOLOGY_FIELDS = ['sigla', 'SIGLA', 'sigla_geo', 'COD_LITO', 'cod_lito', 'litologia', 'LITOLOGIA']
 
 function extractLithologyCode(props: Record<string, unknown>): string | null {

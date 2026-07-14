@@ -567,7 +567,7 @@ function mkCat(key: string, label: string, emoji: string, score: number, reasons
 }
 
 // vFondSource is the internal label from computeVfond's vFondSourceLabel() — translates it to
-// a user-facing reason string for CLBadge/TEI breakdown UI. 'neutro' has nothing worth saying
+// a user-facing reason string for the TEI breakdown UI. 'neutro' has nothing worth saying
 // (no OSM tag nearby and no land-cover data either), so it stays an empty reasons array.
 function vFondReasons(vFondSource: string): string[] {
   switch (vFondSource) {
