@@ -4,7 +4,7 @@ import type { CLLabel, CLSignals, Sentinel2Data } from '@/lib/cl/types'
 import type { SafetyScore } from '@/lib/safetyScore'
 import { ctsLabel, type TrailScoreResult } from '@/lib/trailScore'
 import type { BeautyScore } from '@/lib/beautyScore'
-import { computeTrailScoreV2, tsLabel, SAFETY_VETO_THRESHOLD } from '@/lib/trailScoreV2'
+import { computeTrailScoreV2, SAFETY_VETO_THRESHOLD } from '@/lib/trailScoreV2'
 import { CLBadge } from '@/components/CLBadge'
 import { SafetyScoreWidget } from '@/components/SafetyScoreWidget'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
@@ -297,7 +297,6 @@ export function ScoreRing({
   const total   = computeTrailScoreTotal(cl, safety, cts, shadeWater, forecastTempC)
   const animatedTotal = useCountUp(mounted ? total : 0)
   const vetoed  = isTrailScoreVetoed(safety)
-  const tier = tsLabel(Math.round(animatedTotal))
   const active  = activeKey === 'cl' ? null : segments.find(s => s.key === activeKey) ?? null
 
   const points = segments.map((s, i) => {
@@ -354,14 +353,6 @@ export function ScoreRing({
             <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Punteggio</span>
             <span className="font-display font-black text-[28px] text-stone-900 leading-none mt-0.5 tabular-nums">{Math.round(animatedTotal)}</span>
             <span className="text-[10px] text-stone-400 font-semibold mt-0.5">su {TRAIL_SCORE_MAX}</span>
-            {total > 0 && (
-              <span
-                className="pointer-events-none mt-1.5 px-2 py-0.5 rounded-full text-white text-[9px] font-bold uppercase tracking-wide"
-                style={{ backgroundColor: tier.color }}
-              >
-                {tier.label}
-              </span>
-            )}
             {vetoed && (
               <span className="pointer-events-auto mt-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-bold uppercase tracking-wide">
                 Sconsigliato — rischio elevato
