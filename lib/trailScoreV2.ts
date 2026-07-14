@@ -108,12 +108,3 @@ export function computeTrailScoreV2(input: TrailScoreV2Input): TrailScoreV2Resul
     breakdown: { wCts, wOa, value, gate, vetoed },
   }
 }
-
-/** Etichetta testuale a 4 fasce per il Trail Score aggregato — stesse soglie di
- *  components/ScoreRing.tsx's tsColor (25/50/75), coerenti nel colore. */
-export function tsLabel(score: number): { label: string; color: string } {
-  if (score <= 25) return { label: 'Da migliorare', color: '#dc2626' }
-  if (score <= 50) return { label: 'Nella media',   color: '#eab308' }
-  if (score <= 75) return { label: 'Buono',          color: '#0ea5e9' }
-  return              { label: 'Eccellente',        color: '#16a34a' }
-}
