@@ -22,7 +22,17 @@ import type { Sentinel2ApiResponse } from '@/lib/cl/types'
 
 export const maxDuration = 30
 
-const COMPUTE_TIMEOUT_MS = 15000
+// Era 15000 — identico a OVERPASS_TIMEOUT_MS in lib/shadeWater/computeShadeWater.ts, che questo
+// wrapper avvolge da fuori. Con due timer della STESSA durata ma un avvio sfalsato (questo parte
+// prima: il DB read della cache + l'overhead di chiamata a computeShadeWater* precedono l'avvio
+// del timer interno su fetchOverpass), il timeout esterno scade quasi sempre PRIMA che Overpass
+// abbia una vera possibilità di rispondere — bastava che il mirror più veloce impiegasse più di
+// ~14s (comune, non un caso limite) perché questa route restituisse 502 invece del risultato.
+// Per un percorso appena importato (nessuna cache da cui ripiegare) questo significava che
+// Ombra&Acqua non veniva mai calcolato alla prima richiesta. Ora lascia margine reale sopra i
+// 15s interni, restando comunque sotto maxDuration=30 anche sommando i 4s di MATCH_TIMEOUT_MS
+// prima del blocco try.
+const COMPUTE_TIMEOUT_MS = 22000
 const MATCH_TIMEOUT_MS = 4000
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {

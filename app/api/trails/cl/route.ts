@@ -18,7 +18,13 @@ import type { CLApiResponse } from '@/lib/cl/types'
 
 export const maxDuration = 30
 
-const COMPUTE_TIMEOUT_MS = 15000
+// Era 15000 — questo wrapper avvolge computeCL/computeCLForPlannedHike, il cui collector più
+// lento (satellite, Planetary Computer) ha un proprio SATELLITE_COLLECTOR_TIMEOUT_MS=16000
+// (vedi lib/cl/computeCL.ts) già di per sé superiore ai 15000ms qui: stesso identico schema di
+// bug del sibling /api/trails/sentinel2 (timeout esterno più corto del timeout interno che
+// avvolge). Alzato a 21000 per lasciare margine reale, restando sotto maxDuration=30 anche
+// sommando i 4s di MATCH_TIMEOUT_MS prima del blocco try.
+const COMPUTE_TIMEOUT_MS = 21000
 const MATCH_TIMEOUT_MS = 4000
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
