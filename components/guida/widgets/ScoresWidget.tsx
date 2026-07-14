@@ -4,6 +4,7 @@ import { Compass, Layers } from 'lucide-react'
 import { ScoreRing, computeTrailScoreBreakdown, isTrailScoreVetoed, type CLProps, type CtsProps, type ShadeWaterProps } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import type { SafetyScore } from '@/lib/safetyScore'
+import type { GuideNotice } from '@/lib/guideNotices'
 import { glassTile, textMuted } from '@/components/routehub/overlayTheme'
 import Kicker from '@/components/ui/Kicker'
 
@@ -21,6 +22,9 @@ interface Props {
   showGradient: boolean
   onToggleAspect: () => void
   onToggleGradient: () => void
+  /** Avvisi trovati da Giulia (vedi lib/guideNotices.ts) — puntini sull'anello Sicurezza del badge
+   *  Sintesi, puramente informativi. */
+  guideNotices?: GuideNotice[]
 }
 
 type ScoreView = 'sintesi' | 'dettaglio'
@@ -33,7 +37,7 @@ type ScoreView = 'sintesi' | 'dettaglio'
  *  animazione d'ingresso ogni volta che ci si torna, invece di restare statico dopo il primo mount
  *  — stesso principio già usato da components/guida/widgets/DatiSicurezzaTabs.tsx per le sue tab. */
 export default function ScoresWidget({
-  cl, safety, cts, shadeWater, forecastTempC,
+  cl, safety, cts, shadeWater, forecastTempC, guideNotices,
   showAspectToggle, showGradientToggle, showAspect, showGradient, onToggleAspect, onToggleGradient,
 }: Props) {
   const [view, setView] = useState<ScoreView>('sintesi')
@@ -65,6 +69,7 @@ export default function ScoresWidget({
             value={breakdown.value}
             safety={safety}
             vetoed={isTrailScoreVetoed(safety)}
+            notices={guideNotices}
             size={128}
           />
         </div>

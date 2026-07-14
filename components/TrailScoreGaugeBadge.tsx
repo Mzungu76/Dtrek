@@ -23,7 +23,24 @@ export interface TrailScoreGaugeBadgeProps {
   /** Didascalia a fianco del badge (Sicurezza, o Valore+Sicurezza se `value` è passato) —
    *  disattivata negli usi molto compatti (es. la miniatura di galleria) dove non c'è spazio. */
   showLabel?: boolean
+  /** Avvisi trovati dalla ricerca web di Giulia (vedi lib/guideNotices.ts) — disegnati come
+   *  puntini colorati sull'anello Sicurezza, uno per avviso. Puramente informativo: non cambia il
+   *  numero della Sicurezza né del TS, un percorso con un avviso "warning" e Sicurezza 90 mostra
+   *  comunque 90 — l'avviso segnala solo "verifica prima di partire", non ricalcola il rischio.
+   *  Assente/vuoto ⇒ nessun puntino. */
+  notices?: { severity: NoticeDotSeverity }[]
 }
+
+export type NoticeDotSeverity = 'danger' | 'warning' | 'info'
+
+const NOTICE_DOT_COLOR: Record<NoticeDotSeverity, string> = {
+  danger: '#dc2626',
+  warning: '#f59e0b',
+  info: '#0ea5e9',
+}
+// Oltre questo numero i puntini si affollerebbero sull'anello senza restare leggibili — Giulia
+// comunque crea avvisi solo per problemi concreti e specifici, non ci si aspetta di arrivarci.
+const MAX_NOTICE_DOTS = 5
 
 const NEUTRAL_TRACK = 'rgba(255,255,255,0.18)'
 
@@ -59,7 +76,7 @@ function safetyPhrase(overall: number): string {
  * `<button>` qui dentro anniderebbe due elementi interattivi, HTML non valido oltre che
  * problematico per il click della tile in galleria.
  */
-export function TrailScoreGaugeBadge({ total, value, safety, loading, vetoed, size = 80, showLabel = true }: TrailScoreGaugeBadgeProps) {
+export function TrailScoreGaugeBadge({ total, value, safety, loading, vetoed, size = 80, showLabel = true, notices }: TrailScoreGaugeBadgeProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     const raf = requestAnimationFrame(() => setMounted(true))
@@ -96,6 +113,11 @@ export function TrailScoreGaugeBadge({ total, value, safety, loading, vetoed, si
     ? `${valuePhrase(value)}, ${safetyPhrase(safety.overall)}`
     : safety?.label
 
+  // Distribuiti sull'anello Sicurezza, non ammucchiati in un angolo — a partire da alto-destra
+  // (non esattamente in cima, dove parte l'arco stesso) e girando in senso orario.
+  const noticeDots = (notices ?? []).slice(0, MAX_NOTICE_DOTS)
+  const dotR = Math.max(2.5, size * 0.045)
+
   return (
     <div
       className="flex items-center gap-2.5"
@@ -119,6 +141,17 @@ export function TrailScoreGaugeBadge({ total, value, safety, loading, vetoed, si
               style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(.22,.8,.25,1) 120ms' }}
             />
           )}
+          {noticeDots.map((n, i) => {
+            const angle = (-90 + 40 + (360 / Math.max(noticeDots.length, 1)) * i) * (Math.PI / 180)
+            const dx = cx + rOuter * Math.cos(angle)
+            const dy = cy + rOuter * Math.sin(angle)
+            return (
+              <circle
+                key={i} cx={dx} cy={dy} r={dotR} fill={NOTICE_DOT_COLOR[n.severity]} stroke="#fff" strokeWidth={1.25}
+                style={{ opacity: mounted ? 1 : 0, transition: `opacity 300ms ease ${260 + i * 80}ms` }}
+              />
+            )
+          })}
         </svg>
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <span className="font-display font-black leading-none text-white tabular-nums" style={{ fontSize: size * 0.32, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>

@@ -13,7 +13,7 @@ import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
-import { extractGuideNotices, parseNoticeSource } from '@/lib/guideNotices'
+import { extractGuideNotices, normalizeGuideNotices, parseNoticeSource, type GuideNotice } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
@@ -42,6 +42,14 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+// Stile del riquadro avviso per gravità (vedi lib/guideNotices.ts) — una chiusura reale (danger)
+// deve leggersi diversamente da una nota stagionale (info), non tutte uguali in ambra.
+const NOTICE_SEVERITY_STYLE: Record<GuideNotice['severity'], { box: string; icon: string; text: string; link: string }> = {
+  danger:  { box: 'border-red-200 bg-red-50',       icon: 'text-red-600',    text: 'text-red-900',    link: 'bg-red-100 hover:bg-red-200 text-red-800' },
+  warning: { box: 'border-amber-200 bg-amber-50',   icon: 'text-amber-600',  text: 'text-amber-900',  link: 'bg-amber-100 hover:bg-amber-200 text-amber-800' },
+  info:    { box: 'border-sky-200 bg-sky-50',       icon: 'text-sky-600',    text: 'text-sky-900',    link: 'bg-sky-100 hover:bg-sky-200 text-sky-800' },
+}
+
 interface DisplaySection {
   key: GuideSectionKey | `legacy-${number}`
   guideKey: GuideSectionKey | null
@@ -64,6 +72,10 @@ export interface ScoresBundle {
   showGradient: boolean
   onToggleAspect: () => void
   onToggleGradient: () => void
+  /** Avvisi trovati dalla ricerca web di Giulia (vedi lib/guideNotices.ts) — puramente
+   *  informativi, mostrati come puntini colorati sull'anello Sicurezza del badge a doppio anello
+   *  (components/TrailScoreGaugeBadge.tsx), non entrano nel calcolo del punteggio. */
+  guideNotices?: GuideNotice[]
 }
 
 export interface SafetyDetailsBundle {
@@ -199,7 +211,7 @@ export default function GuideReader({
   weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura, driving,
 }: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
-  const [guideNotices, setGuideNotices] = useState<string[]>(hike.cachedGuideNotices ?? [])
+  const [guideNotices, setGuideNotices] = useState<GuideNotice[]>(normalizeGuideNotices(hike.cachedGuideNotices))
   const [guideSources, setGuideSources] = useState<GuideSource[]>(hike.cachedGuideSources ?? [])
   const [genStatus,    setGenStatus]    = useState<string | undefined>(undefined)
   const [generating,   setGenerating]   = useState(false)
@@ -241,7 +253,7 @@ export default function GuideReader({
   // while this tab stays open, or the cached guide arriving from elsewhere).
   useEffect(() => {
     setGuideText(hike.cachedGuide ?? '')
-    setGuideNotices(hike.cachedGuideNotices ?? [])
+    setGuideNotices(normalizeGuideNotices(hike.cachedGuideNotices))
     setGuideSources(hike.cachedGuideSources ?? [])
   }, [hike.id, hike.cachedGuide, hike.cachedGuideNotices, hike.cachedGuideSources])
 
@@ -663,7 +675,7 @@ export default function GuideReader({
           />
         )
       case 'dati_sicurezza':
-        return <DatiSicurezzaTabs scores={scores} safetyDetails={safetyDetails} />
+        return <DatiSicurezzaTabs scores={scores ? { ...scores, guideNotices } : scores} safetyDetails={safetyDetails} />
       case 'luoghi':
         return poiList
           ? (
@@ -822,21 +834,22 @@ export default function GuideReader({
             {guideNotices.length > 0 && (
               <div className="mt-4 space-y-2">
                 {guideNotices.map((notice, i) => {
-                  const { text, url } = parseNoticeSource(notice)
+                  const { text, url } = parseNoticeSource(notice.text)
+                  const style = NOTICE_SEVERITY_STYLE[notice.severity]
                   return (
-                    <div key={i} className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${style.box}`}>
+                      <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${style.icon}`} />
                       <div className="min-w-0">
-                        <p className="text-[13px] leading-relaxed text-amber-900">{text}</p>
+                        <p className={`text-[13px] leading-relaxed ${style.text}`}>{text}</p>
                         {url && (
                           <a
                             href={url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors text-[11px] text-amber-800"
+                            className={`mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full transition-colors text-[11px] ${style.link}`}
                             title={url}
                           >
-                            <Link2 className="w-3 h-3 shrink-0 text-amber-600" />
+                            <Link2 className={`w-3 h-3 shrink-0 ${style.icon}`} />
                             <span className="truncate">Vai alla fonte</span>
                           </a>
                         )}

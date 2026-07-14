@@ -9,6 +9,7 @@ import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
 import { computeTrailScoreTotal, computeTrailScoreBreakdown, isTrailScoreVetoed, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import { normalizeGuideNotices } from '@/lib/guideNotices'
 import { useCL, useSentinel2 } from '@/lib/cl/useCL'
 import { useFlora } from '@/lib/useFlora'
 import {
@@ -639,6 +640,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           safety={safetyScore}
           loading={scoreLoading}
           vetoed={isTrailScoreVetoed(safetyScore)}
+          notices={normalizeGuideNotices(hike.cachedGuideNotices)}
         />
       </button>
     )
