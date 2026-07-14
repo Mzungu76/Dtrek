@@ -22,6 +22,14 @@ const STATIC_TTL_MS = SI_STATIC_TTL_MS
 const DYNAMIC_TTL_MS = SI_DYNAMIC_TTL_MS
 const SATELLITE_TTL_MS = SI_SATELLITE_TTL_MS
 const COLLECTOR_TIMEOUT_MS = 5000
+// Il collector satellite (lib/cl/signals/satelliteSignals.ts, Planetary Computer) fa una catena
+// di fetch necessariamente sequenziale: 2 ricerche STAC in parallelo (fino a TIMEOUT_MS=6000ms
+// ciascuna, vedi lib/sentinel2/planetaryComputerClient.ts), seguite dalla lettura di più bande
+// raster (ogni banda è a sua volta 2 fetch sequenziali — token SAS poi lettura finestra — fino a
+// 12000ms). COLLECTOR_TIMEOUT_MS=5000 non gli dava mai una vera possibilità di completare: il
+// timeout scattava prima che la prima ricerca STAC potesse anche solo rispondere, non solo nei
+// casi limite. Vedi anche app/api/trails/cl/route.ts's COMPUTE_TIMEOUT_MS, alzato in coerenza.
+const SATELLITE_COLLECTOR_TIMEOUT_MS = 16000
 const FORCE_REFRESH_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
 // Thrown by computeCL/computeCLForPlannedHike when a manual `force` refresh
@@ -292,7 +300,9 @@ async function runClPipeline(
   }
   if (satelliteExpired) tasks.push({ key: 'satellite', promise: collectSatelliteSignal(collectorId, ctx), neutral: NEUTRAL_SATELLITE })
 
-  const settled = await Promise.allSettled(tasks.map(t => withTimeout(t.promise, COLLECTOR_TIMEOUT_MS)))
+  const settled = await Promise.allSettled(
+    tasks.map(t => withTimeout(t.promise, t.key === 'satellite' ? SATELLITE_COLLECTOR_TIMEOUT_MS : COLLECTOR_TIMEOUT_MS)),
+  )
 
   let partial = false
   const fresh: Partial<Record<CollectorKey, unknown>> = {}
