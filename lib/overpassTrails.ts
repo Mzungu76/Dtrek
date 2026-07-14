@@ -10,10 +10,7 @@ const OVERPASS_ENDPOINTS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
 
-// Races all mirrors and returns the first successful response — avoids waiting out
-// a slow/down primary's full timeout before trying the others (sequential fallback
-// made trail lookups feel very slow when overpass-api.de was congested).
-export async function fetchOverpass<T = unknown>(query: string, timeoutMs = 20_000): Promise<T> {
+async function fetchOverpassOnce<T>(query: string, timeoutMs: number): Promise<T> {
   const attempts = OVERPASS_ENDPOINTS.map(async endpoint => {
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -24,11 +21,34 @@ export async function fetchOverpass<T = unknown>(query: string, timeoutMs = 20_0
     if (!res.ok) throw new Error(`status ${res.status}`)
     return res.json() as Promise<T>
   })
+  return Promise.any(attempts)
+}
 
+// Races all mirrors and returns the first successful response — avoids waiting out
+// a slow/down primary's full timeout before trying the others (sequential fallback
+// made trail lookups feel very slow when overpass-api.de was congested).
+//
+// Un singolo retry dopo una breve pausa (non un'altra corsa immediata sugli stessi 3 mirror,
+// che sarebbe stata sostanzialmente la stessa richiesta ripetuta subito) copre il caso — comune
+// durante un ricalcolo massivo (lib/recalcScores.ts, chiama questa funzione più volte al secondo
+// per sentieri diversi) — in cui tutti e tre i mirror pubblici rispondono 429/504 per throttling
+// momentaneo lato loro, non perché il servizio sia davvero giù. Senza questo, un batch di
+// ricalcolo bulk poteva veder fallire in blocco Ombra&Acqua/CL (entrambi passano da qui) proprio
+// nei minuti in cui il carico concorrente generato dal batch stesso li affollava.
+export async function fetchOverpass<T = unknown>(query: string, timeoutMs = 20_000): Promise<T> {
   try {
-    return await Promise.any(attempts)
+    return await fetchOverpassOnce<T>(query, timeoutMs)
   } catch {
-    throw new Error('Overpass non disponibile')
+    // Pausa breve, non un altro timeoutMs pieno: i chiamanti di questa funzione hanno spesso un
+    // proprio budget stretto attorno alla chiamata intera (vedi computeCL.ts/computeShadeWater.ts,
+    // dove timeoutMs è già tarato vicino al limite del wrapper esterno) — un retry che da solo
+    // rischia di superare quel budget varrebbe quanto nessun retry, solo scoperto più tardi.
+    await new Promise(r => setTimeout(r, 1200))
+    try {
+      return await fetchOverpassOnce<T>(query, timeoutMs)
+    } catch {
+      throw new Error('Overpass non disponibile')
+    }
   }
 }
 

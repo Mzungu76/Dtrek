@@ -6,7 +6,7 @@ import { Loader2, RefreshCw, ChevronDown, Wrench } from 'lucide-react'
 
 /**
  * Strumenti di manutenzione dati — ricalcolo massivo dei punteggi (CTS, CL,
- * Safety Score, Sentinel-2) su tutti i percorsi. Sono operazioni pesanti e
+ * Safety Score, Ombra e Acqua) su tutti i percorsi. Sono operazioni pesanti e
  * opzionali, non azioni quotidiane: raccolte qui, collassate di default,
  * invece di essere sparse ed esposte come bottoni utente normali altrove
  * in Profilo. Piano di ristrutturazione, Parte 2.4.
@@ -62,10 +62,12 @@ export default function SectionAvanzate() {
   async function handleRecalcSentinel2() {
     setS2Running(true)
     setS2Progress('Recupero percorsi…')
-    const { ok } = await recalcAllSentinel2(setS2Progress).catch(() => ({ ok: 0, failed: 0 }))
+    const { ok, failed } = await recalcAllSentinel2(setS2Progress).catch(() => ({ ok: 0, failed: 0 }))
     setS2Running(false)
-    setS2Progress(ok > 0 ? `Completato · ${ok} dati Sentinel-2 ricalcolati.` : 'Nessun dato Sentinel-2 ricalcolato.')
-    setTimeout(() => setS2Progress(''), 4000)
+    setS2Progress(ok > 0
+      ? `Completato · ${ok} dati Ombra e Acqua ricalcolati${failed ? `, ${failed} non disponibili` : ''}.`
+      : `Nessun dato Ombra e Acqua ricalcolato${failed ? ` · ${failed} non disponibili (Overpass irraggiungibile o nessuna geometria)` : ''}.`)
+    setTimeout(() => setS2Progress(''), 6000)
   }
 
   async function handleRecalcAll() {
@@ -79,8 +81,8 @@ export default function SectionAvanzate() {
       )
       const cl = await recalcAllCL(text => setAllProgress(`CL: ${text}`))
       const safety = await recalcAllSafety(text => setAllProgress(`Safety: ${text}`))
-      const s2 = await recalcAllSentinel2(text => setAllProgress(`Sentinel-2: ${text}`))
-      setAllProgress(`Completato · ${ctsCount} CTS, ${cl.ok} CL, ${safety} Safety Score, ${s2.ok} Sentinel-2 ricalcolati.`)
+      const s2 = await recalcAllSentinel2(text => setAllProgress(`Ombra e Acqua: ${text}`))
+      setAllProgress(`Completato · ${ctsCount} CTS, ${cl.ok} CL, ${safety} Safety Score, ${s2.ok} Ombra e Acqua ricalcolati${s2.failed ? ` (${s2.failed} non disponibili)` : ''}.`)
     } catch {
       setAllProgress('Errore durante il ricalcolo.')
     }
@@ -151,7 +153,7 @@ export default function SectionAvanzate() {
         >
           {s2Running
             ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {s2Progress || 'Ricalcolo in corso…'}</>
-            : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutti i dati Sentinel-2</>
+            : <><RefreshCw className="w-3.5 h-3.5" /> Ricalcola tutti i dati Ombra e Acqua</>
           }
         </button>
         {!s2Running && s2Progress && (

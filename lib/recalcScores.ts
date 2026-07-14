@@ -158,6 +158,18 @@ function clSentinelQuery(meta: { osmId?: number; routePolyline?: [number, number
  *  bypass_cooldown=1 skips the 24h anti-mash cooldown meant for the per-hike "Aggiorna CL"
  *  button — legitimate here since this is itself the explicit, consciously-triggered bulk
  *  action (see the comment on bypassCooldown in lib/cl/computeCL.ts). */
+// chunkSize/delayMs più bassi del default di batchUpdate (5/200ms): ogni CL forzato con force=1
+// riattiva ANCHE i collector "static" (OSM tags + densità), entrambi via Overpass (vedi
+// lib/overpassTrails.ts) — con 5 sentieri in parallelo, ciascuno dei quali corre già su 3 mirror
+// Overpass contemporaneamente, un ricalcolo massivo generava fino a ~30 richieste concorrenti agli
+// stessi mirror pubblici, che rispondevano 429/504 in blocco. computeCL non fa distinzione tra
+// "nessuna penalità" e "il collector è andato in timeout" (torna comunque un punteggio, solo da
+// segnali neutri) — il ricalcolo massivo appariva quindi "completato" ma senza che nulla fosse
+// davvero stato ricalcolato. Vedi anche il retry aggiunto a fetchOverpass, che coper questo caso
+// anche per le chiamate singole (non solo il batch).
+const EXTERNAL_API_CHUNK_SIZE = 2
+const EXTERNAL_API_DELAY_MS = 1500
+
 export async function recalcAllCL(onProgress?: (text: string) => void): Promise<{ ok: number; rateLimited: number; failed: number }> {
   const hikes = await getAllPlanned()
   let ok = 0, rateLimited = 0, failed = 0
@@ -171,7 +183,7 @@ export async function recalcAllCL(onProgress?: (text: string) => void): Promise<
     if (res.status === 429) { rateLimited++; return }
     if (!res.ok) { failed++; return }
     ok++
-  })
+  }, EXTERNAL_API_CHUNK_SIZE, EXTERNAL_API_DELAY_MS)
   return { ok, rateLimited, failed }
 }
 
@@ -181,15 +193,26 @@ export async function recalcAllCL(onProgress?: (text: string) => void): Promise<
 export async function recalcAllSentinel2(onProgress?: (text: string) => void): Promise<{ ok: number; failed: number }> {
   const hikes = await getAllPlanned()
   let idx = 0
+  let ok = 0
+  let failed = 0
   const eligible = hikes.filter(h => clSentinelQuery(h) != null)
-  const { ok, failed } = await batchUpdate(eligible, async meta => {
+  await batchUpdate(eligible, async meta => {
     onProgress?.(`${++idx}/${eligible.length} — ${meta.title ?? 'Pianificata'}`)
     const qs = clSentinelQuery(meta)
     if (!qs) return
-    const res = await fetch(`/api/trails/sentinel2?${qs}&force=1`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json().catch(() => null) as { available?: boolean } | null
-    if (data?.available) refreshTsForHike(meta.id).catch(() => {})
-  })
+    try {
+      const res = await fetch(`/api/trails/sentinel2?${qs}&force=1`)
+      if (!res.ok) { failed++; return }
+      const data = await res.json().catch(() => null) as { available?: boolean } | null
+      // La route risponde 200 anche quando il calcolo interno è fallito silenziosamente (Overpass
+      // irraggiungibile, nessuna geometria…) — vedi runShadeWaterPipeline in
+      // lib/shadeWater/computeShadeWater.ts, che intercetta l'errore e torna { available: false }
+      // invece di propagarlo. Contare questi come "ok" solo perché l'HTTP status è 200 nascondeva
+      // un ricalcolo che, di fatto, non aveva prodotto nulla di nuovo — da qui la percezione che il
+      // pulsante "non facesse niente".
+      if (data?.available) { ok++; refreshTsForHike(meta.id).catch(() => {}) }
+      else failed++
+    } catch { failed++ }
+  }, EXTERNAL_API_CHUNK_SIZE, EXTERNAL_API_DELAY_MS)
   return { ok, failed }
 }
