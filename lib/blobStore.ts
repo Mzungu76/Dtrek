@@ -1,6 +1,6 @@
 import { TcxActivity, type TrackPoint } from './tcxParser'
 import { lsGet, lsSet, lsDel, LS_KEYS, obEnqueue } from './localStore'
-import { registerEntityFlusher, scheduleFlush } from './sync/syncEngine'
+import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
 import { apiFetch, isPermanentClientError } from './apiFetch'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
@@ -200,32 +200,23 @@ export async function deleteActivity(id: string): Promise<void> {
   scheduleFlush()
 }
 
-registerEntityFlusher(ENTITY_TYPE, async (rows) => {
-  const succeededIds: number[] = []
-  for (const row of rows) {
-    try {
-      if (row.op === 'delete') {
-        await apiFetch(`/api/activity?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
-      } else if (row.op === 'upsert') {
-        await apiFetch('/api/activity', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify(row.payload),
-        })
-      } else {
-        await apiFetch('/api/activity', {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ id: row.recordId, ...(row.payload as object ?? {}) }),
-        })
-      }
-      succeededIds.push(row.outboxId!)
-    } catch {
-      // Leave this row pending — retried on the next flush trigger.
-    }
+registerEntityFlusher(ENTITY_TYPE, (rows) => flushRows(rows, async (row) => {
+  if (row.op === 'delete') {
+    await apiFetch(`/api/activity?id=${encodeURIComponent(row.recordId)}`, { method: 'DELETE' })
+  } else if (row.op === 'upsert') {
+    await apiFetch('/api/activity', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(row.payload),
+    })
+  } else {
+    await apiFetch('/api/activity', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id: row.recordId, ...(row.payload as object ?? {}) }),
+    })
   }
-  return { succeededIds }
-})
+}))
 
 /** Global stats calculated from the list (no extra fetch). */
 export function computeGlobalStats(activities: ActivityMeta[]) {

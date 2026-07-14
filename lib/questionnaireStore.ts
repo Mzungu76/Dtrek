@@ -1,5 +1,5 @@
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from './localStore'
-import { registerEntityFlusher, scheduleFlush } from './sync/syncEngine'
+import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
 
 const ENTITY_TYPE = 'hike_questionnaire'
 
@@ -142,20 +142,11 @@ export async function setQuestionnaireStatus(
   scheduleFlush()
 }
 
-registerEntityFlusher(ENTITY_TYPE, async (rows) => {
-  const succeededIds: number[] = []
-  for (const row of rows) {
-    try {
-      const res = await fetch('/api/questionnaire', {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(row.payload),
-      })
-      if (!res.ok) throw new Error(`${res.status}`)
-      succeededIds.push(row.outboxId!)
-    } catch {
-      // Leave this row pending — retried on the next flush trigger.
-    }
-  }
-  return { succeededIds }
-})
+registerEntityFlusher(ENTITY_TYPE, (rows) => flushRows(rows, async (row) => {
+  const res = await fetch('/api/questionnaire', {
+    method:  'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(row.payload),
+  })
+  if (!res.ok) throw new Error(`${res.status}`)
+}))

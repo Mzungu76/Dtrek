@@ -24,6 +24,26 @@ export function registerEntityFlusher(entityType: string, handler: FlushHandler)
   flushHandlers.set(entityType, handler)
 }
 
+/**
+ * Shared per-row flush loop for entities whose flusher applies each outbox row independently
+ * (as opposed to lib/sync/userSettingsStore.ts's flusher, which merges every pending row into a
+ * single PATCH instead — genuinely different batching semantics, not covered here): tries
+ * `apply` for each row, collects the ids of the ones that succeeded, and leaves the rest pending
+ * for the next flush trigger. Every other entity store repeated this exact loop by hand.
+ */
+export async function flushRows(rows: OutboxRow[], apply: (row: OutboxRow) => Promise<void>): Promise<FlushResult> {
+  const succeededIds: number[] = []
+  for (const row of rows) {
+    try {
+      await apply(row)
+      succeededIds.push(row.outboxId!)
+    } catch {
+      // Leave this row pending — retried on the next flush trigger.
+    }
+  }
+  return { succeededIds }
+}
+
 const DEBOUNCE_MS = 15_000
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
