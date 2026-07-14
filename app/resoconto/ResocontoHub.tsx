@@ -52,6 +52,7 @@ import { useTerrainProfile } from './useTerrainProfile'
 import { useProtectedAreaCheck } from './useProtectedAreaCheck'
 import { useDrivingDistance } from './useDrivingDistance'
 import { useUserPrefs } from '@/lib/useUserPrefs'
+import { useCtsRecompute } from '@/lib/useCtsRecompute'
 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
@@ -231,21 +232,19 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // results to computeCtsForActivity as `prefetched` instead of having it repeat the exact same
   // /api/pois, /api/tei-dtm, /api/tei-terrain and /api/natura2000 calls this component already
   // made for its own map/UI state (mirrors the same fix on the Guida/GuidaHub side).
-  useEffect(() => {
-    if (!activity) return
-    const fresh = activity.trailScore != null && isScoreFresh(activity.trailScoreComputedAt)
-    if (fresh) return
-    const gps = activity.trackPoints.filter(p => p.lat && p.lon)
-    if (gps.length < 2) return
-    if (!poisLoaded || dtmProfile === undefined || terrainProfile === undefined || inProtectedArea === undefined || !prefsLoaded) return
-    let cancelled = false
-    setCtsComputing(true)
-    computeCtsForActivity(activity, { pois, dtmProfile, terrainProfile, inProtectedArea, prefs: { prefSforzo, prefDurata, hrRest, hrMax } })
-      .then(result => { if (!cancelled && result) setActivity(prev => prev ? { ...prev, ...result } : prev) })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setCtsComputing(false) })
-    return () => { cancelled = true }
-  }, [activity?.id, poisLoaded, dtmProfile, terrainProfile, inProtectedArea, prefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  useCtsRecompute({
+    entity: activity,
+    entityId: activity?.id,
+    isFresh: (a) => a.trailScore != null && isScoreFresh(a.trailScoreComputedAt),
+    hasEnoughGps: (a) => a.trackPoints.filter(p => p.lat && p.lon).length >= 2,
+    poisReady: poisLoaded,
+    dtmProfile, terrainProfile, inProtectedArea, prefsLoaded,
+    pois,
+    prefs: { prefSforzo, prefDurata, hrRest, hrMax },
+    compute: computeCtsForActivity,
+    onResult: (result) => setActivity(prev => prev ? { ...prev, ...result } : prev),
+    setComputing: setCtsComputing,
+  })
 
   useEffect(() => {
     const bs = activity?.linkedBeautyScore

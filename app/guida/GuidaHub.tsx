@@ -41,6 +41,7 @@ import { useTerrainProfile } from './useTerrainProfile'
 import { useProtectedAreaCheck } from './useProtectedAreaCheck'
 import { useDrivingDistance } from './useDrivingDistance'
 import { useSafetyScore } from './useSafetyScore'
+import { useCtsRecompute } from '@/lib/useCtsRecompute'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -315,21 +316,20 @@ export default function GuidaHub({ id }: { id?: string }) {
   // component is already making for its own map/UI state.
   useEffect(() => { setCtsSettled(false) }, [hike?.id])
 
-  useEffect(() => {
-    if (!hike) return
-    const fresh = hike.cachedTrailScore != null && isScoreFresh(hike.cachedScoresComputedAt)
-    if (fresh) { setCtsSettled(true); return }
-    const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
-    if (gps.length < 2) { setCtsSettled(true); return }
-    if (!poisFullyLoaded || dtmProfile === undefined || terrainProfile === undefined || inProtectedArea === undefined || !prefsLoaded) return
-    let cancelled = false
-    setCtsComputing(true)
-    computeCtsForHike(hike, { pois, dtmProfile, terrainProfile, inProtectedArea, prefs: { prefSforzo, prefDurata, hrRest, hrMax } })
-      .then(result => { if (!cancelled && result) setHike(prev => prev ? { ...prev, ...result } : prev) })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) { setCtsComputing(false); setCtsSettled(true) } })
-    return () => { cancelled = true }
-  }, [hike?.id, poisFullyLoaded, dtmProfile, terrainProfile, inProtectedArea, prefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  useCtsRecompute({
+    entity: hike,
+    entityId: hike?.id,
+    isFresh: (h) => h.cachedTrailScore != null && isScoreFresh(h.cachedScoresComputedAt),
+    hasEnoughGps: (h) => (h.trackPoints ?? []).filter(p => p.lat && p.lon).length >= 2,
+    poisReady: poisFullyLoaded,
+    dtmProfile, terrainProfile, inProtectedArea, prefsLoaded,
+    pois,
+    prefs: { prefSforzo, prefDurata, hrRest, hrMax },
+    compute: computeCtsForHike,
+    onResult: (result) => setHike(prev => prev ? { ...prev, ...result } : prev),
+    setComputing: setCtsComputing,
+    onSettled: () => setCtsSettled(true),
+  })
 
   // Once Sicurezza/Comfort TrailScore are both settled (no per-item fetch needed — this only runs
   // for the hike that's actually open), persists the aggregate to Supabase. From then on every

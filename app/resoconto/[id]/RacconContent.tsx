@@ -13,6 +13,7 @@ import {
   type ReportSection, type ReportAuthoredBy, type HikeReport,
 } from '@/lib/reportStore'
 import { getReport, saveReportContent, cacheReport } from '@/lib/sync/hikeReportStore'
+import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
 import ManualEditor from '@/app/components/ManualEditor'
 import {
@@ -144,31 +145,7 @@ export default function RacconContent({ activityId }: { activityId: string }) {
     }))
 
     try {
-      const res = await fetch('/api/resoconto', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ activityId: id, length, photos: photoMeta }),
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        if (res.status === 402) {
-          setApiError('Aggiungi la tua chiave API Claude nelle impostazioni per usare questa funzione.')
-        } else {
-          setApiError(err.message ?? 'Errore durante la generazione.')
-        }
-        return
-      }
-
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let full = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        full += decoder.decode(value, { stream: true })
-        setContent(full)
-      }
+      const full = await streamFetchText('/api/resoconto', { activityId: id, length, photos: photoMeta }, setContent)
       // The server already upserted this row (see app/api/resoconto/route.ts) — mirror it into
       // the local cache so a cache-first getReport() on the next visit doesn't miss it.
       const now = new Date().toISOString()
@@ -184,8 +161,17 @@ export default function RacconContent({ activityId }: { activityId: string }) {
         updated_at: now,
       }
       await cacheReport(id, generated)
-    } catch {
-      setApiError('Errore di rete. Riprova.')
+    } catch (e) {
+      if (e instanceof StreamFetchError) {
+        if (e.status === 402) {
+          setApiError('Aggiungi la tua chiave API Claude nelle impostazioni per usare questa funzione.')
+        } else {
+          const err = e.body as { message?: string }
+          setApiError(err.message ?? 'Errore durante la generazione.')
+        }
+      } else {
+        setApiError('Errore di rete. Riprova.')
+      }
     } finally {
       setGenerating(false)
     }
