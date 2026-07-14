@@ -1,6 +1,6 @@
 import type { PoiItem } from './overpass'
 import { computeTrailScore, type CtsConfidence } from './trailScore'
-import { computeTEI, teiToBeautyScore, type OsmTeiData } from './tei'
+import { computeTEI, teiToBeautyScore, type OsmTeiData, type TeiWeights, type FAntrSensitivity } from './tei'
 import type { TrailDtmProfile } from './dtm/trailDtmProfile'
 import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import { checkProtectedArea } from './natura2000/checkProtectedArea'
@@ -22,7 +22,10 @@ export interface CtsPrefetched {
   dtmProfile?: TrailDtmProfile
   terrainProfile?: TrailTerrainProfile
   inProtectedArea?: boolean
-  prefs?: { prefSforzo?: number; prefDurata?: number; hrRest?: number; hrMax?: number }
+  prefs?: {
+    prefSforzo?: number; prefDurata?: number; hrRest?: number; hrMax?: number
+    teiWeights?: Partial<TeiWeights>; teiFAntrSensitivity?: FAntrSensitivity
+  }
 }
 
 export interface CtsCoreInput {
@@ -84,6 +87,14 @@ export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetc
     .filter(p => p.lat && p.lon)
     .map(p => p.altitudeMeters ?? 0)
 
+  const settings = await getUserSettingsCached()
+  const prefs = prefetched?.prefs ?? settings
+  const teiWeights = prefetched?.prefs?.teiWeights ?? {
+    cultura: settings.teiPesoCultura, topografia: settings.teiPesoTopografia, idrografia: settings.teiPesoIdrografia,
+    fondo: settings.teiPesoFondo, geodiversita: settings.teiPesoGeodiversita,
+  }
+  const teiFAntrSensitivity = prefetched?.prefs?.teiFAntrSensitivity ?? settings.teiFAntrSensitivity
+
   const tei = computeTEI({
     track: gps,
     elevGain: hike.elevationGain,
@@ -95,11 +106,13 @@ export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetc
     dtmProfile,
     terrainProfile,
     inProtectedArea: protectedArea?.inProtectedArea,
+    prefSforzo: prefs.prefSforzo,
+    weights: teiWeights,
+    fAntrSensitivity: teiFAntrSensitivity,
   })
   const bs = teiToBeautyScore(tei)
   const confidence: CtsConfidence = tei.confidence
 
-  const prefs = prefetched?.prefs ?? await getUserSettingsCached()
   let { ts } = computeTrailScore(bs, {
     distanceMeters: hike.distanceMeters,
     elevationGain:  hike.elevationGain,

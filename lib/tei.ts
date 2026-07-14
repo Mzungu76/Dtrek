@@ -52,6 +52,40 @@ export interface TeiResult {
   version:    2
 }
 
+// Le 5 componenti sono "quanto ti importa" (0-100), non frazioni già normalizzate — vedi
+// normalizeTeiWeights. Default = i pesi fissi di sempre (20/30/20/20/10), così un utente che non
+// tocca gli slider in Impostazioni ottiene esattamente lo stesso TEI di prima.
+export interface TeiWeights {
+  cultura:      number
+  topografia:   number
+  idrografia:   number
+  fondo:        number
+  geodiversita: number
+}
+
+export const DEFAULT_TEI_WEIGHTS: TeiWeights = {
+  cultura: 20, topografia: 30, idrografia: 20, fondo: 20, geodiversita: 10,
+}
+
+/** Normalizza i pesi "quanto ti importa" (0-100 ciascuno) in frazioni che sommano a 1 —
+ *  stesso principio di lib/beautyScore.ts's normalizeWeights, adattato alle 5 componenti TEI. */
+export function normalizeTeiWeights(raw?: Partial<TeiWeights>): TeiWeights {
+  const w = { ...DEFAULT_TEI_WEIGHTS, ...raw }
+  const sum = w.cultura + w.topografia + w.idrografia + w.fondo + w.geodiversita
+  if (sum <= 0) return normalizeTeiWeights(DEFAULT_TEI_WEIGHTS)
+  return {
+    cultura:      w.cultura      / sum,
+    topografia:   w.topografia   / sum,
+    idrografia:   w.idrografia   / sum,
+    fondo:        w.fondo        / sum,
+    geodiversita: w.geodiversita / sum,
+  }
+}
+
+/** Sensibilità alla penalità antropica (asfalto/elettrodotti/traffico) — vedi computeFantr.
+ *  'normale' = comportamento storico (fino a -25%), 'ignora' la disattiva, 'fastidio' la amplifica. */
+export type FAntrSensitivity = 'ignora' | 'normale' | 'fastidio'
+
 export interface TeiInput {
   track:           [number, number][]
   elevGain:        number
@@ -63,6 +97,16 @@ export interface TeiInput {
   dtmProfile?:     TrailDtmProfile
   terrainProfile?: TrailTerrainProfile
   inProtectedArea?: boolean
+  /** Preferenza di sforzo (0-100, vedi lib/useUserPrefs.ts) — usata da V_topo/V_geo per giudicare
+   *  un sali-scendo marcato o un percorso pianeggiante in base a cosa l'utente sta cercando,
+   *  invece di trattare "più dislivello/varietà" come oggettivamente meglio per chiunque. Assente
+   *  ⇒ 50 (nessuna preferenza dichiarata, target a metà strada). */
+  prefSforzo?: number
+  /** "Quanto ti importa" per le 5 componenti (0-100 ciascuna) — vedi TeiWeights. Assente/parziale
+   *  ⇒ normalizeTeiWeights riempie con i default (pesi storici). */
+  weights?: Partial<TeiWeights>
+  /** Assente ⇒ 'normale' (comportamento storico). */
+  fAntrSensitivity?: FAntrSensitivity
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -169,9 +213,15 @@ function proximityFactor(distM: number): number {
 // even though it's independent of the POI-density logic below.
 const PROTECTED_AREA_BONUS = 0.5
 
+// Nessun sito culturale nei dintorni non è un difetto del percorso, è solo un'altra tipologia di
+// sentiero (può piacere o no, non è oggettivamente peggiore) — quindi il default è il centro
+// della scala (5, "nessuna informazione"), non un voto basso. La presenza di siti rilevanti resta
+// un bonus che sale da lì fino a 10, non un intero range 0-10 dove "niente" equivale al minimo.
+const VCULT_NEUTRAL = 5
+
 function computeVcultBase(segments: GpxSegment[], pois: PoiItem[]): number {
   const cultPois = pois.filter(p => relevanceGrade(p) > 0)
-  if (cultPois.length === 0) return 2
+  if (cultPois.length === 0) return VCULT_NEUTRAL
 
   let weightedSum = 0
   let totalLength = 0
@@ -198,8 +248,9 @@ function computeVcultBase(segments: GpxSegment[], pois: PoiItem[]): number {
     }
   }
 
-  if (totalLength === 0) return 2
-  return clamp(weightedSum / totalLength)
+  if (totalLength === 0) return VCULT_NEUTRAL
+  const intensity = clamp(weightedSum / totalLength) // 0-10, forza del segnale culturale trovato
+  return clamp(VCULT_NEUTRAL + intensity * ((10 - VCULT_NEUTRAL) / 10))
 }
 
 // Bonus applied uniformly on top of every exit path of computeVcultBase (not folded into the
@@ -213,7 +264,18 @@ function computeVcult(segments: GpxSegment[], pois: PoiItem[], inProtectedArea?:
 
 // ── V_topo ────────────────────────────────────────────────────────────────────
 
-function computeVtopo(
+// prefSforzo (0-100, lib/useUserPrefs.ts) → intensità di dislivello/pendenza "desiderata" sulla
+// stessa scala 0-10 di topoIntensity/geoIntensity qui sotto. Assente ⇒ 5 (centro scala): senza una
+// preferenza dichiarata, un percorso con variazione moderata è il compromesso più ragionevole,
+// non un pianeggiante né un percorso estremo.
+function targetIntensity(prefSforzo?: number): number {
+  return clamp((prefSforzo ?? 50) / 10)
+}
+
+// Quanto più il percorso è vario/impegnativo (0 = piatto e regolare, 10 = pendenze estreme e
+// molto variabili) — puramente descrittivo, senza giudizio: non è più vero che "di più" sia
+// "meglio", lo decide targetIntensity(prefSforzo) più sotto.
+function computeTopoIntensity(
   elevGain: number,
   distanceMeters: number,
   segments: GpxSegment[],
@@ -262,7 +324,27 @@ function computeVtopo(
   return clamp(stdScore * 0.40 + optimalSlopeScore * 0.35 + relativeGainScore * 0.25)
 }
 
+// V_topo premia la VICINANZA tra quanto è impegnativo/vario il percorso e quanto lo vuole
+// l'utente — non più "più dislivello o più variabilità = voto più alto" per chiunque. Un
+// pianeggiante non è più penalizzato per chi cerca una passeggiata, un saliscendo estremo non è
+// più automaticamente premiato per chi non l'ha chiesto.
+function computeVtopo(
+  elevGain: number,
+  distanceMeters: number,
+  segments: GpxSegment[],
+  dtmProfile?: TrailDtmProfile,
+  prefSforzo?: number,
+): number {
+  const intensity = computeTopoIntensity(elevGain, distanceMeters, segments, dtmProfile)
+  return clamp(10 - Math.abs(intensity - targetIntensity(prefSforzo)))
+}
+
 // ── V_idro ────────────────────────────────────────────────────────────────────
+
+// Stesso principio di VCULT_NEUTRAL: niente torrenti/cascate/laghi vicino al tracciato non
+// significa "percorso povero" — a qualcuno piacciono i sentieri d'acqua, ad altri no, non è un
+// giudizio oggettivo. Il default è il centro scala, la presenza d'acqua è un bonus sopra quello.
+const VIDRO_NEUTRAL = 5
 
 function computeVidro(
   segments: GpxSegment[],
@@ -270,6 +352,8 @@ function computeVidro(
   waterways: OsmElement[],
   waterShore: OsmElement[] = [],
 ): number {
+  if (segments.length === 0) return VIDRO_NEUTRAL
+
   const waterPois = pois.filter(p => p.type === 'waterfall' || p.type === 'spring')
 
   let waterSegCount = 0
@@ -287,9 +371,11 @@ function computeVidro(
     if (hasWaterPoi || hasWaterway || hasLakeShore) waterSegCount++
   }
 
-  if (segments.length === 0) return 1
-  const idroCoverage = waterSegCount / segments.length
-  return clamp(idroCoverage * 10 * 1.5, 1, 10)
+  const idroCoverage = waterSegCount / segments.length // 0-1
+  // ×1.5 così non serve acqua lungo l'intero tracciato per raggiungere il bonus massimo (come
+  // nella vecchia scala) — a ~67% di copertura si è già al tetto del bonus.
+  const bonus = Math.min(1, idroCoverage * 1.5) * (10 - VIDRO_NEUTRAL)
+  return clamp(VIDRO_NEUTRAL + bonus, VIDRO_NEUTRAL, 10)
 }
 
 // ── V_fond ────────────────────────────────────────────────────────────────────
@@ -432,9 +518,10 @@ function aspectVarietyScore(aspectDegs: number[]): number | null {
   return clamp((circularStdDevDeg(valid) / 180) * 10)
 }
 
-function computeVgeo(segments: GpxSegment[], elevProfile: number[], dtmProfile?: TrailDtmProfile): number {
-  if (segments.length < 3 || elevProfile.length < 3) return 5
-
+// Quanto è morfologicamente varia la quota attraversata (0 = range/alternanza minimi, 10 =
+// dislivelli ampi e molto alternati) — puramente descrittivo, il giudizio arriva dopo (vedi
+// computeVgeo) confrontandolo con targetIntensity(prefSforzo), stesso principio di V_topo.
+function computeGeoIntensity(segments: GpxSegment[], elevProfile: number[], dtmProfile?: TrailDtmProfile): number {
   const minElev = Math.min(...elevProfile)
   const maxElev = Math.max(...elevProfile)
   const rangeScore = clamp((maxElev - minElev) / 100)
@@ -464,7 +551,25 @@ function computeVgeo(segments: GpxSegment[], elevProfile: number[], dtmProfile?:
   return clamp(rangeScore * 0.5 + alternationScore * 0.5)
 }
 
+// Stesso principio di V_topo: premia la vicinanza tra quanto è morfologicamente vario il
+// percorso e quanto lo vuole l'utente, non più "più range/alternanza = voto più alto" per tutti.
+// Dati insufficienti (<3 segmenti/quote) restano un neutro onesto 5, non passano dal confronto —
+// non sappiamo abbastanza per dire se il percorso si avvicina o no al gusto dell'utente.
+function computeVgeo(segments: GpxSegment[], elevProfile: number[], dtmProfile?: TrailDtmProfile, prefSforzo?: number): number {
+  if (segments.length < 3 || elevProfile.length < 3) return 5
+  const intensity = computeGeoIntensity(segments, elevProfile, dtmProfile)
+  return clamp(10 - Math.abs(intensity - targetIntensity(prefSforzo)))
+}
+
 // ── f_antr ────────────────────────────────────────────────────────────────────
+
+// Asfalto/elettrodotti/traffico non sono "un'altra tipologia di percorso" come l'assenza di
+// acqua o di siti culturali — restano una scocciatura per la stragrande maggioranza degli
+// escursionisti, quindi qui il default resta punitivo (a differenza di V_cult/V_idro). Il
+// controllo utente è solo di sensibilità: quanto deve pesare quella scocciatura per te.
+const F_ANTR_SENSITIVITY_MULT: Record<FAntrSensitivity, number> = {
+  ignora: 0, normale: 1, fastidio: 1.6,
+}
 
 function computeFantr(
   track: [number, number][],
@@ -472,6 +577,7 @@ function computeFantr(
   highways: OsmElement[],
   antrHighways: OsmElement[],
   powerLines: OsmElement[],
+  sensitivity: FAntrSensitivity = 'normale',
 ): number {
   let fantr = 0
 
@@ -507,31 +613,34 @@ function computeFantr(
     if (closeLength > 500) fantr += 0.10
   }
 
-  return Math.min(fantr, 0.25)
+  const capped = Math.min(fantr, 0.25)
+  return Math.min(capped * F_ANTR_SENSITIVITY_MULT[sensitivity], 0.4)
 }
 
 // ── Main: computeTEI ──────────────────────────────────────────────────────────
 
 export function computeTEI(input: TeiInput): TeiResult {
-  const { track, elevGain, distanceMeters, pois, osmData, dtmProfile, terrainProfile, inProtectedArea } = input
+  const { track, elevGain, distanceMeters, pois, osmData, dtmProfile, terrainProfile, inProtectedArea, prefSforzo, fAntrSensitivity } = input
   const elevProfile = input.elevProfile ?? []
 
   const segments = segmentGpx(track, elevProfile)
 
   const vCult = computeVcult(segments, pois, inProtectedArea)
-  const vTopo = computeVtopo(elevGain, distanceMeters, segments, dtmProfile)
+  const vTopo = computeVtopo(elevGain, distanceMeters, segments, dtmProfile, prefSforzo)
   const vIdro = computeVidro(segments, pois, osmData?.waterways ?? [], osmData?.waterShore ?? [])
   const { vFond, vFondSource } = computeVfond(segments, osmData?.highways ?? [], terrainProfile)
-  const vGeo  = computeVgeo(segments, elevProfile, dtmProfile)
+  const vGeo  = computeVgeo(segments, elevProfile, dtmProfile, prefSforzo)
 
   const fAntr = computeFantr(
     track, segments,
     osmData?.highways ?? [],
     osmData?.antrHighways ?? [],
     osmData?.powerLines ?? [],
+    fAntrSensitivity,
   )
 
-  const raw   = vCult * 0.20 + vTopo * 0.30 + vIdro * 0.20 + vFond * 0.20 + vGeo * 0.10
+  const w = normalizeTeiWeights(input.weights)
+  const raw   = vCult * w.cultura + vTopo * w.topografia + vIdro * w.idrografia + vFond * w.fondo + vGeo * w.geodiversita
   const score = clamp(raw * (1 - fAntr))
 
   const { label, color } = teiLabel(score)

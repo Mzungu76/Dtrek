@@ -296,6 +296,20 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMES
 -- non è mai stato calcolato.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS hiker_history_stats JSONB;
 
+-- Pesi personalizzabili del TEI ("quanto ti importa" 0-100 per componente, vedi
+-- normalizeTeiWeights in lib/tei.ts) — default = i pesi fissi storici (20/30/20/20/10), così un
+-- utente che non tocca gli slider in Impostazioni ottiene lo stesso TEI di prima. Introdotti
+-- perché il TEI trattava l'assenza di acqua/siti culturali come un difetto oggettivo invece che
+-- come un gusto personale.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_peso_cultura      SMALLINT DEFAULT 20;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_peso_topografia   SMALLINT DEFAULT 30;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_peso_idrografia   SMALLINT DEFAULT 20;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_peso_fondo        SMALLINT DEFAULT 20;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_peso_geodiversita SMALLINT DEFAULT 10;
+-- Sensibilità alla penalità antropica (asfalto/elettrodotti/traffico) — 'normale' = comportamento
+-- storico, a differenza dei pesi sopra questo non è "assenza = neutro" (vedi lib/tei.ts).
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_f_antr_sensitivity TEXT DEFAULT 'normale' CHECK (tei_f_antr_sensitivity IN ('ignora','normale','fastidio'));
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --
