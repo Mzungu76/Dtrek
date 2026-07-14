@@ -59,8 +59,8 @@ export async function GET(req: NextRequest) {
       .order('start_time', { ascending: false })
 
     if (error) throw error
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return NextResponse.json((data ?? [] as any[]).map((r: any) => rowToMeta(r)))
+    const rows = (data ?? []) as unknown as Record<string, unknown>[]
+    return NextResponse.json(rows.map(rowToMeta))
   } catch (e) {
     console.error('GET /api/activities:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })

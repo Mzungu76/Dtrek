@@ -1,5 +1,6 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
+import type * as L from 'leaflet'
 import { useEffect, useRef } from 'react'
 
 interface RouteEntry {
@@ -28,7 +29,7 @@ const PALETTE = [
 
 export default function AllRoutesMap({ routes, height = '500px', interactive = true }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstance = useRef<any>(null)
+  const mapInstance = useRef<L.Map | null>(null)
   const interactiveRef = useRef(interactive)
   interactiveRef.current = interactive
 

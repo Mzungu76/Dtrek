@@ -1,5 +1,6 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
+import type * as L from 'leaflet'
 import { useEffect, useRef } from 'react'
 
 interface Props {
@@ -12,7 +13,7 @@ interface Props {
 export default function TrailMiniMap({ polyline, height = '160px' }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapInstance = useRef<any>(null)
+  const mapInstance = useRef<L.Map | null>(null)
 
   useEffect(() => {
     if (!mapRef.current || polyline.length < 2) return

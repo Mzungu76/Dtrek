@@ -44,7 +44,8 @@ async function fetchGbifFlora(b: BboxBounds, month: number): Promise<GbifOccurre
     return (data.results ?? []).filter(r =>
       r.media && r.media.length > 0 && r.decimalLatitude !== undefined && r.decimalLongitude !== undefined,
     )
-  } catch {
+  } catch (e) {
+    console.error('[api/flora] fetchGbifFlora failed:', e)
     return []
   }
 }
@@ -143,7 +144,8 @@ export async function GET(req: Request) {
       fetchDirect: makeFetchDirect(month),
       n2000TaxonGroups: ['Plants'],
     })
-  } catch {
+  } catch (e) {
+    console.error('[api/flora] runGalleryCascade failed:', e)
     return Response.json({ items: [], total: 0, error: 'gallery_unavailable' })
   }
 

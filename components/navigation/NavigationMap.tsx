@@ -1,5 +1,6 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
+import type * as L from 'leaflet'
 import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
 import type { NavState } from '@/lib/navigation/types'
@@ -42,9 +43,9 @@ const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
  */
 export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstance = useRef<any>(null)
-  const userMarker = useRef<any>(null)
-  const accuracyCircle = useRef<any>(null)
+  const mapInstance = useRef<L.Map | null>(null)
+  const userMarker = useRef<L.Marker | null>(null)
+  const accuracyCircle = useRef<L.Circle | null>(null)
   const hasCentered = useRef(false)
   const [followMode, setFollowMode] = useState(true)
 

@@ -1,6 +1,7 @@
 'use client'
 
 import 'leaflet/dist/leaflet.css'
+import type * as L from 'leaflet'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { TrackPoint } from '@/lib/tcxParser'
@@ -33,7 +34,7 @@ export default function PhotoPlacementMap({
   trackPoints, photos: initialPhotos, onClose, onUpdate,
 }: Props) {
   const mapRef        = useRef<HTMLDivElement>(null)
-  const mapInstance   = useRef<any>(null)
+  const mapInstance   = useRef<L.Map | null>(null)
   const pinMarkersRef = useRef<Map<string, any>>(new Map())
   const selectedIdRef = useRef<string | null>(null)
   const localPhotosRef = useRef<RoutePhoto[]>([])
@@ -132,7 +133,7 @@ export default function PhotoPlacementMap({
           iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: '',
         })
         const m = L.marker([pos.lat, pos.lon], { icon })
-          .addTo(mapInstance.current)
+          .addTo(mapInstance.current!)
           .bindTooltip(`${i + 1}. ${ph.caption}`, { direction: 'top', offset: [0, -8] })
           .on('click', (e: any) => {
             L.DomEvent.stopPropagation(e)

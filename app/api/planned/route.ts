@@ -197,8 +197,7 @@ export async function GET(req: NextRequest) {
     } else {
       listData = d1 as unknown as Record<string, unknown>[] | null
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return NextResponse.json((listData ?? [] as any[]).map((r: any) => rowToHike(r, false) as PlannedHikeMeta))
+    return NextResponse.json((listData ?? []).map((r) => rowToHike(r, false) as PlannedHikeMeta))
   } catch (e) {
     console.error('GET /api/planned:', e)
     return NextResponse.json({ error: errMsg(e) }, { status: 500 })
