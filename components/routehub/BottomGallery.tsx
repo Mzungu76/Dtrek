@@ -1,4 +1,5 @@
 'use client'
+import type * as L from 'leaflet'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import { Mountain, ArrowUpDown, Upload, Star } from 'lucide-react'
@@ -90,7 +91,7 @@ function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapInstance = useRef<any>(null)
+  const mapInstance = useRef<L.Map | null>(null)
   const [nearView, setNearView] = useState(false)
 
   useEffect(() => {

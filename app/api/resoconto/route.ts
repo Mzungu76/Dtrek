@@ -343,7 +343,8 @@ export async function POST(req: NextRequest) {
       length = body.length as ResocontoLength
     }
     if (Array.isArray(body.photos)) photos = body.photos
-  } catch {
+  } catch (e) {
+    console.error('[api/resoconto] POST: body non valido:', e)
     return new Response('{"error":"Body non valido"}', {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
@@ -487,7 +488,8 @@ export async function PATCH(req: NextRequest) {
     if (Array.isArray(body.sections)) sections = body.sections as ReportSection[]
     if (typeof body.authoredBy === 'string') authoredBy = body.authoredBy
     if (!activityId || content === undefined) throw new Error()
-  } catch {
+  } catch (e) {
+    console.error('[api/resoconto] PATCH: body non valido:', e)
     return new Response('{"error":"Body non valido"}', {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })

@@ -372,7 +372,7 @@ export default function ActiveNavigationView({ hike }: Props) {
       stopBatteryWatch()
       clearInterval(flushInterval)
       clearInterval(movingTimeInterval)
-      if (sessionRef.current) saveNavigationSession({ ...sessionRef.current, state, lastFix: null, lastBearingDeg: bearing }).catch(() => {})
+      if (sessionRef.current) saveNavigationSession(sessionRef.current).catch(() => {})
       flushToServer()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

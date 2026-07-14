@@ -1,5 +1,6 @@
 'use client'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import type * as maplibregl from 'maplibre-gl'
 import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
 import { maptilerStyleUrl, MAPTILER_KEY, type MapTilerStyleId } from '@/lib/mapStyles'
@@ -92,9 +93,9 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  */
 export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, showGeologia, onGeologiaUnavailable }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<any>(null)
-  const markersRef = useRef<any[]>([])
-  const userMarker = useRef<any>(null)
+  const mapRef = useRef<maplibregl.Map | null>(null)
+  const markersRef = useRef<maplibregl.Marker[]>([])
+  const userMarker = useRef<maplibregl.Marker | null>(null)
   const userMarkerArrow = useRef<HTMLDivElement | null>(null)
   const hasCentered = useRef(false)
   const styleWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -189,7 +190,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       properties: {},
     }
     if (map.getSource(ROUTE_SOURCE_ID)) {
-      map.getSource(ROUTE_SOURCE_ID).setData(geojson)
+      (map.getSource(ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource).setData(geojson)
     } else {
       map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson })
       map.addLayer({ id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID, paint: { 'line-color': '#277134', 'line-width': 4, 'line-opacity': 0.85 } })

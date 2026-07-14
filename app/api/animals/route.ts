@@ -47,7 +47,8 @@ async function fetchGbifAnimals(b: BboxBounds, month: number): Promise<GbifOccur
     return (data.results ?? []).filter(r =>
       r.media && r.media.length > 0 && r.decimalLatitude !== undefined && r.decimalLongitude !== undefined,
     )
-  } catch {
+  } catch (e) {
+    console.error('[api/animals] fetchGbifFauna failed:', e)
     return []
   }
 }
@@ -139,7 +140,8 @@ export async function GET(req: Request) {
       fetchDirect: makeFetchDirect(month),
       n2000TaxonGroups: ['Mammals', 'Birds', 'Reptiles', 'Amphibians'],
     })
-  } catch {
+  } catch (e) {
+    console.error('[api/animals] runGalleryCascade failed:', e)
     return Response.json({ items: [], total: 0, error: 'gallery_unavailable' })
   }
 

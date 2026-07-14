@@ -75,9 +75,9 @@ export default function WeatherWidget(props: Props) {
   const [daily,       setDaily]      = useState<DailyWeather[]>([])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const dateKey        = (props as any).date
+  const dateKey        = (props as HistoricalProps | PlannedProps).date
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const daysKey        = (props as any).days
+  const daysKey        = (props as ForecastProps | PlannedProps).days
   const altitudeMax    = (props as PlannedProps).altitudeMax  ?? 0
   const elevationGain  = (props as PlannedProps).elevationGain ?? 0
 

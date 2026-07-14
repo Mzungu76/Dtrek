@@ -1,5 +1,6 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
+import type * as L from 'leaflet'
 import { useEffect, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
@@ -129,20 +130,20 @@ export default function MapView({
   focusSignal,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
-  const mapInstance     = useRef<any>(null)
+  const mapInstance     = useRef<L.Map | null>(null)
   const obscuredBottomPxRef = useRef(obscuredBottomPx)
   obscuredBottomPxRef.current = obscuredBottomPx
-  const focusLatLngRef  = useRef<any>(null)
-  const poiLayer        = useRef<any[]>([])
-  const poiMarkersRef   = useRef<Map<number, any>>(new Map())
-  const wikiLayer       = useRef<any[]>([])
+  const focusLatLngRef  = useRef<L.LatLng | null>(null)
+  const poiLayer        = useRef<L.Marker[]>([])
+  const poiMarkersRef   = useRef<Map<number, L.Marker>>(new Map())
+  const wikiLayer       = useRef<L.Marker[]>([])
   const dtmProfileRef   = useRef(dtmProfile)
   dtmProfileRef.current = dtmProfile
-  const difficultyLayer = useRef<any[]>([])
-  const floraLayer      = useRef<any[]>([])
-  const activeMarker    = useRef<any>(null)
-  const boundsRef       = useRef<any>(null)
-  const transientGradientLayer = useRef<any[]>([])
+  const difficultyLayer = useRef<L.Marker[]>([])
+  const floraLayer      = useRef<L.Marker[]>([])
+  const activeMarker    = useRef<L.Marker | null>(null)
+  const boundsRef       = useRef<L.LatLngBounds | null>(null)
+  const transientGradientLayer = useRef<L.Polyline[]>([])
   const [mapReady, setMapReady] = useState(false)
 
   const tour = useRouteTour({
@@ -360,7 +361,7 @@ export default function MapView({
       const series = computeSignedSlopeSeries(points)
       for (let i = 0; i < coords.length - 1; i++) {
         const color = slopeColorSigned((series[i] + series[i + 1]) / 2)
-        const pl = L.polyline([coords[i], coords[i + 1]], { color, weight: 5, opacity: 0.95 }).addTo(mapInstance.current)
+        const pl = L.polyline([coords[i], coords[i + 1]], { color, weight: 5, opacity: 0.95 }).addTo(mapInstance.current!)
         transientGradientLayer.current.push(pl)
       }
     })
@@ -458,9 +459,9 @@ export default function MapView({
         })
         const popup = buildPoiPopupHtml(poi)
 
-        const m = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 }).addTo(mapInstance.current).bindPopup(popup, { maxWidth: 250 })
+        const m = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 }).addTo(mapInstance.current!).bindPopup(popup, { maxWidth: 250 })
         m.on('click', () => {
-          mapInstance.current.setView([poi.lat, poi.lon], Math.max(mapInstance.current.getZoom(), 16), { animate: true })
+          mapInstance.current!.setView([poi.lat, poi.lon], Math.max(mapInstance.current!.getZoom(), 16), { animate: true })
           onPoiTap?.(poi)
         })
         poiLayer.current.push(m)
@@ -468,7 +469,7 @@ export default function MapView({
       })
 
       if (highlightedPoiIndex != null && pois[highlightedPoiIndex]) {
-        mapInstance.current.panTo([pois[highlightedPoiIndex].lat, pois[highlightedPoiIndex].lon])
+        mapInstance.current!.panTo([pois[highlightedPoiIndex].lat, pois[highlightedPoiIndex].lon])
       }
     })
   }, [pois, mapReady, highlightedPoiIndex, showPoiLayer, poiMarkerScale]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -490,7 +491,7 @@ export default function MapView({
         iconAnchor: [7, 7],
         className: '',
       })
-      activeMarker.current = L.marker([pt.lat, pt.lon], { icon, interactive: false, zIndexOffset: 1000 }).addTo(mapInstance.current)
+      activeMarker.current = L.marker([pt.lat, pt.lon], { icon, interactive: false, zIndexOffset: 1000 }).addTo(mapInstance.current!)
     })
   }, [activeIndex, mapReady, trackPoints])
 
@@ -530,7 +531,7 @@ export default function MapView({
           </div>`
 
         const m = L.marker([page.lat, page.lon], { icon })
-          .addTo(mapInstance.current)
+          .addTo(mapInstance.current!)
           .bindPopup(popup, { maxWidth: 240 })
         wikiLayer.current.push(m)
       }
@@ -561,13 +562,13 @@ export default function MapView({
           </div>`
 
         const m = L.marker([marker.lat, marker.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 })
-          .addTo(mapInstance.current)
+          .addTo(mapInstance.current!)
           .bindPopup(popup, { maxWidth: 240 })
         difficultyLayer.current.push(m)
       })
 
       if (highlightedDifficultyIndex != null && difficultyMarkers[highlightedDifficultyIndex]) {
-        mapInstance.current.panTo([difficultyMarkers[highlightedDifficultyIndex].lat, difficultyMarkers[highlightedDifficultyIndex].lon])
+        mapInstance.current!.panTo([difficultyMarkers[highlightedDifficultyIndex].lat, difficultyMarkers[highlightedDifficultyIndex].lon])
       }
     })
   }, [difficultyMarkers, mapReady, highlightedDifficultyIndex])
@@ -588,7 +589,7 @@ export default function MapView({
           className: '',
         })
         const m = L.marker([marker.lat, marker.lon], { icon })
-          .addTo(mapInstance.current)
+          .addTo(mapInstance.current!)
           .bindPopup(`<div style="font-size:12px">${marker.label}</div>`)
         floraLayer.current.push(m)
       }

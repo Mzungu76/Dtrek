@@ -1,60 +1,42 @@
-# 🥾 Diario Trekking — con Vercel Blob
+# 🥾 DTrek — diario di trekking
 
-App Next.js per registrare e visualizzare le tue escursioni tramite file TCX.
-I dati vengono archiviati permanentemente su **Vercel Blob**.
+App Next.js 14 (App Router, TypeScript) per pianificare, navigare e registrare escursioni.
 
-## Configurazione Vercel Blob
+## Architettura dati (stato reale, non aspirazionale)
 
-### 1. Crea il Blob Store su Vercel
+L'app è a metà di una migrazione verso un modello **local-first**: non tutte le entità sono
+allo stesso punto, quindi non va assunto che "local-first" sia già lo stato di tutto il codice.
 
-1. Apri la dashboard Vercel → seleziona il progetto
-2. Vai su **Storage** → **Create Database** → **Blob**
-3. Dai un nome (es. `trekking-diary-blob`) e crea
-4. Nella sezione **Settings** del Blob Store → clicca **Connect to Project** → seleziona il tuo progetto
+- **Local-first (IndexedDB + coda di sync in background)**: user settings, resoconti di
+  escursione, percorsi pianificati, attività (GPX/TCX importati) e risposte al questionario.
+  Lo strato locale vive in `lib/localStore.ts` (key/value + outbox di scritture pendenti) e
+  `lib/sync/syncEngine.ts` (motore di flush generico, con debounce e retry); ogni entità
+  registra il proprio handler (vedi `lib/sync/userSettingsStore.ts`, `lib/plannedStore.ts`,
+  `lib/blobStore.ts`, `lib/questionnaireStore.ts`). Le letture sono cache-first, le scritture
+  si applicano subito in locale e vengono sincronizzate in background verso Supabase.
+- **Supabase diretto (nessun local-first)**: la maggior parte delle altre feature — guida AI,
+  sessioni/storico di navigazione, condizioni sentiero, condivisione/report pubblici, dati
+  admin, sorgenti POI/PTPR, cache di specie (Wikidata/GBIF) — legge e scrive Supabase
+  direttamente dalle route API, senza cache locale né supporto offline.
+- **Vercel Blob**: ancora presente (`lib/blobIndex.ts`, `lib/plannedIndex.ts`) come percorso
+  legacy dall'architettura pre-Supabase — usato da `app/api/migrate/route.ts` (migrazione
+  una tantum) e come fallback di lettura in un paio di route. Non è più lo storage primario.
 
-La variabile `BLOB_READ_WRITE_TOKEN` viene aggiunta **automaticamente** alle variabili d'ambiente del progetto.
+Se devi modificare una feature, verifica prima in quale categoria ricade prima di assumere
+che segua il pattern local-first o quello Supabase-diretto.
 
-### 2. Per lo sviluppo locale
+## Sviluppo locale
 
 ```bash
-# Copia il file esempio
-cp .env.local.example .env.local
-
-# Inserisci il token che trovi su Vercel → Storage → il tuo Blob Store → Settings → Tokens
-# BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
-
 npm install
+cp .env.example .env.local
+# .env.example copre solo le integrazioni geo-dati opzionali — mancano ancora le variabili
+# Supabase (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY),
+# KV_REST_API_URL/TOKEN (Upstash, cache chiavi AI) e ANTHROPIC_API_KEY (guida "Giulia").
 npm run dev
 ```
 
 ## Deploy
 
-Carica su GitHub e importa su Vercel. Il deploy è automatico ad ogni `git push`.
-
-Assicurati che il Blob Store sia **connesso al progetto** prima del primo deploy.
-
-## Struttura dati su Blob
-
-```
-activities/
-  index.json           ← lista leggera di tutte le escursioni (ActivityMeta[])
-  2026-05-23T06_49_54Z.json   ← dati completi di ogni escursione
-  ...
-```
-
-## Aggiornamento dal progetto v1 (localStorage)
-
-Sostituire i file seguenti con quelli di questa patch:
-
-| File da sostituire / aggiungere | Motivo |
-|---|---|
-| `package.json` | aggiunge `@vercel/blob` |
-| `lib/blobStore.ts` | nuovo store (sostituisce `lib/store.ts`) |
-| `app/api/activities/route.ts` | nuovo — GET lista |
-| `app/api/activity/route.ts` | nuovo — GET/POST/PATCH/DELETE |
-| `app/page.tsx` | usa `blobStore` |
-| `app/upload/page.tsx` | usa `blobStore` |
-| `app/escursione/[id]/page.tsx` | usa `blobStore` |
-| `app/statistiche/page.tsx` | usa `blobStore` |
-
-Il file `lib/store.ts` originale **non va eliminato** se `utils/exportExcel.ts` e `utils/exportDoc.ts` vi fanno riferimento — ma in questo progetto già usano direttamente `StoredActivity` importato da `blobStore.ts`.
+Push su GitHub → import su Vercel, deploy automatico ad ogni push. Il progetto Supabase va
+configurato separatamente (schema in `supabase-schema.sql` e `supabase/migrations/`).

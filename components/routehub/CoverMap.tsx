@@ -1,4 +1,5 @@
 'use client'
+import type * as L from 'leaflet'
 import { useEffect, useRef } from 'react'
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 export default function CoverMap({ polyline }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapInstance = useRef<any>(null)
+  const mapInstance = useRef<L.Map | null>(null)
 
   useEffect(() => {
     if (!mapRef.current || !polyline || polyline.length < 2) return

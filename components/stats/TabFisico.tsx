@@ -18,7 +18,7 @@ import InfoButton from './InfoButton'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 
 interface UserSettings {
-  hrMax?: number
+  hrMax?: number | null
   derivedFCmax?: number
   hrRest?: number | null
   userWeightKg?: number
@@ -33,7 +33,7 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
 
   useEffect(() => {
     getUserSettingsCached()
-      .then((data: any) => setUserSettings({
+      .then((data) => setUserSettings({
         hrMax:       data.hrMax ?? null,
         derivedFCmax: data.derivedFCmax ?? 0,
         hrRest:      data.hrRest ?? null,

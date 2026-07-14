@@ -43,6 +43,45 @@ export interface ClothingItem {
   priority: 'essential' | 'recommended' | 'optional'
 }
 
+// Shapes of the raw Open-Meteo JSON responses — only the fields this module reads.
+interface OpenMeteoHourlyRaw {
+  time: string[]
+  temperature_2m: number[]
+  windspeed_10m: number[]
+  precipitation: number[]
+  cloudcover: number[]
+  weathercode: number[]
+}
+interface OpenMeteoHistoricalResponse { hourly: OpenMeteoHourlyRaw }
+
+interface OpenMeteoDailyRaw {
+  time: string[]
+  temperature_2m_max: number[]
+  temperature_2m_min: number[]
+  precipitation_sum: number[]
+  windspeed_10m_max: number[]
+  weathercode: number[]
+}
+interface OpenMeteoForecastResponse { daily: OpenMeteoDailyRaw }
+
+// Every field optional here (unlike the two above): fetchDayHourly already reads these
+// defensively via `?.[i] ?? 0`, so the type should reflect that the caller doesn't trust
+// the endpoint to always include every variable.
+interface OpenMeteoDayHourlyRaw {
+  time?: string[]
+  temperature_2m?: number[]
+  windspeed_10m?: number[]
+  precipitation?: number[]
+  cloudcover?: number[]
+  weathercode?: number[]
+  apparent_temperature?: number[]
+  relative_humidity_2m?: number[]
+  winddirection_10m?: number[]
+  snowfall?: number[]
+  uv_index?: number[]
+}
+interface OpenMeteoDayHourlyResponse { hourly?: OpenMeteoDayHourlyRaw }
+
 // WMO 4677 codes → Italian label + emoji
 const WMO: Record<number, [string, string]> = {
   0:  ['☀️', 'Cielo sereno'],
@@ -108,9 +147,9 @@ export async function fetchHistoricalWeather(
   })
   const res = await fetch(url)
   if (!res.ok) throw new Error('Open-Meteo historical error')
-  const d = await res.json()
+  const d = await res.json() as OpenMeteoHistoricalResponse
   const { time, temperature_2m, windspeed_10m, precipitation, cloudcover, weathercode } = d.hourly
-  return (time as string[]).map((t, i) => ({
+  return time.map((t, i) => ({
     time:          t,
     temperature:   temperature_2m[i],
     windspeed:     windspeed_10m[i],
@@ -134,9 +173,9 @@ export async function fetchForecastWeather(
   })
   const res = await fetch(url)
   if (!res.ok) throw new Error('Open-Meteo forecast error')
-  const d = await res.json()
+  const d = await res.json() as OpenMeteoForecastResponse
   const { time, temperature_2m_max, temperature_2m_min, precipitation_sum, windspeed_10m_max, weathercode } = d.daily
-  return (time as string[]).map((t, i) => ({
+  return time.map((t, i) => ({
     date:          t,
     tempMax:       temperature_2m_max[i],
     tempMin:       temperature_2m_min[i],
@@ -187,11 +226,11 @@ export async function fetchDayHourly(
 
   const res = await fetch(url)
   if (!res.ok) throw new Error('Open-Meteo day-hourly error')
-  const d = await res.json()
+  const d = await res.json() as OpenMeteoDayHourlyResponse
   const h = d.hourly
   if (!h?.time?.length) throw new Error('No data')
 
-  return (h.time as string[]).map((t, i) => ({
+  return h.time.map((t, i) => ({
     time:          t,
     temperature:   h.temperature_2m?.[i] ?? 0,
     windspeed:     h.windspeed_10m?.[i] ?? 0,

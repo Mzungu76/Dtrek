@@ -221,7 +221,8 @@ function parseQuestions(raw: string, anchors: Anchor[]): QuestionnaireQuestion[]
   let parsed: unknown
   try {
     parsed = JSON.parse(jsonStr)
-  } catch {
+  } catch (e) {
+    console.error('[api/questionnaire] parseQuestions: risposta AI non è JSON valido:', e)
     return null
   }
   if (!Array.isArray(parsed)) return null
@@ -327,7 +328,8 @@ export async function POST(req: NextRequest) {
     activityId = body.activityId
     if (!activityId) throw new Error('activityId mancante')
     if (Array.isArray(body.photos)) photos = body.photos
-  } catch {
+  } catch (e) {
+    console.error('[api/questionnaire] POST: body non valido:', e)
     return new Response('{"error":"Body non valido"}', {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
@@ -460,7 +462,8 @@ export async function PATCH(req: NextRequest) {
     if (body.status && ['in_progress', 'completed', 'skipped'].includes(body.status)) {
       status = body.status
     }
-  } catch {
+  } catch (e) {
+    console.error('[api/questionnaire] PATCH: body non valido:', e)
     return new Response('{"error":"Body non valido"}', {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })

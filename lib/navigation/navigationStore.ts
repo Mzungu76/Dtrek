@@ -6,18 +6,12 @@
  * already been announced, and the current nav state.
  */
 import { lsGet, lsSet, lsDel } from '@/lib/localStore'
-import type { GeoFix, NavState } from './types'
 import type { TrackPoint } from '@/lib/tcxParser'
 
 export interface NavigationSessionSnapshot {
   hikeId: string
   sessionId: string
   startedAt: number
-  state: NavState
-  lastFix: GeoFix | null
-  lastBearingDeg: number | null
-  notifiedPoiIds: (string | number)[]
-  reachedMomentIds: string[]
 }
 
 const NAV_SESSION_KEY = (hikeId: string) => `nav-session:${hikeId}`
@@ -39,11 +33,6 @@ export function newSessionSnapshot(hikeId: string, sessionId: string): Navigatio
     hikeId,
     sessionId,
     startedAt: Date.now(),
-    state: 'idle',
-    lastFix: null,
-    lastBearingDeg: null,
-    notifiedPoiIds: [],
-    reachedMomentIds: [],
   }
 }
 

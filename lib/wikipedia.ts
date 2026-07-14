@@ -16,6 +16,25 @@ export interface WikiPage {
   source?:     'wikipedia-it' | 'wikipedia-en' | 'wikivoyage-it'
 }
 
+// Shapes of the raw Wikimedia REST/Action API JSON — only the fields this module reads.
+interface WikiRestSummary {
+  pageid: number
+  title: string
+  description?: string
+  extract: string
+  thumbnail?: { source?: string }
+  content_urls?: { mobile?: { page?: string }; desktop?: { page?: string } }
+  coordinates?: { lat?: number; lon?: number }
+}
+
+interface WikiSearchApiResponse {
+  query?: { search?: { title: string }[] }
+}
+
+interface WikiGeosearchApiResponse {
+  query?: { geosearch?: { pageid: number; title: string; dist: number }[] }
+}
+
 // POI types worth looking up (named items likely to have articles)
 const WIKI_WORTHY = new Set<PoiItem['type']>([
   'peak', 'pass', 'waterfall', 'cave', 'ruins', 'archaeological',
@@ -82,7 +101,7 @@ async function fetchSummary(
       { headers: { 'Api-User-Agent': 'DtrekApp/1.0' } },
     )
     if (!res.ok) return null
-    const s = await res.json()
+    const s = await res.json() as WikiRestSummary
     if (!s.extract || s.extract.length < 50) return null
     return {
       pageid:      s.pageid,
@@ -114,7 +133,8 @@ async function searchAndFetch(
     })
     const res = await fetch(searchUrl)
     if (!res.ok) return null
-    const top = (await res.json()).query?.search?.[0]
+    const searchJson = await res.json() as WikiSearchApiResponse
+    const top = searchJson.query?.search?.[0]
     if (!top) return null
 
     // Require the result title to share at least one significant word with the query name
@@ -205,9 +225,8 @@ export async function fetchNearbyWiki(
   })
   const searchRes = await fetch(searchUrl)
   if (!searchRes.ok) return []
-  const searchData = await searchRes.json()
-  const hits: { pageid: number; title: string; dist: number }[] =
-    searchData.query?.geosearch ?? []
+  const searchData = await searchRes.json() as WikiGeosearchApiResponse
+  const hits = searchData.query?.geosearch ?? []
   if (hits.length === 0) return []
 
   // Fetch page summaries in parallel
@@ -220,18 +239,18 @@ export async function fetchNearbyWiki(
           { headers: { 'Api-User-Agent': 'DtrekApp/1.0' } },
         )
         if (!sumRes.ok) return null
-        const s = await sumRes.json()
+        const s = await sumRes.json() as WikiRestSummary
         if (!s.extract || s.extract.length < 30) return null
         return {
           pageid:      h.pageid,
-          title:       s.title as string,
-          description: s.description as string | undefined,
-          extract:     s.extract as string,
-          thumbnail:   (s.thumbnail?.source as string | undefined),
-          url:         (s.content_urls?.mobile?.page ?? s.content_urls?.desktop?.page ?? '') as string,
+          title:       s.title,
+          description: s.description,
+          extract:     s.extract,
+          thumbnail:   s.thumbnail?.source,
+          url:         s.content_urls?.mobile?.page ?? s.content_urls?.desktop?.page ?? '',
           dist:        h.dist,
-          lat:         s.coordinates?.lat as number | undefined,
-          lon:         s.coordinates?.lon as number | undefined,
+          lat:         s.coordinates?.lat,
+          lon:         s.coordinates?.lon,
         } as WikiPage
       } catch {
         return null

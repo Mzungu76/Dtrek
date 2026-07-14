@@ -1,6 +1,7 @@
 'use client'
 
 import 'leaflet/dist/leaflet.css'
+import type * as L from 'leaflet'
 import { useEffect, useRef } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 
@@ -28,7 +29,7 @@ function getPhotoLatLon(ph: RoutePhoto, pts: TrackPoint[]): { lat: number; lon: 
 
 export default function RoutePhotoMap({ trackPoints, photos, height = '180px' }: Props) {
   const mapRef      = useRef<HTMLDivElement>(null)
-  const mapInstance = useRef<any>(null)
+  const mapInstance = useRef<L.Map | null>(null)
 
   const gpsPoints = trackPoints.filter(p => p.lat && p.lon)
   const sorted    = [...photos].sort((a, b) => a.progress - b.progress)

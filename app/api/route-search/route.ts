@@ -213,7 +213,8 @@ async function tryMatchOsm(candidate: RawCandidate): Promise<{ osmId: number | n
     const matches = await searchHikingRoutesByName(searchName, bbox, 5)
     const best = matches[0]
     return best ? { osmId: best.id, hasGpsTrack: true } : { osmId: null, hasGpsTrack: false }
-  } catch {
+  } catch (e) {
+    console.error('[api/route-search] tryMatchOsm failed:', e)
     return { osmId: null, hasGpsTrack: false }
   }
 }
@@ -255,7 +256,8 @@ export async function POST(req: NextRequest) {
       .slice(-MAX_HISTORY_MESSAGES)
       .map((m: { role: string; text: string }) => ({ role: m.role as 'user' | 'assistant', text: m.text.slice(0, MAX_MESSAGE_LENGTH) }))
     if (messages.length === 0 || messages[messages.length - 1].role !== 'user') throw new Error('ultimo messaggio non valido')
-  } catch {
+  } catch (e) {
+    console.error('[api/route-search] POST: richiesta non valida:', e)
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
@@ -316,7 +318,8 @@ export async function POST(req: NextRequest) {
   try {
     raw = JSON.parse(resultsMatch[1])
     if (!Array.isArray(raw)) throw new Error('non un array')
-  } catch {
+  } catch (e) {
+    console.error('[api/route-search] risposta AI non è JSON valido:', e)
     return NextResponse.json({ error: 'Risposta AI non valida, riprova.' }, { status: 502 })
   }
 

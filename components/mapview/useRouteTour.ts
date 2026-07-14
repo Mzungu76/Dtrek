@@ -1,3 +1,4 @@
+import type * as L from 'leaflet'
 import { useEffect, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
@@ -22,12 +23,12 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
 }
 
 interface Args {
-  mapInstance: React.MutableRefObject<any>
+  mapInstance: React.MutableRefObject<L.Map | null>
   mapReady: boolean
   trackPoints: TrackPoint[]
   pois: PoiItem[]
   /** POI id → Leaflet marker, kept in sync by MapView's POI layer effect. */
-  poiMarkersRef: React.MutableRefObject<Map<number, any>>
+  poiMarkersRef: React.MutableRefObject<Map<number, L.Marker>>
   enabled: boolean
 }
 
@@ -46,7 +47,7 @@ export function useRouteTour({ mapInstance, mapReady, trackPoints, pois, poiMark
   const progressRef       = useRef(0)
   const lastTsRef         = useRef(0)
   const animRef           = useRef<number>()
-  const tourMarkerRef     = useRef<any>(null)
+  const tourMarkerRef     = useRef<L.Marker | null>(null)
   const poiTriggeredRef   = useRef<Set<number>>(new Set())
   const poiOpenIdRef      = useRef<number | null>(null)
   const poiOpenTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -64,7 +65,7 @@ export function useRouteTour({ mapInstance, mapReady, trackPoints, pois, poiMark
         html: `<div style="width:18px;height:18px;border-radius:50%;background:#f59e0b;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div>`,
         iconSize: [18, 18], iconAnchor: [9, 9], className: '',
       })
-      tourMarkerRef.current = L.marker([pts[0].lat!, pts[0].lon!], { icon, interactive: false, zIndexOffset: 2000 }).addTo(mapInstance.current)
+      tourMarkerRef.current = L.marker([pts[0].lat!, pts[0].lon!], { icon, interactive: false, zIndexOffset: 2000 }).addTo(mapInstance.current!)
     })
     return () => {
       cancelled = true
@@ -140,7 +141,7 @@ export function useRouteTour({ mapInstance, mapReady, trackPoints, pois, poiMark
     poiTriggeredRef.current.clear()
     if (poiOpenTimeoutRef.current) { clearTimeout(poiOpenTimeoutRef.current); poiOpenTimeoutRef.current = null }
     if (poiOpenIdRef.current != null) { poiMarkersRef.current.get(poiOpenIdRef.current)?.closePopup(); poiOpenIdRef.current = null }
-    if (pts.length) tourMarkerRef.current?.setLatLng([pts[0].lat, pts[0].lon])
+    if (pts.length) tourMarkerRef.current?.setLatLng([pts[0].lat!, pts[0].lon!])
   }
 
   return { isPlaying, progress, speedIdx, setSpeedIdx, play, pause, reset, hasTrack: pts.length >= 2 }
