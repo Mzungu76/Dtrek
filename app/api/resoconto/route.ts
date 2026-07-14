@@ -250,7 +250,7 @@ IMPORTANTE: Completa obbligatoriamente tutte e ${hasQa ? 'quattro le sezioni' : 
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) {
-    return new Response('{"error":"Non autenticato"}', {
+    return new Response(JSON.stringify({ error: 'Non autenticato' }), {
       status: 401, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -279,7 +279,7 @@ export async function GET(req: NextRequest) {
 
   const activityId = req.nextUrl.searchParams.get('activityId')
   if (!activityId) {
-    return new Response('{"error":"activityId mancante"}', {
+    return new Response(JSON.stringify({ error: 'activityId mancante' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -307,7 +307,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) {
-    return new Response('{"error":"Non autenticato"}', {
+    return new Response(JSON.stringify({ error: 'Non autenticato' }), {
       status: 401, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -345,7 +345,7 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(body.photos)) photos = body.photos
   } catch (e) {
     console.error('[api/resoconto] POST: body non valido:', e)
-    return new Response('{"error":"Body non valido"}', {
+    return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -358,7 +358,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (actErr || !activity) {
-    return new Response('{"error":"Attività non trovata"}', {
+    return new Response(JSON.stringify({ error: 'Attività non trovata' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -473,7 +473,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) {
-    return new Response('{"error":"Non autenticato"}', {
+    return new Response(JSON.stringify({ error: 'Non autenticato' }), {
       status: 401, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -490,7 +490,7 @@ export async function PATCH(req: NextRequest) {
     if (!activityId || content === undefined) throw new Error()
   } catch (e) {
     console.error('[api/resoconto] PATCH: body non valido:', e)
-    return new Response('{"error":"Body non valido"}', {
+    return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -534,5 +534,5 @@ export async function PATCH(req: NextRequest) {
     })
   }
 
-  return new Response('{"ok":true}', { headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
 }

@@ -30,7 +30,7 @@ Rispondi SOLO con un oggetto JSON valido, nessun testo fuori dal JSON:
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) {
-    return new Response('{"error":"Non autenticato"}', {
+    return new Response(JSON.stringify({ error: 'Non autenticato' }), {
       status: 401, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     date         = body.date
     videoFormat  = body.videoFormat  ?? '9:16'
   } catch {
-    return new Response('{"error":"Body non valido"}', {
+    return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }

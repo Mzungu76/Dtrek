@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(body.otherSections)) otherSections = body.otherSections
     if (!activityId || !sectionTitle || !instruction) throw new Error()
   } catch {
-    return new Response('{"error":"Body non valido"}', {
+    return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (actErr || !activity) {
-    return new Response('{"error":"Attività non trovata"}', {
+    return new Response(JSON.stringify({ error: 'Attività non trovata' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
     })
   }

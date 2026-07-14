@@ -437,7 +437,7 @@ export async function GET(req: NextRequest) {
     return new Response(
       authUnavailable
         ? JSON.stringify({ hasAccess: false, unavailable: true })
-        : '{"error":"Non autenticato"}',
+        : JSON.stringify({ error: 'Non autenticato' }),
       { status: authUnavailable ? 200 : 401, headers: { 'Content-Type': 'application/json' } },
     )
   }
@@ -504,7 +504,7 @@ export async function POST(req: NextRequest) {
     // pulsante "Sblocca la guida integrale", che manda tier 'approfondita' su tutte le sezioni).
     if (isGuideSectionKey(body.sectionKey)) sectionKey = body.sectionKey
   } catch {
-    return new Response('{"error":"Body non valido"}', {
+    return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -558,7 +558,7 @@ export async function POST(req: NextRequest) {
       // già (l'ha appena creata lui stesso), usa quella invece di dire "non trovato": è quasi
       // certamente solo questione di qualche secondo prima che l'outbox la sincronizzi.
       if (!hikeFallback) {
-        return new Response('{"error":"Percorso non trovato"}', {
+        return new Response(JSON.stringify({ error: 'Percorso non trovato' }), {
           status: 404, headers: { 'Content-Type': 'application/json' },
         })
       }
@@ -623,7 +623,7 @@ export async function POST(req: NextRequest) {
     // questa modalità (non mirrorati client-side): la guida resta generabile, solo un po' meno
     // arricchita di quei dettagli specifici finché Supabase non torna raggiungibile.
     if (!hikeFallback) {
-      return new Response('{"error":"Percorso non trovato"}', {
+      return new Response(JSON.stringify({ error: 'Percorso non trovato' }), {
         status: 404, headers: { 'Content-Type': 'application/json' },
       })
     }
