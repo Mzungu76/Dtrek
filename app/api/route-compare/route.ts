@@ -7,6 +7,7 @@ import { difficultyIndex, formatPaceMinkm } from '@/lib/stats'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
+import { jsonSchemaFormat } from '@/lib/aiJsonOutput'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -28,10 +29,36 @@ l'utente a scegliere, non ti limiti alla difficoltà: consideri distanza, disliv
 punteggi già calcolati dall'app (bellezza, sentiero, sicurezza) quando presenti, e soprattutto
 quanto ogni percorso si adatta A QUESTO UTENTE SPECIFICO — alle sue preferenze dichiarate e alle
 abitudini che emergono dal suo storico. Non dai un giudizio assoluto: la classifica è personale.
-Rispondi SOLO con un oggetto JSON valido, senza markdown, senza blocchi di codice, nel formato
-esatto:
-{"narrative":"<resoconto in massimo 180 parole, in italiano, tono caldo e diretto>","ranking":[{"id":"<id esatto fornito>","reason":"<massimo 2 frasi, specifiche per questo percorso e questo utente>"}]}
-L'array "ranking" deve contenere ESATTAMENTE gli id ricevuti, ordinati dal più consigliato al meno consigliato per questo utente.`
+Il campo "narrative" è un resoconto in massimo 180 parole, in italiano, tono caldo e diretto. Il
+campo "ranking" contiene ESATTAMENTE gli id ricevuti, ordinati dal più consigliato al meno
+consigliato per questo utente, ciascuno con una "reason" di massimo 2 frasi specifiche per quel
+percorso e questo utente.`
+
+interface RouteCompareOutput {
+  narrative: string
+  ranking: { id: string; reason: string }[]
+}
+
+const RANKING_SCHEMA = {
+  type: 'object',
+  properties: {
+    narrative: { type: 'string' },
+    ranking: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id:     { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['id', 'reason'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['narrative', 'ranking'],
+  additionalProperties: false,
+}
 
 function buildEntryBlock(title: string, type: 'completata' | 'pianificata', lines: string[]): string {
   return `### ${title} (${type === 'completata' ? 'già completato' : 'pianificato'})\n${lines.join('\n')}`
@@ -49,7 +76,7 @@ export async function POST(req: NextRequest) {
       : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
   }
 
-  const { apiKey, userGender, claudeModel, lookupFailed } = await resolveApiKeyAndSettings(user.id)
+  const { apiKey, userGender, claudeModel, lookupFailed } = await resolveApiKeyAndSettings(user.id, 'routeCompare')
 
   if (!apiKey) {
     return NextResponse.json(
@@ -190,25 +217,21 @@ id da usare nel ranking, nello stesso ordine dei percorsi sopra: ${found.map(f =
 
   const client = new Anthropic({ apiKey })
 
-  let raw: string
+  let msg
   try {
-    const msg = await client.messages.create({
-      model:      claudeModel,
-      max_tokens: 1200,
-      system:     SYSTEM,
-      messages:   [{ role: 'user', content: prompt }],
+    msg = await client.messages.parse({
+      model:          claudeModel,
+      max_tokens:     1200,
+      system:         SYSTEM,
+      messages:       [{ role: 'user', content: prompt }],
+      output_config:  { format: jsonSchemaFormat<RouteCompareOutput>(RANKING_SCHEMA) },
     })
-    const textBlock = msg.content.find(b => b.type === 'text')
-    raw = textBlock && textBlock.type === 'text' ? textBlock.text : ''
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Errore AI' }, { status: 502 })
   }
 
-  let parsed: { narrative?: string; ranking?: { id: string; reason: string }[] }
-  try {
-    const jsonText = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '')
-    parsed = JSON.parse(jsonText)
-  } catch {
+  const parsed = msg.parsed_output
+  if (!parsed) {
     return NextResponse.json({ error: 'Risposta AI non valida, riprova.' }, { status: 502 })
   }
 

@@ -44,13 +44,12 @@ export const dynamic = 'force-dynamic'
 // Le combinazioni possibili sono solo 4 (booleano × booleano), quindi il prompt resta comunque
 // identico tra tantissime richieste diverse — il cache_control su questo blocco (vedi più sotto)
 // continua a funzionare, semplicemente con fino a 4 prefissi cacheati invece di uno solo.
-const SYSTEM_CORE = `Sei Giulia, una guida escursionistica italiana con vent'anni di esperienza sul campo.
-Conosci a menadito la storia, l'architettura, l'archeologia, la geologia e la natura del territorio italiano.
-Il tuo stile è caldo, colloquiale e contagioso: parli come se stessi camminando accanto all'escursionista,
-con un tono da amica esperta che non smette mai di stupirsi della bellezza dei luoghi. Ma la tua onestà
-viene sempre prima dell'entusiasmo: non minimizzare mai un rischio, una difficoltà reale o un'incertezza
-nei dati solo per sembrare più incoraggiante, e non aggiungere previsioni o rassicurazioni ("ti piacerà
-sicuramente", "hai ottime probabilità di amarlo") quando non hai elementi concreti per affermarlo.
+const SYSTEM_CORE = `Sei Giulia, guida escursionistica italiana con vent'anni di esperienza sul campo:
+conosci storia, architettura, archeologia, geologia e natura del territorio italiano. Il tuo stile è
+caldo, colloquiale e contagioso — parli come un'amica esperta che cammina accanto all'escursionista.
+Ma l'onestà viene sempre prima dell'entusiasmo: non minimizzare mai un rischio, una difficoltà reale o
+un'incertezza nei dati per sembrare più incoraggiante, e non aggiungere previsioni o rassicurazioni
+non supportate da elementi concreti (es. "ti piacerà sicuramente", "hai ottime probabilità di amarlo").
 
 Ti viene chiesto di scrivere una o più sezioni di una guida escursionistica per questo percorso, elencate
 più sotto nel messaggio — se altre sezioni esistono già (scritte in una richiesta precedente), non fanno
@@ -59,8 +58,7 @@ di ciascuna sezione richiesta, cominciando con il suo titolo preceduto da ## (du
 spazio), senza nessun commento sul tuo processo prima o dopo.
 
 Per ogni luogo significativo includi almeno uno tra: un aneddoto storico poco noto, una leggenda locale,
-una curiosità sorprendente, un fatto insolito legato al sito. I dettagli che la gente non trova sulle guide
-ordinarie sono il tuo punto di forza.
+una curiosità sorprendente, un fatto insolito legato al sito.
 
 Usa la seconda persona singolare (tu/ti). Scrivi in italiano vivace, mai pedante.
 Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio), esattamente come indicato più sotto —
@@ -108,16 +106,19 @@ senza nessuna riga di transizione.`
 
 // Aggiunto a SYSTEM_CORE solo quando "Il percorso" è tra le sezioni richieste in questa chiamata —
 // è l'unica sezione per cui Giulia verifica lo stato online del percorso, vedi il subtitle
-// dichiarato all'utente in lib/guideSections.ts.
+// dichiarato all'utente in lib/guideSections.ts. La ricerca web qui è un controllo mirato (due
+// sotto-domande esplicite, max_uses: 2 più sotto), non un motore esplorativo: la qualità della
+// guida nasce dalla fusione di dati già posseduti (GIS, POI, traccia, profilo), non da quante fonti
+// si trovano — vedi la discussione con l'utente in questa sessione sul punto "web_search nella guida".
 const SYSTEM_RESEARCH = `
 
-Prima di scrivere la sezione "Il percorso", usa lo strumento di ricerca web per verificare lo stato
-attuale e aggiornato del percorso: chiusure temporanee o permanenti di tratti, deviazioni, frane,
-lavori in corso, divieti stagionali, eventuali allerte meteo/incendi. Cerca su fonti ufficiali quando
-possibile (enti parco, comuni, CAI, sezioni locali, siti di sentieristica regionale) e integra, se
-utili, resoconti recenti di altri escursionisti (community di trekking, forum, blog) per capire come
-si presenta il percorso di recente. Se non trovi nulla di rilevante o specifico su questo percorso,
-non inventare: è normale, significa solo che non ci sono criticità note al momento.
+Prima di scrivere la sezione "Il percorso", usa lo strumento di ricerca web per due sole verifiche
+mirate: (1) condizioni attuali del percorso — chiusure temporanee o permanenti, deviazioni, frane,
+lavori in corso, divieti stagionali; (2) sicurezza — allerte meteo o incendio attive, restrizioni di
+accesso. Cerca su fonti ufficiali quando possibile (enti parco, comuni, CAI, sezioni locali, siti di
+sentieristica regionale) e integra, se utili, resoconti recenti di altri escursionisti (community di
+trekking, forum, blog). Se non trovi nulla di rilevante o specifico su questo percorso, non inventare:
+è normale, significa solo che non ci sono criticità note al momento.
 Se dalla ricerca emergono informazioni concrete e specifiche su un problema reale in corso (chiusura,
 deviazione, frana, lavori, divieto), racchiudile in un riquadro dedicato, una riga per ciascun avviso,
 usando il formato esatto:
@@ -438,8 +439,8 @@ export async function GET(req: NextRequest) {
   }
 
   const { apiKey, lookupFailed } = user
-    ? await resolveApiKeyAndSettings(user.id)
-    : await resolveEmergencySharedKey()
+    ? await resolveApiKeyAndSettings(user.id, 'guide')
+    : await resolveEmergencySharedKey('guide')
   return new Response(JSON.stringify({ hasAccess: !!apiKey, unavailable: lookupFailed }), {
     status: 200, headers: { 'Content-Type': 'application/json' },
   })
@@ -480,8 +481,8 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   }
 
   const { apiKey, userGender, breveSections, claudeModel, lookupFailed } = user
-    ? await resolveApiKeyAndSettings(user.id)
-    : await resolveEmergencySharedKey()
+    ? await resolveApiKeyAndSettings(user.id, 'guide')
+    : await resolveEmergencySharedKey('guide')
 
   if (!apiKey) {
     return new Response(
@@ -701,13 +702,15 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // Stream Claude response — web_search abilita Giulia a verificare online lo stato aggiornato del
   // percorso (chiusure, deviazioni, lavori) prima di scrivere "Il percorso" (vedi SYSTEM_RESEARCH)
   // — l'unica sezione che lo fa. Omesso del tutto quando "Il percorso" non è tra le sezioni
-  // richieste in questa chiamata: risparmia sia costo che tempo.
+  // richieste in questa chiamata: risparmia sia costo che tempo. max_uses: 2 (non un budget più
+  // ampio) rispecchia le due sole sotto-domande consentite in SYSTEM_RESEARCH — un "controllo
+  // medico" mirato, non un motore esplorativo che spende ricerche extra per arricchire il racconto.
   const stream = client.messages.stream({
     model:      claudeModel,
     max_tokens: GUIDE_MAX_TOKENS,
     system,
     messages:   [{ role: 'user', content: prompt }],
-    ...(includesRoute ? { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 4 }] } : {}),
+    ...(includesRoute ? { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 2 }] } : {}),
   })
 
   // Raccoglie le fonti web citate da Giulia mentre scrive (citations_delta sui blocchi di testo,

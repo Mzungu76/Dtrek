@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server'
 import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
-import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
+import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
+import { jsonSchemaFormat } from '@/lib/aiJsonOutput'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,12 +22,24 @@ Regole per gli hashtag:
 - 25-28 hashtag totali
 - Mix strategico: 8 molto generici (>1M post), 10 medi (100k-1M), 7 specifici/niche (<100k)
 - Metà in italiano, metà in inglese
-- Includi hashtag di comunità hiking italiane: #escursionismo #camminandoimparo #italiainmontagna #montagnagram
-- Includi hashtag internazionali performanti: #hikingitaly #trailrunning #alpinism #mountainlife
-- Includi hashtag per il tipo di contenuto: #reelsitalia #videooftheday #outdooradventure
+- Includi hashtag di comunità hiking italiane: #escursionismo #camminandoimparo #italiainmontagna
+- Includi hashtag internazionali performanti: #hikingitaly #trailrunning #alpinism
+- Includi hashtag per il tipo di contenuto: #reelsitalia #videooftheday #outdooradventure`
 
-Rispondi SOLO con un oggetto JSON valido, nessun testo fuori dal JSON:
-{"caption": "testo della caption", "hashtags": "#hashtag1 #hashtag2 ..."}`
+interface CaptionOutput {
+  caption: string
+  hashtags: string
+}
+
+const CAPTION_SCHEMA = {
+  type: 'object',
+  properties: {
+    caption:  { type: 'string' },
+    hashtags: { type: 'string' },
+  },
+  required: ['caption', 'hashtags'],
+  additionalProperties: false,
+}
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req)
@@ -45,7 +58,7 @@ export async function POST(req: NextRequest) {
   const userKey = settings?.claude_api_key as string | null | undefined
   const hasSub  = (settings?.subscription_tier as string) === 'premium'
   const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
-  const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : DEFAULT_CLAUDE_MODEL
+  const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : resolveDefaultModel('caption')
 
   if (!apiKey) {
     return new Response(
@@ -90,15 +103,15 @@ La caption deve rispecchiare le specifiche tecniche del percorso (distanza, disl
 
   const client = new Anthropic({ apiKey })
 
-  let raw = ''
+  let msg
   try {
-    const msg = await client.messages.create({
-      model:      claudeModel,
-      max_tokens: 700,
-      system:     SYSTEM,
-      messages:   [{ role: 'user', content: userPrompt }],
+    msg = await client.messages.parse({
+      model:         claudeModel,
+      max_tokens:    700,
+      system:        SYSTEM,
+      messages:      [{ role: 'user', content: userPrompt }],
+      output_config: { format: jsonSchemaFormat<CaptionOutput>(CAPTION_SCHEMA) },
     })
-    raw = msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : ''
   } catch (e: any) {
     return new Response(
       JSON.stringify({ error: 'Errore AI', message: e.message }),
@@ -106,17 +119,15 @@ La caption deve rispecchiare le specifiche tecniche del percorso (distanza, disl
     )
   }
 
-  // Strip markdown code fences if the model wraps the JSON
-  const jsonStr = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
-
-  try {
-    const parsed = JSON.parse(jsonStr)
-    return new Response(JSON.stringify(parsed), {
-      headers: { 'Content-Type': 'application/json' },
-    })
-  } catch {
-    return new Response(JSON.stringify({ caption: raw, hashtags: '' }), {
+  if (msg.parsed_output) {
+    return new Response(JSON.stringify(msg.parsed_output), {
       headers: { 'Content-Type': 'application/json' },
     })
   }
+  // Fallback raro (refusal/troncamento): nessun output strutturato, ma il testo grezzo può
+  // comunque contenere una caption leggibile da mostrare — meglio di un errore secco.
+  const raw = msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : ''
+  return new Response(JSON.stringify({ caption: raw, hashtags: '' }), {
+    headers: { 'Content-Type': 'application/json' },
+  })
 }

@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { apiKey, claudeModel, lookupFailed } = await resolveApiKeyAndSettings(user.id)
+  const { apiKey, claudeModel, lookupFailed } = await resolveApiKeyAndSettings(user.id, 'resocontoAssist')
 
   if (!apiKey) {
     return new Response(
