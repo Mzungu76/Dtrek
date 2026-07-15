@@ -69,16 +69,18 @@ export async function GET(req: NextRequest) {
 
     // Lightweight freshness check for lib/sync/pullEngine.ts: id + updated_at only,
     // so a device with an already-populated local cache can detect new/changed/deleted
-    // rows without re-downloading the full list on every check. A missing updated_at
-    // column (pre-migration environment) degrades to "nothing to reconcile" rather
-    // than a 500, since this endpoint is purely additive.
+    // rows without re-downloading the full list on every check. A real query error MUST
+    // surface as a non-2xx status rather than an empty [] — the reconciler treats an empty
+    // digest as "you have zero records on the server" and prunes every locally cached
+    // record accordingly, so silently downgrading a failure to [] would look like every
+    // record was deleted elsewhere and wipe the local cache for nothing.
     if (req.nextUrl.searchParams.get('digest') === '1') {
       const { data, error } = await supabase
         .from('activities')
         .select('id, updated_at')
         .eq('user_id', user.id)
 
-      if (error) return NextResponse.json([])
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json(
         (data ?? []).map((r: Record<string, unknown>) => ({ id: r.id as string, updatedAt: r.updated_at as string })),
       )
