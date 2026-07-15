@@ -362,8 +362,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   // Persists the refreshed preview into `items` itself (not just this render's displayItems) —
   // otherwise the moment the hike stops being the active one, its gallery entry reverts to
   // whatever metaToItem() saw when the list first loaded.
+  //
+  // Gated on ctsSettled — same fix as driveCache above, same root cause: cachedBeautyScore/
+  // cachedTrailScore/cachedSafetyScore/cachedTsTotal land one at a time as the pipeline
+  // progresses, and writing sortValues.cts on each intermediate arrival re-sorts a TS-ordered
+  // gallery repeatedly out from under the user right as they open a route (was the "galleria
+  // impazzita" bug). Waiting for the settled signal collapses it into one final write.
   useEffect(() => {
-    if (!hike) return
+    if (!hike || !ctsSettled) return
     const preview = scorePreviewFor(hike)
     const safetyPreview = hike.cachedSafetyScore
       ? { overall: hike.cachedSafetyScore.overall, color: hike.cachedSafetyScore.color, label: hike.cachedSafetyScore.label }
@@ -375,7 +381,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       next[idx] = { ...next[idx], scorePreview: preview, safetyPreview, sortValues: { ...next[idx].sortValues!, cts: preview?.value ?? 0 } }
       return next
     })
-  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore, hike?.cachedTsTotal]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore, hike?.cachedTsTotal, ctsSettled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const displayItems = useMemo(() => {
     // Distanza in auto REALE (OSRM) — non in linea d'aria: per l'itinerario aperto usa il valore
@@ -418,7 +424,12 @@ export default function GuidaHub({ id }: { id?: string }) {
       }
       const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
       const preview = scorePreviewFor(hike)
-      return { ...it, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview }
+      // scorePreview (the badge) tracks the live, still-settling value so its progress is visible;
+      // sortValues.cts stays pinned to the last known-stable rank until ctsSettled, then snaps once
+      // to the final value — otherwise the TS-sorted gallery reshuffles on every intermediate score
+      // update while the user is still looking at the route they just opened.
+      const stableCts = ctsSettled ? (preview?.value ?? 0) : (it.sortValues?.cts ?? preview?.value ?? 0)
+      return { ...it, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, stableCts, distanceMeters), scorePreview: preview }
     })
     // Deep link to a hike outside the active list (e.g. archived/expired) — still show it
     // standalone rather than 404, once its full record has loaded.
@@ -428,7 +439,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite }, ...mapped]
     }
     return mapped
-  }, [items, hike, driving, userOrigin, driveCache])
+  }, [items, hike, driving, userOrigin, driveCache, ctsSettled])
 
   if (!listLoaded) {
     return <HubSkeleton />
