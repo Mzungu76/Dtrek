@@ -667,6 +667,22 @@ export default function GuideReader({
     [displaySections],
   )
 
+  // Galleria fotografica — fonte principale: le thumbnail degli articoli Wikipedia dei luoghi
+  // lungo il percorso (già scaricate durante l'arricchimento del percorso, prima ancora che la
+  // guida esista — vedi lib/wikipedia.ts's WikiPage.thumbnail), quindi disponibili a costo zero e
+  // indipendenti da quante fonti la ricerca web di sicurezza cita. Deliberatamente disaccoppiata
+  // da quella ricerca (max_uses:2, mirata solo a condizioni/sicurezza, vedi SYSTEM_RESEARCH in
+  // app/api/guide/route.ts) — prima la galleria dipendeva SOLO dalle foto trovate tra le fonti
+  // citate lì, quindi poteva restare vuota quando quella ricerca non trovava nulla da segnalare.
+  const poiPhotos = useMemo(() => {
+    const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
+    const seen = new Set<string>()
+    return wiki
+      .filter(({ wiki: w }) => !!w.thumbnail && !seen.has(w.thumbnail) && seen.add(w.thumbnail))
+      .slice(0, 12)
+      .map(({ wiki: w }) => ({ url: w.url, imageUrl: w.thumbnail!, title: w.title }))
+  }, [hike.cachedPoiWiki])
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -887,15 +903,37 @@ export default function GuideReader({
               </div>
             )}
 
-            {hasGuide && !generating && guideSources.some(s => s.imageUrl) && (
+            {hasGuide && !generating && (poiPhotos.length > 0 || guideSources.some(s => s.imageUrl)) && (
               <div className="mt-4 mb-1">
                 <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
                   Galleria fotografica
                 </p>
                 <div className="flex gap-2.5 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}>
+                  {poiPhotos.map((p, i) => (
+                    <a
+                      key={`poi-${i}`}
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group"
+                      style={{ scrollSnapAlign: 'start' }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata da Wikipedia, mai copiata sui nostri server */}
+                      <img
+                        src={p.imageUrl}
+                        alt={p.title}
+                        className="w-52 h-36 object-cover group-hover:opacity-90 transition-opacity"
+                        loading="lazy"
+                        onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
+                      />
+                      <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
+                        Luogo: {p.title}
+                      </p>
+                    </a>
+                  ))}
                   {guideSources.filter(s => s.imageUrl).map((s, i) => (
                     <a
-                      key={i}
+                      key={`src-${i}`}
                       href={s.url}
                       target="_blank"
                       rel="noopener noreferrer"

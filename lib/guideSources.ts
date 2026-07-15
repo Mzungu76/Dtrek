@@ -8,8 +8,9 @@ export interface GuideSource {
   url: string
   title: string
   // Foto di riferimento del percorso letta dal meta tag og:image della pagina fonte (vedi
-  // lib/sourceImageFetch.ts) — presente al massimo su UNA fonte per guida, quella la cui pagina
-  // ne espone una. Assente sulle guide generate prima di questo campo.
+  // lib/sourceImageFetch.ts) — presente su ciascuna fonte la cui pagina ne espone una (possono
+  // essere più di una). Assente sulle guide generate prima di questo campo, o quando la fonte non
+  // espone un'immagine pubblica.
   imageUrl?: string
 }
 
