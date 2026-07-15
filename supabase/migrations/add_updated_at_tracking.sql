@@ -21,12 +21,15 @@ ALTER TABLE activity_photos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT 
 CREATE INDEX IF NOT EXISTS idx_activities_updated_at    ON activities (updated_at);
 CREATE INDEX IF NOT EXISTS idx_planned_hikes_updated_at ON planned_hikes (updated_at);
 
-CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_activities_updated_at ON activities;
 CREATE TRIGGER trg_activities_updated_at
