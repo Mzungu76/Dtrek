@@ -4,6 +4,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { sanitizeBreveSections, DEFAULT_BREVE_SECTIONS } from '@/lib/guideSections'
 import { writeCachedAiSettings, deleteCachedAiSettings } from '@/lib/aiKeyCache'
 import { isHikerExperienceLevel, sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
+import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
 
 /** Tanaka formula for max heart rate: 211 − 0.64 × age */
 function deriveFCmax(age: number): number {
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at, claude_model')
     .eq('user_id', user.id)
     .single()
 
@@ -99,6 +100,7 @@ export async function GET(req: NextRequest) {
     hikerConcerns:            sanitizeHikerConcerns(data?.hiker_concerns),
     hikerEnvironmentPrefs:    sanitizeHikerEnvironmentPrefs(data?.hiker_environment_prefs),
     onboardingCompletedAt:    (data?.onboarding_completed_at    as string) ?? null,
+    claudeModel:              isValidClaudeModelId(data?.claude_model) ? data.claude_model : DEFAULT_CLAUDE_MODEL,
   })
 }
 
@@ -146,6 +148,7 @@ export async function POST(req: NextRequest) {
     hikerConcerns?: string[]
     hikerEnvironmentPrefs?: string[]
     onboardingCompletedAt?: string | null
+    claudeModel?: string | null
   }
 
   const upsertData: Record<string, unknown> = {
@@ -293,6 +296,15 @@ export async function POST(req: NextRequest) {
     upsertData.guide_breve_sections = sanitizeBreveSections(body.guideBreveSections)
   }
 
+  // Modello Claude preferito per la generazione (guida, Chiedi a Giulia, confronto percorsi) —
+  // vedi lib/claudeModels.ts. null torna al modello di default.
+  if (body.claudeModel !== undefined) {
+    if (body.claudeModel !== null && !isValidClaudeModelId(body.claudeModel)) {
+      return NextResponse.json({ error: 'Modello Claude non valido' }, { status: 400 })
+    }
+    upsertData.claude_model = body.claudeModel
+  }
+
   // Profilo escursionista (wizard di onboarding / sezione profilo) — vedi lib/hikerProfile.ts
   if (body.hikerExperienceLevel !== undefined) {
     if (body.hikerExperienceLevel !== null && !isHikerExperienceLevel(body.hikerExperienceLevel)) {
@@ -342,6 +354,7 @@ export async function POST(req: NextRequest) {
       apiKey:        trimmed,
       userGender:    body.userGender ?? 'non_specificato',
       breveSections: body.guideBreveSections ? sanitizeBreveSections(body.guideBreveSections) : DEFAULT_BREVE_SECTIONS,
+      claudeModel:   isValidClaudeModelId(body.claudeModel) ? body.claudeModel : DEFAULT_CLAUDE_MODEL,
     })
   }
 

@@ -7,6 +7,7 @@ import type { PoiItem }    from '@/lib/overpass'
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration }  from '@/lib/tcxParser'
 import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/guide/resolveApiKeyAndSettings'
+import { isCreditBalanceError } from '@/lib/anthropicErrors'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120  // ricerca web + risposta può richiedere più dei 60s di partenza
@@ -138,7 +139,7 @@ export async function POST(req: NextRequest) {
         : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
     }
 
-    const { apiKey, lookupFailed } = user
+    const { apiKey, claudeModel, lookupFailed } = user
       ? await resolveApiKeyAndSettings(user.id)
       : await resolveEmergencySharedKey()
     if (!apiKey) {
@@ -247,7 +248,7 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey })
     const stream = client.messages.stream({
-      model:      'claude-sonnet-4-6',
+      model:      claudeModel,
       max_tokens: 600,
       system,
       messages: [
@@ -345,7 +346,12 @@ export async function POST(req: NextRequest) {
           send({ type: 'done', pertinent, sources })
           controller.close()
         } catch (e) {
-          send({ type: 'error', message: e instanceof Error ? e.message : 'Errore Claude' })
+          send({
+            type: 'error',
+            message: isCreditBalanceError(e)
+              ? 'Il credito residuo della tua chiave API Claude si è esaurito.'
+              : e instanceof Error ? e.message : 'Errore Claude',
+          })
           controller.close()
         }
       },

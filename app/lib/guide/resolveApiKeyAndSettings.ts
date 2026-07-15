@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { sanitizeBreveSections, type GuideSectionKey } from '@/lib/guideSections'
 import { readCachedAiSettings, writeCachedAiSettings, deleteCachedAiSettings, isEmergencySharedKeyEnabled } from '@/lib/aiKeyCache'
+import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
 
 /** Chiave API Claude + preferenze utente rilevanti per la Guida — condiviso tra la generazione
  *  della guida (app/api/guide/route.ts) e le domande e risposte sul percorso (app/api/guide/qa/route.ts). */
@@ -8,6 +9,9 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
   apiKey: string | null
   userGender: string
   breveSections: GuideSectionKey[]
+  /** Modello Claude scelto dall'utente in Impostazioni (vedi lib/claudeModels.ts) — DEFAULT_CLAUDE_MODEL
+   *  se non ha mai scelto nulla o se il valore salvato non è più una stringa di modello valida. */
+  claudeModel: string
   /** true quando NÉ Supabase NÉ la copia di riserva (lib/aiKeyCache.ts, Upstash Redis) sono
    *  riuscite a rispondere — a differenza di una lettura riuscita che conferma semplicemente
    *  l'assenza di una chiave. I chiamanti devono mostrare "temporaneamente non disponibile", non
@@ -16,7 +20,7 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
 }> {
   const { data: settings, error } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections')
+    .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections, claude_model')
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -26,16 +30,17 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
     const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null) ?? null
     const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
     const breveSections = sanitizeBreveSections(settings?.guide_breve_sections)
+    const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : DEFAULT_CLAUDE_MODEL
 
     // Tiene la copia di riserva sincronizzata con l'ultimo stato noto-buono di Supabase — sia
     // quando c'è una chiave personale da (ri)salvare, sia quando è stata rimossa, così un blackout
     // successivo non serve mai una chiave ormai cancellata. Non cachea mai la chiave condivisa
     // (fallback premium): non ha senso duplicarla per utente, e process.env resta comunque
     // disponibile in ogni caso.
-    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections })
+    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections, claudeModel })
     else void deleteCachedAiSettings(userId)
 
-    return { apiKey, userGender, breveSections, lookupFailed: false }
+    return { apiKey, userGender, breveSections, claudeModel, lookupFailed: false }
   }
 
   // Supabase irraggiungibile — prova la copia di riserva, infrastruttura indipendente.
@@ -45,11 +50,12 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
       apiKey:        cached.apiKey,
       userGender:    cached.userGender,
       breveSections: sanitizeBreveSections(cached.breveSections),
+      claudeModel:   isValidClaudeModelId(cached.claudeModel) ? cached.claudeModel : DEFAULT_CLAUDE_MODEL,
       lookupFailed:  false,
     }
   }
 
-  return { apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined), lookupFailed: true }
+  return { apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined), claudeModel: DEFAULT_CLAUDE_MODEL, lookupFailed: true }
 }
 
 /**
@@ -65,6 +71,7 @@ export async function resolveEmergencySharedKey(): Promise<{
   apiKey: string | null
   userGender: string
   breveSections: GuideSectionKey[]
+  claudeModel: string
   lookupFailed: boolean
 }> {
   const sharedKey = process.env.ANTHROPIC_API_KEY ?? null
@@ -73,6 +80,7 @@ export async function resolveEmergencySharedKey(): Promise<{
     apiKey:        enabled ? sharedKey : null,
     userGender:    'non_specificato',
     breveSections: sanitizeBreveSections(undefined),
+    claudeModel:   DEFAULT_CLAUDE_MODEL,
     lookupFailed:  !enabled,
   }
 }

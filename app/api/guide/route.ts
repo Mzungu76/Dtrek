@@ -18,6 +18,7 @@ import type { SafetyScore } from '@/lib/safetyScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/guide/resolveApiKeyAndSettings'
+import { isCreditBalanceError } from '@/lib/anthropicErrors'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices } from '@/lib/guideNotices'
@@ -503,7 +504,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     )
   }
 
-  const { apiKey, userGender, breveSections, lookupFailed } = user
+  const { apiKey, userGender, breveSections, claudeModel, lookupFailed } = user
     ? await resolveApiKeyAndSettings(user.id)
     : await resolveEmergencySharedKey()
 
@@ -691,7 +692,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // Omesso del tutto per un "Approfondisci" di sezione: non serve riverificare lo stato del
   // percorso solo per arricchire il testo narrativo, e risparmia sia costo che tempo.
   const stream = client.messages.stream({
-    model:      'claude-sonnet-4-6',
+    model:      claudeModel,
     max_tokens: maxTokens,
     system,
     messages:   [{ role: 'user', content: prompt }],
@@ -834,7 +835,19 @@ async function generateGuide(req: NextRequest): Promise<Response> {
           }
         }
       } catch (e) {
-        if (!clientGone) { try { controller.error(e) } catch {} }
+        // Il credito residuo della chiave Anthropic è esaurito: a questo punto la Response è già
+        // partita con status 200 (streaming), quindi non è più possibile segnalarlo con un codice
+        // HTTP dedicato come per gli altri casi d'errore più sopra (402/503) — invece di lasciare
+        // che lo stream vada semplicemente in errore (mostrato al client come un generico "errore
+        // durante la generazione", indistinguibile da un blackout di rete), si manda un tag
+        // dedicato riconosciuto lato client (vedi lib/guideAiError.ts, GuideReader.tsx) e si chiude
+        // lo stream normalmente così il fetch del client completa senza un'eccezione di rete.
+        if (isCreditBalanceError(e)) {
+          safeEnqueue(`[erroreai:credito]Il credito residuo della tua chiave API Claude si è esaurito.[/erroreai]`)
+          if (!clientGone) { try { controller.close() } catch {} }
+        } else if (!clientGone) {
+          try { controller.error(e) } catch {}
+        }
       }
     },
   })

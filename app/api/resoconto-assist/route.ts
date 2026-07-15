@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { apiKey, lookupFailed } = await resolveApiKeyAndSettings(user.id)
+  const { apiKey, claudeModel, lookupFailed } = await resolveApiKeyAndSettings(user.id)
 
   if (!apiKey) {
     return new Response(
@@ -118,7 +118,7 @@ Restituisci solo il nuovo testo del corpo della sezione "${sectionTitle}", senza
   const client = new Anthropic({ apiKey })
 
   const aiStream = client.messages.stream({
-    model:      'claude-sonnet-4-6',
+    model:      claudeModel,
     max_tokens: 4000,
     system:     SYSTEM,
     messages:   [{ role: 'user', content: prompt }],

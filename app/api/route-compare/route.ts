@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
   }
 
-  const { apiKey, userGender, lookupFailed } = await resolveApiKeyAndSettings(user.id)
+  const { apiKey, userGender, claudeModel, lookupFailed } = await resolveApiKeyAndSettings(user.id)
 
   if (!apiKey) {
     return NextResponse.json(
@@ -193,7 +193,7 @@ id da usare nel ranking, nello stesso ordine dei percorsi sopra: ${found.map(f =
   let raw: string
   try {
     const msg = await client.messages.create({
-      model:      'claude-sonnet-4-6',
+      model:      claudeModel,
       max_tokens: 1200,
       system:     SYSTEM,
       messages:   [{ role: 'user', content: prompt }],

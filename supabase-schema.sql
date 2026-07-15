@@ -310,6 +310,12 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_peso_geodiversita SMALLIN
 -- storico, a differenza dei pesi sopra questo non è "assenza = neutro" (vedi lib/tei.ts).
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_f_antr_sensitivity TEXT DEFAULT 'normale' CHECK (tei_f_antr_sensitivity IN ('ignora','normale','fastidio'));
 
+-- Modello Claude preferito per la generazione (guida, Chiedi a Giulia, confronto percorsi) —
+-- vedi lib/claudeModels.ts. NULL = modello di default (DEFAULT_CLAUDE_MODEL), non un valore fisso
+-- qui: l'elenco dei modelli disponibili è letto in diretta dalla Models API di Anthropic
+-- (app/api/ai-models/route.ts), quindi il default può cambiare nel codice senza toccare lo schema.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS claude_model TEXT;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

@@ -34,6 +34,7 @@ export interface CachedAiSettings {
   apiKey: string
   userGender: string
   breveSections: string[]
+  claudeModel: string
 }
 
 const TTL_SECONDS = 60 * 60 * 24 * 30  // 30 giorni — rinfrescata ad ogni lettura Supabase riuscita
