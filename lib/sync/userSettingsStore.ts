@@ -15,6 +15,7 @@
 
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from '@/lib/localStore'
 import { registerEntityFlusher, scheduleFlush } from './syncEngine'
+import { registerPullTask } from './pullEngine'
 
 export interface UserSettingsData {
   hasKey: boolean
@@ -56,6 +57,8 @@ export interface UserSettingsData {
   hikerConcerns: string[]
   hikerEnvironmentPrefs: string[]
   onboardingCompletedAt: string | null
+  /** Server-side last-modified timestamp — see lib/sync/pullEngine.ts. */
+  updatedAt: string | null
 }
 
 const ENTITY_TYPE = 'user_settings'
@@ -118,3 +121,8 @@ registerEntityFlusher(ENTITY_TYPE, async (rows) => {
   refreshUserSettings().catch(() => {})
   return { succeededIds: rows.map((r) => r.outboxId!) }
 })
+
+// A single small row per user — cheap enough to just re-fetch on every pull cycle (app open,
+// reconnect, becoming visible) instead of building list/digest machinery for one record. See
+// lib/sync/pullEngine.ts.
+registerPullTask(async () => { await refreshUserSettings() })

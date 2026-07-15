@@ -11,17 +11,29 @@
 
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from '@/lib/localStore'
 import { registerEntityFlusher, scheduleFlush, flushRows } from './syncEngine'
+import { revalidateInBackground } from './pullEngine'
 import { apiFetch } from '@/lib/apiFetch'
 import type { HikeReport, ReportSection, ReportAuthoredBy } from '@/lib/reportStore'
 
 const ENTITY_TYPE = 'hike_report'
 
-/** Returns the local copy if present; only hits Supabase when there's no local copy yet. */
+function fetchReportFromServer(activityId: string): Promise<HikeReport | null> {
+  return apiFetch<HikeReport | null>(`/api/resoconto?activityId=${encodeURIComponent(activityId)}`)
+}
+
+/**
+ * Returns the local copy if present (and kicks a background revalidation against Supabase in case
+ * another device edited it since — see lib/sync/pullEngine.ts); only awaits the network when
+ * there's no local copy yet.
+ */
 export async function getReport(activityId: string): Promise<HikeReport | null> {
   const local = await lsGet<HikeReport>(LS_KEYS.report(activityId))
-  if (local) return local
+  if (local) {
+    revalidateInBackground(LS_KEYS.report(activityId), local, () => fetchReportFromServer(activityId))
+    return local
+  }
   try {
-    const data = await apiFetch<HikeReport | null>(`/api/resoconto?activityId=${encodeURIComponent(activityId)}`)
+    const data = await fetchReportFromServer(activityId)
     if (data) await lsSet(LS_KEYS.report(activityId), data)
     return data
   } catch {

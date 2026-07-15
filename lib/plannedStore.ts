@@ -2,6 +2,7 @@ import type { TrackPoint } from './tcxParser'
 import type { HikeAssessment } from './hikeAssessment'
 import { lsGet, lsSet, lsDel, LS_KEYS, obEnqueue } from './localStore'
 import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
+import { registerListReconciler } from './sync/pullEngine'
 import { apiFetch, isPermanentClientError } from './apiFetch'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
@@ -27,6 +28,9 @@ export interface PlannedHike {
   hikeNotes?: HikeNote[]
   tags?: string[]
   createdAt: string
+  /** Server-side last-modified timestamp — used by lib/sync/pullEngine.ts to detect a
+   *  newer copy on another device without re-downloading the whole record. */
+  updatedAt?: string
   distanceMeters:       number
   elevationGain:        number
   elevationLoss:        number
@@ -286,3 +290,14 @@ registerEntityFlusher(ENTITY_TYPE, (rows) => flushRows(rows, async (row) => {
     })
   }
 }))
+
+// Keeps this device's cached list/records in sync with edits made on other devices — see
+// lib/sync/pullEngine.ts. Sort matches app/api/planned/route.ts's ORDER BY created_at DESC.
+registerListReconciler<PlannedHikeMeta, PlannedHike>({
+  digestUrl:    '/api/planned?digest=1',
+  listCacheKey: LS_KEYS.plannedList,
+  itemCacheKey: LS_KEYS.planned,
+  fetchItem:    (id) => apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`),
+  toMeta:       toPlannedMeta,
+  sort: (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+})

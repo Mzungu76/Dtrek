@@ -1,5 +1,6 @@
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from './localStore'
 import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
+import { revalidateInBackground } from './sync/pullEngine'
 
 const ENTITY_TYPE = 'hike_questionnaire'
 
@@ -33,6 +34,8 @@ export interface Questionnaire {
   questions: QuestionnaireQuestion[]
   answers: Record<string, QuestionnaireAnswer>
   currentIndex: number
+  /** Server-side last-modified timestamp — see lib/sync/pullEngine.ts. */
+  updatedAt?: string
 }
 
 export interface QuestionnairePhotoMeta {
@@ -57,17 +60,29 @@ function rowToQuestionnaire(row: Record<string, unknown>): Questionnaire {
     questions:    (row.questions as QuestionnaireQuestion[]) ?? [],
     answers:      (row.answers as Record<string, QuestionnaireAnswer>) ?? {},
     currentIndex: (row.current_index as number) ?? 0,
+    updatedAt:    row.updated_at as string | undefined,
   }
 }
 
-/** Returns the local copy if present; only hits Supabase when there's no local copy yet. */
-export async function getQuestionnaire(activityId: string): Promise<Questionnaire | null> {
-  const local = await lsGet<Questionnaire>(LS_KEYS.questionnaire(activityId))
-  if (local) return local
+async function fetchQuestionnaireFromServer(activityId: string): Promise<Questionnaire | null> {
   const res = await fetch(`/api/questionnaire?activityId=${encodeURIComponent(activityId)}`)
   if (!res.ok) throw new Error(`API /api/questionnaire → ${res.status}`)
   const row = await res.json()
-  const q = row ? rowToQuestionnaire(row) : null
+  return row ? rowToQuestionnaire(row) : null
+}
+
+/**
+ * Returns the local copy if present (and kicks a background revalidation against Supabase in case
+ * another device edited it since — see lib/sync/pullEngine.ts); only awaits the network when
+ * there's no local copy yet.
+ */
+export async function getQuestionnaire(activityId: string): Promise<Questionnaire | null> {
+  const local = await lsGet<Questionnaire>(LS_KEYS.questionnaire(activityId))
+  if (local) {
+    revalidateInBackground(LS_KEYS.questionnaire(activityId), local, () => fetchQuestionnaireFromServer(activityId))
+    return local
+  }
+  const q = await fetchQuestionnaireFromServer(activityId)
   if (q) await lsSet(LS_KEYS.questionnaire(activityId), q)
   return q
 }

@@ -74,6 +74,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     floraResult:                   row.flora_result                    as PlannedHike['floraResult'],
     floraTrackHash:                row.flora_track_hash                as string | undefined,
     floraComputedAt:               row.flora_computed_at               as string | undefined,
+    updatedAt:                     row.updated_at                      as string | undefined,
   }
 }
 
@@ -134,10 +135,13 @@ const META_COLS = [
   'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_riddles', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
-  'pending_expires_at', 'archived_at', 'favorite',
+  'pending_expires_at', 'archived_at', 'favorite', 'updated_at',
 ].join(', ')
 
-// Guaranteed-to-exist columns (base schema, no ALTER TABLE additions)
+// Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at
+// deliberately excluded here too: it's itself an ALTER TABLE addition, see
+// supabase/migrations/add_updated_at_tracking.sql, so an environment that hasn't
+// run that migration yet must still be able to fall back to this list)
 const META_COLS_CORE = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
@@ -153,6 +157,20 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const id = req.nextUrl.searchParams.get('id')
+
+    // Lightweight freshness check for lib/sync/pullEngine.ts — see the identical branch in
+    // app/api/activities/route.ts. Swallows a missing updated_at column (pre-migration
+    // environment) as "nothing to reconcile" instead of a 500, since this is purely additive.
+    if (req.nextUrl.searchParams.get('digest') === '1') {
+      const { data, error } = await supabase
+        .from('planned_hikes')
+        .select('id, updated_at')
+        .eq('user_id', user.id)
+      if (error) return NextResponse.json([])
+      return NextResponse.json(
+        (data ?? []).map((r: Record<string, unknown>) => ({ id: r.id as string, updatedAt: r.updated_at as string })),
+      )
+    }
 
     if (id) {
       const { data, error } = await supabase
