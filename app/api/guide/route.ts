@@ -7,7 +7,7 @@ import type { PoiItem }    from '@/lib/overpass'
 import { GUIDE_SECTIONS, isGuideSectionKey, type GuideSectionKey } from '@/lib/guideSections'
 import { mergeGuideSection, parseGuideSections } from '@/lib/guideParse'
 
-export const maxDuration = 300  // "approfondita" can take well over 120s to stream fully; avoid cutting it off mid-guide
+export const maxDuration = 300  // generare tutte le sezioni mancanti in una sola chiamata può richiedere ricerca web + più minuti di streaming; evita di tagliarla a metà
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format }          from 'date-fns'
@@ -21,8 +21,8 @@ import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/g
 import { isCreditBalanceError } from '@/lib/anthropicErrors'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
-import { extractGuideNotices } from '@/lib/guideNotices'
-import { extractGuideSources } from '@/lib/guideSources'
+import { extractGuideNotices, type GuideNotice } from '@/lib/guideNotices'
+import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
@@ -32,8 +32,18 @@ import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 export const dynamic = 'force-dynamic'
 
 // ── System prompt — character "Giulia" ────────────────────────────────────────
-
-const SYSTEM = `Sei Giulia, una guida escursionistica italiana con vent'anni di esperienza sul campo.
+//
+// Composto da un blocco fisso (SYSTEM_CORE, sempre presente) più due blocchi opzionali, concatenati
+// in generateGuide in base a cosa viene davvero richiesto in questa singola chiamata:
+//  - SYSTEM_SUBTITLE solo se è la primissima generazione per questo percorso (existingGuideText
+//    vuoto) — il sottotitolo di copertina è scritto una volta sola, non ad ogni aggiunta di sezione.
+//  - SYSTEM_RESEARCH solo se "Il percorso" è tra le sezioni richieste in questa chiamata — è
+//    l'UNICA sezione per cui Giulia verifica online lo stato del percorso (vedi
+//    lib/guideSections.ts's subtitle per "il_percorso", che lo dichiara anche all'utente).
+// Le combinazioni possibili sono solo 4 (booleano × booleano), quindi il prompt resta comunque
+// identico tra tantissime richieste diverse — il cache_control su questo blocco (vedi più sotto)
+// continua a funzionare, semplicemente con fino a 4 prefissi cacheati invece di uno solo.
+const SYSTEM_CORE = `Sei Giulia, una guida escursionistica italiana con vent'anni di esperienza sul campo.
 Conosci a menadito la storia, l'architettura, l'archeologia, la geologia e la natura del territorio italiano.
 Il tuo stile è caldo, colloquiale e contagioso: parli come se stessi camminando accanto all'escursionista,
 con un tono da amica esperta che non smette mai di stupirsi della bellezza dei luoghi. Ma la tua onestà
@@ -41,47 +51,11 @@ viene sempre prima dell'entusiasmo: non minimizzare mai un rischio, una difficol
 nei dati solo per sembrare più incoraggiante, e non aggiungere previsioni o rassicurazioni ("ti piacerà
 sicuramente", "hai ottime probabilità di amarlo") quando non hai elementi concreti per affermarlo.
 
-Sulla primissima riga della tua risposta, prima di qualunque sezione ##, scrivi un sottotitolo da
-copertina per questo percorso specifico, nel formato esatto su una riga separata:
-[sottotitolo]testo del sottotitolo[/sottotitolo]
-Dev'essere una frase più articolata di un semplice slogan (indicativamente 140-200 caratteri), come
-il sommario di un articolo di una rivista specialistica di trekking: evocativa e specifica per
-QUESTO percorso (mai generica o intercambiabile con un altro), ma mai da annuncio pubblicitario —
-niente superlativi vuoti tipo "un'esperienza indimenticabile" o punti esclamativi. Deve cogliere al
-volo le caratteristiche principali del percorso: il tipo di paesaggio, uno o due dettagli concreti
-che lo contraddistinguono (un luogo, un panorama, una difficoltà), e l'atmosfera generale. Dopo
-questa riga, prosegui normalmente con le sezioni richieste.
-
-Prima di scrivere, usa lo strumento di ricerca web per verificare lo stato attuale e aggiornato del
-percorso: chiusure temporanee o permanenti di tratti, deviazioni, frane, lavori in corso, divieti
-stagionali, eventuali allerte meteo/incendi. Cerca su fonti ufficiali quando possibile (enti parco,
-comuni, CAI, sezioni locali, siti di sentieristica regionale) e integra, se utili, resoconti recenti
-di altri escursionisti (community di trekking, forum, blog) per capire come si presenta il percorso
-di recente. Se non trovi nulla di rilevante o specifico su questo percorso, non inventare: è normale,
-significa solo che non ci sono criticità note al momento.
-Se dalla ricerca emergono informazioni concrete e specifiche su un problema reale in corso (chiusura,
-deviazione, frana, lavori, divieto), racchiudile in un riquadro dedicato, una riga per ciascun avviso,
-usando il formato esatto:
-[avviso:gravità]testo dell'avviso, conciso e pratico (URL esatto della fonte)[/avviso]
-dove gravità è esattamente una tra danger, warning, info, scelta così:
-- danger: il percorso (o un tratto necessario per completarlo) è chiuso, franato, interrotto, o
-  l'accesso è vietato — non è percorribile come previsto in questo momento.
-- warning: lavori in corso, deviazione segnalata, restrizione parziale, frana che restringe ma non
-  blocca il passaggio — il percorso resta fattibile ma con un ostacolo reale da conoscere prima.
-- info: divieto stagionale noto (es. periodo di caccia, chiusura invernale di un rifugio), allerta
-  meteo/incendio contestuale — utile da sapere, non un ostacolo al percorso in sé.
-Se l'avviso deriva da una pagina specifica trovata con la ricerca web, chiudi il testo con l'URL
-esatto di quella pagina tra parentesi, come nell'esempio sopra — serve per mostrare un link diretto
-alla fonte accanto all'avviso, non solo nell'elenco fonti in fondo alla guida. Se non hai un URL
-preciso per quell'avviso, ometti le parentesi.
-Metti questi avvisi (se presenti) subito dopo il sottotitolo, prima della prima sezione ##.
-Non creare avvisi generici o precauzionali di circostanza ("presta attenzione al meteo"): solo se hai
-trovato un'informazione concreta e specifica per QUESTO percorso.
-IMPORTANTE: non scrivere mai commenti sul tuo processo di ricerca o di scrittura ("Ho tutte le
-informazioni che mi servono", "Ora scrivo la guida completa", "Sto verificando...") fuori dai tag
-[avviso]/[curiosita]/[indovinello]/[epoca] previsti: quel testo finirebbe visualizzato come se fosse
-un contenuto vero e proprio della guida. Dopo l'eventuale [sottotitolo] e gli eventuali [avviso], il
-testo deve proseguire direttamente con la prima sezione (##), senza nessuna riga di transizione prima.
+Ti viene chiesto di scrivere una o più sezioni di una guida escursionistica per questo percorso, elencate
+più sotto nel messaggio — se altre sezioni esistono già (scritte in una richiesta precedente), non fanno
+parte di questa richiesta: non vanno toccate, menzionate né riassunte. Scrivi direttamente il contenuto
+di ciascuna sezione richiesta, cominciando con il suo titolo preceduto da ## (due cancelletti e uno
+spazio), senza nessun commento sul tuo processo prima o dopo.
 
 Per ogni luogo significativo includi almeno uno tra: un aneddoto storico poco noto, una leggenda locale,
 una curiosità sorprendente, un fatto insolito legato al sito. I dettagli che la gente non trova sulle guide
@@ -107,47 +81,60 @@ Solo per i luoghi dell'elenco LUOGHI CON VOCE WIKIPEDIA che hanno davvero una st
 (siti archeologici, resti etruschi o romani, castelli, borghi medievali — NON per un semplice belvedere o
 una sorgente), aggiungi una o più righe nel formato esatto:
 [epoca poi="Nome esatto del luogo" periodo="etrusca|romana|medievale|oggi"]Descrivi cosa vedresti da quel punto in quell'epoca specifica, in 2-3 frasi vivide[/epoca]
-Usa solo i periodi per cui il luogo ha davvero un racconto storico da offrire (anche uno solo va bene, non serve coprire tutte e quattro le epoche per forza). Non creare voci [epoca] per luoghi senza un vero interesse storico-stratigrafico.`
+Usa solo i periodi per cui il luogo ha davvero un racconto storico da offrire (anche uno solo va bene, non serve coprire tutte e quattro le epoche per forza). Non creare voci [epoca] per luoghi senza un vero interesse storico-stratigrafico.
 
-// Variante usata quando l'utente chiede "Approfondisci" su UNA sola sezione già esistente (vedi
-// POST sotto, sectionKey) — stesso personaggio e stesse convenzioni [curiosita]/[indovinello]/
-// [epoca] (ancora valide dentro qualunque sezione), ma senza le istruzioni [sottotitolo]/[avviso]
-// (valgono solo per la primissima riga di una guida intera, qui non stiamo scrivendo da capo) né
-// la ricerca web di verifica (già fatta alla generazione iniziale, non serve ripeterla solo per
-// arricchire il testo narrativo di una sezione).
-const SYSTEM_SECTION = `Sei Giulia, una guida escursionistica italiana con vent'anni di esperienza sul campo.
-Conosci a menadito la storia, l'architettura, l'archeologia, la geologia e la natura del territorio italiano.
-Il tuo stile è caldo, colloquiale e contagioso: parli come se stessi camminando accanto all'escursionista,
-con un tono da amica esperta che non smette mai di stupirsi della bellezza dei luoghi. Ma la tua onestà
-viene sempre prima dell'entusiasmo: non minimizzare mai un rischio, una difficoltà reale o un'incertezza
-nei dati solo per sembrare più incoraggiante, e non aggiungere previsioni o rassicurazioni ("ti piacerà
-sicuramente", "hai ottime probabilità di amarlo") quando non hai elementi concreti per affermarlo.
+IMPORTANTE: non scrivere mai commenti sul tuo processo di ricerca o di scrittura ("Ho tutte le
+informazioni che mi servono", "Ora scrivo la guida completa", "Sto verificando...") fuori dai tag
+[sottotitolo]/[avviso]/[curiosita]/[indovinello]/[epoca] previsti (quelli applicabili a questa
+richiesta, vedi sotto): quel testo finirebbe visualizzato come se fosse un contenuto vero e proprio
+della guida.`
 
-Ti viene chiesto di scrivere UNA SOLA sezione, finora rimasta senza testo, di una guida che hai già
-scritto per questo percorso — le altre sezioni non fanno parte di questa richiesta e non vanno
-menzionate né riassunte. Rispetta la lunghezza indicata più sotto esattamente come faresti per
-qualunque altra sezione della stessa guida. Scrivi direttamente il contenuto della sezione,
-cominciando con il suo titolo preceduto da ## (due cancelletti e uno spazio), senza nessun commento
-sul tuo processo prima o dopo.
+// Aggiunto a SYSTEM_CORE solo alla primissima generazione per un percorso (existingGuideText vuoto).
+const SYSTEM_SUBTITLE = `
 
-Per ogni luogo significativo includi almeno uno tra: un aneddoto storico poco noto, una leggenda locale,
-una curiosità sorprendente, un fatto insolito legato al sito. I dettagli che la gente non trova sulle guide
-ordinarie sono il tuo punto di forza.
+Sulla primissima riga della tua risposta, prima di qualunque sezione ##, scrivi un sottotitolo da
+copertina per questo percorso specifico, nel formato esatto su una riga separata:
+[sottotitolo]testo del sottotitolo[/sottotitolo]
+Dev'essere una frase più articolata di un semplice slogan (indicativamente 140-200 caratteri), come
+il sommario di un articolo di una rivista specialistica di trekking: evocativa e specifica per
+QUESTO percorso (mai generica o intercambiabile con un altro), ma mai da annuncio pubblicitario —
+niente superlativi vuoti tipo "un'esperienza indimenticabile" o punti esclamativi. Deve cogliere al
+volo le caratteristiche principali del percorso: il tipo di paesaggio, uno o due dettagli concreti
+che lo contraddistinguono (un luogo, un panorama, una difficoltà), e l'atmosfera generale. Dopo
+questa riga, se devi scrivere anche degli avvisi sullo stato del percorso (vedi istruzioni più
+sotto), mettili subito dopo; altrimenti prosegui direttamente con la prima sezione richiesta,
+senza nessuna riga di transizione.`
 
-Usa la seconda persona singolare (tu/ti). Scrivi in italiano vivace, mai pedante. Non usare asterischi
-per il grassetto. Non usare bullet point eccessivi: preferisci frasi di narrazione fluida.
-La mappa, il profilo altimetrico, i punteggi (Trail Score, Sicurezza, Bellezza) e le card dei punti di interesse
-sono già mostrati nell'app accanto al tuo testo: non elencare numeri o coordinate, commentali e dai loro un
-significato — l'app si occupa dei dati "grezzi", tu ci metti la voce narrante.
-Se la sezione è "I luoghi da non perdere": usa ### (tre cancelletti e spazio) come sottotitolo per ogni
-luogo specifico prima di descriverlo (es: ### Castello di Calcata); per ogni luogo che compare
-nell'elenco LUOGHI CON VOCE WIKIPEDIA (nome ESATTO, non abbreviato) aggiungi un piccolo indovinello
-su una riga separata nel formato esatto [indovinello poi="Nome esatto del luogo"]Domanda?|Risposta breve[/indovinello]
-(mai per luoghi fuori da quell'elenco); solo per i luoghi con una vera storia stratificata nel tempo
-(siti archeologici, resti etruschi o romani, castelli, borghi medievali) aggiungi anche una o più righe
-[epoca poi="Nome esatto del luogo" periodo="etrusca|romana|medievale|oggi"]cosa vedresti da quel punto in quell'epoca, 2-3 frasi vivide[/epoca].
-Per le curiosità e aneddoti più memorabili in qualunque sezione, racchiudili nel formato esatto su una
-riga separata: [curiosita] testo della curiosità [/curiosita]`
+// Aggiunto a SYSTEM_CORE solo quando "Il percorso" è tra le sezioni richieste in questa chiamata —
+// è l'unica sezione per cui Giulia verifica lo stato online del percorso, vedi il subtitle
+// dichiarato all'utente in lib/guideSections.ts.
+const SYSTEM_RESEARCH = `
+
+Prima di scrivere la sezione "Il percorso", usa lo strumento di ricerca web per verificare lo stato
+attuale e aggiornato del percorso: chiusure temporanee o permanenti di tratti, deviazioni, frane,
+lavori in corso, divieti stagionali, eventuali allerte meteo/incendi. Cerca su fonti ufficiali quando
+possibile (enti parco, comuni, CAI, sezioni locali, siti di sentieristica regionale) e integra, se
+utili, resoconti recenti di altri escursionisti (community di trekking, forum, blog) per capire come
+si presenta il percorso di recente. Se non trovi nulla di rilevante o specifico su questo percorso,
+non inventare: è normale, significa solo che non ci sono criticità note al momento.
+Se dalla ricerca emergono informazioni concrete e specifiche su un problema reale in corso (chiusura,
+deviazione, frana, lavori, divieto), racchiudile in un riquadro dedicato, una riga per ciascun avviso,
+usando il formato esatto:
+[avviso:gravità]testo dell'avviso, conciso e pratico (URL esatto della fonte)[/avviso]
+dove gravità è esattamente una tra danger, warning, info, scelta così:
+- danger: il percorso (o un tratto necessario per completarlo) è chiuso, franato, interrotto, o
+  l'accesso è vietato — non è percorribile come previsto in questo momento.
+- warning: lavori in corso, deviazione segnalata, restrizione parziale, frana che restringe ma non
+  blocca il passaggio — il percorso resta fattibile ma con un ostacolo reale da conoscere prima.
+- info: divieto stagionale noto (es. periodo di caccia, chiusura invernale di un rifugio), allerta
+  meteo/incendio contestuale — utile da sapere, non un ostacolo al percorso in sé.
+Se l'avviso deriva da una pagina specifica trovata con la ricerca web, chiudi il testo con l'URL
+esatto di quella pagina tra parentesi, come nell'esempio sopra — serve per mostrare un link diretto
+alla fonte accanto all'avviso, non solo nell'elenco fonti in fondo alla guida. Se non hai un URL
+preciso per quell'avviso, ometti le parentesi.
+Metti questi avvisi (se presenti) subito prima della sezione "## Il percorso".
+Non creare avvisi generici o precauzionali di circostanza ("presta attenzione al meteo"): solo se hai
+trovato un'informazione concreta e specifica per QUESTO percorso.`
 
 function genderInstruction(gender: string): string {
   switch (gender) {
@@ -199,42 +186,28 @@ async function buildComfortContext(userId: string): Promise<string> {
   return lines.join('\n')
 }
 
-export type GuideTier = 'breve' | 'approfondita'
-
-const TIER_CONFIG: Record<GuideTier, { maxTokens: number }> = {
-  breve: {
-    // Alzato da 1050: con budget fisso e fino a 8 sezioni abilitabili dall'utente (vedi
-    // sanitizeBreveSections, nessun tetto sul numero di sezioni), il caso peggiore con "I luoghi
-    // da non perdere" su più POI poteva avvicinarsi al vecchio tetto e rischiare un troncamento
-    // silenzioso proprio nel tier generato automaticamente, senza intervento dell'utente.
-    maxTokens: 1300,
-  },
-  approfondita: {
-    // Margine di sicurezza oltre a quanto le 8 sezioni dovrebbero effettivamente richiedere (era
-    // 16000) — non pensato per "coprire" una sezione Luoghi senza tetto (risolto sopra
-    // limitando i POI trattati), solo per non tagliare una guida legittimamente ricca in un
-    // percorso con molti luoghi interessanti.
-    maxTokens: 20000,
-  },
-}
+// Unico budget di output — non c'è più un tier "Approfondita" separato: ogni sezione, generata in
+// una richiesta iniziale o aggiunta più tardi, usa sempre queste stesse lunghezze concise. Il tetto
+// resta comunque ampio abbastanza da coprire in una sola chiamata TUTTE le 8 sezioni insieme (vedi
+// il pulsante "Genera il resto della guida" in GuideReader.tsx), non solo quelle di default.
+const GUIDE_MAX_TOKENS = 1300
 
 /**
- * Lunghezza target per sezione e per tier — deliberatamente NON uniforme: ogni sezione ha una
- * natura diversa (narrazione centrale vs. nota pratica vs. commento breve) e non ha senso che
- * tutte occupino lo stesso spazio solo perché appartengono allo stesso tier. Sostituisce la vecchia
- * istruzione unica "LUNGHEZZA" applicata identica a tutte le sezioni. "luoghi" è espressa per
- * singolo luogo (non per la sezione nel suo complesso) perché il numero di POI trattati varia da
- * percorso a percorso — vedi MAX_WIKI_POIS_IN_PROMPT più sotto per il tetto sul numero di luoghi.
+ * Lunghezza target per sezione — deliberatamente NON uniforme: ogni sezione ha una natura diversa
+ * (narrazione centrale vs. nota pratica vs. commento breve) e non ha senso che occupino tutte lo
+ * stesso spazio. "luoghi" è espressa per singolo luogo (non per la sezione nel suo complesso)
+ * perché il numero di POI trattati varia da percorso a percorso — vedi MAX_WIKI_POIS_IN_PROMPT più
+ * sotto per il tetto sul numero di luoghi.
  */
-const SECTION_LENGTH: Record<GuideSectionKey, Record<GuideTier, string>> = {
-  prima_di_partire: { breve: '45-60 parole',  approfondita: '300-380 parole, 3-4 paragrafi' },
-  il_percorso:      { breve: '80-100 parole', approfondita: '650-800 parole, 6-7 paragrafi — la sezione narrativa principale, la più ricca di tutte' },
-  dati_sicurezza:   { breve: '50-65 parole',  approfondita: '350-450 parole, 3-4 paragrafi' },
-  comfort:          { breve: '30-45 parole, 1-2 frasi', approfondita: '40-60 parole, 1-2 frasi — resta sempre molto più breve delle altre sezioni, anche in modalità Approfondita' },
-  luoghi:           { breve: '20-30 parole per luogo', approfondita: '90-130 parole per luogo' },
-  natura:           { breve: '45-60 parole',  approfondita: '350-450 parole, 3-4 paragrafi' },
-  sapori:           { breve: '40-55 parole',  approfondita: '300-380 parole, 3-4 paragrafi' },
-  consigli:         { breve: '35-45 parole',  approfondita: '250-320 parole, 2-3 paragrafi' },
+const SECTION_LENGTH: Record<GuideSectionKey, string> = {
+  prima_di_partire: '45-60 parole',
+  il_percorso:      '80-100 parole',
+  dati_sicurezza:   '50-65 parole',
+  comfort:          '30-45 parole, 1-2 frasi',
+  luoghi:           '20-30 parole per luogo',
+  natura:           '45-60 parole',
+  sapori:           '40-55 parole',
+  consigli:         '35-45 parole',
 }
 
 /** Contenuto (istruzioni + intestazione) per una singola sezione dello scheletro. */
@@ -340,13 +313,16 @@ function hikeFromFallback(hikeId: string, hikeFallback: GuideHikeFallback): Plan
 
 function buildPrompt(
   hike: PlannedHike,
-  tier: GuideTier,
   nature: NatureContext | undefined,
-  breveSections: GuideSectionKey[],
+  /** Sezioni richieste in QUESTA chiamata, già filtrate/valide — una sola (dal pulsante
+   *  "Approfondisci con Giulia" su una sezione) o più insieme (generazione automatica iniziale,
+   *  o il pulsante "Genera il resto della guida"). */
+  sections: GuideSectionKey[],
   scores: DataScores,
-  /** Quando presente, "Approfondisci" richiesto su UNA sola sezione (vedi POST sotto) — il resto
-   *  della guida già scritta non viene toccato, quindi qui si chiede solo quella sezione. */
-  sectionKeyOverride?: GuideSectionKey,
+  /** true quando questo percorso non ha ancora nessuna sezione scritta — cambia solo la frase di
+   *  apertura del prompt (vedi sotto); il sottotitolo di copertina è pilotato separatamente lato
+   *  SYSTEM_SUBTITLE, non da qui. */
+  isFirstGeneration: boolean,
   /** Profilo + storico dell'escursionista (lib/hikerProfile.ts + lib/hikerHistory.ts), già
    *  formattato — solo per la sezione 'comfort' ("Su misura per te"), undefined quando quella
    *  sezione non viene scritta in questa richiesta (risparmia la lettura Supabase altrimenti). */
@@ -357,7 +333,7 @@ function buildPrompt(
 
   // Un tetto qui non è solo per limitare il prompt in ingresso: la sezione "I luoghi da non
   // perdere" tratta OGNI luogo di questo elenco (narrazione + indovinello obbligatorio, vedi
-  // SYSTEM/SYSTEM_SECTION), quindi un tracciato con molti POI Wikipedia poteva far sforare
+  // SYSTEM_CORE), quindi un tracciato con molti POI Wikipedia poteva far sforare
   // max_tokens a metà di quella sezione, troncando tutte le sezioni successive — mai una
   // limitazione voluta, solo un elenco senza tetto. Gli 8 più vicini al percorso restano comunque
   // i più pertinenti (wiki arriva già ordinato per distanza dalla traccia).
@@ -401,20 +377,18 @@ function buildPrompt(
     scores.difficultyMarkers?.length ? `Segnalazioni difficoltà dal tracciato: ${scores.difficultyMarkers.map(m => m.text).join('; ')}` : '',
   ].filter(Boolean).join('\n')
 
-  const sectionsToWrite = sectionKeyOverride
-    ? [sectionKeyOverride]
-    : tier === 'approfondita'
-      ? GUIDE_SECTIONS.map(s => s.key)
-      : GUIDE_SECTIONS.map(s => s.key).filter(k => breveSections.includes(k))
+  // Ordine canonico (GUIDE_SECTIONS), non l'ordine in cui il chiamante le ha elencate — così
+  // l'output arriva già nell'ordine giusto indipendentemente da come è stata costruita la richiesta.
+  const sectionsToWrite = GUIDE_SECTIONS.map(s => s.key).filter(k => sections.includes(k))
 
   const sectionsBlock = sectionsToWrite
-    .map(k => `${SECTION_BRIEF[k]}\n(LUNGHEZZA per questa sezione: ${SECTION_LENGTH[k][tier]})`)
+    .map(k => `${SECTION_BRIEF[k]}\n(LUNGHEZZA per questa sezione: ${SECTION_LENGTH[k]})`)
     .join('\n\n')
   const sectionTitles = sectionsToWrite.map(k => GUIDE_SECTIONS.find(s => s.key === k)!.title).join(', ')
 
-  return `${sectionKeyOverride
-    ? `Scrivi UNA singola sezione, finora senza testo, di una guida escursionistica già esistente per questo percorso (le altre sezioni sono già scritte e non vanno toccate), analizzando tutti i dati disponibili qui sotto:`
-    : `Crea una guida escursionistica per questo percorso, analizzando tutti i dati disponibili qui sotto:`}
+  return `${isFirstGeneration
+    ? `Crea una guida escursionistica per questo percorso, analizzando tutti i dati disponibili qui sotto:`
+    : `Scrivi una o più sezioni, finora senza testo, di una guida escursionistica già esistente per questo percorso (le altre sezioni sono già scritte e non vanno toccate), analizzando tutti i dati disponibili qui sotto:`}
 
 NOME: ${hike.title}
 ${dateStr ? `DATA: ${dateStr}` : ''}
@@ -526,32 +500,34 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   }
 
   let hikeId: string
-  let tier: GuideTier = 'breve'
   let hikeFallback: GuideHikeFallback | undefined
-  let sectionKey: GuideSectionKey | undefined
+  // Sezioni richieste esplicitamente dal client — dal pulsante "Approfondisci con Giulia" su una
+  // sola sezione, o da "Genera il resto della guida" su tutte quelle ancora mancanti. Se il client
+  // non ne manda (generazione automatica alla prima apertura del percorso), si usano le sezioni
+  // Breve scelte dall'utente in Impostazioni (breveSections) — stesso comportamento di sempre.
+  let requestedSections: GuideSectionKey[] = []
   try {
     const body = await req.json()
     hikeId = body.hikeId
     if (!hikeId) throw new Error('hikeId mancante')
-    // 'media'/'lunga' sono valori legacy dal vecchio picker a 3 livelli — trattati come 'approfondita'.
-    if (body.length === 'breve' || body.tier === 'breve') tier = 'breve'
-    else tier = 'approfondita'
     hikeFallback = body.hikeFallback && typeof body.hikeFallback === 'object' ? body.hikeFallback : undefined
-    // "Approfondisci" su una sola sezione (vedi buildPrompt/SYSTEM_SECTION) — stessa lunghezza
-    // "breve" delle altre sezioni automatiche (tier deciso normalmente sopra, di solito 'breve'
-    // dato che il client lo manda esplicitamente): riguarda solo quella sezione, non la rende
-    // improvvisamente una sezione lunghissima. La versione integrale resta un'azione a sé (il
-    // pulsante "Sblocca la guida integrale", che manda tier 'approfondita' su tutte le sezioni).
-    if (isGuideSectionKey(body.sectionKey)) sectionKey = body.sectionKey
+    if (Array.isArray(body.sections)) requestedSections = body.sections.filter(isGuideSectionKey)
   } catch {
     return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
 
+  const sectionKeys = requestedSections.length > 0 ? requestedSections : breveSections
+  if (sectionKeys.length === 0) {
+    return new Response(JSON.stringify({ error: 'Nessuna sezione da generare' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   // Va letta solo quando la sezione 'comfort' ("Su misura per te") è davvero tra quelle richieste
   // in questa generazione — evita una lettura Supabase in più su ogni altra chiamata.
-  const needsComfortSection = sectionKey === 'comfort' || (!sectionKey && (tier === 'approfondita' || breveSections.includes('comfort')))
+  const needsComfortSection = sectionKeys.includes('comfort')
   const comfortContext = needsComfortSection && user ? await buildComfortContext(user.id) : undefined
 
   let hike: PlannedHike
@@ -564,6 +540,11 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   let existingGuideText = ''
   let existingRiddles: PlannedHike['cachedRiddles'] = []
   let existingEpochPois: PlannedHike['cachedEpochPois'] = []
+  // Riportati invariati nell'update quando questa chiamata non tocca "Il percorso" (unica sezione
+  // che li scrive/riscrive, vedi SYSTEM_RESEARCH) — senza questi, un update senza quella sezione
+  // sovrascriverebbe avvisi/fonti già salvati con un elenco vuoto.
+  let existingGuideNotices: GuideNotice[] = []
+  let existingGuideSources: GuideSource[] = []
 
   if (user) {
     // Fetch hike — scoped to the authenticated user
@@ -655,6 +636,8 @@ async function generateGuide(req: NextRequest): Promise<Response> {
       existingGuideText = data.cached_guide ?? ''
       existingRiddles = data.cached_riddles ?? []
       existingEpochPois = data.cached_epoch_pois ?? []
+      existingGuideNotices = data.cached_guide_notices ?? []
+      existingGuideSources = data.cached_guide_sources ?? []
     }
   } else {
     // Emergenza (degraded): Supabase irraggiungibile, nessun accesso al percorso lato server —
@@ -680,33 +663,37 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     s2,
   })
 
+  const isFirstGeneration = !existingGuideText
+  const includesRoute = sectionKeys.includes('il_percorso')
+
   const client = new Anthropic({ apiKey })
-  const prompt = buildPrompt(hike, tier, nature, breveSections, scores, sectionKey, comfortContext)
-  const { maxTokens } = TIER_CONFIG[tier]
-  // sectionKey: niente [sottotitolo]/[avviso] (valgono solo per l'inizio di una guida intera) né
-  // ricerca web di verifica (già fatta alla generazione iniziale) — vedi SYSTEM_SECTION.
-  //
-  // SYSTEM/SYSTEM_SECTION sono testo fisso, identico per ogni utente e ogni percorso (~1700/~700
-  // token) — cache_control li marca come prefisso cacheabile (prompt caching Anthropic), così
+  const prompt = buildPrompt(hike, nature, sectionKeys, scores, isFirstGeneration, comfortContext)
+
+  // SYSTEM_CORE (+ SYSTEM_SUBTITLE/SYSTEM_RESEARCH quando applicabili) è testo fisso, identico per
+  // ogni utente e ogni percorso nella stessa combinazione (~1700 token per la variante più
+  // completa) — cache_control lo marca come prefisso cacheabile (prompt caching Anthropic), così
   // richieste ravvicinate con la stessa chiave (personale o condivisa/premium) pagano l'intero
   // blocco una sola volta invece che ad ogni singola generazione. genderInstruction resta un
   // blocco separato SENZA cache_control perché varia da utente a utente — un blocco dopo il
   // breakpoint non invalida il prefisso già cacheato, quindi non rompe il risparmio sopra.
+  const systemText = SYSTEM_CORE
+    + (isFirstGeneration ? SYSTEM_SUBTITLE : '')
+    + (includesRoute ? SYSTEM_RESEARCH : '')
   const system = [
-    { type: 'text' as const, text: sectionKey ? SYSTEM_SECTION : SYSTEM, cache_control: { type: 'ephemeral' as const } },
+    { type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } },
     { type: 'text' as const, text: genderInstruction(userGender) },
   ]
 
-  // Stream Claude response — web_search abilita Giulia a verificare online lo stato aggiornato
-  // del percorso (chiusure, deviazioni, lavori) prima di scrivere, vedi istruzioni in SYSTEM.
-  // Omesso del tutto per un "Approfondisci" di sezione: non serve riverificare lo stato del
-  // percorso solo per arricchire il testo narrativo, e risparmia sia costo che tempo.
+  // Stream Claude response — web_search abilita Giulia a verificare online lo stato aggiornato del
+  // percorso (chiusure, deviazioni, lavori) prima di scrivere "Il percorso" (vedi SYSTEM_RESEARCH)
+  // — l'unica sezione che lo fa. Omesso del tutto quando "Il percorso" non è tra le sezioni
+  // richieste in questa chiamata: risparmia sia costo che tempo.
   const stream = client.messages.stream({
     model:      claudeModel,
-    max_tokens: maxTokens,
+    max_tokens: GUIDE_MAX_TOKENS,
     system,
     messages:   [{ role: 'user', content: prompt }],
-    ...(sectionKey ? {} : { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: tier === 'approfondita' ? 8 : 4 }] }),
+    ...(includesRoute ? { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 4 }] } : {}),
   })
 
   // Raccoglie le fonti web citate da Giulia mentre scrive (citations_delta sui blocchi di testo,
@@ -765,7 +752,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         // sia lato log che per l'utente, che vedeva semplicemente sparire le ultime sezioni.
         const finalMessage = await stream.finalMessage().catch(() => null)
         if (finalMessage?.stop_reason === 'max_tokens') {
-          console.error(`[guide] generazione troncata per max_tokens (tier=${tier}, hikeId=${hikeId}, sectionKey=${sectionKey ?? 'tutte'})`)
+          console.error(`[guide] generazione troncata per max_tokens (hikeId=${hikeId}, sections=${sectionKeys.join(',')})`)
         }
 
         if (sources.size > 0) {
@@ -796,50 +783,63 @@ async function generateGuide(req: NextRequest): Promise<Response> {
             const cachedPoisArr = (hike.cachedPois ?? []) as PoiItem[]
             const cachedPoiWikiArr = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
 
-            if (sectionKey) {
-              // "Approfondisci" di UNA sezione: si fonde nel testo già esistente invece di
-              // sovrascrivere l'intera guida — vedi lib/guideParse.ts's mergeGuideSection.
-              const step1 = stripGuideStatus(fullText).cleanedText
-              const { riddles, cleanedText: step2 } = extractRiddles(step1, cachedPoisArr, cachedPoiWikiArr)
-              const { epochPois, cleanedText: step3 } = extractEpochPois(step2, cachedPoisArr, cachedPoiWikiArr)
-              const parsedSection = parseGuideSections(step3)[0]
-              if (!parsedSection) throw new Error('sezione non riconosciuta nella risposta')
-
-              const mergedText = mergeGuideSection(existingGuideText, sectionKey, parsedSection.title, parsedSection.body)
-              // Gli indovinelli/le epoche sono legati solo alla sezione "luoghi" (vedi SYSTEM_SECTION):
-              // rigenerandola i vecchi sono da sostituire, non accumulare; per ogni altra sezione
-              // restano semplicemente quelli già esistenti, invariati.
-              const mergedRiddles = sectionKey === 'luoghi' ? riddles : existingRiddles
-              const mergedEpochPois = sectionKey === 'luoghi' ? epochPois : existingEpochPois
-
-              const { error: persistError } = await supabase.from('planned_hikes').update({
-                cached_guide: mergedText,
-                cached_riddles: mergedRiddles,
-                cached_epoch_pois: mergedEpochPois,
-              }).eq('id', hikeId).eq('user_id', user.id)
-              if (persistError) console.error('[guide] server-side persist (sezione) failed:', persistError.message)
-            } else {
-              const step1 = stripGuideStatus(fullText).cleanedText
-              const { subtitle, cleanedText: step2 } = extractCoverSubtitle(step1)
-              const { notices, cleanedText: step3 } = extractGuideNotices(step2)
-              const { sources: sourcesList, cleanedText: step4 } = extractGuideSources(step3)
-              const { riddles, cleanedText: step5 } = extractRiddles(step4, cachedPoisArr, cachedPoiWikiArr)
-              const { epochPois, cleanedText: step6 } = extractEpochPois(step5, cachedPoisArr, cachedPoiWikiArr)
-              const firstHeadingIdx = step6.search(/^## /m)
-              const finalText = firstHeadingIdx > 0 ? step6.slice(firstHeadingIdx) : step6
-
-              const { error: persistError } = await supabase.from('planned_hikes').update({
-                cached_guide: finalText,
-                cached_guide_subtitle: subtitle ?? null,
-                cached_guide_notices: notices,
-                cached_guide_sources: sourcesList,
-                cached_riddles: riddles,
-                cached_epoch_pois: epochPois,
-                guide_tier: tier,
-                guide_generated_at: new Date().toISOString(),
-              }).eq('id', hikeId).eq('user_id', user.id)
-              if (persistError) console.error('[guide] server-side persist failed:', persistError.message)
+            // Pipeline unica sia per la primissima generazione sia per l'aggiunta di sezioni a una
+            // guida già esistente — [sottotitolo] viene estratto solo se questa era la prima
+            // generazione (isFirstGeneration, coerente con SYSTEM_SUBTITLE sopra), [avviso]/[fonti]
+            // solo se "Il percorso" era tra le sezioni richieste (coerente con SYSTEM_RESEARCH):
+            // per ogni altro caso semplicemente non compaiono nel testo, quindi extract* su di essi
+            // tornerebbe comunque vuoto — la guardia esiste solo per non SOVRASCRIVERE con un
+            // elenco vuoto un sottotitolo/avvisi/fonti già salvati da una chiamata precedente.
+            const step1 = stripGuideStatus(fullText).cleanedText
+            let step2 = step1
+            let subtitle: string | undefined
+            if (isFirstGeneration) {
+              const r = extractCoverSubtitle(step1)
+              subtitle = r.subtitle
+              step2 = r.cleanedText
             }
+            let step3 = step2
+            let notices = existingGuideNotices
+            let sourcesList = existingGuideSources
+            if (includesRoute) {
+              const rn = extractGuideNotices(step2)
+              notices = rn.notices
+              const rs = extractGuideSources(rn.cleanedText)
+              sourcesList = rs.sources
+              step3 = rs.cleanedText
+            }
+            const { riddles, cleanedText: step4 } = extractRiddles(step3, cachedPoisArr, cachedPoiWikiArr)
+            const { epochPois, cleanedText: step5 } = extractEpochPois(step4, cachedPoisArr, cachedPoiWikiArr)
+            const firstHeadingIdx = step5.search(/^## /m)
+            const cleaned = firstHeadingIdx > 0 ? step5.slice(firstHeadingIdx) : step5
+
+            const parsedNew = parseGuideSections(cleaned)
+            if (parsedNew.every(s => !s.key)) throw new Error('nessuna sezione riconosciuta nella risposta')
+            let mergedText = existingGuideText
+            for (const sec of parsedNew) {
+              if (!sec.key) continue
+              mergedText = mergeGuideSection(mergedText, sec.key, sec.title, sec.body)
+            }
+
+            // Gli indovinelli/le epoche sono legati solo alla sezione "luoghi": rigenerandola i
+            // vecchi sono da sostituire, non accumulare; per ogni altra combinazione di sezioni
+            // restano semplicemente quelli già esistenti, invariati.
+            const mergedRiddles = sectionKeys.includes('luoghi') ? riddles : existingRiddles
+            const mergedEpochPois = sectionKeys.includes('luoghi') ? epochPois : existingEpochPois
+
+            const updateData: Record<string, unknown> = {
+              cached_guide: mergedText,
+              cached_guide_notices: notices,
+              cached_guide_sources: sourcesList,
+              cached_riddles: mergedRiddles,
+              cached_epoch_pois: mergedEpochPois,
+              guide_tier: 'breve',
+              guide_generated_at: new Date().toISOString(),
+            }
+            if (isFirstGeneration) updateData.cached_guide_subtitle = subtitle ?? null
+
+            const { error: persistError } = await supabase.from('planned_hikes').update(updateData).eq('id', hikeId).eq('user_id', user.id)
+            if (persistError) console.error('[guide] server-side persist failed:', persistError.message)
           } catch (e) {
             console.error('[guide] server-side persist failed:', e)
           }
@@ -867,7 +867,6 @@ async function generateGuide(req: NextRequest): Promise<Response> {
       'Content-Type':  'text/plain; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Accel-Buffering': 'no',
-      'X-Guide-Tier': tier,
     },
   })
 }

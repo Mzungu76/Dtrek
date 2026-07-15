@@ -5,6 +5,8 @@ import MagazineBody from './MagazineBody'
 
 interface Props {
   title: string
+  /** Riga statica sotto il titolo che spiega cosa contiene la sezione — vedi lib/guideSections.ts. */
+  subtitle?: string
   icon: ReactNode
   color: string
   body?: string
@@ -33,7 +35,7 @@ interface Props {
  *    così la nav e lo scroll-to-section continuano a funzionare anche per lei.
  */
 const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
-  { title, icon, color, body, widget, sectionPhoto, twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo },
+  { title, subtitle, icon, color, body, widget, sectionPhoto, twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo },
   ref,
 ) {
   const hasBody = !!body?.trim()
@@ -50,7 +52,7 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
           </span>
         ) : onApprofondisci && (
           <button onClick={onApprofondisci} className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 shrink-0">
-            Approfondisci <ChevronRight className="w-3 h-3" />
+            Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" />
           </button>
         )}
       </article>
@@ -78,6 +80,9 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
         <h2 className="font-display text-[22px] sm:text-[26px] font-semibold text-stone-800 mt-1.5 leading-tight" style={{ textWrap: 'balance' as const }}>
           {title}
         </h2>
+        {subtitle && (
+          <p className="text-[12.5px] text-stone-400 mt-1 leading-snug">{subtitle}</p>
+        )}
         <div className="mt-3 h-[2px] w-10 rounded-full" style={{ background: color }} />
       </div>
 
@@ -98,7 +103,7 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
           <div className="flex items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
             <Sparkles className="w-3.5 h-3.5" />
             Testo narrato non ancora generato —{' '}
-            <button onClick={onApprofondisci} className="text-terra-600 font-bold hover:text-terra-700">Approfondisci</button>
+            <button onClick={onApprofondisci} className="text-terra-600 font-bold hover:text-terra-700">Approfondisci con Giulia (AI)</button>
           </div>
         )}
       </div>
