@@ -685,7 +685,17 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   const { maxTokens } = TIER_CONFIG[tier]
   // sectionKey: niente [sottotitolo]/[avviso] (valgono solo per l'inizio di una guida intera) né
   // ricerca web di verifica (già fatta alla generazione iniziale) — vedi SYSTEM_SECTION.
-  const system = (sectionKey ? SYSTEM_SECTION : SYSTEM) + genderInstruction(userGender)
+  //
+  // SYSTEM/SYSTEM_SECTION sono testo fisso, identico per ogni utente e ogni percorso (~1700/~700
+  // token) — cache_control li marca come prefisso cacheabile (prompt caching Anthropic), così
+  // richieste ravvicinate con la stessa chiave (personale o condivisa/premium) pagano l'intero
+  // blocco una sola volta invece che ad ogni singola generazione. genderInstruction resta un
+  // blocco separato SENZA cache_control perché varia da utente a utente — un blocco dopo il
+  // breakpoint non invalida il prefisso già cacheato, quindi non rompe il risparmio sopra.
+  const system = [
+    { type: 'text' as const, text: sectionKey ? SYSTEM_SECTION : SYSTEM, cache_control: { type: 'ephemeral' as const } },
+    { type: 'text' as const, text: genderInstruction(userGender) },
+  ]
 
   // Stream Claude response — web_search abilita Giulia a verificare online lo stato aggiornato
   // del percorso (chiusure, deviazioni, lavori) prima di scrivere, vedi istruzioni in SYSTEM.

@@ -230,7 +230,14 @@ export async function POST(req: NextRequest) {
 
     const guideExcerpt = guideSource.slice(0, 6000)
     const context = buildContext(hike, guideExcerpt)
-    const system  = `${SYSTEM_BASE}\n\n${context}`
+    // Due breakpoint separati (prompt caching Anthropic): SYSTEM_BASE è identico per ogni domanda
+    // su ogni percorso, context è identico solo finché si resta sullo stesso percorso — è proprio
+    // lo scenario per cui il caching rende di più, dato che "Chiedi a Giulia" è per natura una
+    // conversazione a più turni sullo stesso contesto (vedi history più sotto).
+    const system = [
+      { type: 'text' as const, text: SYSTEM_BASE, cache_control: { type: 'ephemeral' as const } },
+      { type: 'text' as const, text: context,     cache_control: { type: 'ephemeral' as const } },
+    ]
 
     // Ultimi scambi già avvenuti su questo percorso — replay come veri turni user/assistant,
     // così Giulia può seguire il filo di una conversazione invece di trattare ogni domanda isolata.
