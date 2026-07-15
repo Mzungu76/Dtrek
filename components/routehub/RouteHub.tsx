@@ -103,7 +103,11 @@ export default function RouteHub({
   const indexChangeTimer = useRef<ReturnType<typeof setTimeout>>()
   const skippedFirstRun = useRef(false)
   useEffect(() => {
-    if (!onIndexChange || items.length === 0) return
+    // A RESYNC_INDEX (state.instant) is the same route re-deriving its numeric slot in a
+    // reordered list, not the user picking a different one — notifying the caller for it would
+    // treat it as real navigation (re-fetch the "new" hike, reset its score-settling state...)
+    // even though nothing the user is looking at actually changed.
+    if (!onIndexChange || items.length === 0 || state.instant) return
     if (!skippedFirstRun.current) { skippedFirstRun.current = true; return }
     clearTimeout(indexChangeTimer.current)
     indexChangeTimer.current = setTimeout(() => {
@@ -140,8 +144,16 @@ export default function RouteHub({
   // tracks intent; the layout effect re-derives the index from that id every time the set changes.
   // If the current route got filtered out entirely (e.g. it isn't a favorite and the filter just
   // turned on), it falls back to index 0 of whatever's left instead of leaving state.index stale.
+  // Both effects below must be layout effects, and in this order: a plain (deferred) useEffect
+  // here used to let the reconciliation effect run — synchronously, in a later commit — before
+  // this one had caught up with the route the user had just picked. It would then resync the
+  // index back to the *previous* route, which itself changes state.index and can trigger another
+  // round — the carousel/gallery visibly ping-ponging between routes instead of settling once.
+  // Layout effects for one component flush in declaration order within the same commit, and any
+  // one commit's layout effects always finish before the next commit's — so this can no longer
+  // observe a stale id, from either an in-commit or a cross-commit race.
   const currentRouteId = useRef<string | null>(null)
-  useEffect(() => { currentRouteId.current = visibleItems[state.index]?.id ?? currentRouteId.current }, [state.index]) // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { currentRouteId.current = visibleItems[state.index]?.id ?? currentRouteId.current }, [state.index]) // eslint-disable-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     if (visibleItems.length === 0) return
     const id = currentRouteId.current
