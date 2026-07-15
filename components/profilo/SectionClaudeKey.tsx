@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Key, Trash2, Eye, EyeOff, Loader2, ShieldCheck, WifiOff } from 'lucide-react'
+import { Key, Trash2, Eye, EyeOff, Loader2, ShieldCheck, WifiOff, Cpu, Check } from 'lucide-react'
+import { DEFAULT_CLAUDE_MODEL, FALLBACK_CLAUDE_MODELS, type ClaudeModelOption } from '@/lib/claudeModels'
 
 /** Gestione della chiave API Claude personale per la generazione delle guide AI. Piano di ristrutturazione, Parte 2.4. */
 export default function SectionClaudeKey() {
@@ -17,15 +18,48 @@ export default function SectionClaudeKey() {
   // sparirebbe dalla vista durante un blackout, inducendo a incollarla di nuovo inutilmente.
   const [unavailable, setUnavailable] = useState(false)
 
+  // Modello Claude usato per generazione/domande — selezionabile indipendentemente dalla chiave
+  // (l'utente può cambiare modello in qualsiasi momento, non solo quando salva una nuova chiave).
+  const [claudeModel,  setClaudeModel]  = useState(DEFAULT_CLAUDE_MODEL)
+  const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>(FALLBACK_CLAUDE_MODELS)
+  const [modelSaving,  setModelSaving]  = useState(false)
+  const [modelSaved,   setModelSaved]   = useState(false)
+
   useEffect(() => {
     fetch('/api/user-settings')
       .then(r => r.json().then(d => {
         if (!r.ok) { setUnavailable(true); return }
         setHasKey(d.hasKey); setKeyHint(d.keyHint); setUnavailable(!!d.settingsUnavailable)
+        if (d.claudeModel) setClaudeModel(d.claudeModel)
       }))
       .catch(() => setUnavailable(true))
       .finally(() => setLoading(false))
+
+    // Elenco modelli disponibili — letto in diretta dalla Models API di Anthropic (sempre
+    // aggiornato ad ogni nuovo modello rilasciato, vedi app/api/ai-models/route.ts). Se il modello
+    // già salvato dall'utente non compare nell'elenco tornato (es. rimosso/rinominato da
+    // Anthropic), lo si aggiunge comunque come opzione così il selettore non "salta" silenziosamente
+    // su un altro modello.
+    fetch('/api/ai-models')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.models?.length) setModelOptions(d.models) })
+      .catch(() => {})
   }, [])
+
+  async function handleModelChange(modelId: string) {
+    setClaudeModel(modelId)
+    setModelSaving(true); setModelSaved(false)
+    try {
+      const res = await fetch('/api/user-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claudeModel: modelId }),
+      })
+      if (res.ok) { setModelSaved(true); setTimeout(() => setModelSaved(false), 2200) }
+    } finally {
+      setModelSaving(false)
+    }
+  }
 
   async function handleSave() {
     if (!input.trim()) return
@@ -142,6 +176,41 @@ export default function SectionClaudeKey() {
         <p className={`mt-3 ml-7 text-xs font-medium ${status.ok ? 'text-forest-600' : 'text-red-600'}`}>
           {status.ok ? '✓ ' : '✗ '}{status.msg}
         </p>
+      )}
+
+      {/* ── Modello Claude ────────────────────────────────────────────────── */}
+      {!loading && (
+        <div className="mt-5 pt-5 border-t border-stone-100">
+          <div className="flex items-center gap-2.5 mb-1">
+            <Cpu className="w-5 h-5 text-forest-600 shrink-0" />
+            <h2 className="text-sm font-semibold text-stone-800">Modello AI</h2>
+          </div>
+          <p className="text-xs text-stone-500 mb-3 ml-7 leading-relaxed">
+            Scegli il modello Claude usato per generare guide e rispondere alle domande — modelli
+            più leggeri (es. Haiku) costano meno per richiesta ma sono meno approfonditi.
+          </p>
+          <div className="ml-7 flex items-center gap-2">
+            <select
+              value={claudeModel}
+              onChange={e => handleModelChange(e.target.value)}
+              disabled={modelSaving}
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition disabled:opacity-50"
+            >
+              {(modelOptions.some(m => m.id === claudeModel)
+                ? modelOptions
+                : [...modelOptions, { id: claudeModel, displayName: claudeModel }]
+              ).map(m => (
+                <option key={m.id} value={m.id}>{m.displayName}</option>
+              ))}
+            </select>
+            {modelSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-400" />}
+            {modelSaved && !modelSaving && (
+              <span className="flex items-center gap-1 text-xs text-forest-600 font-medium">
+                <Check className="w-3.5 h-3.5" /> Salvato
+              </span>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

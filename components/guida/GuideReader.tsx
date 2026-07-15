@@ -16,6 +16,8 @@ import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, normalizeGuideNotices, parseNoticeSource, type GuideNotice } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
+import { extractGuideAiError, type GuideAiError } from '@/lib/guideAiError'
+import CreditErrorModal from './CreditErrorModal'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
@@ -209,6 +211,11 @@ export default function GuideReader({
   const [generating,   setGenerating]   = useState(false)
   const [generatingSectionKey, setGeneratingSectionKey] = useState<GuideSectionKey | null>(null)
   const [error,        setError]        = useState<string | null>(null)
+  // Errore AI irreversibile rilevato a metà stream (es. credito Anthropic esaurito, vedi
+  // lib/guideAiError.ts) — mostrato come popup dedicato invece del banner generico `error` sopra,
+  // perché richiede un'azione dell'utente (ricaricare credito o cambiare modello) e non va perso
+  // di vista in fondo alla pagina.
+  const [aiCreditError, setAiCreditError] = useState<GuideAiError | null>(null)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
 
@@ -346,6 +353,10 @@ export default function GuideReader({
       acc = stripGuideStatus(acc).cleanedText
       setGenStatus(undefined)
 
+      const { aiError, cleanedText: withoutAiError } = extractGuideAiError(acc)
+      if (aiError) { setAiCreditError(aiError); return }
+      acc = withoutAiError
+
       const { subtitle, cleanedText } = extractCoverSubtitle(acc)
       const { notices, cleanedText: cleanedText2 } = extractGuideNotices(cleanedText)
       const { sources, cleanedText: cleanedText3 } = extractGuideSources(cleanedText2)
@@ -425,6 +436,10 @@ export default function GuideReader({
         },
       })
       acc = stripGuideStatus(acc).cleanedText
+
+      const { aiError, cleanedText: withoutAiError } = extractGuideAiError(acc)
+      if (aiError) { setAiCreditError(aiError); return }
+      acc = withoutAiError
 
       const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
       const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
@@ -975,6 +990,10 @@ export default function GuideReader({
           </div>
         </div>
       </div>
+
+      {aiCreditError && (
+        <CreditErrorModal message={aiCreditError.message} onClose={() => setAiCreditError(null)} />
+      )}
     </div>
   )
 }

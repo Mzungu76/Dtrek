@@ -9,6 +9,7 @@ import { sectionsToMarkdown, type ReportSection } from '@/lib/reportStore'
 import type { PoiItem }      from '@/lib/overpass'
 import type { WikiPage }     from '@/lib/wikipedia'
 import { fetchNatureContext, formatNatureContextBlock, type NatureContext } from '@/lib/aiNatureContext'
+import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -314,13 +315,14 @@ export async function POST(req: NextRequest) {
 
   const { data: settings } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier')
+    .select('claude_api_key, subscription_tier, claude_model')
     .eq('user_id', user.id)
     .maybeSingle()
 
   const userKey = settings?.claude_api_key as string | null | undefined
   const hasSub  = (settings?.subscription_tier as string) === 'premium'
   const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
+  const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : DEFAULT_CLAUDE_MODEL
 
   if (!apiKey) {
     return new Response(
@@ -416,7 +418,7 @@ export async function POST(req: NextRequest) {
   let fullText = ''
 
   const aiStream = client.messages.stream({
-    model:      'claude-sonnet-4-6',
+    model:      claudeModel,
     max_tokens: maxTokens,
     system:     SYSTEM,
     messages:   [{ role: 'user', content: prompt }],
