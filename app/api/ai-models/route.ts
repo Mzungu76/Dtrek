@@ -16,10 +16,12 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: NextRequest) {
   const { user, degraded } = await getUserFromRequestDetailed(req)
+  // Il "feature" richiesto qui non conta: questa route legge solo apiKey (per interrogare la
+  // Models API), mai il claudeModel risolto — 'guide' è un valore arbitrario tra quelli validi.
   const { apiKey } = user
-    ? await resolveApiKeyAndSettings(user.id)
+    ? await resolveApiKeyAndSettings(user.id, 'guide')
     : degraded
-      ? await resolveEmergencySharedKey()
+      ? await resolveEmergencySharedKey('guide')
       : { apiKey: null }
 
   if (!apiKey) {

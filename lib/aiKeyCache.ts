@@ -34,7 +34,12 @@ export interface CachedAiSettings {
   apiKey: string
   userGender: string
   breveSections: string[]
-  claudeModel: string
+  /** Scelta esplicita dell'utente (user_settings.claude_model), non ancora risolta contro il
+   *  default per funzionalità — null quando l'utente non ha scelto nulla. La risoluzione al
+   *  default giusto (diverso per funzionalità, vedi lib/claudeModels.ts) avviene solo lato
+   *  lettura, in resolveApiKeyAndSettings.ts — cachear già un valore risolto legherebbe per
+   *  errore ogni funzionalità al default di quella che ha scritto la cache per prima. */
+  claudeModel: string | null
 }
 
 const TTL_SECONDS = 60 * 60 * 24 * 30  // 30 giorni — rinfrescata ad ogni lettura Supabase riuscita

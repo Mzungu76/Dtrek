@@ -1,16 +1,21 @@
 import { supabase } from '@/lib/supabase'
 import { sanitizeBreveSections, type GuideSectionKey } from '@/lib/guideSections'
 import { readCachedAiSettings, writeCachedAiSettings, deleteCachedAiSettings, isEmergencySharedKeyEnabled } from '@/lib/aiKeyCache'
-import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
+import { resolveDefaultModel, isValidClaudeModelId, type AiFeature } from '@/lib/claudeModels'
 
 /** Chiave API Claude + preferenze utente rilevanti per la Guida — condiviso tra la generazione
- *  della guida (app/api/guide/route.ts) e le domande e risposte sul percorso (app/api/guide/qa/route.ts). */
-export async function resolveApiKeyAndSettings(userId: string): Promise<{
+ *  della guida (app/api/guide/route.ts), le domande e risposte sul percorso
+ *  (app/api/guide/qa/route.ts), il confronto percorsi e l'assistente di editing del resoconto.
+ *  `feature` sceglie il default corretto (lib/claudeModels.ts) quando l'utente non ha scelto
+ *  esplicitamente un modello — la scelta esplicita, quando presente, resta identica per tutte le
+ *  funzionalità e vince sempre. */
+export async function resolveApiKeyAndSettings(userId: string, feature: AiFeature): Promise<{
   apiKey: string | null
   userGender: string
   breveSections: GuideSectionKey[]
-  /** Modello Claude scelto dall'utente in Impostazioni (vedi lib/claudeModels.ts) — DEFAULT_CLAUDE_MODEL
-   *  se non ha mai scelto nulla o se il valore salvato non è più una stringa di modello valida. */
+  /** Modello Claude scelto dall'utente in Impostazioni, oppure il default della funzionalità
+   *  richiesta (vedi lib/claudeModels.ts) se non ha mai scelto nulla o se il valore salvato non è
+   *  più una stringa di modello valida. */
   claudeModel: string
   /** true quando NÉ Supabase NÉ la copia di riserva (lib/aiKeyCache.ts, Upstash Redis) sono
    *  riuscite a rispondere — a differenza di una lettura riuscita che conferma semplicemente
@@ -30,14 +35,17 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
     const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null) ?? null
     const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
     const breveSections = sanitizeBreveSections(settings?.guide_breve_sections)
-    const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : DEFAULT_CLAUDE_MODEL
+    // rawClaudeModel è la scelta esplicita dell'utente (o null) — non ancora risolta contro il
+    // default, che dipende dalla funzionalità chiamante e quindi va calcolato qui, non cacheato.
+    const rawClaudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : null
+    const claudeModel = rawClaudeModel ?? resolveDefaultModel(feature)
 
     // Tiene la copia di riserva sincronizzata con l'ultimo stato noto-buono di Supabase — sia
     // quando c'è una chiave personale da (ri)salvare, sia quando è stata rimossa, così un blackout
     // successivo non serve mai una chiave ormai cancellata. Non cachea mai la chiave condivisa
     // (fallback premium): non ha senso duplicarla per utente, e process.env resta comunque
     // disponibile in ogni caso.
-    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections, claudeModel })
+    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections, claudeModel: rawClaudeModel })
     else void deleteCachedAiSettings(userId)
 
     return { apiKey, userGender, breveSections, claudeModel, lookupFailed: false }
@@ -46,16 +54,17 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
   // Supabase irraggiungibile — prova la copia di riserva, infrastruttura indipendente.
   const cached = await readCachedAiSettings(userId)
   if (cached) {
+    const rawClaudeModel = isValidClaudeModelId(cached.claudeModel) ? cached.claudeModel : null
     return {
       apiKey:        cached.apiKey,
       userGender:    cached.userGender,
       breveSections: sanitizeBreveSections(cached.breveSections),
-      claudeModel:   isValidClaudeModelId(cached.claudeModel) ? cached.claudeModel : DEFAULT_CLAUDE_MODEL,
+      claudeModel:   rawClaudeModel ?? resolveDefaultModel(feature),
       lookupFailed:  false,
     }
   }
 
-  return { apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined), claudeModel: DEFAULT_CLAUDE_MODEL, lookupFailed: true }
+  return { apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined), claudeModel: resolveDefaultModel(feature), lookupFailed: true }
 }
 
 /**
@@ -67,7 +76,7 @@ export async function resolveApiKeyAndSettings(userId: string): Promise<{
  * lib/aiKeyCache.ts's isEmergencySharedKeyEnabled. Mai chiamata quando la verifica normale o
  * quella via JWKS riescono — solo come ultima risorsa.
  */
-export async function resolveEmergencySharedKey(): Promise<{
+export async function resolveEmergencySharedKey(feature: AiFeature): Promise<{
   apiKey: string | null
   userGender: string
   breveSections: GuideSectionKey[]
@@ -80,7 +89,7 @@ export async function resolveEmergencySharedKey(): Promise<{
     apiKey:        enabled ? sharedKey : null,
     userGender:    'non_specificato',
     breveSections: sanitizeBreveSections(undefined),
-    claudeModel:   DEFAULT_CLAUDE_MODEL,
+    claudeModel:   resolveDefaultModel(feature),
     lookupFailed:  !enabled,
   }
 }

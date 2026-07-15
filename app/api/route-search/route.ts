@@ -233,8 +233,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { apiKey, lookupFailed } = user
-    ? await resolveApiKeyAndSettings(user.id)
-    : await resolveEmergencySharedKey()
+    ? await resolveApiKeyAndSettings(user.id, 'routeSearch')
+    : await resolveEmergencySharedKey('routeSearch')
   if (!apiKey) {
     return NextResponse.json(
       lookupFailed

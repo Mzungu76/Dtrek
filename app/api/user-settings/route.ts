@@ -354,7 +354,11 @@ export async function POST(req: NextRequest) {
       apiKey:        trimmed,
       userGender:    body.userGender ?? 'non_specificato',
       breveSections: body.guideBreveSections ? sanitizeBreveSections(body.guideBreveSections) : DEFAULT_BREVE_SECTIONS,
-      claudeModel:   isValidClaudeModelId(body.claudeModel) ? body.claudeModel : DEFAULT_CLAUDE_MODEL,
+      // Valore grezzo (null se l'utente non ha scelto nulla) — la risoluzione al default corretto,
+      // diverso per funzionalità, avviene solo in resolveApiKeyAndSettings.ts al momento della
+      // lettura, non qui: cachear già un valore risolto legherebbe per errore ogni funzionalità al
+      // default di quella che ha scritto la cache per prima (vedi lib/claudeModels.ts).
+      claudeModel:   isValidClaudeModelId(body.claudeModel) ? body.claudeModel : null,
     })
   }
 

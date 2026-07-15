@@ -9,7 +9,7 @@ import { sectionsToMarkdown, type ReportSection } from '@/lib/reportStore'
 import type { PoiItem }      from '@/lib/overpass'
 import type { WikiPage }     from '@/lib/wikipedia'
 import { fetchNatureContext, formatNatureContextBlock, type NatureContext } from '@/lib/aiNatureContext'
-import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
+import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
 import { tryAcquireCooldown } from '@/lib/aiCooldown'
 
 export const maxDuration = 120
@@ -32,13 +32,16 @@ const LENGTH_CONFIG: Record<ResocontoLength, { maxTokens: number; instruction: s
   },
 }
 
-const SYSTEM = `Sei un giornalista outdoor di punta, specializzato in reportage escursionistici per riviste come Meridiani Montagne e National Geographic Traveller Italia.
-Hai una solida formazione in geografia, storia naturale e medicina dello sport, che usi per arricchire ogni articolo con dati precisi e contesto culturale profondo.
+const SYSTEM = `Sei un giornalista outdoor di punta, specializzato in reportage per riviste come Meridiani
+Montagne e National Geographic Traveller Italia — con solida formazione in geografia, storia
+naturale e medicina dello sport, che usi per dare ad ogni articolo dati precisi e contesto
+culturale profondo.
 
-Il tuo stile è autorevole ma accessibile: come un corrispondente dal campo, descrivi l'escursione in terza persona con tono oggettivo ma evocativo.
-Usa i dati biometrici (frequenza cardiaca, calorie, passo) come elementi narrativi che raccontano lo sforzo fisico.
-Integra i dati di percorso con riferimenti storici, geologici e naturalistici tratti dalla guida disponibile.
-Descrivi le fotografie scattate lungo il percorso come dispacci visivi: cosa immortalano, a che punto del cammino, cosa rivelano del territorio.
+Stile autorevole ma accessibile: come un corrispondente dal campo, racconti l'escursione in terza
+persona con tono oggettivo ma evocativo. Usa i dati biometrici (frequenza cardiaca, calorie, passo)
+come elementi narrativi che raccontano lo sforzo fisico, integra riferimenti storici, geologici e
+naturalistici tratti dalla guida disponibile, e descrivi le fotografie come dispacci visivi: cosa
+immortalano, in quale punto del cammino, cosa rivelano del territorio.
 
 Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio). Non usare asterischi per il grassetto.
 Non usare bullet point: preferisci narrazione fluida e densa di dettagli.
@@ -323,7 +326,7 @@ export async function POST(req: NextRequest) {
   const userKey = settings?.claude_api_key as string | null | undefined
   const hasSub  = (settings?.subscription_tier as string) === 'premium'
   const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
-  const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : DEFAULT_CLAUDE_MODEL
+  const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : resolveDefaultModel('resoconto')
 
   if (!apiKey) {
     return new Response(

@@ -8,15 +8,41 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem }    from '@/lib/overpass'
 import { POI_META }        from '@/lib/overpass'
 import { fetchNatureContext, type NatureContext } from '@/lib/aiNatureContext'
-import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
+import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
+import { jsonSchemaFormat } from '@/lib/aiJsonOutput'
 
 export const dynamic = 'force-dynamic'
 
 const SYSTEM = `Sei un'intervistatrice esperta che aiuta gli escursionisti a raccontare le proprie esperienze in montagna con parole proprie.
 Il tuo compito è preparare un breve questionario mirato, basato su punti specifici di un percorso (vette, salite, punti di interesse, foto scattate, vegetazione/fenologia osservata), per raccogliere ricordi, sensazioni e dettagli personali da fondere poi in un resoconto scritto.
 Le domande devono essere concrete e ancorate a un punto preciso del percorso, mai generiche o intercambiabili tra escursioni diverse.
-Scrivi in italiano naturale e colloquiale, come faresti parlando di persona con l'escursionista.
-Rispondi sempre e solo con un array JSON valido, senza alcun testo introduttivo o conclusivo fuori dal JSON.`
+Scrivi in italiano naturale e colloquiale, come faresti parlando di persona con l'escursionista.`
+
+interface QuestionnaireOutput {
+  questions: RawQuestion[]
+}
+
+const QUESTIONNAIRE_SCHEMA = {
+  type: 'object',
+  properties: {
+    questions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          anchorIndex: { type: 'integer' },
+          question:    { type: 'string' },
+          inputType:   { type: 'string', enum: ['choice', 'text', 'freewrite'] },
+          choices:     { type: 'array', items: { type: 'string' } },
+        },
+        required: ['anchorIndex', 'question', 'inputType'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['questions'],
+  additionalProperties: false,
+}
 
 interface PhotoMeta {
   caption: string
@@ -211,25 +237,15 @@ Crea tra 5 e 8 domande, una per ciascuno dei punti di ancoraggio più significat
 Le domande devono essere specifiche per quel punto del percorso (la salita, la foto, la vetta, il rifugio...), non generiche o intercambiabili.
 Scegli 1 o 2 punti tra quelli più "emotivamente densi" (una vetta, una foto significativa) per invitare l'escursionista a scrivere liberamente con parole sue: in quel caso usa inputType "freewrite" e la domanda deve invitarlo esplicitamente a raccontare cosa ha provato o pensato in quel momento.
 Per gli altri punti usa inputType "text" (risposta breve) oppure "choice" con 3-4 opzioni quando ha senso una scelta rapida (es. percezione di difficoltà, stato d'animo).
-
-Rispondi SOLO con un array JSON valido, nessun testo fuori dal JSON, in questo formato esatto:
-[{"anchorIndex": 0, "question": "...", "inputType": "choice|text|freewrite", "choices": ["...", "..."]}]
-Il campo "choices" va incluso solo quando inputType è "choice".`
+Il campo "choices" va incluso solo quando inputType è "choice", con almeno 2 opzioni.`
 }
 
-function parseQuestions(raw: string, anchors: Anchor[]): QuestionnaireQuestion[] | null {
-  const jsonStr = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(jsonStr)
-  } catch (e) {
-    console.error('[api/questionnaire] parseQuestions: risposta AI non è JSON valido:', e)
-    return null
-  }
-  if (!Array.isArray(parsed)) return null
-
+function parseQuestions(items: RawQuestion[], anchors: Anchor[]): QuestionnaireQuestion[] | null {
+  // Struttura e tipi dei campi sono già garantiti dallo schema (output_config.format,
+  // vedi QUESTIONNAIRE_SCHEMA) — qui restano solo i controlli semantici che lo schema non può
+  // esprimere: indice dell'ancora esistente, "choices" con almeno 2 opzioni per le domande a scelta.
   const out: QuestionnaireQuestion[] = []
-  for (const item of parsed as RawQuestion[]) {
+  for (const item of items) {
     if (typeof item.anchorIndex !== 'number') continue
     const anchor = anchors[item.anchorIndex]
     if (!anchor) continue
@@ -311,7 +327,7 @@ export async function POST(req: NextRequest) {
   const userKey = settings?.claude_api_key as string | null | undefined
   const hasSub  = (settings?.subscription_tier as string) === 'premium'
   const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
-  const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : DEFAULT_CLAUDE_MODEL
+  const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : resolveDefaultModel('questionnaire')
 
   if (!apiKey) {
     return new Response(
@@ -389,15 +405,16 @@ export async function POST(req: NextRequest) {
   const client = new Anthropic({ apiKey })
   const prompt = buildUserPrompt(activity, anchors)
 
-  let raw = ''
+  let output: QuestionnaireOutput | null
   try {
-    const msg = await client.messages.create({
-      model:      claudeModel,
-      max_tokens: 3000,
-      system:     SYSTEM,
-      messages:   [{ role: 'user', content: prompt }],
+    const msg = await client.messages.parse({
+      model:         claudeModel,
+      max_tokens:    3000,
+      system:        SYSTEM,
+      messages:      [{ role: 'user', content: prompt }],
+      output_config: { format: jsonSchemaFormat<QuestionnaireOutput>(QUESTIONNAIRE_SCHEMA) },
     })
-    raw = msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : ''
+    output = msg.parsed_output
   } catch (e: any) {
     return new Response(
       JSON.stringify({ error: 'ai_error', message: e.message }),
@@ -405,7 +422,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const questions = parseQuestions(raw, anchors)
+  const questions = output ? parseQuestions(output.questions, anchors) : null
   if (!questions) {
     return new Response(
       JSON.stringify({ error: 'ai_parse_error', message: 'La risposta AI non era nel formato atteso. Riprova oppure usa la generazione rapida.' }),

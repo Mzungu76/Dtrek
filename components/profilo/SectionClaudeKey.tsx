@@ -186,8 +186,11 @@ export default function SectionClaudeKey() {
             <h2 className="text-sm font-semibold text-stone-800">Modello AI</h2>
           </div>
           <p className="text-xs text-stone-500 mb-3 ml-7 leading-relaxed">
-            Scegli il modello Claude usato per generare guide e rispondere alle domande — modelli
-            più leggeri (es. Haiku) costano meno per richiesta ma sono meno approfonditi.
+            Scegli qui il modello Claude e vale per tutte le funzionalità AI (guida, resoconto,
+            domande, confronto percorsi, questionario, caption): la tua scelta ha sempre la
+            precedenza. Se non scegli nulla, ogni funzionalità usa già di default il modello più
+            adatto per lei — più leggero (Haiku) per i compiti semplici e strutturati, più
+            approfondito (Sonnet) per la narrazione lunga.
           </p>
           <div className="ml-7 flex items-center gap-2">
             <select
