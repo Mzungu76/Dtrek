@@ -4,7 +4,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { sanitizeBreveSections, DEFAULT_BREVE_SECTIONS } from '@/lib/guideSections'
 import { writeCachedAiSettings, deleteCachedAiSettings } from '@/lib/aiKeyCache'
 import { isHikerExperienceLevel, sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
-import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
+import { isValidClaudeModelId } from '@/lib/claudeModels'
 
 /** Tanaka formula for max heart rate: 211 − 0.64 × age */
 function deriveFCmax(age: number): number {
@@ -100,7 +100,11 @@ export async function GET(req: NextRequest) {
     hikerConcerns:            sanitizeHikerConcerns(data?.hiker_concerns),
     hikerEnvironmentPrefs:    sanitizeHikerEnvironmentPrefs(data?.hiker_environment_prefs),
     onboardingCompletedAt:    (data?.onboarding_completed_at    as string) ?? null,
-    claudeModel:              isValidClaudeModelId(data?.claude_model) ? data.claude_model : DEFAULT_CLAUDE_MODEL,
+    // null = "Automatico" (nessuna scelta esplicita, vedi components/profilo/SectionClaudeKey.tsx)
+    // — non risolto qui a un default fisso perché il default vero dipende dalla funzionalità
+    // (guida/resoconto/... vs caption/questionario/...), calcolato solo in
+    // app/lib/guide/resolveApiKeyAndSettings.ts al momento della generazione.
+    claudeModel:              isValidClaudeModelId(data?.claude_model) ? data.claude_model : null,
     updatedAt:                (data?.updated_at as string) ?? null,
   })
 }
