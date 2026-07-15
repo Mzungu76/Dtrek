@@ -200,10 +200,13 @@ async function buildComfortContext(userId: string): Promise<string> {
 
 export type GuideTier = 'breve' | 'approfondita'
 
-const TIER_CONFIG: Record<GuideTier, { maxTokens: number; instruction: string }> = {
+const TIER_CONFIG: Record<GuideTier, { maxTokens: number }> = {
   breve: {
-    maxTokens: 1050,
-    instruction: 'Scrivi in modo conciso ma discorsivo, non didascalico: 3-4 frasi, circa 65-85 parole per sezione.',
+    // Alzato da 1050: con budget fisso e fino a 8 sezioni abilitabili dall'utente (vedi
+    // sanitizeBreveSections, nessun tetto sul numero di sezioni), il caso peggiore con "I luoghi
+    // da non perdere" su più POI poteva avvicinarsi al vecchio tetto e rischiare un troncamento
+    // silenzioso proprio nel tier generato automaticamente, senza intervento dell'utente.
+    maxTokens: 1300,
   },
   approfondita: {
     // Margine di sicurezza oltre a quanto le 8 sezioni dovrebbero effettivamente richiedere (era
@@ -211,8 +214,26 @@ const TIER_CONFIG: Record<GuideTier, { maxTokens: number; instruction: string }>
     // limitando i POI trattati), solo per non tagliare una guida legittimamente ricca in un
     // percorso con molti luoghi interessanti.
     maxTokens: 20000,
-    instruction: 'Scrivi con grande ricchezza di dettagli: 5-6 paragrafi per sezione, circa 500-600 parole per sezione, con aneddoti, curiosità e descrizioni vivide.',
   },
+}
+
+/**
+ * Lunghezza target per sezione e per tier — deliberatamente NON uniforme: ogni sezione ha una
+ * natura diversa (narrazione centrale vs. nota pratica vs. commento breve) e non ha senso che
+ * tutte occupino lo stesso spazio solo perché appartengono allo stesso tier. Sostituisce la vecchia
+ * istruzione unica "LUNGHEZZA" applicata identica a tutte le sezioni. "luoghi" è espressa per
+ * singolo luogo (non per la sezione nel suo complesso) perché il numero di POI trattati varia da
+ * percorso a percorso — vedi MAX_WIKI_POIS_IN_PROMPT più sotto per il tetto sul numero di luoghi.
+ */
+const SECTION_LENGTH: Record<GuideSectionKey, Record<GuideTier, string>> = {
+  prima_di_partire: { breve: '45-60 parole',  approfondita: '300-380 parole, 3-4 paragrafi' },
+  il_percorso:      { breve: '80-100 parole', approfondita: '650-800 parole, 6-7 paragrafi — la sezione narrativa principale, la più ricca di tutte' },
+  dati_sicurezza:   { breve: '50-65 parole',  approfondita: '350-450 parole, 3-4 paragrafi' },
+  comfort:          { breve: '30-45 parole, 1-2 frasi', approfondita: '40-60 parole, 1-2 frasi — resta sempre molto più breve delle altre sezioni, anche in modalità Approfondita' },
+  luoghi:           { breve: '20-30 parole per luogo', approfondita: '90-130 parole per luogo' },
+  natura:           { breve: '45-60 parole',  approfondita: '350-450 parole, 3-4 paragrafi' },
+  sapori:           { breve: '40-55 parole',  approfondita: '300-380 parole, 3-4 paragrafi' },
+  consigli:         { breve: '35-45 parole',  approfondita: '250-320 parole, 2-3 paragrafi' },
 }
 
 /** Contenuto (istruzioni + intestazione) per una singola sezione dello scheletro. */
@@ -242,18 +263,14 @@ valido per chiunque.
 Se il PROFILO E STORICO non è disponibile o è vuoto, dillo in una riga sola e passa subito a commentare
 il percorso in assoluto (dislivello, distanza, terreno) — senza aggiungere entusiasmo o previsioni non
 basate su nulla (es. mai frasi come "le probabilità che tu la ami sono alte" quando non hai nessun dato
-per saperlo).
-IMPORTANTE: questa sezione resta sempre molto più breve delle altre, anche in modalità Approfondita —
-massimo 30-50 parole, 1-2 frasi, mai di più.`,
+per saperlo).`,
   luoghi: `## I luoghi da non perdere
 Approfondimento sui punti di interesse più significativi (quelli nell'elenco LUOGHI CON VOCE
 WIKIPEDIA più sotto). Racconta la loro storia, le leggende, le curiosità che la maggior parte dei
 turisti non conosce. Rendi ogni luogo memorabile.
-IMPORTANTE: la lunghezza indicata più in basso (LUNGHEZZA) vale per QUESTA sezione nel suo
-complesso, non per ogni singolo luogo — se l'elenco contiene diversi luoghi, dividi lo spazio tra
-loro invece di scrivere un paragrafo integrale per ciascuno: è molto meglio finire tutte le sezioni
-richieste con un ritmo più asciutto per luogo, piuttosto che restare a metà di questa sezione senza
-mai arrivare alle successive.`,
+IMPORTANTE: la lunghezza indicata più in basso (LUNGHEZZA) è PER SINGOLO LUOGO, non per la sezione
+nel suo complesso — dedica a ciascun luogo dell'elenco circa quello spazio, così una sezione con più
+luoghi resta comunque completa invece di esaurire lo spazio a metà elenco.`,
   natura: `## La natura intorno a te
 Flora, fauna e geologia della zona. Cosa potresti incontrare (animali, fiori, rocce particolari).
 Aggiungi curiosità naturalistiche legate alla stagione.`,
@@ -389,7 +406,9 @@ function buildPrompt(
       ? GUIDE_SECTIONS.map(s => s.key)
       : GUIDE_SECTIONS.map(s => s.key).filter(k => breveSections.includes(k))
 
-  const sectionsBlock = sectionsToWrite.map(k => SECTION_BRIEF[k]).join('\n\n')
+  const sectionsBlock = sectionsToWrite
+    .map(k => `${SECTION_BRIEF[k]}\n(LUNGHEZZA per questa sezione: ${SECTION_LENGTH[k][tier]})`)
+    .join('\n\n')
   const sectionTitles = sectionsToWrite.map(k => GUIDE_SECTIONS.find(s => s.key === k)!.title).join(', ')
 
   return `${sectionKeyOverride
@@ -425,7 +444,7 @@ ${sectionsBlock}
 
 La guida deve essere ricca di vita ma mai ridondante coi dati che l'app già mostra. Scrivi come se raccontassi in persona, con calore ed entusiasmo genuino.
 
-LUNGHEZZA: ${TIER_CONFIG[tier].instruction}
+IMPORTANTE: rispetta esattamente l'indicazione LUNGHEZZA scritta sotto ciascuna sezione qui sopra — sezioni diverse hanno lunghezze diverse per loro natura (una nota pratica non è lunga come la narrazione del percorso), non uniformarle tutte alla stessa misura.
 
 IMPORTANTE: Completa obbligatoriamente tutte le sezioni richieste (${sectionTitles}). Non terminare prima dell'ultima.`
 }
@@ -451,7 +470,27 @@ export async function GET(req: NextRequest) {
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
+// POST è solo un guscio sottile attorno a generateGuide: qualunque eccezione non gestita che sfugga
+// da generateGuide (letture Supabase che lanciano invece di restituire {error}, un TypeError su un
+// campo inatteso, un fallimento di rete non catturato altrove...) diventerebbe altrimenti un 500
+// generico di Next.js senza corpo JSON, mostrato lato client come errore illeggibile — a differenza
+// di ogni altro errore già previsto qui sotto (402/404/503), che ha sempre un messaggio per l'utente.
 export async function POST(req: NextRequest) {
+  try {
+    return await generateGuide(req)
+  } catch (e) {
+    console.error('[guide] errore non gestito in POST:', e)
+    return new Response(
+      JSON.stringify({
+        error:   'ai_temporarily_unavailable',
+        message: 'Si è verificato un errore imprevisto durante la generazione della guida — riprova tra poco.',
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+}
+
+async function generateGuide(req: NextRequest): Promise<Response> {
   const { user, authUnavailable, degraded } = await getUserFromRequestDetailed(req)
   if (!user && !degraded) {
     return new Response(
@@ -708,6 +747,16 @@ export async function POST(req: NextRequest) {
             if (url && !sources.has(url)) sources.set(url, title ?? url)
           }
         }
+
+        // Rileva un troncamento per esaurimento token: senza questo controllo, una guida tagliata
+        // a metà sezione (o a metà di un tag [indovinello]/[epoca], scartato in silenzio dal
+        // parsing perché mai chiuso — vedi lib/riddles.ts, lib/epochPois.ts) passava inosservata,
+        // sia lato log che per l'utente, che vedeva semplicemente sparire le ultime sezioni.
+        const finalMessage = await stream.finalMessage().catch(() => null)
+        if (finalMessage?.stop_reason === 'max_tokens') {
+          console.error(`[guide] generazione troncata per max_tokens (tier=${tier}, hikeId=${hikeId}, sectionKey=${sectionKey ?? 'tutte'})`)
+        }
+
         if (sources.size > 0) {
           // Foto di riferimento del percorso, per ogni fonte citata che ne espone una pubblicamente
           // (meta tag og:image, vedi lib/sourceImageFetch.ts) — quante più se ne trovano, meglio è
