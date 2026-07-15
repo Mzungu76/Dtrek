@@ -55,6 +55,7 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     netSpeedMs:           row.net_speed_ms             as number | undefined,
     pauseTimeSeconds:     row.pause_time_seconds       as number | undefined,
     iev:                  row.iev                      as number | null | undefined,
+    updatedAt:            row.updated_at               as string | undefined,
   }
 }
 

@@ -1,6 +1,7 @@
 import { TcxActivity, type TrackPoint } from './tcxParser'
 import { lsGet, lsSet, lsDel, LS_KEYS, obEnqueue } from './localStore'
 import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
+import { registerListReconciler } from './sync/pullEngine'
 import { apiFetch, isPermanentClientError } from './apiFetch'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
@@ -21,6 +22,9 @@ export interface HikeNote {
 }
 
 export interface StoredActivity extends TcxActivity {
+  /** Server-side last-modified timestamp — used by lib/sync/pullEngine.ts to detect a
+   *  newer copy on another device without re-downloading the whole record. */
+  updatedAt?: string
   userNotes?: string
   hikeNotes?: HikeNote[]
   title?: string
@@ -44,6 +48,7 @@ export interface ActivityMeta {
   id: string
   title: string
   startTime: string
+  updatedAt?: string
   distanceMeters: number
   totalTimeSeconds: number
   calories: number
@@ -77,6 +82,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     id:              a.id,
     title:           a.title ?? a.notes ?? 'Escursione',
     startTime:       a.startTime,
+    updatedAt:       a.updatedAt,
     distanceMeters:  a.distanceMeters,
     totalTimeSeconds: a.totalTimeSeconds,
     calories:        a.calories,
@@ -217,6 +223,17 @@ registerEntityFlusher(ENTITY_TYPE, (rows) => flushRows(rows, async (row) => {
     })
   }
 }))
+
+// Keeps this device's cached list/records in sync with edits made on other devices — see
+// lib/sync/pullEngine.ts. Sort matches app/api/activities/route.ts's ORDER BY start_time DESC.
+registerListReconciler<ActivityMeta, StoredActivity>({
+  digestUrl:    '/api/activities?digest=1',
+  listCacheKey: LS_KEYS.activitiesList,
+  itemCacheKey: LS_KEYS.activity,
+  fetchItem:    (id) => apiFetch<StoredActivity>(`/api/activity?id=${encodeURIComponent(id)}`),
+  toMeta,
+  sort: (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
+})
 
 /** Global stats calculated from the list (no extra fetch). */
 export function computeGlobalStats(activities: ActivityMeta[]) {

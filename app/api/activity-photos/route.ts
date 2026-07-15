@@ -17,6 +17,7 @@ function rowToPhoto(row: Record<string, unknown>) {
     hasExifGps: (row.has_exif_gps as boolean) ?? false,
     lat:        row.lat as number | undefined,
     lon:        row.lon as number | undefined,
+    updatedAt:  row.updated_at as string | undefined,
   }
 }
 

@@ -3,6 +3,7 @@
 import { getBrowserSupabase } from './supabaseBrowser'
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from './localStore'
 import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
+import { revalidateListInBackground } from './sync/pullEngine'
 
 const BUCKET = 'dtrek-photos'
 const LEGACY_PREFIX = 'dtrek_vp_'
@@ -16,6 +17,8 @@ export interface RoutePhoto {
   hasExifGps: boolean
   lat?: number
   lon?: number
+  /** Server-side last-modified timestamp — see lib/sync/pullEngine.ts. */
+  updatedAt?: string
 }
 
 interface LegacyPhoto {
@@ -82,10 +85,10 @@ async function fetchFromServer(activityId: string): Promise<RoutePhoto[]> {
   if (!res.ok) throw new Error('Impossibile caricare le foto')
   const rows = await res.json() as Array<{
     id: string; url: string; caption: string; progress: number
-    hasExifGps: boolean; lat?: number; lon?: number
+    hasExifGps: boolean; lat?: number; lon?: number; updatedAt?: string
   }>
   return rows
-    .map(r => ({ id: r.id, url: r.url, caption: r.caption, progress: r.progress, hasExifGps: r.hasExifGps, lat: r.lat, lon: r.lon }))
+    .map(r => ({ id: r.id, url: r.url, caption: r.caption, progress: r.progress, hasExifGps: r.hasExifGps, lat: r.lat, lon: r.lon, updatedAt: r.updatedAt }))
     .sort((a, b) => a.progress - b.progress)
 }
 
@@ -144,7 +147,10 @@ async function migrateLegacyPhotos(activityId: string): Promise<RoutePhoto[] | n
  */
 export async function fetchActivityPhotos(activityId: string): Promise<RoutePhoto[]> {
   const local = await lsGet<RoutePhoto[]>(LS_KEYS.activityPhotos(activityId))
-  if (local) return local
+  if (local) {
+    revalidateListInBackground(LS_KEYS.activityPhotos(activityId), local, () => fetchFromServer(activityId))
+    return local
+  }
 
   const serverPhotos = await fetchFromServer(activityId)
   if (serverPhotos.length > 0) {

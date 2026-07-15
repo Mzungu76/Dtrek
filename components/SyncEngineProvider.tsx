@@ -1,14 +1,29 @@
 'use client'
 import { useEffect } from 'react'
 import { flush, startPeriodicSafetyNet } from '@/lib/sync/syncEngine'
+import { pullAll } from '@/lib/sync/pullEngine'
+
+// Side-effect imports: each of these modules self-registers its outbox flusher (push) and pull
+// reconciler/task (pull) at load time — see e.g. lib/blobStore.ts's registerEntityFlusher/
+// registerListReconciler calls. Without importing them here, that registration would only happen
+// once something on the current page imports that specific store, so flush()/pullAll() below
+// could silently cover fewer entities depending on which page the user opened first.
+import '@/lib/blobStore'
+import '@/lib/plannedStore'
+import '@/lib/activityPhotos'
+import '@/lib/questionnaireStore'
+import '@/lib/sync/hikeReportStore'
+import '@/lib/sync/userSettingsStore'
+
+// Safety net for pulling, same idea as syncEngine's hourly one for pushing — but shorter, since a
+// stale read is a worse user-facing surprise than a delayed write.
+const PULL_INTERVAL_MS = 5 * 60 * 1000
 
 /**
- * Mounts the outbox-flush triggers for the whole app session: an immediate
- * flush on load (covers anything left pending from a killed tab), network
- * reconnect, backgrounding, tab close (best-effort), and an hourly safety
- * net in case none of the above ever fire. Entity-specific flush logic
- * lives in each entity's store module (e.g. lib/sync/userSettingsStore.ts);
- * this component only wires the generic triggers from lib/sync/syncEngine.ts.
+ * Mounts both the outbox-flush triggers (push local changes to Supabase) and the pull-reconcile
+ * triggers (pull other devices' changes back in — see lib/sync/pullEngine.ts) for the whole app
+ * session: an immediate run on load, network reconnect, becoming visible/hidden, tab close
+ * (best-effort, flush only), and periodic safety nets in case none of the above ever fire.
  */
 export default function SyncEngineProvider() {
   useEffect(() => {
@@ -17,16 +32,22 @@ export default function SyncEngineProvider() {
     }
 
     flush()
+    pullAll()
     startPeriodicSafetyNet()
+    const pullTimer = setInterval(() => { pullAll() }, PULL_INTERVAL_MS)
 
-    const onOnline     = () => flush()
-    const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    const onOnline     = () => { flush(); pullAll() }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+      else pullAll()
+    }
     const onBeforeUnload = () => { flush() }
 
     window.addEventListener('online', onOnline)
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
+      clearInterval(pullTimer)
       window.removeEventListener('online', onOnline)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('beforeunload', onBeforeUnload)
