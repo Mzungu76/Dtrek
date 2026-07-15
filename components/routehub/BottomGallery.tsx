@@ -1,5 +1,6 @@
 'use client'
 import type * as L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import { Mountain, ArrowUpDown, Upload, Star } from 'lucide-react'
