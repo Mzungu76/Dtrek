@@ -102,7 +102,7 @@ export default function SectionGuida() {
               Giulia scrive subito un testo narrativo — da nessuna a tutte, a tua scelta: più ne scegli,
               più lunga (e più costosa in token AI) sarà ogni generazione automatica. Le sezioni non scelte
               restano comunque visibili con i loro dati (mappa, punteggi, POI…) ma senza racconto, finché
-              non premi &quot;Approfondisci&quot; su quella specifica sezione.
+              non premi &quot;Approfondisci con Giulia (AI)&quot; su quella specifica sezione.
             </p>
           </div>
         </div>

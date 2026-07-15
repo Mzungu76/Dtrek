@@ -10,6 +10,7 @@ import type { PoiItem }      from '@/lib/overpass'
 import type { WikiPage }     from '@/lib/wikipedia'
 import { fetchNatureContext, formatNatureContextBlock, type NatureContext } from '@/lib/aiNatureContext'
 import { DEFAULT_CLAUDE_MODEL, isValidClaudeModelId } from '@/lib/claudeModels'
+import { tryAcquireCooldown } from '@/lib/aiCooldown'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -350,6 +351,19 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  // Rete di sicurezza economica contro click ripetuti in sequenza sulla generazione del resoconto —
+  // vedi lib/aiCooldown.ts. Per attività, non per utente: ogni riga activities appartiene già a un
+  // solo utente, quindi coincide con lo stesso effetto.
+  if (!(await tryAcquireCooldown('resoconto', activityId))) {
+    return new Response(
+      JSON.stringify({
+        error:   'cooldown',
+        message: 'Hai appena generato questo resoconto — aspetta qualche secondo prima di rigenerarlo.',
+      }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 
   const { data: activity, error: actErr } = await supabase

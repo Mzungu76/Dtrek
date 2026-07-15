@@ -21,7 +21,7 @@ import CreditErrorModal from './CreditErrorModal'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
-import { GUIDE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
+import { GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
 import { parseGuideSections, mergeGuideSection } from '@/lib/guideParse'
 import { SECTION_STYLE, LEGACY_STYLE } from './sectionStyle'
 import { slugifyHeading } from '@/lib/guideSlug'
@@ -56,6 +56,7 @@ interface DisplaySection {
   key: GuideSectionKey | `legacy-${number}`
   guideKey: GuideSectionKey | null
   title: string
+  subtitle?: string
   body?: string
   icon: ReactNode
   color: string
@@ -186,8 +187,6 @@ function getItalianVoice(): SpeechSynthesisVoice | null {
 
 const RATES = [0.8, 1, 1.2, 1.5]
 
-type GuideTier = 'breve' | 'approfondita'
-
 /**
  * Magazine-style tourist guide reader. The Breve tier is generated automatically (no user
  * action) once `enrichmentReady` — every widget (mappa, profilo altimetrico, punteggi, POI,
@@ -209,7 +208,10 @@ export default function GuideReader({
   const [guideSources, setGuideSources] = useState<GuideSource[]>(hike.cachedGuideSources ?? [])
   const [genStatus,    setGenStatus]    = useState<string | undefined>(undefined)
   const [generating,   setGenerating]   = useState(false)
-  const [generatingSectionKey, setGeneratingSectionKey] = useState<GuideSectionKey | null>(null)
+  // Sezioni in corso di generazione in QUESTA chiamata (una sola per "Approfondisci con Giulia" su
+  // una sezione, più d'una per "Genera il resto della guida") — pilota lo spinner per-sezione in
+  // SectionCard senza interferire con `generating`, usato solo per la primissima generazione.
+  const [generatingSections, setGeneratingSections] = useState<GuideSectionKey[]>([])
   const [error,        setError]        = useState<string | null>(null)
   // Errore AI irreversibile rilevato a metà stream (es. credito Anthropic esaurito, vedi
   // lib/guideAiError.ts) — mostrato come popup dedicato invece del banner generico `error` sopra,
@@ -226,7 +228,7 @@ export default function GuideReader({
     const fixed: DisplaySection[] = GUIDE_SECTIONS.map(def => {
       const parsed = byKey.get(def.key)
       const style = SECTION_STYLE[def.key]
-      return { key: def.key, guideKey: def.key, title: def.title, body: parsed?.body, icon: style.icon, color: style.color }
+      return { key: def.key, guideKey: def.key, title: def.title, subtitle: def.subtitle, body: parsed?.body, icon: style.icon, color: style.color }
     })
     const legacy: DisplaySection[] = parsedSections
       .filter(s => !s.key)
@@ -304,18 +306,34 @@ export default function GuideReader({
 
   // ── Generate ──────────────────────────────────────────────────────────────
 
-  const generate = useCallback(async (tier: GuideTier) => {
-    if (generating || generatingSectionKey) return
-    setGenerating(true)
+  // Genera una o più sezioni con Giulia in una sola chiamata AI — sostituisce i vecchi generate()
+  // (guida intera) e generateSection() (una sola): ora è la stessa funzione sia per la
+  // generazione automatica iniziale, sia per "Approfondisci con Giulia" su una sezione, sia per
+  // "Genera il resto della guida" su più sezioni mancanti insieme. Due modalità, a seconda che il
+  // percorso abbia già del testo:
+  //  - primissima generazione (nessuna sezione scritta finora): reset completo + anteprima live
+  //    man mano che lo stream arriva.
+  //  - aggiunta di sezioni a una guida già esistente: nessun reset, nessuna anteprima live — solo
+  //    uno spinner per-sezione (generatingSections) finché il risultato non è pronto, poi fuso nel
+  //    testo già visibile con mergeGuideSection (lib/guideParse.ts), sezione per sezione.
+  const generateSections = useCallback(async (sections: GuideSectionKey[]) => {
+    if (generating || generatingSections.length > 0 || sections.length === 0) return
+    const isInitial = guideText.trim().length <= 50
+
+    if (isInitial) {
+      setGenerating(true)
+      setGuideText('')
+      setGuideNotices([])
+      setGuideSources([])
+      setGenStatus(undefined)
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+      if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
+      setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(0)
+      chunkIdxRef.current = 0
+    } else {
+      setGeneratingSections(sections)
+    }
     setError(null)
-    setGuideText('')
-    setGuideNotices([])
-    setGuideSources([])
-    setGenStatus(undefined)
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-    if (iosTimerRef.current) { clearInterval(iosTimerRef.current); iosTimerRef.current = null }
-    setIsPlaying(false); setIsPaused(false); setActiveSection(null); setPlayProgress(0)
-    chunkIdxRef.current = 0
 
     try {
       // hikeFallback: usato dal server SOLO in modalità di emergenza (Supabase del tutto
@@ -323,7 +341,7 @@ export default function GuideReader({
       // locale, per non bloccare la generazione in quei momenti. Ignorato in condizioni normali.
       let acc = await streamFetchText('/api/guide', {
         hikeId: hike.id,
-        tier,
+        sections,
         hikeFallback: {
           title:                hike.title,
           plannedDate:          hike.plannedDate,
@@ -340,7 +358,7 @@ export default function GuideReader({
           cachedPoiWiki:        hike.cachedPoiWiki,
           trackPoints:          hike.trackPoints,
         },
-      }, (partial) => {
+      }, isInitial ? (partial) => {
         const { lastStatus, cleanedText: displayText } = stripGuideStatus(partial)
         if (lastStatus) setGenStatus(lastStatus)
         // Stesso taglio del commento libero pre-prima-sezione applicato in anteprima live, non
@@ -349,7 +367,7 @@ export default function GuideReader({
         // arriva il primo titolo vero, ma nel frattempo si vede).
         const firstHeadingIdx = displayText.search(/^## /m)
         setGuideText(firstHeadingIdx > 0 ? displayText.slice(firstHeadingIdx) : displayText)
-      })
+      } : undefined)
       acc = stripGuideStatus(acc).cleanedText
       setGenStatus(undefined)
 
@@ -357,16 +375,31 @@ export default function GuideReader({
       if (aiError) { setAiCreditError(aiError); return }
       acc = withoutAiError
 
-      const { subtitle, cleanedText } = extractCoverSubtitle(acc)
-      const { notices, cleanedText: cleanedText2 } = extractGuideNotices(cleanedText)
-      const { sources, cleanedText: cleanedText3 } = extractGuideSources(cleanedText2)
-      acc = cleanedText3
+      // [sottotitolo] compare solo alla primissima generazione, [avviso]/[fonti] solo quando "Il
+      // percorso" è tra le sezioni richieste (vedi SYSTEM_SUBTITLE/SYSTEM_RESEARCH in
+      // app/api/guide/route.ts) — per ogni altra combinazione questi extract tornano comunque
+      // vuoti/undefined sul testo, quindi non serve altra guardia qui.
+      let subtitle: string | undefined
+      if (isInitial) {
+        const r = extractCoverSubtitle(acc)
+        subtitle = r.subtitle
+        acc = r.cleanedText
+      }
+      let notices = guideNotices
+      let sources = guideSources
+      if (sections.includes('il_percorso')) {
+        const rn = extractGuideNotices(acc)
+        notices = rn.notices
+        const rs = extractGuideSources(rn.cleanedText)
+        sources = rs.sources
+        acc = rs.cleanedText
+      }
 
       const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
       const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
-      const { riddles, cleanedText: cleanedText4 } = extractRiddles(acc, cachedPois, cachedPoiWiki)
-      const { epochPois, cleanedText: cleanedText5 } = extractEpochPois(cleanedText4, cachedPois, cachedPoiWiki)
-      acc = cleanedText5
+      const { riddles, cleanedText: c1 } = extractRiddles(acc, cachedPois, cachedPoiWiki)
+      const { epochPois, cleanedText: c2 } = extractEpochPois(c1, cachedPois, cachedPoiWiki)
+      acc = c2
 
       // Ogni tanto il modello scrive una riga di commento libero ("Ho tutte le informazioni che
       // mi servono, ora scrivo la guida...") prima del primo titolo di sezione, non racchiusa in
@@ -375,11 +408,33 @@ export default function GuideReader({
       const firstHeadingIdx = acc.search(/^## /m)
       if (firstHeadingIdx > 0) acc = acc.slice(firstHeadingIdx)
 
-      setGuideText(acc)
+      const parsedNew = parseGuideSections(acc)
+      if (parsedNew.every(s => !s.key)) throw new Error('Risposta non riconosciuta, riprova.')
+      let merged = isInitial ? '' : guideText
+      for (const sec of parsedNew) {
+        if (!sec.key) continue
+        merged = mergeGuideSection(merged, sec.key, sec.title, sec.body)
+      }
+
+      setGuideText(merged)
       setGuideNotices(notices)
       setGuideSources(sources)
 
-      const patch = { cachedGuide: acc, cachedGuideSubtitle: subtitle, cachedGuideNotices: notices, cachedGuideSources: sources, cachedRiddles: riddles, cachedEpochPois: epochPois, guideTier: tier, guideGeneratedAt: new Date().toISOString() }
+      // Indovinelli/epoche esistono solo per la sezione "luoghi" — rigenerandola sostituiscono i
+      // precedenti (evita duplicati sugli stessi POI), per ogni altra combinazione restano invariati.
+      const mergedRiddles   = sections.includes('luoghi') ? riddles   : (hike.cachedRiddles ?? [])
+      const mergedEpochPois = sections.includes('luoghi') ? epochPois : (hike.cachedEpochPois ?? [])
+
+      const patch: Partial<PlannedHike> = {
+        cachedGuide: merged,
+        cachedGuideNotices: notices,
+        cachedGuideSources: sources,
+        cachedRiddles: mergedRiddles,
+        cachedEpochPois: mergedEpochPois,
+        guideTier: 'breve',
+        guideGeneratedAt: new Date().toISOString(),
+      }
+      if (isInitial) patch.cachedGuideSubtitle = subtitle
       updatePlannedMeta(hike.id, patch).catch(() => {})
       onHikeUpdate(patch)
     } catch (e) {
@@ -393,85 +448,10 @@ export default function GuideReader({
       }
     } finally {
       setGenerating(false)
+      setGeneratingSections([])
     }
   }, [
-    generating, generatingSectionKey,
-    hike.id, hike.title, hike.plannedDate, hike.userNotes, hike.tags,
-    hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
-    hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
-    onHikeUpdate,
-  ])
-
-  // "Approfondisci" su UNA sola sezione — a differenza di generate('approfondita') (che riscrive
-  // l'intera guida) qui si chiede al server solo quella sezione (app/api/guide/route.ts, sectionKey)
-  // e si fonde il risultato nel testo già visibile, senza toccare le altre sezioni già scritte.
-  const generateSection = useCallback(async (sectionKey: GuideSectionKey) => {
-    if (generating || generatingSectionKey) return
-    setGeneratingSectionKey(sectionKey)
-    setError(null)
-
-    try {
-      let acc = await streamFetchText('/api/guide', {
-        hikeId: hike.id,
-        sectionKey,
-        // Stessa lunghezza "breve" delle altre sezioni automatiche — l'"Approfondisci" per
-        // sezione riempie solo il testo mancante, non lo rende una sezione lunghissima. La
-        // versione integrale resta un'azione a sé (vedi il pulsante "Sblocca la guida integrale").
-        tier: 'breve',
-        hikeFallback: {
-          title:                hike.title,
-          plannedDate:          hike.plannedDate,
-          userNotes:            hike.userNotes,
-          tags:                 hike.tags,
-          distanceMeters:       hike.distanceMeters,
-          elevationGain:        hike.elevationGain,
-          elevationLoss:        hike.elevationLoss,
-          altitudeMax:          hike.altitudeMax,
-          altitudeMin:          hike.altitudeMin,
-          estimatedTimeSeconds: hike.estimatedTimeSeconds,
-          assessment:           hike.assessment,
-          cachedPois:           hike.cachedPois,
-          cachedPoiWiki:        hike.cachedPoiWiki,
-          trackPoints:          hike.trackPoints,
-        },
-      })
-      acc = stripGuideStatus(acc).cleanedText
-
-      const { aiError, cleanedText: withoutAiError } = extractGuideAiError(acc)
-      if (aiError) { setAiCreditError(aiError); return }
-      acc = withoutAiError
-
-      const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
-      const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
-      const { riddles: newRiddles, cleanedText: c1 } = extractRiddles(acc, cachedPois, cachedPoiWiki)
-      const { epochPois: newEpochPois, cleanedText: c2 } = extractEpochPois(c1, cachedPois, cachedPoiWiki)
-
-      const parsed = parseGuideSections(c2)[0]
-      if (!parsed) throw new Error('Risposta non riconosciuta, riprova.')
-
-      const merged = mergeGuideSection(guideText, sectionKey, parsed.title, parsed.body)
-      setGuideText(merged)
-
-      // Indovinelli/epoche esistono solo per la sezione "luoghi" — approfondendola sostituiscono i
-      // precedenti (evita duplicati sugli stessi POI), per ogni altra sezione restano invariati.
-      const mergedRiddles   = sectionKey === 'luoghi' ? newRiddles   : (hike.cachedRiddles ?? [])
-      const mergedEpochPois = sectionKey === 'luoghi' ? newEpochPois : (hike.cachedEpochPois ?? [])
-
-      const patch = { cachedGuide: merged, cachedRiddles: mergedRiddles, cachedEpochPois: mergedEpochPois }
-      updatePlannedMeta(hike.id, patch).catch(() => {})
-      onHikeUpdate(patch)
-    } catch (e) {
-      if (e instanceof StreamFetchError) {
-        const j = e.body as { error?: string; message?: string }
-        setError(j.message ?? j.error ?? `HTTP ${e.status}`)
-      } else {
-        setError(e instanceof Error ? e.message : 'Errore durante la generazione')
-      }
-    } finally {
-      setGeneratingSectionKey(null)
-    }
-  }, [
-    generating, generatingSectionKey, guideText,
+    generating, generatingSections, guideText, guideNotices, guideSources,
     hike.id, hike.title, hike.plannedDate, hike.userNotes, hike.tags,
     hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
     hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
@@ -479,30 +459,30 @@ export default function GuideReader({
     onHikeUpdate,
   ])
 
-  // null finché non si sa ancora (in caricamento) — in quel caso l'effetto sotto aspetta invece
-  // di generare comunque, ma un fallimento del fetch non deve bloccare la generazione automatica
-  // per sempre: in quel caso si assume "sì" (comportamento di prima di questa impostazione).
-  const [autoGenEnabled, setAutoGenEnabled] = useState<boolean | null>(null)
+  // Sezioni Breve scelte dall'utente in Impostazioni (components/profilo/SectionGuida.tsx) — null
+  // finché non si sa ancora (in caricamento), in quel caso l'effetto sotto aspetta invece di
+  // generare comunque; un fallimento del fetch non deve bloccare la generazione automatica per
+  // sempre, quindi in quel caso si assume il default (comportamento di prima di questa impostazione).
+  const [autoGenSections, setAutoGenSections] = useState<GuideSectionKey[] | null>(null)
   useEffect(() => {
     getUserSettingsCached()
-      .then(d => setAutoGenEnabled(!Array.isArray(d.guideBreveSections) || d.guideBreveSections.length > 0))
-      .catch(() => setAutoGenEnabled(true))
+      .then(d => setAutoGenSections(Array.isArray(d.guideBreveSections) ? d.guideBreveSections as GuideSectionKey[] : DEFAULT_BREVE_SECTIONS))
+      .catch(() => setAutoGenSections(DEFAULT_BREVE_SECTIONS))
   }, [])
 
   // Auto-generate the Breve guide the moment enrichment data has settled — no button, no user
   // action. Only fires once per hike (guarded by the ref) and only if this account can call
   // Claude at all; otherwise the "no access" card below invites the user to add a key instead.
-  // Salta del tutto se l'utente ha scelto zero sezioni automatiche in Impostazioni (vedi
-  // components/profilo/SectionGuida.tsx) — evita una chiamata AI per una guida che non
-  // scriverebbe comunque nessun testo.
+  // Salta del tutto se l'utente ha scelto zero sezioni automatiche in Impostazioni — evita una
+  // chiamata AI per una guida che non scriverebbe comunque nessun testo.
   useEffect(() => {
     if (hike.cachedGuide || generating) return
     if (!enrichmentReady || hasAiAccess !== true) return
-    if (autoGenEnabled !== true) return
+    if (!autoGenSections || autoGenSections.length === 0) return
     if (autoTriggeredForRef.current === hike.id) return
     autoTriggeredForRef.current = hike.id
-    generate('breve')
-  }, [hike.id, hike.cachedGuide, enrichmentReady, hasAiAccess, autoGenEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+    generateSections(autoGenSections)
+  }, [hike.id, hike.cachedGuide, enrichmentReady, hasAiAccess, autoGenSections]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function scrollToSection(idx: number) {
     sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -675,14 +655,17 @@ export default function GuideReader({
   }
 
   const hasGuide  = guideText.trim().length > 50
-  const tier      = hike.guideTier
-  const effectiveTier: GuideTier = tier ?? 'approfondita'
   const hikeTitle = hike.title
   const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
-  // Non più legato a effectiveTier === 'breve': con "Approfondisci" ora per singola sezione (vedi
-  // generateSection), qualunque sezione ancora senza testo AI può mostrare l'invito, a prescindere
-  // dal tier complessivo della guida — SectionCard mostra comunque il bottone solo se !hasBody.
+  // Qualunque sezione ancora senza testo AI può mostrare l'invito ad "Approfondisci con Giulia" —
+  // SectionCard mostra comunque il bottone solo se !hasBody.
   const showApprofondisciHint = hasGuide && !generating
+  // Sezioni fisse ancora senza testo — pilota sia il bottone "Genera il resto della guida" (mostrato
+  // solo se ce n'è almeno una) sia il calcolo di cosa chiedere quando viene premuto.
+  const missingSectionKeys = useMemo(
+    () => displaySections.filter((s): s is DisplaySection & { guideKey: GuideSectionKey } => s.guideKey != null && !s.body?.trim()).map(s => s.guideKey),
+    [displaySections],
+  )
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -720,6 +703,27 @@ export default function GuideReader({
           />
 
           <div className="min-w-0 px-4 sm:px-6 md:px-0 md:max-w-3xl lg:max-w-[52rem]">
+
+            {/* ── Genera il resto della guida in un'unica chiamata ────────────── */}
+            {hasGuide && !generating && generatingSections.length === 0 && missingSectionKeys.length > 0 && (
+              <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
+                <Sparkles className="w-4 h-4 text-terra-600 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-stone-800">
+                    {missingSectionKeys.length === 1 ? 'Manca ancora una sezione' : `Mancano ancora ${missingSectionKeys.length} sezioni`}
+                  </p>
+                  <p className="text-[11.5px] text-stone-500 leading-snug">
+                    Generarle tutte insieme in un&apos;unica richiesta è più efficiente che una alla volta
+                  </p>
+                </div>
+                <button
+                  onClick={() => generateSections(missingSectionKeys)}
+                  className="shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-[12.5px] font-semibold transition-colors"
+                >
+                  Genera il resto con Giulia (AI)
+                </button>
+              </div>
+            )}
 
             {/* ── Voice mini-player ──────────────────────────────────────────── */}
             {hasGuide && (
@@ -843,14 +847,15 @@ export default function GuideReader({
             <div className="mt-4">
               {displaySections.map((s, i) => {
                 // Ogni sezione può essere approfondita singolarmente (app/api/guide/route.ts,
-                // sectionKey) — a differenza del vecchio "Approfondisci" unico che riscriveva
-                // l'intera guida. Solo per le sezioni fisse (s.guideKey), non per quelle "legacy".
-                const canApprofondisciSection = showApprofondisciHint && s.guideKey != null && !generatingSectionKey
+                // sections) — a differenza di "Genera il resto della guida" che le chiede tutte
+                // insieme. Solo per le sezioni fisse (s.guideKey), non per quelle "legacy".
+                const canApprofondisciSection = showApprofondisciHint && s.guideKey != null && generatingSections.length === 0
                 return (
                   <SectionCard
                     key={s.key}
                     ref={el => { sectionRefs.current[i] = el }}
                     title={s.title}
+                    subtitle={s.subtitle}
                     icon={s.icon}
                     color={s.color}
                     body={s.body}
@@ -860,8 +865,8 @@ export default function GuideReader({
                     isVoiceActive={activeSection === i && (isPlaying || isPaused)}
                     onSpeak={() => speakSection(i)}
                     showApprofondisciHint={canApprofondisciSection}
-                    onApprofondisci={canApprofondisciSection ? () => generateSection(s.guideKey!) : undefined}
-                    approfondendo={generatingSectionKey === s.guideKey}
+                    onApprofondisci={canApprofondisciSection ? () => generateSections([s.guideKey!]) : undefined}
+                    approfondendo={generatingSections.includes(s.guideKey as GuideSectionKey)}
                   />
                 )
               })}
@@ -965,17 +970,6 @@ export default function GuideReader({
                 {/* Azioni principali — impilate a piena larghezza su mobile, affiancate da sm in
                     su, sempre come coppia coerente invece di andare a capo l'una senza l'altra. */}
                 <div className="flex flex-col sm:flex-row sm:justify-end gap-2.5">
-                  {effectiveTier === 'breve' && (
-                    <button onClick={() => generate('approfondita')}
-                      disabled={!!generatingSectionKey}
-                      className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
-                      title={generatingSectionKey ? 'Attendi il completamento della sezione in corso' : 'Riscrive tutta la guida in una versione molto più lunga e ricca di dettagli'}
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Sblocca la guida integrale
-                    </button>
-                  )}
-
                   <button onClick={exportPdf} disabled={exportingPdf}
                     className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-terra-500 hover:bg-terra-600 disabled:opacity-60 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
                   >

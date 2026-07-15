@@ -6,6 +6,7 @@ import { formatDuration }    from '@/lib/tcxParser'
 import { format }            from 'date-fns'
 import { it }                from 'date-fns/locale'
 import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
+import { tryAcquireCooldown } from '@/lib/aiCooldown'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -72,6 +73,19 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  // Rete di sicurezza economica contro click ripetuti in sequenza sullo stesso suggerimento AI —
+  // vedi lib/aiCooldown.ts. Per attività+sezione, non per l'intera attività: sezioni diverse dello
+  // stesso resoconto restano modificabili in parallelo senza bloccarsi a vicenda.
+  if (!(await tryAcquireCooldown('resoconto-assist', `${activityId}:${sectionTitle}`))) {
+    return new Response(
+      JSON.stringify({
+        error:   'cooldown',
+        message: 'Hai appena chiesto una modifica a questa sezione — aspetta qualche secondo prima di richiederne un\'altra.',
+      }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 
   const { data: activity, error: actErr } = await supabase
