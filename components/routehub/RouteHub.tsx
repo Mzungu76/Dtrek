@@ -147,7 +147,7 @@ export default function RouteHub({
     const id = currentRouteId.current
     const idx = id == null ? -1 : visibleItems.findIndex(it => it.id === id)
     const nextIndex = idx >= 0 ? idx : 0
-    if (nextIndex !== state.index) dispatch({ type: 'JUMP_TO', index: nextIndex })
+    if (nextIndex !== state.index) dispatch({ type: 'RESYNC_INDEX', index: nextIndex })
   }, [visibleItems]) // eslint-disable-line react-hooks/exhaustive-deps
   const handleSortChange = (key: SortKey) => setSortBy(key)
 
@@ -195,6 +195,7 @@ export default function RouteHub({
         <RouteCarousel
           items={visibleItems}
           index={state.index}
+          instant={state.instant}
           dragging={state.dragging}
           dragDeltaPx={state.dragDeltaPx}
           swipeEnabled={!isOpen}

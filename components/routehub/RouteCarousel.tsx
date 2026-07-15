@@ -20,6 +20,10 @@ function clamp(v: number, min: number, max: number): number {
 interface Props {
   items: RouteHubItem[]
   index: number
+  /** True for the one render right after a silent index resync (same route, just relocated in
+   *  a re-sorted list) — skips the slide transition so it doesn't animate through every route
+   *  in between for a change the user never asked for. */
+  instant?: boolean
   dragging: boolean
   dragDeltaPx: number
   onDragStart: () => void
@@ -38,7 +42,7 @@ interface Props {
 }
 
 export default function RouteCarousel({
-  items, index, dragging, dragDeltaPx, onDragStart, onDragMove, onDragEnd,
+  items, index, instant = false, dragging, dragDeltaPx, onDragStart, onDragMove, onDragEnd,
   swipeEnabled = true, onOpenDragMove, onOpenDragEnd, renderSlide,
 }: Props) {
   const startX = useRef(0)
@@ -118,7 +122,7 @@ export default function RouteCarousel({
         className="flex h-full"
         style={{
           transform: `translateX(calc(${-index * 100}% + ${dragDeltaPx}px))`,
-          transition: dragging ? 'none' : 'transform 0.32s cubic-bezier(.2,.8,.2,1)',
+          transition: dragging || instant ? 'none' : 'transform 0.32s cubic-bezier(.2,.8,.2,1)',
         }}
       >
         {items.map((item, i) => (
