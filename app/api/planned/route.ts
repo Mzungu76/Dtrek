@@ -158,15 +158,15 @@ export async function GET(req: NextRequest) {
 
     const id = req.nextUrl.searchParams.get('id')
 
-    // Lightweight freshness check for lib/sync/pullEngine.ts — see the identical branch in
-    // app/api/activities/route.ts. Swallows a missing updated_at column (pre-migration
-    // environment) as "nothing to reconcile" instead of a 500, since this is purely additive.
+    // Lightweight freshness check for lib/sync/pullEngine.ts — see the identical branch (and the
+    // rationale for surfacing a real error as non-2xx rather than an empty digest) in
+    // app/api/activities/route.ts.
     if (req.nextUrl.searchParams.get('digest') === '1') {
       const { data, error } = await supabase
         .from('planned_hikes')
         .select('id, updated_at')
         .eq('user_id', user.id)
-      if (error) return NextResponse.json([])
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json(
         (data ?? []).map((r: Record<string, unknown>) => ({ id: r.id as string, updatedAt: r.updated_at as string })),
       )

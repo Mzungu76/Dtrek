@@ -250,6 +250,12 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS pending_expires_at TIMESTAMPT
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS archived_at        TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_planned_pending_expires ON planned_hikes (pending_expires_at ASC NULLS LAST);
 
+-- Preferito nella galleria Guida — vedi components/routehub/BottomGallery.tsx (stella sulla scheda
+-- chiusa) e app/guida/GuidaHub.tsx (filtro "Preferiti"). Era già scritto/letto dal codice ma non
+-- era mai stato documentato qui né applicato al database (vedi supabase/migrations/
+-- backfill_missing_planned_hikes_columns.sql) — ogni salvataggio falliva silenziosamente.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT false;
+
 -- Scadenza predefinita (in giorni) applicata ai nuovi percorsi importati in Guida
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_pending_days SMALLINT DEFAULT 30;
 
