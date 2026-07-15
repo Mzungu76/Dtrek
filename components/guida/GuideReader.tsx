@@ -706,19 +706,21 @@ export default function GuideReader({
 
             {/* ── Genera il resto della guida in un'unica chiamata ────────────── */}
             {hasGuide && !generating && generatingSections.length === 0 && missingSectionKeys.length > 0 && (
-              <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
-                <Sparkles className="w-4 h-4 text-terra-600 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold text-stone-800">
-                    {missingSectionKeys.length === 1 ? 'Manca ancora una sezione' : `Mancano ancora ${missingSectionKeys.length} sezioni`}
-                  </p>
-                  <p className="text-[11.5px] text-stone-500 leading-snug">
-                    Generarle tutte insieme in un&apos;unica richiesta è più efficiente che una alla volta
-                  </p>
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
+                <div className="flex items-start gap-3 min-w-0">
+                  <Sparkles className="w-4 h-4 text-terra-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-stone-800">
+                      {missingSectionKeys.length === 1 ? 'Manca ancora una sezione' : `Mancano ancora ${missingSectionKeys.length} sezioni`}
+                    </p>
+                    <p className="text-[11.5px] text-stone-500 leading-snug">
+                      Generarle tutte insieme in un&apos;unica richiesta è più efficiente che una alla volta
+                    </p>
+                  </div>
                 </div>
                 <button
                   onClick={() => generateSections(missingSectionKeys)}
-                  className="shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-[12.5px] font-semibold transition-colors"
+                  className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-[12.5px] font-semibold transition-colors"
                 >
                   Genera il resto con Giulia (AI)
                 </button>
