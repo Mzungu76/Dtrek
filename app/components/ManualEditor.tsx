@@ -38,6 +38,7 @@ export default function ManualEditor({
   const [sections,   setSections]   = useState<ReportSection[]>(initialSections)
   const [authoredBy, setAuthoredBy] = useState<ReportAuthoredBy>(initialAuthoredBy)
   const [aiAssistLoadingId, setAiAssistLoadingId] = useState<string | null>(null)
+  const [aiAssistError, setAiAssistError] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [showPhotoManager, setShowPhotoManager] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -114,6 +115,7 @@ export default function ManualEditor({
     const target = sections.find(s => s.id === sectionId)
     if (!target) return
     setAiAssistLoadingId(sectionId)
+    setAiAssistError(null)
     try {
       const otherSections = sections
         .filter(s => s.id !== sectionId)
@@ -127,7 +129,13 @@ export default function ManualEditor({
           instruction, otherSections,
         }),
       })
-      if (!res.ok || !res.body) throw new Error('AI assist failed')
+      if (!res.ok || !res.body) {
+        // Il cooldown anti-spam (vedi lib/aiCooldown.ts) e altri errori con un messaggio pensato
+        // per l'utente arrivano qui — senza questo l'AI assist fallirebbe in silenzio, lasciando
+        // credere all'utente che il click non abbia avuto alcun effetto.
+        const j = await res.json().catch(() => ({}))
+        throw new Error((j as { message?: string }).message ?? 'Assistente AI non disponibile, riprova tra poco.')
+      }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -140,8 +148,8 @@ export default function ManualEditor({
       }
       setAuthoredBy(prev => prev === 'manual' ? 'mixed' : prev)
       setDirty(true)
-    } catch {
-      /* leave section body unchanged on failure */
+    } catch (e) {
+      setAiAssistError(e instanceof Error ? e.message : 'Assistente AI non disponibile, riprova tra poco.')
     } finally {
       setAiAssistLoadingId(null)
     }
@@ -251,6 +259,15 @@ export default function ManualEditor({
         <div className="fixed bottom-4 right-4 z-30 flex items-center gap-2 bg-white border border-stone-200 rounded-xl shadow-lg px-4 py-2.5">
           <Loader2 className="w-4 h-4 text-forest-600 animate-spin" />
           <span className="text-xs font-body italic text-stone-600">L&apos;AI sta scrivendo…</span>
+        </div>
+      )}
+
+      {aiAssistError && !aiAssistLoadingId && (
+        <div className="fixed bottom-4 right-4 z-30 flex items-center gap-2 bg-white border border-amber-200 rounded-xl shadow-lg px-4 py-2.5 max-w-xs">
+          <span className="text-xs font-body text-amber-700">{aiAssistError}</span>
+          <button onClick={() => setAiAssistError(null)} className="shrink-0 p-0.5 rounded hover:bg-amber-50">
+            <X className="w-3.5 h-3.5 text-amber-400" />
+          </button>
         </div>
       )}
     </div>

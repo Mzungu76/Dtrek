@@ -19,6 +19,7 @@ import type { BeautyScore } from '@/lib/beautyScore'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/guide/resolveApiKeyAndSettings'
 import { isCreditBalanceError } from '@/lib/anthropicErrors'
+import { tryAcquireCooldown } from '@/lib/aiCooldown'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, type GuideNotice } from '@/lib/guideNotices'
@@ -523,6 +524,19 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     return new Response(JSON.stringify({ error: 'Nessuna sezione da generare' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  // Rete di sicurezza economica contro click ripetuti in sequenza su "Approfondisci con Giulia" /
+  // "Genera il resto della guida" — vedi lib/aiCooldown.ts. Per percorso (hikeId), non per utente:
+  // ogni riga planned_hikes appartiene già a un solo utente, quindi coincide con lo stesso effetto.
+  if (!(await tryAcquireCooldown('guide', hikeId))) {
+    return new Response(
+      JSON.stringify({
+        error:   'cooldown',
+        message: 'Hai appena generato o aggiornato questa guida — aspetta qualche secondo prima di richiederla di nuovo.',
+      }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 
   // Va letta solo quando la sezione 'comfort' ("Su misura per te") è davvero tra quelle richieste
