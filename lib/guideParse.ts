@@ -40,7 +40,11 @@ export function mergeGuideSection(
   for (let i = 0; i < parts.length; i++) {
     const k = parts[i].key
     const idx = k ? canonicalOrder.indexOf(k) : -1
-    if (idx === -1 || idx > targetIdx) { insertAt = i; break }
+    // Le sezioni non riconosciute (idx === -1, es. legacy) vanno scavalcate nella ricerca del
+    // punto d'inserimento, non usate come ancora: altrimenti una sezione legacy ovunque nel testo
+    // fermava la ricerca troppo presto, inserendo la nuova sezione prima del suo posto corretto
+    // rispetto alle altre sezioni canoniche riconosciute.
+    if (idx !== -1 && idx > targetIdx) { insertAt = i; break }
   }
 
   const merged = [...parts]
