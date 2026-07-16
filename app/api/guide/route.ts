@@ -194,16 +194,15 @@ async function buildComfortContext(userId: string): Promise<string> {
 // una richiesta iniziale o aggiunta più tardi, usa sempre queste stesse lunghezze concise. Il tetto
 // resta comunque ampio abbastanza da coprire in una sola chiamata TUTTE le 8 sezioni insieme (vedi
 // il pulsante "Genera il resto della guida" in GuideReader.tsx), non solo quelle di default.
-// Alzato a 3200 dopo un troncamento reale osservato con tutte e 8 le sezioni + "Il percorso" su un
-// percorso turistico ben documentato online (lago di Bolsena): il testo visibile arrivato all'utente
-// era di sole ~180 parole quando il limite (allora 1600) è scattato — la maggior parte del budget
-// era stata assorbita da contenuto MAI mostrato: le query e i risultati delle 2 ricerche web
-// (SYSTEM_RESEARCH, contano comunque come token di output anche se l'utente non li vede mai) e
-// probabilmente uno o più [avviso] scritti e poi troncati a metà (quindi scartati in silenzio dal
-// parsing, perché il tag non si chiudeva). Vedi anche il tetto esplicito di 3 avvisi aggiunto in
-// SYSTEM_RESEARCH, che riduce il caso peggiore ma non lo azzera (il contenuto delle ricerche resta
-// comunque variabile) — da qui il margine più ampio qui.
-const GUIDE_MAX_TOKENS = 3200
+// Alzato a 6000 (era 3200, prima ancora 1600) dopo DUE troncamenti reali consecutivi con tutte e 8
+// le sezioni + "Il percorso" su un percorso ben documentato online (lago di Bolsena) — anche a 3200
+// il testo si è fermato a metà di "Luoghi da non perdere", con un divario ancora non del tutto
+// spiegato tra il testo visibile salvato (~900-1000 token) e il totale consumato (~3200-3400). I
+// risultati grezzi della ricerca web NON contano qui (sono input, non output, per Anthropic) — il
+// divario è quindi in testo che Giulia scrive davvero: sottotitolo, query di ricerca, avvisi (fino
+// a 3, vedi SYSTEM_RESEARCH) e la narrazione stessa. Margine ampio deliberato finché non si osserva
+// un nuovo troncamento anche a questo livello.
+const GUIDE_MAX_TOKENS = 6000
 
 /**
  * Lunghezza target per sezione — deliberatamente NON uniforme: ogni sezione ha una natura diversa
