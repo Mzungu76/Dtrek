@@ -22,7 +22,7 @@ interface Props {
  *  - `md+`: sommario laterale sticky — rail a sole icone a `md` (poco spazio orizzontale insieme
  *    al contenuto), icona + titolo da `lg`.
  */
-export default function GuideSectionNav({ sections, activeIndex, onSelect }: Props) {
+export default function SectionNav({ sections, activeIndex, onSelect }: Props) {
   return (
     <>
       {/* Mobile: barra a pillole orizzontale */}

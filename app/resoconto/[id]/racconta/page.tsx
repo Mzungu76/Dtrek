@@ -84,7 +84,7 @@ export default function RacconaPage() {
       currentIndex: newIndex,
       status:       isLast ? 'completed' : q.status,
     } : q)
-    if (isLast) router.push(`/resoconto/${encodeURIComponent(id)}/leggi`)
+    if (isLast) router.push(`/resoconto/${encodeURIComponent(id)}`)
   }, [questionnaire, id, router])
 
   const handleSkip = useCallback(async (questionId: string) => {
@@ -98,7 +98,7 @@ export default function RacconaPage() {
       currentIndex: newIndex,
       status:       isLast ? 'completed' : q.status,
     } : q)
-    if (isLast) router.push(`/resoconto/${encodeURIComponent(id)}/leggi`)
+    if (isLast) router.push(`/resoconto/${encodeURIComponent(id)}`)
   }, [questionnaire, id, router])
 
   const handleBack = useCallback(() => {
@@ -107,11 +107,11 @@ export default function RacconaPage() {
 
   const handleSkipAll = useCallback(async () => {
     await setQuestionnaireStatus(id, 'skipped')
-    router.push(`/resoconto/${encodeURIComponent(id)}/leggi`)
+    router.push(`/resoconto/${encodeURIComponent(id)}`)
   }, [id, router])
 
   const goToResoconto = useCallback(() => {
-    router.push(`/resoconto/${encodeURIComponent(id)}/leggi`)
+    router.push(`/resoconto/${encodeURIComponent(id)}`)
   }, [id, router])
 
   if ((loading || !activity) && !error) return (

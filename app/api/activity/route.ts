@@ -56,6 +56,7 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     pauseTimeSeconds:     row.pause_time_seconds       as number | undefined,
     iev:                  row.iev                      as number | null | undefined,
     updatedAt:            row.updated_at               as string | undefined,
+    favorite:             row.favorite                 as boolean | undefined,
   }
 }
 
@@ -96,6 +97,7 @@ function activityToRow(a: StoredActivity) {
     net_speed_ms:                 a.netSpeedMs ?? null,
     pause_time_seconds:           a.pauseTimeSeconds ?? null,
     iev:                          a.iev ?? null,
+    favorite:                     a.favorite ?? false,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }
@@ -176,6 +178,7 @@ export async function PATCH(req: NextRequest) {
       trailScoreConfidence?: string
       trailScoreComputedAt?: string
       weatherAtHike?: StoredActivity['weatherAtHike']
+      favorite?: boolean
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -192,6 +195,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.trailScoreConfidence !== undefined) dbPatch.trail_score_confidence = patch.trailScoreConfidence
     if (patch.trailScoreComputedAt !== undefined) dbPatch.trail_score_computed_at = patch.trailScoreComputedAt
     if (patch.weatherAtHike        !== undefined) dbPatch.weather_at_hike        = patch.weatherAtHike
+    if (patch.favorite             !== undefined) dbPatch.favorite               = patch.favorite
 
     const { error } = await supabase
       .from('activities')

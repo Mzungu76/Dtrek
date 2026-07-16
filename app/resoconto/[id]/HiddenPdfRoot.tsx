@@ -5,7 +5,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import { slotFor } from './sectionPhotoSlot'
 
 // Off-screen layout captured by html2pdf when publishing (see the "Genera e pubblica"
-// handler in RacconContent) — kept structurally separate from the on-screen article so
+// handler in ReportReader) — kept structurally separate from the on-screen article so
 // the PDF's inline styles/fixed pixel widths don't have to also serve the responsive view.
 export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos }: {
   activity: StoredActivity; heroPhoto: RoutePhoto | null; dateStr: string

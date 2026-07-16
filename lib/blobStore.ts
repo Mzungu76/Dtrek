@@ -42,6 +42,10 @@ export interface StoredActivity extends TcxActivity {
   trailScoreComputedAt?: string
   depKm?: number
   weatherAtHike?: WeatherAtHike
+  // Preferito nella galleria Resoconto — vedi components/routehub/BottomGallery.tsx (stella sulla
+  // scheda chiusa) e app/resoconto/ResocontoHub.tsx (filtro "Preferiti"), stesso concetto già
+  // esistente per planned_hikes (vedi lib/plannedStore.ts).
+  favorite?: boolean
 }
 
 export interface ActivityMeta {
@@ -73,6 +77,7 @@ export interface ActivityMeta {
   trailScoreComputedAt?: string
   depKm?: number
   iev?: number
+  favorite?: boolean
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -105,6 +110,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     trailScoreComputedAt:    a.trailScoreComputedAt,
     depKm:           computeDEP(a.distanceMeters, a.elevationGain),
     iev:             a.iev ?? undefined,  // a.iev is number | null | undefined (TcxActivity)
+    favorite:        a.favorite,
   }
 }
 
@@ -148,7 +154,7 @@ export async function getActivityById(
 /**
  * Applies the activity to the local cache immediately, then attempts a synchronous save —
  * mirroring lib/plannedStore.ts's savePlanned(), and for the same reason: the page the caller
- * navigates to right after saving (app/resoconto/[id]/RacconContent.tsx → app/api/resoconto/
+ * navigates to right after saving (components/resoconto/ReportReader.tsx → app/api/resoconto/
  * route.ts, and others) reads this row directly from Supabase, and the outbox's ~15s debounce
  * (lib/sync/syncEngine.ts) is too slow to cover that. A permanent failure (4xx) rejects instead of
  * silently queuing, so the UI can show an error instead of navigating to a page for a row that was
@@ -186,7 +192,7 @@ export async function saveActivity(activity: StoredActivity): Promise<{ ok: bool
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updateActivityMeta(
   id: string,
-  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore' | 'trailScoreConfidence' | 'trailScoreComputedAt'>>
+  meta: Partial<Pick<StoredActivity, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'userRating' | 'userRatingNote' | 'linkedPlannedId' | 'soddisfazione' | 'linkedBeautyScore' | 'trailScore' | 'trailScoreConfidence' | 'trailScoreComputedAt' | 'favorite'>>
 ): Promise<void> {
   const local = await lsGet<StoredActivity>(LS_KEYS.activity(id))
   if (local) await lsSet(LS_KEYS.activity(id), { ...local, ...meta })

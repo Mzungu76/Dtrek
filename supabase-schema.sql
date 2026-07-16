@@ -955,6 +955,14 @@ CREATE TRIGGER trg_hike_questionnaires_updated_at
 
 
 -- ═══════════════════════════════════════════════════════════
+-- Preferito nella galleria Resoconto — stesso blocco anche in
+-- supabase/migrations/add_activities_favorite_column.sql. Stesso concetto già esistente per
+-- planned_hikes (vedi colonna "favorite" più sopra), ora replicato per le escursioni concluse.
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT false;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- MIGRAZIONE DATI ESISTENTI
 -- Esegui DOPO aver creato il tuo account su DTrek.
 -- Sostituisci 'INCOLLA-QUI-IL-TUO-UUID' con il tuo user_id

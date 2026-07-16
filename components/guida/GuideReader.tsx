@@ -32,9 +32,9 @@ import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
-import GuideSectionNav from './GuideSectionNav'
-import VoicePlayer from './VoicePlayer'
-import SectionCard from './SectionCard'
+import SectionNav from '@/components/editorial/SectionNav'
+import VoicePlayer from '@/components/editorial/VoicePlayer'
+import SectionCard from '@/components/editorial/SectionCard'
 import type { CtsProps } from '@/components/ScoreRing'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { HikeAssessment } from '@/lib/hikeAssessment'
@@ -786,7 +786,7 @@ export default function GuideReader({
       {/* ── Section nav (mobile: sticky pill bar / md+: sidebar) + reading column ────────── */}
       <div className="md:px-8 md:max-w-[1180px] md:mx-auto">
         <div className="md:grid md:grid-cols-[auto_1fr] md:gap-8 md:items-start md:pt-6">
-          <GuideSectionNav
+          <SectionNav
             sections={displaySections.map(s => ({ key: s.key, title: s.title, icon: s.icon, color: s.color }))}
             activeIndex={visibleSec}
             onSelect={scrollToSection}
