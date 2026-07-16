@@ -136,7 +136,9 @@ alla fonte accanto all'avviso, non solo nell'elenco fonti in fondo alla guida. S
 preciso per quell'avviso, ometti le parentesi.
 Metti questi avvisi (se presenti) subito prima della sezione "## Il percorso".
 Non creare avvisi generici o precauzionali di circostanza ("presta attenzione al meteo"): solo se hai
-trovato un'informazione concreta e specifica per QUESTO percorso.`
+trovato un'informazione concreta e specifica per QUESTO percorso.
+Segnala al massimo i 3 avvisi più rilevanti e concreti, anche se la ricerca ne suggerisce di più —
+scegli quelli con l'impatto maggiore su chi percorre l'itinerario, non un elenco esaustivo.`
 
 function genderInstruction(gender: string): string {
   switch (gender) {
@@ -191,11 +193,17 @@ async function buildComfortContext(userId: string): Promise<string> {
 // Unico budget di output — non c'è più un tier "Approfondita" separato: ogni sezione, generata in
 // una richiesta iniziale o aggiunta più tardi, usa sempre queste stesse lunghezze concise. Il tetto
 // resta comunque ampio abbastanza da coprire in una sola chiamata TUTTE le 8 sezioni insieme (vedi
-// il pulsante "Genera il resto della guida" in GuideReader.tsx), non solo quelle di default. Alzato
-// da 1300 insieme ai target di SECTION_LENGTH più sotto (comfort/natura/sapori/consigli erano
-// percepiti come troppo scarni, vedi conversazione con l'utente) per mantenere lo stesso margine di
-// sicurezza contro il troncamento nel caso peggiore di tutte le sezioni insieme.
-const GUIDE_MAX_TOKENS = 1600
+// il pulsante "Genera il resto della guida" in GuideReader.tsx), non solo quelle di default.
+// Alzato a 3200 dopo un troncamento reale osservato con tutte e 8 le sezioni + "Il percorso" su un
+// percorso turistico ben documentato online (lago di Bolsena): il testo visibile arrivato all'utente
+// era di sole ~180 parole quando il limite (allora 1600) è scattato — la maggior parte del budget
+// era stata assorbita da contenuto MAI mostrato: le query e i risultati delle 2 ricerche web
+// (SYSTEM_RESEARCH, contano comunque come token di output anche se l'utente non li vede mai) e
+// probabilmente uno o più [avviso] scritti e poi troncati a metà (quindi scartati in silenzio dal
+// parsing, perché il tag non si chiudeva). Vedi anche il tetto esplicito di 3 avvisi aggiunto in
+// SYSTEM_RESEARCH, che riduce il caso peggiore ma non lo azzera (il contenuto delle ricerche resta
+// comunque variabile) — da qui il margine più ampio qui.
+const GUIDE_MAX_TOKENS = 3200
 
 /**
  * Lunghezza target per sezione — deliberatamente NON uniforme: ogni sezione ha una natura diversa
@@ -697,11 +705,24 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // blocco una sola volta invece che ad ogni singola generazione. genderInstruction resta un
   // blocco separato SENZA cache_control perché varia da utente a utente — un blocco dopo il
   // breakpoint non invalida il prefisso già cacheato, quindi non rompe il risparmio sopra.
+  //
+  // ECCEZIONE quando includesRoute (web_search abilitato, vedi tools più sotto): l'API Anthropic,
+  // quando un cache_control è presente E viene usato un server tool come web_search, mette
+  // AUTOMATICAMENTE in cache anche i risultati grezzi della ricerca — a costo di scrittura (1,25×
+  // l'input normale), non richiesto e non scelto da noi (vedi "Server tool results are cached
+  // automatically" nella documentazione Anthropic su tool use + prompt caching). Per un percorso
+  // ben documentato online questo può costare decine di migliaia di token in più a generazione,
+  // pagati per un contenuto che una generazione one-shot come questa non rilegge mai — osservato
+  // concretamente su un test reale (~44.000 token di cache write, la maggior parte del costo della
+  // chiamata). Il piccolo risparmio che cache_control offrirebbe qui sul solo system prompt (~2000
+  // token) non giustifica quel rischio, quindi in questo caso il blocco resta senza cache_control.
   const systemText = SYSTEM_CORE
     + (isFirstGeneration ? SYSTEM_SUBTITLE : '')
     + (includesRoute ? SYSTEM_RESEARCH : '')
   const system = [
-    { type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } },
+    includesRoute
+      ? { type: 'text' as const, text: systemText }
+      : { type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } },
     // Il genere è un dato biometrico/anagrafico — rispetta il consenso dell'utente (vedi
     // components/profilo/SectionAiPrivacy.tsx), tornando alla formulazione neutra quando negato.
     { type: 'text' as const, text: genderInstruction(aiUseBiometricData ? userGender : 'non_specificato') },

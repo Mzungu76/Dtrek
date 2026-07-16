@@ -229,13 +229,19 @@ export async function POST(req: NextRequest) {
 
     const guideExcerpt = guideSource.slice(0, 6000)
     const context = buildContext(hike, guideExcerpt)
-    // Due breakpoint separati (prompt caching Anthropic): SYSTEM_BASE è identico per ogni domanda
-    // su ogni percorso, context è identico solo finché si resta sullo stesso percorso — è proprio
-    // lo scenario per cui il caching rende di più, dato che "Chiedi a Giulia" è per natura una
-    // conversazione a più turni sullo stesso contesto (vedi history più sotto).
+    // NIENTE cache_control qui (a differenza di prima): questa route ha web_search sempre
+    // disponibile (vedi tools più sotto, non condizionale come in app/api/guide/route.ts) — la
+    // documentazione Anthropic conferma che cache_control + un server tool come web_search fa
+    // scattare automaticamente una cache aggiuntiva sui risultati grezzi della ricerca, a prezzo
+    // maggiorato (1,25x) e non richiesta da noi. Per un percorso ben documentato online questo può
+    // costare decine di migliaia di token in più (osservato concretamente su app/api/guide/route.ts
+    // con lo stesso pattern, vedi commit "Disabilita cache_control..."). SYSTEM_BASE/context erano
+    // pensati per il caso ideale di più domande ravvicinate sullo stesso percorso (vedi history più
+    // sotto) — un risparmio reale ma piccolo (~450 token), non abbastanza da giustificare il
+    // rischio di un costo enorme e imprevedibile ad ogni domanda che fa scattare una ricerca.
     const system = [
-      { type: 'text' as const, text: SYSTEM_BASE, cache_control: { type: 'ephemeral' as const } },
-      { type: 'text' as const, text: context,     cache_control: { type: 'ephemeral' as const } },
+      { type: 'text' as const, text: SYSTEM_BASE },
+      { type: 'text' as const, text: context },
     ]
 
     // Ultimi scambi già avvenuti su questo percorso — replay come veri turni user/assistant,
