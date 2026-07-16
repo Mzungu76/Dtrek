@@ -728,19 +728,20 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // ampio) rispecchia le due sole sotto-domande consentite in SYSTEM_RESEARCH — un "controllo
   // medico" mirato, non un motore esplorativo che spende ricerche extra per arricchire il racconto.
   //
-  // web_search_20260209 (non 20250305) per il "filtro dinamico": con la versione base ogni
-  // risultato di ricerca finisce per intero nel contesto di Claude, senza nessun controllo sulla
-  // dimensione — per un percorso ben documentato online questo può da solo costare decine di
-  // migliaia di token (osservato concretamente su un test reale). Con questa versione più recente
-  // (supportata da Sonnet 5) Claude scrive ed esegue del codice che filtra i risultati PRIMA che
-  // entrino nel contesto, tenendo solo il contenuto rilevante — la stessa ottimizzazione
-  // raccomandata dalla documentazione Anthropic proprio per "richieste con uso intenso di ricerca".
+  // web_search_20250305 (RIPRISTINATO da 20260209): il filtro dinamico di 20260209 fa scrivere ed
+  // eseguire a Claude del codice per filtrare i risultati — quel codice è comunque testo generato,
+  // quindi consuma token di OUTPUT reali, competendo con lo stesso GUIDE_MAX_TOKENS usato per
+  // scrivere la guida vera. Osservato concretamente peggiorare il troncamento invece di risolverlo:
+  // con 20260209 il budget si esauriva nella fase di ricerca/filtro, prima ancora di scrivere una
+  // sola sezione ("nessuna sezione riconosciuta nella risposta" — zero contenuto salvabile, peggio
+  // di prima). Tornati alla versione base finché non si trova un modo di isolare il costo della
+  // ricerca dal budget di output della narrazione (vedi docs/piano-ottimizzazione-ai.md).
   const stream = client.messages.stream({
     model:      claudeModel,
     max_tokens: GUIDE_MAX_TOKENS,
     system,
     messages:   [{ role: 'user', content: prompt }],
-    ...(includesRoute ? { tools: [{ type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: 2 }] } : {}),
+    ...(includesRoute ? { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 2 }] } : {}),
   })
 
   // Raccoglie le fonti web citate da Giulia mentre scrive (citations_delta sui blocchi di testo,

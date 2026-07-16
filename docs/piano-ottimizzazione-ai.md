@@ -104,12 +104,18 @@ base) carica ogni risultato per intero nel contesto, senza nessun controllo sull
    entro la finestra di 5 minuti/1 ora della cache. Il 25% di sovrapprezzo su system prompt piccoli
    (~450-2000 token) vale pochi millesimi di centesimo — non giustifica il rischio residuo nemmeno a
    parte il problema `web_search`. Decisione esplicita dell'utente.
-2. **Tool aggiornato da `web_search_20250305` a `web_search_20260209`** (filtro dinamico, supportato
-   da Sonnet 5/4.6, Opus 4.6-4.8, Fable 5, Mythos 5): Claude scrive ed esegue del codice che filtra i
-   risultati di ricerca PRIMA che entrino nel contesto, tenendo solo il contenuto rilevante — la
-   stessa ottimizzazione raccomandata dalla documentazione Anthropic per "richieste con uso intenso
-   di ricerca". Non ancora verificato con un test reale successivo alla modifica (né il comportamento
-   con un modello che l'utente scegliesse manualmente e che non supporti il filtro dinamico).
+2. ~~**Tool aggiornato da `web_search_20250305` a `web_search_20260209`**~~ — **provato e
+   RIPRISTINATO**: il filtro dinamico di `20260209` fa scrivere ed eseguire a Claude del codice per
+   filtrare i risultati PRIMA che entrino nel contesto — ma quel codice è comunque testo generato
+   dal modello, quindi consuma token di *output* reali, competendo con lo stesso `max_tokens` usato
+   per scrivere la guida vera. Verificato con un test reale: invece di ridurre il troncamento lo ha
+   **peggiorato** — il budget si esauriva nella fase di ricerca/filtro prima ancora di scrivere una
+   sola sezione (`nessuna sezione riconosciuta nella risposta`, zero contenuto salvabile, contro le
+   sezioni parziali che almeno si salvavano con la versione base). Tornati a `web_search_20250305` su
+   tutte e 3 le route. Il filtro dinamico resta un'idea valida in teoria per il problema dei token di
+   *input* (risultati grezzi troppo grandi), ma non è la soluzione finché non si trova un modo di
+   isolare il suo costo di *output* dal budget della narrazione — es. con la ricerca in una chiamata
+   separata e dedicata (vedi "Reintroduzione futura" più sotto, stessa architettura proposta lì).
 
 **Reintroduzione futura, SOLO per la chiave condivisa/premium**: a differenza di una chiave personale
 (riletture rare, beneficio marginale), una chiave condivisa usata da **molti utenti diversi** rende
@@ -228,7 +234,7 @@ L'utente ha chiarito che la filosofia dell'app è "personale": di default Giulia
 - `components/profilo/SectionClaudeKey.tsx` — copy aggiornato sul comportamento di default
 
 **Sessione successiva** (vedi punto 6 sopra):
-- `app/api/guide/route.ts`, `app/api/guide/qa/route.ts`, `app/api/route-search/route.ts` — rimosso `cache_control`; tool aggiornato a `web_search_20260209` (filtro dinamico)
+- `app/api/guide/route.ts`, `app/api/guide/qa/route.ts`, `app/api/route-search/route.ts` — rimosso `cache_control`; tool provato su `web_search_20260209` (filtro dinamico) e poi **ripristinato** a `web_search_20250305` dopo un test reale che ha mostrato il filtro dinamico peggiorare il troncamento (vedi punto 6)
 
 ## Verifica
 

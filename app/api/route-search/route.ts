@@ -294,9 +294,12 @@ export async function POST(req: NextRequest) {
       // max_uses più alto di prima (era 6): ora chiediamo esplicitamente a Giulia di verificare
       // anche fonti GPX alternative per ogni candidato fin dalla prima ricerca, non solo su
       // richiesta esplicita — serve margine per le ricerche aggiuntive senza troncarle a metà.
-      // web_search_20260209 (non 20250305): filtra i risultati prima che entrino nel contesto,
-      // riducendo il volume di token grezzi per richieste "search-heavy" come questa.
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 8 }],
+      // web_search_20250305 (RIPRISTINATO da 20260209): il filtro dinamico fa scrivere ed eseguire
+      // a Claude del codice per filtrare i risultati — consuma token di OUTPUT reali, competendo
+      // con max_tokens. Osservato concretamente peggiorare il troncamento su app/api/guide/route.ts
+      // (stesso pattern, con max_uses più basso) invece di risolverlo — qui con max_uses:8 il
+      // rischio è anche più alto. Vedi commit di reversione e docs/piano-ottimizzazione-ai.md.
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
     })
   } catch (e) {
     console.error('[route-search] Anthropic error:', e)
