@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Loader2, ShieldCheck, HeartPulse, History } from 'lucide-react'
+import { Loader2, ShieldCheck, HeartPulse, History, Radar } from 'lucide-react'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -17,22 +17,26 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   )
 }
 
-/** Consenso all'uso di dati personali nei prompt AI — 2 categorie separate (dati fisiologici/
- *  biometrici vs. storico/preferenze), entrambe attive di default (scelta esplicita dell'utente:
- *  default acceso, opt-out). Disattivarle non impedisce l'uso dell'AI, la rende solo meno
- *  personalizzata — vedi app/lib/guide/resolveApiKeyAndSettings.ts per dove vengono lette. */
+/** Consenso all'uso di dati personali/ricerca web nei prompt AI — 3 interruttori separati (dati
+ *  fisiologici/biometrici, storico/preferenze, ricerca web), tutti attivi di default (scelta
+ *  esplicita dell'utente: default acceso, opt-out). Disattivarli non impedisce l'uso dell'AI, la
+ *  rende solo meno personalizzata/aggiornata — vedi app/lib/guide/resolveApiKeyAndSettings.ts per
+ *  dove vengono letti. */
 export default function SectionAiPrivacy() {
   const [loading,  setLoading]  = useState(true)
   const [biometric, setBiometric] = useState(true)
   const [history,   setHistory]   = useState(true)
+  const [webSearch, setWebSearch] = useState(true)
   const [savingBiometric, setSavingBiometric] = useState(false)
   const [savingHistory,   setSavingHistory]   = useState(false)
+  const [savingWebSearch, setSavingWebSearch] = useState(false)
 
   useEffect(() => {
     getUserSettingsCached()
       .then(d => {
         if (typeof d.aiUseBiometricData === 'boolean') setBiometric(d.aiUseBiometricData)
         if (typeof d.aiUseHistoryData === 'boolean') setHistory(d.aiUseHistoryData)
+        if (typeof d.aiUseWebSearch === 'boolean') setWebSearch(d.aiUseWebSearch)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -50,6 +54,13 @@ export default function SectionAiPrivacy() {
     setSavingHistory(true)
     await updateUserSettings({ aiUseHistoryData: v })
     setSavingHistory(false)
+  }
+
+  async function handleWebSearchChange(v: boolean) {
+    setWebSearch(v)
+    setSavingWebSearch(true)
+    await updateUserSettings({ aiUseWebSearch: v })
+    setSavingWebSearch(false)
   }
 
   return (
@@ -92,6 +103,22 @@ export default function SectionAiPrivacy() {
               <p className="text-xs text-stone-500 mt-0.5">
                 Percorsi passati, voti dati, livello di esperienza e attenzioni dichiarate — usati per
                 confrontare un nuovo percorso con le tue abitudini reali.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Toggle checked={webSearch} onChange={handleWebSearchChange} disabled={savingWebSearch} />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-stone-800 flex items-center gap-1.5">
+                <Radar className="w-3.5 h-3.5 text-stone-400" /> Verifica sicurezza online
+              </p>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Prima di scrivere &quot;Verificato online&quot;, Giulia controlla in rete se ci sono
+                chiusure, frane o allerte recenti specifiche per il percorso. Disattivandola, la guida
+                si basa solo sui dati già raccolti dall&apos;app (mappa, punteggi, storico) — resta
+                comunque affidabile, solo senza questo controllo aggiuntivo in tempo reale. Genera più
+                veloce e a costo inferiore.
               </p>
             </div>
           </div>

@@ -34,16 +34,12 @@ export const dynamic = 'force-dynamic'
 
 // ── System prompt — character "Giulia" ────────────────────────────────────────
 //
-// Composto da un blocco fisso (SYSTEM_CORE, sempre presente) più due blocchi opzionali, concatenati
-// in generateGuide in base a cosa viene davvero richiesto in questa singola chiamata:
-//  - SYSTEM_SUBTITLE solo se è la primissima generazione per questo percorso (existingGuideText
-//    vuoto) — il sottotitolo di copertina è scritto una volta sola, non ad ogni aggiunta di sezione.
-//  - SYSTEM_RESEARCH solo se "Il percorso" è tra le sezioni richieste in questa chiamata — è
-//    l'UNICA sezione per cui Giulia verifica online lo stato del percorso (vedi
-//    lib/guideSections.ts's subtitle per "il_percorso", che lo dichiara anche all'utente).
-// Le combinazioni possibili sono solo 4 (booleano × booleano), quindi il prompt resta comunque
-// identico tra tantissime richieste diverse — il cache_control su questo blocco (vedi più sotto)
-// continua a funzionare, semplicemente con fino a 4 prefissi cacheati invece di uno solo.
+// Composto da un blocco fisso (SYSTEM_CORE, sempre presente) più un blocco opzionale (SYSTEM_SUBTITLE,
+// solo alla primissima generazione per questo percorso — existingGuideText vuoto — dato che il
+// sottotitolo di copertina va scritto una volta sola, non ad ogni aggiunta di sezione). Questo blocco
+// genera SOLO narrazione: mai ricerca web, mai la sezione "Verificato online" — quella vive in una
+// chiamata separata (SYSTEM_VERIFICATO più sotto, vedi generateVerificatoText), per i motivi spiegati
+// lì.
 const SYSTEM_CORE = `Sei Giulia, guida escursionistica italiana con vent'anni di esperienza sul campo:
 conosci storia, architettura, archeologia, geologia e natura del territorio italiano. Il tuo stile è
 caldo, colloquiale e contagioso — parli come un'amica esperta che cammina accanto all'escursionista.
@@ -100,28 +96,39 @@ QUESTO percorso (mai generica o intercambiabile con un altro), ma mai da annunci
 niente superlativi vuoti tipo "un'esperienza indimenticabile" o punti esclamativi. Deve cogliere al
 volo le caratteristiche principali del percorso: il tipo di paesaggio, uno o due dettagli concreti
 che lo contraddistinguono (un luogo, un panorama, una difficoltà), e l'atmosfera generale. Dopo
-questa riga, se devi scrivere anche degli avvisi sullo stato del percorso (vedi istruzioni più
-sotto), mettili subito dopo; altrimenti prosegui direttamente con la prima sezione richiesta,
-senza nessuna riga di transizione.`
+questa riga, prosegui direttamente con la prima sezione richiesta, senza nessuna riga di transizione.`
 
-// Aggiunto a SYSTEM_CORE solo quando "Il percorso" è tra le sezioni richieste in questa chiamata —
-// è l'unica sezione per cui Giulia verifica lo stato online del percorso, vedi il subtitle
-// dichiarato all'utente in lib/guideSections.ts. La ricerca web qui è un controllo mirato (due
-// sotto-domande esplicite, max_uses: 2 più sotto), non un motore esplorativo: la qualità della
-// guida nasce dalla fusione di dati già posseduti (GIS, POI, traccia, profilo), non da quante fonti
-// si trovano — vedi la discussione con l'utente in questa sessione sul punto "web_search nella guida".
-const SYSTEM_RESEARCH = `
+// System prompt della chiamata DEDICATA alla sezione "Verificato online" (vedi generateVerificatoText
+// più sotto) — separata dalla generazione narrativa principale (SYSTEM_CORE) per due motivi: (1)
+// combinare cache_control con web_search nella stessa richiesta fa scattare una cache automatica
+// costosa sui risultati grezzi di ricerca (vedi commit "Disabilita cache_control..."), tenerle
+// separate evita il problema alla radice; (2) l'esito della ricerca (avvisi/fonti) deve essere
+// affidabile e sempre presente, non un sottoprodotto opportunistico del testo narrativo di "Il
+// percorso" — da cui il tag [fonti] auto-riportato esplicitamente più sotto, invece di dipendere
+// dalle citazioni automatiche di Claude (che non scattano sempre, vedi la discussione con l'utente
+// sul problema delle fonti mancanti). Ricerca mirata (due sotto-domande esplicite, max_uses: 2 più
+// sotto), non un motore esplorativo.
+const SYSTEM_VERIFICATO = `Sei Giulia, la stessa guida escursionistica italiana che scrive le guide di
+DTrek. Qui il tuo unico compito è verificare online lo stato aggiornato di UN percorso specifico e
+scrivere la sezione "## Verificato online" della sua guida — non stai scrivendo il resto della guida,
+solo questa sezione.
 
-Prima di scrivere la sezione "Il percorso", usa lo strumento di ricerca web per due sole verifiche
-mirate: (1) condizioni attuali del percorso — chiusure temporanee o permanenti, deviazioni, frane,
-lavori in corso, divieti stagionali; (2) sicurezza — allerte meteo o incendio attive, restrizioni di
-accesso. Cerca su fonti ufficiali quando possibile (enti parco, comuni, CAI, sezioni locali, siti di
-sentieristica regionale) e integra, se utili, resoconti recenti di altri escursionisti (community di
-trekking, forum, blog). Se non trovi nulla di rilevante o specifico su questo percorso, non inventare:
-è normale, significa solo che non ci sono criticità note al momento.
+Usa lo strumento di ricerca web per due sole verifiche mirate: (1) condizioni attuali del percorso —
+chiusure temporanee o permanenti, deviazioni, frane, lavori in corso, divieti stagionali; (2)
+sicurezza — allerte meteo o incendio attive, restrizioni di accesso. Cerca su fonti ufficiali quando
+possibile (enti parco, comuni, CAI, sezioni locali, siti di sentieristica regionale) e integra, se
+utili, resoconti recenti di altri escursionisti (community di trekking, forum, blog).
+
+Scrivi la sezione in questo formato esatto:
+## Verificato online
+Una riga di sintesi (1-2 frasi, tono caldo ma diretto) che riassume l'esito del controllo. Se non hai
+trovato nulla di rilevante o specifico su questo percorso, non inventare: scrivi una frase che lo dica
+esplicitamente in modo rassicurante (es. "Nessuna criticità nota alla data odierna: il percorso
+risulta regolarmente percorribile secondo le fonti consultate.").
+
 Se dalla ricerca emergono informazioni concrete e specifiche su un problema reale in corso (chiusura,
-deviazione, frana, lavori, divieto), racchiudile in un riquadro dedicato, una riga per ciascun avviso,
-usando il formato esatto:
+deviazione, frana, lavori, divieto), aggiungi anche uno o più avvisi, subito dopo la riga di sintesi,
+uno per riga, nel formato esatto:
 [avviso:gravità]testo dell'avviso, conciso e pratico (URL esatto della fonte)[/avviso]
 dove gravità è esattamente una tra danger, warning, info, scelta così:
 - danger: il percorso (o un tratto necessario per completarlo) è chiuso, franato, interrotto, o
@@ -130,15 +137,21 @@ dove gravità è esattamente una tra danger, warning, info, scelta così:
   blocca il passaggio — il percorso resta fattibile ma con un ostacolo reale da conoscere prima.
 - info: divieto stagionale noto (es. periodo di caccia, chiusura invernale di un rifugio), allerta
   meteo/incendio contestuale — utile da sapere, non un ostacolo al percorso in sé.
-Se l'avviso deriva da una pagina specifica trovata con la ricerca web, chiudi il testo con l'URL
-esatto di quella pagina tra parentesi, come nell'esempio sopra — serve per mostrare un link diretto
-alla fonte accanto all'avviso, non solo nell'elenco fonti in fondo alla guida. Se non hai un URL
-preciso per quell'avviso, ometti le parentesi.
-Metti questi avvisi (se presenti) subito prima della sezione "## Il percorso".
-Non creare avvisi generici o precauzionali di circostanza ("presta attenzione al meteo"): solo se hai
-trovato un'informazione concreta e specifica per QUESTO percorso.
-Segnala al massimo i 3 avvisi più rilevanti e concreti, anche se la ricerca ne suggerisce di più —
-scegli quelli con l'impatto maggiore su chi percorre l'itinerario, non un elenco esaustivo.`
+Se non hai un URL preciso per un avviso, ometti le parentesi. Non creare avvisi generici o
+precauzionali di circostanza ("presta attenzione al meteo"): solo se hai trovato un'informazione
+concreta e specifica per QUESTO percorso. Segnala al massimo i 3 avvisi più rilevanti e concreti,
+anche se la ricerca ne suggerisce di più.
+
+Alla fine della sezione, se hai davvero usato lo strumento di ricerca web, elenca SEMPRE in un tag
+[fonti] tutte le pagine che hai consultato durante la ricerca — anche quelle non citate direttamente
+nel testo sopra, non solo quelle con informazioni rilevanti — nell'esatto formato JSON su una riga
+separata: [fonti][{"url":"https://...","title":"Titolo della pagina"}][/fonti]
+Serve a mostrare all'utente cosa hai controllato, non solo cosa hai trovato — è importante anche
+quando non hai trovato nessuna criticità. Ometti il tag solo se non hai usato affatto lo strumento
+di ricerca in questa risposta.
+
+Non scrivere nessun commento sul tuo processo di ricerca o di scrittura fuori dai formati indicati
+sopra.`
 
 function genderInstruction(gender: string): string {
   switch (gender) {
@@ -190,18 +203,18 @@ async function buildComfortContext(userId: string): Promise<string> {
   return lines.join('\n')
 }
 
-// Unico budget di output — non c'è più un tier "Approfondita" separato: ogni sezione, generata in
-// una richiesta iniziale o aggiunta più tardi, usa sempre queste stesse lunghezze concise. Il tetto
-// resta comunque ampio abbastanza da coprire in una sola chiamata TUTTE le 8 sezioni insieme (vedi
-// il pulsante "Genera il resto della guida" in GuideReader.tsx), non solo quelle di default.
-// Alzato a 6000 (era 3200, prima ancora 1600) dopo DUE troncamenti reali consecutivi con tutte e 8
-// le sezioni + "Il percorso" su un percorso ben documentato online (lago di Bolsena) — anche a 3200
-// il testo si è fermato a metà di "Luoghi da non perdere", con un divario ancora non del tutto
-// spiegato tra il testo visibile salvato (~900-1000 token) e il totale consumato (~3200-3400). I
-// risultati grezzi della ricerca web NON contano qui (sono input, non output, per Anthropic) — il
-// divario è quindi in testo che Giulia scrive davvero: sottotitolo, query di ricerca, avvisi (fino
-// a 3, vedi SYSTEM_RESEARCH) e la narrazione stessa. Margine ampio deliberato finché non si osserva
-// un nuovo troncamento anche a questo livello.
+// Unico budget di output della chiamata NARRATIVA — non c'è più un tier "Approfondita" separato:
+// ogni sezione, generata in una richiesta iniziale o aggiunta più tardi, usa sempre queste stesse
+// lunghezze concise. Il tetto resta comunque ampio abbastanza da coprire in una sola chiamata TUTTE
+// le 7 sezioni narrative insieme (vedi il pulsante "Genera il resto della guida" in
+// GuideReader.tsx), non solo quelle di default. Non copre più "Verificato online" (VERIFICATO_MAX_
+// TOKENS a parte, vedi generateVerificatoText): prima di isolarla in una chiamata dedicata, due
+// troncamenti reali consecutivi con tutte le sezioni + ricerca web nella stessa chiamata (lago di
+// Bolsena, percorso ben documentato online) avevano già portato questo tetto da 1600 a 3200 senza
+// risolvere — un divario tra testo visibile e token consumati mai chiarito del tutto, e che la
+// separazione della ricerca rende comunque irrilevante qui: qualunque fosse la causa, ora vive
+// nell'altra chiamata, con il suo budget separato. 6000 resta un margine ampio deliberato per le
+// sole 7 sezioni narrative.
 const GUIDE_MAX_TOKENS = 6000
 
 /**
@@ -211,12 +224,17 @@ const GUIDE_MAX_TOKENS = 6000
  * perché il numero di POI trattati varia da percorso a percorso — vedi MAX_WIKI_POIS_IN_PROMPT più
  * sotto per il tetto sul numero di luoghi.
  */
+// "verificato" non ha una voce reale qui — non fa mai parte della narrazione scritta da questo
+// prompt (vedi buildPrompt: filtrata via prima di costruire sectionsToWrite), è generata da una
+// chiamata dedicata (generateVerificatoText, SYSTEM_VERIFICATO). Le voci sotto sono solo per
+// soddisfare il tipo Record<GuideSectionKey, string> — mai lette a runtime.
 const SECTION_LENGTH: Record<GuideSectionKey, string> = {
   prima_di_partire: '45-60 parole',
   il_percorso:      '80-100 parole',
+  verificato:       '(non usato — sezione generata da una chiamata separata)',
   dati_sicurezza:   '50-65 parole',
   comfort:          '70-90 parole',
-  luoghi:           '20-30 parole per luogo',
+  luoghi:           '40-60 parole per luogo',
   natura:           '80-100 parole',
   sapori:           '60-80 parole',
   consigli:         '55-70 parole',
@@ -230,6 +248,7 @@ Sii specifica rispetto alla stagione ideale, al tipo di terreno, all'acqua dispo
   il_percorso: `## Il percorso
 Narrazione vivace del tracciato dall'inizio alla fine. Descrivi l'atmosfera, i panorami, i cambi di paesaggio,
 i momenti più belli. Dai l'idea di cosa si prova davvero a camminare lì.`,
+  verificato: '', // non usato — vedi commento su SECTION_LENGTH
   dati_sicurezza: `## Dati e sicurezza
 Commenta (senza elencare i numeri, già visibili nell'app) quanto il percorso è adatto a chi lo affronta, i rischi
 principali indicati nella VALUTAZIONE PERSONALIZZATA e i punteggi di Trail Score/Sicurezza/Bellezza forniti sotto:
@@ -391,7 +410,9 @@ function buildPrompt(
 
   // Ordine canonico (GUIDE_SECTIONS), non l'ordine in cui il chiamante le ha elencate — così
   // l'output arriva già nell'ordine giusto indipendentemente da come è stata costruita la richiesta.
-  const sectionsToWrite = GUIDE_SECTIONS.map(s => s.key).filter(k => sections.includes(k))
+  // "verificato" esclusa sempre: non è mai narrata da questo prompt, vedi SECTION_LENGTH sopra —
+  // il chiamante (generateGuide) dovrebbe già filtrarla, questa è solo una difesa in più.
+  const sectionsToWrite = GUIDE_SECTIONS.map(s => s.key).filter(k => k !== 'verificato' && sections.includes(k))
 
   const sectionsBlock = sectionsToWrite
     .map(k => `${SECTION_BRIEF[k]}\n(LUNGHEZZA per questa sezione: ${SECTION_LENGTH[k]})`)
@@ -434,6 +455,44 @@ La guida deve essere ricca di vita ma mai ridondante coi dati che l'app già mos
 IMPORTANTE: rispetta esattamente l'indicazione LUNGHEZZA scritta sotto ciascuna sezione qui sopra — sezioni diverse hanno lunghezze diverse per loro natura (una nota pratica non è lunga come la narrazione del percorso), non uniformarle tutte alla stessa misura.
 
 IMPORTANTE: Completa obbligatoriamente tutte le sezioni richieste (${sectionTitles}). Non terminare prima dell'ultima.`
+}
+
+const VERIFICATO_MAX_TOKENS = 1000
+
+/**
+ * Chiamata DEDICATA per la sezione "Verificato online" — separata dalla generazione narrativa
+ * principale (vedi SYSTEM_VERIFICATO per i motivi: niente cache_control + web_search insieme, esito
+ * sempre affidabile invece che opportunistico). Non streaming (client.messages.create, non .stream):
+ * l'output è breve e delimitato, non serve un'anteprima progressiva token-per-token. Lanciata IN
+ * PARALLELO alla generazione narrativa da generateGuide (nessuna dipendenza tra le due: "Il
+ * percorso" è tornata pura narrazione, non ha più bisogno dell'esito di questa ricerca).
+ * Ritorna null (mai un'eccezione) su qualunque fallimento — un errore qui non deve mai far fallire
+ * l'intera generazione della guida, solo lasciare questa sezione vuota per un prossimo tentativo.
+ */
+async function generateVerificatoText(hikeTitle: string, claudeModel: string, apiKey: string): Promise<string | null> {
+  try {
+    const client = new Anthropic({ apiKey })
+    const todayStr = format(new Date(), "d MMMM yyyy", { locale: it })
+    const msg = await client.messages.create({
+      model:      claudeModel,
+      max_tokens: VERIFICATO_MAX_TOKENS,
+      system:     SYSTEM_VERIFICATO,
+      messages:   [{
+        role: 'user',
+        content: `Percorso: ${hikeTitle}\nData odierna: ${todayStr}\n\nVerifica online lo stato di questo percorso e scrivi la sezione "## Verificato online" come da istruzioni.`,
+      }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
+    })
+    const text = msg.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+      .trim()
+    return text || null
+  } catch (e) {
+    console.error('[guide] generazione "Verificato online" fallita:', e)
+    return null
+  }
 }
 
 // ── GET /api/guide?hikeId=X → pre-flight AI-access check, no generation ───────
@@ -490,7 +549,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     )
   }
 
-  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, lookupFailed } = user
+  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, lookupFailed } = user
     ? await resolveApiKeyAndSettings(user.id, 'guide')
     : await resolveEmergencySharedKey('guide')
 
@@ -568,9 +627,9 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   let existingGuideText = ''
   let existingRiddles: PlannedHike['cachedRiddles'] = []
   let existingEpochPois: PlannedHike['cachedEpochPois'] = []
-  // Riportati invariati nell'update quando questa chiamata non tocca "Il percorso" (unica sezione
-  // che li scrive/riscrive, vedi SYSTEM_RESEARCH) — senza questi, un update senza quella sezione
-  // sovrascriverebbe avvisi/fonti già salvati con un elenco vuoto.
+  // Riportati invariati nell'update quando questa chiamata non include/completa con successo
+  // "Verificato online" (unica sezione che li scrive/riscrive, vedi SYSTEM_VERIFICATO) — senza
+  // questi, un update senza quella sezione sovrascriverebbe avvisi/fonti già salvati con un vuoto.
   let existingGuideNotices: GuideNotice[] = []
   let existingGuideSources: GuideSource[] = []
 
@@ -692,27 +751,70 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   })
 
   const isFirstGeneration = !existingGuideText
-  const includesRoute = sectionKeys.includes('il_percorso')
+  // "verificato" non è mai narrata dalla chiamata principale (buildPrompt la filtra comunque, vedi
+  // sopra) — generata da generateVerificatoText, lanciata IN PARALLELO qui sotto perché non ha
+  // nessuna dipendenza dalla narrazione (né viceversa): "Il percorso" è tornata pura narrazione,
+  // non scrive più avvisi/fonti. Il consenso dell'utente (SectionAiPrivacy.tsx) la disattiva del
+  // tutto, indipendentemente da cosa è stato richiesto.
+  const needsVerificato = sectionKeys.includes('verificato') && aiUseWebSearch
+  const narrativeSectionKeys = sectionKeys.filter(k => k !== 'verificato')
 
   const client = new Anthropic({ apiKey })
-  const prompt = buildPrompt(hike, nature, sectionKeys, scores, isFirstGeneration, comfortContext)
+  const verificatoPromise = needsVerificato
+    ? generateVerificatoText(hike.title, claudeModel, apiKey)
+    : Promise.resolve(null)
 
-  // SYSTEM_CORE (+ SYSTEM_SUBTITLE/SYSTEM_RESEARCH quando applicabili) è testo fisso, identico per
-  // ogni utente e ogni percorso nella stessa combinazione (~1700-2000 token per la variante più
-  // completa) — niente cache_control (rimosso deliberatamente, non dimenticato). Due motivi:
-  // (1) con web_search abilitato (includesRoute), l'API Anthropic mette AUTOMATICAMENTE in cache
-  // anche i risultati grezzi della ricerca quando un cache_control è presente da qualche parte
-  // nella richiesta — a costo di scrittura (1,25×), non richiesto da noi, osservato concretamente
-  // costare decine di migliaia di token in più a generazione (vedi "Server tool results are cached
-  // automatically" nella documentazione Anthropic); (2) anche a parte quel rischio, il beneficio
-  // reale è minimo: genera una guida è un'azione rara per un singolo utente con chiave personale,
-  // improbabile che rilegga lo stesso prefisso entro la finestra di 5 minuti/1 ora della cache —
-  // il 25% di sovrapprezzo sui ~2000 token qui in gioco (pochi millesimi di centesimo) non vale il
-  // rischio residuo, anche fuori dal caso web_search. genderInstruction resta comunque un blocco
-  // separato per chiarezza (varia da utente a utente), ma la distinzione non serve più per la cache.
-  const systemText = SYSTEM_CORE
-    + (isFirstGeneration ? SYSTEM_SUBTITLE : '')
-    + (includesRoute ? SYSTEM_RESEARCH : '')
+  // Caso "Approfondisci con Giulia" premuto solo su "Verificato online": nessuna narrazione da
+  // generare in questa chiamata, solo l'esito della ricerca — un percorso più leggero rispetto a
+  // quello sotto, che riusa la stessa pipeline di estrazione/salvataggio ma senza stream/riddle/
+  // epoch/sottotitolo (non pertinenti per questa sola sezione).
+  if (narrativeSectionKeys.length === 0) {
+    const readableOnly = new ReadableStream({
+      async start(controller) {
+        const enc = new TextEncoder()
+        const verificatoText = await verificatoPromise
+        try { if (verificatoText) controller.enqueue(enc.encode(verificatoText)) } catch {}
+        try { controller.close() } catch {}
+
+        if (user && verificatoText) {
+          try {
+            const rn = extractGuideNotices(verificatoText)
+            const rs = extractGuideSources(rn.cleanedText)
+            const foundImages = await findAllSourceImages(rs.sources.map(s => s.url)).catch(() => [])
+            const imageByUrl = new Map(foundImages.map(f => [f.url, f.imageUrl]))
+            const sourcesList = rs.sources.map(s => (imageByUrl.has(s.url) ? { ...s, imageUrl: imageByUrl.get(s.url) } : s))
+            const parsedVerificato = parseGuideSections(rs.cleanedText)[0]
+            if (parsedVerificato?.key) {
+              const mergedText = mergeGuideSection(existingGuideText, parsedVerificato.key, parsedVerificato.title, parsedVerificato.body)
+              const { error: persistError } = await supabase.from('planned_hikes').update({
+                cached_guide: mergedText,
+                cached_guide_notices: rn.notices,
+                cached_guide_sources: sourcesList,
+                guide_generated_at: new Date().toISOString(),
+              }).eq('id', hikeId).eq('user_id', user.id)
+              if (persistError) console.error('[guide] server-side persist (solo Verificato online) failed:', persistError.message)
+            }
+          } catch (e) {
+            console.error('[guide] server-side persist (solo Verificato online) failed:', e)
+          }
+        }
+      },
+    })
+    return new Response(readableOnly, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' },
+    })
+  }
+
+  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, comfortContext)
+
+  // SYSTEM_CORE (+ SYSTEM_SUBTITLE quando applicabile) è testo fisso, identico per ogni utente e
+  // ogni percorso nella stessa combinazione (~1700-1900 token) — niente cache_control (rimosso
+  // deliberatamente, non dimenticato): con una chiave personale generare una guida è un'azione rara,
+  // improbabile che rilegga lo stesso prefisso entro la finestra di 5 minuti/1 ora della cache — il
+  // 25% di sovrapprezzo di scrittura (pochi millesimi di centesimo qui) non vale il rischio residuo.
+  // Questa chiamata non fa mai ricerca web (vedi SYSTEM_VERIFICATO/generateVerificatoText sopra per
+  // quella, isolata apposta in una chiamata separata).
+  const systemText = SYSTEM_CORE + (isFirstGeneration ? SYSTEM_SUBTITLE : '')
   const system = [
     { type: 'text' as const, text: systemText },
     // Il genere è un dato biometrico/anagrafico — rispetta il consenso dell'utente (vedi
@@ -720,33 +822,12 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     { type: 'text' as const, text: genderInstruction(aiUseBiometricData ? userGender : 'non_specificato') },
   ]
 
-  // Stream Claude response — web_search abilita Giulia a verificare online lo stato aggiornato del
-  // percorso (chiusure, deviazioni, lavori) prima di scrivere "Il percorso" (vedi SYSTEM_RESEARCH)
-  // — l'unica sezione che lo fa. Omesso del tutto quando "Il percorso" non è tra le sezioni
-  // richieste in questa chiamata: risparmia sia costo che tempo. max_uses: 2 (non un budget più
-  // ampio) rispecchia le due sole sotto-domande consentite in SYSTEM_RESEARCH — un "controllo
-  // medico" mirato, non un motore esplorativo che spende ricerche extra per arricchire il racconto.
-  //
-  // web_search_20250305 (RIPRISTINATO da 20260209): il filtro dinamico di 20260209 fa scrivere ed
-  // eseguire a Claude del codice per filtrare i risultati — quel codice è comunque testo generato,
-  // quindi consuma token di OUTPUT reali, competendo con lo stesso GUIDE_MAX_TOKENS usato per
-  // scrivere la guida vera. Osservato concretamente peggiorare il troncamento invece di risolverlo:
-  // con 20260209 il budget si esauriva nella fase di ricerca/filtro, prima ancora di scrivere una
-  // sola sezione ("nessuna sezione riconosciuta nella risposta" — zero contenuto salvabile, peggio
-  // di prima). Tornati alla versione base finché non si trova un modo di isolare il costo della
-  // ricerca dal budget di output della narrazione (vedi docs/piano-ottimizzazione-ai.md).
   const stream = client.messages.stream({
     model:      claudeModel,
     max_tokens: GUIDE_MAX_TOKENS,
     system,
     messages:   [{ role: 'user', content: prompt }],
-    ...(includesRoute ? { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 2 }] } : {}),
   })
-
-  // Raccoglie le fonti web citate da Giulia mentre scrive (citations_delta sui blocchi di testo,
-  // popolate automaticamente da Claude quando usa web_search) — appese in coda allo stream come
-  // tag [fonti], stessa convenzione di [sottotitolo]/[avviso], estratte in lib/guideSources.ts.
-  const sources = new Map<string, string>()
 
   const readable = new ReadableStream({
     async start(controller) {
@@ -762,34 +843,19 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         if (clientGone) return
         try { controller.enqueue(enc.encode(chunk)) } catch { clientGone = true }
       }
+      // Segnala subito che la ricerca "Verificato online" è in corso in parallelo — non arriverà
+      // char-per-char (client.messages.create, non stream), solo un pop-in a fine narrazione, ma
+      // così l'utente sa che sta succedendo qualcosa anche prima che compaia.
+      if (needsVerificato) safeEnqueue('[stato]Sto verificando lo stato del percorso online…[/stato]')
       let fullText = ''
       try {
         for await (const event of stream) {
-          // [stato] è un marcatore transitorio (stessa convenzione di [sottotitolo]/[avviso]/
-          // [fonti]) rimosso lato client man mano che arriva — dà un feedback di cosa sta facendo
-          // Giulia durante la fase di ricerca web, prima che compaia il primo testo vero.
-          if (event.type === 'content_block_start') {
-            const cb = event.content_block
-            if (cb.type === 'server_tool_use' && cb.name === 'web_search') {
-              safeEnqueue('[stato]Sto verificando lo stato aggiornato del percorso online…[/stato]')
-            } else if (cb.type === 'web_search_tool_result') {
-              safeEnqueue('[stato]Ho trovato delle informazioni, le sto integrando…[/stato]')
-            }
-          }
           if (
             event.type === 'content_block_delta' &&
             event.delta.type === 'text_delta'
           ) {
             fullText += event.delta.text
             safeEnqueue(event.delta.text)
-          }
-          if (
-            event.type === 'content_block_delta' &&
-            event.delta.type === 'citations_delta' &&
-            event.delta.citation.type === 'web_search_result_location'
-          ) {
-            const { url, title } = event.delta.citation
-            if (url && !sources.has(url)) sources.set(url, title ?? url)
           }
         }
 
@@ -799,24 +865,21 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         // sia lato log che per l'utente, che vedeva semplicemente sparire le ultime sezioni.
         const finalMessage = await stream.finalMessage().catch(() => null)
         if (finalMessage?.stop_reason === 'max_tokens') {
-          console.error(`[guide] generazione troncata per max_tokens (hikeId=${hikeId}, sections=${sectionKeys.join(',')})`)
+          console.error(`[guide] generazione troncata per max_tokens (hikeId=${hikeId}, sections=${narrativeSectionKeys.join(',')})`)
         }
 
-        if (sources.size > 0) {
-          // Foto di riferimento del percorso, per ogni fonte citata che ne espone una pubblicamente
-          // (meta tag og:image, vedi lib/sourceImageFetch.ts) — quante più se ne trovano, meglio è
-          // per la Galleria fotografica; mai sui domini che non la mostrerebbero comunque
-          // (Komoot/AllTrails/Wikiloc).
-          const foundImages = await findAllSourceImages(Array.from(sources.keys())).catch(() => [])
-          const imageByUrl = new Map(foundImages.map(f => [f.url, f.imageUrl]))
-          const list = Array.from(sources, ([url, title]) => ({
-            url, title,
-            ...(imageByUrl.has(url) ? { imageUrl: imageByUrl.get(url) } : {}),
-          }))
-          const tag = `\n[fonti]${JSON.stringify(list)}[/fonti]`
-          fullText += tag
-          safeEnqueue(tag)
+        // Il risultato della ricerca (kickata in parallelo, prima di questo stream) è quasi sempre
+        // già pronto a questo punto — l'attesa qui è solo per il caso raro in cui sia più lenta
+        // della narrazione. null quando disattivata dall'utente O quando la ricerca è fallita
+        // (vedi generateVerificatoText): in quel caso non si tocca affatto la sezione, notices/
+        // fonti esistenti restano quelle già salvate in precedenza (mai sovrascritte con un vuoto).
+        const verificatoText = needsVerificato ? await verificatoPromise : null
+        if (verificatoText) {
+          const chunk = '\n\n' + verificatoText
+          fullText += chunk
+          safeEnqueue(chunk)
         }
+
         if (!clientGone) { try { controller.close() } catch {} }
 
         // Salvataggio lato server, indipendente dal client che ha fatto la richiesta — la stessa
@@ -833,10 +896,10 @@ async function generateGuide(req: NextRequest): Promise<Response> {
             // Pipeline unica sia per la primissima generazione sia per l'aggiunta di sezioni a una
             // guida già esistente — [sottotitolo] viene estratto solo se questa era la prima
             // generazione (isFirstGeneration, coerente con SYSTEM_SUBTITLE sopra), [avviso]/[fonti]
-            // solo se "Il percorso" era tra le sezioni richieste (coerente con SYSTEM_RESEARCH):
-            // per ogni altro caso semplicemente non compaiono nel testo, quindi extract* su di essi
-            // tornerebbe comunque vuoto — la guardia esiste solo per non SOVRASCRIVERE con un
-            // elenco vuoto un sottotitolo/avvisi/fonti già salvati da una chiamata precedente.
+            // solo se la ricerca "Verificato online" è riuscita in QUESTA chiamata (verificatoText
+            // non nullo): per ogni altro caso semplicemente non compaiono nel testo, quindi
+            // extract* su di essi tornerebbe comunque vuoto — la guardia esiste solo per non
+            // SOVRASCRIVERE con un elenco vuoto un sottotitolo/avvisi/fonti già salvati prima.
             const step1 = stripGuideStatus(fullText).cleanedText
             let step2 = step1
             let subtitle: string | undefined
@@ -848,12 +911,17 @@ async function generateGuide(req: NextRequest): Promise<Response> {
             let step3 = step2
             let notices = existingGuideNotices
             let sourcesList = existingGuideSources
-            if (includesRoute) {
+            if (verificatoText) {
               const rn = extractGuideNotices(step2)
               notices = rn.notices
               const rs = extractGuideSources(rn.cleanedText)
-              sourcesList = rs.sources
               step3 = rs.cleanedText
+              // Foto di riferimento del percorso, per ogni fonte auto-riportata da Giulia che ne
+              // espone una pubblicamente (meta tag og:image, vedi lib/sourceImageFetch.ts) — mai
+              // sui domini che non la mostrerebbero comunque (Komoot/AllTrails/Wikiloc).
+              const foundImages = await findAllSourceImages(rs.sources.map(s => s.url)).catch(() => [])
+              const imageByUrl = new Map(foundImages.map(f => [f.url, f.imageUrl]))
+              sourcesList = rs.sources.map(s => (imageByUrl.has(s.url) ? { ...s, imageUrl: imageByUrl.get(s.url) } : s))
             }
             const { riddles, cleanedText: step4 } = extractRiddles(step3, cachedPoisArr, cachedPoiWikiArr)
             const { epochPois, cleanedText: step5 } = extractEpochPois(step4, cachedPoisArr, cachedPoiWikiArr)

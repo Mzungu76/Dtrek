@@ -133,6 +133,45 @@ problema non può ripresentarsi.
 
 File toccati: `app/api/guide/route.ts`, `app/api/guide/qa/route.ts`, `app/api/route-search/route.ts`.
 
+### 7. Sezione dedicata "Verificato online" + interruttore ricerca web — ✅ implementato (sessione successiva)
+
+Due problemi ulteriori emersi da altri test reali con l'utente sullo stesso percorso: (a) le fonti
+consultate a volte non comparivano affatto nella guida — le citazioni automatiche di Claude
+(`citations_delta`) sono opportunistiche, scattano solo se il modello cita alla lettera un risultato
+di ricerca nel testo narrativo, non se lo usa solo per sintetizzare a parole sue; (b) la sezione "I
+luoghi da non perdere" era troppo stringata (20-30 parole/luogo, alzata a 40-60).
+
+**Sezione dedicata**: nuova `GuideSectionKey` `'verificato'` ("Verificato online"), posizionata subito
+dopo "Il percorso". Non è più un sottoprodotto di quest'ultima — è generata da una chiamata
+**separata e in parallelo** (`generateVerificatoText`, `SYSTEM_VERIFICATO`), esattamente
+l'architettura descritta al punto 6 come "reintroduzione futura per la cache" — implementata ora
+per un motivo diverso (affidabilità delle fonti), ma la stessa separazione la rende anche pronta per
+riattivare `cache_control` sulla chiamata narrativa quando la chiave condivisa/premium avrà volume
+(quella chiamata non fa più *mai* `web_search`, quindi il rischio della cache automatica sui
+risultati di ricerca — punto 6 — non può più ripresentarsi lì). La cache resta comunque **disattivata
+ora**, per scelta esplicita dell'utente indipendente da questo punto (vedi punto 6).
+
+Fonti affidabili: invece di dipendere dalle citazioni automatiche, il prompt chiede esplicitamente a
+Giulia di **auto-riportare** tutte le pagine consultate in un tag `[fonti]`, sempre, anche quando non
+trova nulla di rilevante — non solo quelle citate nel testo. Riusa `extractGuideNotices`/
+`extractGuideSources` esistenti, applicati però al solo output di questa chiamata (non più mischiati
+con la narrazione).
+
+**Interruttore utente**: nuova colonna `user_settings.ai_web_search` (default `true`, opt-out),
+letta da `resolveApiKeyAndSettings.ts`. Copre guida (`generateVerificatoText`) e "Chiedi a Giulia"
+(`app/api/guide/qa/route.ts`) — **non** `route-search/route.ts`, dove la ricerca web è il motore
+stesso della funzione, non un extra disattivabile. UI in `components/profilo/SectionAiPrivacy.tsx`,
+terzo interruttore accanto ai due sui dati personali, copy che guida con cosa significa disattivarlo
+(niente controllo automatico di chiusure/frane/allerte) prima del beneficio di costo/velocità.
+
+File toccati: `lib/guideSections.ts` (nuova sezione + `DEFAULT_BREVE_SECTIONS`),
+`components/guida/sectionStyle.tsx` (icona/colore), `components/guida/GuideReader.tsx` (widget
+avvisi/fonti spostato dentro la sezione, non più banner globale), `app/api/guide/route.ts`
+(`generateVerificatoText`, chiamate in parallelo), `app/api/guide/qa/route.ts` (gate
+`aiUseWebSearch`), `app/lib/guide/resolveApiKeyAndSettings.ts`, `lib/aiKeyCache.ts`,
+`app/api/user-settings/route.ts`, `lib/sync/userSettingsStore.ts`, `supabase-schema.sql`,
+`components/profilo/SectionAiPrivacy.tsx`.
+
 ### Esplicitamente fuori scope per questo piano
 - **Cache route-status condivisa** (idea "punto 1" già discussa e scartata in questa sessione): il cambiamento con il potenziale di risparmio più alto in assoluto, ma richiede nuova tabella Supabase + logica di lettura/scrittura + integrazione nel prompt — un progetto a sé.
 - **Supporto multi-provider** (OpenAI/Gemini): l'utente ha confermato di volerlo solo come benchmark informativo, non come implementazione.

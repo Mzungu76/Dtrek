@@ -24,6 +24,11 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
    *  valore non è ancora leggibile (blackout Supabase, colonna non ancora migrata). */
   aiUseBiometricData: boolean
   aiUseHistoryData: boolean
+  /** Consenso dell'utente alla ricerca web di Giulia (sezione "Verificato online" della guida,
+   *  "Chiedi a Giulia") — vedi components/profilo/SectionAiPrivacy.tsx. Default true (opt-out).
+   *  NON copre app/api/route-search/route.ts: lì la ricerca web è il motore stesso della funzione
+   *  (trovare percorsi da importare), non un extra disattivabile. */
+  aiUseWebSearch: boolean
   /** true quando NÉ Supabase NÉ la copia di riserva (lib/aiKeyCache.ts, Upstash Redis) sono
    *  riuscite a rispondere — a differenza di una lettura riuscita che conferma semplicemente
    *  l'assenza di una chiave. I chiamanti devono mostrare "temporaneamente non disponibile", non
@@ -32,7 +37,7 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
 }> {
   const { data: settings, error } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections, claude_model, ai_use_biometric_data, ai_use_history_data')
+    .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections, claude_model, ai_use_biometric_data, ai_use_history_data, ai_web_search')
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -48,16 +53,17 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
     const claudeModel = rawClaudeModel ?? resolveDefaultModel(feature)
     const aiUseBiometricData = (settings?.ai_use_biometric_data as boolean | null) ?? true
     const aiUseHistoryData   = (settings?.ai_use_history_data   as boolean | null) ?? true
+    const aiUseWebSearch     = (settings?.ai_web_search         as boolean | null) ?? true
 
     // Tiene la copia di riserva sincronizzata con l'ultimo stato noto-buono di Supabase — sia
     // quando c'è una chiave personale da (ri)salvare, sia quando è stata rimossa, così un blackout
     // successivo non serve mai una chiave ormai cancellata. Non cachea mai la chiave condivisa
     // (fallback premium): non ha senso duplicarla per utente, e process.env resta comunque
     // disponibile in ogni caso.
-    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections, claudeModel: rawClaudeModel, aiUseBiometricData, aiUseHistoryData })
+    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections, claudeModel: rawClaudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch })
     else void deleteCachedAiSettings(userId)
 
-    return { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, lookupFailed: false }
+    return { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, lookupFailed: false }
   }
 
   // Supabase irraggiungibile — prova la copia di riserva, infrastruttura indipendente.
@@ -71,6 +77,7 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
       claudeModel:   rawClaudeModel ?? resolveDefaultModel(feature),
       aiUseBiometricData: cached.aiUseBiometricData ?? true,
       aiUseHistoryData:   cached.aiUseHistoryData ?? true,
+      aiUseWebSearch:     cached.aiUseWebSearch ?? true,
       lookupFailed:  false,
     }
   }
@@ -78,7 +85,7 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
   return {
     apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined),
     claudeModel: resolveDefaultModel(feature), aiUseBiometricData: true, aiUseHistoryData: true,
-    lookupFailed: true,
+    aiUseWebSearch: true, lookupFailed: true,
   }
 }
 
@@ -98,6 +105,7 @@ export async function resolveEmergencySharedKey(feature: AiFeature): Promise<{
   claudeModel: string
   aiUseBiometricData: boolean
   aiUseHistoryData: boolean
+  aiUseWebSearch: boolean
   lookupFailed: boolean
 }> {
   const sharedKey = process.env.ANTHROPIC_API_KEY ?? null
@@ -111,6 +119,7 @@ export async function resolveEmergencySharedKey(feature: AiFeature): Promise<{
     // — non c'è una preferenza da leggere, si presuppone il default opt-out come ovunque altrove.
     aiUseBiometricData: true,
     aiUseHistoryData:   true,
+    aiUseWebSearch:     true,
     lookupFailed:  !enabled,
   }
 }

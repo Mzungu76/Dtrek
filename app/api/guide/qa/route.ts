@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
         : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
     }
 
-    const { apiKey, claudeModel, lookupFailed } = user
+    const { apiKey, claudeModel, aiUseWebSearch, lookupFailed } = user
       ? await resolveApiKeyAndSettings(user.id, 'guideQa')
       : await resolveEmergencySharedKey('guideQa')
     if (!apiKey) {
@@ -273,11 +273,13 @@ export async function POST(req: NextRequest) {
         ]),
         { role: 'user', content: question },
       ],
-      // web_search_20250305 (RIPRISTINATO da 20260209): il filtro dinamico fa scrivere ed eseguire
-      // a Claude del codice per filtrare i risultati — consuma token di OUTPUT reali, competendo
-      // con max_tokens (qui 600, molto stretto). Osservato concretamente peggiorare il troncamento
-      // su app/api/guide/route.ts (stesso pattern) invece di risolverlo — vedi commit di reversione.
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
+      // web_search_20250305 (non 20260209 — il filtro dinamico fa scrivere ed eseguire a Claude del
+      // codice per filtrare i risultati, consumando token di OUTPUT reali che competono con
+      // max_tokens, qui 600, molto stretto — osservato concretamente peggiorare il troncamento su
+      // app/api/guide/route.ts, stesso pattern). Omesso del tutto quando l'utente ha disattivato la
+      // ricerca web (vedi components/profilo/SectionAiPrivacy.tsx) — Giulia risponde comunque, solo
+      // senza poter verificare informazioni recenti online.
+      ...(aiUseWebSearch ? { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 2 }] } : {}),
     })
 
     const readable = new ReadableStream({

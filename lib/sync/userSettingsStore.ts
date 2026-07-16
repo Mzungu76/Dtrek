@@ -61,6 +61,7 @@ export interface UserSettingsData {
   updatedAt: string | null
   aiUseBiometricData: boolean
   aiUseHistoryData: boolean
+  aiUseWebSearch: boolean
 }
 
 const ENTITY_TYPE = 'user_settings'
