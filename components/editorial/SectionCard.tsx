@@ -12,6 +12,9 @@ interface Props {
   body?: string
   widget?: ReactNode
   sectionPhoto?: string
+  photoCaption?: string
+  extraFloatNode?: ReactNode
+  photoIndexBadge?: number
   twoColumns?: boolean
   isVoiceActive?: boolean
   onSpeak?: () => void
@@ -35,7 +38,7 @@ interface Props {
  *    così la nav e lo scroll-to-section continuano a funzionare anche per lei.
  */
 const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
-  { title, subtitle, icon, color, body, widget, sectionPhoto, twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo },
+  { title, subtitle, icon, color, body, widget, sectionPhoto, photoCaption, extraFloatNode, photoIndexBadge, twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo },
   ref,
 ) {
   const hasBody = !!body?.trim()
@@ -90,7 +93,10 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
         {widget}
         {hasBody && (
           <div className={hasWidget ? 'mt-5 pt-5 border-t' : ''} style={hasWidget ? { borderColor: '#dcd8cc' } : undefined}>
-            <MagazineBody body={body!} color={color} sectionPhoto={sectionPhoto} twoColumns={twoColumns} />
+            <MagazineBody
+              body={body!} color={color} sectionPhoto={sectionPhoto} twoColumns={twoColumns}
+              photoCaption={photoCaption} extraFloatNode={extraFloatNode} photoIndexBadge={photoIndexBadge}
+            />
           </div>
         )}
         {!hasBody && approfondendo && (

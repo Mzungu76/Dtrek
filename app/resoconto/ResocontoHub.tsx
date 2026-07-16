@@ -5,47 +5,38 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import RouteHub from '@/components/routehub/RouteHub'
-import { useCenteredItem } from '@/components/routehub/useCenteredItem'
-import { glassTile, glassTileHover, textPrimary, textMuted, sectionHeading } from '@/components/routehub/overlayTheme'
-import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from '@/components/routehub/types'
+import HubSkeleton from '@/components/routehub/HubSkeleton'
+import ReportReader from '@/components/resoconto/ReportReader'
+import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
+import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
 import { wmoInfo } from '@/lib/openmeteo'
-import RouteMapSection from '@/components/RouteMapSection'
-import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
-import WeatherWidget from '@/components/WeatherWidget'
-import WikiCards from '@/components/WikiCards'
 import { MiniScoreRing } from '@/components/ScoreRing'
-import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
-import StatCard from '@/components/StatCard'
-import HRChart from '@/components/HRChart'
-import SpeedChart from '@/components/SpeedChart'
 import {
   getActivityById, updateActivityMeta, deleteActivity, getAllActivities,
   type StoredActivity, type ActivityMeta,
 } from '@/lib/blobStore'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
-import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
+import { formatDuration } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import { exportActivityPdf } from '@/utils/pdfExport'
-import { type PoiItem, POI_META } from '@/lib/overpass'
-import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
-import { computeDEP, depLabel, findSimilarActivities } from '@/lib/stats'
+import { type PoiItem } from '@/lib/overpass'
+import { findSimilarActivities } from '@/lib/stats'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
 import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import {
   FileSpreadsheet, FileText, Map, FileDown,
-  Route, TrendingUp, Clock, Flame, Heart, Zap,
-  Pencil, Trash2, Loader2, Share2, Layers, Box, Images, RefreshCw, BookOpen, Film, Compass, Leaf, Camera, PawPrint, X, MapPin,
-  BarChart2, ShieldAlert, Wrench, Star, Mountain, Car,
+  Route, TrendingUp, Clock, Flame,
+  Pencil, Trash2, Loader2, Share2, Box, Images, Film, Camera, X,
+  Star, Car,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
-import { FloraPanel } from '@/components/FloraPanel'
 import { useFlora } from '@/lib/useFlora'
 import { useDtmProfile } from './useDtmProfile'
 import { useTerrainProfile } from './useTerrainProfile'
@@ -85,6 +76,7 @@ function metaToItem(a: ActivityMeta): RouteHubItem {
     // Manual rating stands in for a computed score here — a completed hike's own vote is more
     // meaningful than an estimate, and it's already known for every item with no extra fetch.
     scorePreview: a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined,
+    favorite: a.favorite,
   }
 }
 
@@ -104,7 +96,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [showAspect,   setShowAspect]   = useState(false)
   const [pois,            setPois]           = useState<PoiItem[]>([])
   const [poisLoaded,      setPoisLoaded]     = useState(false)
-  const [, setWikiPages] = useState<WikiPage[]>([])
   const [ratingVal,       setRatingVal]      = useState(0)
   const [ratingNote,      setRatingNote]     = useState('')
   const [savingRating,    setSavingRating]   = useState(false)
@@ -119,6 +110,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [showCoverPicker, setShowCoverPicker] = useState(false)
   const [ctsResult,       setCtsResult]       = useState<TrailScoreResult | null>(null)
   const [ctsComputing,    setCtsComputing]    = useState(false)
+  const [favoritesFilter, setFavoritesFilter] = useState(false)
+  const [pendingScrollSection, setPendingScrollSection] = useState<'dati_punteggi' | null>(null)
 
   const dtmProfile      = useDtmProfile(activity)
   const terrainProfile  = useTerrainProfile(activity)
@@ -127,9 +120,18 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   const [userOrigin, setUserOrigin] = useState<{ lat: number; lon: number } | null>(null)
-  // Indirizzo/punto di partenza salvato nelle impostazioni — usato per la distanza in linea
-  // d'aria mostrata tra i dati di ogni scheda e come filtro di ordinamento della galleria.
+  // Indirizzo/punto di partenza salvato nelle impostazioni — usato per la distanza in auto
+  // mostrata nell'hero e come filtro di ordinamento della galleria.
   useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
+
+  const drivingWithMaps = useMemo(() => {
+    if (!driving) return driving
+    const trailStart = activity?.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])?.[0]
+    const mapsUrl = userOrigin && trailStart
+      ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
+      : undefined
+    return { ...driving, mapsUrl }
+  }, [driving, userOrigin, activity?.trackPoints])
 
   const heroPolyline = useMemo((): [number, number][] => {
     const pts = (activity?.trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -139,7 +141,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }, [activity])
 
   const flora = useFlora(heroPolyline, activity?.altitudeMax)
-  const poiCenter = useCenteredItem(pois.length)
   const [showFloraGallery, setShowFloraGallery] = useState(false)
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
 
@@ -210,28 +211,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (savedCover) setCoverPhotoId(savedCover)
   }, [currentId, router])
 
-  // Cover subtitle for the magazine closed-card — heuristic (not AI-authored like Guida's, see
-  // lib/extractLeadSubtitle.ts) lead-paragraph extraction from the resoconto narrativo, if one has
-  // already been generated (app/resoconto/[id]/RacconContent.tsx owns that generation flow).
-  const [coverSubtitle, setCoverSubtitle] = useState<string | undefined>(undefined)
-  useEffect(() => {
-    setCoverSubtitle(undefined)
-    if (!currentId) return
-    let cancelled = false
-    fetch(`/api/resoconto?activityId=${encodeURIComponent(currentId)}`)
-      .then(r => r.json())
-      .then(d => { if (!cancelled) setCoverSubtitle(extractLeadSubtitle(d?.content)) })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [currentId])
-
   // CTS+Beauty: computed once at import (lib/activitySave.ts) and re-verified here only if
   // missing (an older activity, saved before that policy existed) or older than
   // SCORE_STALE_DAYS — same policy as the planned-hike side in GuidaHub.
-  // Waits for the POI/DTM/terrain/protected-area/prefs effects above to land, then hands their
-  // results to computeCtsForActivity as `prefetched` instead of having it repeat the exact same
-  // /api/pois, /api/tei-dtm, /api/tei-terrain and /api/natura2000 calls this component already
-  // made for its own map/UI state (mirrors the same fix on the Guida/GuidaHub side).
   useCtsRecompute({
     entity: activity,
     entityId: activity?.id,
@@ -302,30 +284,25 @@ export default function ResocontoHub({ id }: { id?: string }) {
       distance: driving?.distanceMeters,
     })
     const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? photos[0]?.url : undefined)
-    // Otherwise the gallery thumbnail's rating ring stays at whatever it was when the list first
-    // loaded, so voting while the hike is open never reaches its own thumbnail once the user swipes away.
     const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
     const mapped = items.map(it => {
       if (it.id === activity?.id) {
-        return { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }
+        return { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity), favorite: activity.favorite }
       }
       const coverUrl = cover(it.id)
       return coverUrl ? { ...it, coverPhotoUrl: coverUrl } : it
     })
     if (activity && !mapped.some(it => it.id === activity.id)) {
-      return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity) }, ...mapped]
+      return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity), favorite: activity.favorite }, ...mapped]
     }
     return mapped
   }, [items, covers, activity, photos, coverPhotoId, driving, userOrigin])
 
   if (!listLoaded) {
-    return (
-      <div className="fixed inset-0 bg-forest-950 flex items-center justify-center text-stone-300 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
-      </div>
-    )
+    return <HubSkeleton />
   }
   if (!currentId) {
+    if (items.length > 0) return <HubSkeleton />
     return (
       <div className="fixed inset-0 bg-forest-950 flex flex-col items-center justify-center gap-4 text-center px-6">
         <p className="text-stone-300 text-sm">Nessuna escursione conclusa.</p>
@@ -336,11 +313,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
   if (displayItems.length === 0) {
-    return (
-      <div className="fixed inset-0 bg-forest-950 flex items-center justify-center text-stone-300 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
-      </div>
-    )
+    return <HubSkeleton />
   }
 
   const patch = async (data: Parameters<typeof updateActivityMeta>[1]) => {
@@ -379,9 +352,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (gps.length < 2) return
     setCtsComputing(true)
     try {
-      // Shares the pipeline (and the prefetched-data shortcut) with the automatic background
-      // recompute above — reuses whatever this hub has already fetched for its own POI/DTM/
-      // terrain/protected-area/prefs UI instead of asking it to fetch that all again.
       const result = await computeCtsForActivity(activity, {
         pois: poisLoaded ? pois : undefined,
         dtmProfile, terrainProfile, inProtectedArea,
@@ -395,19 +365,27 @@ export default function ResocontoHub({ id }: { id?: string }) {
     }
   }
 
+  // Non legata a `activity` (a differenza di patch sopra) — la stella va toccabile su qualunque
+  // scheda della galleria, anche quella non ancora "aperta" — stesso meccanismo di GuidaHub.
+  const handleToggleFavorite = (routeItem: RouteHubItem) => {
+    const next = !routeItem.favorite
+    setItems(prev => prev.map(it => it.id === routeItem.id ? { ...it, favorite: next } : it))
+    setActivity(prev => prev && prev.id === routeItem.id ? { ...prev, favorite: next } : prev)
+    updateActivityMeta(routeItem.id, { favorite: next })
+  }
+
   const gpsPoints = activity?.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined) ?? []
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
   const rated     = (activity?.userRating ?? 0) > 0
-  const dateISO   = activity ? activity.startTime.slice(0, 10) : undefined
 
-  const scoreBadges = (routeItem: RouteHubItem, onTap: () => void) => {
+  // Anello del voto, mostrato sotto il sottotitolo (stessa posizione del badge a doppio anello di
+  // Guida) invece che nella fila di chip sopra il titolo — stesso principio, un dato diverso (il
+  // voto manuale non è un punteggio calcolato, quindi resta un anello singolo, non a doppio anello).
+  const scoreGaugeBadge = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!activity || routeItem.id !== activity.id || !rated) return null
     return (
-      // The manual vote (not a computed score) is the most meaningful "how good was it" figure
-      // for a hike already done — shown the same way Guida shows its Trail Score, just on a
-      // 0-10 scale with its own color instead of the CTS-tier gradient.
-      <button onClick={onTap} title="Voto" className="pointer-events-auto shrink-0">
+      <button onClick={() => { setPendingScrollSection('dati_punteggi'); onTap() }} title="Voto" className="pointer-events-auto shrink-0">
         <MiniScoreRing value={activity.userRating!} max={10} color={ratingColor(activity.userRating!)} />
       </button>
     )
@@ -419,21 +397,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
     fetchActivityPhotos(currentId).then(setPhotos).catch(() => setPhotosError(true))
   }
 
-  const heroPhotos = photos.length > 0 ? (
-    <div data-hscroll className="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 snap-x">
-      {photos.map(ph => (
-        <Image key={ph.id} src={ph.url} alt={ph.caption ?? ''} width={112} height={112} className="w-28 h-28 object-cover rounded-2xl shrink-0 snap-start border border-stone-200" />
-      ))}
-    </div>
-  ) : photosError ? (
-    // Distinguishes "failed to load" from "genuinely no photos" — the fetch is wrapped in a
-    // silent .catch() so without this the two looked identical (nothing rendered), which is
-    // exactly what made a transient Supabase outage indistinguishable from "no photos here".
-    <button onClick={retryPhotos} className={`flex items-center gap-2 mx-4 mt-3 px-3 py-2 rounded-xl ${glassTile} text-xs ${textMuted}`}>
-      <RefreshCw className="w-3.5 h-3.5 shrink-0" /> Impossibile caricare le foto — riprova
-    </button>
-  ) : undefined
-
   const ratingBadge = (item: RouteHubItem) => {
     if (!activity || item.id !== activity.id || !rated) return null
     return (
@@ -444,187 +407,46 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
 
-  const renderSection = (section: SectionKind, item: RouteHubItem) => {
+  const renderSection = (section: SectionKind, item: RouteHubItem, onClose: () => void) => {
     if (!activity || item.id !== activity.id) {
       return <div className={`py-10 text-center text-sm ${textMuted}`}>Caricamento…</div>
     }
 
-    if (section === 'dati') return (
-      <div className="px-4 py-4 space-y-5">
-          {(ctsResult || activity.trailScore != null) ? (
-            <ComfortTrailScoreWidget
-              result={ctsResult} cached={activity.trailScore} beautyScore={activity.linkedBeautyScore} defaultOpen
-            />
-          ) : (
-            <div className={`${glassTile} px-5 py-4 flex items-center justify-between gap-4`}>
-              <p className={`text-sm ${textMuted}`}>Il punteggio non è ancora stato calcolato.</p>
-              <button onClick={handleComputeCts} disabled={ctsComputing} className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-forest-500 hover:bg-forest-400 disabled:opacity-50 text-white text-sm font-medium transition-colors">
-                {ctsComputing ? <><Loader2 className="w-4 h-4 animate-spin" /> Calcolo…</> : <><RefreshCw className="w-4 h-4" /> Calcola CTS</>}
-              </button>
-            </div>
-          )}
-
-          {hasGps && dtmProfile?.source === 'dtm' && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setShowAspect(a => !a)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-forest-500 text-white border-forest-500' : `${glassTile} ${textMuted}`}`}>
-                <Compass className="w-3 h-3" /> Esposizione
-              </button>
-              {activity.trackPoints?.some(p => p.altitudeMeters !== undefined) && (
-                <button onClick={() => setShowGradient(g => !g)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-forest-500 text-white border-forest-500' : `${glassTile} ${textMuted}`}`}>
-                  <Layers className="w-3 h-3" /> Pendenza
-                </button>
-              )}
-            </div>
-          )}
-
-          {(() => {
-            const hasHR  = (activity.avgHeartRate ?? 0) > 0
-            const hasCal = (activity.calories ?? 0) > 0
-            const hasNetSpeed = (activity.netSpeedMs ?? 0) > 0 && (activity.pauseTimeSeconds ?? 0) > 0
-            const hasIev = (activity.iev ?? 0) > 0
-            const dep = computeDEP(activity.distanceMeters, activity.elevationGain)
-            return (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {hasHR && <StatCard label="FC Media" value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
-                  <StatCard label="Vel. Media" value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
-                  {hasNetSpeed && <StatCard label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue" />}
-                  {hasCal && <StatCard label="Calorie" value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
-                  <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone" />
-                  {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest" />}
-                </div>
-                <dl className={`${glassTile} p-4 grid grid-cols-2 gap-x-3 gap-y-1.5`}>
-                  {[
-                    ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
-                    ['Quota partenza', `${activity.trackPoints[0]?.altitudeMeters?.toFixed(1) ?? '--'} m`],
-                    ['Quota minima', `${activity.altitudeMin.toFixed(1)} m`],
-                    ['Quota massima', `${activity.altitudeMax.toFixed(1)} m`],
-                    ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
-                    ['Sport', activity.sport],
-                  ].map(([k, v]) => (
-                    <div key={k} className="flex justify-between border-b border-stone-100 py-1">
-                      <dt className="text-stone-400/60 text-xs">{k}</dt>
-                      <dd className={`font-mono text-xs font-medium ${textPrimary}`}>{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            )
-          })()}
-
-          {similarActivities.length > 0 && (
-            <div>
-              <p className={`text-sm font-semibold mb-2 ${textPrimary}`}>Percorsi simili</p>
-              <div className={`${glassTile} overflow-hidden`}>
-                <table className="w-full text-xs">
-                  <tbody>
-                    {similarActivities.slice(0, 5).map(({ activity: a, startDistanceM }) => (
-                      <tr key={a.id} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50 cursor-pointer" onClick={() => router.push(`/resoconto/${a.id}`)}>
-                        <td className={`px-3 py-2 ${textPrimary}`}>{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
-                        <td className={`px-3 py-2 ${textPrimary}`}>{(a.distanceMeters / 1000).toFixed(1)} km</td>
-                        <td className="px-3 py-2 text-stone-400/60">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-    )
-
-    if (section === 'profilo') return (
-      <div className="px-4 py-4 space-y-5">
-        {hasGps && activity.trackPoints.length ? (
-          <RouteMapSection
-            trackPoints={activity.trackPoints}
-            pois={pois}
-            highlightedPoiIndex={poiCenter.centeredIndex}
-            onOpenMap3D={() => setShow3D(true)}
-            showGradient={showGradient}
-            showAspect={showAspect}
-            dtmProfile={dtmProfile}
-          />
-        ) : (
-          <p className={`text-sm italic text-center py-8 ${textMuted}`}>Profilo altimetrico non disponibile senza un tracciato GPS.</p>
-        )}
-        {activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0) && (
-          <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
-        )}
-        <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
-      </div>
-    )
-
-    if (section === 'meteo') return (
-      <div className="px-4 py-4">
-        {hasGps && dateISO
-          ? <WeatherWidget mode="historical" lat={centerPt.lat!} lon={centerPt.lon!} date={dateISO} />
-          : <p className={`text-sm italic text-center py-8 ${textMuted}`}>Meteo non disponibile senza un tracciato GPS.</p>}
-      </div>
-    )
-
-    if (section === 'natura') return (
-      <div className="px-4 py-4 space-y-5">
-        {hasGps && heroPolyline.length > 1 && <FloraPanel flora={flora.data} floraLoading={flora.loading} />}
-        <div className="flex gap-2">
-          <button onClick={() => setShowFloraGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
-            <Leaf className="w-4 h-4 text-emerald-400" /> Galleria Verde
-          </button>
-          <button onClick={() => setShowAnimalGallery(true)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
-            <PawPrint className="w-4 h-4 text-amber-500" /> Galleria Animali
-          </button>
-        </div>
-      </div>
-    )
-
-    if (section === 'poi') return (
-      <div className="px-4 py-4 space-y-3">
-        <p className={sectionHeading}>Sul percorso</p>
-        {pois.length === 0 && (
-          <p className={`text-sm italic text-center py-8 ${textMuted}`}>Nessun punto di interesse trovato lungo il tracciato.</p>
-        )}
-        {pois.map((poi, i) => {
-          const meta = POI_META[poi.type]
-          const highlighted = i === poiCenter.centeredIndex
-          return (
-            <div key={poi.id} ref={poiCenter.setItemRef(i)}
-              className={`${glassTile} p-4 flex gap-3 transition-colors ${highlighted ? 'bg-emerald-400/15 border-emerald-400/40' : ''}`}>
-              <span className="w-12 h-12 rounded-xl bg-stone-100 flex items-center justify-center text-2xl shrink-0">{meta.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className={`text-[10px] font-semibold uppercase tracking-wide ${textMuted}`}>{meta.label}</span>
-                  <span className="text-[10px] text-stone-400/50 ml-auto shrink-0">{poi.distFromTrack === 0 ? 'sul tracciato' : `${poi.distFromTrack} m`}</span>
-                </div>
-                <p className={`text-sm font-semibold leading-tight ${textPrimary}`}>{poi.name ?? meta.label}</p>
-              </div>
-            </div>
-          )
-        })}
-        {hasGps && (
-          <>
-            <p className={`${sectionHeading} pt-2`}>Wikipedia nei dintorni</p>
-            <WikiCards lat={centerPt.lat!} lon={centerPt.lon!} onLoaded={setWikiPages} />
-          </>
-        )}
-      </div>
-    )
-
-    if (section === 'sicurezza') return (
-      <div className="flex items-center justify-center px-6 py-10">
-        <p className={`text-sm italic text-center ${textMuted}`}>
-          Il punteggio sicurezza è disponibile solo per le guide pre-escursione, non per le escursioni concluse.
-        </p>
-      </div>
-    )
+    if (section === 'featured') {
+      return (
+        <ReportReader
+          activity={activity}
+          photos={photos}
+          photosError={photosError}
+          onRetryPhotos={retryPhotos}
+          onPhotosChange={setPhotos}
+          coverPhotoId={coverPhotoId}
+          onOpenCoverPicker={() => setShowCoverPicker(true)}
+          pois={pois}
+          poisLoaded={poisLoaded}
+          driving={drivingWithMaps}
+          data={{
+            ctsResult, ctsComputing, onComputeCts: handleComputeCts,
+            dtmProfile, showGradient, showAspect,
+            onToggleGradient: () => setShowGradient(g => !g),
+            onToggleAspect: () => setShowAspect(a => !a),
+            similarActivities, onOpenSimilar: (activityId) => router.push(`/resoconto/${activityId}`),
+          }}
+          natura={{
+            hasGps: hasGps && heroPolyline.length > 1, flora: flora.data, floraLoading: flora.loading,
+            onOpenFloraGallery: () => setShowFloraGallery(true), onOpenAnimalGallery: () => setShowAnimalGallery(true),
+          }}
+          onOpenMap3D={() => setShow3D(true)}
+          onOpenVideoWizard={() => { setOpenVideoWizard(true); setShow3D(true) }}
+          scrollToSectionKey={pendingScrollSection}
+          onScrollToSectionConsumed={() => setPendingScrollSection(null)}
+        />
+      )
+    }
 
     // strumenti
     return (
       <div className="px-4 py-4 space-y-1">
-        <button onClick={() => router.push(`/resoconto/${encodeURIComponent(activity.id)}/leggi`)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
-          <BookOpen className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Resoconto</span>
-        </button>
         <button onClick={() => setShowStreetView(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
           <Images className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Foto zona (street view)</span>
         </button>
@@ -698,22 +520,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
 
-  const tabs: TabDef[] = [
-    {
-      key: 'dati', label: 'Dati & punteggi', icon: BarChart2,
-      badge: activity?.trailScore != null ? (
-        <span className="inline-flex items-center justify-center min-w-[16px] h-[15px] px-1 rounded-full bg-sky-500 text-[9px] font-bold text-white leading-none">
-          {Math.round(activity.trailScore)}
-        </span>
-      ) : undefined,
-    },
-    { key: 'profilo', label: 'Andamento', icon: Mountain },
-    { key: 'natura', label: 'Natura', icon: Leaf },
-    { key: 'poi', label: 'Punti di interesse', icon: MapPin },
-    { key: 'sicurezza', label: 'Sicurezza & segnalazioni', icon: ShieldAlert },
-    { key: 'strumenti', label: 'Strumenti', icon: Wrench },
-  ]
-
   const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
     label: rated ? `Voto ${activity?.userRating}/10` : 'Vota bellezza',
     icon: Star,
@@ -721,8 +527,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
     variant: rated ? 'glass' : 'terra',
     badge: ratingBadge(routeItem),
   })
-
-  const tabScrollRef = (section: SectionKind) => section === 'poi' ? poiCenter.containerRef : undefined
 
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))
@@ -733,6 +537,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
         mode="resoconto"
         items={displayItems}
         initialIndex={initialIndex}
+        favoritesFilter={favoritesFilter}
+        onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
+        onToggleFavorite={handleToggleFavorite}
         onIndexChange={(item) => {
           setCurrentId(item.id)
           // Plain History API, not router.replace: `/resoconto` and `/resoconto/[id]` are
@@ -741,17 +548,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
           // double-render — this is a purely cosmetic address-bar sync, not a real navigation.
           window.history.replaceState(null, '', `/resoconto/${encodeURIComponent(item.id)}`)
         }}
-        bodyMode="tabbed"
-        tabs={tabs}
+        bodyMode="continuous"
         renderSection={renderSection}
-        tabScrollRef={tabScrollRef}
         primaryAction={primaryAction}
-        scoreBadges={scoreBadges}
+        scoreGaugeBadge={scoreGaugeBadge}
+        scoreBadgesTargetSection="featured"
         weatherIcon={(routeItem) => activity && routeItem.id === activity.id ? weatherIcon : undefined}
-        subtitle={(routeItem) => activity && routeItem.id === activity.id ? coverSubtitle : undefined}
         onCompare={(routeItem) => router.push(`/statistiche?tab=confronta&pre=${encodeURIComponent(`c:${routeItem.id}`)}`)}
         topOverlayVariant="magazine"
-        heroPhotos={heroPhotos}
         importLabel="Carica"
         onImport={() => router.push('/upload?tab=activity')}
       />

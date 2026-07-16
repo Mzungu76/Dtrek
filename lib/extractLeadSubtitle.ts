@@ -2,7 +2,7 @@
 // scritto ad hoc dall'AI al momento della generazione), qui si ricava euristicamente dal primo
 // paragrafo del resoconto già generato, dato che la procedura di generazione del Resoconto non
 // va toccata in questa fase. Markdown a blocchi "## Titolo", stessa convenzione di sezioni usata
-// da lib/reportStore.ts/RacconContent.tsx.
+// da lib/reportStore.ts/components/resoconto/ReportReader.tsx.
 const CURIOSITA_RE = /\[curiosita\]([\s\S]*?)\[\/curiosita\]/g
 const MAX_LENGTH = 140
 

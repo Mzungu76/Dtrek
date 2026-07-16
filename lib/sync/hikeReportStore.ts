@@ -6,7 +6,7 @@
  * lib/blobStore.ts and lib/plannedStore.ts. Report *generation* (the AI
  * streaming POST) is deliberately NOT covered here: it's inherently
  * network-dependent (a Claude call) and has no offline equivalent, so
- * app/resoconto/[id]/RacconContent.tsx keeps calling it directly.
+ * components/resoconto/ReportReader.tsx keeps calling it directly.
  */
 
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from '@/lib/localStore'

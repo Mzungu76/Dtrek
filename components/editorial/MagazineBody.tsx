@@ -1,5 +1,5 @@
 'use client'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import Image from 'next/image'
 import { slugifyHeading } from '@/lib/guideSlug'
 
@@ -43,13 +43,30 @@ function parseBlocks(body: string): Block[] {
   return out
 }
 
+interface Props {
+  body: string
+  color: string
+  sectionPhoto?: string
+  twoColumns?: boolean
+  /** Didascalia sotto la foto — quando assente (Guida) resta "© Wikimedia Commons"; il
+   *  chiamante (Resoconto: foto proprie dell'utente, con didascalia personale) la sovrascrive. */
+  photoCaption?: string
+  /** Nodo aggiuntivo mostrato prima della foto (Resoconto: mini-mappa del percorso con i pin
+   *  foto sulla prima sezione) — assente per Guida. */
+  extraFloatNode?: ReactNode
+  /** Numero del pin foto (Resoconto: stesso numero della galleria/profilo altimetrico/PDF) —
+   *  mostrato come pallino in alto a sinistra sulla foto. Assente per Guida. */
+  photoIndexBadge?: number
+}
+
 /**
  * Corpo "magazine" di una sezione: lead paragraph a piena larghezza, resto del testo su colonne
  * CSS (attive solo da `lg`, vedi classe `two` passata dal chiamante — su schermi più stretti la
  * colonna singola evita il problema di colonne troppo anguste insieme al sommario laterale),
  * callout `[curiosita]`/`[avviso]` e sottotitoli per-POI (usati dallo scroll-to-POI della mappa).
+ * Condiviso tra Guida (GuideReader) e Resoconto (ReportReader).
  */
-export default function MagazineBody({ body, color, sectionPhoto, twoColumns }: { body: string; color: string; sectionPhoto?: string; twoColumns?: boolean }) {
+export default function MagazineBody({ body, color, sectionPhoto, twoColumns, photoCaption, extraFloatNode, photoIndexBadge }: Props) {
   const blocks = useMemo(() => parseBlocks(body), [body])
 
   // First paragraph (lead) stands alone full-width; rest flow in columns
@@ -64,12 +81,18 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns }: 
         </p>
       )}
       <div className={twoColumns ? 'lg:columns-2 lg:gap-8 print-columns-2' : 'print-columns-2'}>
+        {extraFloatNode}
         {sectionPhoto && (
           <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
             <div className="relative w-full h-40 rounded-sm shadow-sm overflow-hidden">
               <Image src={sectionPhoto} alt="" fill sizes="(max-width: 640px) 42vw, 38vw" className="object-cover" />
+              {photoIndexBadge != null && (
+                <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  {photoIndexBadge}
+                </span>
+              )}
             </div>
-            <p className="text-[9px] italic text-stone-400 mt-1">© Wikimedia Commons</p>
+            <p className="text-[9px] italic text-stone-400 mt-1">{photoCaption ?? '© Wikimedia Commons'}</p>
           </div>
         )}
         {rest.map((b, i) => {
