@@ -319,6 +319,11 @@ export default function GuideReader({
   const generateSections = useCallback(async (sections: GuideSectionKey[]) => {
     if (generating || generatingSections.length > 0 || sections.length === 0) return
     const isInitial = guideText.trim().length <= 50
+    // Istantanea del testo già esistente PRIMA di questa chiamata — usata per fondere in anteprima
+    // live le sole sezioni di questa richiesta (vedi onChunk sotto), senza toccare quelle già
+    // scritte. Da qui in poi lo state guideText non va più letto: verrà aggiornato progressivamente
+    // dalla preview stessa.
+    const baseText = isInitial ? '' : guideText
 
     if (isInitial) {
       setGenerating(true)
@@ -358,7 +363,7 @@ export default function GuideReader({
           cachedPoiWiki:        hike.cachedPoiWiki,
           trackPoints:          hike.trackPoints,
         },
-      }, isInitial ? (partial) => {
+      }, (partial) => {
         const { lastStatus, cleanedText: displayText } = stripGuideStatus(partial)
         if (lastStatus) setGenStatus(lastStatus)
         // Stesso taglio del commento libero pre-prima-sezione applicato in anteprima live, non
@@ -366,8 +371,24 @@ export default function GuideReader({
         // primo "## ", quel testo appare come una finta sezione a sé (si "aggiusta" da solo appena
         // arriva il primo titolo vero, ma nel frattempo si vede).
         const firstHeadingIdx = displayText.search(/^## /m)
-        setGuideText(firstHeadingIdx > 0 ? displayText.slice(firstHeadingIdx) : displayText)
-      } : undefined)
+        const cleaned = firstHeadingIdx > 0 ? displayText.slice(firstHeadingIdx) : displayText
+        if (isInitial) {
+          setGuideText(cleaned)
+        } else {
+          // "Approfondisci"/"Genera il resto": fonde in anteprima live SOLO le sezioni di questa
+          // richiesta dentro la guida già esistente (stesso mergeGuideSection usato per il
+          // salvataggio finale più sotto), così il testo compare progressivamente al posto giusto
+          // invece di restare dietro a un semplice spinner — senza toccare le sezioni già scritte
+          // in precedenza (baseText, mai lo state guideText che cambierebbe sotto i piedi).
+          const partialSections = parseGuideSections(cleaned)
+          let preview = baseText
+          for (const sec of partialSections) {
+            if (!sec.key) continue
+            preview = mergeGuideSection(preview, sec.key, sec.title, sec.body)
+          }
+          setGuideText(preview)
+        }
+      })
       acc = stripGuideStatus(acc).cleanedText
       setGenStatus(undefined)
 
@@ -410,7 +431,7 @@ export default function GuideReader({
 
       const parsedNew = parseGuideSections(acc)
       if (parsedNew.every(s => !s.key)) throw new Error('Risposta non riconosciuta, riprova.')
-      let merged = isInitial ? '' : guideText
+      let merged = baseText
       for (const sec of parsedNew) {
         if (!sec.key) continue
         merged = mergeGuideSection(merged, sec.key, sec.title, sec.body)

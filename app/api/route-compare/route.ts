@@ -39,17 +39,23 @@ interface RouteCompareOutput {
   ranking: { id: string; reason: string }[]
 }
 
+// maxLength (in caratteri, non parole) è una rete di sicurezza applicata dal decoder vincolato di
+// Claude durante la generazione stessa, non solo una validazione a posteriori — rinforza i limiti
+// "massimo 180 parole"/"massimo 2 frasi" già scritti a parole in SYSTEM, che il modello a volte non
+// rispetta con precisione (soprattutto con 3 percorsi da confrontare, dove serve più testo che con
+// 2): senza questo, un output più lungo del previsto poteva superare max_tokens ed essere troncato
+// a metà, con un JSON non valido da parsare (vedi anche parseWithRetry in lib/aiJsonOutput.ts).
 const RANKING_SCHEMA = {
   type: 'object',
   properties: {
-    narrative: { type: 'string' },
+    narrative: { type: 'string', maxLength: 1400 },
     ranking: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
           id:     { type: 'string' },
-          reason: { type: 'string' },
+          reason: { type: 'string', maxLength: 320 },
         },
         required: ['id', 'reason'],
         additionalProperties: false,
@@ -227,7 +233,10 @@ id da usare nel ranking, nello stesso ordine dei percorsi sopra: ${found.map(f =
   try {
     parsed = await parseWithRetry('route-compare', () => client.messages.parse({
       model:          claudeModel,
-      max_tokens:     1200,
+      // Alzato da 1200: con MAX_ENTRIES=3 il campo narrative + 3 "reason" superavano il tetto in
+      // alcuni casi, troncando il JSON a metà (vedi maxLength su RANKING_SCHEMA sopra per l'altra
+      // metà della stessa correzione).
+      max_tokens:     2000,
       system:         SYSTEM,
       messages:       [{ role: 'user', content: prompt }],
       output_config:  { format: jsonSchemaFormat<RouteCompareOutput>(RANKING_SCHEMA) },
