@@ -216,7 +216,7 @@ const SECTION_LENGTH: Record<GuideSectionKey, string> = {
   il_percorso:      '80-100 parole',
   dati_sicurezza:   '50-65 parole',
   comfort:          '70-90 parole',
-  luoghi:           '20-30 parole per luogo',
+  luoghi:           '40-60 parole per luogo',
   natura:           '80-100 parole',
   sapori:           '60-80 parole',
   consigli:         '55-70 parole',
