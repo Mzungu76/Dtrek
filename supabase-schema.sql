@@ -330,6 +330,11 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS claude_model TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_use_biometric_data BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_use_history_data BOOLEAN NOT NULL DEFAULT true;
 
+-- Consenso alla ricerca web di Giulia (sezione "Verificato online" della guida, "Chiedi a Giulia") —
+-- default ON/opt-out, stesso pattern sopra. NON copre app/api/route-search/route.ts: lì la ricerca
+-- web è il motore stesso della funzione, non un extra disattivabile.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_web_search BOOLEAN NOT NULL DEFAULT true;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

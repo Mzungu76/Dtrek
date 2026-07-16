@@ -6,6 +6,7 @@
 export type GuideSectionKey =
   | 'prima_di_partire'
   | 'il_percorso'
+  | 'verificato'
   | 'dati_sicurezza'
   | 'comfort'
   | 'luoghi'
@@ -20,9 +21,9 @@ export interface GuideSectionDef {
   /** Sottostringhe (lowercase) per riconoscere la sezione in guide legacy/varianti di titolo. */
   match: string[]
   /** Riga statica (non scritta dall'AI) sotto il titolo di ogni sezione, per spiegare in anticipo
-   *  cosa l'utente vi troverà — vedi components/guida/SectionCard.tsx. Per "Il percorso" dichiara
-   *  esplicitamente la verifica online (l'unica sezione dove Giulia usa la ricerca web, vedi
-   *  SYSTEM_RESEARCH in app/api/guide/route.ts), così non è un dettaglio nascosto. */
+   *  cosa l'utente vi troverà — vedi components/guida/SectionCard.tsx. Per "Verificato online"
+   *  dichiara esplicitamente la ricerca web (l'unica sezione dove Giulia la usa, vedi
+   *  SYSTEM_VERIFICATO in app/api/guide/route.ts), così non è un dettaglio nascosto. */
   subtitle: string
 }
 
@@ -30,7 +31,9 @@ export const GUIDE_SECTIONS: GuideSectionDef[] = [
   { key: 'prima_di_partire', title: 'Prima di partire',           match: ['prima di partire'],
     subtitle: 'Equipaggiamento, stagione ideale e orario di partenza consigliati per questo percorso.' },
   { key: 'il_percorso',      title: 'Il percorso',                match: ['il percorso'],
-    subtitle: 'Il racconto del tracciato, verificato online in tempo reale per chiusure, deviazioni e avvisi — con le fonti citate qui sotto.' },
+    subtitle: 'Il racconto del tracciato: atmosfera, panorami, cosa si prova a camminarci.' },
+  { key: 'verificato',       title: 'Verificato online',          match: ['verificato online', 'verificato'],
+    subtitle: 'Chiusure, allerte e aggiornamenti trovati online per questo percorso, con le fonti consultate.' },
   { key: 'dati_sicurezza',   title: 'Dati e sicurezza',           match: ['dati e sicurezza', 'sicurezza e dati'],
     subtitle: 'Un commento a voce su rischi, difficoltà e punteggi di sicurezza già mostrati sopra.' },
   { key: 'comfort',          title: 'Su misura per te',           match: ['su misura per te', 'su misura'],
@@ -46,9 +49,10 @@ export const GUIDE_SECTIONS: GuideSectionDef[] = [
 ]
 
 /** Applicata quando l'utente non ha ancora scelto le sezioni della guida Breve in Impostazioni —
- *  solo le due sezioni essenziali (racconto del tracciato + consigli pratici); tutte le altre
- *  restano un click di distanza ("Approfondisci con Giulia") invece di partire già tutte attive. */
-export const DEFAULT_BREVE_SECTIONS: GuideSectionKey[] = ['prima_di_partire', 'il_percorso']
+ *  solo le tre sezioni essenziali (racconto del tracciato + verifica di sicurezza online + consigli
+ *  pratici); tutte le altre restano un click di distanza ("Approfondisci con Giulia") invece di
+ *  partire già tutte attive. */
+export const DEFAULT_BREVE_SECTIONS: GuideSectionKey[] = ['prima_di_partire', 'il_percorso', 'verificato']
 
 export function isGuideSectionKey(v: unknown): v is GuideSectionKey {
   return typeof v === 'string' && GUIDE_SECTIONS.some(s => s.key === v)

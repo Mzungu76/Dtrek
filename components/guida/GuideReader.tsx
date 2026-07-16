@@ -670,6 +670,59 @@ export default function GuideReader({
           : null
       case 'natura':
         return natura ? <NaturaWidget {...natura} /> : null
+      case 'verificato':
+        // Avvisi (banner colorati per gravità) + fonti consultate — prima mostrati globalmente
+        // sopra tutte le sezioni, ora vivono qui: stessi dati (guideNotices/guideSources, mai
+        // toccati), solo raccolti in un unico posto invece di sparsi in due blocchi separati.
+        return (guideNotices.length > 0 || guideSources.length > 0) ? (
+          <div className="space-y-3">
+            {guideNotices.length > 0 && (
+              <div className="space-y-2">
+                {guideNotices.map((notice, i) => {
+                  const { text, url } = parseNoticeSource(notice.text)
+                  const style = NOTICE_SEVERITY_STYLE[notice.severity]
+                  return (
+                    <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${style.box}`}>
+                      <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${style.icon}`} />
+                      <div className="min-w-0">
+                        <p className={`text-[13px] leading-relaxed ${style.text}`}>{text}</p>
+                        {url && (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full transition-colors text-[11px] ${style.link}`}
+                            title={url}
+                          >
+                            <Link2 className={`w-3 h-3 shrink-0 ${style.icon}`} />
+                            <span className="truncate">Vai alla fonte</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {guideSources.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {guideSources.map((s, i) => (
+                  <a
+                    key={i}
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-600"
+                    title={s.url}
+                  >
+                    <Link2 className="w-3 h-3 shrink-0 text-stone-400" />
+                    <span className="truncate">{s.title}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null
       default:
         return null
     }
@@ -852,36 +905,6 @@ export default function GuideReader({
               </div>
             )}
 
-            {/* ── Stato del percorso — avvisi trovati dalla ricerca web di Giulia ──────────── */}
-            {guideNotices.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {guideNotices.map((notice, i) => {
-                  const { text, url } = parseNoticeSource(notice.text)
-                  const style = NOTICE_SEVERITY_STYLE[notice.severity]
-                  return (
-                    <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${style.box}`}>
-                      <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${style.icon}`} />
-                      <div className="min-w-0">
-                        <p className={`text-[13px] leading-relaxed ${style.text}`}>{text}</p>
-                        {url && (
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full transition-colors text-[11px] ${style.link}`}
-                            title={url}
-                          >
-                            <Link2 className={`w-3 h-3 shrink-0 ${style.icon}`} />
-                            <span className="truncate">Vai alla fonte</span>
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
             {/* ── Guide sections — always rendered (widgets), text where available ────────── */}
             <div className="mt-4">
               {displaySections.map((s, i) => {
@@ -972,29 +995,6 @@ export default function GuideReader({
                       <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
                         Fonte: {s.title}
                       </p>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {hasGuide && !generating && guideSources.length > 0 && (
-              <div className="mt-4 mb-2">
-                <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
-                  Fonti consultate online
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {guideSources.map((s, i) => (
-                    <a
-                      key={i}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-600"
-                      title={s.url}
-                    >
-                      <Link2 className="w-3 h-3 shrink-0 text-stone-400" />
-                      <span className="truncate">{s.title}</span>
                     </a>
                   ))}
                 </div>
