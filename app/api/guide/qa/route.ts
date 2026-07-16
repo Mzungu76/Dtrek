@@ -273,7 +273,12 @@ export async function POST(req: NextRequest) {
         ]),
         { role: 'user', content: question },
       ],
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
+      // web_search_20260209 (non 20250305): con la versione base ogni risultato di ricerca finisce
+      // per intero nel contesto senza nessun controllo sulla dimensione — per un percorso ben
+      // documentato online questo può da solo costare decine di migliaia di token (osservato
+      // concretamente su app/api/guide/route.ts, stesso pattern). Questa versione più recente
+      // (supportata da Sonnet 5) filtra i risultati prima che entrino nel contesto.
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 2 }],
     })
 
     const readable = new ReadableStream({
