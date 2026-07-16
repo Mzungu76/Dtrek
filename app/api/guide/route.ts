@@ -191,8 +191,11 @@ async function buildComfortContext(userId: string): Promise<string> {
 // Unico budget di output — non c'è più un tier "Approfondita" separato: ogni sezione, generata in
 // una richiesta iniziale o aggiunta più tardi, usa sempre queste stesse lunghezze concise. Il tetto
 // resta comunque ampio abbastanza da coprire in una sola chiamata TUTTE le 8 sezioni insieme (vedi
-// il pulsante "Genera il resto della guida" in GuideReader.tsx), non solo quelle di default.
-const GUIDE_MAX_TOKENS = 1300
+// il pulsante "Genera il resto della guida" in GuideReader.tsx), non solo quelle di default. Alzato
+// da 1300 insieme ai target di SECTION_LENGTH più sotto (comfort/natura/sapori/consigli erano
+// percepiti come troppo scarni, vedi conversazione con l'utente) per mantenere lo stesso margine di
+// sicurezza contro il troncamento nel caso peggiore di tutte le sezioni insieme.
+const GUIDE_MAX_TOKENS = 1600
 
 /**
  * Lunghezza target per sezione — deliberatamente NON uniforme: ogni sezione ha una natura diversa
@@ -205,11 +208,11 @@ const SECTION_LENGTH: Record<GuideSectionKey, string> = {
   prima_di_partire: '45-60 parole',
   il_percorso:      '80-100 parole',
   dati_sicurezza:   '50-65 parole',
-  comfort:          '30-45 parole, 1-2 frasi',
+  comfort:          '70-90 parole',
   luoghi:           '20-30 parole per luogo',
-  natura:           '45-60 parole',
-  sapori:           '40-55 parole',
-  consigli:         '35-45 parole',
+  natura:           '80-100 parole',
+  sapori:           '60-80 parole',
+  consigli:         '55-70 parole',
 }
 
 /** Contenuto (istruzioni + intestazione) per una singola sezione dello scheletro. */
