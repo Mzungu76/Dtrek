@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at, claude_model, updated_at')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at, claude_model, updated_at, ai_use_biometric_data, ai_use_history_data')
     .eq('user_id', user.id)
     .single()
 
@@ -106,6 +106,11 @@ export async function GET(req: NextRequest) {
     // app/lib/guide/resolveApiKeyAndSettings.ts al momento della generazione.
     claudeModel:              isValidClaudeModelId(data?.claude_model) ? data.claude_model : null,
     updatedAt:                (data?.updated_at as string) ?? null,
+    // Consenso all'uso di dati personali nei prompt AI — default true (opt-out, non opt-in, scelta
+    // esplicita dell'utente) finché non ha mai toccato il relativo interruttore in Impostazioni >
+    // Intelligenza artificiale (vedi components/profilo/SectionAiPrivacy.tsx).
+    aiUseBiometricData:       (data?.ai_use_biometric_data as boolean | null) ?? true,
+    aiUseHistoryData:         (data?.ai_use_history_data   as boolean | null) ?? true,
   })
 }
 
@@ -154,6 +159,8 @@ export async function POST(req: NextRequest) {
     hikerEnvironmentPrefs?: string[]
     onboardingCompletedAt?: string | null
     claudeModel?: string | null
+    aiUseBiometricData?: boolean
+    aiUseHistoryData?: boolean
   }
 
   const upsertData: Record<string, unknown> = {
@@ -327,6 +334,14 @@ export async function POST(req: NextRequest) {
     upsertData.onboarding_completed_at = body.onboardingCompletedAt
   }
 
+  // Consenso all'uso di dati personali nei prompt AI — vedi resolveApiKeyAndSettings.ts.
+  if (body.aiUseBiometricData !== undefined) {
+    upsertData.ai_use_biometric_data = !!body.aiUseBiometricData
+  }
+  if (body.aiUseHistoryData !== undefined) {
+    upsertData.ai_use_history_data = !!body.aiUseHistoryData
+  }
+
   let { error } = await supabase
     .from('user_settings')
     .upsert(upsertData, { onConflict: 'user_id' })
@@ -364,6 +379,10 @@ export async function POST(req: NextRequest) {
       // lettura, non qui: cachear già un valore risolto legherebbe per errore ogni funzionalità al
       // default di quella che ha scritto la cache per prima (vedi lib/claudeModels.ts).
       claudeModel:   isValidClaudeModelId(body.claudeModel) ? body.claudeModel : null,
+      // Idem: miglior stima da questa richiesta, non una lettura fresca — default true (opt-out)
+      // quando questa richiesta non tocca il consenso, coerente col default applicato ovunque.
+      aiUseBiometricData: body.aiUseBiometricData ?? true,
+      aiUseHistoryData:   body.aiUseHistoryData ?? true,
     })
   }
 

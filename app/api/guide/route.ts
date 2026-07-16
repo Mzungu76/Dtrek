@@ -480,7 +480,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     )
   }
 
-  const { apiKey, userGender, breveSections, claudeModel, lookupFailed } = user
+  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, lookupFailed } = user
     ? await resolveApiKeyAndSettings(user.id, 'guide')
     : await resolveEmergencySharedKey('guide')
 
@@ -541,9 +541,12 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   }
 
   // Va letta solo quando la sezione 'comfort' ("Su misura per te") è davvero tra quelle richieste
-  // in questa generazione — evita una lettura Supabase in più su ogni altra chiamata.
+  // in questa generazione — evita una lettura Supabase in più su ogni altra chiamata. Rispetta
+  // anche il consenso dell'utente all'uso dello storico nei prompt AI (vedi
+  // components/profilo/SectionAiPrivacy.tsx) — a consenso negato la sezione viene comunque scritta,
+  // solo senza il confronto personalizzato con storico/profilo dichiarato.
   const needsComfortSection = sectionKeys.includes('comfort')
-  const comfortContext = needsComfortSection && user ? await buildComfortContext(user.id) : undefined
+  const comfortContext = needsComfortSection && user && aiUseHistoryData ? await buildComfortContext(user.id) : undefined
 
   let hike: PlannedHike
   let scores: DataScores
@@ -696,7 +699,9 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     + (includesRoute ? SYSTEM_RESEARCH : '')
   const system = [
     { type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } },
-    { type: 'text' as const, text: genderInstruction(userGender) },
+    // Il genere è un dato biometrico/anagrafico — rispetta il consenso dell'utente (vedi
+    // components/profilo/SectionAiPrivacy.tsx), tornando alla formulazione neutra quando negato.
+    { type: 'text' as const, text: genderInstruction(aiUseBiometricData ? userGender : 'non_specificato') },
   ]
 
   // Stream Claude response — web_search abilita Giulia a verificare online lo stato aggiornato del

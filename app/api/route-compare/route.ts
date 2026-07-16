@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       : NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
   }
 
-  const { apiKey, userGender, claudeModel, lookupFailed } = await resolveApiKeyAndSettings(user.id, 'routeCompare')
+  const { apiKey, userGender, claudeModel, aiUseBiometricData, aiUseHistoryData, lookupFailed } = await resolveApiKeyAndSettings(user.id, 'routeCompare')
 
   if (!apiKey) {
     return NextResponse.json(
@@ -168,16 +168,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Percorsi non trovati' }, { status: 404 })
   }
 
-  // Storico — pattern dalle escursioni completate dall'utente (non solo quelle selezionate),
-  // per capire cosa affronta/apprezza davvero, non solo cosa dichiara nelle preferenze.
-  const { data: historyRows } = await supabase
-    .from('activities')
-    .select('distance_meters, elevation_gain, user_rating, soddisfazione')
-    .eq('user_id', user.id)
-    .limit(200)
+  // Storico — pattern dalle escursioni completate dall'utente (non solo quelle selezionate), per
+  // capire cosa affronta/apprezza davvero, non solo cosa dichiara nelle preferenze. Rispetta il
+  // consenso dell'utente all'uso dello storico nei prompt AI (vedi
+  // components/profilo/SectionAiPrivacy.tsx) — a consenso negato non viene nemmeno letto.
+  const historyRows = aiUseHistoryData
+    ? (await supabase
+        .from('activities')
+        .select('distance_meters, elevation_gain, user_rating, soddisfazione')
+        .eq('user_id', user.id)
+        .limit(200)).data
+    : null
 
   const history = historyRows ?? []
-  const historyBlock = history.length > 0
+  const historyBlock = !aiUseHistoryData
+    ? 'Storico non disponibile: l\'utente ha disattivato l\'uso dello storico escursionistico nei prompt AI.'
+    : history.length > 0
     ? (() => {
         const avgKm    = history.reduce((s, h) => s + (h.distance_meters as number), 0) / history.length / 1000
         const avgDplus = history.reduce((s, h) => s + (h.elevation_gain as number), 0) / history.length
@@ -192,12 +198,12 @@ export async function POST(req: NextRequest) {
       })()
     : 'Nessuna escursione completata ancora registrata.'
 
-  const age    = extraPrefs?.user_age as number | undefined
-  const prefSforzo = extraPrefs?.pref_sforzo as number | undefined
-  const prefDurata = extraPrefs?.pref_durata as number | undefined
+  const age    = aiUseBiometricData ? extraPrefs?.user_age as number | undefined : undefined
+  const prefSforzo = aiUseHistoryData ? extraPrefs?.pref_sforzo as number | undefined : undefined
+  const prefDurata = aiUseHistoryData ? extraPrefs?.pref_durata as number | undefined : undefined
   const profileBlock = [
     age ? `Età: ${age} anni` : null,
-    userGender && userGender !== 'non_specificato' ? `Genere: ${userGender}` : null,
+    aiUseBiometricData && userGender && userGender !== 'non_specificato' ? `Genere: ${userGender}` : null,
     prefSforzo != null ? `Sforzo fisico preferito (0=leggero, 100=intenso): ${prefSforzo}/100` : null,
     prefDurata != null ? `Durata di escursione preferita: circa ${formatDuration(prefDurata * 60)}` : null,
   ].filter((l): l is string => !!l).join('\n') || 'Nessuna preferenza dichiarata nelle impostazioni.'

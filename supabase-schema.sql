@@ -322,6 +322,14 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS tei_f_antr_sensitivity TEXT D
 -- (app/api/ai-models/route.ts), quindi il default può cambiare nel codice senza toccare lo schema.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS claude_model TEXT;
 
+-- Consenso all'uso di dati personali nei prompt AI (guida, resoconto, questionario, confronto
+-- percorsi) — 2 categorie separate, entrambe default ON/opt-out (scelta esplicita dell'utente,
+-- vedi components/profilo/SectionAiPrivacy.tsx): ai_use_biometric_data copre età/sesso/frequenza
+-- cardiaca/calorie (dati "particolari" ex art. 9 GDPR), ai_use_history_data copre storico percorsi/
+-- preferenze/esperienza dichiarata. Lette in app/lib/guide/resolveApiKeyAndSettings.ts.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_use_biometric_data BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_use_history_data BOOLEAN NOT NULL DEFAULT true;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --
