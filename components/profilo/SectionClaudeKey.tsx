@@ -1,7 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Key, Trash2, Eye, EyeOff, Loader2, ShieldCheck, WifiOff, Cpu, Check } from 'lucide-react'
-import { DEFAULT_CLAUDE_MODEL, FALLBACK_CLAUDE_MODELS, type ClaudeModelOption } from '@/lib/claudeModels'
+import { FALLBACK_CLAUDE_MODELS, type ClaudeModelOption } from '@/lib/claudeModels'
+
+// Sentinella per il selettore, non un vero model id — corrisponde a claude_model = null in
+// user_settings: nessuna scelta esplicita, ogni funzionalità AI usa il proprio default (vedi
+// lib/claudeModels.ts's FEATURE_DEFAULT_MODEL, applicato in resolveApiKeyAndSettings.ts).
+const AUTO_MODEL_ID = 'auto'
+const AUTO_OPTION: ClaudeModelOption = { id: AUTO_MODEL_ID, displayName: 'Automatico (consigliato)' }
 
 /** Gestione della chiave API Claude personale per la generazione delle guide AI. Piano di ristrutturazione, Parte 2.4. */
 export default function SectionClaudeKey() {
@@ -20,7 +26,7 @@ export default function SectionClaudeKey() {
 
   // Modello Claude usato per generazione/domande — selezionabile indipendentemente dalla chiave
   // (l'utente può cambiare modello in qualsiasi momento, non solo quando salva una nuova chiave).
-  const [claudeModel,  setClaudeModel]  = useState(DEFAULT_CLAUDE_MODEL)
+  const [claudeModel,  setClaudeModel]  = useState<string>(AUTO_MODEL_ID)
   const [modelOptions, setModelOptions] = useState<ClaudeModelOption[]>(FALLBACK_CLAUDE_MODELS)
   const [modelSaving,  setModelSaving]  = useState(false)
   const [modelSaved,   setModelSaved]   = useState(false)
@@ -30,7 +36,9 @@ export default function SectionClaudeKey() {
       .then(r => r.json().then(d => {
         if (!r.ok) { setUnavailable(true); return }
         setHasKey(d.hasKey); setKeyHint(d.keyHint); setUnavailable(!!d.settingsUnavailable)
-        if (d.claudeModel) setClaudeModel(d.claudeModel)
+        // GET torna null quando l'utente non ha scelto nulla (vedi app/api/user-settings/route.ts) —
+        // si mappa sulla sentinella "Automatico" del selettore.
+        setClaudeModel(d.claudeModel ?? AUTO_MODEL_ID)
       }))
       .catch(() => setUnavailable(true))
       .finally(() => setLoading(false))
@@ -53,7 +61,9 @@ export default function SectionClaudeKey() {
       const res = await fetch('/api/user-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ claudeModel: modelId }),
+        // "Automatico" salva null — l'API lo accetta esplicitamente (vedi POST in
+        // app/api/user-settings/route.ts) per tornare al default per-funzionalità.
+        body: JSON.stringify({ claudeModel: modelId === AUTO_MODEL_ID ? null : modelId }),
       })
       if (res.ok) { setModelSaved(true); setTimeout(() => setModelSaved(false), 2200) }
     } finally {
@@ -187,10 +197,10 @@ export default function SectionClaudeKey() {
           </div>
           <p className="text-xs text-stone-500 mb-3 ml-7 leading-relaxed">
             Scegli qui il modello Claude e vale per tutte le funzionalità AI (guida, resoconto,
-            domande, confronto percorsi, questionario, caption): la tua scelta ha sempre la
-            precedenza. Se non scegli nulla, ogni funzionalità usa già di default il modello più
-            adatto per lei — più leggero (Haiku) per i compiti semplici e strutturati, più
-            approfondito (Sonnet) per la narrazione lunga.
+            domande, confronto percorsi, questionario, caption). Con <strong>Automatico</strong> ogni
+            funzionalità usa il modello più adatto per lei — più leggero (Haiku) per i compiti
+            semplici e strutturati, più approfondito (Sonnet) per la narrazione lunga. Scegliendo un
+            modello specifico, invece, quello vale ovunque, con precedenza su ogni default.
           </p>
           <div className="ml-7 flex items-center gap-2">
             <select
@@ -199,10 +209,16 @@ export default function SectionClaudeKey() {
               disabled={modelSaving}
               className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition disabled:opacity-50"
             >
-              {(modelOptions.some(m => m.id === claudeModel)
-                ? modelOptions
-                : [...modelOptions, { id: claudeModel, displayName: claudeModel }]
-              ).map(m => (
+              {[
+                AUTO_OPTION,
+                // Ripiego solo se il modello salvato non compare più nell'elenco tornato dalla
+                // Models API (es. rimosso/rinominato da Anthropic) — evita che il selettore
+                // "salti" silenziosamente su un altro modello.
+                ...(claudeModel !== AUTO_MODEL_ID && !modelOptions.some(m => m.id === claudeModel)
+                  ? [{ id: claudeModel, displayName: claudeModel }]
+                  : []),
+                ...modelOptions,
+              ].map(m => (
                 <option key={m.id} value={m.id}>{m.displayName}</option>
               ))}
             </select>

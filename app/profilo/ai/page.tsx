@@ -3,6 +3,7 @@ import Navbar from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import SectionClaudeKey from '@/components/profilo/SectionClaudeKey'
 import SectionAbbonamento from '@/components/profilo/SectionAbbonamento'
+import SectionAiPrivacy from '@/components/profilo/SectionAiPrivacy'
 
 export default function AiSettingsPage() {
   return (
@@ -16,6 +17,7 @@ export default function AiSettingsPage() {
         </div>
 
         <SectionClaudeKey />
+        <SectionAiPrivacy />
         <SectionAbbonamento />
       </div>
     </div>

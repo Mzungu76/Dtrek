@@ -122,16 +122,20 @@ function buildPrompt(
   qa?: QaItem[],
   poiBlock?: string,
   nature?: NatureContext,
+  /** Consenso dell'utente all'uso dei dati biometrici (FC, calorie) nei prompt AI — vedi
+   *  components/profilo/SectionAiPrivacy.tsx. */
+  aiUseBiometricData = true,
 ): string {
   const dateStr = activity.start_time
     ? format(new Date(activity.start_time as string), "EEEE d MMMM yyyy", { locale: it })
     : null
 
-  // Biometric data
-  const avgHR  = activity.avg_heart_rate  as number | undefined
-  const maxHR  = activity.max_heart_rate  as number | undefined
+  // Biometric data — avgSpd (passo) non è biometrico in senso stretto (derivato da GPS, non dal
+  // corpo), resta sempre incluso; FC e calorie invece rispettano il consenso dell'utente.
+  const avgHR  = aiUseBiometricData ? activity.avg_heart_rate as number | undefined : undefined
+  const maxHR  = aiUseBiometricData ? activity.max_heart_rate as number | undefined : undefined
   const avgSpd = activity.avg_speed_ms    as number | undefined
-  const cal    = activity.calories        as number | undefined
+  const cal    = aiUseBiometricData ? activity.calories as number | undefined : undefined
   const biometricBlock = [
     avgHR  && avgHR  > 0 ? `FC MEDIA: ${Math.round(avgHR)} bpm` : '',
     maxHR  && maxHR  > 0 ? `FC MASSIMA: ${Math.round(maxHR)} bpm` : '',
@@ -319,7 +323,7 @@ export async function POST(req: NextRequest) {
 
   const { data: settings } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, claude_model')
+    .select('claude_api_key, subscription_tier, claude_model, ai_use_biometric_data')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -327,6 +331,9 @@ export async function POST(req: NextRequest) {
   const hasSub  = (settings?.subscription_tier as string) === 'premium'
   const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
   const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : resolveDefaultModel('resoconto')
+  // Consenso all'uso dei dati biometrici (FC, calorie) nei prompt AI — vedi
+  // components/profilo/SectionAiPrivacy.tsx. Default true finché l'utente non lo disattiva.
+  const aiUseBiometricData = (settings?.ai_use_biometric_data as boolean | null) ?? true
 
   if (!apiKey) {
     return new Response(
@@ -429,7 +436,7 @@ export async function POST(req: NextRequest) {
   }
 
   const client  = new Anthropic({ apiKey })
-  const prompt  = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature)
+  const prompt  = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData)
   const { maxTokens } = LENGTH_CONFIG[length]
 
   let fullText = ''

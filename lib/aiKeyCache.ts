@@ -40,6 +40,10 @@ export interface CachedAiSettings {
    *  lettura, in resolveApiKeyAndSettings.ts — cachear già un valore risolto legherebbe per
    *  errore ogni funzionalità al default di quella che ha scritto la cache per prima. */
   claudeModel: string | null
+  /** Consenso dell'utente all'uso di dati personali nei prompt AI — vedi
+   *  app/lib/guide/resolveApiKeyAndSettings.ts e components/profilo/SectionAiPrivacy.tsx. */
+  aiUseBiometricData: boolean
+  aiUseHistoryData: boolean
 }
 
 const TTL_SECONDS = 60 * 60 * 24 * 30  // 30 giorni — rinfrescata ad ogni lettura Supabase riuscita

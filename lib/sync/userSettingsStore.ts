@@ -59,6 +59,8 @@ export interface UserSettingsData {
   onboardingCompletedAt: string | null
   /** Server-side last-modified timestamp — see lib/sync/pullEngine.ts. */
   updatedAt: string | null
+  aiUseBiometricData: boolean
+  aiUseHistoryData: boolean
 }
 
 const ENTITY_TYPE = 'user_settings'
