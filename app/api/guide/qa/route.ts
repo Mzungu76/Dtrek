@@ -229,16 +229,16 @@ export async function POST(req: NextRequest) {
 
     const guideExcerpt = guideSource.slice(0, 6000)
     const context = buildContext(hike, guideExcerpt)
-    // NIENTE cache_control qui (a differenza di prima): questa route ha web_search sempre
-    // disponibile (vedi tools più sotto, non condizionale come in app/api/guide/route.ts) — la
-    // documentazione Anthropic conferma che cache_control + un server tool come web_search fa
-    // scattare automaticamente una cache aggiuntiva sui risultati grezzi della ricerca, a prezzo
-    // maggiorato (1,25x) e non richiesta da noi. Per un percorso ben documentato online questo può
-    // costare decine di migliaia di token in più (osservato concretamente su app/api/guide/route.ts
-    // con lo stesso pattern, vedi commit "Disabilita cache_control..."). SYSTEM_BASE/context erano
-    // pensati per il caso ideale di più domande ravvicinate sullo stesso percorso (vedi history più
-    // sotto) — un risparmio reale ma piccolo (~450 token), non abbastanza da giustificare il
-    // rischio di un costo enorme e imprevedibile ad ogni domanda che fa scattare una ricerca.
+    // NIENTE cache_control qui (rimosso deliberatamente, non dimenticato). Due motivi: (1) questa
+    // route ha web_search sempre disponibile (vedi tools più sotto, non condizionale come in
+    // app/api/guide/route.ts) — l'API Anthropic mette AUTOMATICAMENTE in cache anche i risultati
+    // grezzi della ricerca quando un cache_control è presente da qualche parte nella richiesta, a
+    // prezzo maggiorato (1,25×) e non richiesto da noi, osservato concretamente costare decine di
+    // migliaia di token in più; (2) anche a parte quel rischio, SYSTEM_BASE/context (~450 token)
+    // sono piccoli abbastanza che il 25% di sovrapprezzo vale pochi millesimi di centesimo — con
+    // una chiave personale, rileggere lo stesso prefisso entro 5 minuti/1 ora non è garantito
+    // nemmeno nel caso ideale di domande ravvicinate sullo stesso percorso, quindi il beneficio
+    // atteso non giustifica comunque il rischio residuo.
     const system = [
       { type: 'text' as const, text: SYSTEM_BASE },
       { type: 'text' as const, text: context },
@@ -273,7 +273,12 @@ export async function POST(req: NextRequest) {
         ]),
         { role: 'user', content: question },
       ],
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
+      // web_search_20260209 (non 20250305): con la versione base ogni risultato di ricerca finisce
+      // per intero nel contesto senza nessun controllo sulla dimensione — per un percorso ben
+      // documentato online questo può da solo costare decine di migliaia di token (osservato
+      // concretamente su app/api/guide/route.ts, stesso pattern). Questa versione più recente
+      // (supportata da Sonnet 5) filtra i risultati prima che entrino nel contesto.
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 2 }],
     })
 
     const readable = new ReadableStream({

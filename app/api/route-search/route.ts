@@ -277,20 +277,26 @@ export async function POST(req: NextRequest) {
     response = await client.messages.create({
       model: MODEL,
       max_tokens: 2000,
-      // Blocco unico con cache_control: il profilo/storico non cambia da un turno all'altro della
-      // STESSA conversazione (es. il giro di chiarimento "trova anche altri"), quindi Anthropic
-      // riusa il prefisso già processato invece di ripagarlo per intero ad ogni turno — l'unico
-      // caso in cui questo endpoint viene richiamato più volte a distanza di pochi secondi.
+      // NIENTE cache_control (rimosso deliberatamente, non dimenticato): questa route ha
+      // web_search sempre disponibile e con max_uses:8 — l'API Anthropic mette AUTOMATICAMENTE in
+      // cache anche i risultati grezzi della ricerca quando un cache_control è presente da
+      // qualche parte nella richiesta, a prezzo maggiorato (1,25×) e non richiesto da noi, con un
+      // volume di contenuto potenzialmente ancora più grande qui (fino a 8 ricerche) di quanto
+      // osservato concretamente su app/api/guide/route.ts (~44.000 token in più a chiamata). Il
+      // profilo/storico qui sotto è comunque piccolo, quindi anche il beneficio della cache che si
+      // perde è minimo — vedi docs/piano-ottimizzazione-ai.md per la cache sulla chiave condivisa/
+      // premium come possibile ottimizzazione futura, quando il volume la giustificherà davvero.
       system: [{
         type: 'text',
         text: `${SYSTEM}\n\nPROFILO E STORICO DI QUESTO ESCURSIONISTA (usali per comfortVerdict/comfortNote):\n${profileBlock}`,
-        cache_control: { type: 'ephemeral' },
       }],
       messages: messages.map(m => ({ role: m.role, content: m.text })),
       // max_uses più alto di prima (era 6): ora chiediamo esplicitamente a Giulia di verificare
       // anche fonti GPX alternative per ogni candidato fin dalla prima ricerca, non solo su
       // richiesta esplicita — serve margine per le ricerche aggiuntive senza troncarle a metà.
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
+      // web_search_20260209 (non 20250305): filtra i risultati prima che entrino nel contesto,
+      // riducendo il volume di token grezzi per richieste "search-heavy" come questa.
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 8 }],
     })
   } catch (e) {
     console.error('[route-search] Anthropic error:', e)
