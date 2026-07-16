@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { format } from 'date-fns'
@@ -22,7 +22,6 @@ import { getReport, saveReportContent, cacheReport } from '@/lib/sync/hikeReport
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
 import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
-import PhotoMosaic from '@/components/PhotoMosaic'
 import SectionNav from '@/components/editorial/SectionNav'
 import SectionCard from '@/components/editorial/SectionCard'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
@@ -39,9 +38,11 @@ import { PhotoGallery } from '@/app/resoconto/[id]/PhotoGallery'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { PrintPhotoGrid } from '@/app/resoconto/[id]/PrintPhotoGrid'
 import { HiddenPdfRoot } from '@/app/resoconto/[id]/HiddenPdfRoot'
-import { slotFor } from '@/app/resoconto/[id]/sectionPhotoSlot'
 import ReportHero from './ReportHero'
 import ReportStatsStrip from './ReportStatsStrip'
+import PhotoShowcase from './PhotoShowcase'
+import StickyRouteMap from './StickyRouteMap'
+import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import {
   Pencil, Check, Loader2, Images, BookOpen, Share2, Copy, Link2Off, ExternalLink,
@@ -49,6 +50,44 @@ import {
 } from 'lucide-react'
 
 const RoutePhotoMap = dynamic(() => import('@/app/components/RoutePhotoMap'), { ssr: false })
+
+/** Distribuisce le foto tra i capitoli narrativi in base alla loro progressione lungo il
+ *  percorso (0..1) — ogni capitolo riceve le foto scattate durante la sua "fetta" di cammino,
+ *  invece del vecchio abbinamento a un solo titolo fisso ('Il percorso'/'Cronaca'/…, vedi
+ *  app/resoconto/[id]/sectionPhotoSlot.ts, ancora usato dal solo export PDF che non passa da
+ *  qui) — funziona con qualunque numero/titolo di capitoli scriva Giulia. */
+function bucketPhotosByChapter(photos: RoutePhoto[], chapterCount: number): RoutePhoto[][] {
+  if (chapterCount === 0) return []
+  const buckets: RoutePhoto[][] = Array.from({ length: chapterCount }, () => [])
+  const sorted = [...photos].sort((a, b) => a.progress - b.progress)
+  for (const p of sorted) {
+    const idx = Math.min(chapterCount - 1, Math.floor(p.progress * chapterCount))
+    buckets[idx].push(p)
+  }
+  return buckets
+}
+
+/** Frase a effetto da mostrare in grande, stile rivista, a metà lettura — preferisce un
+ *  [curiosita] già scritto da Giulia (già pensato per stupire), altrimenti la frase più lunga
+ *  (ma non un intero paragrafo) tra tutti i capitoli. */
+function extractPullQuote(sections: { title: string; body: string }[]): string | null {
+  for (const s of sections) {
+    const m = s.body.match(/\[curiosita\]([\s\S]*?)\[\/curiosita\]/)
+    if (m) {
+      const text = m[1].trim().replace(/\s+/g, ' ')
+      if (text.length > 20 && text.length < 240) return text
+    }
+  }
+  let best: string | null = null
+  for (const s of sections) {
+    const plain = s.body.replace(/\[(curiosita|avviso)\][\s\S]*?\[\/\1\]/g, ' ').replace(/^###\s.*$/gm, ' ')
+    const sentences = plain.split(/(?<=[.!?])\s+/).map(t => t.trim()).filter(t => t.length > 40 && t.length < 200)
+    for (const sent of sentences) {
+      if (!best || sent.length > best.length) best = sent
+    }
+  }
+  return best
+}
 
 type ResocontoLength = 'breve' | 'media' | 'lunga'
 
@@ -92,6 +131,7 @@ interface Props {
   pois: PoiItem[]
   poisLoaded: boolean
   driving?: { distanceMeters: number; mapsUrl?: string } | null
+  weatherIcon?: { emoji: string; label: string } | null
   data: DataSectionBundle
   natura: NaturaBundle
   onOpenMap3D: () => void
@@ -111,7 +151,7 @@ interface Props {
  */
 export default function ReportReader({
   activity, photos, photosError, onRetryPhotos, onPhotosChange, coverPhotoId, onOpenCoverPicker,
-  pois, poisLoaded, driving, data, natura, onOpenMap3D, onOpenVideoWizard,
+  pois, poisLoaded, driving, weatherIcon, data, natura, onOpenMap3D, onOpenVideoWizard,
   scrollToSectionKey, onScrollToSectionConsumed,
 }: Props) {
   const router = useRouter()
@@ -124,7 +164,7 @@ export default function ReportReader({
   const [saving,      setSaving]      = useState(false)
   const [saveOk,      setSaveOk]      = useState(false)
   const [length,      setLength]      = useState<ResocontoLength>('media')
-  const [lightbox,    setLightbox]    = useState<RoutePhoto | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [apiError,    setApiError]    = useState<string | null>(null)
   const [sharePdfUrl,   setSharePdfUrl]   = useState<string | null>(null)
@@ -253,15 +293,43 @@ export default function ReportReader({
   // ── Narrative chapters + fixed data sections ─────────────────────────────
   const sections = useMemo(() => parseSections(content), [content])
 
+  // "Foto sulla mappa" compare solo se almeno una foto ha una posizione nota (EXIF o posizionata
+  // a mano sulla mappa 3D) — altrimenti sarebbe una sezione vuota nel sommario.
+  const hasGeoPhotos = useMemo(() => photos.some(p => p.lat != null && p.lon != null), [photos])
+
   const displaySections = useMemo<DisplaySection[]>(() => {
     const narrative: DisplaySection[] = sections.map((s, i) => ({
       key: `narrative-${i}`, title: s.title, narrativeIndex: i, ...narrativeStyleFor(i),
     }))
-    const fixed: DisplaySection[] = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).map(k => ({
+    const fixedKeys = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).filter(k => k !== 'foto_mappa' || hasGeoPhotos)
+    const fixed: DisplaySection[] = fixedKeys.map(k => ({
       key: k, title: REPORT_SECTION_TITLE[k], ...REPORT_SECTION_STYLE[k],
     }))
     return [...narrative, ...fixed]
-  }, [sections])
+  }, [sections, hasGeoPhotos])
+
+  // Foto distribuite tra i capitoli in base alla progressione lungo il percorso — vedi
+  // bucketPhotosByChapter più sopra.
+  const photoBuckets = useMemo(() => bucketPhotosByChapter(photos, sections.length), [photos, sections.length])
+
+  // Posizione lungo il percorso (0..1) di ogni voce del sommario — solo i capitoli narrativi ne
+  // hanno una (si presume distribuiti uniformemente lungo il cammino); le sezioni dati fisse
+  // restano `null` (non legate a un punto preciso) — usata dalla mini-mappa sticky in
+  // components/resoconto/StickyRouteMap.tsx.
+  const sectionProgress = useMemo(
+    () => displaySections.map(s => s.narrativeIndex != null ? s.narrativeIndex / Math.max(sections.length - 1, 1) : null),
+    [displaySections, sections.length],
+  )
+
+  // Frase a effetto mostrata a metà lettura — solo se il racconto ha abbastanza capitoli da
+  // giustificare un'interruzione editoriale.
+  const pullQuote = useMemo(() => sections.length >= 3 ? extractPullQuote(sections) : null, [sections])
+  const pullQuoteAfterNarrativeIndex = Math.floor((sections.length - 1) / 2)
+
+  const readingMinutes = useMemo(() => {
+    const words = content.trim().split(/\s+/).filter(Boolean).length
+    return words > 0 ? Math.max(1, Math.round(words / 200)) : undefined
+  }, [content])
 
   useEffect(() => {
     if (!displaySections.length) return
@@ -292,27 +360,30 @@ export default function ReportReader({
     onScrollToSectionConsumed?.()
   }, [scrollToSectionKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mini-mappa con i pin foto — ancorata al capitolo il cui slot foto è 0 (di norma "Il percorso",
-  // il primo), esattamente come nella vecchia app/resoconto/[id]/ReportSections.tsx.
-  const miniMapNode = activity.trackPoints.length > 4 ? (
-    <div className="float-right ml-5 mb-4 w-52 shrink-0 hidden md:block print:block" style={{ columnSpan: 'none' as const }}>
-      <div className="bg-stone-50 rounded-xl border border-stone-200 overflow-hidden shadow-sm">
-        <RoutePhotoMap trackPoints={activity.trackPoints} photos={photos} height="170px" />
-        {photos.length > 0 && (
-          <div className="px-2 pt-1 pb-2 space-y-0.5">
-            {photos.slice(0, 7).map((ph, i) => (
-              <div key={ph.id} className="flex items-center gap-1.5">
-                <span className="w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0 font-display">{i + 1}</span>
-                <span className="font-body text-[9px] text-stone-500 truncate">{ph.caption}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  ) : null
+  const autoHeroPhoto = useMemo(() => pickBestCoverPhoto(photos), [photos])
+  const heroPhoto = photos.find(p => p.id === coverPhotoId) ?? autoHeroPhoto ?? null
 
-  const heroPhoto = photos.find(p => p.id === coverPhotoId) ?? photos[0] ?? null
+  // Foto del carosello hero — la copertina (scelta o automatica) sempre per prima, poi le altre
+  // più "descrittive" (didascalia più lunga), fino a 4.
+  const heroCarouselPhotos = useMemo(() => {
+    if (!heroPhoto) return []
+    const rest = photos
+      .filter(p => p.id !== heroPhoto.id)
+      .sort((a, b) => (b.caption?.trim().length ?? 0) - (a.caption?.trim().length ?? 0))
+    return [heroPhoto, ...rest].slice(0, 4).map(p => ({ id: p.id, url: p.url }))
+  }, [photos, heroPhoto])
+
+  // Mosaico "protagonista" — le foto restanti, senza ripetere quelle già nel carosello hero.
+  const showcasePhotos = useMemo(() => {
+    const heroIds = new Set(heroCarouselPhotos.map(p => p.id))
+    return photos.filter(p => !heroIds.has(p.id)).slice(0, 5)
+  }, [photos, heroCarouselPhotos])
+
+  const openLightboxById = (photoId: string) => {
+    const idx = photos.findIndex(p => p.id === photoId)
+    if (idx >= 0) setLightboxIndex(idx)
+  }
+
   const hasContent = content.trim().length > 0
   const categoryBadge = (activity.tags?.[0] ?? activity.sport ?? 'Escursione').toUpperCase()
   const gpsPoints = activity.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -456,7 +527,7 @@ export default function ReportReader({
             {hasGps && activity.trackPoints.length ? (
               <RouteMapSection
                 trackPoints={activity.trackPoints}
-                pois={pois}
+                showPois={false}
                 onOpenMap3D={onOpenMap3D}
                 showGradient={data.showGradient}
                 showAspect={data.showAspect}
@@ -489,6 +560,29 @@ export default function ReportReader({
             onOpenMap3D={onOpenMap3D}
           />
         )
+      case 'foto_mappa': {
+        const geoPhotos = photos.filter(p => p.lat != null && p.lon != null)
+        return (
+          <div className="space-y-3">
+            <RoutePhotoMap trackPoints={activity.trackPoints} photos={photos} height="360px" onPhotoTap={openLightboxById} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {geoPhotos.map(ph => {
+                const globalIdx = photos.findIndex(p => p.id === ph.id)
+                return (
+                  <button
+                    key={ph.id}
+                    onClick={() => openLightboxById(ph.id)}
+                    className="flex items-center gap-2 rounded-xl bg-stone-50 border border-stone-200 px-2.5 py-2 text-left hover:bg-stone-100 transition-colors"
+                  >
+                    <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">{globalIdx + 1}</span>
+                    <span className="text-[11px] text-stone-600 truncate">{ph.caption || 'Foto'}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      }
     }
   }
 
@@ -506,8 +600,10 @@ export default function ReportReader({
         title={activity.title ?? activity.notes ?? 'Escursione'}
         categoryBadge={categoryBadge}
         startTime={activity.startTime}
-        heroPhotoUrl={heroPhoto?.url}
+        heroPhotos={heroCarouselPhotos}
         driving={driving}
+        weatherIcon={weatherIcon}
+        readingMinutes={hasContent ? readingMinutes : undefined}
       />
 
       <ReportStatsStrip
@@ -521,12 +617,7 @@ export default function ReportReader({
         }
       />
 
-      {photos.length >= 2 && (
-        <PhotoMosaic
-          photos={photos.slice(1, 5).map(ph => ({ id: ph.id, url: ph.url, alt: ph.caption }))}
-          onPhotoClick={photoId => { const ph = photos.find(p => p.id === photoId); if (ph) setLightbox(ph) }}
-        />
-      )}
+      <PhotoShowcase photos={showcasePhotos} onPhotoClick={openLightboxById} />
 
       {photosError && (
         <div className="px-4 pt-4">
@@ -543,6 +634,7 @@ export default function ReportReader({
               sections={displaySections.map(s => ({ key: s.key, title: s.title, icon: s.icon, color: s.color }))}
               activeIndex={visibleSec}
               onSelect={scrollToSection}
+              stickyExtra={hasGps ? <StickyRouteMap trackPoints={activity.trackPoints} progress={sectionProgress[visibleSec] ?? null} /> : undefined}
             />
           )}
 
@@ -694,22 +786,33 @@ export default function ReportReader({
                     {displaySections.map((s, i) => {
                       if (s.narrativeIndex != null) {
                         const section = sections[s.narrativeIndex]
-                        const slot = slotFor(section.title, s.narrativeIndex)
-                        const photo = slot === 0 ? undefined : photos[slot]
+                        const bucket = photoBuckets[s.narrativeIndex] ?? []
+                        const primary = bucket[0]
+                        const primaryIdx = primary ? photos.findIndex(p => p.id === primary.id) : -1
+                        const extraPhotos = bucket.slice(1).map(p => ({ url: p.url, caption: p.caption }))
                         return (
-                          <SectionCard
-                            key={s.key}
-                            ref={el => { sectionRefs.current[i] = el }}
-                            title={s.title}
-                            icon={s.icon}
-                            color={s.color}
-                            body={section.body}
-                            sectionPhoto={photo?.url}
-                            photoCaption={photo ? `${slot + 1}. ${photo.caption}` : undefined}
-                            photoIndexBadge={photo ? slot + 1 : undefined}
-                            extraFloatNode={slot === 0 ? miniMapNode : undefined}
-                            twoColumns
-                          />
+                          <Fragment key={s.key}>
+                            <SectionCard
+                              ref={el => { sectionRefs.current[i] = el }}
+                              title={s.title}
+                              icon={s.icon}
+                              color={s.color}
+                              body={section.body}
+                              sectionPhoto={primary?.url}
+                              photoCaption={primary ? `${primaryIdx + 1}. ${primary.caption}` : undefined}
+                              photoIndexBadge={primary ? primaryIdx + 1 : undefined}
+                              extraPhotos={extraPhotos}
+                              collapsible
+                              twoColumns
+                            />
+                            {pullQuote && s.narrativeIndex === pullQuoteAfterNarrativeIndex && (
+                              <blockquote className="my-6 px-2 sm:px-8 text-center">
+                                <p className="font-display italic text-[22px] sm:text-[28px] leading-snug text-stone-700">
+                                  “{pullQuote}”
+                                </p>
+                              </blockquote>
+                            )}
+                          </Fragment>
                         )
                       }
                       return (
@@ -727,7 +830,7 @@ export default function ReportReader({
                 )}
 
                 {hasContent && !isEditing && photos.length > 0 && (
-                  <PhotoGallery photos={photos} onPhotoClick={setLightbox} />
+                  <PhotoGallery photos={photos} onPhotoClick={photo => openLightboxById(photo.id)} />
                 )}
                 {hasContent && !isEditing && photos.length > 0 && (
                   <PrintPhotoGrid photos={photos} />
@@ -790,7 +893,9 @@ export default function ReportReader({
         <HiddenPdfRoot activity={activity} heroPhoto={heroPhoto} dateStr={format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })} sections={sections} photos={photos} />
       )}
 
-      {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
+      {lightboxIndex != null && (
+        <PhotoLightbox photos={photos} index={lightboxIndex} onNavigate={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
+      )}
     </div>
   )
 }

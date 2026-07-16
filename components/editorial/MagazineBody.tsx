@@ -43,6 +43,8 @@ function parseBlocks(body: string): Block[] {
   return out
 }
 
+export interface ExtraPhoto { url: string; caption?: string }
+
 interface Props {
   body: string
   color: string
@@ -57,6 +59,11 @@ interface Props {
   /** Numero del pin foto (Resoconto: stesso numero della galleria/profilo altimetrico/PDF) —
    *  mostrato come pallino in alto a sinistra sulla foto. Assente per Guida. */
   photoIndexBadge?: number
+  /** Resoconto-only: altre foto di questo capitolo (oltre a `sectionPhoto`, che resta la sola
+   *  ancorata in alto a destra) — inserite a piena larghezza ogni due paragrafi, in stile
+   *  reportage, invece di restare tutte compresse nello stesso riquadro fluttuante. Assente per
+   *  Guida. */
+  extraPhotos?: ExtraPhoto[]
 }
 
 /**
@@ -66,12 +73,18 @@ interface Props {
  * callout `[curiosita]`/`[avviso]` e sottotitoli per-POI (usati dallo scroll-to-POI della mappa).
  * Condiviso tra Guida (GuideReader) e Resoconto (ReportReader).
  */
-export default function MagazineBody({ body, color, sectionPhoto, twoColumns, photoCaption, extraFloatNode, photoIndexBadge }: Props) {
+export default function MagazineBody({ body, color, sectionPhoto, twoColumns, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos }: Props) {
   const blocks = useMemo(() => parseBlocks(body), [body])
 
   // First paragraph (lead) stands alone full-width; rest flow in columns
   const lead = blocks.find(b => b.type === 'lead')
   const rest  = blocks.filter(b => b !== lead)
+
+  // Foto extra inserite a piena larghezza dopo ogni 2° paragrafo di prosa (non conta subtitle/
+  // curiosita/avviso) — un contatore locale al render, non ha bisogno di stato: la lista di foto
+  // e il testo cambiano sempre insieme (stesso capitolo).
+  let paraCount = 0
+  let extraPhotoIdx = 0
 
   return (
     <div>
@@ -95,9 +108,9 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
             <p className="text-[9px] italic text-stone-400 mt-1">{photoCaption ?? '© Wikimedia Commons'}</p>
           </div>
         )}
-        {rest.map((b, i) => {
+        {rest.flatMap((b, i) => {
           if (b.type === 'curiosita') {
-            return (
+            return [(
               <div
                 key={i}
                 className="my-5 rounded-xl bg-stone-50 border-l-2 pl-4 pr-4 py-3"
@@ -110,10 +123,10 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
                   {b.text}
                 </p>
               </div>
-            )
+            )]
           }
           if (b.type === 'avviso') {
-            return (
+            return [(
               <div
                 key={i}
                 className="my-5 rounded-sm overflow-hidden shadow-sm border border-amber-200"
@@ -131,10 +144,10 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
                   </div>
                 </div>
               </div>
-            )
+            )]
           }
           if (b.type === 'subsection') {
-            return (
+            return [(
               <h3
                 key={i}
                 id={slugifyHeading(b.text)}
@@ -143,13 +156,36 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
               >
                 {b.text}
               </h3>
-            )
+            )]
           }
-          return (
+          paraCount++
+          const paragraph = (
             <p key={i} className="text-[15px] leading-7 text-stone-600 mb-4">
               {b.text}
             </p>
           )
+          // Una foto extra ogni due paragrafi di prosa — resa come <figure> a piena larghezza,
+          // fratello del paragrafo (non annidata: un <p> non può contenere un blocco a piena
+          // larghezza senza invalidare l'HTML e rompere il flusso delle colonne CSS).
+          if (extraPhotos && paraCount % 2 === 0 && extraPhotoIdx < extraPhotos.length) {
+            const photo = extraPhotos[extraPhotoIdx++]
+            const figure = (
+              <figure
+                key={`${i}-photo`}
+                className="my-5 rounded-2xl overflow-hidden shadow-sm"
+                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
+              >
+                <div className="relative w-full h-56 sm:h-72">
+                  <Image src={photo.url} alt="" fill sizes="(max-width: 1024px) 100vw, 52rem" className="object-cover" />
+                </div>
+                {photo.caption && (
+                  <figcaption className="text-[10px] italic text-stone-400 mt-1.5 text-center px-2">{photo.caption}</figcaption>
+                )}
+              </figure>
+            )
+            return [paragraph, figure]
+          }
+          return [paragraph]
         })}
       </div>
     </div>

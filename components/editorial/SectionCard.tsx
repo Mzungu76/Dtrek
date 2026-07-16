@@ -1,7 +1,8 @@
 'use client'
-import { forwardRef, type ReactNode } from 'react'
-import { Volume2, Sparkles, ChevronRight, Loader2 } from 'lucide-react'
-import MagazineBody from './MagazineBody'
+import { forwardRef, useState, type ReactNode } from 'react'
+import { Volume2, Sparkles, ChevronRight, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import MagazineBody, { type ExtraPhoto } from './MagazineBody'
+import { truncateBody } from './textTruncate'
 
 interface Props {
   title: string
@@ -15,6 +16,7 @@ interface Props {
   photoCaption?: string
   extraFloatNode?: ReactNode
   photoIndexBadge?: number
+  extraPhotos?: ExtraPhoto[]
   twoColumns?: boolean
   isVoiceActive?: boolean
   onSpeak?: () => void
@@ -25,6 +27,11 @@ interface Props {
   /** True mentre è in corso "Approfondisci" proprio SU QUESTA sezione — mostra uno spinner al
    *  posto del pulsante invece di lasciarlo cliccabile una seconda volta. */
   approfondendo?: boolean
+  /** Resoconto-only: il corpo parte troncato a poche parole ("Leggi tutto"/"Riduci"), per dare
+   *  subito più spazio a foto/mappa/dati invece di un lungo muro di testo — assente per Guida,
+   *  che mostra sempre il testo intero. Il PDF/stampa (HiddenPdfRoot) non passa da qui, quindi
+   *  resta sempre integrale a prescindere da questo stato. */
+  collapsible?: boolean
 }
 
 /**
@@ -38,11 +45,20 @@ interface Props {
  *    così la nav e lo scroll-to-section continuano a funzionare anche per lei.
  */
 const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
-  { title, subtitle, icon, color, body, widget, sectionPhoto, photoCaption, extraFloatNode, photoIndexBadge, twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo },
+  {
+    title, subtitle, icon, color, body, widget, sectionPhoto, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos,
+    twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo, collapsible,
+  },
   ref,
 ) {
   const hasBody = !!body?.trim()
   const hasWidget = widget != null
+  const [expanded, setExpanded] = useState(false)
+  const { preview, isTruncated } = collapsible && body ? truncateBody(body) : { preview: '', isTruncated: false }
+  // Se il corpo sta già tutto nelle 20-30 parole, non c'è nulla da troncare — va dritto al testo
+  // formattato (foto/curiosità inclusi), altrimenti l'utente resterebbe bloccato sull'anteprima
+  // piana senza mai vedere l'impaginazione vera e senza un modo per espanderla.
+  const showCollapsedPreview = !!collapsible && !expanded && isTruncated
 
   if (!hasWidget && !hasBody) {
     return (
@@ -93,10 +109,38 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
         {widget}
         {hasBody && (
           <div className={hasWidget ? 'mt-5 pt-5 border-t' : ''} style={hasWidget ? { borderColor: '#dcd8cc' } : undefined}>
-            <MagazineBody
-              body={body!} color={color} sectionPhoto={sectionPhoto} twoColumns={twoColumns}
-              photoCaption={photoCaption} extraFloatNode={extraFloatNode} photoIndexBadge={photoIndexBadge}
-            />
+            {showCollapsedPreview ? (
+              <div>
+                <p className="text-[15px] sm:text-[16px] leading-7 text-stone-600">
+                  {preview}{' '}
+                  {isTruncated && (
+                    <button
+                      onClick={() => setExpanded(true)}
+                      className="inline-flex items-center gap-0.5 font-bold text-[13px] align-baseline whitespace-nowrap"
+                      style={{ color }}
+                    >
+                      Leggi tutto <ChevronDown className="w-3 h-3" />
+                    </button>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <>
+                <MagazineBody
+                  body={body!} color={color} sectionPhoto={sectionPhoto} twoColumns={twoColumns}
+                  photoCaption={photoCaption} extraFloatNode={extraFloatNode} photoIndexBadge={photoIndexBadge}
+                  extraPhotos={extraPhotos}
+                />
+                {collapsible && isTruncated && (
+                  <button
+                    onClick={() => setExpanded(false)}
+                    className="mt-3 inline-flex items-center gap-1 text-[12px] font-bold text-stone-400 hover:text-stone-600 transition-colors"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" /> Riduci
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
         {!hasBody && approfondendo && (

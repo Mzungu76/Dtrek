@@ -36,7 +36,7 @@ import {
 import ShareModal from '@/components/ShareModal'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
-import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
+import { fetchActivityPhotos, pickBestCoverPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import { useFlora } from '@/lib/useFlora'
 import { useDtmProfile } from './useDtmProfile'
 import { useTerrainProfile } from './useTerrainProfile'
@@ -283,7 +283,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       date: new Date(a.startTime).getTime(), km: a.distanceMeters, dplus: a.elevationGain, cts: a.trailScore, rating: a.userRating,
       distance: driving?.distanceMeters,
     })
-    const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? photos[0]?.url : undefined)
+    const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? pickBestCoverPhoto(photos)?.url : undefined)
     const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
     const mapped = items.map(it => {
       if (it.id === activity?.id) {
@@ -425,6 +425,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
           pois={pois}
           poisLoaded={poisLoaded}
           driving={drivingWithMaps}
+          weatherIcon={weatherIcon}
           data={{
             ctsResult, ctsComputing, onComputeCts: handleComputeCts,
             dtmProfile, showGradient, showAspect,
