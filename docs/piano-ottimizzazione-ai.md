@@ -6,6 +6,11 @@
 > stato scartato per ritorno marginale, come spiegato più sotto. I capitoli "Contesto di
 > business" e "Personalizzazione AI di default" restano direzione di prodotto non ancora
 > progettata/implementata.
+>
+> **Aggiornamento successivo**: il prompt caching su guida/Q&A/route-search, descritto qui
+> sotto come "già ottimo", è stato **rimosso** in una sessione successiva dopo un incidente
+> di costo reale — vedi "Rimozione del prompt caching" più sotto per i dettagli e il piano di
+> reintroduzione futura limitato alla chiave condivisa/premium.
 
 ## Contesto
 
@@ -21,8 +26,8 @@ Decisioni già prese con l'utente (AskUserQuestion):
 
 | Route | Persona | Caching oggi | Modello proposto | Perché |
 |---|---|---|---|---|
-| `guide/route.ts` | Giulia | ✅ già ottimo (SYSTEM_CORE + varianti condizionali, fino a 4 prefissi cacheabili) | **Sonnet** (resta) | Narrativa lunga + verifica web di sicurezza reale (chiusure/frane): qui la qualità conta più del risparmio, ed è la chiamata a volume più alto (auto-generata a ogni import) |
-| `guide/qa/route.ts` | Giulia | ✅ già ottimo (2 breakpoint: SYSTEM_BASE + context) | **Sonnet** (resta) | Risposte su sicurezza/stato del percorso — stesso motivo del sopra, non conviene abbassare qualità qui |
+| `guide/route.ts` | Giulia | ❌ rimosso (vedi "Rimozione del prompt caching" più sotto) | **Sonnet** (resta) | Narrativa lunga + verifica web di sicurezza reale (chiusure/frane): qui la qualità conta più del risparmio, ed è la chiamata a volume più alto (auto-generata a ogni import) |
+| `guide/qa/route.ts` | Giulia | ❌ rimosso (vedi "Rimozione del prompt caching" più sotto) | **Sonnet** (resta) | Risposte su sicurezza/stato del percorso — stesso motivo del sopra, non conviene abbassare qualità qui |
 | `resoconto/route.ts` | Giornalista | ❌ nessun caching | **Sonnet** (resta) | Output lungo e visibile/condivisibile (articolo). **Il costo qui è dominato dai token di OUTPUT, non input** — quindi il caching aiuterebbe poco (vedi sotto) |
 | `resoconto-assist/route.ts` | Editor | ❌ nessun caching (corretto: prompt troppo corto + testo diverso ogni volta, non c'è nulla da cacheare) | **Haiku** (nuovo default) | Editing meccanico e vincolato (correggi/espandi/sintetizza) su un testo già esistente, mai generazione libera — compito facile per un modello più economico |
 | `route-compare/route.ts` | Giulia | ❌ nessun caching (corretto: system troppo corto per il minimo cacheabile, contenuto sempre diverso) | **Sonnet** (resta) | Deve pesare dati numerici + storico + preferenze e produrre una classifica che guida una decisione reale dell'utente |
@@ -74,6 +79,53 @@ Rivisto con l'utente: il rischio reale non è il costo della singola ricerca, è
 
 ### 5. Caching sul resoconto (priorità bassa — incluso per completezza, non conviene molto) — ❌ scartato
 Si potrebbe cacheare system + contesto condiviso (guida/POI/natura) di `resoconto/route.ts` separandolo dall'istruzione di lunghezza finale. **Ma il costo di resoconto è dominato dai token di OUTPUT (narrativa lunga, ~$0.03-0.06 a generazione), non di input** — il caching agirebbe solo sulla frazione più piccola del costo, quindi il ritorno è marginale rispetto allo sforzo di ristrutturare il prompt in blocchi. Non incluso come azione immediata; da riconsiderare solo se in futuro si osserva un pattern reale di rigenerazioni ravvicinate (utente che prova "breve" poi "lunga" sullo stesso resoconto).
+
+### 6. Rimozione del prompt caching su guida/Q&A/route-search — ✅ implementato (sessione successiva)
+
+Il prompt caching (`cache_control: {type: 'ephemeral'}`) su `guide/route.ts`, `guide/qa/route.ts` e
+`route-search/route.ts` — presentato nei punti sopra come "già ottimo" — è stato **tolto del tutto**
+dopo un incidente reale con l'utente: una generazione guida con tutte le 8 sezioni + "Il percorso"
+(percorso ben documentato online, lago di Bolsena) è costata **~0,20€** invece della frazione di
+centesimo attesa.
+
+**Causa radice, confermata dalla documentazione Anthropic** ("Tool use with prompt caching" →
+"Server tool results are cached automatically"): quando una richiesta ha `cache_control` **e** usa un
+server tool come `web_search`, l'API mette **automaticamente** in cache anche i risultati grezzi
+della ricerca — a prezzo maggiorato (1,25× l'input normale), mai richiesto esplicitamente da noi. Sul
+test reale: ~44.000 token di scrittura cache in una sola chiamata, quasi tutti dai risultati di 2
+ricerche web. Rimuovendo `cache_control` quel contenuto torna a essere billed come input normale (1×
+invece di 1,25×) ma **resta comunque grande** — il vero limite è che `web_search_20250305` (versione
+base) carica ogni risultato per intero nel contesto, senza nessun controllo sulla dimensione.
+
+**Due correzioni applicate insieme**:
+1. **`cache_control` rimosso** da tutti e 3 i breakpoint (guida, Q&A, route-search) — non solo per il
+   rischio della cache automatica, ma perché il beneficio reale è comunque minimo: generare una guida
+   è un'azione rara per un utente con chiave personale, improbabile che rilegga lo stesso prefisso
+   entro la finestra di 5 minuti/1 ora della cache. Il 25% di sovrapprezzo su system prompt piccoli
+   (~450-2000 token) vale pochi millesimi di centesimo — non giustifica il rischio residuo nemmeno a
+   parte il problema `web_search`. Decisione esplicita dell'utente.
+2. **Tool aggiornato da `web_search_20250305` a `web_search_20260209`** (filtro dinamico, supportato
+   da Sonnet 5/4.6, Opus 4.6-4.8, Fable 5, Mythos 5): Claude scrive ed esegue del codice che filtra i
+   risultati di ricerca PRIMA che entrino nel contesto, tenendo solo il contenuto rilevante — la
+   stessa ottimizzazione raccomandata dalla documentazione Anthropic per "richieste con uso intenso
+   di ricerca". Non ancora verificato con un test reale successivo alla modifica (né il comportamento
+   con un modello che l'utente scegliesse manualmente e che non supporti il filtro dinamico).
+
+**Reintroduzione futura, SOLO per la chiave condivisa/premium**: a differenza di una chiave personale
+(riletture rare, beneficio marginale), una chiave condivisa usata da **molti utenti diversi** rende
+molto più probabile che due richieste diverse capitino nella stessa finestra di 5 minuti/1 ora — lì il
+prompt caching torna a valere la pena. Quando la tier "Premium" (vedi "Contesto di business" più
+sotto) avrà volume reale, va **assolutamente reintrodotta** la cache sulla chiave condivisa — ma
+strutturata diversamente da come era: **mai `cache_control` nella stessa chiamata che usa
+`web_search`** (la causa dell'incidente). L'architettura corretta, discussa con l'utente ma non ancora
+implementata: separare la ricerca web in una chiamata dedicata, piccola, mai cacheata (system minimo +
+`web_search`, output solo gli avvisi trovati) da una chiamata di generazione narrativa sempre cacheata
+(SYSTEM_CORE ecc., **senza** `web_search`) — gli avvisi trovati dalla prima entrano come testo semplice
+nella seconda, esattamente come già avviene per `assessmentBlock`/`scoresBlock`. Così le due
+funzionalità (cache del prompt fisso, ricerca web) non convivono mai nella stessa richiesta e il
+problema non può ripresentarsi.
+
+File toccati: `app/api/guide/route.ts`, `app/api/guide/qa/route.ts`, `app/api/route-search/route.ts`.
 
 ### Esplicitamente fuori scope per questo piano
 - **Cache route-status condivisa** (idea "punto 1" già discussa e scartata in questa sessione): il cambiamento con il potenziale di risparmio più alto in assoluto, ma richiede nuova tabella Supabase + logica di lettura/scrittura + integrazione nel prompt — un progetto a sé.
@@ -131,7 +183,12 @@ Durante questa sessione di planning l'utente ha introdotto la direzione di busin
 
 **Perché è la leva di costo più grande di tutte**: ogni ottimizzazione di questo piano (tiering modello, taglio testuale, `max_uses`) agisce sul *costo per generazione*. Le quote per tier agiscono sul *numero di generazioni pagate da Dtrek* — che è il vero moltiplicatore della spesa totale. Il taglio testuale dei prompt (punto 2) da solo vale ~3-5%; un limite freemium ben calibrato vale ordini di grandezza di più, perché elimina del tutto il costo delle generazioni che oggi un utente free-tier senza chiave propria non potrebbe nemmeno fare (nota: oggi senza abbonamento premium E senza chiave propria l'accesso AI è già a zero, vedi punto sotto — quindi la vera novità di questa strategia non è "aggiungere un limite dove oggi non c'è", ma **introdurre una fascia intermedia** tra "zero accesso" e "accesso illimitato dietro abbonamento".
 
-**Due punti risolti con l'utente, da portare avanti nel progetto futuro**:
+**Tre punti risolti con l'utente, da portare avanti nel progetto futuro**:
+- **Prompt caching sulla chiave condivisa/premium**: da reintrodurre **assolutamente** quando questa
+  tier avrà volume reale (più utenti diversi che condividono la stessa chiave rendono probabile una
+  rilettura entro la finestra di cache, a differenza di una chiave personale) — vedi "Rimozione del
+  prompt caching" più sopra per il perché è stata tolta ora e come va strutturata per non ripetere
+  l'incidente di costo (mai insieme a `web_search` nella stessa chiamata).
 - **BYOK non più gratuito per tutti**: oggi qualunque utente (anche free) può incollare la propria chiave Claude in Impostazioni e ottenere generazioni illimitate a costo zero per Dtrek (nessun gate su `subscription_tier`) — questo svuoterebbe di senso la tier "acquisto una tantum". Deciso: nel progetto futuro, il campo chiave personale (`user_settings.claude_api_key`, oggi in `components/profilo/SectionClaudeKey.tsx`) andrà **gate-ato** dietro l'acquisto una tantum, rimosso/nascosto per free e premium. Comportamento diverso da oggi — non toccato in questo piano.
 - **Multi-provider per la tier 3**: confermato come iniziativa futura, non progettata ora. Richiederà: un livello di astrazione sopra l'attuale `new Anthropic({ apiKey })` (usato identico in tutte e 7 le route), un secondo/terzo campo per chiavi OpenAI/Gemini in `user_settings`, e — il pezzo più delicato — un equivalente per prompt caching e web_search che oggi sono implementati con la sintassi specifica Anthropic (`cache_control`, `web_search_20250305`) e non hanno un corrispettivo 1:1 negli altri SDK. Stima indicativa: è un progetto dell'ordine di grandezza dell'intera integrazione AI attuale, non un'estensione incrementale.
 
@@ -169,6 +226,9 @@ L'utente ha chiarito che la filosofia dell'app è "personale": di default Giulia
 - `app/api/caption/route.ts` — fallback a `resolveDefaultModel('caption')`; hashtag di esempio ridotti; migrato a `output_config.format`
 - `app/api/ai-models/route.ts`, `app/api/route-search/route.ts` — aggiornati per il nuovo parametro `feature` obbligatorio (scoperti durante l'implementazione, non nella valutazione iniziale)
 - `components/profilo/SectionClaudeKey.tsx` — copy aggiornato sul comportamento di default
+
+**Sessione successiva** (vedi punto 6 sopra):
+- `app/api/guide/route.ts`, `app/api/guide/qa/route.ts`, `app/api/route-search/route.ts` — rimosso `cache_control`; tool aggiornato a `web_search_20260209` (filtro dinamico)
 
 ## Verifica
 

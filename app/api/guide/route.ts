@@ -699,30 +699,23 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   const prompt = buildPrompt(hike, nature, sectionKeys, scores, isFirstGeneration, comfortContext)
 
   // SYSTEM_CORE (+ SYSTEM_SUBTITLE/SYSTEM_RESEARCH quando applicabili) è testo fisso, identico per
-  // ogni utente e ogni percorso nella stessa combinazione (~1700 token per la variante più
-  // completa) — cache_control lo marca come prefisso cacheabile (prompt caching Anthropic), così
-  // richieste ravvicinate con la stessa chiave (personale o condivisa/premium) pagano l'intero
-  // blocco una sola volta invece che ad ogni singola generazione. genderInstruction resta un
-  // blocco separato SENZA cache_control perché varia da utente a utente — un blocco dopo il
-  // breakpoint non invalida il prefisso già cacheato, quindi non rompe il risparmio sopra.
-  //
-  // ECCEZIONE quando includesRoute (web_search abilitato, vedi tools più sotto): l'API Anthropic,
-  // quando un cache_control è presente E viene usato un server tool come web_search, mette
-  // AUTOMATICAMENTE in cache anche i risultati grezzi della ricerca — a costo di scrittura (1,25×
-  // l'input normale), non richiesto e non scelto da noi (vedi "Server tool results are cached
-  // automatically" nella documentazione Anthropic su tool use + prompt caching). Per un percorso
-  // ben documentato online questo può costare decine di migliaia di token in più a generazione,
-  // pagati per un contenuto che una generazione one-shot come questa non rilegge mai — osservato
-  // concretamente su un test reale (~44.000 token di cache write, la maggior parte del costo della
-  // chiamata). Il piccolo risparmio che cache_control offrirebbe qui sul solo system prompt (~2000
-  // token) non giustifica quel rischio, quindi in questo caso il blocco resta senza cache_control.
+  // ogni utente e ogni percorso nella stessa combinazione (~1700-2000 token per la variante più
+  // completa) — niente cache_control (rimosso deliberatamente, non dimenticato). Due motivi:
+  // (1) con web_search abilitato (includesRoute), l'API Anthropic mette AUTOMATICAMENTE in cache
+  // anche i risultati grezzi della ricerca quando un cache_control è presente da qualche parte
+  // nella richiesta — a costo di scrittura (1,25×), non richiesto da noi, osservato concretamente
+  // costare decine di migliaia di token in più a generazione (vedi "Server tool results are cached
+  // automatically" nella documentazione Anthropic); (2) anche a parte quel rischio, il beneficio
+  // reale è minimo: genera una guida è un'azione rara per un singolo utente con chiave personale,
+  // improbabile che rilegga lo stesso prefisso entro la finestra di 5 minuti/1 ora della cache —
+  // il 25% di sovrapprezzo sui ~2000 token qui in gioco (pochi millesimi di centesimo) non vale il
+  // rischio residuo, anche fuori dal caso web_search. genderInstruction resta comunque un blocco
+  // separato per chiarezza (varia da utente a utente), ma la distinzione non serve più per la cache.
   const systemText = SYSTEM_CORE
     + (isFirstGeneration ? SYSTEM_SUBTITLE : '')
     + (includesRoute ? SYSTEM_RESEARCH : '')
   const system = [
-    includesRoute
-      ? { type: 'text' as const, text: systemText }
-      : { type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } },
+    { type: 'text' as const, text: systemText },
     // Il genere è un dato biometrico/anagrafico — rispetta il consenso dell'utente (vedi
     // components/profilo/SectionAiPrivacy.tsx), tornando alla formulazione neutra quando negato.
     { type: 'text' as const, text: genderInstruction(aiUseBiometricData ? userGender : 'non_specificato') },
