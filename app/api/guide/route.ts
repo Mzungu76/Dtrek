@@ -194,16 +194,15 @@ async function buildComfortContext(userId: string): Promise<string> {
 // una richiesta iniziale o aggiunta più tardi, usa sempre queste stesse lunghezze concise. Il tetto
 // resta comunque ampio abbastanza da coprire in una sola chiamata TUTTE le 8 sezioni insieme (vedi
 // il pulsante "Genera il resto della guida" in GuideReader.tsx), non solo quelle di default.
-// Alzato a 3200 dopo un troncamento reale osservato con tutte e 8 le sezioni + "Il percorso" su un
-// percorso turistico ben documentato online (lago di Bolsena): il testo visibile arrivato all'utente
-// era di sole ~180 parole quando il limite (allora 1600) è scattato — la maggior parte del budget
-// era stata assorbita da contenuto MAI mostrato: le query e i risultati delle 2 ricerche web
-// (SYSTEM_RESEARCH, contano comunque come token di output anche se l'utente non li vede mai) e
-// probabilmente uno o più [avviso] scritti e poi troncati a metà (quindi scartati in silenzio dal
-// parsing, perché il tag non si chiudeva). Vedi anche il tetto esplicito di 3 avvisi aggiunto in
-// SYSTEM_RESEARCH, che riduce il caso peggiore ma non lo azzera (il contenuto delle ricerche resta
-// comunque variabile) — da qui il margine più ampio qui.
-const GUIDE_MAX_TOKENS = 3200
+// Alzato a 6000 (era 3200, prima ancora 1600) dopo DUE troncamenti reali consecutivi con tutte e 8
+// le sezioni + "Il percorso" su un percorso ben documentato online (lago di Bolsena) — anche a 3200
+// il testo si è fermato a metà di "Luoghi da non perdere", con un divario ancora non del tutto
+// spiegato tra il testo visibile salvato (~900-1000 token) e il totale consumato (~3200-3400). I
+// risultati grezzi della ricerca web NON contano qui (sono input, non output, per Anthropic) — il
+// divario è quindi in testo che Giulia scrive davvero: sottotitolo, query di ricerca, avvisi (fino
+// a 3, vedi SYSTEM_RESEARCH) e la narrazione stessa. Margine ampio deliberato finché non si osserva
+// un nuovo troncamento anche a questo livello.
+const GUIDE_MAX_TOKENS = 6000
 
 /**
  * Lunghezza target per sezione — deliberatamente NON uniforme: ogni sezione ha una natura diversa
@@ -728,19 +727,20 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // ampio) rispecchia le due sole sotto-domande consentite in SYSTEM_RESEARCH — un "controllo
   // medico" mirato, non un motore esplorativo che spende ricerche extra per arricchire il racconto.
   //
-  // web_search_20260209 (non 20250305) per il "filtro dinamico": con la versione base ogni
-  // risultato di ricerca finisce per intero nel contesto di Claude, senza nessun controllo sulla
-  // dimensione — per un percorso ben documentato online questo può da solo costare decine di
-  // migliaia di token (osservato concretamente su un test reale). Con questa versione più recente
-  // (supportata da Sonnet 5) Claude scrive ed esegue del codice che filtra i risultati PRIMA che
-  // entrino nel contesto, tenendo solo il contenuto rilevante — la stessa ottimizzazione
-  // raccomandata dalla documentazione Anthropic proprio per "richieste con uso intenso di ricerca".
+  // web_search_20250305 (RIPRISTINATO da 20260209): il filtro dinamico di 20260209 fa scrivere ed
+  // eseguire a Claude del codice per filtrare i risultati — quel codice è comunque testo generato,
+  // quindi consuma token di OUTPUT reali, competendo con lo stesso GUIDE_MAX_TOKENS usato per
+  // scrivere la guida vera. Osservato concretamente peggiorare il troncamento invece di risolverlo:
+  // con 20260209 il budget si esauriva nella fase di ricerca/filtro, prima ancora di scrivere una
+  // sola sezione ("nessuna sezione riconosciuta nella risposta" — zero contenuto salvabile, peggio
+  // di prima). Tornati alla versione base finché non si trova un modo di isolare il costo della
+  // ricerca dal budget di output della narrazione (vedi docs/piano-ottimizzazione-ai.md).
   const stream = client.messages.stream({
     model:      claudeModel,
     max_tokens: GUIDE_MAX_TOKENS,
     system,
     messages:   [{ role: 'user', content: prompt }],
-    ...(includesRoute ? { tools: [{ type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: 2 }] } : {}),
+    ...(includesRoute ? { tools: [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 2 }] } : {}),
   })
 
   // Raccoglie le fonti web citate da Giulia mentre scrive (citations_delta sui blocchi di testo,
