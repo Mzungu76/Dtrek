@@ -705,11 +705,24 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // blocco una sola volta invece che ad ogni singola generazione. genderInstruction resta un
   // blocco separato SENZA cache_control perché varia da utente a utente — un blocco dopo il
   // breakpoint non invalida il prefisso già cacheato, quindi non rompe il risparmio sopra.
+  //
+  // ECCEZIONE quando includesRoute (web_search abilitato, vedi tools più sotto): l'API Anthropic,
+  // quando un cache_control è presente E viene usato un server tool come web_search, mette
+  // AUTOMATICAMENTE in cache anche i risultati grezzi della ricerca — a costo di scrittura (1,25×
+  // l'input normale), non richiesto e non scelto da noi (vedi "Server tool results are cached
+  // automatically" nella documentazione Anthropic su tool use + prompt caching). Per un percorso
+  // ben documentato online questo può costare decine di migliaia di token in più a generazione,
+  // pagati per un contenuto che una generazione one-shot come questa non rilegge mai — osservato
+  // concretamente su un test reale (~44.000 token di cache write, la maggior parte del costo della
+  // chiamata). Il piccolo risparmio che cache_control offrirebbe qui sul solo system prompt (~2000
+  // token) non giustifica quel rischio, quindi in questo caso il blocco resta senza cache_control.
   const systemText = SYSTEM_CORE
     + (isFirstGeneration ? SYSTEM_SUBTITLE : '')
     + (includesRoute ? SYSTEM_RESEARCH : '')
   const system = [
-    { type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } },
+    includesRoute
+      ? { type: 'text' as const, text: systemText }
+      : { type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } },
     // Il genere è un dato biometrico/anagrafico — rispetta il consenso dell'utente (vedi
     // components/profilo/SectionAiPrivacy.tsx), tornando alla formulazione neutra quando negato.
     { type: 'text' as const, text: genderInstruction(aiUseBiometricData ? userGender : 'non_specificato') },
