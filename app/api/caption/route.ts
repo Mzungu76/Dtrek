@@ -103,18 +103,28 @@ La caption deve rispecchiare le specifiche tecniche del percorso (distanza, disl
 
   const client = new Anthropic({ apiKey })
 
-  let msg
-  try {
-    msg = await client.messages.parse({
-      model:         claudeModel,
-      max_tokens:    700,
-      system:        SYSTEM,
-      messages:      [{ role: 'user', content: userPrompt }],
-      output_config: { format: jsonSchemaFormat<CaptionOutput>(CAPTION_SCHEMA) },
-    })
-  } catch (e: any) {
+  // Un secondo tentativo automatico solo se il primo lancia un'eccezione — non se restituisce
+  // semplicemente parsed_output vuoto, caso già gestito più sotto col fallback sul testo grezzo.
+  // L'SDK Anthropic rilancia un errore tipo "Failed to parse structured output: SyntaxError:
+  // Unexpected end of JSON input" quando il testo non è JSON valido (risposta troncata o vuota) —
+  // quasi sempre transitorio, non un dettaglio da mostrare all'utente così com'è.
+  let msg: Awaited<ReturnType<typeof client.messages.parse>> | undefined
+  for (let attempt = 1; attempt <= 2 && !msg; attempt++) {
+    try {
+      msg = await client.messages.parse({
+        model:         claudeModel,
+        max_tokens:    700,
+        system:        SYSTEM,
+        messages:      [{ role: 'user', content: userPrompt }],
+        output_config: { format: jsonSchemaFormat<CaptionOutput>(CAPTION_SCHEMA) },
+      })
+    } catch (e) {
+      console.error(`[caption] tentativo ${attempt} fallito:`, e)
+    }
+  }
+  if (!msg) {
     return new Response(
-      JSON.stringify({ error: 'Errore AI', message: e.message }),
+      JSON.stringify({ error: 'ai_error', message: 'La caption non è arrivata completa — riprova.' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
     )
   }

@@ -7,7 +7,7 @@ import { difficultyIndex, formatPaceMinkm } from '@/lib/stats'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
-import { jsonSchemaFormat } from '@/lib/aiJsonOutput'
+import { jsonSchemaFormat, parseWithRetry } from '@/lib/aiJsonOutput'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -223,22 +223,17 @@ id da usare nel ranking, nello stesso ordine dei percorsi sopra: ${found.map(f =
 
   const client = new Anthropic({ apiKey })
 
-  let msg
+  let parsed: RouteCompareOutput
   try {
-    msg = await client.messages.parse({
+    parsed = await parseWithRetry('route-compare', () => client.messages.parse({
       model:          claudeModel,
       max_tokens:     1200,
       system:         SYSTEM,
       messages:       [{ role: 'user', content: prompt }],
       output_config:  { format: jsonSchemaFormat<RouteCompareOutput>(RANKING_SCHEMA) },
-    })
+    }))
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Errore AI' }, { status: 502 })
-  }
-
-  const parsed = msg.parsed_output
-  if (!parsed) {
-    return NextResponse.json({ error: 'Risposta AI non valida, riprova.' }, { status: 502 })
   }
 
   const byId = new Map(found.map(f => [f.id, f]))
