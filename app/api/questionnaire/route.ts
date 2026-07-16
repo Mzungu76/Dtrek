@@ -9,7 +9,7 @@ import type { PoiItem }    from '@/lib/overpass'
 import { POI_META }        from '@/lib/overpass'
 import { fetchNatureContext, type NatureContext } from '@/lib/aiNatureContext'
 import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
-import { jsonSchemaFormat } from '@/lib/aiJsonOutput'
+import { jsonSchemaFormat, parseWithRetry } from '@/lib/aiJsonOutput'
 
 export const dynamic = 'force-dynamic'
 
@@ -408,24 +408,23 @@ export async function POST(req: NextRequest) {
   const client = new Anthropic({ apiKey })
   const prompt = buildUserPrompt(activity, anchors, aiUseBiometricData)
 
-  let output: QuestionnaireOutput | null
+  let output: QuestionnaireOutput
   try {
-    const msg = await client.messages.parse({
+    output = await parseWithRetry('questionnaire', () => client.messages.parse({
       model:         claudeModel,
       max_tokens:    3000,
       system:        SYSTEM,
       messages:      [{ role: 'user', content: prompt }],
       output_config: { format: jsonSchemaFormat<QuestionnaireOutput>(QUESTIONNAIRE_SCHEMA) },
-    })
-    output = msg.parsed_output
-  } catch (e: any) {
+    }))
+  } catch (e) {
     return new Response(
-      JSON.stringify({ error: 'ai_error', message: e.message }),
+      JSON.stringify({ error: 'ai_error', message: e instanceof Error ? e.message : 'Errore AI' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
     )
   }
 
-  const questions = output ? parseQuestions(output.questions, anchors) : null
+  const questions = parseQuestions(output.questions, anchors)
   if (!questions) {
     return new Response(
       JSON.stringify({ error: 'ai_parse_error', message: 'La risposta AI non era nel formato atteso. Riprova oppure usa la generazione rapida.' }),
