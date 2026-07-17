@@ -670,6 +670,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [renderFrame,       setRenderFrame]      = useState(0)
   const [renderTotal,       setRenderTotal]      = useState(0)
   const [finalizeElapsedSec,setFinalizeElapsedSec]= useState(0)
+  const [entertainIdx,      setEntertainIdx]      = useState(0)
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
   const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
   const [photoDurationSec,  setPhotoDurationSec] = useState(3.0)
@@ -696,6 +697,66 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const placingPhotoRef = useRef<{id:string;step:PlacingStep}|null>(null)
   useEffect(()=>{ placingPhotoRef.current=placingPhoto },[placingPhoto])
   const [photoBeingAdded, setPhotoBeingAdded]= useState(false)
+
+  // Screen Wake Lock: sullo schermo del telefono che si spegne durante il rendering, il
+  // browser sospende il rendering WebGL/requestAnimationFrame — il video resta a metà finché
+  // l'utente non riaccende lo schermo. Chiave su videoState (non su un punto specifico dentro
+  // startRecording) così UN SOLO effetto copre tutti i percorsi di uscita (fine normale,
+  // errore, annullamento): qualunque cosa porti fuori da 'rendering'/'finalizing' fa scattare
+  // il cleanup dell'effetto, che rilascia il lock — niente da duplicare in ogni handler.
+  useEffect(() => {
+    if (videoState !== 'rendering' && videoState !== 'finalizing') return
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return
+    let sentinel: WakeLockSentinel | null = null
+    let active = true
+    const acquire = () => {
+      navigator.wakeLock.request('screen')
+        .then(s => { if (!active) { s.release().catch(() => {}); return } sentinel = s })
+        .catch(() => {}) // negato/non supportato in questo contesto: degrado silenzioso, non blocca il rendering
+    }
+    acquire()
+    // Il lock viene rilasciato automaticamente dal browser quando il documento diventa
+    // "hidden" (cambio app, non spegnimento schermo) — se poi torna visibile mentre siamo
+    // ancora in rendering, va richiesto di nuovo.
+    const onVisibility = () => { if (document.visibilityState === 'visible' && !sentinel) acquire() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      active = false
+      document.removeEventListener('visibilitychange', onVisibility)
+      sentinel?.release().catch(() => {})
+    }
+  }, [videoState])
+
+  // Contenuti della schermata di attesa durante il rendering: alcuni fatti calcolati sul
+  // percorso corrente (così sono sempre pertinenti, non generici) mescolati a qualche
+  // suggerimento sull'app — niente chiamate AI, solo dati già disponibili lato client.
+  const entertainmentContent = useMemo(() => {
+    const km = +((distanceProp ?? totalDistRef.current) / 1000).toFixed(1)
+    const gain = Math.round(elevGainProp ?? elevStatsRef.current.gain)
+    const alt = elevStatsRef.current.altMax
+    const poiCount = pois?.length ?? 0
+    const photoCount = routePhotos.filter(p => !videoExcludedPhotoIds.has(p.id)).length
+    const facts: string[] = []
+    if (km > 0) facts.push(`🥾 Hai percorso ${km} km — circa ${Math.round(km * 1300).toLocaleString('it-IT')} passi.`)
+    if (gain > 60) facts.push(`⛰️ ${gain} m di dislivello: più di ${Math.max(1, Math.round(gain / 93))}× la Torre di Pisa.`)
+    if (alt > 0) facts.push(`🏔️ Punto più alto toccato: ${alt} m.`)
+    if (poiCount > 0) facts.push(`📍 ${poiCount} punti di interesse individuati lungo il percorso.`)
+    if (photoCount > 0) facts.push(`📸 ${photoCount} ${photoCount === 1 ? 'foto entrerà' : 'foto entreranno'} nel video.`)
+    const tips = [
+      '💡 Nella mappa 3D puoi colorare il percorso per pendenza o esposizione (icona strati).',
+      '⚙️ Ogni fotogramma viene composto direttamente sul tuo telefono, senza passare da un server.',
+      '🎬 Il preset "Epico" applica una color grading pensata per il trekking in montagna.',
+      '☑️ Puoi scegliere quali foto includere nel video con la spunta sulla galleria, prima di generare.',
+      '🔋 Tienilo a schermo acceso: lo schermo spento mette in pausa il rendering.',
+    ]
+    return [...facts, ...tips]
+  }, [distanceProp, elevGainProp, pois, routePhotos, videoExcludedPhotoIds])
+
+  useEffect(() => {
+    if (videoState !== 'rendering' && videoState !== 'finalizing') { setEntertainIdx(0); return }
+    const id = setInterval(() => setEntertainIdx(i => (i + 1) % Math.max(1, entertainmentContent.length)), 4200)
+    return () => clearInterval(id)
+  }, [videoState, entertainmentContent.length])
 
   // Load persisted photos from the server on mount (migra automaticamente da localStorage se serve)
   useEffect(() => {
@@ -843,7 +904,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       map.addSource('terrain',{type:'raster-dem',url:`https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${KEY}`,tileSize:512})
     map.setTerrain({source:'terrain',exaggeration:exaggRef.current})
     if(!map.getLayer('sky')) try{map.addLayer({id:'sky',type:'sky',paint:{'sky-type':'atmosphere','sky-atmosphere-sun':[0,90],'sky-atmosphere-sun-intensity':15}} as any)}catch{}
-    const coords=pts.map(p=>[p.lon!,p.lat!,p.altitudeMeters??0] as [number,number,number])
+    // Niente Z esplicita: con una Z incorporata (altitudine GPS registrata, spesso scostata di
+    // decine di metri dal DEM del terreno) MapLibre disegna la linea a quella quota fissa invece
+    // di drappeggiarla sul terreno 3D — mentre pin/camera (center) e route-traveled (sotto)
+    // seguono sempre il DEM. Risultato: uno scostamento costante fra linea e pin per tutto il
+    // percorso, non legato alla pendenza. Con sole [lon,lat] la linea si appoggia al DEM come
+    // tutto il resto, stessa fonte di quota ovunque.
+    const coords=pts.map(p=>[p.lon!,p.lat!] as [number,number])
     if(map.getSource('route')){(map.getSource('route') as any).setData({type:'Feature',geometry:{type:'LineString',coordinates:coords},properties:{}})}
     else{map.addSource('route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:coords},properties:{}}})}
     if(!map.getLayer('route-casing')) map.addLayer({id:'route-casing',type:'line',source:'route',paint:{'line-color':'#ffffff','line-width':8,'line-opacity':0.55},layout:{'line-cap':'round','line-join':'round'}})
@@ -2741,6 +2808,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   ? 'Può richiedere fino a 20-30s con video lunghi o molte foto — non chiudere questa schermata'
                   : 'Frame-by-frame rendering — qualità cinematografica garantita'}
               </p>
+            </div>
+          </div>
+
+          {/* Schermata di attesa: fatti sul percorso corrente + suggerimenti sull'app,
+              a rotazione, mentre il rendering procede in background sulla stessa mappa. */}
+          <div className="flex-1 flex items-center justify-center px-6 pointer-events-none">
+            <div key={entertainIdx} className="fade-up bg-black/55 backdrop-blur-sm rounded-2xl px-5 py-4 max-w-xs text-center">
+              <p className="text-white/85 text-sm leading-relaxed">{entertainmentContent[entertainIdx % entertainmentContent.length]}</p>
             </div>
           </div>
         </div>
