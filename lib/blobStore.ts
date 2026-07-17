@@ -7,6 +7,7 @@ import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
 import type { WeatherAtHike } from './openmeteo'
 import { computeDEP } from './stats'
+import { downsamplePolyline } from './downsamplePolyline'
 
 const ENTITY_TYPE = 'activity'
 
@@ -101,6 +102,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     tags:            a.tags,
     userNotes:       a.userNotes,
     fileName:        a.fileName,
+    routePolyline:   downsamplePolyline(a.trackPoints ?? []),
     userRating:      a.userRating,
     userRatingNote:  a.userRatingNote,
     soddisfazione:   a.soddisfazione,
@@ -123,7 +125,18 @@ function toMeta(a: StoredActivity): ActivityMeta {
 /** Returns the local list if present; only hits Supabase when there's no local copy yet (new device / cleared storage). */
 export async function getAllActivities(onRefresh?: (data: ActivityMeta[]) => void): Promise<ActivityMeta[]> {
   const local = await lsGet<ActivityMeta[]>(LS_KEYS.activitiesList)
-  if (local) return local
+  if (local) {
+    // Self-heal a known bad cache shape from before toMeta() included routePolyline: an activity
+    // cached without one can never show its map-fallback cover/thumbnail (components/routehub/
+    // CoverMap.tsx, BottomGallery.tsx's GalleryMapThumb) until it happens to be resaved or
+    // reconciled — refresh once in the background instead of leaving it stuck like that.
+    if (local.some(a => !a.routePolyline?.length)) {
+      apiFetch<ActivityMeta[]>('/api/activities')
+        .then(data => { lsSet(LS_KEYS.activitiesList, data); onRefresh?.(data) })
+        .catch(() => {})
+    }
+    return local
+  }
   try {
     const data = await apiFetch<ActivityMeta[]>('/api/activities')
     await lsSet(LS_KEYS.activitiesList, data)
