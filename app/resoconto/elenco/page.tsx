@@ -364,7 +364,7 @@ export default function ResocontoIndexPage() {
             {view === 'calendar' ? (
               <div>
                 {months.length > 1 && (
-                  <div ref={monthBarRef} className="flex gap-1 overflow-x-auto mb-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+                  <div ref={monthBarRef} className="flex gap-1 overflow-x-auto mb-4 pb-1">
                     {months.map(({ year: y, month: m }, i) => {
                       const count    = countPerMonth[i]
                       const isActive = i === safeIdx

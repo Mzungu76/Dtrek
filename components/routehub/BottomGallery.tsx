@@ -200,7 +200,7 @@ export default function BottomGallery({
   return (
     <div>
       {(hasSortData || onToggleFavoritesFilter) && (
-        <div className="flex items-center justify-center gap-1.5 overflow-x-auto px-4 mb-2 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex items-center justify-center gap-1.5 overflow-x-auto px-4 mb-2">
           {onToggleFavoritesFilter && (
             <button
               onClick={onToggleFavoritesFilter}
@@ -226,7 +226,7 @@ export default function BottomGallery({
           ))}
         </div>
       )}
-      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4 [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}>
+      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4" style={{ scrollSnapType: 'x proximity' }}>
         {onImport && (
           <button
             onClick={onImport}
@@ -249,17 +249,17 @@ export default function BottomGallery({
             }`}
             style={{ scrollSnapAlign: 'start' }}
           >
-            {mode === 'guida' ? (
-              <GalleryMapThumb polyline={item.polyline} />
-            ) : item.coverPhotoUrl ? (
+            {item.coverPhotoUrl ? (
               <>
                 <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="80px" className="object-cover" loading="lazy" />
                 <div className="absolute inset-0 bg-black/20 pointer-events-none" />
               </>
             ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-forest-800 to-forest-950 flex items-center justify-center">
-                <Mountain className="w-5 h-5 text-white/40" />
-              </div>
+              // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
+              // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
+              // CoverMap in RouteHub.tsx). Guida non ha mai coverPhotoUrl, quindi qui vede sempre
+              // la mappa, come prima.
+              <GalleryMapThumb polyline={item.polyline} />
             )}
             {hasSortData && (
               <div className="absolute top-1 left-1">

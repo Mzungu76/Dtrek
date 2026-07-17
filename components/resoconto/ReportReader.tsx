@@ -25,6 +25,7 @@ import SectionNav from '@/components/editorial/SectionNav'
 import SectionCard from '@/components/editorial/SectionCard'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import { RatingGaugeBadge } from '@/components/resoconto/RatingGaugeBadge'
 import Kicker from '@/components/ui/Kicker'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
@@ -448,8 +449,19 @@ export default function ReportReader({
         const dep = computeDEP(activity.distanceMeters, activity.elevationGain)
         const ts = data.ctsResult?.ts ?? activity.trailScore
         const scoreLabel = ts != null ? (data.ctsResult ?? ctsLabel(ts)).label : undefined
+        const rated = (activity.userRating ?? 0) > 0
         return (
           <div className="space-y-5">
+            {rated && (
+              <div className="rounded-2xl bg-gradient-to-br from-stone-900 to-stone-800 px-5 py-6 flex flex-col sm:flex-row items-center gap-4">
+                <RatingGaugeBadge value={activity.userRating!} size={96} />
+                {activity.userRatingNote && (
+                  <p className="flex-1 min-w-0 text-white/85 text-sm italic leading-relaxed text-center sm:text-left">
+                    “{activity.userRatingNote}”
+                  </p>
+                )}
+              </div>
+            )}
             {ts != null ? (
               <>
                 {/* Stessa impaginazione della "Punteggio complessivo" di Guida
