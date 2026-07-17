@@ -106,7 +106,7 @@ export default function PhotoMapSection({ trackPoints, photos, onPhotoTap, onOpe
           className="absolute inset-x-0 bottom-0 z-[1000] pb-[env(safe-area-inset-bottom,0px)]"
           style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0))' }}
         >
-          <div className="flex gap-2 overflow-x-auto px-3 pt-8 pb-3 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex gap-2 overflow-x-auto px-3 pt-8 pb-3">
             {sortedPhotos.map((ph, i) => (
               <button
                 key={ph.id}

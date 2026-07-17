@@ -54,7 +54,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           className="transition-opacity ease-out"
           style={{ opacity: visible ? 1 : 0, transitionDuration: `${visible ? FADE_IN_MS : FADE_OUT_MS}ms` }}
         >
-          <div className="pointer-events-auto mt-3 flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+          <div className="pointer-events-auto mt-3 flex items-center gap-1.5 overflow-x-auto">
             {scoreBadges}
             {statPills.map(({ icon: Icon, label, href }) => {
               const className = 'pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm'

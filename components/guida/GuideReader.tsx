@@ -952,7 +952,7 @@ export default function GuideReader({
                 <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
                   Galleria fotografica
                 </p>
-                <div className="flex gap-2.5 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}>
+                <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollSnapType: 'x proximity' }}>
                   {poiPhotos.map((p, i) => (
                     <a
                       key={`poi-${i}`}

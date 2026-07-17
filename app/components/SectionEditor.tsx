@@ -266,7 +266,7 @@ export default function SectionEditor({
           {photos.length === 0 ? (
             <p className="text-xs text-stone-400 font-body italic">Nessuna foto disponibile.</p>
           ) : (
-            <div data-hscroll className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+            <div data-hscroll className="flex gap-2 overflow-x-auto pb-1">
               {photos.map((p, i) => {
                 const isPrimary = section.photoId === p.id
                 const isExtra = extraIds.includes(p.id)
