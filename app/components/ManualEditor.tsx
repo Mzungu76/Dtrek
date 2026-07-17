@@ -20,7 +20,6 @@ interface Props {
   initialAuthoredBy: ReportAuthoredBy
   onSave: (sections: ReportSection[], authoredBy: ReportAuthoredBy) => Promise<void>
   onCancel: () => void
-  saving: boolean
 }
 
 function emptySection(order: number): ReportSection {
@@ -36,7 +35,7 @@ function emptySection(order: number): ReportSection {
 
 export default function ManualEditor({
   activityId, activity, photos, onPhotosChange,
-  initialSections, initialAuthoredBy, onSave, onCancel, saving,
+  initialSections, initialAuthoredBy, onSave, onCancel,
 }: Props) {
   const [sections,   setSections]   = useState<ReportSection[]>(initialSections)
   const [authoredBy, setAuthoredBy] = useState<ReportAuthoredBy>(initialAuthoredBy)
@@ -231,7 +230,7 @@ export default function ManualEditor({
           {sorted.length} sezioni · {withText} con testo
         </span>
         <span className="text-[11px] text-stone-400 font-body italic">
-          {saving || dirty ? 'Salvataggio…' : savedAt ? 'Salvato' : ''}
+          {dirty ? 'Salvataggio…' : savedAt ? 'Salvato' : ''}
         </span>
         <div className="flex-1" />
         <button onClick={() => setShowPreview(s => !s)}
