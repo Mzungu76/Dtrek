@@ -21,6 +21,16 @@ export interface RoutePhoto {
   updatedAt?: string
 }
 
+/** Copertina "intelligente" quando l'utente non ne ha scelta una a mano (vedi
+ *  app/resoconto/ResocontoHub.tsx e components/resoconto/ReportReader.tsx): preferisce la foto
+ *  con la didascalia più descrittiva (più lunga) invece della prima per progressione lungo il
+ *  percorso — di solito quella con più da raccontare è anche la più rappresentativa. A parità di
+ *  didascalia (es. tutte vuote) resta l'ordine per progressione già garantito dal caller. */
+export function pickBestCoverPhoto(photos: RoutePhoto[]): RoutePhoto | undefined {
+  if (photos.length === 0) return undefined
+  return [...photos].sort((a, b) => (b.caption?.trim().length ?? 0) - (a.caption?.trim().length ?? 0))[0]
+}
+
 interface LegacyPhoto {
   id: string
   dataUrl: string

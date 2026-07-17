@@ -12,6 +12,9 @@ interface Props {
   sections: NavSection[]
   activeIndex: number
   onSelect: (index: number) => void
+  /** Resoconto-only: mini-mappa di posizione sotto la lista, visibile solo dove l'aside ha spazio
+   *  (`lg+`) — vedi components/resoconto/StickyRouteMap.tsx. Assente per Guida. */
+  stickyExtra?: ReactNode
 }
 
 /**
@@ -22,7 +25,7 @@ interface Props {
  *  - `md+`: sommario laterale sticky — rail a sole icone a `md` (poco spazio orizzontale insieme
  *    al contenuto), icona + titolo da `lg`.
  */
-export default function SectionNav({ sections, activeIndex, onSelect }: Props) {
+export default function SectionNav({ sections, activeIndex, onSelect, stickyExtra }: Props) {
   return (
     <>
       {/* Mobile: barra a pillole orizzontale */}
@@ -62,6 +65,7 @@ export default function SectionNav({ sections, activeIndex, onSelect }: Props) {
             </button>
           )
         })}
+        {stickyExtra && <div className="hidden lg:block mt-2">{stickyExtra}</div>}
       </aside>
     </>
   )

@@ -18,6 +18,10 @@ interface Props {
   trackPoints: TrackPoint[]
   photos: RoutePhoto[]
   height?: string
+  /** Fired when a numbered pin is tapped — apre il lightbox sulla foto corrispondente (vedi
+   *  "Foto sulla mappa" in components/resoconto/ReportReader.tsx). Assente per l'uso come
+   *  mini-mappa puramente illustrativa. */
+  onPhotoTap?: (photoId: string) => void
 }
 
 function getPhotoLatLon(ph: RoutePhoto, pts: TrackPoint[]): { lat: number; lon: number } | null {
@@ -27,7 +31,7 @@ function getPhotoLatLon(ph: RoutePhoto, pts: TrackPoint[]): { lat: number; lon: 
   return pt.lat && pt.lon ? { lat: pt.lat, lon: pt.lon } : null
 }
 
-export default function RoutePhotoMap({ trackPoints, photos, height = '180px' }: Props) {
+export default function RoutePhotoMap({ trackPoints, photos, height = '180px', onPhotoTap }: Props) {
   const mapRef      = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
 
@@ -57,12 +61,13 @@ export default function RoutePhotoMap({ trackPoints, photos, height = '180px' }:
         const pos = getPhotoLatLon(ph, gpsPoints)
         if (!pos) return
         const icon = L.divIcon({
-          html: `<div style="background:#f59e0b;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)">${i + 1}</div>`,
+          html: `<div style="background:#f59e0b;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)${onPhotoTap ? ';cursor:pointer' : ''}">${i + 1}</div>`,
           iconSize: [20, 20], iconAnchor: [10, 10], className: '',
         })
-        L.marker([pos.lat, pos.lon], { icon })
+        const marker = L.marker([pos.lat, pos.lon], { icon })
           .addTo(map)
           .bindTooltip(`${i + 1}. ${ph.caption}`, { direction: 'top', offset: [0, -6] })
+        if (onPhotoTap) marker.on('click', () => onPhotoTap(ph.id))
       })
     })
 
