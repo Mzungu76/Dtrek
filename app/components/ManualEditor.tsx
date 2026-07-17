@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Eye, EyeOff, X, Plus, Check, Loader2 } from 'lucide-react'
 import type { StoredActivity } from '@/lib/blobStore'
-import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
+import type { RoutePhoto } from '@/lib/activityPhotos'
 import { type ReportSection, type ReportAuthoredBy } from '@/lib/reportStore'
 import SectionEditor from '@/app/components/SectionEditor'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
@@ -179,10 +179,8 @@ export default function ManualEditor({
     }
   }, [sections, activityId])
 
-  async function closePhotoManager() {
+  function closePhotoManager() {
     setShowPhotoManager(false)
-    const fresh = await fetchActivityPhotos(activityId)
-    onPhotosChange(fresh)
   }
 
   async function handleClose() {
@@ -329,9 +327,8 @@ export default function ManualEditor({
             <ActivityPhotoManager
               activityId={activityId}
               trackPoints={activity.trackPoints}
-              activityTitle={activity.title ?? undefined}
-              distanceMeters={activity.distanceMeters}
-              elevationGain={activity.elevationGain}
+              photos={photos}
+              onPhotosChange={onPhotosChange}
             />
           </div>
         </div>

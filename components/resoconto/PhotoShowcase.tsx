@@ -39,15 +39,12 @@ export default function PhotoShowcase({ photos, onPhotoClick }: Props) {
       >
         <Image src={first.url} alt={first.caption ?? ''} fill sizes="(max-width: 640px) 100vw, 50vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
       </button>
-      <div
-        className="col-span-2 sm:col-span-1 grid grid-cols-2 sm:grid-cols-1 gap-1"
-        style={{ gridTemplateRows: smalls.length > 1 ? `repeat(${Math.ceil(smalls.length / 2)}, 1fr)` : undefined }}
-      >
+      <div className="col-span-2 sm:col-span-1 grid grid-cols-2 sm:flex sm:flex-col gap-1 sm:h-80">
         {smalls.map(ph => (
           <button
             key={ph.id}
             onClick={() => onPhotoClick(ph.id)}
-            className="relative h-24 sm:h-auto overflow-hidden group"
+            className="relative h-24 sm:h-auto sm:flex-1 overflow-hidden group"
           >
             <Image src={ph.url} alt={ph.caption ?? ''} fill sizes="25vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
           </button>
