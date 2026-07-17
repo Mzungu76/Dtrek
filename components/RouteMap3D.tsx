@@ -1803,9 +1803,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current = lerpAngle(smoothBearRef.current, outroBearing, 0.04)
         smoothPitchRef.current = lerp(smoothPitchRef.current, outroPitch, 0.06)
         smoothZoomRef.current = lerp(smoothZoomRef.current, outroZoom_val, 0.06)
+        const outroElev = mapRef.current?.queryTerrainElevation?.([pts[N-1].lon!, pts[N-1].lat!]) ?? undefined
         mapRef.current?.jumpTo({
           center: [pts[N-1].lon!, pts[N-1].lat!],
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
+          ...(outroElev != null ? { elevation: outroElev } : {}),
         })
         // Photo/POI pins: fade out over first 30% of outro via symbol layer opacity.
         // setPaintProperty forces a style recalc even when the value is unchanged —
@@ -1908,9 +1910,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, introBearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, targetPitch, lerpF)
         smoothZoomRef.current  = lerp(smoothZoomRef.current, targetZoom, lerpF)
+        // Elevazione del terreno passata esplicitamente insieme al center: senza questo,
+        // MapLibre la risincronizza con un frame di ritardo rispetto a jumpTo (centerClampedToGround
+        // aggiorna transform.elevation nel render loop successivo, non nella stessa chiamata) — su
+        // un pendio ripido quel ritardo di un frame sposta visibilmente il punto "a schermo centro"
+        // rispetto al tracciato realmente drappeggiato sul terreno 3D, facendo apparire il pin
+        // fuori dal percorso proprio nei tratti in salita/discesa più marcata.
+        const introElev = mapRef.current?.queryTerrainElevation?.([pts[0].lon!, pts[0].lat!]) ?? undefined
         mapRef.current?.jumpTo({
           center: [pts[0].lon!, pts[0].lat!], bearing: smoothBearRef.current,
           pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
+          ...(introElev != null ? { elevation: introElev } : {}),
         })
       } else {
         // ── Follow: camera tracks GPS, pin moves ──────────────────────────────
@@ -1922,9 +1932,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
         smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom, 0.06)
+        // Stesso motivo del commento sopra (fase intro) — qui è il caso più visibile: center
+        // cambia a ogni frame seguendo il GPS, quindi un ritardo di un frame nell'elevazione è
+        // costante durante tutta la fase "follow", non solo un guizzo isolato.
+        const followElev = mapRef.current?.queryTerrainElevation?.([lon, lat]) ?? undefined
         mapRef.current?.jumpTo({
           center:[lon,lat], bearing:smoothBearRef.current,
           pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
+          ...(followElev != null ? { elevation: followElev } : {}),
         })
         // Progressive route reveal (every 20 frames)
         if(frameIdx%20===0&&mapRef.current){
