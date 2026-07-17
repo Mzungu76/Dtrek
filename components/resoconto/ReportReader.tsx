@@ -35,6 +35,7 @@ import PoiListWidget from '@/components/guida/widgets/PoiListWidget'
 import NaturaWidget from '@/components/guida/widgets/NaturaWidget'
 import RouteTimeline from '@/app/components/RouteTimeline'
 import ManualEditor from '@/app/components/ManualEditor'
+import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import { PhotoGallery } from '@/app/resoconto/[id]/PhotoGallery'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { PrintPhotoGrid } from '@/app/resoconto/[id]/PrintPhotoGrid'
@@ -176,6 +177,11 @@ export default function ReportReader({
   const [reportAuthoredBy, setReportAuthoredBy] = useState<ReportAuthoredBy>('ai')
   const [visibleSec,   setVisibleSec]   = useState(0)
   const sectionRefs = useRef<(HTMLElement | null)[]>([])
+  // Elementi "di passaggio" tra due SectionCard (es. la citazione a effetto) che non hanno una
+  // voce propria nel sommario ma vanno comunque osservati: senza questo, scorrendo sopra la
+  // citazione l'IntersectionObserver non intercetta nessun elemento tracciato e il sommario resta
+  // "congelato" sulla sezione precedente invece di aggiornarsi.
+  const gapRefs = useRef<{ node: HTMLElement; idx: number }[]>([])
 
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
@@ -269,20 +275,18 @@ export default function ReportReader({
   // ── Narrative chapters + fixed data sections ─────────────────────────────
   const sections = useMemo(() => parseSections(content), [content])
 
-  // "Foto sulla mappa" compare solo se almeno una foto ha una posizione nota (EXIF o posizionata
-  // a mano sulla mappa 3D) — altrimenti sarebbe una sezione vuota nel sommario.
-  const hasGeoPhotos = useMemo(() => photos.some(p => p.lat != null && p.lon != null), [photos])
-
+  // "Galleria fotografica" compare solo se ci sono foto caricate — altrimenti sarebbe una sezione
+  // vuota nel sommario (niente mappa foto, niente "le tue foto", niente gestione foto).
   const displaySections = useMemo<DisplaySection[]>(() => {
     const narrative: DisplaySection[] = sections.map((s, i) => ({
       key: `narrative-${i}`, title: s.title, narrativeIndex: i, ...narrativeStyleFor(i),
     }))
-    const fixedKeys = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).filter(k => k !== 'foto_mappa' || hasGeoPhotos)
+    const fixedKeys = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).filter(k => k !== 'galleria_foto' || photos.length > 0)
     const fixed: DisplaySection[] = fixedKeys.map(k => ({
       key: k, title: REPORT_SECTION_TITLE[k], ...REPORT_SECTION_STYLE[k],
     }))
     return [...narrative, ...fixed]
-  }, [sections, hasGeoPhotos])
+  }, [sections, photos.length])
 
   // Foto di ogni capitolo — se il racconto ha una struttura editata a mano (reportSections, in
   // sync 1:1 con i capitoli attuali) si usa la scelta esplicita dell'utente (foto principale +
@@ -322,10 +326,15 @@ export default function ReportReader({
   useEffect(() => {
     if (!displaySections.length) return
     const state = new Map<number, boolean>()
+    const resolveIdx = (target: HTMLElement) => {
+      const direct = sectionRefs.current.indexOf(target)
+      if (direct >= 0) return direct
+      return gapRefs.current.find(g => g.node === target)?.idx ?? -1
+    }
     const obs = new IntersectionObserver(
       entries => {
         for (const e of entries) {
-          const idx = sectionRefs.current.indexOf(e.target as HTMLElement)
+          const idx = resolveIdx(e.target as HTMLElement)
           if (idx >= 0) state.set(idx, e.isIntersecting)
         }
         const activeIdxs = Array.from(state.entries()).filter(([, v]) => v).map(([k]) => k)
@@ -334,6 +343,7 @@ export default function ReportReader({
       { threshold: 0, rootMargin: '-96px 0px -70% 0px' },
     )
     sectionRefs.current.forEach(el => el && obs.observe(el))
+    gapRefs.current.forEach(g => obs.observe(g.node))
     return () => obs.disconnect()
   }, [displaySections])
 
@@ -564,29 +574,26 @@ export default function ReportReader({
             onOpenMap3D={onOpenMap3D}
           />
         )
-      case 'foto_mappa': {
-        const geoPhotos = photos.filter(p => p.lat != null && p.lon != null)
+      case 'galleria_foto':
         return (
-          <div className="space-y-3">
-            <PhotoMapSection trackPoints={activity.trackPoints} photos={photos} onPhotoTap={openLightboxById} onOpenMap3D={onOpenMap3D} />
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {geoPhotos.map(ph => {
-                const globalIdx = photos.findIndex(p => p.id === ph.id)
-                return (
-                  <button
-                    key={ph.id}
-                    onClick={() => openLightboxById(ph.id)}
-                    className="flex items-center gap-2 rounded-xl bg-stone-50 border border-stone-200 px-2.5 py-2 text-left hover:bg-stone-100 transition-colors"
-                  >
-                    <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">{globalIdx + 1}</span>
-                    <span className="text-[11px] text-stone-600 truncate">{ph.caption || 'Foto'}</span>
-                  </button>
-                )
-              })}
-            </div>
+          <div className="space-y-6">
+            {hasGps && (
+              <PhotoMapSection trackPoints={activity.trackPoints} photos={photos} onPhotoTap={openLightboxById} onOpenMap3D={onOpenMap3D} />
+            )}
+            {photos.length > 0 && (
+              <>
+                <PhotoGallery photos={photos} onPhotoClick={photo => openLightboxById(photo.id)} />
+                <PrintPhotoGrid photos={photos} />
+              </>
+            )}
+            <ActivityPhotoManager
+              activityId={activity.id}
+              trackPoints={activity.trackPoints}
+              photos={photos}
+              onPhotosChange={onPhotosChange}
+            />
           </div>
         )
-      }
     }
   }
 
@@ -771,6 +778,7 @@ export default function ReportReader({
 
                 {/* ── Capitoli del racconto + sezioni dati (sempre presenti) ── */}
                 <div className="mt-2">
+                    {(gapRefs.current = []) && null}
                     {displaySections.map((s, i) => {
                       if (s.narrativeIndex != null) {
                         const section = sections[s.narrativeIndex]
@@ -794,7 +802,9 @@ export default function ReportReader({
                               twoColumns
                             />
                             {pullQuote && s.narrativeIndex === pullQuoteAfterNarrativeIndex && (
-                              <blockquote className="my-6 px-2 sm:px-8 text-center">
+                              <blockquote
+                                ref={el => { if (el) gapRefs.current.push({ node: el, idx: i }) }}
+                                className="my-6 px-2 sm:px-8 text-center">
                                 <p className="font-display italic text-[22px] sm:text-[28px] leading-snug text-stone-700">
                                   “{pullQuote}”
                                 </p>
@@ -815,13 +825,6 @@ export default function ReportReader({
                       )
                     })}
                   </div>
-
-                {hasContent && photos.length > 0 && (
-                  <PhotoGallery photos={photos} onPhotoClick={photo => openLightboxById(photo.id)} />
-                )}
-                {hasContent && photos.length > 0 && (
-                  <PrintPhotoGrid photos={photos} />
-                )}
 
                 {/* ── Pubblica PDF ──────────────────────────────────────────── */}
                 {hasContent && (

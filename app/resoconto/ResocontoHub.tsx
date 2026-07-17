@@ -34,7 +34,6 @@ import {
   Star, Car,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
-import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
 import { fetchActivityPhotos, pickBestCoverPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import { useFlora } from '@/lib/useFlora'
@@ -454,13 +453,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
         <button onClick={() => { onClose(); setShowStreetView(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
           <Images className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Foto zona (street view)</span>
         </button>
-        <div className="pt-1 mt-1 border-t border-stone-200">
-          <ActivityPhotoManager
-            activityId={activity.id} trackPoints={activity.trackPoints}
-            activityTitle={activity.title ?? undefined}
-            distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain}
-          />
-        </div>
         <div className="pt-1 mt-1 border-t border-stone-200 space-y-1">
           {photos.length > 0 && (
             <button onClick={() => { onClose(); setShowCoverPicker(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">

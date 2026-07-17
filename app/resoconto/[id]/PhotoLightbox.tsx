@@ -32,7 +32,7 @@ export function PhotoLightbox({ photos, index, onNavigate, onClose }: {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 print:hidden"
+      className="fixed inset-0 z-[95] bg-black/90 flex items-center justify-center p-4 print:hidden"
       onClick={onClose}
       onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
       onTouchEnd={e => {

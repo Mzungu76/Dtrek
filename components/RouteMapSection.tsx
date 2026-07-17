@@ -64,7 +64,7 @@ export default function RouteMapSection({
   return (
     <div className="space-y-4">
       <div
-        className={fullscreen ? 'fixed inset-0 z-[70] bg-black' : 'relative rounded-2xl overflow-hidden border'}
+        className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate rounded-2xl overflow-hidden border'}
         style={fullscreen ? undefined : { height: 260, borderColor: '#dcd8cc' }}
       >
         <MapView

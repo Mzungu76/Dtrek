@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
@@ -71,15 +71,17 @@ async function readExifGps(file: File): Promise<{ lat: number; lon: number } | n
 interface Props {
   activityId: string
   trackPoints: TrackPoint[]
-  activityTitle?: string
-  distanceMeters?: number
-  elevationGain?: number
+  /** Foto già caricate dal chiamante (ReportReader, che le usa anche per hero/mosaico/mappa/
+   *  galleria) — componente controllato: nessun fetch proprio, ogni variazione (upload,
+   *  didascalia, rimozione, riposizionamento) passa da `onPhotosChange` invece di uno stato
+   *  interno separato, altrimenti le due copie andrebbero fuori sincrono. */
+  photos: RoutePhoto[]
+  onPhotosChange: (photos: RoutePhoto[]) => void
 }
 
 export default function ActivityPhotoManager({
-  activityId, trackPoints,
+  activityId, trackPoints, photos, onPhotosChange,
 }: Props) {
-  const [photos,     setPhotos]     = useState<RoutePhoto[]>([])
   const [uploading,  setUploading]  = useState(false)
   const [editingId,  setEditingId]  = useState<string | null>(null)
   const [editCaption,setEditCaption]= useState('')
@@ -90,17 +92,11 @@ export default function ActivityPhotoManager({
 
   async function refreshPhotos() {
     try {
-      const fetched = await fetchActivityPhotos(activityId)
-      setPhotos(fetched)
+      onPhotosChange(await fetchActivityPhotos(activityId))
     } catch {
       setError('Impossibile caricare le foto di questa escursione.')
     }
   }
-
-  useEffect(() => {
-    refreshPhotos()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activityId])
 
   const pts = trackPoints.filter(p => p.lat && p.lon)
 
@@ -162,7 +158,7 @@ export default function ActivityPhotoManager({
         added.push(saved)
       }
 
-      setPhotos(prev => [...prev, ...added].sort((a, b) => a.progress - b.progress))
+      onPhotosChange([...photos, ...added].sort((a, b) => a.progress - b.progress))
 
       // Single upload → open its caption editor right away so the user writes
       // their own caption instead of keeping the filename-derived default.
@@ -181,7 +177,7 @@ export default function ActivityPhotoManager({
     setError(null)
     try {
       await removeActivityPhoto(id)
-      setPhotos(prev => prev.filter(p => p.id !== id))
+      onPhotosChange(photos.filter(p => p.id !== id))
     } catch {
       setError('Eliminazione foto non riuscita. Riprova.')
     }
@@ -200,16 +196,16 @@ export default function ActivityPhotoManager({
     if (!caption) return
     try {
       await updateActivityPhoto(id, { caption })
-      setPhotos(prev => prev.map(p => p.id === id ? { ...p, caption } : p))
+      onPhotosChange(photos.map(p => p.id === id ? { ...p, caption } : p))
     } catch {
       setError('Aggiornamento didascalia non riuscito. Riprova.')
     }
   }
 
   return (
-    <section className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+    <section className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm print:hidden">
       <div className="flex items-start justify-between mb-1">
-        <h2 className="font-display text-xl font-semibold text-stone-700">Foto del percorso</h2>
+        <h2 className="font-display text-xl font-semibold text-stone-700">Aggiungi o gestisci le foto</h2>
         {photos.length > 0 && (
           <span className="text-xs font-mono text-stone-400 mt-1">{photos.length} foto</span>
         )}
