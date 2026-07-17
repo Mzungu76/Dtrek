@@ -107,16 +107,25 @@ export default function RoutePhotoMap({ trackPoints, photos, height = '180px', o
   }, [interactive])
 
   // "Inquadra tutto il percorso" — reinquadra sulla polilinea ogni volta che il chiamante
-  // incrementa fitSignal (es. dopo aver navigato liberamente con la mappa sbloccata).
+  // incrementa fitSignal: sia per il bottone "Inquadra" esplicito, sia (PhotoMapSection) subito
+  // dopo il passaggio a schermo intero, dove è quello che tiene effettivamente aggiornate le
+  // dimensioni interne di Leaflet — il solo ResizeObserver a volte vince la corsa col reflow del
+  // contenitore e la mappa restava inquadrata (e le foto quindi "sparite") alle vecchie dimensioni
+  // strette. Chiamato due volte (subito + al prossimo frame) perché il primo invalidateSize può
+  // ancora leggere le dimensioni del contenitore un istante prima che il passaggio a
+  // `position: fixed; inset: 0` sia stato applicato dal browser.
   useEffect(() => {
     if (fitSignal == null) return
     const map = mapInstance.current
     const poly = polyRef.current
-    if (map && poly) {
+    if (!map || !poly) return
+    map.invalidateSize()
+    map.fitBounds(poly.getBounds(), { padding: [14, 14] })
+    const raf = requestAnimationFrame(() => {
       map.invalidateSize()
       map.fitBounds(poly.getBounds(), { padding: [14, 14] })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    })
+    return () => cancelAnimationFrame(raf)
   }, [fitSignal])
 
   if (!gpsPoints.length) return null

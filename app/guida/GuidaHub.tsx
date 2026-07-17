@@ -683,7 +683,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     return (
       <div className="px-4 py-4 space-y-1">
         <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className={`w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left text-sm font-medium ${textPrimary}`} />
-        <button onClick={() => setShowStreetView(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
+        <button onClick={() => { onClose(); setShowStreetView(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
           <Images className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Foto zona (street view)</span>
         </button>
         <div>

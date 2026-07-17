@@ -34,6 +34,11 @@ export default function PhotoMapSection({ trackPoints, photos, onPhotoTap, onOpe
       if (next) setLocked(false) // richiesto: lo schermo intero attiva sempre la navigazione
       return next
     })
+    // A differenza di MapView (usata da RouteMapSection), RoutePhotoMap è un Leaflet "grezzo": il
+    // solo ResizeObserver non basta a farla ridisegnare in tempo quando il contenitore passa da
+    // ~360px allo schermo intero — senza questo la mappa restava con le dimensioni/l'inquadratura
+    // vecchie e le foto finivano fuori dall'area visibile (sembravano sparite).
+    setFitTick(t => t + 1)
   }
 
   return (
