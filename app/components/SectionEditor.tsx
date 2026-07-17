@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { GripVertical, ChevronUp, ChevronDown, X, Sparkles, Loader2 } from 'lucide-react'
+import { GripVertical, ChevronUp, ChevronDown, X, Sparkles, Loader2, Star } from 'lucide-react'
 import type { RoutePhoto } from '@/lib/activityPhotos'
 import type { ReportSection } from '@/lib/reportStore'
 
@@ -16,6 +16,14 @@ interface Props {
   onMoveDown: () => void
   onAiAssist: (sectionId: string, instruction: string) => void
   aiAssistLoading: boolean
+  /** Drag-and-drop riordino — la maniglia GripVertical è draggable, il resto della card riceve
+   *  gli eventi enter/over per calcolare dove verrebbe inserita. Lo stato del trascinamento vive
+   *  nel genitore (ManualEditor), che possiede l'intero array delle sezioni. */
+  onDragStart: () => void
+  onDragEnter: () => void
+  onDragEnd: () => void
+  isDragging: boolean
+  isDragOver: boolean
 }
 
 const PLACEHOLDERS: Record<string, string> = {
@@ -56,6 +64,7 @@ function insertAtCursor(
 export default function SectionEditor({
   section, sectionIndex, totalSections, photos,
   onChange, onDelete, onMoveUp, onMoveDown, onAiAssist, aiAssistLoading,
+  onDragStart, onDragEnter, onDragEnd, isDragging, isDragOver,
 }: Props) {
   const textareaRef   = useRef<HTMLTextAreaElement>(null)
   const [editingTitle, setEditingTitle]   = useState(false)
@@ -63,7 +72,6 @@ export default function SectionEditor({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showAi,       setShowAi]         = useState(false)
   const [customInstruction, setCustomInstruction] = useState('')
-  const [showPhotoGrid, setShowPhotoGrid] = useState(section.photoId === null)
 
   useEffect(() => {
     const ta = textareaRef.current
@@ -72,7 +80,8 @@ export default function SectionEditor({
     ta.style.height = `${ta.scrollHeight}px`
   }, [section.body])
 
-  const photo = photos.find(p => p.id === section.photoId)
+  const extraIds = section.extraPhotoIds ?? []
+  const primaryPhoto = photos.find(p => p.id === section.photoId)
 
   function commitTitle() {
     const t = titleDraft.trim()
@@ -81,11 +90,48 @@ export default function SectionEditor({
     setEditingTitle(false)
   }
 
+  // Tap: aggiunge/rimuove la foto dalla sezione (principale se non ce n'è ancora una, altrimenti
+  // extra) — la stella promuove un'extra a principale, scambiando il posto con quella corrente.
+  function toggleIncluded(photoId: string) {
+    if (section.photoId === photoId) {
+      const [firstExtra, ...rest] = extraIds
+      onChange({ ...section, photoId: firstExtra ?? null, extraPhotoIds: rest })
+    } else if (extraIds.includes(photoId)) {
+      onChange({ ...section, extraPhotoIds: extraIds.filter(id => id !== photoId) })
+    } else if (!section.photoId) {
+      onChange({ ...section, photoId })
+    } else {
+      onChange({ ...section, extraPhotoIds: [...extraIds, photoId] })
+    }
+  }
+
+  function makePrimary(photoId: string) {
+    if (section.photoId === photoId) return
+    const prevPrimary = section.photoId
+    const nextExtras = extraIds.filter(id => id !== photoId)
+    onChange({ ...section, photoId, extraPhotoIds: prevPrimary ? [prevPrimary, ...nextExtras] : nextExtras })
+  }
+
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm mb-4 overflow-hidden">
+    <div
+      onDragEnter={onDragEnter}
+      onDragOver={e => e.preventDefault()}
+      onDrop={e => e.preventDefault()}
+      className={`bg-white rounded-2xl border shadow-sm mb-4 overflow-hidden transition-all ${
+        isDragging ? 'opacity-40' : isDragOver ? 'border-forest-400 ring-2 ring-forest-200' : 'border-stone-200'
+      }`}
+    >
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-stone-50 border-b border-stone-200">
-        <GripVertical className="w-4 h-4 text-stone-300 shrink-0" />
+        <span
+          draggable
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          title="Trascina per riordinare"
+          className="cursor-grab active:cursor-grabbing p-1 -m-1 rounded touch-none"
+        >
+          <GripVertical className="w-4 h-4 text-stone-300 shrink-0" />
+        </span>
         <span className="text-[10px] font-display font-bold uppercase tracking-wide text-stone-400 shrink-0">
           Sezione {sectionIndex + 1}
         </span>
@@ -106,11 +152,11 @@ export default function SectionEditor({
         )}
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={onMoveUp} disabled={sectionIndex === 0}
-            className="p-1 rounded hover:bg-stone-200 disabled:opacity-30 transition-colors">
+            className="p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 transition-colors">
             <ChevronUp className="w-3.5 h-3.5 text-stone-500" />
           </button>
           <button onClick={onMoveDown} disabled={sectionIndex === totalSections - 1}
-            className="p-1 rounded hover:bg-stone-200 disabled:opacity-30 transition-colors">
+            className="p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 transition-colors">
             <ChevronDown className="w-3.5 h-3.5 text-stone-500" />
           </button>
           {confirmDelete ? (
@@ -121,7 +167,7 @@ export default function SectionEditor({
             </span>
           ) : (
             <button onClick={() => setConfirmDelete(true)}
-              className="p-1 rounded hover:bg-red-100 transition-colors">
+              className="p-1.5 rounded hover:bg-red-100 transition-colors">
               <X className="w-3.5 h-3.5 text-stone-400 hover:text-red-600" />
             </button>
           )}
@@ -132,7 +178,7 @@ export default function SectionEditor({
       <div className="flex flex-col md:flex-row gap-4 p-4">
         {/* Left: text editor */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1 mb-2">
+          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
             {[
               { label: '##',  title: 'Sottosezione', before: '\n## ', after: '\n', ph: 'Titolo' },
               { label: 'B',   title: 'Grassetto',     before: '**',   after: '**', ph: 'testo in grassetto' },
@@ -142,7 +188,7 @@ export default function SectionEditor({
             ].map(btn => (
               <button key={btn.label} title={btn.title}
                 onClick={() => insertAtCursor(textareaRef, section.body, body => onChange({ ...section, body }), btn.before, btn.after, btn.ph)}
-                className="px-2 py-1 rounded border border-stone-200 text-xs font-mono text-stone-500 hover:bg-stone-100 transition-colors">
+                className="min-w-[34px] px-2.5 py-2 rounded-lg border border-stone-200 text-sm font-mono font-semibold text-stone-500 hover:bg-stone-100 hover:border-stone-300 active:scale-95 transition-all">
                 {btn.label}
               </button>
             ))}
@@ -209,58 +255,71 @@ export default function SectionEditor({
         </div>
 
         {/* Right: photo panel */}
-        <div className="w-full md:w-64 shrink-0">
-          <p className="font-display text-xs font-bold uppercase tracking-wide text-stone-500 mb-2 flex items-center gap-1.5">
-            Foto associata
+        <div className="w-full md:w-72 shrink-0">
+          <p className="font-display text-xs font-bold uppercase tracking-wide text-stone-500 mb-2">
+            Foto della sezione
+          </p>
+          <p className="text-[10.5px] text-stone-400 italic mb-2 leading-snug">
+            Tocca per aggiungere/togliere · la stella la rende la foto principale
           </p>
 
-          {!photo || showPhotoGrid ? (
-            <div>
-              {!photo && (
-                <p className="text-xs text-stone-400 font-body italic mb-2">
-                  Nessuna foto associata a questa sezione
-                </p>
-              )}
-              <div className="grid grid-cols-5 gap-1.5 max-h-32 overflow-y-auto">
-                {photos.map((p, i) => (
-                  <button key={p.id}
-                    onClick={() => { onChange({ ...section, photoId: p.id }); setShowPhotoGrid(false) }}
-                    className="relative w-12 h-12 rounded-md overflow-hidden border border-stone-200 hover:border-forest-400 transition-colors">
-                    <img src={p.url} alt={p.caption} className="w-full h-full object-cover" />
-                    <span className="absolute top-0 left-0 w-3.5 h-3.5 bg-amber-500 text-white text-[7px] font-bold flex items-center justify-center rounded-br">
-                      {i + 1}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent('dtrek:open-photo-manager'))}
-                className="mt-2 text-xs text-forest-600 hover:underline">
-                + Carica nuova foto
-              </button>
-            </div>
+          {photos.length === 0 ? (
+            <p className="text-xs text-stone-400 font-body italic">Nessuna foto disponibile.</p>
           ) : (
-            <div>
-              <div className="w-full aspect-[4/3] rounded-xl overflow-hidden">
-                <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover" />
-              </div>
-              {photo.caption && (
-                <p className="font-body text-xs italic text-stone-500 mt-1">{photo.caption}</p>
-              )}
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-[10px] text-stone-400">📍 {progressLabel(photo)}</span>
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <button onClick={() => setShowPhotoGrid(true)}
-                  className="text-xs text-stone-500 hover:underline">Cambia</button>
-                {!photo.hasExifGps && (
-                  <button
-                    onClick={() => window.dispatchEvent(new CustomEvent('dtrek:open-photo-manager'))}
-                    className="text-xs text-forest-600 hover:underline">Riposiziona</button>
-                )}
-              </div>
+            <div data-hscroll className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+              {photos.map((p, i) => {
+                const isPrimary = section.photoId === p.id
+                const isExtra = extraIds.includes(p.id)
+                const included = isPrimary || isExtra
+                return (
+                  <div key={p.id} className="relative shrink-0">
+                    <button
+                      onClick={() => toggleIncluded(p.id)}
+                      className={`relative block w-20 h-20 rounded-xl overflow-hidden border-2 transition-colors ${
+                        isPrimary ? 'border-forest-500' : isExtra ? 'border-forest-300' : 'border-stone-200 hover:border-stone-300'
+                      }`}
+                    >
+                      <img src={p.url} alt={p.caption} className="w-full h-full object-cover" />
+                      {included && (
+                        <div className="absolute inset-0 bg-forest-900/10" />
+                      )}
+                      <span className="absolute bottom-0.5 left-0.5 w-4 h-4 bg-black/50 text-white text-[8px] font-bold flex items-center justify-center rounded-full">
+                        {i + 1}
+                      </span>
+                    </button>
+                    {included && (
+                      <button
+                        onClick={() => makePrimary(p.id)}
+                        title={isPrimary ? 'Foto principale' : 'Rendi principale'}
+                        className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm transition-colors ${
+                          isPrimary ? 'bg-amber-400 text-white' : 'bg-white text-stone-400 hover:text-amber-500'
+                        }`}
+                      >
+                        <Star className="w-2.5 h-2.5" fill={isPrimary ? 'currentColor' : 'none'} />
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
+
+          {primaryPhoto && (
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <span className="text-[10px] text-stone-400 truncate">📍 {progressLabel(primaryPhoto)}</span>
+              {!primaryPhoto.hasExifGps && (
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('dtrek:open-photo-manager'))}
+                  className="text-[11px] text-forest-600 hover:underline shrink-0">Riposiziona</button>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('dtrek:open-photo-manager'))}
+            className="mt-2 text-xs text-forest-600 hover:underline">
+            + Carica nuova foto
+          </button>
         </div>
       </div>
     </div>

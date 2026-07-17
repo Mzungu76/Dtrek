@@ -6,6 +6,10 @@ export interface NavSection {
   title: string
   icon: ReactNode
   color: string
+  /** Editor manuale (Resoconto): pallino discreto per le sezioni ancora senza testo, per capire a
+   *  colpo d'occhio cosa manca da scrivere senza scorrere tutta la pagina. Assente in lettura
+   *  (Guida non ha mai sezioni "vuote" da segnalare così). */
+  empty?: boolean
 }
 
 interface Props {
@@ -44,6 +48,7 @@ export default function SectionNav({ sections, activeIndex, onSelect, stickyExtr
           >
             <span className="[&>svg]:w-3 [&>svg]:h-3">{s.icon}</span>
             <span>{s.title.split(' ').slice(0, 3).join(' ')}</span>
+            {s.empty && <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0" />}
           </button>
         ))}
       </div>
@@ -60,8 +65,17 @@ export default function SectionNav({ sections, activeIndex, onSelect, stickyExtr
               className="flex items-center md:justify-center lg:justify-start gap-2.5 px-2.5 lg:px-3.5 py-2.5 rounded-xl text-[13px] font-semibold transition-all text-left"
               style={active ? { background: s.color, color: 'white' } : { background: 'transparent', color: '#8a7f6e' }}
             >
-              <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0">{s.icon}</span>
-              <span className="hidden lg:inline truncate">{s.title}</span>
+              <span className="relative [&>svg]:w-4 [&>svg]:h-4 shrink-0">
+                {s.icon}
+                {s.empty && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border"
+                    style={{ background: active ? 'white' : '#c4bfb2', borderColor: active ? s.color : 'transparent' }}
+                  />
+                )}
+              </span>
+              <span className="hidden lg:inline truncate flex-1">{s.title}</span>
+              {s.empty && <span className="hidden lg:inline w-1.5 h-1.5 rounded-full shrink-0" style={{ background: active ? 'white' : '#c4bfb2' }} />}
             </button>
           )
         })}

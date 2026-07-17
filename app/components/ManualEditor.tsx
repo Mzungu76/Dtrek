@@ -1,13 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Eye, EyeOff, X, Plus, Check, Loader2 } from 'lucide-react'
 import type { StoredActivity } from '@/lib/blobStore'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
 import { type ReportSection, type ReportAuthoredBy } from '@/lib/reportStore'
 import SectionEditor from '@/app/components/SectionEditor'
-import SectionCard from '@/app/components/ResocontoSectionCard'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
+import SectionNav from '@/components/editorial/SectionNav'
+import SectionCard from '@/components/editorial/SectionCard'
+import { narrativeStyleFor } from '@/components/resoconto/sectionStyle'
 
 interface Props {
   activityId: string
@@ -27,6 +29,7 @@ function emptySection(order: number): ReportSection {
     title: 'Nuova sezione',
     body: '',
     photoId: null,
+    extraPhotoIds: [],
     order,
   }
 }
@@ -44,6 +47,14 @@ export default function ManualEditor({
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Drag-and-drop riordino — vedi la maniglia GripVertical in SectionEditor.tsx.
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  // Indice sezioni (sommario laterale) — stessa componente della lettura finale.
+  const [visibleSec, setVisibleSec] = useState(0)
+  const sectionRefs = useRef<(HTMLDivElement | null)[]>([])
 
   // Mirrors latest state into a ref so the unmount-flush effect (which only
   // runs once, on mount/unmount) can read up-to-date values without forcing
@@ -104,6 +115,20 @@ export default function ManualEditor({
       return [...sorted]
     })
     setDirty(true)
+  }
+
+  function handleDragEnd() {
+    if (dragIndex != null && dragOverIndex != null && dragIndex !== dragOverIndex) {
+      setSections(prev => {
+        const sorted = [...prev].sort((a, b) => a.order - b.order)
+        const [moved] = sorted.splice(dragIndex, 1)
+        sorted.splice(dragOverIndex, 0, moved)
+        return sorted.map((s, i) => ({ ...s, order: i }))
+      })
+      setDirty(true)
+    }
+    setDragIndex(null)
+    setDragOverIndex(null)
   }
 
   function addSection() {
@@ -170,6 +195,34 @@ export default function ManualEditor({
   const sorted = [...sections].sort((a, b) => a.order - b.order)
   const withText = sorted.filter(s => s.body.trim().length > 0).length
 
+  const navSections = useMemo(
+    () => sorted.map((s, i) => ({ key: s.id, title: s.title, empty: !s.body.trim(), ...narrativeStyleFor(i) })),
+    [sorted],
+  )
+
+  useEffect(() => {
+    if (!sorted.length) return
+    const state = new Map<number, boolean>()
+    const obs = new IntersectionObserver(
+      entries => {
+        for (const e of entries) {
+          const idx = sectionRefs.current.indexOf(e.target as HTMLDivElement)
+          if (idx >= 0) state.set(idx, e.isIntersecting)
+        }
+        const activeIdxs = Array.from(state.entries()).filter(([, v]) => v).map(([k]) => k)
+        if (activeIdxs.length > 0) setVisibleSec(Math.max(...activeIdxs))
+      },
+      { threshold: 0, rootMargin: '-96px 0px -70% 0px' },
+    )
+    sectionRefs.current.forEach(el => el && obs.observe(el))
+    return () => obs.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted.length])
+
+  function scrollToSection(idx: number) {
+    sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div className="print:hidden">
       {/* ── Sticky toolbar ── */}
@@ -192,28 +245,42 @@ export default function ManualEditor({
         </button>
       </div>
 
-      {sorted.map((section, i) => (
-        <SectionEditor
-          key={section.id}
-          section={section}
-          sectionIndex={i}
-          totalSections={sorted.length}
-          photos={photos}
-          onChange={updateSection}
-          onDelete={() => deleteSection(section.id)}
-          onMoveUp={() => moveSection(section.id, -1)}
-          onMoveDown={() => moveSection(section.id, 1)}
-          onAiAssist={handleAiAssist}
-          aiAssistLoading={aiAssistLoadingId === section.id}
-        />
-      ))}
+      <div className="md:grid md:grid-cols-[auto_1fr] md:gap-6 md:items-start">
+        {navSections.length > 1 && (
+          <SectionNav sections={navSections} activeIndex={visibleSec} onSelect={scrollToSection} />
+        )}
 
-      <button onClick={addSection}
-        className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl border-2 border-dashed border-stone-200 text-xs font-display font-bold uppercase tracking-wide text-stone-400 hover:border-forest-300 hover:text-forest-600 transition-colors mb-4">
-        <Plus className="w-4 h-4" /> Aggiungi sezione
-      </button>
+        <div className="min-w-0">
+          {sorted.map((section, i) => (
+            <div key={section.id} ref={el => { sectionRefs.current[i] = el }}>
+              <SectionEditor
+                section={section}
+                sectionIndex={i}
+                totalSections={sorted.length}
+                photos={photos}
+                onChange={updateSection}
+                onDelete={() => deleteSection(section.id)}
+                onMoveUp={() => moveSection(section.id, -1)}
+                onMoveDown={() => moveSection(section.id, 1)}
+                onAiAssist={handleAiAssist}
+                aiAssistLoading={aiAssistLoadingId === section.id}
+                onDragStart={() => setDragIndex(i)}
+                onDragEnter={() => { if (dragIndex != null && dragIndex !== i) setDragOverIndex(i) }}
+                onDragEnd={handleDragEnd}
+                isDragging={dragIndex === i}
+                isDragOver={dragOverIndex === i}
+              />
+            </div>
+          ))}
 
-      {/* ── Preview modal ── */}
+          <button onClick={addSection}
+            className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl border-2 border-dashed border-stone-200 text-xs font-display font-bold uppercase tracking-wide text-stone-400 hover:border-forest-300 hover:text-forest-600 transition-colors mb-4">
+            <Plus className="w-4 h-4" /> Aggiungi sezione
+          </button>
+        </div>
+      </div>
+
+      {/* ── Preview modal — stessa resa (SectionCard/MagazineBody) della lettura finale ── */}
       {showPreview && (
         <div className="fixed inset-0 z-30 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowPreview(false)}>
           <div className="bg-stone-50 rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
@@ -224,10 +291,26 @@ export default function ManualEditor({
               </button>
             </div>
             {sorted.map((section, i) => {
-              const photo = photos.find(p => p.id === section.photoId)
-              const photoIndex = photo ? photos.findIndex(p => p.id === photo.id) + 1 : undefined
+              const { icon, color } = narrativeStyleFor(i)
+              const primary = photos.find(p => p.id === section.photoId)
+              const primaryIdx = primary ? photos.findIndex(p => p.id === primary.id) : -1
+              const extraPhotos = (section.extraPhotoIds ?? [])
+                .map(id => photos.find(p => p.id === id))
+                .filter((p): p is RoutePhoto => !!p)
+                .map(p => ({ url: p.url, caption: p.caption }))
               return (
-                <SectionCard key={section.id} section={section} index={i} photo={photo} photoIndex={photoIndex} />
+                <SectionCard
+                  key={section.id}
+                  title={section.title}
+                  icon={icon}
+                  color={color}
+                  body={section.body}
+                  sectionPhoto={primary?.url}
+                  photoCaption={primary ? `${primaryIdx + 1}. ${primary.caption}` : undefined}
+                  photoIndexBadge={primary ? primaryIdx + 1 : undefined}
+                  extraPhotos={extraPhotos}
+                  twoColumns
+                />
               )
             })}
           </div>
