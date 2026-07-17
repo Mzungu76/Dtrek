@@ -371,10 +371,11 @@ export default function ReportReader({
     return [heroPhoto, ...rest].slice(0, 4).map(p => ({ id: p.id, url: p.url }))
   }, [photos, heroPhoto])
 
-  // Mosaico "protagonista" — le foto restanti, senza ripetere quelle già nel carosello hero.
+  // Mosaico "protagonista" — le foto restanti, senza ripetere quelle già nel carosello hero. Solo
+  // 4 (1 grande + 3 piccole): di più affollava la colonna dei piccoli riquadri su desktop.
   const showcasePhotos = useMemo(() => {
     const heroIds = new Set(heroCarouselPhotos.map(p => p.id))
-    return photos.filter(p => !heroIds.has(p.id)).slice(0, 5)
+    return photos.filter(p => !heroIds.has(p.id)).slice(0, 4)
   }, [photos, heroCarouselPhotos])
 
   const openLightboxById = (photoId: string) => {
