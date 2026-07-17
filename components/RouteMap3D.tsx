@@ -684,6 +684,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Post-production
   const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
   const [routePhotos,     setRoutePhotos]    = useState<RoutePhoto[]>([])
+  // Foto escluse dal video (di default nessuna, cioè tutte incluse) — non persistito: è una
+  // preferenza per-generazione, come videoPreset/videoDuration/ecc., non un dato della foto stessa.
+  const [videoExcludedPhotoIds, setVideoExcludedPhotoIds] = useState<Set<string>>(new Set())
+  const togglePhotoIncluded = (id: string) => setVideoExcludedPhotoIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
   const [placingPhoto,    setPlacingPhoto]   = useState<{id:string;step:PlacingStep}|null>(null)
   const placingPhotoRef = useRef<{id:string;step:PlacingStep}|null>(null)
   useEffect(()=>{ placingPhotoRef.current=placingPhoto },[placingPhoto])
@@ -1531,6 +1539,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
     const sortedPhotos = [...routePhotos]
+      .filter(ph => !videoExcludedPhotoIds.has(ph.id))
       .sort((a,b)=>a.progress-b.progress)
       .filter(ph => photoImgsRef.current.has(ph.id))
       .map(ph => ({photo:ph, img:photoImgsRef.current.get(ph.id)!}))
@@ -2030,7 +2039,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2397,14 +2406,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 ))}
               </div>
               {(()=>{
+                const includedPhotoCount = routePhotos.filter(p=>!videoExcludedPhotoIds.has(p.id)).length
                 const introOutro = Math.round(Math.max(2, videoDuration*0.08) + Math.max(3, videoDuration*0.17))
-                const photoTotal = Math.round(routePhotos.length*photoDurationSec)
+                const photoTotal = Math.round(includedPhotoCount*photoDurationSec)
                 const est = videoDuration + photoTotal + introOutro
                 const over = est > 60
                 return (
                   <div className={`mt-2 rounded-xl px-3.5 py-2.5 ${over ? 'bg-amber-500/15 border border-amber-500/30' : 'bg-white/5'}`}>
                     <p className={`text-xs font-semibold ${over ? 'text-amber-300' : 'text-white/70'}`}>
-                      Percorso {videoDuration}s{routePhotos.length>0?` + foto ${routePhotos.length}×${photoDurationSec.toFixed(1)}s`:''} + intro/outro ~{introOutro}s = <span className="font-bold">~{est}s totali</span>
+                      Percorso {videoDuration}s{includedPhotoCount>0?` + foto ${includedPhotoCount}×${photoDurationSec.toFixed(1)}s`:''} + intro/outro ~{introOutro}s = <span className="font-bold">~{est}s totali</span>
                     </p>
                     <p className="text-white/35 text-[11px] mt-1 leading-relaxed">
                       Questa durata è indicativa: il percorso viene sempre mostrato per intero, le foto aggiungono tempo oltre a quello impostato qui.
@@ -2603,8 +2613,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
               ):(
                 <div className="space-y-2.5">
-                  {routePhotos.map(photo=>(
-                    <div key={photo.id} className="bg-white/7 rounded-xl p-2.5">
+                  {routePhotos.map(photo=>{
+                    const included = !videoExcludedPhotoIds.has(photo.id)
+                    return (
+                    <div key={photo.id} className={`bg-white/7 rounded-xl p-2.5 transition-opacity ${included?'':'opacity-45'}`}>
                       <div className="flex items-start gap-3">
                         <div className="relative shrink-0">
                           <img src={photo.url} alt="" className="w-14 h-14 rounded-lg object-cover"/>
@@ -2613,6 +2625,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                               <Check className="w-2.5 h-2.5 text-white"/>
                             </span>
                           )}
+                          <button onClick={()=>togglePhotoIncluded(photo.id)}
+                            title={included?'Escludi dal video':'Includi nel video'}
+                            className={`absolute -top-1 -left-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white/80 transition-colors ${included?'bg-blue-500':'bg-white/20'}`}>
+                            {included&&<Check className="w-3 h-3 text-white"/>}
+                          </button>
                         </div>
                         <div className="flex-1 min-w-0">
                           {/* Caption input */}
@@ -2645,6 +2662,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                             <button onClick={()=>{
                               const id=photo.id
                               setRoutePhotos(prev=>prev.filter(p=>p.id!==id));photoImgsRef.current.delete(id)
+                              setVideoExcludedPhotoIds(prev=>{ if(!prev.has(id)) return prev; const next=new Set(prev); next.delete(id); return next })
                               removeActivityPhoto(id).catch(()=>{
                                 setShareToast('Errore: eliminazione foto non riuscita'); setTimeout(()=>setShareToast(''),3000)
                               })
@@ -2656,7 +2674,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>
