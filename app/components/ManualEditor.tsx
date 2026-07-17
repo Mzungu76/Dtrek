@@ -47,9 +47,12 @@ export default function ManualEditor({
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Drag-and-drop riordino — vedi la maniglia GripVertical in SectionEditor.tsx.
+  // Riordino via Pointer Events — vedi la maniglia GripVertical in SectionEditor.tsx. Non usiamo
+  // il drag-and-drop nativo HTML5 (draggable/onDragStart) perché su touch non parte proprio: i
+  // Pointer Events unificano mouse e touch, quindi la stessa maniglia funziona ovunque.
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const dragOverIndexRef = useRef<number | null>(null)
 
   // Indice sezioni (sommario laterale) — stessa componente della lettura finale.
   const [visibleSec, setVisibleSec] = useState(0)
@@ -116,19 +119,53 @@ export default function ManualEditor({
     setDirty(true)
   }
 
-  function handleDragEnd() {
-    if (dragIndex != null && dragOverIndex != null && dragIndex !== dragOverIndex) {
-      setSections(prev => {
-        const sorted = [...prev].sort((a, b) => a.order - b.order)
-        const [moved] = sorted.splice(dragIndex, 1)
-        sorted.splice(dragOverIndex, 0, moved)
-        return sorted.map((s, i) => ({ ...s, order: i }))
+  // Attivo solo mentre si trascina (dragIndex != null): ascolta il puntatore su tutta la finestra
+  // così il riordino segue il dito/mouse anche fuori dai confini della card di partenza, e calcola
+  // la sezione più vicina in base alla posizione verticale invece di aspettare eventi di enter/over
+  // per-elemento (che il drag-and-drop nativo forniva gratis, ma i Pointer Events no).
+  useEffect(() => {
+    if (dragIndex == null) return
+    dragOverIndexRef.current = null
+    const prevUserSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+
+    function handleMove(e: PointerEvent) {
+      let closestIdx: number | null = null
+      let closestDist = Infinity
+      sectionRefs.current.forEach((el, i) => {
+        if (!el) return
+        const rect = el.getBoundingClientRect()
+        const dist = Math.abs(e.clientY - (rect.top + rect.height / 2))
+        if (dist < closestDist) { closestDist = dist; closestIdx = i }
       })
-      setDirty(true)
+      dragOverIndexRef.current = closestIdx
+      setDragOverIndex(closestIdx)
     }
-    setDragIndex(null)
-    setDragOverIndex(null)
-  }
+    function handleUp() {
+      const to = dragOverIndexRef.current
+      if (dragIndex != null && to != null && dragIndex !== to) {
+        setSections(prev => {
+          const sorted = [...prev].sort((a, b) => a.order - b.order)
+          const [moved] = sorted.splice(dragIndex, 1)
+          sorted.splice(to, 0, moved)
+          return sorted.map((s, i) => ({ ...s, order: i }))
+        })
+        setDirty(true)
+      }
+      setDragIndex(null)
+      setDragOverIndex(null)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      document.body.style.userSelect = prevUserSelect
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [dragIndex])
 
   function addSection() {
     setSections(prev => [...prev, emptySection(prev.length)])
@@ -220,6 +257,35 @@ export default function ManualEditor({
     sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  // Stessa resa (SectionCard/MagazineBody) della lettura finale — usata sia nel pannello
+  // affiancato (xl+, live mentre si scrive) sia nel modal (schermi più piccoli, dove non c'è
+  // spazio per una terza colonna).
+  function renderPreviewCards() {
+    return sorted.map((section, i) => {
+      const { icon, color } = narrativeStyleFor(i)
+      const primary = photos.find(p => p.id === section.photoId)
+      const primaryIdx = primary ? photos.findIndex(p => p.id === primary.id) : -1
+      const extraPhotos = (section.extraPhotoIds ?? [])
+        .map(id => photos.find(p => p.id === id))
+        .filter((p): p is RoutePhoto => !!p)
+        .map(p => ({ url: p.url, caption: p.caption }))
+      return (
+        <SectionCard
+          key={section.id}
+          title={section.title}
+          icon={icon}
+          color={color}
+          body={section.body}
+          sectionPhoto={primary?.url}
+          photoCaption={primary ? `${primaryIdx + 1}. ${primary.caption}` : undefined}
+          photoIndexBadge={primary ? primaryIdx + 1 : undefined}
+          extraPhotos={extraPhotos}
+          twoColumns
+        />
+      )
+    })
+  }
+
   return (
     <div className="print:hidden">
       {/* ── Sticky toolbar ── */}
@@ -242,7 +308,7 @@ export default function ManualEditor({
         </button>
       </div>
 
-      <div className="md:grid md:grid-cols-[auto_1fr] md:gap-6 md:items-start">
+      <div className={`md:grid md:grid-cols-[auto_1fr] md:gap-6 md:items-start ${showPreview ? 'xl:grid-cols-[auto_1fr_1fr]' : ''}`}>
         {navSections.length > 1 && (
           <SectionNav sections={navSections} activeIndex={visibleSec} onSelect={scrollToSection} />
         )}
@@ -261,9 +327,7 @@ export default function ManualEditor({
                 onMoveDown={() => moveSection(section.id, 1)}
                 onAiAssist={handleAiAssist}
                 aiAssistLoading={aiAssistLoadingId === section.id}
-                onDragStart={() => setDragIndex(i)}
-                onDragEnter={() => { if (dragIndex != null && dragIndex !== i) setDragOverIndex(i) }}
-                onDragEnd={handleDragEnd}
+                onDragHandleDown={() => setDragIndex(i)}
                 isDragging={dragIndex === i}
                 isDragOver={dragOverIndex === i}
               />
@@ -275,11 +339,22 @@ export default function ManualEditor({
             <Plus className="w-4 h-4" /> Aggiungi sezione
           </button>
         </div>
+
+        {/* ── Anteprima live affiancata — solo xl+, dove c'è spazio per una terza colonna; sotto
+             xl resta il modal qui sotto, che copre l'intero schermo invece di stringere l'editor. */}
+        {showPreview && (
+          <div className="hidden xl:block xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto xl:pl-2">
+            <h3 className="font-display font-bold text-xs uppercase tracking-wide text-stone-500 mb-3">
+              Anteprima live
+            </h3>
+            {renderPreviewCards()}
+          </div>
+        )}
       </div>
 
-      {/* ── Preview modal — stessa resa (SectionCard/MagazineBody) della lettura finale ── */}
+      {/* ── Preview modal — stessa resa del pannello affiancato, per schermi sotto xl ── */}
       {showPreview && (
-        <div className="fixed inset-0 z-30 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowPreview(false)}>
+        <div className="fixed inset-0 z-30 bg-black/50 flex items-center justify-center p-4 xl:hidden" onClick={() => setShowPreview(false)}>
           <div className="bg-stone-50 rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-bold text-stone-700">Anteprima</h3>
@@ -287,29 +362,7 @@ export default function ManualEditor({
                 <X className="w-4 h-4 text-stone-500" />
               </button>
             </div>
-            {sorted.map((section, i) => {
-              const { icon, color } = narrativeStyleFor(i)
-              const primary = photos.find(p => p.id === section.photoId)
-              const primaryIdx = primary ? photos.findIndex(p => p.id === primary.id) : -1
-              const extraPhotos = (section.extraPhotoIds ?? [])
-                .map(id => photos.find(p => p.id === id))
-                .filter((p): p is RoutePhoto => !!p)
-                .map(p => ({ url: p.url, caption: p.caption }))
-              return (
-                <SectionCard
-                  key={section.id}
-                  title={section.title}
-                  icon={icon}
-                  color={color}
-                  body={section.body}
-                  sectionPhoto={primary?.url}
-                  photoCaption={primary ? `${primaryIdx + 1}. ${primary.caption}` : undefined}
-                  photoIndexBadge={primary ? primaryIdx + 1 : undefined}
-                  extraPhotos={extraPhotos}
-                  twoColumns
-                />
-              )
-            })}
+            {renderPreviewCards()}
           </div>
         </div>
       )}

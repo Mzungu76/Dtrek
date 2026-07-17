@@ -16,12 +16,11 @@ interface Props {
   onMoveDown: () => void
   onAiAssist: (sectionId: string, instruction: string) => void
   aiAssistLoading: boolean
-  /** Drag-and-drop riordino — la maniglia GripVertical è draggable, il resto della card riceve
-   *  gli eventi enter/over per calcolare dove verrebbe inserita. Lo stato del trascinamento vive
-   *  nel genitore (ManualEditor), che possiede l'intero array delle sezioni. */
-  onDragStart: () => void
-  onDragEnter: () => void
-  onDragEnd: () => void
+  /** Riordino via Pointer Events (non drag-and-drop nativo HTML5, che su touch non parte affatto):
+   *  il pointerdown sulla maniglia avvia il trascinamento, il resto della logica (calcolo di dove
+   *  verrebbe inserita, in base alla posizione del puntatore) vive nel genitore (ManualEditor), che
+   *  possiede l'intero array delle sezioni e ascolta pointermove/pointerup su window. */
+  onDragHandleDown: (e: React.PointerEvent) => void
   isDragging: boolean
   isDragOver: boolean
 }
@@ -64,7 +63,7 @@ function insertAtCursor(
 export default function SectionEditor({
   section, sectionIndex, totalSections, photos,
   onChange, onDelete, onMoveUp, onMoveDown, onAiAssist, aiAssistLoading,
-  onDragStart, onDragEnter, onDragEnd, isDragging, isDragOver,
+  onDragHandleDown, isDragging, isDragOver,
 }: Props) {
   const textareaRef   = useRef<HTMLTextAreaElement>(null)
   const [editingTitle, setEditingTitle]   = useState(false)
@@ -82,6 +81,7 @@ export default function SectionEditor({
 
   const extraIds = section.extraPhotoIds ?? []
   const primaryPhoto = photos.find(p => p.id === section.photoId)
+  const wordCount = section.body.trim() ? section.body.trim().split(/\s+/).length : 0
 
   function commitTitle() {
     const t = titleDraft.trim()
@@ -114,9 +114,6 @@ export default function SectionEditor({
 
   return (
     <div
-      onDragEnter={onDragEnter}
-      onDragOver={e => e.preventDefault()}
-      onDrop={e => e.preventDefault()}
       className={`bg-white rounded-2xl border shadow-sm mb-4 overflow-hidden transition-all ${
         isDragging ? 'opacity-40' : isDragOver ? 'border-forest-400 ring-2 ring-forest-200' : 'border-stone-200'
       }`}
@@ -124,9 +121,7 @@ export default function SectionEditor({
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-stone-50 border-b border-stone-200">
         <span
-          draggable
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
+          onPointerDown={onDragHandleDown}
           title="Trascina per riordinare"
           className="cursor-grab active:cursor-grabbing p-1 -m-1 rounded touch-none"
         >
@@ -211,6 +206,11 @@ export default function SectionEditor({
               </div>
             )}
           </div>
+          {wordCount > 0 && (
+            <p className="mt-1 text-[11px] text-stone-400 font-body">
+              {wordCount} parole · ~{Math.max(1, Math.round(wordCount / 200))} min di lettura
+            </p>
+          )}
 
           {/* AI assist panel */}
           <div className="mt-2">
