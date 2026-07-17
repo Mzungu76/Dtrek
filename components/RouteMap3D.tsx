@@ -670,6 +670,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [renderFrame,       setRenderFrame]      = useState(0)
   const [renderTotal,       setRenderTotal]      = useState(0)
   const [finalizeElapsedSec,setFinalizeElapsedSec]= useState(0)
+  const [entertainIdx,      setEntertainIdx]      = useState(0)
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
   const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
   const [photoDurationSec,  setPhotoDurationSec] = useState(3.0)
@@ -684,10 +685,78 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Post-production
   const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
   const [routePhotos,     setRoutePhotos]    = useState<RoutePhoto[]>([])
+  // Foto escluse dal video (di default nessuna, cioè tutte incluse) — non persistito: è una
+  // preferenza per-generazione, come videoPreset/videoDuration/ecc., non un dato della foto stessa.
+  const [videoExcludedPhotoIds, setVideoExcludedPhotoIds] = useState<Set<string>>(new Set())
+  const togglePhotoIncluded = (id: string) => setVideoExcludedPhotoIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
   const [placingPhoto,    setPlacingPhoto]   = useState<{id:string;step:PlacingStep}|null>(null)
   const placingPhotoRef = useRef<{id:string;step:PlacingStep}|null>(null)
   useEffect(()=>{ placingPhotoRef.current=placingPhoto },[placingPhoto])
   const [photoBeingAdded, setPhotoBeingAdded]= useState(false)
+
+  // Screen Wake Lock: sullo schermo del telefono che si spegne durante il rendering, il
+  // browser sospende il rendering WebGL/requestAnimationFrame — il video resta a metà finché
+  // l'utente non riaccende lo schermo. Chiave su videoState (non su un punto specifico dentro
+  // startRecording) così UN SOLO effetto copre tutti i percorsi di uscita (fine normale,
+  // errore, annullamento): qualunque cosa porti fuori da 'rendering'/'finalizing' fa scattare
+  // il cleanup dell'effetto, che rilascia il lock — niente da duplicare in ogni handler.
+  useEffect(() => {
+    if (videoState !== 'rendering' && videoState !== 'finalizing') return
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return
+    let sentinel: WakeLockSentinel | null = null
+    let active = true
+    const acquire = () => {
+      navigator.wakeLock.request('screen')
+        .then(s => { if (!active) { s.release().catch(() => {}); return } sentinel = s })
+        .catch(() => {}) // negato/non supportato in questo contesto: degrado silenzioso, non blocca il rendering
+    }
+    acquire()
+    // Il lock viene rilasciato automaticamente dal browser quando il documento diventa
+    // "hidden" (cambio app, non spegnimento schermo) — se poi torna visibile mentre siamo
+    // ancora in rendering, va richiesto di nuovo.
+    const onVisibility = () => { if (document.visibilityState === 'visible' && !sentinel) acquire() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      active = false
+      document.removeEventListener('visibilitychange', onVisibility)
+      sentinel?.release().catch(() => {})
+    }
+  }, [videoState])
+
+  // Contenuti della schermata di attesa durante il rendering: alcuni fatti calcolati sul
+  // percorso corrente (così sono sempre pertinenti, non generici) mescolati a qualche
+  // suggerimento sull'app — niente chiamate AI, solo dati già disponibili lato client.
+  const entertainmentContent = useMemo(() => {
+    const km = +((distanceProp ?? totalDistRef.current) / 1000).toFixed(1)
+    const gain = Math.round(elevGainProp ?? elevStatsRef.current.gain)
+    const alt = elevStatsRef.current.altMax
+    const poiCount = pois?.length ?? 0
+    const photoCount = routePhotos.filter(p => !videoExcludedPhotoIds.has(p.id)).length
+    const facts: string[] = []
+    if (km > 0) facts.push(`🥾 Hai percorso ${km} km — circa ${Math.round(km * 1300).toLocaleString('it-IT')} passi.`)
+    if (gain > 60) facts.push(`⛰️ ${gain} m di dislivello: più di ${Math.max(1, Math.round(gain / 93))}× la Torre di Pisa.`)
+    if (alt > 0) facts.push(`🏔️ Punto più alto toccato: ${alt} m.`)
+    if (poiCount > 0) facts.push(`📍 ${poiCount} punti di interesse individuati lungo il percorso.`)
+    if (photoCount > 0) facts.push(`📸 ${photoCount} ${photoCount === 1 ? 'foto entrerà' : 'foto entreranno'} nel video.`)
+    const tips = [
+      '💡 Nella mappa 3D puoi colorare il percorso per pendenza o esposizione (icona strati).',
+      '⚙️ Ogni fotogramma viene composto direttamente sul tuo telefono, senza passare da un server.',
+      '🎬 Il preset "Epico" applica una color grading pensata per il trekking in montagna.',
+      '☑️ Puoi scegliere quali foto includere nel video con la spunta sulla galleria, prima di generare.',
+      '🔋 Tienilo a schermo acceso: lo schermo spento mette in pausa il rendering.',
+    ]
+    return [...facts, ...tips]
+  }, [distanceProp, elevGainProp, pois, routePhotos, videoExcludedPhotoIds])
+
+  useEffect(() => {
+    if (videoState !== 'rendering' && videoState !== 'finalizing') { setEntertainIdx(0); return }
+    const id = setInterval(() => setEntertainIdx(i => (i + 1) % Math.max(1, entertainmentContent.length)), 4200)
+    return () => clearInterval(id)
+  }, [videoState, entertainmentContent.length])
 
   // Load persisted photos from the server on mount (migra automaticamente da localStorage se serve)
   useEffect(() => {
@@ -835,7 +904,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       map.addSource('terrain',{type:'raster-dem',url:`https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${KEY}`,tileSize:512})
     map.setTerrain({source:'terrain',exaggeration:exaggRef.current})
     if(!map.getLayer('sky')) try{map.addLayer({id:'sky',type:'sky',paint:{'sky-type':'atmosphere','sky-atmosphere-sun':[0,90],'sky-atmosphere-sun-intensity':15}} as any)}catch{}
-    const coords=pts.map(p=>[p.lon!,p.lat!,p.altitudeMeters??0] as [number,number,number])
+    // Niente Z esplicita: con una Z incorporata (altitudine GPS registrata, spesso scostata di
+    // decine di metri dal DEM del terreno) MapLibre disegna la linea a quella quota fissa invece
+    // di drappeggiarla sul terreno 3D — mentre pin/camera (center) e route-traveled (sotto)
+    // seguono sempre il DEM. Risultato: uno scostamento costante fra linea e pin per tutto il
+    // percorso, non legato alla pendenza. Con sole [lon,lat] la linea si appoggia al DEM come
+    // tutto il resto, stessa fonte di quota ovunque.
+    const coords=pts.map(p=>[p.lon!,p.lat!] as [number,number])
     if(map.getSource('route')){(map.getSource('route') as any).setData({type:'Feature',geometry:{type:'LineString',coordinates:coords},properties:{}})}
     else{map.addSource('route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:coords},properties:{}}})}
     if(!map.getLayer('route-casing')) map.addLayer({id:'route-casing',type:'line',source:'route',paint:{'line-color':'#ffffff','line-width':8,'line-opacity':0.55},layout:{'line-cap':'round','line-join':'round'}})
@@ -1531,6 +1606,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
     const sortedPhotos = [...routePhotos]
+      .filter(ph => !videoExcludedPhotoIds.has(ph.id))
       .sort((a,b)=>a.progress-b.progress)
       .filter(ph => photoImgsRef.current.has(ph.id))
       .map(ph => ({photo:ph, img:photoImgsRef.current.get(ph.id)!}))
@@ -1794,9 +1870,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current = lerpAngle(smoothBearRef.current, outroBearing, 0.04)
         smoothPitchRef.current = lerp(smoothPitchRef.current, outroPitch, 0.06)
         smoothZoomRef.current = lerp(smoothZoomRef.current, outroZoom_val, 0.06)
+        const outroElev = mapRef.current?.queryTerrainElevation?.([pts[N-1].lon!, pts[N-1].lat!]) ?? undefined
         mapRef.current?.jumpTo({
           center: [pts[N-1].lon!, pts[N-1].lat!],
           bearing: smoothBearRef.current, pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
+          ...(outroElev != null ? { elevation: outroElev } : {}),
         })
         // Photo/POI pins: fade out over first 30% of outro via symbol layer opacity.
         // setPaintProperty forces a style recalc even when the value is unchanged —
@@ -1899,9 +1977,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, introBearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, targetPitch, lerpF)
         smoothZoomRef.current  = lerp(smoothZoomRef.current, targetZoom, lerpF)
+        // Elevazione del terreno passata esplicitamente insieme al center: senza questo,
+        // MapLibre la risincronizza con un frame di ritardo rispetto a jumpTo (centerClampedToGround
+        // aggiorna transform.elevation nel render loop successivo, non nella stessa chiamata) — su
+        // un pendio ripido quel ritardo di un frame sposta visibilmente il punto "a schermo centro"
+        // rispetto al tracciato realmente drappeggiato sul terreno 3D, facendo apparire il pin
+        // fuori dal percorso proprio nei tratti in salita/discesa più marcata.
+        const introElev = mapRef.current?.queryTerrainElevation?.([pts[0].lon!, pts[0].lat!]) ?? undefined
         mapRef.current?.jumpTo({
           center: [pts[0].lon!, pts[0].lat!], bearing: smoothBearRef.current,
           pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
+          ...(introElev != null ? { elevation: introElev } : {}),
         })
       } else {
         // ── Follow: camera tracks GPS, pin moves ──────────────────────────────
@@ -1913,9 +1999,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
         smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom, 0.06)
+        // Stesso motivo del commento sopra (fase intro) — qui è il caso più visibile: center
+        // cambia a ogni frame seguendo il GPS, quindi un ritardo di un frame nell'elevazione è
+        // costante durante tutta la fase "follow", non solo un guizzo isolato.
+        const followElev = mapRef.current?.queryTerrainElevation?.([lon, lat]) ?? undefined
         mapRef.current?.jumpTo({
           center:[lon,lat], bearing:smoothBearRef.current,
           pitch:smoothPitchRef.current, zoom:smoothZoomRef.current,
+          ...(followElev != null ? { elevation: followElev } : {}),
         })
         // Progressive route reveal (every 20 frames)
         if(frameIdx%20===0&&mapRef.current){
@@ -2030,7 +2121,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2397,14 +2488,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 ))}
               </div>
               {(()=>{
+                const includedPhotoCount = routePhotos.filter(p=>!videoExcludedPhotoIds.has(p.id)).length
                 const introOutro = Math.round(Math.max(2, videoDuration*0.08) + Math.max(3, videoDuration*0.17))
-                const photoTotal = Math.round(routePhotos.length*photoDurationSec)
+                const photoTotal = Math.round(includedPhotoCount*photoDurationSec)
                 const est = videoDuration + photoTotal + introOutro
                 const over = est > 60
                 return (
                   <div className={`mt-2 rounded-xl px-3.5 py-2.5 ${over ? 'bg-amber-500/15 border border-amber-500/30' : 'bg-white/5'}`}>
                     <p className={`text-xs font-semibold ${over ? 'text-amber-300' : 'text-white/70'}`}>
-                      Percorso {videoDuration}s{routePhotos.length>0?` + foto ${routePhotos.length}×${photoDurationSec.toFixed(1)}s`:''} + intro/outro ~{introOutro}s = <span className="font-bold">~{est}s totali</span>
+                      Percorso {videoDuration}s{includedPhotoCount>0?` + foto ${includedPhotoCount}×${photoDurationSec.toFixed(1)}s`:''} + intro/outro ~{introOutro}s = <span className="font-bold">~{est}s totali</span>
                     </p>
                     <p className="text-white/35 text-[11px] mt-1 leading-relaxed">
                       Questa durata è indicativa: il percorso viene sempre mostrato per intero, le foto aggiungono tempo oltre a quello impostato qui.
@@ -2603,8 +2695,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
               ):(
                 <div className="space-y-2.5">
-                  {routePhotos.map(photo=>(
-                    <div key={photo.id} className="bg-white/7 rounded-xl p-2.5">
+                  {routePhotos.map(photo=>{
+                    const included = !videoExcludedPhotoIds.has(photo.id)
+                    return (
+                    <div key={photo.id} className={`bg-white/7 rounded-xl p-2.5 transition-opacity ${included?'':'opacity-45'}`}>
                       <div className="flex items-start gap-3">
                         <div className="relative shrink-0">
                           <img src={photo.url} alt="" className="w-14 h-14 rounded-lg object-cover"/>
@@ -2613,6 +2707,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                               <Check className="w-2.5 h-2.5 text-white"/>
                             </span>
                           )}
+                          <button onClick={()=>togglePhotoIncluded(photo.id)}
+                            title={included?'Escludi dal video':'Includi nel video'}
+                            className={`absolute -top-1 -left-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white/80 transition-colors ${included?'bg-blue-500':'bg-white/20'}`}>
+                            {included&&<Check className="w-3 h-3 text-white"/>}
+                          </button>
                         </div>
                         <div className="flex-1 min-w-0">
                           {/* Caption input */}
@@ -2645,6 +2744,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                             <button onClick={()=>{
                               const id=photo.id
                               setRoutePhotos(prev=>prev.filter(p=>p.id!==id));photoImgsRef.current.delete(id)
+                              setVideoExcludedPhotoIds(prev=>{ if(!prev.has(id)) return prev; const next=new Set(prev); next.delete(id); return next })
                               removeActivityPhoto(id).catch(()=>{
                                 setShareToast('Errore: eliminazione foto non riuscita'); setTimeout(()=>setShareToast(''),3000)
                               })
@@ -2656,7 +2756,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>
@@ -2708,6 +2808,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   ? 'Può richiedere fino a 20-30s con video lunghi o molte foto — non chiudere questa schermata'
                   : 'Frame-by-frame rendering — qualità cinematografica garantita'}
               </p>
+            </div>
+          </div>
+
+          {/* Schermata di attesa: fatti sul percorso corrente + suggerimenti sull'app,
+              a rotazione, mentre il rendering procede in background sulla stessa mappa. */}
+          <div className="flex-1 flex items-center justify-center px-6 pointer-events-none">
+            <div key={entertainIdx} className="fade-up bg-black/55 backdrop-blur-sm rounded-2xl px-5 py-4 max-w-xs text-center">
+              <p className="text-white/85 text-sm leading-relaxed">{entertainmentContent[entertainIdx % entertainmentContent.length]}</p>
             </div>
           </div>
         </div>
