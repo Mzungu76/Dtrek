@@ -47,7 +47,7 @@ import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import {
-  Pencil, Check, Loader2, Images, BookOpen, Share2, Copy, Link2Off, ExternalLink,
+  Pencil, Loader2, Images, BookOpen, Share2, Copy, Link2Off, ExternalLink,
   Compass, Layers, RefreshCw, Heart, Zap, Flame,
 } from 'lucide-react'
 
@@ -160,9 +160,6 @@ export default function ReportReader({
   const [report,      setReport]      = useState<HikeReport | null>(null)
   const [content,     setContent]     = useState('')
   const [generating,  setGenerating]  = useState(false)
-  const [isEditing,   setIsEditing]   = useState(false)
-  const [saving,      setSaving]      = useState(false)
-  const [saveOk,      setSaveOk]      = useState(false)
   const [length,      setLength]      = useState<ResocontoLength>('media')
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [loading,     setLoading]     = useState(true)
@@ -178,7 +175,6 @@ export default function ReportReader({
   const [reportSections,   setReportSections]   = useState<ReportSection[]>([])
   const [reportAuthoredBy, setReportAuthoredBy] = useState<ReportAuthoredBy>('ai')
   const [visibleSec,   setVisibleSec]   = useState(0)
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sectionRefs = useRef<(HTMLElement | null)[]>([])
 
   const [poiWikiEntries, setPoiWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
@@ -227,33 +223,13 @@ export default function ReportReader({
     return () => { cancelled = true }
   }, [pois])
 
-  // Auto-save debounce when editing raw markdown
-  useEffect(() => {
-    if (!isEditing || !content || generating) return
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => { saveContent(content) }, 1500)
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, isEditing, generating])
-
-  const saveContent = useCallback(async (text: string) => {
-    if (!text.trim()) return
-    setSaving(true)
-    try {
-      await saveReportContent(id, text)
-      setSaveOk(true)
-      setTimeout(() => setSaveOk(false), 2000)
-    } finally {
-      setSaving(false)
-    }
-  }, [id])
-
   const saveSections = useCallback(async (sections: ReportSection[], authoredBy: ReportAuthoredBy) => {
     const newContent = sectionsToMarkdown(sections)
     await saveReportContent(id, newContent, sections, authoredBy)
     setReportSections(sections)
     setReportAuthoredBy(authoredBy)
     setContent(newContent)
+    setReport(prev => prev ? { ...prev, updated_at: new Date().toISOString() } : prev)
   }, [id])
 
   const generateReport = useCallback(async () => {
@@ -666,7 +642,7 @@ export default function ReportReader({
             />
           )}
 
-          <div className="min-w-0 px-4 sm:px-6 md:px-0 md:max-w-3xl lg:max-w-[52rem]">
+          <div className={`min-w-0 px-4 sm:px-6 md:px-0 ${editorMode === 'manual' ? 'md:col-span-2' : 'md:max-w-3xl lg:max-w-[52rem]'}`}>
 
             {editorMode === 'manual' ? (
               <ManualEditor
@@ -678,7 +654,6 @@ export default function ReportReader({
                 initialAuthoredBy={reportAuthoredBy}
                 onSave={saveSections}
                 onCancel={() => setEditorMode('view')}
-                saving={saving}
               />
             ) : (
               <>
@@ -777,40 +752,25 @@ export default function ReportReader({
                   </div>
                 )}
 
-                {/* ── Edit/view toggle + raw markdown editor ───────────────── */}
+                {/* ── Passa all'editor strutturato ─────────────────────────── */}
                 {hasContent && (
                   <div className="flex items-center justify-between mb-3 mt-2 print:hidden">
                     <div className="flex items-center gap-2">
                       {report?.updated_at && <span className="text-xs italic text-stone-400">Salvato {new Date(report.updated_at).toLocaleString('it-IT')}</span>}
-                      {saving && <span className="flex items-center gap-1 text-xs italic text-stone-400"><Loader2 className="w-3 h-3 animate-spin" /> Salvataggio…</span>}
-                      {saveOk && <span className="flex items-center gap-1 text-xs text-forest-600"><Check className="w-3 h-3" /> Salvato</span>}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          if (reportSections.length === 0) { setReportSections(markdownToSections(content)); setReportAuthoredBy(reportAuthoredBy === 'ai' ? 'mixed' : reportAuthoredBy) }
-                          setEditorMode('manual')
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-display font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
-                        <Pencil className="w-3.5 h-3.5" /> Editor strutturato
-                      </button>
-                      <button
-                        onClick={() => { if (isEditing) { saveContent(content); setIsEditing(false) } else setIsEditing(true) }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-display font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
-                        {isEditing ? <><Check className="w-3.5 h-3.5" /> Fatto</> : <><Pencil className="w-3.5 h-3.5" /> Modifica</>}
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        if (reportSections.length === 0) { setReportSections(markdownToSections(content)); setReportAuthoredBy(reportAuthoredBy === 'ai' ? 'mixed' : reportAuthoredBy) }
+                        setEditorMode('manual')
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-display font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
+                      <Pencil className="w-3.5 h-3.5" /> Editor strutturato
+                    </button>
                   </div>
-                )}
-                {isEditing && (
-                  <textarea value={content} onChange={e => setContent(e.target.value)} rows={30}
-                    className="w-full bg-white border border-stone-200 rounded-2xl p-5 font-mono text-sm text-stone-700 leading-relaxed outline-none focus:border-forest-400 resize-y shadow-sm mb-6"
-                    placeholder="Scrivi il resoconto in Markdown…" />
                 )}
 
                 {/* ── Capitoli del racconto + sezioni dati (sempre presenti) ── */}
-                {!isEditing && (
-                  <div className="mt-2">
+                <div className="mt-2">
                     {displaySections.map((s, i) => {
                       if (s.narrativeIndex != null) {
                         const section = sections[s.narrativeIndex]
@@ -855,17 +815,16 @@ export default function ReportReader({
                       )
                     })}
                   </div>
-                )}
 
-                {hasContent && !isEditing && photos.length > 0 && (
+                {hasContent && photos.length > 0 && (
                   <PhotoGallery photos={photos} onPhotoClick={photo => openLightboxById(photo.id)} />
                 )}
-                {hasContent && !isEditing && photos.length > 0 && (
+                {hasContent && photos.length > 0 && (
                   <PrintPhotoGrid photos={photos} />
                 )}
 
                 {/* ── Pubblica PDF ──────────────────────────────────────────── */}
-                {hasContent && !isEditing && (
+                {hasContent && (
                   <div className="mt-8 mb-6 pt-5 print:hidden" style={{ borderTop: '1px solid #dcd8cc' }}>
                     <button onClick={() => setShowPublish(s => !s)}
                       className="flex items-center gap-1.5 text-xs font-display font-bold uppercase tracking-wide text-stone-500 hover:text-stone-700 transition-colors">
