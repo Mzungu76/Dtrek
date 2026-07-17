@@ -10,7 +10,7 @@ import ReportReader from '@/components/resoconto/ReportReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
 import { wmoInfo } from '@/lib/openmeteo'
-import { MiniScoreRing } from '@/components/ScoreRing'
+import { RatingGaugeBadge, ratingColor } from '@/components/resoconto/RatingGaugeBadge'
 import {
   getActivityById, updateActivityMeta, deleteActivity, getAllActivities,
   type StoredActivity, type ActivityMeta,
@@ -49,10 +49,6 @@ const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const FloraGallery    = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
 const AnimalGallery   = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
-
-function ratingColor(n: number) {
-  return n >= 9 ? '#16a34a' : n >= 7 ? '#65a30d' : n >= 5 ? '#ea580c' : '#dc2626'
-}
 
 const COVER_FETCH_CAP = 40
 
@@ -283,7 +279,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
       date: new Date(a.startTime).getTime(), km: a.distanceMeters, dplus: a.elevationGain, cts: a.trailScore, rating: a.userRating,
       distance: driving?.distanceMeters,
     })
-    const cover = (id_: string) => covers[id_] ?? (id_ === activity?.id ? photos.find(p => p.id === coverPhotoId)?.url ?? pickBestCoverPhoto(photos)?.url : undefined)
+    // Per il percorso aperto la copertina scelta a mano (o quella "intelligente" di riserva) deve
+    // vincere sempre sulla cache generica `covers` (un solo scatto per galleria, presa in
+    // background per le altre schede) — altrimenti la scelta fatta in Strumenti veniva ignorata
+    // sulla copertina a percorso chiuso non appena quella cache si popolava. Nessuna foto ⇒
+    // undefined, così RouteHub ricade sulla mappa (CoverMap), come per Guida.
+    const cover = (id_: string) => id_ === activity?.id
+      ? photos.find(p => p.id === coverPhotoId)?.url ?? pickBestCoverPhoto(photos)?.url ?? covers[id_]
+      : covers[id_]
     const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
     const mapped = items.map(it => {
       if (it.id === activity?.id) {
@@ -386,7 +389,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (!activity || routeItem.id !== activity.id || !rated) return null
     return (
       <button onClick={() => { setPendingScrollSection('dati_punteggi'); onTap() }} title="Voto" className="pointer-events-auto shrink-0">
-        <MiniScoreRing value={activity.userRating!} max={10} color={ratingColor(activity.userRating!)} />
+        <RatingGaugeBadge value={activity.userRating!} size={72} />
       </button>
     )
   }

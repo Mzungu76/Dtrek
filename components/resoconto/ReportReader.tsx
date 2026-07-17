@@ -1,7 +1,6 @@
 'use client'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import dynamic from 'next/dynamic'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
@@ -12,7 +11,7 @@ import type { WikiPage } from '@/lib/wikipedia'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import type { FloraResult } from '@/lib/floraTypes'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
-import type { TrailScoreResult } from '@/lib/trailScore'
+import { ctsLabel, type TrailScoreResult } from '@/lib/trailScore'
 import { computeDEP, depLabel, type findSimilarActivities } from '@/lib/stats'
 import {
   parseSections, markdownToSections, sectionsToMarkdown, SCAFFOLD_SECTIONS,
@@ -25,6 +24,8 @@ import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
 import SectionNav from '@/components/editorial/SectionNav'
 import SectionCard from '@/components/editorial/SectionCard'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
+import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import Kicker from '@/components/ui/Kicker'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
 import SpeedChart from '@/components/SpeedChart'
@@ -41,6 +42,7 @@ import { HiddenPdfRoot } from '@/app/resoconto/[id]/HiddenPdfRoot'
 import ReportHero from './ReportHero'
 import ReportStatsStrip from './ReportStatsStrip'
 import PhotoShowcase from './PhotoShowcase'
+import PhotoMapSection from './PhotoMapSection'
 import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
@@ -48,8 +50,6 @@ import {
   Pencil, Check, Loader2, Images, BookOpen, Share2, Copy, Link2Off, ExternalLink,
   Compass, Layers, RefreshCw, Heart, Zap, Flame,
 } from 'lucide-react'
-
-const RoutePhotoMap = dynamic(() => import('@/app/components/RoutePhotoMap'), { ssr: false })
 
 /** Distribuisce le foto tra i capitoli narrativi in base alla loro progressione lungo il
  *  percorso (0..1) — ogni capitolo riceve le foto scattate durante la sua "fetta" di cammino,
@@ -447,10 +447,26 @@ export default function ReportReader({
         const hasNetSpeed = (activity.netSpeedMs ?? 0) > 0 && (activity.pauseTimeSeconds ?? 0) > 0
         const hasIev = (activity.iev ?? 0) > 0
         const dep = computeDEP(activity.distanceMeters, activity.elevationGain)
+        const ts = data.ctsResult?.ts ?? activity.trailScore
+        const scoreLabel = ts != null ? (data.ctsResult ?? ctsLabel(ts)).label : undefined
         return (
           <div className="space-y-5">
-            {(data.ctsResult || activity.trailScore != null) ? (
-              <ComfortTrailScoreWidget result={data.ctsResult} cached={activity.trailScore} beautyScore={activity.linkedBeautyScore} defaultOpen />
+            {ts != null ? (
+              <>
+                {/* Stessa impaginazione della "Punteggio complessivo" di Guida
+                    (components/guida/widgets/ScoresWidget.tsx): card scura + badge grande. Un solo
+                    anello (safety=null) perché qui c'è un solo dato da mostrare, non due. */}
+                <div className="rounded-2xl bg-gradient-to-br from-stone-900 to-stone-800 px-5 py-7 flex flex-col items-center gap-2">
+                  <Kicker className="text-stone-400">Punteggio complessivo</Kicker>
+                  <TrailScoreGaugeBadge total={Math.round(ts)} safety={null} showLabel={false} size={128} />
+                  {scoreLabel && (
+                    <p className="text-white text-[11px] sm:text-xs font-bold uppercase tracking-wide" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                      {scoreLabel}
+                    </p>
+                  )}
+                </div>
+                <ComfortTrailScoreWidget result={data.ctsResult} cached={activity.trailScore} beautyScore={activity.linkedBeautyScore} />
+              </>
             ) : (
               <div className="flex items-center justify-between gap-4 rounded-2xl bg-stone-50 border border-stone-200 px-5 py-4">
                 <p className="text-sm text-stone-500">Il punteggio non è ancora stato calcolato.</p>
@@ -564,7 +580,7 @@ export default function ReportReader({
         const geoPhotos = photos.filter(p => p.lat != null && p.lon != null)
         return (
           <div className="space-y-3">
-            <RoutePhotoMap trackPoints={activity.trackPoints} photos={photos} height="360px" onPhotoTap={openLightboxById} />
+            <PhotoMapSection trackPoints={activity.trackPoints} photos={photos} onPhotoTap={openLightboxById} onOpenMap3D={onOpenMap3D} />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {geoPhotos.map(ph => {
                 const globalIdx = photos.findIndex(p => p.id === ph.id)
