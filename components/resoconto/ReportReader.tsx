@@ -308,9 +308,21 @@ export default function ReportReader({
     return [...narrative, ...fixed]
   }, [sections, hasGeoPhotos])
 
-  // Foto distribuite tra i capitoli in base alla progressione lungo il percorso — vedi
-  // bucketPhotosByChapter più sopra.
-  const photoBuckets = useMemo(() => bucketPhotosByChapter(photos, sections.length), [photos, sections.length])
+  // Foto di ogni capitolo — se il racconto ha una struttura editata a mano (reportSections, in
+  // sync 1:1 con i capitoli attuali) si usa la scelta esplicita dell'utente (foto principale +
+  // extra, vedi SectionEditor.tsx); altrimenti (racconto solo generato dall'AI, mai passato
+  // dall'editor strutturato) si ricade sulla distribuzione automatica per progressione lungo il
+  // percorso — vedi bucketPhotosByChapter più sopra.
+  const photoBuckets = useMemo(() => {
+    const manual = [...reportSections].sort((a, b) => a.order - b.order)
+    if (manual.length > 0 && manual.length === sections.length) {
+      return manual.map(s => {
+        const ids = [s.photoId, ...(s.extraPhotoIds ?? [])].filter((id): id is string => !!id)
+        return ids.map(id => photos.find(p => p.id === id)).filter((p): p is RoutePhoto => !!p)
+      })
+    }
+    return bucketPhotosByChapter(photos, sections.length)
+  }, [photos, sections.length, reportSections])
 
   // Posizione lungo il percorso (0..1) di ogni voce del sommario — solo i capitoli narrativi ne
   // hanno una (si presume distribuiti uniformemente lungo il cammino); le sezioni dati fisse

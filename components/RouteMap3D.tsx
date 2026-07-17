@@ -2138,7 +2138,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col" style={{touchAction:'none'}}>
+    <div className="fixed inset-0 z-[80] bg-black flex flex-col" style={{touchAction:'none'}}>
       <div ref={containerRef} className="flex-1 w-full h-full" />
 
       {/* Top bar */}

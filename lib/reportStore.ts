@@ -23,7 +23,12 @@ export interface ReportSection {
   id: string
   title: string
   body: string
+  /** Foto principale — ancorata in alto a destra nel testo, come in lettura finale. */
   photoId: string | null
+  /** Altre foto della sezione — mostrate a piena larghezza nel testo (una ogni due paragrafi),
+   *  stesso trattamento delle sezioni generate automaticamente. Assente/vuoto per i report più
+   *  vecchi (retrocompatibile: nessuna foto extra). */
+  extraPhotoIds?: string[]
   order: number
 }
 
