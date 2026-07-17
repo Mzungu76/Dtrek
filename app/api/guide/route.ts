@@ -119,6 +119,12 @@ sicurezza — allerte meteo o incendio attive, restrizioni di accesso. Cerca su 
 possibile (enti parco, comuni, CAI, sezioni locali, siti di sentieristica regionale) e integra, se
 utili, resoconti recenti di altri escursionisti (community di trekking, forum, blog).
 
+Dai priorità alle fonti pubblicate o aggiornate negli ultimi 12 mesi rispetto alla data odierna: sono
+le uniche davvero utili per capire se una situazione segnalata è ancora in corso oggi. Una fonte più
+vecchia va usata solo se non trovi nulla di più recente, e solo per informazioni permanenti (es.
+caratteristiche del tracciato) — non per segnalare come attuale un problema che potrebbe essere già
+stato risolto da tempo.
+
 Scrivi la sezione in questo formato esatto:
 ## Verificato online
 Una riga di sintesi (1-2 frasi, tono caldo ma diretto) che riassume l'esito del controllo. Se non hai
