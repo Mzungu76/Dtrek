@@ -19,6 +19,10 @@ interface Props {
   value: number
   size?: number
   showLabel?: boolean
+  /** Nota scritta dall'utente insieme al voto (opzionale) — mostrata come terza riga troncata
+   *  sotto "Voto X/10", così il commento resta visibile ovunque compaia il badge (copertina del
+   *  percorso chiuso, sezione Dati e punteggi) invece di andare perso. */
+  note?: string
 }
 
 /**
@@ -27,7 +31,7 @@ interface Props {
  * didascalia a fianco), un solo anello invece di due perché qui non c'è un secondo dato
  * (Sicurezza) da mostrare separatamente — solo il voto 0-10 dell'utente.
  */
-export function RatingGaugeBadge({ value, size = 80, showLabel = true }: Props) {
+export function RatingGaugeBadge({ value, size = 80, showLabel = true, note }: Props) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     const raf = requestAnimationFrame(() => setMounted(true))
@@ -72,6 +76,11 @@ export function RatingGaugeBadge({ value, size = 80, showLabel = true }: Props) 
           <span className="text-white/70 text-[10px] sm:text-[11px]" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
             Voto {value}/10
           </span>
+          {note && (
+            <span className="text-white/80 text-[10px] sm:text-[11px] italic max-w-[180px] truncate" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+              “{note}”
+            </span>
+          )}
         </div>
       )}
     </div>

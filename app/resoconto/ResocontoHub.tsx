@@ -289,7 +289,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
     const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
     const mapped = items.map(it => {
       if (it.id === activity?.id) {
-        return { ...it, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity), favorite: activity.favorite }
+        // Il percorso aperto ha già il tracciato completo (activity.trackPoints): ricalcolare la
+        // polyline da qui invece di tenere quella (a volte assente/obsoleta) della lista leggera
+        // evita che la copertina/miniatura restino senza mappa di riserva quando non c'è una foto.
+        const polyline = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+        return { ...it, polyline, statPills: pillsFor(activity), coverPhotoUrl: cover(it.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity), favorite: activity.favorite }
       }
       const coverUrl = cover(it.id)
       return coverUrl ? { ...it, coverPhotoUrl: coverUrl } : it
@@ -388,7 +392,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (!activity || routeItem.id !== activity.id || !rated) return null
     return (
       <button onClick={() => { setPendingScrollSection('dati_punteggi'); onTap() }} title="Voto" className="pointer-events-auto shrink-0">
-        <RatingGaugeBadge value={activity.userRating!} size={72} />
+        <RatingGaugeBadge value={activity.userRating!} size={72} note={activity.userRatingNote} />
       </button>
     )
   }
