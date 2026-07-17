@@ -396,10 +396,13 @@ export default function GuideReader({
       if (aiError) { setAiCreditError(aiError); return }
       acc = withoutAiError
 
-      // [sottotitolo] compare solo alla primissima generazione, [avviso]/[fonti] solo quando "Il
-      // percorso" è tra le sezioni richieste (vedi SYSTEM_SUBTITLE/SYSTEM_RESEARCH in
+      // [sottotitolo] compare solo alla primissima generazione, [avviso]/[fonti] solo quando
+      // "Verificato online" è tra le sezioni richieste (vedi SYSTEM_VERIFICATO in
       // app/api/guide/route.ts) — per ogni altra combinazione questi extract tornano comunque
-      // vuoti/undefined sul testo, quindi non serve altra guardia qui.
+      // vuoti/undefined sul testo, quindi non serve altra guardia qui. Senza questa guardia legata
+      // alla sezione giusta, un "Approfondisci" richiesto sulla sola "Verificato online" (senza
+      // "Il percorso" nella stessa chiamata) lasciava i tag [avviso]/[fonti] grezzi nel testo,
+      // poi persistiti così com'erano dal patch più sotto.
       let subtitle: string | undefined
       if (isInitial) {
         const r = extractCoverSubtitle(acc)
@@ -408,7 +411,7 @@ export default function GuideReader({
       }
       let notices = guideNotices
       let sources = guideSources
-      if (sections.includes('il_percorso')) {
+      if (sections.includes('verificato')) {
         const rn = extractGuideNotices(acc)
         notices = rn.notices
         const rs = extractGuideSources(rn.cleanedText)
