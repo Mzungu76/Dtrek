@@ -12,8 +12,8 @@ import { computeRecoveryScore } from '@/lib/bioMetrics'
 import { pickRecoveryPhrase } from '@/lib/recoveryPhrases'
 
 // Centro di Controllo — sintesi di statistiche e badge in home, con AI riservata
-// solo ai cambi di fascia (non ancora cablata: qui gira sempre il ramo a banco di
-// frasi pre-scritte). Vedi lib/recoveryPhrases.ts per il meccanismo di rotazione.
+// solo ai cambi di fascia (non ancora cablata: qui gira sempre il banco di frasi
+// pre-scritte, tutte e 5 le fasce). Vedi lib/recoveryPhrases.ts per la rotazione.
 export default function StatoPage() {
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [loading, setLoading] = useState(true)
