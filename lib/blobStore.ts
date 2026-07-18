@@ -252,6 +252,7 @@ registerListReconciler<ActivityMeta, StoredActivity>({
   fetchItem:    (id) => apiFetch<StoredActivity>(`/api/activity?id=${encodeURIComponent(id)}`),
   toMeta,
   sort: (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
+  entityType:   ENTITY_TYPE,
 })
 
 /** Global stats calculated from the list (no extra fetch). */

@@ -9,7 +9,7 @@
  * cover several entities' pending changes at once.
  */
 
-import { obGetAll, obDelete, type OutboxRow } from '@/lib/localStore'
+import { obGetAll, obGetByEntity, obDelete, type OutboxRow } from '@/lib/localStore'
 
 export interface FlushResult {
   /** outboxId of every row that was successfully applied server-side and can be removed from the queue. */
@@ -95,6 +95,20 @@ export async function flush(): Promise<void> {
 export async function hasPendingChanges(): Promise<boolean> {
   const rows = await obGetAll()
   return rows.length > 0
+}
+
+/**
+ * Record ids con almeno una scrittura non ancora sincronizzata per questo tipo di entità — usata
+ * da lib/sync/pullEngine.ts's registerListReconciler per non toccare un record che l'outbox non ha
+ * ancora inviato al server. Senza questo controllo, un pull che arriva PRIMA che una cancellazione
+ * (o una creazione) in coda venga davvero applicata lato server vedrebbe quel record ancora/non
+ * ancora presente sul digest e lo ri-aggiungerebbe/rimuoverebbe dalla cache locale, annullando in
+ * apparenza un'azione dell'utente già effettuata (es. un percorso appena eliminato che "ricompare"
+ * per qualche secondo se l'app torna in primo piano prima che il flush di 15s sia partito).
+ */
+export async function getPendingRecordIds(entityType: string): Promise<Set<string>> {
+  const rows = await obGetByEntity(entityType)
+  return new Set(rows.map((r) => r.recordId))
 }
 
 let periodicTimer: ReturnType<typeof setInterval> | null = null

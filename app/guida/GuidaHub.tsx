@@ -118,6 +118,22 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [showPendingActions, setShowPendingActions] = useState(false)
   const [favoritesFilter, setFavoritesFilter] = useState(false)
+  // Conferma "Percorso eliminato" — la cancellazione locale (deletePlanned) è già istantanea, ma
+  // handleDelete naviga subito dopo verso '/guida', che rimonta questo componente da zero e mostra
+  // il prossimo percorso (o lo scheletro di caricamento): senza un segnale esplicito, l'utente non
+  // ha modo di distinguere "sto ancora eliminando" da "ho già eliminato, ora sto solo caricando
+  // dell'altro". sessionStorage (non un querystring) sopravvive al remount senza richiedere
+  // useSearchParams, che su questa pagina interamente client-side andrebbe comunque avvolto in un
+  // Suspense boundary.
+  const [showDeletedToast, setShowDeletedToast] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (sessionStorage.getItem('dtrek:justDeletedHike') !== '1') return
+    sessionStorage.removeItem('dtrek:justDeletedHike')
+    setShowDeletedToast(true)
+    const t = setTimeout(() => setShowDeletedToast(false), 3000)
+    return () => clearTimeout(t)
+  }, [])
   const [ctsSettled, setCtsSettled] = useState(false)
   const [pendingScrollSection, setPendingScrollSection] = useState<GuideSectionKey | null>(null)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
@@ -441,25 +457,34 @@ export default function GuidaHub({ id }: { id?: string }) {
     return mapped
   }, [items, hike, driving, userOrigin, driveCache, ctsSettled])
 
+  const deletedToastNode = showDeletedToast ? (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2">
+      <Check className="w-4 h-4 text-forest-400 shrink-0" /> Percorso eliminato
+    </div>
+  ) : null
+
   if (!listLoaded) {
-    return <HubSkeleton />
+    return <>{deletedToastNode}<HubSkeleton /></>
   }
   if (!currentId) {
     // items.length > 0 means the "pick the first item" effect above just hasn't committed its
     // setCurrentId yet (it fires one tick after listLoaded flips true) — genuinely empty is the
     // only case that should show the import CTA, otherwise this flashes on every single load.
-    if (items.length > 0) return <HubSkeleton />
+    if (items.length > 0) return <>{deletedToastNode}<HubSkeleton /></>
     return (
-      <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-4 text-center px-6">
-        <p className="text-stone-300 text-sm">Nessun percorso in attesa.</p>
-        <button onClick={() => router.push('/upload?tab=gpx')} className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-semibold transition-colors">
-          Importa un percorso
-        </button>
-      </div>
+      <>
+        {deletedToastNode}
+        <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-4 text-center px-6">
+          <p className="text-stone-300 text-sm">Nessun percorso in attesa.</p>
+          <button onClick={() => router.push('/upload?tab=gpx')} className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-semibold transition-colors">
+            Importa un percorso
+          </button>
+        </div>
+      </>
     )
   }
   if (displayItems.length === 0) {
-    return <HubSkeleton />
+    return <>{deletedToastNode}<HubSkeleton /></>
   }
 
   const patch = async (data: Parameters<typeof updatePlannedMeta>[1]) => {
@@ -484,8 +509,14 @@ export default function GuidaHub({ id }: { id?: string }) {
   const handleDelete = async () => {
     if (!hike || !confirm('Eliminare questa escursione pianificata?')) return
     setSaving(true)
-    try { await deletePlanned(hike.id); router.push('/guida') }
-    finally { setSaving(false) }
+    try {
+      await deletePlanned(hike.id)
+      // Letto dall'effetto in cima al componente subito dopo il remount che segue router.push:
+      // conferma "Percorso eliminato" indipendente da quanto ci mette a caricare il prossimo
+      // percorso (o lo scheletro), che altrimenti sarebbe l'unico segnale visibile.
+      if (typeof window !== 'undefined') sessionStorage.setItem('dtrek:justDeletedHike', '1')
+      router.push('/guida')
+    } finally { setSaving(false) }
   }
   const handleExtendPending = async () => {
     if (!hike) return
@@ -726,6 +757,7 @@ export default function GuidaHub({ id }: { id?: string }) {
 
   return (
     <>
+      {deletedToastNode}
       <RouteHub
         mode="guida"
         items={displayItems}

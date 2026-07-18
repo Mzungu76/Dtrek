@@ -14,6 +14,7 @@
  */
 
 import { lsGet, lsSet, lsDel } from '@/lib/localStore'
+import { getPendingRecordIds } from './syncEngine'
 
 export interface DigestRow {
   id: string
@@ -34,6 +35,9 @@ interface ListReconcilerConfig<TMeta extends { id: string; updatedAt?: string },
   toMeta: (full: TFull) => TMeta
   /** Matches the ordering the full list endpoint returns, so a reconciled list doesn't reshuffle. */
   sort: (a: TMeta, b: TMeta) => number
+  /** entityType usato da questo store nell'outbox (lib/sync/syncEngine.ts) — permette al
+   *  reconciler di ignorare qualunque id con una scrittura locale ancora in coda, vedi sotto. */
+  entityType: string
 }
 
 type Puller = (onProgress?: (p: PullProgress) => void) => Promise<void>
@@ -62,8 +66,17 @@ export function registerListReconciler<TMeta extends { id: string; updatedAt?: s
     const localList = (await lsGet<TMeta[]>(cfg.listCacheKey)) ?? []
     const byId = new Map(localList.map((m) => [m.id, m]))
     const serverIds = new Set(digest.map((d) => d.id))
+    // Id con una scrittura locale non ancora sincronizzata (es. una cancellazione appena fatta,
+    // ancora in coda nell'outbox — vedi lib/plannedStore.ts's deletePlanned/scheduleFlush, debounce
+    // di 15s) — l'outbox è l'unica fonte di verità per questi finché non flusha davvero: se questo
+    // pull capita nel frattempo, il digest del server è ancora quello VECCHIO (delete non ancora
+    // applicata) e senza questo controllo l'id verrebbe trattato come "mancante in locale" e
+    // ri-scaricato/ri-aggiunto alla cache, facendo ricomparire un record che l'utente ha già
+    // eliminato/modificato.
+    const pendingIds = await getPendingRecordIds(cfg.entityType)
 
     const toFetch = digest.filter((d) => {
+      if (pendingIds.has(d.id)) return false
       const local = byId.get(d.id)
       return !local || !local.updatedAt || new Date(d.updatedAt).getTime() > new Date(local.updatedAt).getTime()
     })
@@ -88,7 +101,11 @@ export function registerListReconciler<TMeta extends { id: string; updatedAt?: s
     }
 
     for (const id of Array.from(byId.keys())) {
-      if (!serverIds.has(id)) {
+      // Stessa cautela di toFetch sopra, simmetrica: un id con una creazione/modifica ancora in
+      // coda nell'outbox può non essere ancora sul server per un motivo del tutto legittimo (non
+      // ha fatto in tempo a flushare), non perché sia stato cancellato altrove — non va rimosso
+      // dalla cache solo perché manca ancora dal digest.
+      if (!serverIds.has(id) && !pendingIds.has(id)) {
         byId.delete(id)
         await lsDel(cfg.itemCacheKey(id))
         changed = true
