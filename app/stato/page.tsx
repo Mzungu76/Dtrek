@@ -10,10 +10,15 @@ import { computeBadges } from '@/lib/badges'
 import { computeTrainingLoad, activityStress, currentForm } from '@/lib/trainingLoad'
 import { computeRecoveryScore } from '@/lib/bioMetrics'
 import { pickRecoveryPhrase } from '@/lib/recoveryPhrases'
+import { pickFormaPhrase } from '@/lib/formaPhrases'
+import { pickStreakPhrase } from '@/lib/streakPhrases'
+import { pickVolumePhrase } from '@/lib/volumePhrases'
 
 // Centro di Controllo — sintesi di statistiche e badge in home, con AI riservata
 // solo ai cambi di fascia (non ancora cablata: qui gira sempre il banco di frasi
-// pre-scritte, tutte e 5 le fasce). Vedi lib/recoveryPhrases.ts per la rotazione.
+// pre-scritte per Recovery, Stato forma, Streak e Volume settimanale). Vedi
+// lib/recoveryPhrases.ts, lib/formaPhrases.ts, lib/streakPhrases.ts e
+// lib/volumePhrases.ts per il meccanismo di rotazione/bucket di ciascuna.
 export default function StatoPage() {
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,6 +47,14 @@ export default function StatoPage() {
     () => pickRecoveryPhrase(recovery.label, recovery.suggestion),
     [recovery],
   )
+  const formaPhrase = useMemo(
+    () => pickFormaPhrase(forma.label, forma.description),
+    [forma],
+  )
+  const streakPhrase = useMemo(
+    () => pickStreakPhrase(streaks.currentWeeks),
+    [streaks.currentWeeks],
+  )
 
   const nearestBadge = useMemo(() => {
     const locked = badges.filter(b => !b.unlocked && typeof b.progressPct === 'number')
@@ -64,6 +77,17 @@ export default function StatoPage() {
   }, [activities])
 
   const currentWeekKm = weeklyVolume.length > 0 ? weeklyVolume[weeklyVolume.length - 1].km : 0
+
+  // Confronto contro la media delle settimane precedenti (non contro la singola
+  // settimana prima, troppo rumorosa) — nessuna frase se non c'è ancora storico.
+  const volumePhrase = useMemo(() => {
+    const previous = weeklyVolume.slice(0, -1)
+    if (previous.length === 0) return null
+    const avgPrev = previous.reduce((s, w) => s + w.km, 0) / previous.length
+    if (avgPrev <= 0) return null
+    const deltaPct = ((currentWeekKm - avgPrev) / avgPrev) * 100
+    return pickVolumePhrase(deltaPct)
+  }, [weeklyVolume, currentWeekKm])
 
   if (loading) {
     return (
@@ -117,7 +141,7 @@ export default function StatoPage() {
               <TrendingUp className="w-3.5 h-3.5" /> Stato forma
             </p>
             <p className="text-2xl font-bold mt-1" style={{ color: forma.color }}>{forma.label}</p>
-            <p className="text-xs text-stone-500 mt-1">{forma.description}</p>
+            <p className="text-xs text-stone-500 mt-1 italic leading-relaxed">{formaPhrase}</p>
             {latestLoad && (
               <p className="text-xs text-stone-400 mt-2 font-mono">CTL {latestLoad.ctl.toFixed(1)} · ATL {latestLoad.atl.toFixed(1)}</p>
             )}
@@ -153,6 +177,7 @@ export default function StatoPage() {
             </p>
             <p className="text-3xl font-bold font-display text-forest-700">{streaks.currentWeeks}</p>
             <p className="text-xs text-stone-500 mt-1">settimane di fila con almeno un&apos;uscita</p>
+            <p className="text-xs text-stone-500 mt-2 italic leading-relaxed">{streakPhrase}</p>
           </div>
         </div>
 
@@ -171,6 +196,9 @@ export default function StatoPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
+          {volumePhrase && (
+            <p className="text-xs text-stone-500 mt-3 italic leading-relaxed">{volumePhrase}</p>
+          )}
         </div>
       </main>
     </div>
