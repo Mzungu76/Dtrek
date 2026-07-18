@@ -42,6 +42,7 @@ export default function PlainSearchUploader({ onBack }: { onBack: () => void }) 
   const [searching, setSearching] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [matchKind, setMatchKind] = useState<'name' | 'nearby'>('name')
 
   const [selected, setSelected] = useState<Candidate | null>(null)
   const [resolving, setResolving] = useState(false)
@@ -67,6 +68,7 @@ export default function PlainSearchUploader({ onBack }: { onBack: () => void }) 
         return
       }
       setCandidates(data.candidates ?? [])
+      setMatchKind(data.matchKind === 'nearby' ? 'nearby' : 'name')
       setView('results')
     } catch {
       setErrorMsg('Errore di rete, riprova.')
@@ -162,14 +164,14 @@ export default function PlainSearchUploader({ onBack }: { onBack: () => void }) 
           </div>
           <div>
             <h3 className="font-display text-base font-semibold text-stone-800">Cerca senza AI</h3>
-            <p className="text-xs text-stone-400">Ricerca diretta su OpenStreetMap, per nome esatto o quasi esatto</p>
+            <p className="text-xs text-stone-400">Ricerca diretta su OpenStreetMap — se non c&apos;è un sentiero con questo nome esatto, mostra quelli mappati nei dintorni della zona</p>
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-stone-600 mb-1">Nome del percorso</label>
+          <label className="block text-sm font-medium text-stone-600 mb-1">Nome del percorso o zona</label>
           <input value={name} onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleSearch() }}
-            placeholder="Es. Cascata del Picchio"
+            placeholder="Es. Cascata del Picchio, oppure Clitunno"
             className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-stone-400 focus:bg-white" />
         </div>
         <div>
@@ -196,7 +198,13 @@ export default function PlainSearchUploader({ onBack }: { onBack: () => void }) 
       {candidates.length === 0 && (
         <div className="flex items-start gap-2 px-3.5 py-3 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-800">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <p>Nessun percorso trovato con questo nome su OpenStreetMap — prova un nome più semplice o senza zona, oppure usa &quot;Cerca con l&apos;AI&quot;.</p>
+          <p>Nessun sentiero trovato su OpenStreetMap, né con questo nome né nei dintorni della zona — prova un altro toponimo vicino, oppure usa &quot;Cerca con l&apos;AI&quot;.</p>
+        </div>
+      )}
+      {candidates.length > 0 && matchKind === 'nearby' && (
+        <div className="flex items-start gap-2 px-3.5 py-3 rounded-xl bg-sky-50 border border-sky-100 text-sm text-sky-800">
+          <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>Nessun sentiero con questo nome esatto — ecco quelli mappati nei dintorni della zona.</p>
         </div>
       )}
       {candidates.map(c => (
