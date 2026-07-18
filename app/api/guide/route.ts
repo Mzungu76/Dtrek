@@ -5,7 +5,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
 import {
-  GUIDE_SECTIONS, isGuideSectionKey, isGuideTextLength, sanitizeSectionLengths,
+  GUIDE_SECTIONS, isGuideSectionKey, isGuideTextLength, sanitizeSectionLengths, clampMoltoApprofondita,
   type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
 } from '@/lib/guideSections'
 import { mergeGuideSection, parseGuideSections } from '@/lib/guideParse'
@@ -706,7 +706,10 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     })
   }
 
-  const effectiveSectionLengths: SectionLengthMap = { ...sectionLengths, ...sectionLengthOverrides }
+  // clampMoltoApprofondita è una difesa lato server, non il meccanismo primario — l'UI (Impostazioni
+  // e override per singola guida) impedisce già di superare MAX_MOLTO_APPROFONDITA_SECTIONS, ma una
+  // richiesta diretta all'API (o un client non aggiornato) potrebbe comunque bypassarla.
+  const effectiveSectionLengths: SectionLengthMap = clampMoltoApprofondita({ ...sectionLengths, ...sectionLengthOverrides })
 
   const sectionKeys = requestedSections.length > 0 ? requestedSections : breveSections
   if (sectionKeys.length === 0) {
