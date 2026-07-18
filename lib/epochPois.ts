@@ -1,8 +1,8 @@
 // Stratigrafia temporale: "cosa vedresti da qui" in epoche diverse, per i POI che hanno
-// davvero un layer storico stratificato (siti archeologici, castelli, rovine...). Stesso
-// principio di lib/riddles.ts: contenuto scritto in fase di generazione guida (nessuna
-// generazione in tempo reale, quindi funziona offline durante la navigazione), un tag per
-// nome POI matchato contro coordinate reali già note — mai coordinate inventate dal modello.
+// davvero un layer storico stratificato (siti archeologici, castelli, rovine...). Contenuto
+// scritto in fase di generazione guida (nessuna generazione in tempo reale, quindi funziona
+// offline durante la navigazione), un tag per nome POI matchato contro coordinate reali già
+// note — mai coordinate inventate dal modello.
 import type { PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { findPoiByName } from '@/lib/poiNameMatch'
@@ -30,11 +30,11 @@ const EPOCH_BLOCK_RE = /\[epoca\s+poi="([^"]+)"\s+periodo="(etrusca|romana|medie
 /**
  * Parses `[epoca poi="Nome esatto" periodo="etrusca|romana|medievale|oggi"]testo[/epoca]`
  * blocks out of the generated guide markdown. A block whose poi name doesn't match a known
- * POI is dropped, same discipline as extractRiddles.
+ * POI is dropped.
  *
- * Also returns `cleanedText` with every `[epoca]` block removed — same reasoning as
- * extractRiddles's cleanedText: this content is meant to surface as its own widget, never as
- * raw bracket markup in the guide text (was leaking through unstripped, see GuideReader.tsx).
+ * Also returns `cleanedText` with every `[epoca]` block removed — this content is meant to
+ * surface as its own widget, never as raw bracket markup in the guide text (was leaking through
+ * unstripped, see GuideReader.tsx).
  */
 export function extractEpochPois(guideText: string, cachedPois: PoiItem[], cachedPoiWiki: { poi: PoiItem; wiki: WikiPage }[]): { epochPois: EpochPoi[]; cleanedText: string } {
   const epochPois: EpochPoi[] = []

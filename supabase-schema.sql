@@ -173,16 +173,10 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_ts_total DOUBLE PRECIS
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS si_score_raw float;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS si_density_factor float;
 
--- Trail riddles ("indovinelli per tappa") extracted from the generated guide text —
--- see lib/riddles.ts. Each entry carries its own lat/lon (matched against cached_pois/
--- cached_poi_wiki at extraction time), so the navigator can trigger them with the same
--- proximity mechanism as POIs without depending on the guide text at runtime.
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_riddles JSONB;
-
--- Stratigrafia temporale ("cosa vedresti da qui" per epoca) — stesso principio dei riddle,
--- vedi lib/epochPois.ts. Ogni voce porta la propria epoca (etrusca/romana/medievale/oggi)
--- e coordinate reali già note, così lo slider epoca del navigatore filtra e mostra i testi
--- senza bisogno di generazione in tempo reale (funziona offline).
+-- Stratigrafia temporale ("cosa vedresti da qui" per epoca) — vedi lib/epochPois.ts. Ogni voce
+-- porta la propria epoca (etrusca/romana/medievale/oggi) e coordinate reali già note, così lo
+-- slider epoca del navigatore filtra e mostra i testi senza bisogno di generazione in tempo
+-- reale (funziona offline).
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_epoch_pois JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_planned_trail_score ON planned_hikes (cached_trail_score DESC NULLS LAST);

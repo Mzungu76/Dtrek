@@ -151,30 +151,36 @@ export default function SectionGuida() {
                     >
                       {s.title}
                     </button>
-                    <div className="flex items-center gap-1 rounded-full border border-stone-200 p-0.5">
-                      {GUIDE_TEXT_LENGTHS.map(l => {
-                        const isCurrent = sectionLengths[s.key] === l.key
-                        // Al limite, ogni pillola "Molto approfondita" non ancora selezionata si
-                        // disabilita — tranne quella già attiva su questa sezione, altrimenti
-                        // l'utente non potrebbe nemmeno tornare indietro a un'altra lunghezza.
-                        const atLimit = l.key === 'molto_approfondita' && !isCurrent && moltoCount >= MAX_MOLTO_APPROFONDITA_SECTIONS
-                        return (
-                          <button
-                            key={l.key}
-                            onClick={() => setSectionLength(s.key, l.key)}
-                            disabled={savingLengths || atLimit}
-                            title={atLimit ? `Massimo ${MAX_MOLTO_APPROFONDITA_SECTIONS} sezioni in "Molto approfondita" — riduci un'altra sezione prima` : l.description}
-                            className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                              isCurrent
-                                ? 'bg-stone-700 text-white'
-                                : 'text-stone-500 hover:bg-stone-100'
-                            }`}
-                          >
-                            {l.label}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    {/* "Verificato online" non passa mai dal meccanismo delle lunghezze (è
+                        generata da una chiamata AI dedicata alla sola ricerca web, vedi
+                        SECTION_LENGTH_BY_LEVEL in app/api/guide/route.ts) — mostrare qui un
+                        controllo senza alcun effetto sarebbe fuorviante. */}
+                    {s.key !== 'verificato' && (
+                      <div className="flex items-center gap-1 rounded-full border border-stone-200 p-0.5">
+                        {GUIDE_TEXT_LENGTHS.map(l => {
+                          const isCurrent = sectionLengths[s.key] === l.key
+                          // Al limite, ogni pillola "Molto approfondita" non ancora selezionata si
+                          // disabilita — tranne quella già attiva su questa sezione, altrimenti
+                          // l'utente non potrebbe nemmeno tornare indietro a un'altra lunghezza.
+                          const atLimit = l.key === 'molto_approfondita' && !isCurrent && moltoCount >= MAX_MOLTO_APPROFONDITA_SECTIONS
+                          return (
+                            <button
+                              key={l.key}
+                              onClick={() => setSectionLength(s.key, l.key)}
+                              disabled={savingLengths || atLimit}
+                              title={atLimit ? `Massimo ${MAX_MOLTO_APPROFONDITA_SECTIONS} sezioni in "Molto approfondita" — riduci un'altra sezione prima` : l.description}
+                              className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                isCurrent
+                                  ? 'bg-stone-700 text-white'
+                                  : 'text-stone-500 hover:bg-stone-100'
+                              }`}
+                            >
+                              {l.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               })

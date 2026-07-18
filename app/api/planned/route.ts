@@ -53,7 +53,6 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     cachedSafetyScore:            row.cached_safety_score            as SafetyScore | undefined,
     cachedSafetyComputedAt:       row.cached_safety_computed_at      as string | undefined,
     cachedTsTotal:                row.cached_ts_total                as number | undefined,
-    cachedRiddles:                row.cached_riddles                 as PlannedHike['cachedRiddles'],
     cachedEpochPois:              row.cached_epoch_pois              as PlannedHike['cachedEpochPois'],
     cachedDrivingDistanceMeters:  row.cached_driving_distance_m      as number | undefined,
     cachedDrivingDurationSeconds: row.cached_driving_duration_s      as number | undefined,
@@ -113,7 +112,6 @@ function hikeToRow(h: PlannedHike) {
     cached_safety_score:              h.cachedSafetyScore ?? null,
     cached_safety_computed_at:        h.cachedSafetyComputedAt ?? null,
     cached_ts_total:                  h.cachedTsTotal ?? null,
-    cached_riddles:                   h.cachedRiddles ?? null,
     cached_epoch_pois:                h.cachedEpochPois ?? null,
     cached_driving_distance_m:        h.cachedDrivingDistanceMeters ?? null,
     cached_driving_duration_s:        h.cachedDrivingDurationSeconds ?? null,
@@ -132,7 +130,7 @@ const META_COLS = [
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
   'route_polyline', 'assessment', 'cached_guide', 'cached_guide_subtitle', 'cached_guide_notices', 'cached_guide_sources', 'guide_tier', 'guide_generated_at', 'osm_relation_id',
   'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence', 'cached_scores_computed_at',
-  'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_riddles', 'cached_epoch_pois',
+  'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
   'pending_expires_at', 'archived_at', 'favorite', 'updated_at',
@@ -345,7 +343,6 @@ export async function PATCH(req: NextRequest) {
       cachedSafetyScore?: SafetyScore
       cachedSafetyComputedAt?: string
       cachedTsTotal?: number
-      cachedRiddles?: PlannedHike['cachedRiddles']
       cachedEpochPois?: PlannedHike['cachedEpochPois']
       cachedDrivingDistanceMeters?: number
       cachedDrivingDurationSeconds?: number
@@ -389,7 +386,6 @@ export async function PATCH(req: NextRequest) {
     if (patch.cachedSafetyScore            !== undefined) dbPatch.cached_safety_score            = patch.cachedSafetyScore
     if (patch.cachedSafetyComputedAt       !== undefined) dbPatch.cached_safety_computed_at      = patch.cachedSafetyComputedAt
     if (patch.cachedTsTotal                !== undefined) dbPatch.cached_ts_total                = patch.cachedTsTotal
-    if (patch.cachedRiddles                !== undefined) dbPatch.cached_riddles                 = patch.cachedRiddles
     if (patch.cachedEpochPois              !== undefined) dbPatch.cached_epoch_pois              = patch.cachedEpochPois
     if (patch.cachedDrivingDistanceMeters  !== undefined) dbPatch.cached_driving_distance_m      = patch.cachedDrivingDistanceMeters
     if (patch.cachedDrivingDurationSeconds !== undefined) dbPatch.cached_driving_duration_s      = patch.cachedDrivingDurationSeconds

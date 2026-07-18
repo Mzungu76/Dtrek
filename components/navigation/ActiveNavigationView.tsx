@@ -35,11 +35,9 @@ import NavigationMap from './NavigationMap'
 import NavigationMapLibre from './NavigationMapLibre'
 import MapModeSwitcher, { type MapMode } from './MapModeSwitcher'
 import PoiCalloutSheet from './PoiCalloutSheet'
-import RiddleSheet from './RiddleSheet'
 import FieldNoteSheet from './FieldNoteSheet'
 import SpeciesIdentifySheet from './SpeciesIdentifySheet'
 import { PoiSpatialIndex } from '@/lib/navigation/poiProximity'
-import type { TrailRiddle } from '@/lib/riddles'
 import { EPOCH_LABELS, type Epoch, type EpochPoi } from '@/lib/epochPois'
 import InstructionBanner from './InstructionBanner'
 import NavBottomSheet from './NavBottomSheet'
@@ -114,8 +112,6 @@ export default function ActiveNavigationView({ hike }: Props) {
   // priorità. Piano di ristrutturazione, Parte 2.8.
   const [bottomAlertsExpanded, setBottomAlertsExpanded] = useState(false)
   const turnBackAlertedRef = useRef(false)
-  const [activeRiddle, setActiveRiddle] = useState<TrailRiddle | null>(null)
-  const shownRiddleIdsRef = useRef<Set<string>>(new Set())
   const [showFieldNote, setShowFieldNote] = useState(false)
   // Live-editable copy of the hike's notes: appended to as the hiker saves field notes during
   // navigation, persisted immediately (updatePlannedMeta) so nothing is lost if the app closes,
@@ -151,16 +147,6 @@ export default function ActiveNavigationView({ hike }: Props) {
   // multiplier defaults to 1 until those fields are cached onto the hike object too.
   const terrainMultiplier = useMemo(() => altitudeTerrainMultiplier(hike.altitudeMax).altPhysioMult, [hike.altitudeMax])
   const routePolyline = hike.routePolyline ?? []
-
-  // Riddles ("indovinelli per tappa") use the same proximity-index mechanism as POIs
-  // (lib/navigation/poiProximity.ts), but kept separate from the engine's own POI index —
-  // they're a content/gamification concern, not a navigation-state one, and don't need to
-  // participate in the poi_near state transition or the enteredPoi/leftPoi event pair.
-  const riddles = useMemo<TrailRiddle[]>(() => hike.cachedRiddles ?? [], [hike.cachedRiddles])
-  const riddleIndex = useMemo(
-    () => new PoiSpatialIndex(riddles.map((r) => ({ id: r.id, lat: r.lat, lon: r.lon, notifyRadiusM: 60 }))),
-    [riddles],
-  )
 
   // Stratigrafia temporale: "oggi" means no historical overlay (normal navigation), the
   // slider only ever offers epochs this specific hike actually has content for — never a
@@ -529,20 +515,6 @@ export default function ActiveNavigationView({ hike }: Props) {
   const turnBackNow = !!(pace?.returnTripTimeSec != null && sunTimes?.dusk &&
     (Date.now() + pace.returnTripTimeSec * 1000) > (sunTimes.dusk.getTime() - TURN_BACK_SAFETY_BUFFER_MS))
 
-  useEffect(() => {
-    if (!position || riddles.length === 0 || activeRiddle || callout) return
-    const nearby = riddleIndex.nearby(position.lat, position.lon)
-    const next = nearby.find((n) => !shownRiddleIdsRef.current.has(String(n.poi.id)))
-    if (next) {
-      const riddle = riddles.find((r) => r.id === next.poi.id)
-      if (riddle) {
-        shownRiddleIdsRef.current.add(riddle.id)
-        setActiveRiddle(riddle)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [position, activeRiddle, callout])
-
   // Switching epoch is a deliberate "look back in time" action — re-arm every epoch poi as
   // unshown so the hiker sees the relevant callouts again for the newly selected period.
   useEffect(() => {
@@ -551,7 +523,7 @@ export default function ActiveNavigationView({ hike }: Props) {
   }, [selectedEpoch])
 
   useEffect(() => {
-    if (!position || selectedEpoch === 'oggi' || filteredEpochPois.length === 0 || activeEpochCallout || callout || activeRiddle) return
+    if (!position || selectedEpoch === 'oggi' || filteredEpochPois.length === 0 || activeEpochCallout || callout) return
     const nearby = epochPoiIndex.nearby(position.lat, position.lon)
     const next = nearby.find((n) => !shownEpochPoiIdsRef.current.has(String(n.poi.id)))
     if (next) {
@@ -562,7 +534,7 @@ export default function ActiveNavigationView({ hike }: Props) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [position, selectedEpoch, activeEpochCallout, callout, activeRiddle])
+  }, [position, selectedEpoch, activeEpochCallout, callout])
 
   useEffect(() => {
     if (turnBackNow && !turnBackAlertedRef.current) {
@@ -796,10 +768,6 @@ export default function ActiveNavigationView({ hike }: Props) {
 
       {callout && (
         <PoiCalloutSheet title={callout.title} extract={callout.extract} imageUrl={callout.imageUrl} onClose={() => setCallout(null)} />
-      )}
-
-      {activeRiddle && (
-        <RiddleSheet question={activeRiddle.question} answer={activeRiddle.answer} onClose={() => setActiveRiddle(null)} />
       )}
 
       {activeEpochCallout && (

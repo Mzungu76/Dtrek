@@ -10,16 +10,13 @@ interface Props {
   elevationProfile?: number[]
 }
 
-// [epoca poi="X" periodo="Y"]...[/epoca] e [indovinello poi="X"]...[/indovinello] (vedi
-// app/api/guide/route.ts) sono pensati per essere estratti separatamente on-screen
-// (extractEpochPois/extractRiddles) — la guida a schermo li rimuove dal testo prima di
-// arrivare qui, ma il PDF riceve il testo grezzo. In assenza di un equivalente "indovinello"/
-// "epoca" nel PDF, vengono semplicemente rimossi invece di trapelare come testo con parentesi
-// quadre (bug riscontrato nel PDF caricato dall'utente).
+// [epoca poi="X" periodo="Y"]...[/epoca] (vedi app/api/guide/route.ts) è pensato per essere
+// estratto separatamente on-screen (extractEpochPois) — la guida a schermo lo rimuove dal testo
+// prima di arrivare qui, ma il PDF riceve il testo grezzo. In assenza di un equivalente "epoca"
+// nel PDF, viene semplicemente rimosso invece di trapelare come testo con parentesi quadre (bug
+// riscontrato nel PDF caricato dall'utente).
 function stripUnrenderedTags(raw: string): string {
-  return raw
-    .replace(/\[epoca[^\]]*\][\s\S]*?\[\/epoca\]/g, '')
-    .replace(/\[indovinello[^\]]*\][\s\S]*?\[\/indovinello\]/g, '')
+  return raw.replace(/\[epoca[^\]]*\][\s\S]*?\[\/epoca\]/g, '')
 }
 
 function parseTextBlocks(raw: string): { type: 'paragraph' | 'curiosita' | 'avviso' | 'subsection'; text: string }[] {
