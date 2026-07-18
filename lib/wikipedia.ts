@@ -36,12 +36,17 @@ interface WikiGeosearchApiResponse {
 }
 
 // POI types worth looking up (named items likely to have articles)
-// 'spring' era assente qui pur avendo già una voce in MAX_DIST_KM più sotto (spring: 5) — una
-// sorgente con nome specifico (es. "Fonti del Clitunno") è esattamente il tipo di luogo con una
-// voce Wikipedia solida, e senza questa riga non diventava mai nemmeno un candidato.
+// 'spring' era assente pur avendo già una voce in MAX_DIST_KM più sotto (spring: 5) — una sorgente
+// con nome specifico (es. "Fonti del Clitunno") è esattamente il tipo di luogo con una voce
+// Wikipedia solida. 'bridge'/'chapel'/'viewpoint'/'fountain' erano interamente assenti nonostante
+// coprano luoghi altrettanto plausibili (un ponte storico, una chiesa/cappella con una vera voce,
+// un belvedere noto, una fontana monumentale) — tutti già protetti dai nomi generici bare
+// ("Ponte"/"Cappella"/"Belvedere"/"Fontana") in GENERIC_POI_NAMES sotto, quindi il rischio di
+// candidati spuri resta lo stesso delle categorie già presenti.
 const WIKI_WORTHY = new Set<PoiItem['type']>([
   'peak', 'pass', 'waterfall', 'cave', 'ruins', 'archaeological',
   'castle', 'monument', 'tower', 'hut', 'bivouac', 'spring',
+  'bridge', 'chapel', 'viewpoint', 'fountain',
 ])
 
 // Generic names that are just the category word — no specific article exists for them. Includes
@@ -56,6 +61,7 @@ const GENERIC_POI_NAMES = new Set([
   'torre', 'torri', 'sorgente', 'sorgenti',
   'fontana', 'fontanile', 'rifugio', 'bivacco',
   'monumento', 'monastero', 'chiesa', 'cappella',
+  'ponte', 'ponti',
   'valico', 'passo', 'cima', 'vetta', 'monte',
   'acqua potabile', 'area picnic', 'belvedere', 'riparo', 'croce',
 ])
@@ -66,6 +72,7 @@ const MAX_DIST_KM: Record<string, number> = {
   ruins: 15, archaeological: 15,
   castle: 20, monument: 10, tower: 15,
   peak: 30, pass: 25,
+  bridge: 10, chapel: 10, viewpoint: 15, fountain: 8,
   hut: 8, bivouac: 8,
 }
 
