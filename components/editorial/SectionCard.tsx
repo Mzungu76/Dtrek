@@ -66,20 +66,26 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
 
   if (!hasWidget && !hasBody) {
     return (
-      <article ref={ref} className="scroll-mt-16 flex items-center gap-3 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5">
-        <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0" style={{ color }}>{icon}</span>
-        <span className="flex-1 text-[13px] font-semibold text-stone-800">{title}</span>
-        {approfondendo ? (
-          <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
-            <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
-          </span>
-        ) : onApprofondisci && (
-          <>
+      <article ref={ref} className="scroll-mt-16 flex flex-col gap-2 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5">
+        <div className="flex items-center gap-3">
+          <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0" style={{ color }}>{icon}</span>
+          <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-stone-800">{title}</span>
+          {approfondendo && (
+            <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
+              <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
+            </span>
+          )}
+        </div>
+        {/* Riga separata (non affiancata al titolo): la lunghezza + il bottone insieme possono
+            superare la larghezza disponibile su mobile — vedi flex-wrap qui sotto per il caso
+            limite in cui non entrano nemmeno su una riga propria. */}
+        {!approfondendo && onApprofondisci && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {lengthSelector}
-            <button onClick={onApprofondisci} className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 shrink-0">
+            <button onClick={onApprofondisci} className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 shrink-0 whitespace-nowrap">
               Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" />
             </button>
-          </>
+          </div>
         )}
       </article>
     )
