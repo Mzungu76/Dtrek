@@ -543,7 +543,15 @@ IMPORTANTE: rispetta esattamente l'indicazione LUNGHEZZA scritta sotto ciascuna 
 IMPORTANTE: Completa obbligatoriamente tutte le sezioni richieste (${sectionTitles}). Non terminare prima dell'ultima.`
 }
 
-const VERIFICATO_MAX_TOKENS = 1000
+// Il tag [fonti] deve elencare SEMPRE tutte le pagine consultate durante la ricerca (vedi
+// SYSTEM_VERIFICATO sotto) — con più fonti trovate (URL lunghi + titoli, in JSON) il tetto da 1000
+// bastava a troncare il blocco a metà, senza mai arrivare al tag di chiusura [/fonti]: senza quel
+// tag, extractGuideSources (lib/guideSources.ts) non trova alcun match e lascia l'intero JSON
+// grezzo visibile in pagina — non un problema di regex, ma di budget insufficiente per contenuto
+// che varia in lunghezza col numero di fonti trovate. 3000 lascia margine ampio anche con molte
+// fonti, restando comunque ben sotto la soglia (~16000) oltre la quale una richiesta non in
+// streaming come questa (client.messages.create, non .stream) rischierebbe timeout HTTP.
+const VERIFICATO_MAX_TOKENS = 3000
 
 /**
  * Chiamata DEDICATA per la sezione "Verificato online" — separata dalla generazione narrativa
@@ -574,7 +582,19 @@ async function generateVerificatoText(hikeTitle: string, claudeModel: string, ap
       .map(b => b.text)
       .join('')
       .trim()
-    return text || null
+    if (msg.stop_reason === 'max_tokens') {
+      console.error('[guide] generazione "Verificato online" troncata per max_tokens')
+    }
+    // Difesa in profondità, indipendente dal budget: se il tag [fonti] risulta aperto ma non
+    // chiuso (troncamento, o una qualunque altra causa), il JSON grezzo e incompleto non deve MAI
+    // arrivare all'utente — extractGuideSources (lib/guideSources.ts) richiede comunque il tag di
+    // chiusura per estrarlo, quindi senza questo taglio resterebbe visibile inalterato in pagina.
+    // Perdere la lista fonti di questa singola generazione (si riottiene al prossimo tentativo) è
+    // sempre preferibile a mostrare testo illeggibile.
+    const fontiOpenIdx = text.indexOf('[fonti]')
+    const hasUnclosedFonti = fontiOpenIdx !== -1 && !text.slice(fontiOpenIdx).includes('[/fonti]')
+    const safeText = hasUnclosedFonti ? text.slice(0, fontiOpenIdx).trimEnd() : text
+    return safeText || null
   } catch (e) {
     console.error('[guide] generazione "Verificato online" fallita:', e)
     return null
