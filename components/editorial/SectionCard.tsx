@@ -27,6 +27,10 @@ interface Props {
   /** True mentre è in corso "Approfondisci" proprio SU QUESTA sezione — mostra uno spinner al
    *  posto del pulsante invece di lasciarlo cliccabile una seconda volta. */
   approfondendo?: boolean
+  /** Selettore "Essenziale/Approfondita/Molto approfondita" per questa sezione, mostrato accanto al
+   *  bottone "Approfondisci con Giulia" — vedi components/guida/GuideReader.tsx. Assente quando il
+   *  bottone stesso non è mostrato (nessun approfondimento possibile in questo momento). */
+  lengthSelector?: ReactNode
   /** Resoconto-only: il corpo parte troncato a poche parole ("Leggi tutto"/"Riduci"), per dare
    *  subito più spazio a foto/mappa/dati invece di un lungo muro di testo — assente per Guida,
    *  che mostra sempre il testo intero. Il PDF/stampa (HiddenPdfRoot) non passa da qui, quindi
@@ -47,7 +51,7 @@ interface Props {
 const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
   {
     title, subtitle, icon, color, body, widget, sectionPhoto, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos,
-    twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo, collapsible,
+    twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo, collapsible, lengthSelector,
   },
   ref,
 ) {
@@ -70,9 +74,12 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
             <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
           </span>
         ) : onApprofondisci && (
-          <button onClick={onApprofondisci} className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 shrink-0">
-            Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" />
-          </button>
+          <>
+            {lengthSelector}
+            <button onClick={onApprofondisci} className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 shrink-0">
+              Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" />
+            </button>
+          </>
         )}
       </article>
     )
@@ -150,10 +157,11 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
           </div>
         )}
         {!hasBody && !approfondendo && showApprofondisciHint && (
-          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
+          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
             <Sparkles className="w-3.5 h-3.5" />
             Testo narrato non ancora generato —{' '}
             <button onClick={onApprofondisci} className="text-terra-600 font-bold hover:text-terra-700">Approfondisci con Giulia (AI)</button>
+            {lengthSelector}
           </div>
         )}
       </div>

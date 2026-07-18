@@ -1,7 +1,10 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Loader2, CalendarClock, BookOpen } from 'lucide-react'
-import { GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
+import {
+  GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, GUIDE_TEXT_LENGTHS, DEFAULT_SECTION_LENGTHS,
+  sanitizeSectionLengths, type GuideSectionKey, type SectionLengthMap,
+} from '@/lib/guideSections'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 
 const PRESETS = [7, 14, 30, 60, 90]
@@ -17,6 +20,9 @@ export default function SectionGuida() {
   const [savingSections, setSavingSections] = useState(false)
   const [sectionsStatus, setSectionsStatus] = useState<{ ok: boolean; msg: string } | null>(null)
 
+  const [sectionLengths, setSectionLengths] = useState<SectionLengthMap>(DEFAULT_SECTION_LENGTHS)
+  const [savingLengths, setSavingLengths] = useState(false)
+
   useEffect(() => {
     getUserSettingsCached()
       .then(d => {
@@ -25,6 +31,7 @@ export default function SectionGuida() {
         // non va scambiato per "non ancora caricato", altrimenti l'interfaccia mostrerebbe il
         // default invece della scelta esplicita dell'utente.
         if (Array.isArray(d.guideBreveSections)) setBreveSections(d.guideBreveSections as GuideSectionKey[])
+        if (d.guideSectionLengths) setSectionLengths(sanitizeSectionLengths(d.guideSectionLengths))
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -47,6 +54,15 @@ export default function SectionGuida() {
     await updateUserSettings({ guideBreveSections: next })
     setSavingSections(false)
     setSectionsStatus({ ok: true, msg: 'Sezioni della guida breve salvate.' })
+  }
+
+  async function setSectionLength(key: GuideSectionKey, length: SectionLengthMap[GuideSectionKey]) {
+    const next = { ...sectionLengths, [key]: length }
+    setSectionLengths(next)
+    setSavingLengths(true); setSectionsStatus(null)
+    await updateUserSettings({ guideSectionLengths: next })
+    setSavingLengths(false)
+    setSectionsStatus({ ok: true, msg: 'Lunghezza del testo salvata.' })
   }
 
   return (
@@ -102,7 +118,9 @@ export default function SectionGuida() {
               Giulia scrive subito un testo narrativo — da nessuna a tutte, a tua scelta: più ne scegli,
               più lunga (e più costosa in token AI) sarà ogni generazione automatica. Le sezioni non scelte
               restano comunque visibili con i loro dati (mappa, punteggi, POI…) ma senza racconto, finché
-              non premi &quot;Approfondisci con Giulia (AI)&quot; su quella specifica sezione.
+              non premi &quot;Approfondisci con Giulia (AI)&quot; su quella specifica sezione. Per ogni
+              sezione puoi anche scegliere quanto Giulia si dilunga — puoi comunque cambiarla al momento
+              della generazione, per una singola guida.
             </p>
           </div>
         </div>
@@ -112,22 +130,40 @@ export default function SectionGuida() {
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Caricamento…
           </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="space-y-1.5">
             {GUIDE_SECTIONS.map(s => {
               const active = breveSections.includes(s.key)
               return (
-                <button
-                  key={s.key}
-                  onClick={() => toggleSection(s.key)}
-                  disabled={savingSections}
-                  className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors disabled:opacity-50 ${
-                    active
-                      ? 'bg-terra-500 border-terra-500 text-white'
-                      : 'bg-white border-stone-200 text-stone-600 hover:border-terra-300'
-                  }`}
-                >
-                  {s.title}
-                </button>
+                <div key={s.key} className="flex flex-wrap items-center gap-2 py-1">
+                  <button
+                    onClick={() => toggleSection(s.key)}
+                    disabled={savingSections}
+                    className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors disabled:opacity-50 shrink-0 ${
+                      active
+                        ? 'bg-terra-500 border-terra-500 text-white'
+                        : 'bg-white border-stone-200 text-stone-600 hover:border-terra-300'
+                    }`}
+                  >
+                    {s.title}
+                  </button>
+                  <div className="flex items-center gap-1 rounded-full border border-stone-200 p-0.5">
+                    {GUIDE_TEXT_LENGTHS.map(l => (
+                      <button
+                        key={l.key}
+                        onClick={() => setSectionLength(s.key, l.key)}
+                        disabled={savingLengths}
+                        title={l.description}
+                        className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium transition-colors disabled:opacity-50 ${
+                          sectionLengths[s.key] === l.key
+                            ? 'bg-stone-700 text-white'
+                            : 'text-stone-500 hover:bg-stone-100'
+                        }`}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )
             })}
           </div>

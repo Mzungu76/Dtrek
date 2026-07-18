@@ -45,6 +45,9 @@ export interface CachedAiSettings {
   aiUseBiometricData: boolean
   aiUseHistoryData: boolean
   aiUseWebSearch: boolean
+  /** Lunghezza del testo AI per sezione (lib/guideSections.ts's SectionLengthMap), già sanitizzata
+   *  — sempre una voce per ogni GuideSectionKey. */
+  sectionLengths: Record<string, string>
 }
 
 const TTL_SECONDS = 60 * 60 * 24 * 30  // 30 giorni — rinfrescata ad ogni lettura Supabase riuscita

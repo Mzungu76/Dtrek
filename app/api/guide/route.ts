@@ -4,7 +4,10 @@ import { supabase }     from '@/lib/supabase'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
-import { GUIDE_SECTIONS, isGuideSectionKey, type GuideSectionKey } from '@/lib/guideSections'
+import {
+  GUIDE_SECTIONS, isGuideSectionKey, isGuideTextLength, sanitizeSectionLengths,
+  type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
+} from '@/lib/guideSections'
 import { mergeGuideSection, parseGuideSections } from '@/lib/guideParse'
 
 export const maxDuration = 300  // generare tutte le sezioni mancanti in una sola chiamata può richiedere ricerca web + più minuti di streaming; evita di tagliarla a metà
@@ -63,6 +66,9 @@ Non usare bullet point eccessivi: preferisci frasi di narrazione fluida.
 La mappa, il profilo altimetrico, i punteggi (Trail Score, Sicurezza, Bellezza) e le card dei punti di interesse
 sono già mostrati nell'app accanto al tuo testo: non elencare numeri o coordinate, commentali e dai loro un
 significato — l'app si occupa dei dati "grezzi", tu ci metti la voce narrante.
+In nessuna sezione nominare app di trekking/navigazione specifiche (es. Komoot, AllTrails, Wikiloc, Strava,
+OsmAnd, Outdooractive): quando serve un riferimento, resta generica ("un'app di navigazione", "un'app GPS"),
+mai il nome di un prodotto preciso.
 Nella sezione "I luoghi da non perdere", usa ### (tre cancelletti e spazio) come sottotitolo per ogni luogo specifico prima di descriverlo (es: ### Castello di Calcata).
 Per le curiosità e aneddoti più memorabili, racchiudili in un riquadro speciale usando il formato esatto su una riga separata: [curiosita] testo della curiosità [/curiosita]
 
@@ -209,41 +215,98 @@ async function buildComfortContext(userId: string): Promise<string> {
   return lines.join('\n')
 }
 
-// Unico budget di output della chiamata NARRATIVA — non c'è più un tier "Approfondita" separato:
-// ogni sezione, generata in una richiesta iniziale o aggiunta più tardi, usa sempre queste stesse
-// lunghezze concise. Il tetto resta comunque ampio abbastanza da coprire in una sola chiamata TUTTE
-// le 7 sezioni narrative insieme (vedi il pulsante "Genera il resto della guida" in
-// GuideReader.tsx), non solo quelle di default. Non copre più "Verificato online" (VERIFICATO_MAX_
-// TOKENS a parte, vedi generateVerificatoText): prima di isolarla in una chiamata dedicata, due
-// troncamenti reali consecutivi con tutte le sezioni + ricerca web nella stessa chiamata (lago di
-// Bolsena, percorso ben documentato online) avevano già portato questo tetto da 1600 a 3200 senza
-// risolvere — un divario tra testo visibile e token consumati mai chiarito del tutto, e che la
-// separazione della ricerca rende comunque irrilevante qui: qualunque fosse la causa, ora vive
-// nell'altra chiamata, con il suo budget separato. 6000 resta un margine ampio deliberato per le
-// sole 7 sezioni narrative.
-const GUIDE_MAX_TOKENS = 6000
+// Numero massimo di POI Wikipedia inclusi nel prompt (vedi anche buildPrompt, che tronca l'elenco
+// stesso a questa cifra) — a livello di modulo perché serve sia lì sia alla stima di
+// computeGuideMaxTokens più sotto, che deve conoscere quanti "luoghi" al massimo la sezione
+// "luoghi" può arrivare a trattare in questa chiamata.
+const MAX_WIKI_POIS_IN_PROMPT = 8
 
 /**
- * Lunghezza target per sezione — deliberatamente NON uniforme: ogni sezione ha una natura diversa
- * (narrazione centrale vs. nota pratica vs. commento breve) e non ha senso che occupino tutte lo
- * stesso spazio. "luoghi" è espressa per singolo luogo (non per la sezione nel suo complesso)
- * perché il numero di POI trattati varia da percorso a percorso — vedi MAX_WIKI_POIS_IN_PROMPT più
- * sotto per il tetto sul numero di luoghi.
+ * Lunghezza target per sezione, per ciascuna delle 3 lunghezze scelte dall'utente (Impostazioni >
+ * Guida, sovrascrivibile per singola generazione — vedi lib/guideSections.ts's GuideTextLength e
+ * SectionLengthMap). 'essenziale' è il comportamento storico, invariato. Deliberatamente NON
+ * uniforme tra sezioni: ognuna ha una natura diversa (narrazione centrale vs. nota pratica vs.
+ * commento breve) e non ha senso che occupino tutte lo stesso spazio, indipendentemente dal
+ * livello scelto. "luoghi" è espressa per singolo luogo (non per la sezione nel suo complesso)
+ * perché il numero di POI trattati varia da percorso a percorso (tetto: MAX_WIKI_POIS_IN_PROMPT).
  */
 // "verificato" non ha una voce reale qui — non fa mai parte della narrazione scritta da questo
 // prompt (vedi buildPrompt: filtrata via prima di costruire sectionsToWrite), è generata da una
 // chiamata dedicata (generateVerificatoText, SYSTEM_VERIFICATO). Le voci sotto sono solo per
-// soddisfare il tipo Record<GuideSectionKey, string> — mai lette a runtime.
-const SECTION_LENGTH: Record<GuideSectionKey, string> = {
-  prima_di_partire: '45-60 parole',
-  il_percorso:      '80-100 parole',
-  verificato:       '(non usato — sezione generata da una chiamata separata)',
-  dati_sicurezza:   '50-65 parole',
-  comfort:          '70-90 parole',
-  luoghi:           '40-60 parole per luogo',
-  natura:           '80-100 parole',
-  sapori:           '60-80 parole',
-  consigli:         '55-70 parole',
+// soddisfare il tipo Record<GuideSectionKey, ...> — mai lette a runtime.
+const SECTION_LENGTH_BY_LEVEL: Record<GuideSectionKey, Record<GuideTextLength, string>> = {
+  prima_di_partire: { essenziale: '45-60 parole',        approfondita: '100-130 parole',      molto_approfondita: '170-210 parole' },
+  il_percorso:      { essenziale: '80-100 parole',       approfondita: '180-220 parole',      molto_approfondita: '320-380 parole' },
+  verificato:       { essenziale: '(non usato)',         approfondita: '(non usato)',         molto_approfondita: '(non usato)' },
+  dati_sicurezza:   { essenziale: '50-65 parole',        approfondita: '110-140 parole',      molto_approfondita: '190-230 parole' },
+  comfort:          { essenziale: '70-90 parole',        approfondita: '150-190 parole',      molto_approfondita: '260-320 parole' },
+  luoghi:           { essenziale: '40-60 parole/luogo',  approfondita: '90-120 parole/luogo', molto_approfondita: '150-200 parole/luogo' },
+  natura:           { essenziale: '80-100 parole',       approfondita: '160-200 parole',      molto_approfondita: '300-360 parole' },
+  sapori:           { essenziale: '60-80 parole',        approfondita: '130-170 parole',      molto_approfondita: '220-280 parole' },
+  consigli:         { essenziale: '55-70 parole',        approfondita: '140-170 parole',      molto_approfondita: '220-270 parole' },
+}
+
+/** Ceiling (estremo superiore della fascia sopra) usato SOLO per stimare max_tokens — mai mostrato
+ *  al modello. Numeri paralleli a SECTION_LENGTH_BY_LEVEL, non la fonte di verità del prompt. */
+const SECTION_WORD_CEILING: Record<GuideSectionKey, Record<GuideTextLength, number>> = {
+  prima_di_partire: { essenziale: 60,  approfondita: 130, molto_approfondita: 210 },
+  il_percorso:      { essenziale: 100, approfondita: 220, molto_approfondita: 380 },
+  verificato:       { essenziale: 0,   approfondita: 0,   molto_approfondita: 0 },
+  dati_sicurezza:   { essenziale: 65,  approfondita: 140, molto_approfondita: 230 },
+  comfort:          { essenziale: 90,  approfondita: 190, molto_approfondita: 320 },
+  luoghi:           { essenziale: 60,  approfondita: 120, molto_approfondita: 200 },  // per luogo
+  natura:           { essenziale: 100, approfondita: 200, molto_approfondita: 360 },
+  sapori:           { essenziale: 80,  approfondita: 170, molto_approfondita: 280 },
+  consigli:         { essenziale: 70,  approfondita: 170, molto_approfondita: 270 },
+}
+
+// Sezioni dove, a "Molto approfondita", è utile poter distendere la narrazione su più paragrafi
+// tematici invece di un unico blocco — non "luoghi" (già strutturata per singolo luogo con ### ,
+// vedi SYSTEM_CORE) né le sezioni pratiche/brevi per natura (prima_di_partire, dati_sicurezza,
+// comfort, consigli), che restano un blocco unico anche al livello massimo: più ricche di dettaglio,
+// non spezzettate.
+const SECTIONS_ALLOWING_SUBPARAGRAPHS = new Set<GuideSectionKey>(['il_percorso', 'luoghi', 'natura', 'sapori'])
+
+/** Istruzione aggiuntiva iniettata dopo SECTION_BRIEF[k] quando il livello non è 'essenziale' —
+ *  vuota per 'essenziale' perché quel livello è il comportamento di sempre, non deve cambiare. */
+function lengthGuidance(key: GuideSectionKey, level: GuideTextLength): string {
+  if (level === 'essenziale') return ''
+  const depth = level === 'approfondita'
+    ? 'Aggiungi più contesto e dettagli concreti rispetto al minimo indispensabile, senza diventare prolissa o ripetitiva.'
+    : 'Scrivi un racconto più ricco e disteso: più aneddoti, dettagli storici/tecnici e sfumature — sempre pertinenti, mai riempitivo solo per allungare il testo.'
+  const structure = level === 'molto_approfondita' && SECTIONS_ALLOWING_SUBPARAGRAPHS.has(key)
+    ? ' Se il contenuto lo giustifica, articola il testo in 2-3 paragrafi tematici distinti (separati da una riga vuota) invece di un unico blocco, ciascuno con un suo filo conduttore.'
+    : ''
+  return `\n${depth}${structure}`
+}
+
+// Tetti di sicurezza sul budget di output dinamico (vedi computeGuideMaxTokens) — mai sotto il
+// pavimento (anche una sola sezione essenziale ha overhead fisso: titolo, eventuali tag
+// indovinello/epoca/curiosità), mai sopra il tetto (contiene costo e tempo di risposta anche
+// quando l'utente chiede tutte le sezioni tutte a "Molto approfondita" insieme).
+const GUIDE_MAX_TOKENS_FLOOR = 3200
+const GUIDE_MAX_TOKENS_CEILING = 14000
+// 6000 era il tetto fisso storico, calibrato per le 7 sezioni narrative insieme, tutte a
+// 'essenziale' (l'unico livello che esisteva prima di questa opzione) — resta il punto di
+// riferimento: il nuovo budget scala proporzionalmente a quanto la combinazione richiesta (sezioni
+// × livello scelto) si discosta da quel caso di riferimento, invece di ripartire da zero con
+// costanti di overhead inventate.
+const REFERENCE_MAX_TOKENS = 6000
+const REFERENCE_WORD_TOTAL = GUIDE_SECTIONS
+  .map(s => s.key)
+  .filter(k => k !== 'verificato')
+  .reduce((sum, k) => sum + SECTION_WORD_CEILING[k].essenziale * (k === 'luoghi' ? MAX_WIKI_POIS_IN_PROMPT : 1), 0)
+
+/** Budget di output per la chiamata narrativa, proporzionale a quante sezioni sono state richieste
+ *  e a quanto lunghe (vedi REFERENCE_MAX_TOKENS/REFERENCE_WORD_TOTAL sopra), clampato tra
+ *  GUIDE_MAX_TOKENS_FLOOR e GUIDE_MAX_TOKENS_CEILING. */
+function computeGuideMaxTokens(sections: GuideSectionKey[], lengths: SectionLengthMap): number {
+  const wordTotal = sections.reduce((sum, k) => {
+    const perPlaceMultiplier = k === 'luoghi' ? MAX_WIKI_POIS_IN_PROMPT : 1
+    return sum + SECTION_WORD_CEILING[k][lengths[k]] * perPlaceMultiplier
+  }, 0)
+  const scaled = Math.round(REFERENCE_MAX_TOKENS * (wordTotal / REFERENCE_WORD_TOTAL))
+  return Math.min(GUIDE_MAX_TOKENS_CEILING, Math.max(GUIDE_MAX_TOKENS_FLOOR, scaled))
 }
 
 /** Contenuto (istruzioni + intestazione) per una singola sezione dello scheletro. */
@@ -290,7 +353,8 @@ Gastronomia locale, prodotti tipici del territorio, piatti da assaggiare dopo l'
 Tradizioni e feste locali, artigianato, cultura popolare della zona.`,
   consigli: `## Consigli finali
 Sicurezza, segnaletica, varianti del percorso, cosa fare in caso di maltempo,
-contatti utili (soccorso alpino, rifugi, app di navigazione).`,
+contatti utili (soccorso alpino, rifugi). Non nominare app specifiche (vale come per ogni altra sezione,
+vedi istruzione generale più sopra): se serve, parla genericamente di "un'app di navigazione".`,
 }
 
 interface DataScores {
@@ -364,6 +428,9 @@ function buildPrompt(
    *  formattato — solo per la sezione 'comfort' ("Su misura per te"), undefined quando quella
    *  sezione non viene scritta in questa richiesta (risparmia la lettura Supabase altrimenti). */
   comfortContext?: string,
+  /** Lunghezza scelta per ciascuna sezione (default utente, sovrascrivibile per questa singola
+   *  generazione — vedi requestedSectionLengths in generateGuide). Sempre completa. */
+  sectionLengths: SectionLengthMap = sanitizeSectionLengths(undefined),
 ): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
@@ -374,7 +441,6 @@ function buildPrompt(
   // max_tokens a metà di quella sezione, troncando tutte le sezioni successive — mai una
   // limitazione voluta, solo un elenco senza tetto. Gli 8 più vicini al percorso restano comunque
   // i più pertinenti (wiki arriva già ordinato per distanza dalla traccia).
-  const MAX_WIKI_POIS_IN_PROMPT = 8
   const wikiCapped = wiki.slice(0, MAX_WIKI_POIS_IN_PROMPT)
   const wikiBlock = wikiCapped.length > 0
     ? wikiCapped.map(({ poi, wiki: w }) =>
@@ -416,12 +482,15 @@ function buildPrompt(
 
   // Ordine canonico (GUIDE_SECTIONS), non l'ordine in cui il chiamante le ha elencate — così
   // l'output arriva già nell'ordine giusto indipendentemente da come è stata costruita la richiesta.
-  // "verificato" esclusa sempre: non è mai narrata da questo prompt, vedi SECTION_LENGTH sopra —
-  // il chiamante (generateGuide) dovrebbe già filtrarla, questa è solo una difesa in più.
+  // "verificato" esclusa sempre: non è mai narrata da questo prompt, vedi SECTION_LENGTH_BY_LEVEL
+  // sopra — il chiamante (generateGuide) dovrebbe già filtrarla, questa è solo una difesa in più.
   const sectionsToWrite = GUIDE_SECTIONS.map(s => s.key).filter(k => k !== 'verificato' && sections.includes(k))
 
   const sectionsBlock = sectionsToWrite
-    .map(k => `${SECTION_BRIEF[k]}\n(LUNGHEZZA per questa sezione: ${SECTION_LENGTH[k]})`)
+    .map(k => {
+      const level = sectionLengths[k]
+      return `${SECTION_BRIEF[k]}${lengthGuidance(k, level)}\n(LUNGHEZZA per questa sezione: ${SECTION_LENGTH_BY_LEVEL[k][level]})`
+    })
     .join('\n\n')
   const sectionTitles = sectionsToWrite.map(k => GUIDE_SECTIONS.find(s => s.key === k)!.title).join(', ')
 
@@ -555,7 +624,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     )
   }
 
-  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, lookupFailed } = user
+  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths, lookupFailed } = user
     ? await resolveApiKeyAndSettings(user.id, 'guide')
     : await resolveEmergencySharedKey('guide')
 
@@ -583,17 +652,28 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // non ne manda (generazione automatica alla prima apertura del percorso), si usano le sezioni
   // Breve scelte dall'utente in Impostazioni (breveSections) — stesso comportamento di sempre.
   let requestedSections: GuideSectionKey[] = []
+  // Override della lunghezza per QUESTA generazione (dal selettore accanto ad "Approfondisci con
+  // Giulia" / "Genera il resto della guida") — solo le sezioni esplicitamente cambiate lì, non
+  // un'intera mappa: quelle assenti restano al valore salvato in Impostazioni (sectionLengths).
+  const sectionLengthOverrides: Partial<SectionLengthMap> = {}
   try {
     const body = await req.json()
     hikeId = body.hikeId
     if (!hikeId) throw new Error('hikeId mancante')
     hikeFallback = body.hikeFallback && typeof body.hikeFallback === 'object' ? body.hikeFallback : undefined
     if (Array.isArray(body.sections)) requestedSections = body.sections.filter(isGuideSectionKey)
+    if (body.sectionLengths && typeof body.sectionLengths === 'object') {
+      for (const [k, v] of Object.entries(body.sectionLengths as Record<string, unknown>)) {
+        if (isGuideSectionKey(k) && isGuideTextLength(v)) sectionLengthOverrides[k] = v
+      }
+    }
   } catch {
     return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
+
+  const effectiveSectionLengths: SectionLengthMap = { ...sectionLengths, ...sectionLengthOverrides }
 
   const sectionKeys = requestedSections.length > 0 ? requestedSections : breveSections
   if (sectionKeys.length === 0) {
@@ -811,7 +891,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     })
   }
 
-  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, comfortContext)
+  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, comfortContext, effectiveSectionLengths)
 
   // SYSTEM_CORE (+ SYSTEM_SUBTITLE quando applicabile) è testo fisso, identico per ogni utente e
   // ogni percorso nella stessa combinazione (~1700-1900 token) — niente cache_control (rimosso
@@ -830,7 +910,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
 
   const stream = client.messages.stream({
     model:      claudeModel,
-    max_tokens: GUIDE_MAX_TOKENS,
+    max_tokens: computeGuideMaxTokens(narrativeSectionKeys, effectiveSectionLengths),
     system,
     messages:   [{ role: 'user', content: prompt }],
   })
