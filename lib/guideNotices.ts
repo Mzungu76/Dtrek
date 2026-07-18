@@ -10,7 +10,13 @@
 // stagionale (info), e Giulia lo sa già dalla ricerca: ha senso che lo dichiari subito invece di
 // doverlo indovinare dopo dal testo libero. Puramente informativo/visivo (vedi
 // components/TrailScoreGaugeBadge.tsx) — non entra nel calcolo del punteggio Sicurezza.
-const NOTICE_RE = /\[avviso(?::(danger|warning|info))?\]([\s\S]*?)\[\/avviso\]\s*/gi
+// Il formato istruito (SYSTEM_VERIFICATO in app/api/guide/route.ts) è sempre [avviso:gravità]...
+// [/avviso], ma il modello occasionalmente scrive la gravità stessa come nome del tag (es.
+// [info]...[/info] invece di [avviso:info]...[/avviso]) — la seconda alternativa qui sotto
+// riconosce anche quella variante, così un avviso non finisce visualizzato come testo grezzo solo
+// perché Giulia non ha seguito il formato alla lettera. Il tag di chiusura è ugualmente permissivo
+// (qualunque delle quattro parole, non necessariamente la stessa dell'apertura) per lo stesso motivo.
+const NOTICE_RE = /\[(?:avviso(?::(danger|warning|info))?|(danger|warning|info))\]([\s\S]*?)\[\/(?:avviso|danger|warning|info)\]\s*/gi
 
 export type NoticeSeverity = 'danger' | 'warning' | 'info'
 
@@ -33,11 +39,14 @@ export interface ExtractedGuideNotices {
  */
 export function extractGuideNotices(rawGuideText: string): ExtractedGuideNotices {
   const notices: GuideNotice[] = []
-  const cleanedText = rawGuideText.replace(NOTICE_RE, (_match, severity: string | undefined, text: string) => {
-    const trimmed = text.trim().replace(/\s+/g, ' ')
-    if (trimmed) notices.push({ severity: (severity as NoticeSeverity) ?? 'warning', text: trimmed })
-    return ''
-  }).trimStart()
+  const cleanedText = rawGuideText.replace(
+    NOTICE_RE,
+    (_match, severityFromAvviso: string | undefined, severityFromBareTag: string | undefined, text: string) => {
+      const trimmed = text.trim().replace(/\s+/g, ' ')
+      if (trimmed) notices.push({ severity: (severityFromAvviso ?? severityFromBareTag ?? 'warning') as NoticeSeverity, text: trimmed })
+      return ''
+    },
+  ).trimStart()
   return { notices, cleanedText }
 }
 
