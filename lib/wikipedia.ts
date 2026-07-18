@@ -36,9 +36,12 @@ interface WikiGeosearchApiResponse {
 }
 
 // POI types worth looking up (named items likely to have articles)
+// 'spring' era assente qui pur avendo già una voce in MAX_DIST_KM più sotto (spring: 5) — una
+// sorgente con nome specifico (es. "Fonti del Clitunno") è esattamente il tipo di luogo con una
+// voce Wikipedia solida, e senza questa riga non diventava mai nemmeno un candidato.
 const WIKI_WORTHY = new Set<PoiItem['type']>([
   'peak', 'pass', 'waterfall', 'cave', 'ruins', 'archaeological',
-  'castle', 'monument', 'tower', 'hut', 'bivouac',
+  'castle', 'monument', 'tower', 'hut', 'bivouac', 'spring',
 ])
 
 // Generic names that are just the category word — no specific article exists for them. Includes
