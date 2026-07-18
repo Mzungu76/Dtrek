@@ -119,3 +119,30 @@ export function sanitizeSectionLengths(v: unknown): SectionLengthMap {
     return acc
   }, {} as SectionLengthMap)
 }
+
+/**
+ * Numero massimo di sezioni impostabili contemporaneamente su "Molto approfondita" — vincolo
+ * tecnico, non arbitrario: il budget di output necessario per generarle tutte insieme (vedi
+ * computeGuideMaxTokens in app/api/guide/route.ts) deve restare entro il tempo massimo di risposta
+ * del server (300s, piano Vercel Hobby di questo progetto). Oltre questa soglia il testo rischia
+ * di troncarsi a metà senza nessun errore visibile. Usata sia per disabilitare la selezione in UI
+ * (Impostazioni e override per singola guida) sia come tetto di sicurezza lato server.
+ */
+export const MAX_MOLTO_APPROFONDITA_SECTIONS = 2
+
+export function countMoltoApprofondita(lengths: SectionLengthMap): number {
+  return GUIDE_SECTIONS.filter(s => lengths[s.key] === 'molto_approfondita').length
+}
+
+/** Se più di MAX_MOLTO_APPROFONDITA_SECTIONS sezioni risultano su "Molto approfondita" (bypassando
+ *  il divieto lato UI — richiesta diretta all'API, client non aggiornato), retrocede le eccedenti
+ *  ad "Approfondita" invece di rifiutare la richiesta — stesso principio di degrado morbido di
+ *  sanitizeSectionLengths sopra. L'ordine canonico (GUIDE_SECTIONS) decide quali restano: le prime
+ *  incontrate in quell'ordine hanno precedenza. */
+export function clampMoltoApprofondita(lengths: SectionLengthMap): SectionLengthMap {
+  const moltoKeys = GUIDE_SECTIONS.map(s => s.key).filter(k => lengths[k] === 'molto_approfondita')
+  if (moltoKeys.length <= MAX_MOLTO_APPROFONDITA_SECTIONS) return lengths
+  const clamped = { ...lengths }
+  for (const k of moltoKeys.slice(MAX_MOLTO_APPROFONDITA_SECTIONS)) clamped[k] = 'approfondita'
+  return clamped
+}

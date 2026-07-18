@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { Loader2, CalendarClock, BookOpen } from 'lucide-react'
 import {
   GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, GUIDE_TEXT_LENGTHS, DEFAULT_SECTION_LENGTHS,
-  sanitizeSectionLengths, type GuideSectionKey, type SectionLengthMap,
+  sanitizeSectionLengths, countMoltoApprofondita, MAX_MOLTO_APPROFONDITA_SECTIONS,
+  type GuideSectionKey, type SectionLengthMap,
 } from '@/lib/guideSections'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 
@@ -120,7 +121,9 @@ export default function SectionGuida() {
               restano comunque visibili con i loro dati (mappa, punteggi, POI…) ma senza racconto, finché
               non premi &quot;Approfondisci con Giulia (AI)&quot; su quella specifica sezione. Per ogni
               sezione puoi anche scegliere quanto Giulia si dilunga — puoi comunque cambiarla al momento
-              della generazione, per una singola guida.
+              della generazione, per una singola guida. Al massimo {MAX_MOLTO_APPROFONDITA_SECTIONS}{' '}
+              sezioni possono essere impostate su &quot;Molto approfondita&quot; contemporaneamente
+              (limite tecnico, per evitare che la generazione si interrompa a metà).
             </p>
           </div>
         </div>
@@ -131,41 +134,51 @@ export default function SectionGuida() {
           </div>
         ) : (
           <div className="space-y-1.5">
-            {GUIDE_SECTIONS.map(s => {
-              const active = breveSections.includes(s.key)
-              return (
-                <div key={s.key} className="flex flex-wrap items-center gap-2 py-1">
-                  <button
-                    onClick={() => toggleSection(s.key)}
-                    disabled={savingSections}
-                    className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors disabled:opacity-50 shrink-0 ${
-                      active
-                        ? 'bg-terra-500 border-terra-500 text-white'
-                        : 'bg-white border-stone-200 text-stone-600 hover:border-terra-300'
-                    }`}
-                  >
-                    {s.title}
-                  </button>
-                  <div className="flex items-center gap-1 rounded-full border border-stone-200 p-0.5">
-                    {GUIDE_TEXT_LENGTHS.map(l => (
-                      <button
-                        key={l.key}
-                        onClick={() => setSectionLength(s.key, l.key)}
-                        disabled={savingLengths}
-                        title={l.description}
-                        className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium transition-colors disabled:opacity-50 ${
-                          sectionLengths[s.key] === l.key
-                            ? 'bg-stone-700 text-white'
-                            : 'text-stone-500 hover:bg-stone-100'
-                        }`}
-                      >
-                        {l.label}
-                      </button>
-                    ))}
+            {(() => {
+              const moltoCount = countMoltoApprofondita(sectionLengths)
+              return GUIDE_SECTIONS.map(s => {
+                const active = breveSections.includes(s.key)
+                return (
+                  <div key={s.key} className="flex flex-wrap items-center gap-2 py-1">
+                    <button
+                      onClick={() => toggleSection(s.key)}
+                      disabled={savingSections}
+                      className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors disabled:opacity-50 shrink-0 ${
+                        active
+                          ? 'bg-terra-500 border-terra-500 text-white'
+                          : 'bg-white border-stone-200 text-stone-600 hover:border-terra-300'
+                      }`}
+                    >
+                      {s.title}
+                    </button>
+                    <div className="flex items-center gap-1 rounded-full border border-stone-200 p-0.5">
+                      {GUIDE_TEXT_LENGTHS.map(l => {
+                        const isCurrent = sectionLengths[s.key] === l.key
+                        // Al limite, ogni pillola "Molto approfondita" non ancora selezionata si
+                        // disabilita — tranne quella già attiva su questa sezione, altrimenti
+                        // l'utente non potrebbe nemmeno tornare indietro a un'altra lunghezza.
+                        const atLimit = l.key === 'molto_approfondita' && !isCurrent && moltoCount >= MAX_MOLTO_APPROFONDITA_SECTIONS
+                        return (
+                          <button
+                            key={l.key}
+                            onClick={() => setSectionLength(s.key, l.key)}
+                            disabled={savingLengths || atLimit}
+                            title={atLimit ? `Massimo ${MAX_MOLTO_APPROFONDITA_SECTIONS} sezioni in "Molto approfondita" — riduci un'altra sezione prima` : l.description}
+                            className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              isCurrent
+                                ? 'bg-stone-700 text-white'
+                                : 'text-stone-500 hover:bg-stone-100'
+                            }`}
+                          >
+                            {l.label}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            })()}
           </div>
         )}
 

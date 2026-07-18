@@ -5,12 +5,17 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import type { PlannedHike } from '@/lib/plannedStore'
 import type { PoiItem }    from '@/lib/overpass'
 import {
-  GUIDE_SECTIONS, isGuideSectionKey, isGuideTextLength, sanitizeSectionLengths,
+  GUIDE_SECTIONS, isGuideSectionKey, isGuideTextLength, sanitizeSectionLengths, clampMoltoApprofondita,
   type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
 } from '@/lib/guideSections'
 import { mergeGuideSection, parseGuideSections } from '@/lib/guideParse'
 
-export const maxDuration = 300  // generare tutte le sezioni mancanti in una sola chiamata può richiedere ricerca web + più minuti di streaming; evita di tagliarla a metà
+// Il piano Vercel di questo progetto è Hobby: 300 è il valore MASSIMO consentito per una
+// Serverless Function (il build stesso rifiuta qualunque valore fuori dal range 1-300), non solo
+// un default prudente — da qui in poi è un vincolo fisso della piattaforma, non regolabile alzando
+// semplicemente questo numero. GUIDE_MAX_TOKENS_CEILING sotto è calibrato per restare
+// ragionevolmente dentro questo tempo anche nel caso più pesante.
+export const maxDuration = 300
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format }          from 'date-fns'
@@ -282,10 +287,18 @@ function lengthGuidance(key: GuideSectionKey, level: GuideTextLength): string {
 
 // Tetti di sicurezza sul budget di output dinamico (vedi computeGuideMaxTokens) — mai sotto il
 // pavimento (anche una sola sezione essenziale ha overhead fisso: titolo, eventuali tag
-// indovinello/epoca/curiosità), mai sopra il tetto (contiene costo e tempo di risposta anche
-// quando l'utente chiede tutte le sezioni tutte a "Molto approfondita" insieme).
+// indovinello/epoca/curiosità). Il tetto superiore vorrebbe stare SOPRA la stima del caso peggiore
+// reale (tutte le sezioni narrative insieme, tutte a "Molto approfondita" — vedi
+// REFERENCE_WORD_TOTAL sotto, ~21000 token stimati), ma è vincolato dal piano Vercel Hobby di
+// questo progetto: maxDuration qui sopra non può superare 300s, quindi il budget di output deve
+// restare abbastanza contenuto da completare lo streaming entro quel tempo — 26000 (che avrebbe
+// coperto anche il caso peggiore) richiedeva più margine di quanto 300s permettano. 18000 è un
+// compromesso: resta ben sopra il vecchio tetto fisso di 6000 (quindi molto meno troncamento per
+// le combinazioni comuni, poche sezioni alla volta), ma non garantisce più il caso limite di TUTTE
+// le sezioni insieme a "Molto approfondita" — se anche quello va coperto, serve un piano Vercel con
+// un maxDuration più alto, non solo alzare questo numero.
 const GUIDE_MAX_TOKENS_FLOOR = 3200
-const GUIDE_MAX_TOKENS_CEILING = 14000
+const GUIDE_MAX_TOKENS_CEILING = 18000
 // 6000 era il tetto fisso storico, calibrato per le 7 sezioni narrative insieme, tutte a
 // 'essenziale' (l'unico livello che esisteva prima di questa opzione) — resta il punto di
 // riferimento: il nuovo budget scala proporzionalmente a quanto la combinazione richiesta (sezioni
@@ -532,7 +545,15 @@ IMPORTANTE: rispetta esattamente l'indicazione LUNGHEZZA scritta sotto ciascuna 
 IMPORTANTE: Completa obbligatoriamente tutte le sezioni richieste (${sectionTitles}). Non terminare prima dell'ultima.`
 }
 
-const VERIFICATO_MAX_TOKENS = 1000
+// Il tag [fonti] deve elencare SEMPRE tutte le pagine consultate durante la ricerca (vedi
+// SYSTEM_VERIFICATO sotto) — con più fonti trovate (URL lunghi + titoli, in JSON) il tetto da 1000
+// bastava a troncare il blocco a metà, senza mai arrivare al tag di chiusura [/fonti]: senza quel
+// tag, extractGuideSources (lib/guideSources.ts) non trova alcun match e lascia l'intero JSON
+// grezzo visibile in pagina — non un problema di regex, ma di budget insufficiente per contenuto
+// che varia in lunghezza col numero di fonti trovate. 3000 lascia margine ampio anche con molte
+// fonti, restando comunque ben sotto la soglia (~16000) oltre la quale una richiesta non in
+// streaming come questa (client.messages.create, non .stream) rischierebbe timeout HTTP.
+const VERIFICATO_MAX_TOKENS = 3000
 
 /**
  * Chiamata DEDICATA per la sezione "Verificato online" — separata dalla generazione narrativa
@@ -563,7 +584,19 @@ async function generateVerificatoText(hikeTitle: string, claudeModel: string, ap
       .map(b => b.text)
       .join('')
       .trim()
-    return text || null
+    if (msg.stop_reason === 'max_tokens') {
+      console.error('[guide] generazione "Verificato online" troncata per max_tokens')
+    }
+    // Difesa in profondità, indipendente dal budget: se il tag [fonti] risulta aperto ma non
+    // chiuso (troncamento, o una qualunque altra causa), il JSON grezzo e incompleto non deve MAI
+    // arrivare all'utente — extractGuideSources (lib/guideSources.ts) richiede comunque il tag di
+    // chiusura per estrarlo, quindi senza questo taglio resterebbe visibile inalterato in pagina.
+    // Perdere la lista fonti di questa singola generazione (si riottiene al prossimo tentativo) è
+    // sempre preferibile a mostrare testo illeggibile.
+    const fontiOpenIdx = text.indexOf('[fonti]')
+    const hasUnclosedFonti = fontiOpenIdx !== -1 && !text.slice(fontiOpenIdx).includes('[/fonti]')
+    const safeText = hasUnclosedFonti ? text.slice(0, fontiOpenIdx).trimEnd() : text
+    return safeText || null
   } catch (e) {
     console.error('[guide] generazione "Verificato online" fallita:', e)
     return null
@@ -673,7 +706,10 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     })
   }
 
-  const effectiveSectionLengths: SectionLengthMap = { ...sectionLengths, ...sectionLengthOverrides }
+  // clampMoltoApprofondita è una difesa lato server, non il meccanismo primario — l'UI (Impostazioni
+  // e override per singola guida) impedisce già di superare MAX_MOLTO_APPROFONDITA_SECTIONS, ma una
+  // richiesta diretta all'API (o un client non aggiornato) potrebbe comunque bypassarla.
+  const effectiveSectionLengths: SectionLengthMap = clampMoltoApprofondita({ ...sectionLengths, ...sectionLengthOverrides })
 
   const sectionKeys = requestedSections.length > 0 ? requestedSections : breveSections
   if (sectionKeys.length === 0) {

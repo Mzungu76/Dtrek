@@ -23,7 +23,8 @@ import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
 import {
   GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, GUIDE_TEXT_LENGTHS, DEFAULT_SECTION_LENGTHS,
-  sanitizeSectionLengths, type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
+  sanitizeSectionLengths, countMoltoApprofondita, MAX_MOLTO_APPROFONDITA_SECTIONS,
+  type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
 } from '@/lib/guideSections'
 import { parseGuideSections, mergeGuideSection } from '@/lib/guideParse'
 import { SECTION_STYLE, LEGACY_STYLE } from './sectionStyle'
@@ -752,23 +753,34 @@ export default function GuideReader({
   // "Approfondisci con Giulia" di ogni sezione ancora senza testo (vedi SectionCard's
   // lengthSelector) — parte dal default salvato in Impostazioni (sectionLengths state) ma è solo
   // un override locale per QUESTA generazione, non persistito.
-  const renderLengthSelector = (key: GuideSectionKey) => (
+  const renderLengthSelector = (key: GuideSectionKey) => {
+    const moltoCount = countMoltoApprofondita(sectionLengths)
+    return (
     <div className="flex items-center gap-0.5 rounded-full border border-stone-200 p-0.5 shrink-0">
-      {GUIDE_TEXT_LENGTHS.map(l => (
-        <button
-          key={l.key}
-          type="button"
-          onClick={() => setSectionLengths(prev => ({ ...prev, [key]: l.key }))}
-          title={l.description}
-          className={`px-2 py-0.5 rounded-full text-[10.5px] font-medium transition-colors ${
-            sectionLengths[key] === l.key ? 'bg-stone-700 text-white' : 'text-stone-400 hover:bg-stone-100'
-          }`}
-        >
-          {l.label}
-        </button>
-      ))}
+      {GUIDE_TEXT_LENGTHS.map(l => {
+        const isCurrent = sectionLengths[key] === l.key
+        // Stesso limite di Impostazioni (components/profilo/SectionGuida.tsx) — il tetto vale
+        // sull'intera sectionLengths condivisa, non solo sulle sezioni di questa generazione,
+        // perché "Genera il resto della guida" può richiederle tutte insieme in una sola chiamata.
+        const atLimit = l.key === 'molto_approfondita' && !isCurrent && moltoCount >= MAX_MOLTO_APPROFONDITA_SECTIONS
+        return (
+          <button
+            key={l.key}
+            type="button"
+            onClick={() => setSectionLengths(prev => ({ ...prev, [key]: l.key }))}
+            disabled={atLimit}
+            title={atLimit ? `Massimo ${MAX_MOLTO_APPROFONDITA_SECTIONS} sezioni in "Molto approfondita" — riduci un'altra sezione prima` : l.description}
+            className={`px-2 py-0.5 rounded-full text-[10.5px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              isCurrent ? 'bg-stone-700 text-white' : 'text-stone-400 hover:bg-stone-100'
+            }`}
+          >
+            {l.label}
+          </button>
+        )
+      })}
     </div>
-  )
+    )
+  }
 
   const hasGuide  = guideText.trim().length > 50
   const hikeTitle = hike.title
