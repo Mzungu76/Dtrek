@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { sanitizeBreveSections, type GuideSectionKey } from '@/lib/guideSections'
+import { sanitizeBreveSections, sanitizeSectionLengths, type GuideSectionKey, type SectionLengthMap } from '@/lib/guideSections'
 import { readCachedAiSettings, writeCachedAiSettings, deleteCachedAiSettings, isEmergencySharedKeyEnabled } from '@/lib/aiKeyCache'
 import { resolveDefaultModel, isValidClaudeModelId, type AiFeature } from '@/lib/claudeModels'
 
@@ -29,6 +29,10 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
    *  NON copre app/api/route-search/route.ts: lì la ricerca web è il motore stesso della funzione
    *  (trovare percorsi da importare), non un extra disattivabile. */
   aiUseWebSearch: boolean
+  /** Lunghezza del testo AI scelta dall'utente per ciascuna sezione (default in Impostazioni,
+   *  sovrascrivibile per singola generazione — vedi requestedSectionLengths in
+   *  app/api/guide/route.ts). Sempre completa: ogni GuideSectionKey ha un valore. */
+  sectionLengths: SectionLengthMap
   /** true quando NÉ Supabase NÉ la copia di riserva (lib/aiKeyCache.ts, Upstash Redis) sono
    *  riuscite a rispondere — a differenza di una lettura riuscita che conferma semplicemente
    *  l'assenza di una chiave. I chiamanti devono mostrare "temporaneamente non disponibile", non
@@ -37,7 +41,7 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
 }> {
   const { data: settings, error } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections, claude_model, ai_use_biometric_data, ai_use_history_data, ai_web_search')
+    .select('claude_api_key, subscription_tier, user_gender, guide_breve_sections, claude_model, ai_use_biometric_data, ai_use_history_data, ai_web_search, guide_section_lengths')
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -54,16 +58,17 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
     const aiUseBiometricData = (settings?.ai_use_biometric_data as boolean | null) ?? true
     const aiUseHistoryData   = (settings?.ai_use_history_data   as boolean | null) ?? true
     const aiUseWebSearch     = (settings?.ai_web_search         as boolean | null) ?? true
+    const sectionLengths     = sanitizeSectionLengths(settings?.guide_section_lengths)
 
     // Tiene la copia di riserva sincronizzata con l'ultimo stato noto-buono di Supabase — sia
     // quando c'è una chiave personale da (ri)salvare, sia quando è stata rimossa, così un blackout
     // successivo non serve mai una chiave ormai cancellata. Non cachea mai la chiave condivisa
     // (fallback premium): non ha senso duplicarla per utente, e process.env resta comunque
     // disponibile in ogni caso.
-    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections, claudeModel: rawClaudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch })
+    if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections, claudeModel: rawClaudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths })
     else void deleteCachedAiSettings(userId)
 
-    return { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, lookupFailed: false }
+    return { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths, lookupFailed: false }
   }
 
   // Supabase irraggiungibile — prova la copia di riserva, infrastruttura indipendente.
@@ -78,6 +83,7 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
       aiUseBiometricData: cached.aiUseBiometricData ?? true,
       aiUseHistoryData:   cached.aiUseHistoryData ?? true,
       aiUseWebSearch:     cached.aiUseWebSearch ?? true,
+      sectionLengths:     sanitizeSectionLengths(cached.sectionLengths),
       lookupFailed:  false,
     }
   }
@@ -85,7 +91,7 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
   return {
     apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined),
     claudeModel: resolveDefaultModel(feature), aiUseBiometricData: true, aiUseHistoryData: true,
-    aiUseWebSearch: true, lookupFailed: true,
+    aiUseWebSearch: true, sectionLengths: sanitizeSectionLengths(undefined), lookupFailed: true,
   }
 }
 
@@ -106,6 +112,7 @@ export async function resolveEmergencySharedKey(feature: AiFeature): Promise<{
   aiUseBiometricData: boolean
   aiUseHistoryData: boolean
   aiUseWebSearch: boolean
+  sectionLengths: SectionLengthMap
   lookupFailed: boolean
 }> {
   const sharedKey = process.env.ANTHROPIC_API_KEY ?? null
@@ -120,6 +127,7 @@ export async function resolveEmergencySharedKey(feature: AiFeature): Promise<{
     aiUseBiometricData: true,
     aiUseHistoryData:   true,
     aiUseWebSearch:     true,
+    sectionLengths:     sanitizeSectionLengths(undefined),
     lookupFailed:  !enabled,
   }
 }

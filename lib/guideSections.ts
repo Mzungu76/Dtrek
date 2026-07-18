@@ -74,3 +74,48 @@ export function sectionDefForTitle(title: string): GuideSectionDef | undefined {
   const t = title.toLowerCase()
   return GUIDE_SECTIONS.find(s => s.match.some(m => t.includes(m)))
 }
+
+// ── Lunghezza del testo AI, personalizzabile per sezione ──────────────────────
+//
+// 'essenziale' è il comportamento storico (l'unico che esisteva prima di questa opzione) — resta
+// il default per ogni sezione finché l'utente non sceglie diversamente in Impostazioni, e può
+// comunque essere sovrascritto per singola generazione (vedi app/api/guide/route.ts, sectionsBlock
+// in buildPrompt, e il selettore in components/guida/GuideReader.tsx).
+export type GuideTextLength = 'essenziale' | 'approfondita' | 'molto_approfondita'
+
+export interface GuideTextLengthDef {
+  key: GuideTextLength
+  label: string
+  description: string
+}
+
+export const GUIDE_TEXT_LENGTHS: GuideTextLengthDef[] = [
+  { key: 'essenziale',         label: 'Essenziale',         description: 'Il taglio di sempre: diretto e conciso.' },
+  { key: 'approfondita',       label: 'Approfondita',       description: 'Più contesto e dettagli, senza dilungarsi.' },
+  { key: 'molto_approfondita', label: 'Molto approfondita', description: 'Racconto ricco, con più aneddoti e dettagli.' },
+]
+
+export const DEFAULT_TEXT_LENGTH: GuideTextLength = 'essenziale'
+
+export type SectionLengthMap = Record<GuideSectionKey, GuideTextLength>
+
+export const DEFAULT_SECTION_LENGTHS: SectionLengthMap = GUIDE_SECTIONS.reduce((acc, s) => {
+  acc[s.key] = DEFAULT_TEXT_LENGTH
+  return acc
+}, {} as SectionLengthMap)
+
+export function isGuideTextLength(v: unknown): v is GuideTextLength {
+  return v === 'essenziale' || v === 'approfondita' || v === 'molto_approfondita'
+}
+
+/** Valida/normalizza una mappa arbitraria sezione→lunghezza in una mappa SEMPRE completa (ogni
+ *  GuideSectionKey presente): valori mancanti o non validi tornano a DEFAULT_TEXT_LENGTH invece di
+ *  essere omessi, così i chiamanti possono indicizzarla senza controlli aggiuntivi. */
+export function sanitizeSectionLengths(v: unknown): SectionLengthMap {
+  const obj = (v && typeof v === 'object' && !Array.isArray(v)) ? v as Record<string, unknown> : {}
+  return GUIDE_SECTIONS.reduce((acc, s) => {
+    const val = obj[s.key]
+    acc[s.key] = isGuideTextLength(val) ? val : DEFAULT_TEXT_LENGTH
+    return acc
+  }, {} as SectionLengthMap)
+}

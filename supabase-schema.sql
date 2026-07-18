@@ -335,6 +335,12 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_use_history_data BOOLEAN N
 -- web è il motore stesso della funzione, non un extra disattivabile.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_web_search BOOLEAN NOT NULL DEFAULT true;
 
+-- Lunghezza del testo AI scelta dall'utente per ciascuna sezione della guida (essenziale /
+-- approfondita / molto_approfondita — vedi lib/guideSections.ts's GuideTextLength). JSONB perché
+-- è una mappa sezione→valore, non un elenco come guide_breve_sections. NULL/chiave assente ⇒
+-- 'essenziale' per quella sezione (vedi sanitizeSectionLengths), il comportamento generato da sempre.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_section_lengths JSONB;
+
 -- ── Supabase Storage bucket per PDF pubblici ──────────────────────────────────
 -- Esegui nel SQL Editor di Supabase:
 --

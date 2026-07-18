@@ -53,6 +53,8 @@ export interface UserSettingsData {
   startingLon: number | null
   guidePendingDays: number
   guideBreveSections: string[]
+  /** Lunghezza del testo AI per sezione (lib/guideSections.ts's SectionLengthMap) — sempre completa. */
+  guideSectionLengths: Record<string, string>
   hikerExperienceLevel: string | null
   hikerConcerns: string[]
   hikerEnvironmentPrefs: string[]

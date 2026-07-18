@@ -21,7 +21,10 @@ import CreditErrorModal from './CreditErrorModal'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
-import { GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
+import {
+  GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, GUIDE_TEXT_LENGTHS, DEFAULT_SECTION_LENGTHS,
+  sanitizeSectionLengths, type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
+} from '@/lib/guideSections'
 import { parseGuideSections, mergeGuideSection } from '@/lib/guideParse'
 import { SECTION_STYLE, LEGACY_STYLE } from './sectionStyle'
 import { slugifyHeading } from '@/lib/guideSlug'
@@ -212,6 +215,10 @@ export default function GuideReader({
   // una sezione, più d'una per "Genera il resto della guida") — pilota lo spinner per-sezione in
   // SectionCard senza interferire con `generating`, usato solo per la primissima generazione.
   const [generatingSections, setGeneratingSections] = useState<GuideSectionKey[]>([])
+  // Lunghezza scelta per sezione — parte dal default salvato in Impostazioni (vedi l'effetto più
+  // sotto), modificabile qui per sezione prima di premere "Approfondisci con Giulia" / "Genera il
+  // resto della guida": è l'override "per singola guida" richiesto, non persistito altrove.
+  const [sectionLengths, setSectionLengths] = useState<SectionLengthMap>(DEFAULT_SECTION_LENGTHS)
   const [error,        setError]        = useState<string | null>(null)
   // Errore AI irreversibile rilevato a metà stream (es. credito Anthropic esaurito, vedi
   // lib/guideAiError.ts) — mostrato come popup dedicato invece del banner generico `error` sopra,
@@ -344,9 +351,16 @@ export default function GuideReader({
       // hikeFallback: usato dal server SOLO in modalità di emergenza (Supabase del tutto
       // irraggiungibile, nessun utente verificabile) — la copia che il browser ha già in
       // locale, per non bloccare la generazione in quei momenti. Ignorato in condizioni normali.
+      // Override "per singola guida" della lunghezza — solo per le sezioni di QUESTA richiesta,
+      // presa dal selettore accanto al bottone "Approfondisci"/"Genera il resto" (sectionLengths
+      // state, di partenza uguale al default salvato in Impostazioni). Il server la fonde con
+      // quel default per ogni altra sezione non toccata qui — vedi effectiveSectionLengths in
+      // app/api/guide/route.ts.
+      const sectionLengthsForCall = Object.fromEntries(sections.map(k => [k, sectionLengths[k]]))
       let acc = await streamFetchText('/api/guide', {
         hikeId: hike.id,
         sections,
+        sectionLengths: sectionLengthsForCall,
         hikeFallback: {
           title:                hike.title,
           plannedDate:          hike.plannedDate,
@@ -480,7 +494,7 @@ export default function GuideReader({
     hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
     hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
     hike.cachedRiddles, hike.cachedEpochPois,
-    onHikeUpdate,
+    onHikeUpdate, sectionLengths,
   ])
 
   // Sezioni Breve scelte dall'utente in Impostazioni (components/profilo/SectionGuida.tsx) — null
@@ -490,7 +504,10 @@ export default function GuideReader({
   const [autoGenSections, setAutoGenSections] = useState<GuideSectionKey[] | null>(null)
   useEffect(() => {
     getUserSettingsCached()
-      .then(d => setAutoGenSections(Array.isArray(d.guideBreveSections) ? d.guideBreveSections as GuideSectionKey[] : DEFAULT_BREVE_SECTIONS))
+      .then(d => {
+        setAutoGenSections(Array.isArray(d.guideBreveSections) ? d.guideBreveSections as GuideSectionKey[] : DEFAULT_BREVE_SECTIONS)
+        if (d.guideSectionLengths) setSectionLengths(sanitizeSectionLengths(d.guideSectionLengths))
+      })
       .catch(() => setAutoGenSections(DEFAULT_BREVE_SECTIONS))
   }, [])
 
@@ -731,6 +748,28 @@ export default function GuideReader({
     }
   }
 
+  // Selettore "Essenziale/Approfondita/Molto approfondita" mostrato accanto al bottone
+  // "Approfondisci con Giulia" di ogni sezione ancora senza testo (vedi SectionCard's
+  // lengthSelector) — parte dal default salvato in Impostazioni (sectionLengths state) ma è solo
+  // un override locale per QUESTA generazione, non persistito.
+  const renderLengthSelector = (key: GuideSectionKey) => (
+    <div className="flex items-center gap-0.5 rounded-full border border-stone-200 p-0.5 shrink-0">
+      {GUIDE_TEXT_LENGTHS.map(l => (
+        <button
+          key={l.key}
+          type="button"
+          onClick={() => setSectionLengths(prev => ({ ...prev, [key]: l.key }))}
+          title={l.description}
+          className={`px-2 py-0.5 rounded-full text-[10.5px] font-medium transition-colors ${
+            sectionLengths[key] === l.key ? 'bg-stone-700 text-white' : 'text-stone-400 hover:bg-stone-100'
+          }`}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  )
+
   const hasGuide  = guideText.trim().length > 50
   const hikeTitle = hike.title
   const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
@@ -932,6 +971,7 @@ export default function GuideReader({
                     showApprofondisciHint={canApprofondisciSection}
                     onApprofondisci={canApprofondisciSection ? () => generateSections([s.guideKey!]) : undefined}
                     approfondendo={generatingSections.includes(s.guideKey as GuideSectionKey)}
+                    lengthSelector={canApprofondisciSection ? renderLengthSelector(s.guideKey!) : undefined}
                   />
                 )
               })}
