@@ -979,7 +979,12 @@ export default function GuideReader({
                     showApprofondisciHint={canApprofondisciSection}
                     onApprofondisci={canApprofondisciSection ? () => generateSections([s.guideKey!]) : undefined}
                     approfondendo={generatingSections.includes(s.guideKey as GuideSectionKey)}
-                    lengthSelector={canApprofondisciSection ? renderLengthSelector(s.guideKey!) : undefined}
+                    // "Verificato online" non passa mai dal meccanismo delle lunghezze (è generata
+                    // da una chiamata AI dedicata alla sola ricerca web, indipendente da
+                    // sectionLengths — vedi SECTION_LENGTH_BY_LEVEL in app/api/guide/route.ts):
+                    // mostrare il selettore lì sarebbe un controllo che sembra fare qualcosa ma non
+                    // ha alcun effetto.
+                    lengthSelector={canApprofondisciSection && s.guideKey !== 'verificato' ? renderLengthSelector(s.guideKey!) : undefined}
                   />
                 )
               })}
