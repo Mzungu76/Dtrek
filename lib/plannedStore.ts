@@ -300,4 +300,5 @@ registerListReconciler<PlannedHikeMeta, PlannedHike>({
   fetchItem:    (id) => apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`),
   toMeta:       toPlannedMeta,
   sort: (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  entityType:   ENTITY_TYPE,
 })
