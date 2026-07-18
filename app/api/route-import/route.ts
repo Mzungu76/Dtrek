@@ -4,6 +4,7 @@ import { resolveGeometryFallback } from '@/lib/trailConditions/geometry'
 import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
 import { downloadAndParseGpx, findGpxLinkOnPage } from '@/lib/gpxSourceFetch'
 import { downloadAndParseKml, findKmlLinkOnPage, kindFromUrl } from '@/lib/kmlSourceFetch'
+import { downloadAndParseGeoJson, findGeoJsonLinkOnPage } from '@/lib/geoJsonSourceFetch'
 import type { ServerParsedGpx } from '@/lib/serverGpxParser'
 import { isBlockedHost } from '@/lib/scrapeBlocklist'
 import { resolveAreaBbox, searchHikingRoutesByName } from '@/lib/overpassTrails'
@@ -37,9 +38,9 @@ async function fetchPageHtml(pageUrl: string): Promise<string | null> {
   }
 }
 
-// Forma di risposta comune a tutte le tracce risolte da un file (GPX o KML/KMZ) — evita di
-// ripetere gli stessi 9 campi per ciascuna delle strade percorribili sotto.
-function trackResultJson(source: 'gpx' | 'kml', title: string, track: ServerParsedGpx) {
+// Forma di risposta comune a tutte le tracce risolte da un file (GPX, KML/KMZ o GeoJSON) — evita
+// di ripetere gli stessi 9 campi per ciascuna delle strade percorribili sotto.
+function trackResultJson(source: 'gpx' | 'kml' | 'geojson', title: string, track: ServerParsedGpx) {
   return NextResponse.json({
     ok: true,
     source,
@@ -86,8 +87,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'blocked_host' })
   }
 
-  // 1) Link diretto a un file di traccia (.gpx, .kml o .kmz) — scaricalo e basta, nessuna analisi
-  // della pagina necessaria.
+  // 1) Link diretto a un file di traccia (.gpx, .kml/.kmz o .geojson) — scaricalo e basta,
+  // nessuna analisi della pagina necessaria.
   if (/\.gpx(?:[?#]|$)/i.test(url)) {
     const gpx = await downloadAndParseGpx(url)
     if (gpx) return trackResultJson('gpx', gpx.title, gpx)
@@ -99,12 +100,20 @@ export async function POST(req: NextRequest) {
     if (kml) return trackResultJson('kml', kml.title, kml)
     return NextResponse.json({ ok: false, reason: 'gpx_download_failed' })
   }
+  if (/\.geojson(?:[?#]|$)/i.test(url)) {
+    const geojson = await downloadAndParseGeoJson(url)
+    if (geojson) return trackResultJson('geojson', geojson.title, geojson)
+    return NextResponse.json({ ok: false, reason: 'gpx_download_failed' })
+  }
 
-  // 2) Pagina normale — cerca un link .gpx o .kml/.kmz pubblicato al suo interno (stesse funzioni
-  // già usate dalla ricerca AI per il caso GPX) e, in parallelo, il titolo della pagina per il
-  // fallback OSM sotto e come titolo precompilato per l'utente. GPX ha priorità se la pagina
-  // offrisse entrambi (caso raro): è il formato con la fedeltà più alta (timestamp per punto).
-  const [gpxLink, kmlLink, html] = await Promise.all([findGpxLinkOnPage(url), findKmlLinkOnPage(url), fetchPageHtml(url)])
+  // 2) Pagina normale — cerca un link .gpx, .kml/.kmz o .geojson pubblicato al suo interno
+  // (stesse funzioni già usate dalla ricerca AI per il caso GPX) e, in parallelo, il titolo della
+  // pagina per il fallback OSM sotto e come titolo precompilato per l'utente. GPX ha priorità se
+  // la pagina offrisse più formati (caso raro): è quello con la fedeltà più alta (timestamp per
+  // punto), poi KML/KMZ, poi GeoJSON.
+  const [gpxLink, kmlLink, geoJsonLink, html] = await Promise.all([
+    findGpxLinkOnPage(url), findKmlLinkOnPage(url), findGeoJsonLinkOnPage(url), fetchPageHtml(url),
+  ])
   const pageTitle = html ? extractTitle(html) : null
 
   if (gpxLink) {
@@ -114,6 +123,10 @@ export async function POST(req: NextRequest) {
   if (kmlLink) {
     const kml = await downloadAndParseKml(kmlLink.url, kmlLink.kind)
     if (kml) return trackResultJson('kml', pageTitle ?? kml.title, kml)
+  }
+  if (geoJsonLink) {
+    const geojson = await downloadAndParseGeoJson(geoJsonLink)
+    if (geojson) return trackResultJson('geojson', pageTitle ?? geojson.title, geojson)
   }
 
   // 3) Nessuna traccia diretta — prova a far corrispondere il titolo della pagina a un percorso

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { parseGpx } from '@/lib/gpxParser'
 import { parseKml } from '@/lib/kmlParser'
 import { extractKmlFromKmz } from '@/lib/kmzExtract'
+import { parseGeoJson } from '@/lib/geoJsonParser'
 import { formatDuration } from '@/lib/tcxParser'
 import { classifyMarkers } from '@/lib/difficultyMarkers'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
@@ -45,9 +46,10 @@ export default function GpxUploader() {
 
   const processFile = useCallback(async (file: File) => {
     const lower = file.name.toLowerCase()
-    const kind = lower.endsWith('.gpx') ? 'gpx' : lower.endsWith('.kml') ? 'kml' : lower.endsWith('.kmz') ? 'kmz' : null
+    const kind = lower.endsWith('.gpx') ? 'gpx' : lower.endsWith('.kml') ? 'kml' : lower.endsWith('.kmz') ? 'kmz'
+      : lower.endsWith('.geojson') ? 'geojson' : null
     if (!kind) {
-      setStatus('error'); setErrorMsg('Seleziona un file con estensione .gpx, .kml o .kmz'); return
+      setStatus('error'); setErrorMsg('Seleziona un file con estensione .gpx, .kml, .kmz o .geojson'); return
     }
     setFileName(file.name); setStatus('parsing' as GpxStatus)
     try {
@@ -57,18 +59,23 @@ export default function GpxUploader() {
         setParsed({ ...gpx })
         setTitle(gpx.title)
       } else {
-        // KML/KMZ non hanno waypoint/commenti nello stesso formato del GPX (vedi
+        // KML/KMZ/GeoJSON non hanno waypoint/commenti nello stesso formato del GPX (vedi
         // extractDifficultyMarkerCandidates in lib/gpxParser.ts) — nessun candidato marcatore di
         // difficoltà da estrarre, stesso stato "nessuno trovato" di un GPX senza wpt/desc.
-        const kmlText = kind === 'kmz'
-          ? extractKmlFromKmz(new Uint8Array(await file.arrayBuffer()))
-          : await file.text()
-        if (!kmlText) throw new Error(`Impossibile leggere il file ${kind.toUpperCase()} (archivio non valido o senza KML al suo interno)`)
-        const kml = parseKml(kmlText)
-        if (!kml) throw new Error(`Nessuna traccia riconosciuta nel file ${kind.toUpperCase()}`)
-        const id = 'kml_' + Date.now().toString(36) + '_' + Math.floor(kml.distanceMeters)
-        setParsed({ ...kml, id, difficultyMarkerCandidates: [] })
-        setTitle(kml.title || 'Escursione pianificata')
+        let track: ReturnType<typeof parseKml>
+        if (kind === 'geojson') {
+          track = parseGeoJson(await file.text())
+        } else {
+          const kmlText = kind === 'kmz'
+            ? extractKmlFromKmz(new Uint8Array(await file.arrayBuffer()))
+            : await file.text()
+          if (!kmlText) throw new Error(`Impossibile leggere il file ${kind.toUpperCase()} (archivio non valido o senza KML al suo interno)`)
+          track = parseKml(kmlText)
+        }
+        if (!track) throw new Error(`Nessuna traccia riconosciuta nel file ${kind.toUpperCase()}`)
+        const id = kind + '_' + Date.now().toString(36) + '_' + Math.floor(track.distanceMeters)
+        setParsed({ ...track, id, difficultyMarkerCandidates: [] })
+        setTitle(track.title || 'Escursione pianificata')
       }
       setStatus('parsed')
     } catch (e) {
@@ -145,11 +152,11 @@ export default function GpxUploader() {
         onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) processFile(f) }}
         onClick={() => inputRef.current?.click()}
       >
-        <input ref={inputRef} type="file" accept=".gpx,.kml,.kmz" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
+        <input ref={inputRef} type="file" accept=".gpx,.kml,.kmz,.geojson" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
 
         {status === 'idle' && (<>
           <MapPin className="w-12 h-12 text-stone-300 mx-auto mb-4" />
-          <p className="text-stone-500 font-medium">Drag & Drop del file GPX, KML o KMZ qui</p>
+          <p className="text-stone-500 font-medium">Drag & Drop del file GPX, KML, KMZ o GeoJSON qui</p>
           <p className="text-stone-400 text-sm mt-1">oppure clicca per sfogliare</p>
         </>)}
 
@@ -171,7 +178,7 @@ export default function GpxUploader() {
           <div>
             <p className="font-medium text-stone-700 text-sm mb-1">Come funziona</p>
             <ul className="text-stone-500 text-sm space-y-0.5 list-disc list-inside">
-              <li>Carica un file GPX, KML o KMZ del percorso che vuoi fare</li>
+              <li>Carica un file GPX, KML, KMZ o GeoJSON del percorso che vuoi fare</li>
               <li>Analisi automatica: distanza, dislivello, quota</li>
               <li>Valutazione personalizzata rispetto al tuo storico</li>
               <li>Visibile nel calendario come escursione pianificata</li>

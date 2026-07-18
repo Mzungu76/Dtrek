@@ -17,7 +17,7 @@ type Status = 'idle' | 'resolving' | 'resolved' | 'notfound' | 'saving' | 'succe
 
 interface ResolvedTrack {
   title: string
-  source: 'gpx' | 'kml' | 'osm'
+  source: 'gpx' | 'kml' | 'geojson' | 'osm'
   trackPoints: PlannedHike['trackPoints']
   distanceMeters: number
   elevationGain: number
@@ -136,7 +136,7 @@ export default function UrlImportUploader({ onBack }: { onBack: () => void }) {
           </div>
           <div>
             <h3 className="font-display text-base font-semibold text-stone-800">Importa da un link</h3>
-            <p className="text-xs text-stone-400">Incolla l&apos;indirizzo della pagina dove hai trovato il percorso — anche un link diretto a un file GPX, KML o KMZ</p>
+            <p className="text-xs text-stone-400">Incolla l&apos;indirizzo della pagina dove hai trovato il percorso — anche un link diretto a un file GPX, KML, KMZ o GeoJSON</p>
           </div>
         </div>
         <input
@@ -187,6 +187,7 @@ export default function UrlImportUploader({ onBack }: { onBack: () => void }) {
           <p className="text-xs font-semibold text-sky-600 uppercase tracking-wider mb-3">
             {resolved.source === 'gpx' ? 'Traccia GPX trovata'
               : resolved.source === 'kml' ? 'Traccia KML/KMZ trovata'
+              : resolved.source === 'geojson' ? 'Traccia GeoJSON trovata'
               : 'Percorso trovato su OpenStreetMap'}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
