@@ -3,19 +3,21 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, BookOpen, User } from 'lucide-react'
+import { Compass, BookMarked, BookOpen, User, Gauge } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// 3 tab principali del nuovo posizionamento: Guida (import GPX → guida turistica
-// AI), Resoconto (escursioni concluse: dati + racconto), Diario (libro impaginato).
+// 4 tab principali del nuovo posizionamento: Stato (centro di controllo:
+// statistiche + badge + AI discreta), Guide (import GPX → guida turistica AI),
+// Resoconti (escursioni concluse: dati + racconto), Diario (libro impaginato).
 // Il Profilo non è un tab alla pari ma un'icona persistente (vedi ProfileAvatar).
 export const NAV_LINKS = [
-  { href: '/guida',     label: 'Guida',     icon: Compass    },
-  { href: '/resoconto', label: 'Resoconto', icon: BookOpen   },
-  { href: '/diario',    label: 'Diario',    icon: BookMarked },
+  { href: '/stato',      label: 'Stato',      icon: Gauge      },
+  { href: '/guida',      label: 'Guide',      icon: Compass    },
+  { href: '/resoconto',  label: 'Resoconti',  icon: BookOpen   },
+  { href: '/diario',     label: 'Diario',     icon: BookMarked },
 ]
 
 export function isActive(href: string, path: string) {
