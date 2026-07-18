@@ -116,7 +116,7 @@ solo questa sezione.
 
 Il nome di un percorso spesso non basta a identificarlo: molti sentieri italiani condividono lo
 stesso nome (o un nome molto simile) con altri percorsi in zone completamente diverse. Nel messaggio
-trovi anche il comune/provincia più vicino al punto di partenza reale — usalo SEMPRE per ancorare la
+trovi anche il comune/provincia/regione più vicini al punto di partenza reale — usali SEMPRE per ancorare la
 ricerca (es. "chiusura sentiero X, comune di Y"), e prima di scrivere qualunque avviso verifica che la
 fonte parli davvero di questo percorso in questa zona, non di un omonimo altrove: se una fonte non
 specifica la località o sembra riferirsi a un posto diverso da quello indicato, scartala e non
@@ -486,12 +486,12 @@ const VERIFICATO_MAX_TOKENS = 1000
  * l'intera generazione della guida, solo lasciare questa sezione vuota per un prossimo tentativo.
  */
 async function generateVerificatoText(
-  hikeTitle: string, comune: string | null, claudeModel: string, apiKey: string,
+  hikeTitle: string, zona: string | null, claudeModel: string, apiKey: string,
 ): Promise<string | null> {
   try {
     const client = new Anthropic({ apiKey })
     const todayStr = format(new Date(), "d MMMM yyyy", { locale: it })
-    const zonaLine = comune ? `Zona (comune/provincia più vicini al punto di partenza): ${comune}` : 'Zona: non nota'
+    const zonaLine = zona ? `Zona (comune/provincia/regione più vicini al punto di partenza): ${zona}` : 'Zona: non nota'
     const msg = await client.messages.create({
       model:      claudeModel,
       max_tokens: VERIFICATO_MAX_TOKENS,
@@ -779,7 +779,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   const narrativeSectionKeys = sectionKeys.filter(k => k !== 'verificato')
 
   const client = new Anthropic({ apiKey })
-  // Comune/provincia del punto di partenza: passato a generateVerificatoText come ancoraggio
+  // Comune/provincia/regione del punto di partenza: passati a generateVerificatoText come ancoraggio
   // geografico esplicito (vedi SYSTEM_VERIFICATO) — un nome di sentiero da solo non basta a
   // distinguerlo da un omonimo altrove in Italia, ed è esattamente il tipo di scambio di
   // percorso osservato in produzione. Nominatim è pubblico/gratuito ma può fallire o essere

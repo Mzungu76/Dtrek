@@ -19,7 +19,7 @@ import { stripGuideStatus } from '@/lib/guideStatus'
 import { extractGuideAiError, type GuideAiError } from '@/lib/guideAiError'
 import CreditErrorModal from './CreditErrorModal'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
-import { AlertTriangle, Link2, KeyRound } from 'lucide-react'
+import { AlertTriangle, Link2, KeyRound, Info } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
 import { GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, type GuideSectionKey } from '@/lib/guideSections'
 import { parseGuideSections, mergeGuideSection } from '@/lib/guideParse'
@@ -639,7 +639,7 @@ export default function GuideReader({
 
   // ── Widgets per section ───────────────────────────────────────────────────
 
-  function renderWidget(key: DisplaySection['key']): ReactNode {
+  function renderWidget(key: DisplaySection['key'], body?: string): ReactNode {
     switch (key) {
       case 'prima_di_partire':
         return weather
@@ -673,11 +673,16 @@ export default function GuideReader({
           : null
       case 'natura':
         return natura ? <NaturaWidget {...natura} /> : null
-      case 'verificato':
+      case 'verificato': {
         // Avvisi (banner colorati per gravità) + fonti consultate — prima mostrati globalmente
         // sopra tutte le sezioni, ora vivono qui: stessi dati (guideNotices/guideSources, mai
         // toccati), solo raccolti in un unico posto invece di sparsi in due blocchi separati.
-        return (guideNotices.length > 0 || guideSources.length > 0) ? (
+        // Il disclaimer sotto compare ogni volta che la sezione ha un testo (quindi la ricerca è
+        // stata davvero eseguita), non solo quando ci sono avvisi/fonti da mostrare — anche un
+        // "nessuna criticità nota" è comunque un esito di una ricerca AI, non un fatto verificato
+        // da una fonte umana, e va segnalato come tale.
+        if (!body?.trim()) return null
+        return (
           <div className="space-y-3">
             {guideNotices.length > 0 && (
               <div className="space-y-2">
@@ -724,8 +729,15 @@ export default function GuideReader({
                 ))}
               </div>
             )}
+            <div className="flex items-start gap-2 rounded-xl bg-stone-50 border border-stone-100 px-3.5 py-2.5">
+              <Info className="w-3.5 h-3.5 shrink-0 text-stone-400 mt-0.5" />
+              <p className="text-[11px] text-stone-400 leading-relaxed">
+                Verifica condotta da un&apos;intelligenza artificiale tramite ricerche automatiche sul web: può contenere errori o non cogliere tutte le criticità reali. Non sostituisce la prudenza sul campo — controlla sempre le condizioni aggiornate prima di partire.
+              </p>
+            </div>
           </div>
-        ) : null
+        )
+      }
       default:
         return null
     }
@@ -924,7 +936,7 @@ export default function GuideReader({
                     icon={s.icon}
                     color={s.color}
                     body={s.body}
-                    widget={renderWidget(s.key)}
+                    widget={renderWidget(s.key, s.body)}
                     sectionPhoto={routePhotos[i]}
                     twoColumns
                     isVoiceActive={activeSection === i && (isPlaying || isPaused)}

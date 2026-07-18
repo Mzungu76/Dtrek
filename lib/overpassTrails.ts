@@ -137,10 +137,12 @@ export async function resolveAreaBbox(areaText: string): Promise<[number, number
 
 /**
  * Direzione inversa di resolveAreaBbox: da coordinate a un'etichetta leggibile
- * "Comune, Provincia" — usata da app/api/guide/route.ts per dare a Giulia un ancoraggio
+ * "Comune, Provincia, Regione" — usata da app/api/guide/route.ts per dare a Giulia un ancoraggio
  * geografico esplicito quando verifica online lo stato di un percorso (SYSTEM_VERIFICATO),
  * così un nome di sentiero generico o condiviso da più percorsi omonimi in Italia non la porta
- * a verificare (e riportare come attuale) lo stato di un percorso diverso in un'altra zona.
+ * a verificare (e riportare come attuale) lo stato di un percorso diverso in un'altra zona. La
+ * regione è inclusa oltre al comune/provincia perché anche questi due possono ripetersi altrove
+ * (comuni omonimi esistono in Italia) — la combinazione dei tre riduce ulteriormente l'ambiguità.
  * Stesso endpoint pubblico Nominatim, nessuna chiave richiesta; null se non risolve — il
  * chiamante prosegue senza l'ancoraggio invece di bloccare la generazione per questo.
  */
@@ -159,8 +161,9 @@ export async function resolveComuneFromLatLon(lat: number, lon: number): Promise
     if (!a) return null
     const comune = a.village ?? a.town ?? a.city ?? a.municipality ?? a.hamlet
     const provincia = a.county ?? a.province
-    if (!comune && !provincia) return null
-    return [comune, provincia].filter(Boolean).join(', ')
+    const regione = a.state
+    if (!comune && !provincia && !regione) return null
+    return [comune, provincia, regione].filter(Boolean).join(', ')
   } catch {
     return null
   }
