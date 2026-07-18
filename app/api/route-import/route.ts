@@ -3,6 +3,9 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { resolveGeometryFallback } from '@/lib/trailConditions/geometry'
 import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
 import { downloadAndParseGpx, findGpxLinkOnPage } from '@/lib/gpxSourceFetch'
+import { downloadAndParseKml, findKmlLinkOnPage, kindFromUrl } from '@/lib/kmlSourceFetch'
+import { downloadAndParseGeoJson, findGeoJsonLinkOnPage } from '@/lib/geoJsonSourceFetch'
+import type { ServerParsedGpx } from '@/lib/serverGpxParser'
 import { isBlockedHost } from '@/lib/scrapeBlocklist'
 import { resolveAreaBbox, searchHikingRoutesByName } from '@/lib/overpassTrails'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
@@ -14,8 +17,8 @@ const USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
 const TITLE_RE = /<title[^>]*>([^<]+)<\/title>/i
 const OG_TITLE_RE = /<meta\b[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i
 
-// Pagina già scaricata da findGpxLinkOnPage per cercare il link .gpx — riusa lo stesso HTML per
-// evitare un secondo fetch solo per il titolo, invece di richiamare la pagina una seconda volta.
+// Pagina già scaricata da findGpxLinkOnPage/findKmlLinkOnPage per cercare un link di traccia —
+// riusa lo stesso HTML per evitare un secondo fetch solo per il titolo.
 function extractTitle(html: string): string | null {
   const og = OG_TITLE_RE.exec(html)
   if (og) return og[1].trim()
@@ -33,6 +36,25 @@ async function fetchPageHtml(pageUrl: string): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+// Forma di risposta comune a tutte le tracce risolte da un file (GPX, KML/KMZ o GeoJSON) — evita
+// di ripetere gli stessi 9 campi per ciascuna delle strade percorribili sotto.
+function trackResultJson(source: 'gpx' | 'kml' | 'geojson', title: string, track: ServerParsedGpx) {
+  return NextResponse.json({
+    ok: true,
+    source,
+    title,
+    routePolyline: downsamplePolyline(track.trackPoints),
+    trackPoints: track.trackPoints,
+    distanceMeters: track.distanceMeters,
+    elevationGain: track.elevationGain,
+    elevationLoss: track.elevationLoss,
+    altitudeMax: track.altitudeMax,
+    altitudeMin: track.altitudeMin,
+    estimatedTimeSeconds: track.estimatedTimeSeconds,
+    hasElevation: true,
+  })
 }
 
 // Nessuna lettura/scrittura per-utente qui (solo Overpass, il DTM pubblico e la pagina incollata
@@ -65,56 +87,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'blocked_host' })
   }
 
-  // 1) Link diretto a un .gpx — scaricalo e basta, nessuna analisi della pagina necessaria.
+  // 1) Link diretto a un file di traccia (.gpx, .kml/.kmz o .geojson) — scaricalo e basta,
+  // nessuna analisi della pagina necessaria.
   if (/\.gpx(?:[?#]|$)/i.test(url)) {
     const gpx = await downloadAndParseGpx(url)
-    if (gpx) {
-      return NextResponse.json({
-        ok: true,
-        source: 'gpx',
-        title: gpx.title,
-        routePolyline: downsamplePolyline(gpx.trackPoints),
-        trackPoints: gpx.trackPoints,
-        distanceMeters: gpx.distanceMeters,
-        elevationGain: gpx.elevationGain,
-        elevationLoss: gpx.elevationLoss,
-        altitudeMax: gpx.altitudeMax,
-        altitudeMin: gpx.altitudeMin,
-        estimatedTimeSeconds: gpx.estimatedTimeSeconds,
-        hasElevation: true,
-      })
-    }
+    if (gpx) return trackResultJson('gpx', gpx.title, gpx)
+    return NextResponse.json({ ok: false, reason: 'gpx_download_failed' })
+  }
+  const directKmlKind = kindFromUrl(url)
+  if (directKmlKind) {
+    const kml = await downloadAndParseKml(url, directKmlKind)
+    if (kml) return trackResultJson('kml', kml.title, kml)
+    return NextResponse.json({ ok: false, reason: 'gpx_download_failed' })
+  }
+  if (/\.geojson(?:[?#]|$)/i.test(url)) {
+    const geojson = await downloadAndParseGeoJson(url)
+    if (geojson) return trackResultJson('geojson', geojson.title, geojson)
     return NextResponse.json({ ok: false, reason: 'gpx_download_failed' })
   }
 
-  // 2) Pagina normale — cerca un link .gpx pubblicato al suo interno (findGpxLinkOnPage, stessa
-  // funzione già usata dalla ricerca AI) e, in parallelo, il titolo della pagina per il fallback
-  // OSM sotto e come titolo precompilato per l'utente.
-  const [gpxLink, html] = await Promise.all([findGpxLinkOnPage(url), fetchPageHtml(url)])
+  // 2) Pagina normale — cerca un link .gpx, .kml/.kmz o .geojson pubblicato al suo interno
+  // (stesse funzioni già usate dalla ricerca AI per il caso GPX) e, in parallelo, il titolo della
+  // pagina per il fallback OSM sotto e come titolo precompilato per l'utente. GPX ha priorità se
+  // la pagina offrisse più formati (caso raro): è quello con la fedeltà più alta (timestamp per
+  // punto), poi KML/KMZ, poi GeoJSON.
+  const [gpxLink, kmlLink, geoJsonLink, html] = await Promise.all([
+    findGpxLinkOnPage(url), findKmlLinkOnPage(url), findGeoJsonLinkOnPage(url), fetchPageHtml(url),
+  ])
   const pageTitle = html ? extractTitle(html) : null
 
   if (gpxLink) {
     const gpx = await downloadAndParseGpx(gpxLink)
-    if (gpx) {
-      return NextResponse.json({
-        ok: true,
-        source: 'gpx',
-        title: pageTitle ?? gpx.title,
-        routePolyline: downsamplePolyline(gpx.trackPoints),
-        trackPoints: gpx.trackPoints,
-        distanceMeters: gpx.distanceMeters,
-        elevationGain: gpx.elevationGain,
-        elevationLoss: gpx.elevationLoss,
-        altitudeMax: gpx.altitudeMax,
-        altitudeMin: gpx.altitudeMin,
-        estimatedTimeSeconds: gpx.estimatedTimeSeconds,
-        hasElevation: true,
-      })
-    }
+    if (gpx) return trackResultJson('gpx', pageTitle ?? gpx.title, gpx)
+  }
+  if (kmlLink) {
+    const kml = await downloadAndParseKml(kmlLink.url, kmlLink.kind)
+    if (kml) return trackResultJson('kml', pageTitle ?? kml.title, kml)
+  }
+  if (geoJsonLink) {
+    const geojson = await downloadAndParseGeoJson(geoJsonLink)
+    if (geojson) return trackResultJson('geojson', pageTitle ?? geojson.title, geojson)
   }
 
-  // 3) Nessun GPX diretto — prova a far corrispondere il titolo della pagina a un percorso reale
-  // su OpenStreetMap, stesso fallback per nome già usato dalla ricerca AI (searchHikingRoutesByName).
+  // 3) Nessuna traccia diretta — prova a far corrispondere il titolo della pagina a un percorso
+  // reale su OpenStreetMap, stesso fallback per nome già usato dalla ricerca AI
+  // (searchHikingRoutesByName).
   if (pageTitle) {
     try {
       const bbox = await resolveAreaBbox(pageTitle)
