@@ -69,7 +69,7 @@ function UploadPageInner() {
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all
                 ${gpxSource === 'file' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
             >
-              <MapPin className="w-3.5 h-3.5" /> File GPX
+              <MapPin className="w-3.5 h-3.5" /> File traccia
             </button>
             <button
               onClick={() => setGpxSource('manual')}
