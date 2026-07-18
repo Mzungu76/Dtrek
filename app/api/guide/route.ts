@@ -29,6 +29,7 @@ import { extractEpochPois } from '@/lib/epochPois'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
 import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
+import { resolveComuneFromLatLon } from '@/lib/overpassTrails'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,6 +113,15 @@ const SYSTEM_VERIFICATO = `Sei Giulia, la stessa guida escursionistica italiana 
 DTrek. Qui il tuo unico compito è verificare online lo stato aggiornato di UN percorso specifico e
 scrivere la sezione "## Verificato online" della sua guida — non stai scrivendo il resto della guida,
 solo questa sezione.
+
+Il nome di un percorso spesso non basta a identificarlo: molti sentieri italiani condividono lo
+stesso nome (o un nome molto simile) con altri percorsi in zone completamente diverse. Nel messaggio
+trovi anche il comune/provincia più vicino al punto di partenza reale — usalo SEMPRE per ancorare la
+ricerca (es. "chiusura sentiero X, comune di Y"), e prima di scrivere qualunque avviso verifica che la
+fonte parli davvero di questo percorso in questa zona, non di un omonimo altrove: se una fonte non
+specifica la località o sembra riferirsi a un posto diverso da quello indicato, scartala e non
+usarla per un avviso. In caso di dubbio residuo, meglio un "nessuna criticità nota" onesto che un
+avviso rischiosamente attribuito al percorso sbagliato.
 
 Usa lo strumento di ricerca web per due sole verifiche mirate: (1) condizioni attuali del percorso —
 chiusure temporanee o permanenti, deviazioni, frane, lavori in corso, divieti stagionali; (2)
@@ -475,17 +485,20 @@ const VERIFICATO_MAX_TOKENS = 1000
  * Ritorna null (mai un'eccezione) su qualunque fallimento — un errore qui non deve mai far fallire
  * l'intera generazione della guida, solo lasciare questa sezione vuota per un prossimo tentativo.
  */
-async function generateVerificatoText(hikeTitle: string, claudeModel: string, apiKey: string): Promise<string | null> {
+async function generateVerificatoText(
+  hikeTitle: string, comune: string | null, claudeModel: string, apiKey: string,
+): Promise<string | null> {
   try {
     const client = new Anthropic({ apiKey })
     const todayStr = format(new Date(), "d MMMM yyyy", { locale: it })
+    const zonaLine = comune ? `Zona (comune/provincia più vicini al punto di partenza): ${comune}` : 'Zona: non nota'
     const msg = await client.messages.create({
       model:      claudeModel,
       max_tokens: VERIFICATO_MAX_TOKENS,
       system:     SYSTEM_VERIFICATO,
       messages:   [{
         role: 'user',
-        content: `Percorso: ${hikeTitle}\nData odierna: ${todayStr}\n\nVerifica online lo stato di questo percorso e scrivi la sezione "## Verificato online" come da istruzioni.`,
+        content: `Percorso: ${hikeTitle}\n${zonaLine}\nData odierna: ${todayStr}\n\nVerifica online lo stato di questo percorso e scrivi la sezione "## Verificato online" come da istruzioni.`,
       }],
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
     })
@@ -766,8 +779,18 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   const narrativeSectionKeys = sectionKeys.filter(k => k !== 'verificato')
 
   const client = new Anthropic({ apiKey })
+  // Comune/provincia del punto di partenza: passato a generateVerificatoText come ancoraggio
+  // geografico esplicito (vedi SYSTEM_VERIFICATO) — un nome di sentiero da solo non basta a
+  // distinguerlo da un omonimo altrove in Italia, ed è esattamente il tipo di scambio di
+  // percorso osservato in produzione. Nominatim è pubblico/gratuito ma può fallire o essere
+  // lento: null in quel caso, generateVerificatoText prosegue comunque senza l'ancoraggio
+  // invece di bloccare la generazione per questo.
+  const startPoint = trackPoints.find(p => p.lat != null && p.lon != null)
   const verificatoPromise = needsVerificato
-    ? generateVerificatoText(hike.title, claudeModel, apiKey)
+    ? (async () => {
+        const comune = startPoint ? await resolveComuneFromLatLon(startPoint.lat!, startPoint.lon!) : null
+        return generateVerificatoText(hike.title, comune, claudeModel, apiKey)
+      })()
     : Promise.resolve(null)
 
   // Caso "Approfondisci con Giulia" premuto solo su "Verificato online": nessuna narrazione da
