@@ -140,6 +140,20 @@ export async function resolveAreaBbox(areaText: string): Promise<[number, number
 const ITALY_BBOX: [number, number, number, number] = [35.2, 6.6, 47.1, 18.6]
 
 /**
+ * Espande un bbox di radiusKm in ogni direzione — usata dal fallback "cerca sentieri nei
+ * dintorni" di app/api/route-search-plain/route.ts: il bbox di Nominatim per un paese/frazione o
+ * un piccolo punto d'interesse (una sorgente, un mulino) è spesso troppo stretto per contenere i
+ * sentieri reali della zona, che partono tipicamente qualche km più in là.
+ */
+export function padBbox(bbox: [number, number, number, number], radiusKm: number): [number, number, number, number] {
+  const [minLat, minLon, maxLat, maxLon] = bbox
+  const centerLat = (minLat + maxLat) / 2
+  const dLat = radiusKm / 111.32
+  const dLon = radiusKm / (111.32 * Math.cos(centerLat * Math.PI / 180))
+  return [minLat - dLat, minLon - dLon, maxLat + dLat, maxLon + dLon]
+}
+
+/**
  * Cerca relazioni escursionistiche OSM il cui nome contiene (case-insensitive) `nameQuery`,
  * entro un bbox (di solito quello di resolveAreaBbox). Usata dalla ricerca AI per verificare se
  * un percorso proposto dal modello ha davvero una traccia GPS reale su OpenStreetMap.
