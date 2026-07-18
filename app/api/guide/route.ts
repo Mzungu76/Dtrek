@@ -10,13 +10,12 @@ import {
 } from '@/lib/guideSections'
 import { mergeGuideSection, parseGuideSections } from '@/lib/guideParse'
 
-// Alzato da 300 a 600 insieme a GUIDE_MAX_TOKENS_CEILING (14000 → 26000, vedi sotto): col tetto
-// precedente il caso peggiore (tutte le sezioni a "Molto approfondita") poteva già avvicinarsi al
-// limite di 300s, e ora richiede più tempo di streaming — un maxDuration troppo basso taglierebbe
-// la risposta a metà a livello di piattaforma (Vercel), indipendentemente da max_tokens. Se il
-// piano Vercel ha un tetto inferiore a 600s, questo valore viene comunque limitato a quello: da
-// verificare se le generazioni più lunghe risultano ancora troncate.
-export const maxDuration = 600
+// Il piano Vercel di questo progetto è Hobby: 300 è il valore MASSIMO consentito per una
+// Serverless Function (il build stesso rifiuta qualunque valore fuori dal range 1-300), non solo
+// un default prudente — da qui in poi è un vincolo fisso della piattaforma, non regolabile alzando
+// semplicemente questo numero. GUIDE_MAX_TOKENS_CEILING sotto è calibrato per restare
+// ragionevolmente dentro questo tempo anche nel caso più pesante.
+export const maxDuration = 300
 import type { WikiPage }   from '@/lib/wikipedia'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { format }          from 'date-fns'
@@ -288,15 +287,18 @@ function lengthGuidance(key: GuideSectionKey, level: GuideTextLength): string {
 
 // Tetti di sicurezza sul budget di output dinamico (vedi computeGuideMaxTokens) — mai sotto il
 // pavimento (anche una sola sezione essenziale ha overhead fisso: titolo, eventuali tag
-// indovinello/epoca/curiosità). Il tetto superiore deve restare comunque SOPRA la stima del caso
-// peggiore reale (tutte le sezioni narrative insieme, tutte a "Molto approfondita" — vedi
-// REFERENCE_WORD_TOTAL sotto, ~21000 token stimati): un tetto più basso di quello troncava
-// silenziosamente la generazione a metà (spesso proprio "I luoghi da non perdere", una delle
-// sezioni più pesanti in fondo all'ordine canonico), producendo un testo palesemente più corto
-// del livello scelto senza nessun errore visibile. 26000 resta comunque ben sotto il tetto nativo
-// di max_tokens di ogni modello selezionabile qui (Sonnet 5/Opus 4.8: 128K, Haiku 4.5: 64K).
+// indovinello/epoca/curiosità). Il tetto superiore vorrebbe stare SOPRA la stima del caso peggiore
+// reale (tutte le sezioni narrative insieme, tutte a "Molto approfondita" — vedi
+// REFERENCE_WORD_TOTAL sotto, ~21000 token stimati), ma è vincolato dal piano Vercel Hobby di
+// questo progetto: maxDuration qui sopra non può superare 300s, quindi il budget di output deve
+// restare abbastanza contenuto da completare lo streaming entro quel tempo — 26000 (che avrebbe
+// coperto anche il caso peggiore) richiedeva più margine di quanto 300s permettano. 18000 è un
+// compromesso: resta ben sopra il vecchio tetto fisso di 6000 (quindi molto meno troncamento per
+// le combinazioni comuni, poche sezioni alla volta), ma non garantisce più il caso limite di TUTTE
+// le sezioni insieme a "Molto approfondita" — se anche quello va coperto, serve un piano Vercel con
+// un maxDuration più alto, non solo alzare questo numero.
 const GUIDE_MAX_TOKENS_FLOOR = 3200
-const GUIDE_MAX_TOKENS_CEILING = 26000
+const GUIDE_MAX_TOKENS_CEILING = 18000
 // 6000 era il tetto fisso storico, calibrato per le 7 sezioni narrative insieme, tutte a
 // 'essenziale' (l'unico livello che esisteva prima di questa opzione) — resta il punto di
 // riferimento: il nuovo budget scala proporzionalmente a quanto la combinazione richiesta (sezioni
