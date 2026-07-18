@@ -1,7 +1,7 @@
-// Shared by lib/riddles.ts and lib/epochPois.ts: both extract LLM-generated content tagged
-// with a POI name (never coordinates — the model only ever names a place it was given in the
-// guide prompt) and need to resolve that name back to the POI's real, already-known lat/lon.
-// An unmatched name means the content is dropped, never guessed at.
+// Used by lib/epochPois.ts: extracts LLM-generated content tagged with a POI name (never
+// coordinates — the model only ever names a place it was given in the guide prompt) and needs
+// to resolve that name back to the POI's real, already-known lat/lon. An unmatched name means
+// the content is dropped, never guessed at.
 import type { PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 

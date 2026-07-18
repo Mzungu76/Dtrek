@@ -8,7 +8,7 @@ interface Block { type: 'lead' | 'para' | 'curiosita' | 'avviso' | 'subsection';
 function parseBlocks(body: string): Block[] {
   const out: Block[] = []
   // [curiosita] e [avviso] sono blocchi delimitati su una riga dedicata (stessa convenzione di
-  // [sottotitolo]/[indovinello]/[epoca], vedi app/api/guide/route.ts) — [avviso] segnala una
+  // [sottotitolo]/[epoca], vedi app/api/guide/route.ts) — [avviso] segnala una
   // criticità reale e specifica trovata dalla ricerca web di Giulia sullo stato del percorso.
   const blockRe = /\[(curiosita|avviso)\]([\s\S]*?)\[\/\1\]/g
   let last = 0

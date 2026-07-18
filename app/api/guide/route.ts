@@ -32,7 +32,6 @@ import { stripGuideStatus } from '@/lib/guideStatus'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
-import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
@@ -77,12 +76,6 @@ mai il nome di un prodotto preciso.
 Nella sezione "I luoghi da non perdere", usa ### (tre cancelletti e spazio) come sottotitolo per ogni luogo specifico prima di descriverlo (es: ### Castello di Calcata).
 Per le curiosità e aneddoti più memorabili, racchiudili in un riquadro speciale usando il formato esatto su una riga separata: [curiosita] testo della curiosità [/curiosita]
 
-Nella sezione "I luoghi da non perdere", per ogni luogo che compare nell'elenco LUOGHI CON VOCE WIKIPEDIA
-(usa il nome ESATTO così come scritto in quell'elenco, non abbreviarlo né parafrasarlo) aggiungi un piccolo
-indovinello legato a quel luogo, su una riga separata, in questo formato esatto:
-[indovinello poi="Nome esatto del luogo"]Domanda dell'indovinello?|Risposta breve[/indovinello]
-Non inventare luoghi che non sono nell'elenco: se un luogo non è nell'elenco LUOGHI CON VOCE WIKIPEDIA, non creare un indovinello per esso.
-
 Solo per i luoghi dell'elenco LUOGHI CON VOCE WIKIPEDIA che hanno davvero una storia stratificata nel tempo
 (siti archeologici, resti etruschi o romani, castelli, borghi medievali — NON per un semplice belvedere o
 una sorgente), aggiungi una o più righe nel formato esatto:
@@ -91,7 +84,7 @@ Usa solo i periodi per cui il luogo ha davvero un racconto storico da offrire (a
 
 IMPORTANTE: non scrivere mai commenti sul tuo processo di ricerca o di scrittura ("Ho tutte le
 informazioni che mi servono", "Ora scrivo la guida completa", "Sto verificando...") fuori dai tag
-[sottotitolo]/[avviso]/[curiosita]/[indovinello]/[epoca] previsti (quelli applicabili a questa
+[sottotitolo]/[avviso]/[curiosita]/[epoca] previsti (quelli applicabili a questa
 richiesta, vedi sotto): quel testo finirebbe visualizzato come se fosse un contenuto vero e proprio
 della guida.`
 
@@ -287,7 +280,7 @@ function lengthGuidance(key: GuideSectionKey, level: GuideTextLength): string {
 
 // Tetti di sicurezza sul budget di output dinamico (vedi computeGuideMaxTokens) — mai sotto il
 // pavimento (anche una sola sezione essenziale ha overhead fisso: titolo, eventuali tag
-// indovinello/epoca/curiosità). Il tetto superiore vorrebbe stare SOPRA la stima del caso peggiore
+// epoca/curiosità). Il tetto superiore vorrebbe stare SOPRA la stima del caso peggiore
 // reale (tutte le sezioni narrative insieme, tutte a "Molto approfondita" — vedi
 // REFERENCE_WORD_TOTAL sotto, ~21000 token stimati), ma è vincolato dal piano Vercel Hobby di
 // questo progetto: maxDuration qui sopra non può superare 300s, quindi il budget di output deve
@@ -449,8 +442,8 @@ function buildPrompt(
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
 
   // Un tetto qui non è solo per limitare il prompt in ingresso: la sezione "I luoghi da non
-  // perdere" tratta OGNI luogo di questo elenco (narrazione + indovinello obbligatorio, vedi
-  // SYSTEM_CORE), quindi un tracciato con molti POI Wikipedia poteva far sforare
+  // perdere" tratta OGNI luogo di questo elenco (vedi SYSTEM_CORE), quindi un tracciato con molti
+  // POI Wikipedia poteva far sforare
   // max_tokens a metà di quella sezione, troncando tutte le sezioni successive — mai una
   // limitazione voluta, solo un elenco senza tetto. Gli 8 più vicini al percorso restano comunque
   // i più pertinenti (wiki arriva già ordinato per distanza dalla traccia).
@@ -743,11 +736,10 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   let scores: DataScores
   let s2: Parameters<typeof fetchNatureContext>[0]['s2']
   let trackPoints: TrackPoint[]
-  // Testo/indovinelli/epoche già esistenti su cui fondere il risultato di un "Approfondisci" per
+  // Testo/epoche già esistenti su cui fondere il risultato di un "Approfondisci" per
   // sezione (vedi persistenza più sotto) — vuoti quando non è una richiesta di quel tipo, o quando
   // non c'è nulla da leggere (degraded/hikeFallback non porta questi campi, vedi GuideHikeFallback).
   let existingGuideText = ''
-  let existingRiddles: PlannedHike['cachedRiddles'] = []
   let existingEpochPois: PlannedHike['cachedEpochPois'] = []
   // Riportati invariati nell'update quando questa chiamata non include/completa con successo
   // "Verificato online" (unica sezione che li scrive/riscrive, vedi SYSTEM_VERIFICATO) — senza
@@ -796,8 +788,8 @@ async function generateGuide(req: NextRequest): Promise<Response> {
       scores = { difficultyMarkers: [] }
       trackPoints = hikeFallback.trackPoints ?? []
       s2 = undefined
-      // existingGuideText/existingRiddles/existingEpochPois restano vuoti (già inizializzati
-      // sopra) — non c'è nulla da leggere finché la riga non esiste ancora.
+      // existingGuideText/existingEpochPois restano vuoti (già inizializzati sopra) — non c'è
+      // nulla da leggere finché la riga non esiste ancora.
     } else {
       const { data: markersRows } = await supabase
         .from('trail_difficulty_markers')
@@ -843,7 +835,6 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         waterSources:       data.s2_water_sources,
       }
       existingGuideText = data.cached_guide ?? ''
-      existingRiddles = data.cached_riddles ?? []
       existingEpochPois = data.cached_epoch_pois ?? []
       existingGuideNotices = data.cached_guide_notices ?? []
       existingGuideSources = data.cached_guide_sources ?? []
@@ -888,8 +879,8 @@ async function generateGuide(req: NextRequest): Promise<Response> {
 
   // Caso "Approfondisci con Giulia" premuto solo su "Verificato online": nessuna narrazione da
   // generare in questa chiamata, solo l'esito della ricerca — un percorso più leggero rispetto a
-  // quello sotto, che riusa la stessa pipeline di estrazione/salvataggio ma senza stream/riddle/
-  // epoch/sottotitolo (non pertinenti per questa sola sezione).
+  // quello sotto, che riusa la stessa pipeline di estrazione/salvataggio ma senza stream/epoch/
+  // sottotitolo (non pertinenti per questa sola sezione).
   if (narrativeSectionKeys.length === 0) {
     const readableOnly = new ReadableStream({
       async start(controller) {
@@ -982,9 +973,9 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         }
 
         // Rileva un troncamento per esaurimento token: senza questo controllo, una guida tagliata
-        // a metà sezione (o a metà di un tag [indovinello]/[epoca], scartato in silenzio dal
-        // parsing perché mai chiuso — vedi lib/riddles.ts, lib/epochPois.ts) passava inosservata,
-        // sia lato log che per l'utente, che vedeva semplicemente sparire le ultime sezioni.
+        // a metà sezione (o a metà di un tag [epoca], scartato in silenzio dal parsing perché mai
+        // chiuso — vedi lib/epochPois.ts) passava inosservata, sia lato log che per l'utente, che
+        // vedeva semplicemente sparire le ultime sezioni.
         const finalMessage = await stream.finalMessage().catch(() => null)
         if (finalMessage?.stop_reason === 'max_tokens') {
           console.error(`[guide] generazione troncata per max_tokens (hikeId=${hikeId}, sections=${narrativeSectionKeys.join(',')})`)
@@ -1045,10 +1036,9 @@ async function generateGuide(req: NextRequest): Promise<Response> {
               const imageByUrl = new Map(foundImages.map(f => [f.url, f.imageUrl]))
               sourcesList = rs.sources.map(s => (imageByUrl.has(s.url) ? { ...s, imageUrl: imageByUrl.get(s.url) } : s))
             }
-            const { riddles, cleanedText: step4 } = extractRiddles(step3, cachedPoisArr, cachedPoiWikiArr)
-            const { epochPois, cleanedText: step5 } = extractEpochPois(step4, cachedPoisArr, cachedPoiWikiArr)
-            const firstHeadingIdx = step5.search(/^## /m)
-            const cleaned = firstHeadingIdx > 0 ? step5.slice(firstHeadingIdx) : step5
+            const { epochPois, cleanedText: step4 } = extractEpochPois(step3, cachedPoisArr, cachedPoiWikiArr)
+            const firstHeadingIdx = step4.search(/^## /m)
+            const cleaned = firstHeadingIdx > 0 ? step4.slice(firstHeadingIdx) : step4
 
             const parsedNew = parseGuideSections(cleaned)
             if (parsedNew.every(s => !s.key)) throw new Error('nessuna sezione riconosciuta nella risposta')
@@ -1058,17 +1048,15 @@ async function generateGuide(req: NextRequest): Promise<Response> {
               mergedText = mergeGuideSection(mergedText, sec.key, sec.title, sec.body)
             }
 
-            // Gli indovinelli/le epoche sono legati solo alla sezione "luoghi": rigenerandola i
-            // vecchi sono da sostituire, non accumulare; per ogni altra combinazione di sezioni
-            // restano semplicemente quelli già esistenti, invariati.
-            const mergedRiddles = sectionKeys.includes('luoghi') ? riddles : existingRiddles
+            // Le epoche sono legate solo alla sezione "luoghi": rigenerandola le vecchie sono da
+            // sostituire, non accumulare; per ogni altra combinazione di sezioni restano
+            // semplicemente quelle già esistenti, invariate.
             const mergedEpochPois = sectionKeys.includes('luoghi') ? epochPois : existingEpochPois
 
             const updateData: Record<string, unknown> = {
               cached_guide: mergedText,
               cached_guide_notices: notices,
               cached_guide_sources: sourcesList,
-              cached_riddles: mergedRiddles,
               cached_epoch_pois: mergedEpochPois,
               guide_tier: 'breve',
               guide_generated_at: new Date().toISOString(),

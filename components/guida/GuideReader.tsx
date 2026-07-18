@@ -10,7 +10,6 @@ import {
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
-import { extractRiddles } from '@/lib/riddles'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, normalizeGuideNotices, parseNoticeSource, type GuideNotice } from '@/lib/guideNotices'
@@ -110,9 +109,9 @@ export interface NaturaBundle {
 
 interface Props {
   hike: PlannedHike
-  /** Mirrors what's persisted (cachedGuide/cachedRiddles/cachedEpochPois/guideTier) back into the
-   *  caller's own hike state, so the rest of the app (map riddles, epoch POIs) sees a freshly
-   *  generated guide without waiting for a refetch. */
+  /** Mirrors what's persisted (cachedGuide/cachedEpochPois/guideTier) back into the caller's own
+   *  hike state, so the rest of the app (epoch POIs) sees a freshly generated guide without
+   *  waiting for a refetch. */
   onHikeUpdate: (patch: Partial<PlannedHike>) => void
   /** True once every enrichment source (POI/Wikipedia, scores, sicurezza, natura) has settled (or
    *  a safety timeout fired) — gates the automatic Breve generation. */
@@ -436,9 +435,8 @@ export default function GuideReader({
 
       const cachedPois = (hike.cachedPois ?? []) as PoiItem[]
       const cachedPoiWiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
-      const { riddles, cleanedText: c1 } = extractRiddles(acc, cachedPois, cachedPoiWiki)
-      const { epochPois, cleanedText: c2 } = extractEpochPois(c1, cachedPois, cachedPoiWiki)
-      acc = c2
+      const { epochPois, cleanedText: c1 } = extractEpochPois(acc, cachedPois, cachedPoiWiki)
+      acc = c1
 
       // Ogni tanto il modello scrive una riga di commento libero ("Ho tutte le informazioni che
       // mi servono, ora scrivo la guida...") prima del primo titolo di sezione, non racchiusa in
@@ -459,16 +457,14 @@ export default function GuideReader({
       setGuideNotices(notices)
       setGuideSources(sources)
 
-      // Indovinelli/epoche esistono solo per la sezione "luoghi" — rigenerandola sostituiscono i
-      // precedenti (evita duplicati sugli stessi POI), per ogni altra combinazione restano invariati.
-      const mergedRiddles   = sections.includes('luoghi') ? riddles   : (hike.cachedRiddles ?? [])
+      // Le epoche esistono solo per la sezione "luoghi" — rigenerandola sostituiscono le
+      // precedenti (evita duplicati sugli stessi POI), per ogni altra combinazione restano invariate.
       const mergedEpochPois = sections.includes('luoghi') ? epochPois : (hike.cachedEpochPois ?? [])
 
       const patch: Partial<PlannedHike> = {
         cachedGuide: merged,
         cachedGuideNotices: notices,
         cachedGuideSources: sources,
-        cachedRiddles: mergedRiddles,
         cachedEpochPois: mergedEpochPois,
         guideTier: 'breve',
         guideGeneratedAt: new Date().toISOString(),
@@ -494,7 +490,7 @@ export default function GuideReader({
     hike.id, hike.title, hike.plannedDate, hike.userNotes, hike.tags,
     hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
     hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
-    hike.cachedRiddles, hike.cachedEpochPois,
+    hike.cachedEpochPois,
     onHikeUpdate, sectionLengths,
   ])
 
