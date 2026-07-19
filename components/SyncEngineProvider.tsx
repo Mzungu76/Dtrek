@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { flush, startPeriodicSafetyNet } from '@/lib/sync/syncEngine'
 import { pullAll } from '@/lib/sync/pullEngine'
+import { startRealtimeSync } from '@/lib/sync/realtimeSync'
 
 // Side-effect imports: each of these modules self-registers its outbox flusher (push) and pull
 // reconciler/task (pull) at load time — see e.g. lib/blobStore.ts's registerEntityFlusher/
@@ -23,7 +24,9 @@ const PULL_INTERVAL_MS = 5 * 60 * 1000
  * Mounts both the outbox-flush triggers (push local changes to Supabase) and the pull-reconcile
  * triggers (pull other devices' changes back in — see lib/sync/pullEngine.ts) for the whole app
  * session: an immediate run on load, network reconnect, becoming visible/hidden, tab close
- * (best-effort, flush only), and periodic safety nets in case none of the above ever fire.
+ * (best-effort, flush only), periodic safety nets in case none of the above ever fire, and a
+ * Supabase Realtime subscription (lib/sync/realtimeSync.ts) that pulls immediately the moment a
+ * change actually lands in Supabase, instead of waiting on the periodic safety net.
  */
 export default function SyncEngineProvider() {
   useEffect(() => {
@@ -34,6 +37,7 @@ export default function SyncEngineProvider() {
     flush()
     pullAll()
     startPeriodicSafetyNet()
+    const stopRealtimeSync = startRealtimeSync()
     const pullTimer = setInterval(() => { pullAll() }, PULL_INTERVAL_MS)
 
     const onOnline     = () => { flush(); pullAll() }
@@ -48,6 +52,7 @@ export default function SyncEngineProvider() {
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
       clearInterval(pullTimer)
+      stopRealtimeSync()
       window.removeEventListener('online', onOnline)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('beforeunload', onBeforeUnload)

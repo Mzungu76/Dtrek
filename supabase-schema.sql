@@ -963,6 +963,40 @@ ALTER TABLE activities ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT false;
 
 
 -- ═══════════════════════════════════════════════════════════
+-- Realtime (postgres_changes) sulle tabelle sincronizzate localmente — vedi
+-- lib/sync/realtimeSync.ts e supabase/migrations/enable_realtime_sync_tables.sql. Senza questa
+-- pubblicazione il client resta sul solo polling di lib/sync/pullEngine.ts (apertura app,
+-- riconnessione, tab tornata visibile, safety net ogni 5 minuti) — un dispositivo lasciato aperto
+-- in primo piano può restare fino a 5 minuti indietro rispetto a una modifica fatta altrove. Le
+-- policy RLS "*_owner" già definite sopra restano l'unico confine di sicurezza: Realtime consegna
+-- solo le righe che l'utente autenticato potrebbe leggere comunque via RLS.
+-- ═══════════════════════════════════════════════════════════
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'activities'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE activities;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'planned_hikes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE planned_hikes;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'user_settings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE user_settings;
+  END IF;
+END $$;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- MIGRAZIONE DATI ESISTENTI
 -- Esegui DOPO aver creato il tuo account su DTrek.
 -- Sostituisci 'INCOLLA-QUI-IL-TUO-UUID' con il tuo user_id
