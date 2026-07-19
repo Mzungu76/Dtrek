@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { getAllActivities, getActivityById, type ActivityMeta } from '@/lib/blobStore'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -118,6 +119,16 @@ export default function VettePage() {
       scanPeaks(metas)
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // scanPeaks already short-circuits via its own cache (isFullyCached) when the activity id set
+  // hasn't changed, so re-running it here on a background pull is cheap when nothing new arrived
+  // and only scans the newly-changed activities when something did.
+  useCtsUpdated(() => {
+    getAllActivities().then(metas => {
+      setActivities(metas)
+      scanPeaks(metas)
+    })
+  })
 
   const sorted = useMemo(() => {
     if (sortBy === 'ele') return [...peaks].sort((a, b) => b.ele - a.ele)

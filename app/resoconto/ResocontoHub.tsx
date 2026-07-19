@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
@@ -27,6 +27,7 @@ import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
 import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
 import { isScoreFresh } from '@/lib/scoreFreshness'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import {
   FileSpreadsheet, FileText, Map, FileDown,
   Route, TrendingUp, Clock, Flame,
@@ -140,18 +141,24 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
 
   // Lightweight list of all completed hikes, most recent first — backs the carousel/gallery.
-  useEffect(() => {
-    // getAllActivities() is stale-while-revalidate: it resolves instantly with last visit's
-    // locally cached list, then fetches the real one in the background. Without onRefresh, that
-    // fresh fetch (with up-to-date trailScore/userRating) is saved to the local cache for next
-    // time but never reaches this session's `items` — so the gallery stays a visit behind.
-    const applyList = (list: ActivityMeta[]) => {
-      const sorted = list.slice().sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
-      setRawActivities(sorted)
-      setItems(sorted.map(metaToItem))
-    }
-    getAllActivities(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
+  // getAllActivities() is stale-while-revalidate: it resolves instantly with last visit's
+  // locally cached list, then fetches the real one in the background. Without onRefresh, that
+  // fresh fetch (with up-to-date trailScore/userRating) is saved to the local cache for next
+  // time but never reaches this session's `items` — so the gallery stays a visit behind.
+  const applyList = useCallback((list: ActivityMeta[]) => {
+    const sorted = list.slice().sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+    setRawActivities(sorted)
+    setItems(sorted.map(metaToItem))
   }, [])
+
+  useEffect(() => {
+    getAllActivities(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
+  }, [applyList])
+
+  // A background pull (another device added/edited/deleted an activity, or this device just
+  // caught up after being offline) lands in the local cache without any user action on this page —
+  // without this, the gallery would stay frozen on the pre-pull list until a manual reload.
+  useCtsUpdated(() => { getAllActivities().then(applyList).catch(() => {}) })
 
   // Background best-effort cover-photo fetch for the gallery/carousel thumbnails (capped —
   // this is a nice-to-have visual enhancement, not core functionality).
