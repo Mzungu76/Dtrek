@@ -93,7 +93,15 @@ export async function getUserSettingsCached(): Promise<UserSettingsData | Record
 export async function refreshUserSettings(): Promise<UserSettingsData | null> {
   try {
     const fresh = await fetchFromServer()
+    const previous = await lsGet<UserSettingsData>(CACHE_KEY)
     await lsSet(CACHE_KEY, fresh)
+    // Same signal lib/sync/pullEngine.ts's list reconcilers fire once they apply a changed
+    // record — without it, a settings edit made on another device (or the server-derived fields
+    // refreshed after a flush) sits in the cache unnoticed until the next full reload, because
+    // getUserSettingsCached() only reads the cache and pages don't otherwise know it changed.
+    if (typeof window !== 'undefined' && JSON.stringify(previous) !== JSON.stringify(fresh)) {
+      window.dispatchEvent(new CustomEvent('cts-updated'))
+    }
     return fresh
   } catch {
     return null

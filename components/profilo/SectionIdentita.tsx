@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getProfile, saveProfile } from '@/lib/userProfile'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { getAllActivities } from '@/lib/blobStore'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { computeStreaks } from '@/lib/stats'
 import { computeBadges, computeCurrentBadges, type ComputedBadge } from '@/lib/badges'
 import { User, Camera, Check, Trash2, Loader2, Trophy } from 'lucide-react'
@@ -42,6 +43,20 @@ export default function SectionIdentita() {
       })
       .catch(() => {})
   }, [])
+
+  useCtsUpdated(() => {
+    getAllActivities()
+      .then(acts => {
+        const streaks = computeStreaks(acts)
+        const badges = computeBadges(acts, streaks)
+        setBadgeCount(computeCurrentBadges(acts, streaks).length)
+        const closest = badges
+          .filter(b => !b.unlocked && b.progressPct !== undefined)
+          .sort((a, b) => (b.progressPct ?? 0) - (a.progressPct ?? 0))[0]
+        setNextBadge(closest ?? null)
+      })
+      .catch(() => {})
+  })
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]

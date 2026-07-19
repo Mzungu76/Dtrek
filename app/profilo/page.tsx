@@ -7,6 +7,7 @@ import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import { getAllActivities } from '@/lib/blobStore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { flush, hasPendingChanges } from '@/lib/sync/syncEngine'
 import { computeStreaks } from '@/lib/stats'
 import { computeCurrentBadges } from '@/lib/badges'
@@ -52,6 +53,14 @@ export default function ProfiloPage() {
       setBadgeCount(computeCurrentBadges(acts, streaks).length)
     }).catch(() => {})
   }, [])
+
+  useCtsUpdated(() => {
+    getAllActivities().then(acts => {
+      const streaks = computeStreaks(acts)
+      setStreakWeeks(streaks.currentWeeks)
+      setBadgeCount(computeCurrentBadges(acts, streaks).length)
+    }).catch(() => {})
+  })
 
   useEffect(() => {
     if (window.matchMedia('(display-mode: standalone)').matches ||
