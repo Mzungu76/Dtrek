@@ -3,7 +3,7 @@ import { usePathname } from 'next/navigation'
 import { NAV_LINKS, isActive, ProfileAvatar } from '@/components/Navbar'
 import Link from 'next/link'
 
-/** Nav pill + profile avatar shared by every section's top bar (Stato, Guide, Resoconti, Diario) —
+/** Nav pill + profile avatar shared by every section's top bar (Bacheca, Guide, Resoconti, Diario) —
  * kept as one component so they stay pixel-for-pixel identical instead of drifting apart. */
 export default function HubNavBar() {
   const path = usePathname()

@@ -9,12 +9,13 @@ import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// 4 tab principali del nuovo posizionamento: Stato (centro di controllo:
-// statistiche + badge + AI discreta), Guide (import GPX → guida turistica AI),
-// Resoconti (escursioni concluse: dati + racconto), Diario (libro impaginato).
+// 4 tab principali del nuovo posizionamento: Bacheca (centro di controllo:
+// statistiche + badge + AI discreta — sezione di apertura dell'app), Guide
+// (import GPX → guida turistica AI), Resoconti (escursioni concluse: dati +
+// racconto), Diario (libro impaginato).
 // Il Profilo non è un tab alla pari ma un'icona persistente (vedi ProfileAvatar).
 export const NAV_LINKS = [
-  { href: '/stato',      label: 'Stato',      icon: Home       },
+  { href: '/bacheca',    label: 'Bacheca',    icon: Home       },
   { href: '/guida',      label: 'Guide',      icon: Compass    },
   { href: '/resoconto',  label: 'Resoconti',  icon: BookOpen   },
   { href: '/diario',     label: 'Diario',     icon: BookMarked },
