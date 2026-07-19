@@ -13,9 +13,9 @@ import {
 } from 'recharts'
 import { CalendarDays, BarChart2, TrendingUp, Star, Sun } from 'lucide-react'
 
-interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void }
+interface Props { activities: ActivityMeta[] }
 
-export default function TabGrafici({ activities, onGuideLink }: Props) {
+export default function TabGrafici({ activities }: Props) {
   const [heatmapYear, setHeatmapYear] = useState(new Date().getFullYear())
 
   const years = useMemo(() => {
@@ -119,9 +119,9 @@ export default function TabGrafici({ activities, onGuideLink }: Props) {
       {/* Annual heatmap */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-stone-700 flex items-center gap-2">
+          <h3 className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
             <CalendarDays className="w-4 h-4 text-forest-600" /> Attività annuale
-            <InfoButton section="heatmap" onGuideLink={onGuideLink} />
+            <InfoButton section="heatmap" />
           </h3>
           <div className="flex gap-1">
             {years.map(y => (
@@ -138,9 +138,9 @@ export default function TabGrafici({ activities, onGuideLink }: Props) {
       {/* Annual comparison */}
       {annualData.length > 1 && (
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             <BarChart2 className="w-4 h-4 text-forest-600" /> Confronto annuale
-            <InfoButton section="confronto-annuale" onGuideLink={onGuideLink} />
+            <InfoButton section="confronto-annuale" />
           </h3>
           <p className="text-xs text-stone-400 mb-4">Distanza totale e dislivello anno per anno.</p>
           <div className="h-56">
@@ -184,9 +184,9 @@ export default function TabGrafici({ activities, onGuideLink }: Props) {
       {/* NEW: Score evolution */}
       {hasScoreData && (
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             <Star className="w-4 h-4 text-terra-500" /> Evoluzione Score nel Tempo
-            <InfoButton section="score-evolution" onGuideLink={onGuideLink} />
+            <InfoButton section="score-evolution" />
           </h3>
           <p className="text-xs text-stone-400 mb-1">Media mobile su 5 uscite. Trail Score (0-100) · Soddisfazione e Rating scalati a 100.</p>
           {trailTrend && (
@@ -228,9 +228,9 @@ export default function TabGrafici({ activities, onGuideLink }: Props) {
       {/* NEW: Seasonal analysis */}
       {hasSeasonal && (
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             <Sun className="w-4 h-4 text-yellow-500" /> Analisi Stagionale
-            <InfoButton section="stagionale" onGuideLink={onGuideLink} />
+            <InfoButton section="stagionale" />
           </h3>
           <p className="text-xs text-stone-400 mb-4">Km medi e dislivello medio per stagione.</p>
           {/* Season cards */}
@@ -310,9 +310,9 @@ export default function TabGrafici({ activities, onGuideLink }: Props) {
       {/* Altitude distribution (new) */}
       {altBands.length > 1 && (
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             <TrendingUp className="w-4 h-4 text-forest-600" /> Distribuzione per quota massima
-            <InfoButton section="altimetrica" onGuideLink={onGuideLink} />
+            <InfoButton section="altimetrica" />
           </h3>
           <p className="text-xs text-stone-400 mb-4">Fino a che quota arrivi più spesso?</p>
           <div className="h-48">
@@ -332,8 +332,8 @@ export default function TabGrafici({ activities, onGuideLink }: Props) {
 
       {/* FC trend */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
-          Trend fitness (FC media) <InfoButton section="fc-trend" onGuideLink={onGuideLink} />
+        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
+          Trend fitness (FC media) <InfoButton section="fc-trend" />
         </h3>
         <p className="text-xs text-stone-400 mb-4">Se la FC media scende nel tempo mantenendo distanze simili, stai migliorando.</p>
         <div className="h-56">

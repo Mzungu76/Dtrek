@@ -24,10 +24,9 @@ const CATEGORY_ORDER: BadgeCategory[] = ['distanza', 'dislivello', 'quota', 'fre
 interface Props {
   activities: ActivityMeta[]
   streaks: Streaks
-  onGuideLink: (section: string) => void
 }
 
-export default function TabTraguardi({ activities, streaks, onGuideLink }: Props) {
+export default function TabTraguardi({ activities, streaks }: Props) {
   const badges = useMemo(() => computeBadges(activities, streaks), [activities, streaks])
   const [newlyUnlocked, setNewlyUnlocked] = useState<Set<string>>(new Set())
 
@@ -59,9 +58,9 @@ export default function TabTraguardi({ activities, streaks, onGuideLink }: Props
           </div>
           <div>
             <p className="text-2xl font-bold font-display text-stone-800">{unlocked} <span className="text-stone-400 font-normal text-lg">/ {total}</span></p>
-            <p className="text-sm text-stone-500 flex items-center gap-1.5">
+            <p className="text-sm text-stone-500 flex items-center gap-1.5 flex-wrap">
               badge sbloccati
-              <InfoButton section="badge" onGuideLink={onGuideLink} />
+              <InfoButton section="badge" />
             </p>
           </div>
           <div className="ml-auto hidden sm:block">

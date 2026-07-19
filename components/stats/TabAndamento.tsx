@@ -5,7 +5,7 @@ import TabGrafici from './TabGrafici'
 import TabForma from './TabForma'
 import TabFisico from './TabFisico'
 
-interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void }
+interface Props { activities: ActivityMeta[] }
 
 const SUBSECTIONS = [
   { id: 'andamento-volume', label: 'Volume e distanza' },
@@ -20,7 +20,7 @@ const SUBSECTIONS = [
  * Piano di ristrutturazione, Parte 2.6. I tre componenti figli non
  * sono stati riscritti: restano invariati, solo raggruppati.
  */
-export default function TabAndamento({ activities, onGuideLink }: Props) {
+export default function TabAndamento({ activities }: Props) {
   return (
     <div className="space-y-10">
       <div className="flex gap-4 flex-wrap text-xs font-barlow font-bold uppercase tracking-wide text-stone-400">
@@ -31,17 +31,17 @@ export default function TabAndamento({ activities, onGuideLink }: Props) {
 
       <section id="andamento-volume" className="scroll-mt-32 space-y-6">
         <Kicker>Volume e distanza</Kicker>
-        <TabGrafici activities={activities} onGuideLink={onGuideLink} />
+        <TabGrafici activities={activities} />
       </section>
 
       <section id="andamento-carico" className="scroll-mt-32 space-y-6 pt-6 border-t border-stone-200">
         <Kicker>Frequenza cardiaca e carico</Kicker>
-        <TabForma activities={activities} onGuideLink={onGuideLink} />
+        <TabForma activities={activities} />
       </section>
 
       <section id="andamento-fisico" className="scroll-mt-32 space-y-6 pt-6 border-t border-stone-200">
         <Kicker>Composizione fisica</Kicker>
-        <TabFisico activities={activities} onGuideLink={onGuideLink} />
+        <TabFisico activities={activities} />
       </section>
     </div>
   )

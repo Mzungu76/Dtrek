@@ -11,9 +11,9 @@ import {
 import { Brain, Activity } from 'lucide-react'
 import InfoButton from './InfoButton'
 
-interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void }
+interface Props { activities: ActivityMeta[] }
 
-export default function TabForma({ activities, onGuideLink }: Props) {
+export default function TabForma({ activities }: Props) {
   const weeklyVolumeData = useMemo(() => {
     const out: { week: string; km: number; gain: number }[] = []
     for (let i = 15; i >= 0; i--) {
@@ -75,9 +75,9 @@ export default function TabForma({ activities, onGuideLink }: Props) {
       {latestForm && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1 flex items-center gap-1.5">
+            <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1 flex items-center gap-1.5 flex-wrap">
               <Brain className="w-3.5 h-3.5" /> Stato forma attuale
-              <InfoButton section="training-load" onGuideLink={onGuideLink} />
+              <InfoButton section="training-load" />
             </p>
             <p className="text-2xl font-bold mt-1" style={{ color: latestForm.status.color }}>{latestForm.status.label}</p>
             <p className="text-xs text-stone-500 mt-1">{latestForm.status.description}</p>
@@ -97,9 +97,9 @@ export default function TabForma({ activities, onGuideLink }: Props) {
 
       {weeklyAvg && (
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2">
+          <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
             <Activity className="w-4 h-4 text-forest-600" /> Medie settimanali (ultime 16 settimane)
-            <InfoButton section="volume-settimanale" onGuideLink={onGuideLink} />
+            <InfoButton section="volume-settimanale" />
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
@@ -165,9 +165,9 @@ export default function TabForma({ activities, onGuideLink }: Props) {
       </div>
 
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
           <Brain className="w-4 h-4 text-forest-600" /> Training Load — ultimi 90 giorni
-          <InfoButton section="training-load" onGuideLink={onGuideLink} />
+          <InfoButton section="training-load" />
         </h3>
         <p className="text-xs text-stone-400 mb-4">
           CTL (fitness, verde) · ATL (fatica, arancio) · TSB (forma, blu — positivo = fresco, negativo = affaticato)
@@ -197,8 +197,8 @@ export default function TabForma({ activities, onGuideLink }: Props) {
       </div>
 
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2">
-          Carico giornaliero (TSS stimato) <InfoButton section="tss" onGuideLink={onGuideLink} />
+        <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
+          Carico giornaliero (TSS stimato) <InfoButton section="tss" />
         </h3>
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
