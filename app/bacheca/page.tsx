@@ -1,16 +1,16 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   AreaChart, Area, LineChart, Line, XAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import {
-  TrendingUp, Trophy, Flame, BarChart3, Loader2, Mountain, Upload,
+  TrendingUp, Trophy, Flame, BarChart3, Loader2, Mountain, Upload, CalendarDays, ArrowRight,
   Route as RouteIcon, ArrowUpToLine, Layers, Zap, type LucideIcon,
 } from 'lucide-react'
-import Link from 'next/link'
-import Navbar from '@/components/Navbar'
+import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -21,15 +21,20 @@ import { computeTrainingLoad, activityStress, currentForm } from '@/lib/training
 import { computeRecoveryScore, computeEFTrend, computeFitnessScore } from '@/lib/bioMetrics'
 import { pickRecoveryPhrase } from '@/lib/recoveryPhrases'
 import { pickFormaPhrase } from '@/lib/formaPhrases'
-import { pickStreakPhrase } from '@/lib/streakPhrases'
 import { pickVolumePhrase } from '@/lib/volumePhrases'
 import { fetchActivityPhotos, pickBestCoverPhoto } from '@/lib/activityPhotos'
 
 const FALLBACK_HERO = '/stato-hero-fallback.jpg'
-// Stessi valori esatti usati da RouteHub.tsx per una copertina-foto (Resoconto) — non i miei di
-// prima: qui l'allineamento visivo è letterale, non "nello spirito di".
+// Stessi valori esatti usati da RouteHub.tsx per una copertina-foto (Resoconto).
 const HERO_IMAGE_FILTER = 'saturate(1.25) contrast(1.08) brightness(0.85)'
 const HERO_TINT_GRADIENT = 'linear-gradient(160deg, rgba(129,54,25,0.35) 0%, rgba(28,71,36,0.3) 55%, rgba(7,24,36,0.45) 100%)'
+// Pannello dei grafici in sovraimpressione: scrim scuro semi-trasparente (non bianco pieno) così
+// foto e grafico restano entrambi leggibili — colori delle linee chiariti di conseguenza.
+const CHART_TOOLTIP_STYLE = { background: 'rgba(15,15,15,0.88)', border: 'none', borderRadius: 8, fontSize: 12 }
+const CHART_TICK = { fontSize: 10, fill: 'rgba(255,255,255,0.7)' }
+const CHART_GRID = 'rgba(255,255,255,0.15)'
+
+type Visual = 'ring' | 'chart' | 'plain'
 
 interface GalleryItem {
   id: string
@@ -38,6 +43,8 @@ interface GalleryItem {
   icon: LucideIcon
   gradientColor: string
   badgeText: string
+  visual: Visual
+  ringValue?: number
   emoji?: string
   routePolyline?: [number, number][]
   activityId?: string
@@ -45,27 +52,26 @@ interface GalleryItem {
   highlight?: boolean
 }
 
-// Centro di Controllo — sintesi di statistiche e badge in home, con AI riservata solo ai cambi di
-// fascia (non ancora cablata: qui gira sempre il banco di frasi pre-scritte per Recovery, Stato
-// forma, Streak e Volume settimanale — vedi lib/*Phrases.ts per la rotazione).
+// Bacheca (ex "Stato") — sezione di apertura dell'app (vedi app/page.tsx e public/manifest.json):
+// sintesi di statistiche e badge, con AI riservata solo ai cambi di fascia (non ancora cablata: qui
+// gira sempre il banco di frasi pre-scritte — vedi lib/*Phrases.ts per la rotazione).
 //
-// Stile allineato al pattern hero di app/guida (components/routehub/): stessi valori di
-// filtro/tinta foto di RouteHub.tsx, stesso widget ad anelli TrailScoreGaugeBadge (riusato
-// direttamente, qui con safety=null perché Recovery non ha un "cancello sicurezza" separato) per
-// il Recovery Score come punteggio centrale, pillole di stato (Forma/Streak/Volume) e una
-// filmstrip orizzontale sotto invece della griglia precedente. Non importa RouteHub/TopOverlay/
-// BottomGallery veri e propri: RouteHub è un carosello swipeable a schermo intero con un pannello
-// che si apre in overlay (paradigma diverso da questa pagina scrollabile), TopOverlay monta il suo
-// proprio HubNavBar (duplicherebbe il <Navbar/> di questa pagina) e BottomGallery è cucito sul
-// contratto dati dei percorsi (sortValues/scorePreview) — qui la stessa resa visiva è ricostruita
-// a mano invece di piegare quei componenti condivisi a un caso d'uso diverso.
-export default function StatoPage() {
+// Architettura fixed-schermo-intero allineata a Guida (components/routehub/): stessi valori di
+// filtro/tinta foto di RouteHub.tsx, HubNavBar al posto del Navbar normale (tutto, filmstrip
+// compresa, vive in overlay sopra la foto — nessuno scroll di pagina separato), e lo stesso widget
+// TrailScoreGaugeBadge per i punteggi 0-100 (Recovery, % Traguardo, Efficienza aerobica), mentre
+// Stato forma/Volume settimanale — andamenti, non un punteggio singolo — restano un grafico.
+// Non importa RouteHub/TopOverlay/BottomGallery veri e propri: RouteHub aggiunge una logica di
+// swipe/apertura-sezione che qui non serve, TopOverlay monta il proprio HubNavBar (già montato qui
+// direttamente) e BottomGallery è cucito sul contratto dati dei percorsi (sortValues/scorePreview)
+// — la stessa resa visiva è ricostruita a mano invece di piegare quei componenti a un caso diverso.
+export default function BachecaPage() {
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [coverPhotos, setCoverPhotos] = useState<Record<string, string>>({})
   const [ambientPhotos, setAmbientPhotos] = useState<string[]>([])
   const [photoIndex, setPhotoIndex] = useState(0)
-  const [selectedId, setSelectedId] = useState('forma')
+  const [selectedId, setSelectedId] = useState('recovery')
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
@@ -122,7 +128,6 @@ export default function StatoPage() {
   const forma    = useMemo(() => currentForm(tsb), [tsb])
   const recoveryPhrase = useMemo(() => pickRecoveryPhrase(recovery.label, recovery.suggestion), [recovery])
   const formaPhrase    = useMemo(() => pickFormaPhrase(forma.label, forma.description), [forma])
-  const streakPhrase   = useMemo(() => pickStreakPhrase(streaks.currentWeeks), [streaks.currentWeeks])
   const lowHistoryNote = 'Servono almeno 3 uscite per un quadro affidabile — continua a caricare le tue attività.'
 
   const efTrend = useMemo(() => computeEFTrend(activities), [activities])
@@ -165,31 +170,19 @@ export default function StatoPage() {
   }, [weeklyVolume, currentWeekKm])
 
   // Pillole persistenti (sempre visibili, non legate alla selezione) — analoghe a km/D+/quota di
-  // Guida, qui sempre il valore live di Stato forma/Streak/Volume.
+  // Guida: qui sempre il valore live di Stato forma/Streak/Volume.
   const statPills = [
     { icon: TrendingUp, label: forma.label },
     { icon: Flame, label: `${streaks.currentWeeks} sett.` },
     { icon: BarChart3, label: `${currentWeekKm} km/sett.` },
   ]
 
-  // Filmstrip selezionabile — tutto il resto: Stato forma/Volume restano anche qui (con il loro
-  // grafico), più Traguardo/Efficienza/Record/Numeri totali.
   const galleryItems = useMemo<GalleryItem[]>(() => {
     const items: GalleryItem[] = [
       {
-        id: 'forma', title: forma.label, subtitle: hasEnoughHistory ? formaPhrase : lowHistoryNote,
-        icon: TrendingUp, gradientColor: forma.color, badgeText: forma.label,
-        chart: hasEnoughHistory && trainingLoadData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={170}>
-            <LineChart data={trainingLoadData}>
-              <CartesianGrid vertical={false} stroke="#eeece5" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#a9a18e' }} tickFormatter={d => format(new Date(d), 'd/M')} minTickGap={40} />
-              <Tooltip labelFormatter={d => format(new Date(d), 'd MMM', { locale: it })} />
-              <Line type="monotone" dataKey="ctl" name="Fitness (CTL)" stroke="#277134" strokeWidth={2} dot={false} isAnimationActive animationDuration={900} />
-              <Line type="monotone" dataKey="atl" name="Fatica (ATL)" stroke="#c05a17" strokeWidth={2} dot={false} isAnimationActive animationDuration={900} />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : undefined,
+        id: 'recovery', title: recovery.label, subtitle: hasEnoughHistory ? recoveryPhrase : lowHistoryNote,
+        icon: TrendingUp, gradientColor: recovery.color, badgeText: `${recovery.score}`,
+        visual: 'ring', ringValue: recovery.score,
       },
       {
         id: 'badge',
@@ -199,24 +192,40 @@ export default function StatoPage() {
           : 'Niente male.',
         icon: Trophy, gradientColor: '#f59e0b', emoji: nearestBadge?.icon,
         badgeText: nearestBadge ? `${nearestBadge.progressPct}%` : '100%',
+        visual: 'ring', ringValue: nearestBadge?.progressPct ?? 100,
         highlight: badgeIsClose,
       },
       {
+        id: 'forma', title: forma.label, subtitle: hasEnoughHistory ? formaPhrase : lowHistoryNote,
+        icon: TrendingUp, gradientColor: forma.color, badgeText: forma.label, visual: 'chart',
+        chart: hasEnoughHistory && trainingLoadData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={trainingLoadData}>
+              <CartesianGrid vertical={false} stroke={CHART_GRID} />
+              <XAxis dataKey="date" tick={CHART_TICK} tickFormatter={d => format(new Date(d), 'd/M')} minTickGap={40} />
+              <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={{ color: '#fff' }} itemStyle={{ color: '#fff' }} labelFormatter={d => format(new Date(d), 'd MMM', { locale: it })} />
+              <Line type="monotone" dataKey="ctl" name="Fitness (CTL)" stroke="#8cc894" strokeWidth={2} dot={false} isAnimationActive animationDuration={900} />
+              <Line type="monotone" dataKey="atl" name="Fatica (ATL)" stroke="#e9ab64" strokeWidth={2} dot={false} isAnimationActive animationDuration={900} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : undefined,
+      },
+      {
         id: 'volume', title: `${currentWeekKm} km`, subtitle: volumePhrase ?? 'Volume di questa settimana.',
-        icon: BarChart3, gradientColor: '#378d44', badgeText: `${currentWeekKm} km`,
+        icon: BarChart3, gradientColor: '#378d44', badgeText: `${currentWeekKm} km`, visual: 'chart',
         chart: (
-          <ResponsiveContainer width="100%" height={170}>
+          <ResponsiveContainer width="100%" height={160}>
             <AreaChart data={weeklyVolume}>
               <defs>
                 <linearGradient id="volFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#378d44" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#378d44" stopOpacity={0.02} />
+                  <stop offset="0%" stopColor="#8cc894" stopOpacity={0.45} />
+                  <stop offset="100%" stopColor="#8cc894" stopOpacity={0.03} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} stroke="#eeece5" />
-              <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#a9a18e' }} />
-              <Tooltip formatter={(v: number) => [`${v} km`, 'Volume']} />
-              <Area type="monotone" dataKey="km" stroke="#277134" strokeWidth={2} fill="url(#volFill)" isAnimationActive animationDuration={900} />
+              <CartesianGrid vertical={false} stroke={CHART_GRID} />
+              <XAxis dataKey="week" tick={CHART_TICK} />
+              <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={{ color: '#fff' }} itemStyle={{ color: '#fff' }} formatter={(v: number) => [`${v} km`, 'Volume']} />
+              <Area type="monotone" dataKey="km" stroke="#8cc894" strokeWidth={2} fill="url(#volFill)" isAnimationActive animationDuration={900} />
             </AreaChart>
           </ResponsiveContainer>
         ),
@@ -227,17 +236,7 @@ export default function StatoPage() {
       items.push({
         id: 'efficienza', title: 'Efficienza aerobica', subtitle: efSubtitle,
         icon: Zap, gradientColor: '#378d44', badgeText: fitnessInfo.hasData ? `${fitnessInfo.score}` : '–',
-        chart: (
-          <ResponsiveContainer width="100%" height={170}>
-            <LineChart data={efTrend}>
-              <CartesianGrid vertical={false} stroke="#eeece5" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#a9a18e' }} tickFormatter={d => format(new Date(d), 'd/M')} minTickGap={40} />
-              <Tooltip labelFormatter={d => format(new Date(d), 'd MMM', { locale: it })} />
-              <Line type="monotone" dataKey="ef" stroke="#bbe0bf" strokeWidth={1.5} dot={false} isAnimationActive animationDuration={900} />
-              <Line type="monotone" dataKey="efSmoothed" name="Tendenza" stroke="#277134" strokeWidth={2.5} dot={false} isAnimationActive animationDuration={900} />
-            </LineChart>
-          </ResponsiveContainer>
-        ),
+        visual: 'ring', ringValue: fitnessInfo.hasData ? fitnessInfo.score : undefined,
       })
     }
 
@@ -256,7 +255,7 @@ export default function StatoPage() {
         id: `record-${def.key}`,
         title: act.title,
         subtitle: `${def.label} · ${def.sub(act)} · ${format(new Date(act.startTime), 'd MMM yyyy', { locale: it })}`,
-        icon: def.icon, gradientColor: '#378d44', badgeText: def.badge(act),
+        icon: def.icon, gradientColor: '#378d44', badgeText: def.badge(act), visual: 'plain',
         routePolyline: act.routePolyline && act.routePolyline.length > 1 ? act.routePolyline : undefined,
         activityId: act.id,
       })
@@ -266,129 +265,143 @@ export default function StatoPage() {
       items.push({
         id: 'totali', title: `${globalStats.totalDistanceKm.toFixed(0)} km`,
         subtitle: `${globalStats.totalActivities} escursioni · ${Math.round(globalStats.totalElevationGain)} m D+ totali`,
-        icon: Layers, gradientColor: '#978e7a', badgeText: `${globalStats.totalActivities} usc.`,
+        icon: Layers, gradientColor: '#978e7a', badgeText: `${globalStats.totalActivities} usc.`, visual: 'plain',
+      })
+      items.push({
+        id: 'giorni-attivi', title: `${streaks.totalActiveDays} giorni`,
+        subtitle: `${streaks.totalActiveWeeks} settimane attive in totale`,
+        icon: CalendarDays, gradientColor: '#a9a18e', badgeText: `${streaks.totalActiveDays}`, visual: 'plain',
       })
     }
 
     return items
   }, [
-    forma, hasEnoughHistory, formaPhrase, trainingLoadData,
+    recovery, hasEnoughHistory, recoveryPhrase, forma, formaPhrase, trainingLoadData,
     nearestBadge, badgeIsClose, currentWeekKm, volumePhrase, weeklyVolume,
-    efTrend, efSubtitle, fitnessInfo, personalRecords, globalStats,
+    efTrend, efSubtitle, fitnessInfo, personalRecords, globalStats, streaks,
   ])
 
   const selected = galleryItems.find(g => g.id === selectedId) ?? galleryItems[0]
   const ambientPhoto = ambientPhotos.length > 0 ? ambientPhotos[photoIndex % ambientPhotos.length] : FALLBACK_HERO
   const heroPhoto = (selected?.activityId && coverPhotos[selected.activityId]) || ambientPhoto
 
-  return (
-    <div className="min-h-screen bg-stone-50 pb-24 md:pb-8">
-      <Navbar />
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-[#0b1a24] overflow-hidden">
+        <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+          <HubNavBar />
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center text-stone-400 gap-3">
+          <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
+        </div>
+      </div>
+    )
+  }
 
-      {/* ── Hero ── */}
-      <div className="relative h-[62vh] min-h-[420px] max-h-[640px] overflow-hidden bg-forest-900">
-        <img
-          key={heroPhoto} src={heroPhoto} alt=""
-          className="absolute inset-0 w-full h-full object-cover" draggable={false}
-          style={{ filter: HERO_IMAGE_FILTER }}
-        />
+  if (activities.length === 0) {
+    return (
+      <div className="fixed inset-0 overflow-hidden bg-forest-900">
+        <img src={FALLBACK_HERO} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
         <div className="absolute inset-0 pointer-events-none mix-blend-multiply" style={{ background: HERO_TINT_GRADIENT }} />
-        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-        <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/75 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-black/35 pointer-events-none" />
+        <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+          <HubNavBar />
+        </div>
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center px-6">
+          <div className="w-20 h-20 rounded-full bg-white/10 border border-white/25 flex items-center justify-center mb-6 backdrop-blur-sm">
+            <Mountain className="w-10 h-10 text-white/80" />
+          </div>
+          <h2 className="font-display text-2xl font-semibold text-white mb-2">La tua bacheca comincia qui</h2>
+          <p className="text-white/75 text-sm max-w-sm mb-6" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
+            Recovery, stato forma, traguardi e streak si calcolano dalle escursioni che carichi —
+            carica la prima per iniziare a vedere qualcosa qui.
+          </p>
+          <Link
+            href="/upload?tab=activity"
+            className="flex items-center gap-2 px-6 py-3 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium transition-colors"
+          >
+            <Upload className="w-5 h-5" /> Carica un&apos;escursione
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
-        {!loading && activities.length > 0 && ambientPhotos.length > 1 && (
-          <div className="absolute top-4 right-4 flex gap-1.5 z-10">
-            {ambientPhotos.map((_, i) => (
-              <button
-                key={i} aria-label={`Foto ${i + 1}`} onClick={() => setPhotoIndex(i)}
-                className={`h-1.5 rounded-full transition-all ${i === photoIndex % ambientPhotos.length ? 'bg-white w-4' : 'bg-white/40 w-1.5'}`}
-              />
+  return (
+    <div className="fixed inset-0 overflow-hidden bg-forest-900 select-none">
+      <img
+        key={heroPhoto} src={heroPhoto} alt=""
+        className="absolute inset-0 w-full h-full object-cover" draggable={false}
+        style={{ filter: HERO_IMAGE_FILTER }}
+      />
+      <div className="absolute inset-0 pointer-events-none mix-blend-multiply" style={{ background: HERO_TINT_GRADIENT }} />
+      <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+      <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10" />
+      <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-10" />
+
+      {/* ── Top overlay: nav + pillole + carosello ── */}
+      <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+        <HubNavBar />
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {statPills.map(({ icon: Icon, label }) => (
+              <span key={label} className="shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm">
+                <Icon className="w-3 h-3" /> {label}
+              </span>
             ))}
           </div>
-        )}
-
-        <div className="absolute inset-x-0 bottom-0 px-4 sm:px-10 pb-6 sm:pb-8">
-          <div className="max-w-6xl mx-auto">
-            {loading ? (
-              <p className="font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05]">Caricamento…</p>
-            ) : activities.length === 0 ? (
-              <>
-                <p className="font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05]" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-                  Pronto per la tua prima uscita
-                </p>
-                <p className="font-body text-[13px] sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
-                  Carica un&apos;escursione per iniziare a vedere qui il tuo stato.
-                </p>
-              </>
-            ) : selected && (
-              <>
-                <div className="flex items-center gap-1.5 overflow-x-auto mb-3">
-                  {statPills.map(({ icon: Icon, label }) => (
-                    <span key={label} className="shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm">
-                      <Icon className="w-3 h-3" /> {label}
-                    </span>
-                  ))}
-                </div>
-
-                <div key={selectedId} className="fade-up">
-                  <p className="font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05] truncate" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-                    {selected.title}
-                  </p>
-                  <p className="font-body text-[13px] sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
-                    {selected.subtitle}
-                  </p>
-                </div>
-
-                <div className="mt-2.5 flex items-center gap-2.5">
-                  <TrailScoreGaugeBadge total={recovery.score} safety={null} showLabel={false} size={64} />
-                  <span className="text-white text-[11px] sm:text-xs font-bold uppercase tracking-wide" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-                    Recovery {recovery.label} — {hasEnoughHistory ? recoveryPhrase : lowHistoryNote}
-                  </span>
-                </div>
-
-                {selected.chart && (
-                  <div key={`chart-${selectedId}`} className="mt-3 bg-white/95 backdrop-blur-sm rounded-2xl p-3 sm:p-4 shadow-lg max-w-xl fade-up">
-                    {selected.chart}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          {ambientPhotos.length > 1 && (
+            <div className="flex gap-1.5 shrink-0">
+              {ambientPhotos.map((_, i) => (
+                <button
+                  key={i} aria-label={`Foto ${i + 1}`} onClick={() => setPhotoIndex(i)}
+                  className={`h-1.5 rounded-full transition-all ${i === photoIndex % ambientPhotos.length ? 'bg-white w-4' : 'bg-white/40 w-1.5'}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-5 sm:py-8 fade-up">
-        {loading ? (
-          <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
-            <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento dati…</span>
-          </div>
-
-        ) : activities.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
-              <Mountain className="w-10 h-10 text-forest-400" />
-            </div>
-            <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Il tuo stato comincia qui</h2>
-            <p className="text-stone-400 text-sm max-w-sm mb-6 px-4">
-              Recovery, stato forma, traguardi e streak si calcolano dalle escursioni che carichi —
-              carica la prima per iniziare a vedere qualcosa qui.
+      {/* ── Bottom overlay: titolo/sottotitolo + anello o grafico + filmstrip ── */}
+      <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
+        <div className="px-4 sm:px-10">
+          <div key={selectedId} className="fade-up">
+            <p className="font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05] truncate" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+              {selected.title}
             </p>
-            <Link
-              href="/upload?tab=activity"
-              className="flex items-center gap-2 px-6 py-3 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium transition-colors"
-            >
-              <Upload className="w-5 h-5" /> Carica un&apos;escursione
-            </Link>
+            <p className="font-body text-[13px] sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+              {selected.subtitle}
+            </p>
           </div>
 
-        ) : (
-          <div className="flex gap-2.5 overflow-x-auto pb-2" style={{ scrollSnapType: 'x proximity' }}>
-            {galleryItems.map(item => (
-              <FilmstripTile key={item.id} item={item} selected={item.id === selectedId} onSelect={() => setSelectedId(item.id)} />
-            ))}
-          </div>
-        )}
-      </main>
+          {selected.visual === 'ring' && (
+            <div key={`ring-${selectedId}`} className="mt-2.5 fade-up">
+              <TrailScoreGaugeBadge total={selected.ringValue ?? null} safety={null} showLabel={false} size={64} />
+            </div>
+          )}
+
+          {selected.visual === 'chart' && selected.chart && (
+            <div key={`chart-${selectedId}`} className="mt-3 bg-black/30 backdrop-blur-md rounded-2xl p-3 sm:p-4 max-w-xl fade-up">
+              {selected.chart}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
+          {galleryItems.map(item => (
+            <FilmstripTile key={item.id} item={item} selected={item.id === selectedId} onSelect={() => setSelectedId(item.id)} />
+          ))}
+          <Link
+            href="/statistiche"
+            className="shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative border-[1.5px] border-dashed border-white/40 bg-white/10 flex flex-col items-center justify-center gap-1 hover:bg-white/15 transition-colors"
+            style={{ scrollSnapAlign: 'start' }}
+          >
+            <ArrowRight className="w-5 h-5 text-white/80" />
+            <span className="text-[9px] font-bold text-white/80 leading-tight text-center px-1">Tutte le statistiche</span>
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }
@@ -400,7 +413,7 @@ function FilmstripTile({ item, selected, onSelect }: { item: GalleryItem; select
       onClick={onSelect}
       aria-pressed={selected}
       className={`shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative ${
-        selected ? 'border-[3px] border-forest-400 shadow-[0_0_0_2px_rgba(88,170,99,0.35)]' : 'border-[1.5px] border-stone-200'
+        selected ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
       }`}
       style={{ scrollSnapAlign: 'start' }}
     >
