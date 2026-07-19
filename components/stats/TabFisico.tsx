@@ -25,9 +25,9 @@ interface UserSettings {
   userAge?: number
 }
 
-interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void }
+interface Props { activities: ActivityMeta[] }
 
-export default function TabFisico({ activities, onGuideLink }: Props) {
+export default function TabFisico({ activities }: Props) {
   const [userSettings, setUserSettings] = useState<UserSettings>({})
   const [loadingSettings, setLoadingSettings] = useState(true)
 
@@ -110,9 +110,9 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Recovery Score */}
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5">
+          <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5 flex-wrap">
             <Activity className="w-3.5 h-3.5" /> Recovery Score
-            <InfoButton section="recovery-score" onGuideLink={onGuideLink} />
+            <InfoButton section="recovery-score" />
           </p>
           <div className="flex items-end gap-2 mb-1">
             <p className="text-3xl font-bold font-display" style={{ color: recovery.color }}>{recovery.score}</p>
@@ -131,9 +131,9 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
 
         {/* Fitness Score */}
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5">
+          <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5 flex-wrap">
             <TrendingUp className="w-3.5 h-3.5" /> Fitness Score
-            <InfoButton section="fitness-score" onGuideLink={onGuideLink} />
+            <InfoButton section="fitness-score" />
           </p>
           {fitnessInfo.hasData ? (
             <>
@@ -161,9 +161,9 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
 
         {/* VO2max estimate */}
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5">
+          <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5 flex-wrap">
             <Heart className="w-3.5 h-3.5" /> VO₂max Stimato
-            <InfoButton section="vo2max" onGuideLink={onGuideLink} />
+            <InfoButton section="vo2max" />
           </p>
           {loadingSettings ? (
             <div className="flex items-center gap-2 text-stone-400 text-sm py-3">
@@ -193,9 +193,9 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
 
       {/* ── Efficienza Aerobica (EF) ── */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
           <Zap className="w-4 h-4 text-forest-600" /> Efficienza Aerobica nel Tempo
-          <InfoButton section="ef-aerobica" onGuideLink={onGuideLink} />
+          <InfoButton section="ef-aerobica" />
         </h3>
         <p className="text-xs text-stone-400 mb-4">
           EF = velocità / FC, normalizzata per il dislivello. Un EF crescente indica un cuore che lavora meno a parità di ritmo: la tua base aerobica sta migliorando.
@@ -235,9 +235,9 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
 
       {/* ── Efficienza Verticale (IEV) ── */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
           <Zap className="w-4 h-4 text-amber-600" /> IEV nel Tempo
-          <InfoButton section="iev" onGuideLink={onGuideLink} />
+          <InfoButton section="iev" />
         </h3>
         <p className="text-xs text-stone-400 mb-4">
           Metri di dislivello guadagnati al minuto nei tratti in salita, ultime 20 escursioni con dato disponibile.
@@ -278,9 +278,9 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
       {/* ── Distribuzione sforzo (Polarized) ── */}
       {polarized.hasData && (
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             <Activity className="w-4 h-4 text-forest-600" /> Distribuzione Intensità Allenamento
-            <InfoButton section="distribuzione-polarizzata" onGuideLink={onGuideLink} />
+            <InfoButton section="distribuzione-polarizzata" />
           </h3>
           <p className="text-xs text-stone-400 mb-4">
             Basata sulla FC media per attività (approssimazione). I ricercatori dello sport raccomandano ~80% bassa intensità e ~20% alta intensità.
@@ -318,9 +318,9 @@ export default function TabFisico({ activities, onGuideLink }: Props) {
       {/* ── Calorie per kg ── */}
       {calorieEff.length > 0 && (
         <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2">
+          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             Efficienza Metabolica (kcal/kg/h)
-            <InfoButton section="calorie-metabolismo" onGuideLink={onGuideLink} />
+            <InfoButton section="calorie-metabolismo" />
           </h3>
           <p className="text-xs text-stone-400 mb-4">
             Calorie bruciate per kg di peso corporeo per ora. Valore tipico per trekking: 4–7 MET (kcal/kg/h).

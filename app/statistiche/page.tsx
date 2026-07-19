@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo, useCallback, Suspense } from 'react'
+import { useEffect, useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -8,13 +8,12 @@ import { getPersonalRecords, computeStreaks } from '@/lib/stats'
 import { exportAllActivitiesToExcel } from '@/utils/exportExcel'
 import { exportStatsPdf, exportMapPdf } from '@/utils/pdfExport'
 import ExportMenu, { type ExportMenuAction } from '@/components/ExportMenu'
-import { Loader2, Mountain, FileSpreadsheet, Share2, BookOpen, FileDown, Map } from 'lucide-react'
+import { Loader2, Mountain, FileSpreadsheet, Share2, FileDown, Map } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import TabPanoramica  from '@/components/stats/TabPanoramica'
 import TabAndamento   from '@/components/stats/TabAndamento'
 import TabConfronto   from '@/components/stats/TabConfronto'
 import TabTraguardi   from '@/components/stats/TabTraguardi'
-import GuideOverlay   from '@/components/stats/GuideOverlay'
 
 type Tab = 'panoramica' | 'andamento' | 'confronta' | 'traguardi'
 
@@ -47,11 +46,6 @@ function StatisticheContent() {
   const [loading,    setLoading]    = useState(true)
   const [tab,        setTab]        = useState<Tab>(initialTab)
   const [shareStats, setShareStats] = useState(false)
-  // La Guida non è più un tab: le icone "i" sparse nelle altre tab e il
-  // bottone "Guida" in header aprono questo overlay senza perdere lo
-  // stato del tab attivo sottostante. Piano di ristrutturazione, Parte 2.6.
-  const [guideOpen,   setGuideOpen]   = useState(false)
-  const [guideAnchor, setGuideAnchor] = useState<string | null>(null)
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
@@ -62,11 +56,6 @@ function StatisticheContent() {
   const stats   = useMemo(() => computeGlobalStats(activities),    [activities])
   const records = useMemo(() => getPersonalRecords(activities),    [activities])
   const streaks = useMemo(() => computeStreaks(activities),         [activities])
-
-  const openGuide = useCallback((section: string) => {
-    setGuideAnchor(section || null)
-    setGuideOpen(true)
-  }, [])
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
@@ -83,10 +72,6 @@ function StatisticheContent() {
           </div>
           {!loading && activities.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              <button onClick={() => openGuide('')}
-                className="flex items-center gap-1.5 px-3 py-2 bg-stone-200 text-stone-700 rounded-xl text-sm hover:bg-stone-300 transition-colors">
-                <BookOpen className="w-4 h-4" /> <span className="hidden sm:inline">Guida</span>
-              </button>
               <ExportMenu
                 label="Esporta"
                 actions={[
@@ -124,20 +109,16 @@ function StatisticheContent() {
               ))}
             </div>
 
-            {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} onGuideLink={openGuide} />}
-            {tab === 'andamento'  && <TabAndamento   activities={activities} onGuideLink={openGuide} />}
-            {tab === 'confronta'  && <TabConfronto   activities={activities} onGuideLink={openGuide} preselectId={preselectId} />}
-            {tab === 'traguardi'  && <TabTraguardi   activities={activities} streaks={streaks} onGuideLink={openGuide} />}
+            {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} />}
+            {tab === 'andamento'  && <TabAndamento   activities={activities} />}
+            {tab === 'confronta'  && <TabConfronto   activities={activities} preselectId={preselectId} />}
+            {tab === 'traguardi'  && <TabTraguardi   activities={activities} streaks={streaks} />}
           </>
         )}
       </main>
 
       {shareStats && (
         <ShareModal kind="stats" activities={activities} onClose={() => setShareStats(false)} />
-      )}
-
-      {guideOpen && (
-        <GuideOverlay anchor={guideAnchor} onClose={() => setGuideOpen(false)} />
       )}
     </div>
   )

@@ -74,9 +74,9 @@ function buildElevProfile(trackPoints: TrackPoint[] | undefined, samples = 60): 
   })
 }
 
-interface Props { activities: ActivityMeta[]; onGuideLink: (section: string) => void; preselectId?: string | null }
+interface Props { activities: ActivityMeta[]; preselectId?: string | null }
 
-export default function TabConfronto({ activities, onGuideLink, preselectId }: Props) {
+export default function TabConfronto({ activities, preselectId }: Props) {
   const [selectedIds,     setSelectedIds]     = useState(new Set<string>())
   const [plannedMetas,    setPlannedMetas]    = useState<PlannedHikeMeta[]>([])
   const [loadingPlanned,  setLoadingPlanned]  = useState(false)
@@ -401,9 +401,9 @@ export default function TabConfronto({ activities, onGuideLink, preselectId }: P
           {/* Elevation profiles + HR zones */}
           <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium text-stone-700 flex items-center gap-1.5">
+              <h3 className="font-medium text-stone-700 flex items-center gap-1.5 flex-wrap">
                 Profili altimetrici sovrapposti + Zone FC
-                <InfoButton section="zone-fc" onGuideLink={onGuideLink} />
+                <InfoButton section="zone-fc" />
               </h3>
               {!allFullLoaded && (
                 <button onClick={loadFullData} disabled={loadingFull}

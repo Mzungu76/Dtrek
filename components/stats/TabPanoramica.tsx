@@ -21,7 +21,6 @@ interface Props {
   activities: ActivityMeta[]
   records: PersonalRecords
   streaks: Streaks
-  onGuideLink: (section: string) => void
 }
 
 type SortKey = 'date' | 'title' | 'distance' | 'duration' | 'pace' | 'difficulty' | 'hr' | 'calories' | 'calhour'
@@ -38,7 +37,7 @@ const SORT_VALUE: Record<SortKey, (a: ActivityMeta) => number | string> = {
   calhour:    a => a.calories ? a.calories / (a.totalTimeSeconds / 3600) : 0,
 }
 
-export default function TabPanoramica({ activities, records, streaks, onGuideLink }: Props) {
+export default function TabPanoramica({ activities, records, streaks }: Props) {
   const stats = computeGlobalStats(activities)
   const [showShareMap, setShowShareMap] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('date')
@@ -100,9 +99,9 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
 
       {/* Global KPI — 2 numeri primari, il resto dietro "Altri totali" (piano di restyling 2.6) */}
       <div>
-        <div className="flex items-center gap-1.5 mb-2">
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
           <span className="text-xs text-stone-400 font-medium uppercase tracking-wide">Totali storici</span>
-          <InfoButton section="kpi" onGuideLink={onGuideLink} />
+          <InfoButton section="kpi" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <StatCard label="Distanza totale"   value={`${stats.totalDistanceKm.toFixed(1)} km`}                         color="forest" icon={<Route className="w-3.5 h-3.5"/>} />
@@ -168,9 +167,9 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
 
       {/* Streak — 2 numeri primari, il resto dietro accordion */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2">
+        <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
           <Activity className="w-4 h-4 text-forest-600" /> Continuità
-          <InfoButton section="streak" onGuideLink={onGuideLink} />
+          <InfoButton section="streak" />
         </h3>
         <div className="grid grid-cols-2 gap-4">
           {[
@@ -206,9 +205,9 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
       {/* Personal records — dietro un accordion, come nel mockup del restyling */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
         <button onClick={() => setShowRecords(v => !v)} className="w-full flex items-center justify-between px-5 py-4 text-left">
-          <span className="font-medium text-stone-700 flex items-center gap-2">
+          <span className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
             <Trophy className="w-4 h-4 text-terra-500" /> Record personali
-            <InfoButton section="records" onGuideLink={onGuideLink} />
+            <InfoButton section="records" />
           </span>
           <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showRecords ? 'rotate-180' : ''}`} />
         </button>
@@ -315,7 +314,7 @@ export default function TabPanoramica({ activities, records, streaks, onGuideLin
                         ? (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)
                         : <ChevronsUpDown className="w-3 h-3 text-stone-300" />}
                     </button>
-                    {section && <InfoButton section={section} onGuideLink={onGuideLink} />}
+                    {section && <InfoButton section={section} />}
                   </th>
                 ))}
               </tr>

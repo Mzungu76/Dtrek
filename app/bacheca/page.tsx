@@ -4,12 +4,11 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { AreaChart, Area, LineChart, Line, XAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { TrendingUp, Flame, BarChart3, Loader2, Mountain, Upload, ArrowRight } from 'lucide-react'
+import { TrendingUp, Flame, BarChart3, Loader2, Mountain, Upload, ArrowRight, Sparkles } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import InfoButton from '@/components/stats/InfoButton'
-import GuideOverlay from '@/components/stats/GuideOverlay'
 import TileIllustration, { type IllustrationKind } from '@/components/bacheca/TileIllustration'
 import {
   HeatmapPanel, AnnualBarChart, MonthlyBarChart, SeasonalBarChart, WeekdayBarChart,
@@ -28,6 +27,7 @@ import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { pickRecoveryPhrase } from '@/lib/recoveryPhrases'
 import { pickFormaPhrase } from '@/lib/formaPhrases'
 import { pickVolumePhrase } from '@/lib/volumePhrases'
+import { pickStreakPhrase } from '@/lib/streakPhrases'
 import { fetchActivityPhotos, pickBestCoverPhoto } from '@/lib/activityPhotos'
 
 const FALLBACK_HERO = '/stato-hero-fallback.jpg'
@@ -51,8 +51,11 @@ interface GalleryItem {
   activityId?: string
   chart?: React.ReactNode
   highlight?: boolean
-  /** Ancora in TabGuida.tsx — mostra il bottoncino "i" nell'hero quando presente. */
+  /** Ancora in lib/guideContent.tsx — mostra il bottoncino "i" nell'hero quando presente. */
   guideSection?: string
+  /** Sottotitolo pescato da un banco di frasi pre-scritte (lib/*Phrases.ts) invece che un dato
+   *  puramente descrittivo — mostra l'etichetta "Lettura" per distinguerlo dagli altri. */
+  insight?: boolean
 }
 
 // Bacheca (ex "Stato") — sezione di apertura dell'app (vedi app/page.tsx e public/manifest.json):
@@ -63,10 +66,11 @@ interface GalleryItem {
 // Architettura fixed-schermo-intero allineata a Guida (components/routehub/): stessi valori di
 // filtro/tinta foto di RouteHub.tsx, HubNavBar al posto del Navbar normale, illustrazioni piatte
 // disegnate a mano (components/bacheca/TileIllustration.tsx) al posto delle icone lucide nude sulla
-// filmstrip, e InfoButton+GuideOverlay riusati identici a /statistiche per spiegare ogni parametro
-// (stesso contenuto di TabGuida.tsx, zero testo nuovo da scrivere). Ogni grafico vive in
-// components/bacheca/ChartPanels.tsx, con lo stesso stile chiaro-su-scuro pensato per stare in
-// sovraimpressione sulla foto scurita invece che su una card bianca come in /statistiche.
+// filmstrip, e InfoButton riusato identico a /statistiche per spiegare ogni parametro — non più un
+// overlay a tutto schermo: il testo si espande sul posto, sotto al titolo (lib/guideContent.tsx).
+// Ogni grafico vive in components/bacheca/ChartPanels.tsx, con lo stesso stile chiaro-su-scuro
+// pensato per stare in sovraimpressione sulla foto scurita invece che su una card bianca come in
+// /statistiche.
 export default function BachecaPage() {
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,8 +78,6 @@ export default function BachecaPage() {
   const [ambientPhotos, setAmbientPhotos] = useState<string[]>([])
   const [photoIndex, setPhotoIndex] = useState(0)
   const [selectedId, setSelectedId] = useState('recovery')
-  const [guideOpen, setGuideOpen] = useState(false)
-  const [guideAnchor, setGuideAnchor] = useState<string | null>(null)
   const [userSettings, setUserSettings] = useState<{ hrMax?: number | null; derivedFCmax?: number; hrRest?: number | null; userWeightKg?: number }>({})
 
   useEffect(() => {
@@ -93,8 +95,6 @@ export default function BachecaPage() {
       .catch(() => {})
   }, [])
   const maxHR = userSettings.hrMax ?? userSettings.derivedFCmax ?? 190
-
-  const openGuide = (section: string) => { setGuideAnchor(section); setGuideOpen(true) }
 
   const streaks = useMemo(() => computeStreaks(activities), [activities])
   const badges  = useMemo(() => computeBadges(activities, streaks), [activities, streaks])
@@ -145,6 +145,7 @@ export default function BachecaPage() {
   const forma    = useMemo(() => currentForm(tsb), [tsb])
   const recoveryPhrase = useMemo(() => pickRecoveryPhrase(recovery.label, recovery.suggestion), [recovery])
   const formaPhrase    = useMemo(() => pickFormaPhrase(forma.label, forma.description), [forma])
+  const streakPhrase   = useMemo(() => pickStreakPhrase(streaks.currentWeeks), [streaks.currentWeeks])
   const lowHistoryNote = 'Servono almeno 3 uscite per un quadro affidabile — continua a caricare le tue attività.'
 
   const efTrend  = useMemo(() => computeEFTrend(activities), [activities])
@@ -204,7 +205,7 @@ export default function BachecaPage() {
       {
         id: 'recovery', title: recovery.label, subtitle: hasEnoughHistory ? recoveryPhrase : lowHistoryNote,
         illustration: 'pulse', gradientColor: recovery.color, badgeText: `${recovery.score}`,
-        visual: 'ring', ringValue: recovery.score, guideSection: 'recovery-score',
+        visual: 'ring', ringValue: recovery.score, guideSection: 'recovery-score', insight: hasEnoughHistory,
       },
       {
         id: 'badge',
@@ -220,6 +221,7 @@ export default function BachecaPage() {
       {
         id: 'forma', title: forma.label, subtitle: hasEnoughHistory ? formaPhrase : lowHistoryNote,
         illustration: 'trend', gradientColor: forma.color, badgeText: forma.label, visual: 'chart', guideSection: 'training-load',
+        insight: hasEnoughHistory,
         chart: hasEnoughHistory && trainingLoadData.length > 0 ? (
           <ResponsiveContainer width="100%" height={160}>
             <LineChart data={trainingLoadData}>
@@ -235,6 +237,7 @@ export default function BachecaPage() {
       {
         id: 'volume', title: `${currentWeekKm} km`, subtitle: volumePhrase ?? 'Volume di questa settimana.',
         illustration: 'bars', gradientColor: '#378d44', badgeText: `${currentWeekKm} km`, visual: 'chart', guideSection: 'volume-settimanale',
+        insight: volumePhrase !== null,
         chart: (
           <ResponsiveContainer width="100%" height={160}>
             <AreaChart data={weeklyVolume}>
@@ -251,6 +254,11 @@ export default function BachecaPage() {
             </AreaChart>
           </ResponsiveContainer>
         ),
+      },
+      {
+        id: 'streak', title: `${streaks.currentWeeks} sett.`, subtitle: streakPhrase,
+        illustration: 'calendar', gradientColor: '#e08d3c', badgeText: `${streaks.currentWeeks}`,
+        visual: 'plain', guideSection: 'streak', insight: true,
       },
       {
         id: 'tss', title: 'Carico giornaliero', subtitle: 'TSS stimato da distanza, dislivello e durata, ultimi 90 giorni.',
@@ -424,7 +432,7 @@ export default function BachecaPage() {
     return items
   }, [
     activities, recovery, hasEnoughHistory, recoveryPhrase, forma, formaPhrase, trainingLoadData,
-    nearestBadge, badgeIsClose, currentWeekKm, volumePhrase, weeklyVolume,
+    nearestBadge, badgeIsClose, currentWeekKm, volumePhrase, weeklyVolume, streakPhrase,
     efTrend, ievTrend, efSubtitle, fitnessInfo, personalRecords, globalStats, streaks,
     annualYearsCount, hasHRData, maxHR, userSettings, vo2max,
   ])
@@ -476,92 +484,89 @@ export default function BachecaPage() {
   }
 
   return (
-    <>
-      <div className="fixed inset-0 overflow-hidden bg-forest-900 select-none">
-        <img
-          key={heroPhoto} src={heroPhoto} alt=""
-          className="absolute inset-0 w-full h-full object-cover" draggable={false}
-          style={{ filter: HERO_IMAGE_FILTER }}
-        />
-        <div className="absolute inset-0 pointer-events-none mix-blend-multiply" style={{ background: HERO_TINT_GRADIENT }} />
-        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-        <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10" />
-        <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-10" />
+    <div className="fixed inset-0 overflow-hidden bg-forest-900 select-none">
+      <img
+        key={heroPhoto} src={heroPhoto} alt=""
+        className="absolute inset-0 w-full h-full object-cover" draggable={false}
+        style={{ filter: HERO_IMAGE_FILTER }}
+      />
+      <div className="absolute inset-0 pointer-events-none mix-blend-multiply" style={{ background: HERO_TINT_GRADIENT }} />
+      <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+      <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10" />
+      <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-10" />
 
-        {/* ── Top overlay: nav + pillole + carosello ── */}
-        <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
-          <HubNavBar />
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 overflow-x-auto">
-              {statPills.map(({ icon: Icon, label }) => (
-                <span key={label} className="shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm">
-                  <Icon className="w-3 h-3" /> {label}
-                </span>
+      {/* ── Top overlay: nav + pillole + carosello ── */}
+      <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+        <HubNavBar />
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {statPills.map(({ icon: Icon, label }) => (
+              <span key={label} className="shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm">
+                <Icon className="w-3 h-3" /> {label}
+              </span>
+            ))}
+          </div>
+          {ambientPhotos.length > 1 && (
+            <div className="flex gap-1.5 shrink-0">
+              {ambientPhotos.map((_, i) => (
+                <button
+                  key={i} aria-label={`Foto ${i + 1}`} onClick={() => setPhotoIndex(i)}
+                  className={`h-1.5 rounded-full transition-all ${i === photoIndex % ambientPhotos.length ? 'bg-white w-4' : 'bg-white/40 w-1.5'}`}
+                />
               ))}
             </div>
-            {ambientPhotos.length > 1 && (
-              <div className="flex gap-1.5 shrink-0">
-                {ambientPhotos.map((_, i) => (
-                  <button
-                    key={i} aria-label={`Foto ${i + 1}`} onClick={() => setPhotoIndex(i)}
-                    className={`h-1.5 rounded-full transition-all ${i === photoIndex % ambientPhotos.length ? 'bg-white w-4' : 'bg-white/40 w-1.5'}`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── Bottom overlay: titolo/sottotitolo + anello o grafico + filmstrip ── */}
-        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
-          <div className="px-4 sm:px-10">
-            <div key={selectedId} className="fade-up">
-              <div className="flex items-center gap-2">
-                <p className="font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05] truncate" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-                  {selected.title}
-                </p>
-                {selected.guideSection && (
-                  <span className="shrink-0 bg-white/85 rounded-full p-0.5">
-                    <InfoButton section={selected.guideSection} onGuideLink={openGuide} />
-                  </span>
-                )}
-              </div>
-              <p className="font-body text-[13px] sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
-                {selected.subtitle}
-              </p>
-            </div>
-
-            {selected.visual === 'ring' && (
-              <div key={`ring-${selectedId}`} className="mt-2.5 fade-up">
-                <TrailScoreGaugeBadge total={selected.ringValue ?? null} safety={null} showLabel={false} size={64} />
-              </div>
-            )}
-
-            {selected.visual === 'chart' && selected.chart && (
-              <div key={`chart-${selectedId}`} className="mt-3 bg-black/30 backdrop-blur-md rounded-2xl p-3 sm:p-4 max-w-xl fade-up">
-                {selected.chart}
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
-            {galleryItems.map(item => (
-              <FilmstripTile key={item.id} item={item} selected={item.id === selectedId} onSelect={() => setSelectedId(item.id)} />
-            ))}
-            <Link
-              href="/statistiche"
-              className="shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative border-[1.5px] border-dashed border-white/40 bg-white/10 flex flex-col items-center justify-center gap-1 hover:bg-white/15 transition-colors"
-              style={{ scrollSnapAlign: 'start' }}
-            >
-              <ArrowRight className="w-5 h-5 text-white/80" />
-              <span className="text-[9px] font-bold text-white/80 leading-tight text-center px-1">Tutte le statistiche</span>
-            </Link>
-          </div>
+          )}
         </div>
       </div>
 
-      {guideOpen && <GuideOverlay anchor={guideAnchor} onClose={() => setGuideOpen(false)} />}
-    </>
+      {/* ── Bottom overlay: titolo/sottotitolo + anello o grafico + filmstrip ── */}
+      <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
+        <div className="px-4 sm:px-10">
+          <div key={selectedId} className="fade-up">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05] truncate" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+                {selected.title}
+              </p>
+              {selected.guideSection && <InfoButton section={selected.guideSection} onDark />}
+            </div>
+            {selected.insight && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-amber-300 mt-1.5">
+                <Sparkles className="w-3 h-3" /> Lettura della settimana
+              </span>
+            )}
+            <p className="font-body text-[13px] sm:text-sm text-white/85 leading-snug mt-1 max-w-md" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+              {selected.subtitle}
+            </p>
+          </div>
+
+          {selected.visual === 'ring' && (
+            <div key={`ring-${selectedId}`} className="mt-2.5 fade-up">
+              <TrailScoreGaugeBadge total={selected.ringValue ?? null} safety={null} showLabel={false} size={64} />
+            </div>
+          )}
+
+          {selected.visual === 'chart' && selected.chart && (
+            <div key={`chart-${selectedId}`} className="mt-3 bg-black/30 backdrop-blur-md rounded-2xl p-3 sm:p-4 max-w-xl fade-up">
+              {selected.chart}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
+          {galleryItems.map(item => (
+            <FilmstripTile key={item.id} item={item} selected={item.id === selectedId} onSelect={() => setSelectedId(item.id)} />
+          ))}
+          <Link
+            href="/statistiche"
+            className="shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative border-[1.5px] border-dashed border-white/40 bg-white/10 flex flex-col items-center justify-center gap-1 hover:bg-white/15 transition-colors"
+            style={{ scrollSnapAlign: 'start' }}
+          >
+            <ArrowRight className="w-5 h-5 text-white/80" />
+            <span className="text-[9px] font-bold text-white/80 leading-tight text-center px-1">Tutte le statistiche</span>
+          </Link>
+        </div>
+      </div>
+    </div>
   )
 }
 
