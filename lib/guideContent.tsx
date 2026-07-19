@@ -1,4 +1,6 @@
+'use client'
 import type { ReactNode } from 'react'
+import { useGuideTheme } from './guideTheme'
 
 // Testo di spiegazione per ogni parametro/grafico dell'app — un tempo un'unica pagina
 // (components/stats/TabGuida.tsx) aperta in un pannello a tutto schermo dall'icona "i" ovunque
@@ -10,21 +12,37 @@ export interface GuideEntry {
   body: ReactNode
 }
 
+// Formula/Tip/Note leggono il tema da InfoPanel (light in /statistiche, dark in sovraimpressione su
+// foto in Bacheca) invece di avere un colore fisso — così lo stesso contenuto resta leggibile su
+// sfondo bianco e su sfondo scuro senza scriverlo due volte.
 function Formula({ children }: { children: ReactNode }) {
+  const dark = useGuideTheme() === 'dark'
   return (
-    <div className="bg-stone-100 rounded-lg px-3 py-2 font-mono text-[11px] text-stone-700 border-l-2 border-forest-400 my-1">
+    <div className={dark
+      ? 'bg-white/10 rounded-lg px-3 py-2 font-mono text-[11px] text-white/90 border-l-2 border-amber-300/70 my-1'
+      : 'bg-stone-100 rounded-lg px-3 py-2 font-mono text-[11px] text-stone-700 border-l-2 border-forest-400 my-1'
+    }>
       {children}
     </div>
   )
 }
 
 function Tip({ children }: { children: ReactNode }) {
+  const dark = useGuideTheme() === 'dark'
   return (
-    <div className="bg-sky-50 rounded-lg px-3 py-2 text-[11px] text-sky-700 flex items-start gap-2 my-1">
+    <div className={dark
+      ? 'bg-amber-400/15 rounded-lg px-3 py-2 text-[11px] text-amber-100 flex items-start gap-2 my-1'
+      : 'bg-sky-50 rounded-lg px-3 py-2 text-[11px] text-sky-700 flex items-start gap-2 my-1'
+    }>
       <span className="shrink-0">💡</span>
       <span>{children}</span>
     </div>
   )
+}
+
+function Note({ children }: { children: ReactNode }) {
+  const dark = useGuideTheme() === 'dark'
+  return <p className={`text-[10px] italic ${dark ? 'text-white/55' : 'text-stone-400'}`}>{children}</p>
 }
 
 export const GUIDE_CONTENT: Record<string, GuideEntry> = {
@@ -171,7 +189,7 @@ export const GUIDE_CONTENT: Record<string, GuideEntry> = {
     body: <>
       <p>Stima il carico di ogni singola uscita combinando distanza, dislivello e durata:</p>
       <Formula>TSS = (km × 3) + (D+ in m × 0.01) + (minuti × 0.5)</Formula>
-      <p className="text-[10px] text-stone-400 italic">Nota: è una stima semplificata basata sui metadati. Con dati di frequenza cardiaca sarebbe possibile usare TRIMPS per una stima più precisa.</p>
+      <Note>Nota: è una stima semplificata basata sui metadati. Con dati di frequenza cardiaca sarebbe possibile usare TRIMPS per una stima più precisa.</Note>
     </>,
   },
   'volume-settimanale': {
@@ -248,7 +266,7 @@ export const GUIDE_CONTENT: Record<string, GuideEntry> = {
         <li>45–55 — buono, sopra la media</li>
         <li>{'>'} 55 — eccellente, tipico di atleti allenati</li>
       </ul>
-      <p className="text-[10px] text-stone-400 italic">Limitazione: senza FC a riposo accurata (misurazione mattutina a letto, prima di alzarsi) la stima ha un margine di ±5 ml/kg/min.</p>
+      <Note>Limitazione: senza FC a riposo accurata (misurazione mattutina a letto, prima di alzarsi) la stima ha un margine di ±5 ml/kg/min.</Note>
       <Tip>Imposta la FC a riposo reale nel profilo per una stima più precisa. Rimisurarla ogni 3 mesi riflette il tuo progresso.</Tip>
     </>,
   },

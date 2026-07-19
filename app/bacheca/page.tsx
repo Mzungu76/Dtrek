@@ -8,7 +8,7 @@ import { TrendingUp, Flame, BarChart3, Loader2, Mountain, Upload, ArrowRight, Sp
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
-import InfoButton from '@/components/stats/InfoButton'
+import { InfoToggleButton, InfoPanel } from '@/components/stats/InfoButton'
 import TileIllustration, { type IllustrationKind } from '@/components/bacheca/TileIllustration'
 import {
   HeatmapPanel, AnnualBarChart, MonthlyBarChart, SeasonalBarChart, WeekdayBarChart,
@@ -78,7 +78,10 @@ export default function BachecaPage() {
   const [ambientPhotos, setAmbientPhotos] = useState<string[]>([])
   const [photoIndex, setPhotoIndex] = useState(0)
   const [selectedId, setSelectedId] = useState('recovery')
+  const [infoOpen, setInfoOpen] = useState(false)
   const [userSettings, setUserSettings] = useState<{ hrMax?: number | null; derivedFCmax?: number; hrRest?: number | null; userWeightKg?: number }>({})
+
+  useEffect(() => { setInfoOpen(false) }, [selectedId])
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
@@ -527,7 +530,9 @@ export default function BachecaPage() {
               <p className="font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05] truncate" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
                 {selected.title}
               </p>
-              {selected.guideSection && <InfoButton section={selected.guideSection} onDark />}
+              {selected.guideSection && (
+                <InfoToggleButton section={selected.guideSection} open={infoOpen} onToggle={() => setInfoOpen(o => !o)} onDark />
+              )}
             </div>
             {selected.insight && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-amber-300 mt-1.5">
@@ -549,6 +554,10 @@ export default function BachecaPage() {
             <div key={`chart-${selectedId}`} className="mt-3 bg-black/30 backdrop-blur-md rounded-2xl p-3 sm:p-4 max-w-xl fade-up">
               {selected.chart}
             </div>
+          )}
+
+          {selected.guideSection && (
+            <InfoPanel section={selected.guideSection} open={infoOpen} onDark className="mt-3 max-w-xl" />
           )}
         </div>
 
