@@ -1,6 +1,6 @@
 // Avvisi sullo stato aggiornato del percorso — scritti da Giulia dopo una ricerca web mirata al
 // momento della generazione della guida (vedi app/api/guide/route.ts's SYSTEM prompt), stesso
-// principio dei tag [sottotitolo]/[curiosita]/[indovinello]/[epoca]: un blocco delimitato su una
+// principio dei tag [sottotitolo]/[curiosita]/[epoca]: un blocco delimitato su una
 // riga dedicata, scritto PRIMA della prima sezione "## " e quindi da estrarre e ripulire dal testo
 // come il sottotitolo (lib/coverSubtitle.ts), non da un parsing per-sezione come [curiosita].
 //

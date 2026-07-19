@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
 import { exportAllActivitiesToExcel } from '@/utils/exportExcel'
 import { exportStatsPdf, exportMapPdf } from '@/utils/pdfExport'
@@ -55,6 +56,8 @@ function StatisticheContent() {
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
   }, [])
+
+  useCtsUpdated(() => { getAllActivities().then(setActivities) })
 
   const stats   = useMemo(() => computeGlobalStats(activities),    [activities])
   const records = useMemo(() => getPersonalRecords(activities),    [activities])

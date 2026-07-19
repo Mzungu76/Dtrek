@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { formatDuration } from '@/lib/tcxParser'
 import { ctsLabel } from '@/lib/trailScore'
 import { format } from 'date-fns'
@@ -32,6 +33,8 @@ export default function GuidaIndexPage() {
   useEffect(() => {
     getAllPlanned(setPlanned).then(setPlanned).catch(() => setPlanned([]))
   }, [])
+
+  useCtsUpdated(() => { getAllPlanned().then(setPlanned).catch(() => {}) })
 
   const all      = planned ?? []
   const active   = all.filter(h => !h.archivedAt)

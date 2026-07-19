@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import RouteHub from '@/components/routehub/RouteHub'
@@ -24,6 +24,7 @@ import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, originMatches } from '@/lib/drivingInfo'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
 import {
@@ -179,32 +180,38 @@ export default function GuidaHub({ id }: { id?: string }) {
   // Lightweight list of every active (non-archived) planned hike, sorted by import
   // order (most recent first) — backs the carousel/gallery. Resolves the bare
   // /guida entry point to the latest one once loaded.
-  useEffect(() => {
-    // getAllPlanned() is stale-while-revalidate: it resolves instantly with whatever was cached
-    // locally from the *previous* visit, then fetches the real list in the background. Without
-    // onRefresh, that fresh fetch (with up-to-date cachedTrailScore/cachedBeautyScore/
-    // cachedSafetyScore) is written to the local cache for next time but never reaches this
-    // session's `items` — so the gallery's TS ring stays pinned to whatever it was a visit ago.
-    const applyList = (list: PlannedHikeMeta[]) => {
-      const active = list.filter(h => !h.archivedAt)
-      const sorted = active.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      setItems(sorted.map(metaToItem))
-      setDriveCache(prev => {
-        const next = new Map(prev)
-        for (const h of sorted) {
-          if (h.cachedDrivingDistanceMeters == null || h.cachedDrivingOriginLat == null || h.cachedDrivingOriginLon == null) continue
-          next.set(h.id, {
-            distanceMeters: h.cachedDrivingDistanceMeters,
-            durationSeconds: h.cachedDrivingDurationSeconds ?? 0,
-            originLat: h.cachedDrivingOriginLat,
-            originLon: h.cachedDrivingOriginLon,
-          })
-        }
-        return next
-      })
-    }
-    getAllPlanned(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
+  // getAllPlanned() is stale-while-revalidate: it resolves instantly with whatever was cached
+  // locally from the *previous* visit, then fetches the real list in the background. Without
+  // onRefresh, that fresh fetch (with up-to-date cachedTrailScore/cachedBeautyScore/
+  // cachedSafetyScore) is written to the local cache for next time but never reaches this
+  // session's `items` — so the gallery's TS ring stays pinned to whatever it was a visit ago.
+  const applyList = useCallback((list: PlannedHikeMeta[]) => {
+    const active = list.filter(h => !h.archivedAt)
+    const sorted = active.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    setItems(sorted.map(metaToItem))
+    setDriveCache(prev => {
+      const next = new Map(prev)
+      for (const h of sorted) {
+        if (h.cachedDrivingDistanceMeters == null || h.cachedDrivingOriginLat == null || h.cachedDrivingOriginLon == null) continue
+        next.set(h.id, {
+          distanceMeters: h.cachedDrivingDistanceMeters,
+          durationSeconds: h.cachedDrivingDurationSeconds ?? 0,
+          originLat: h.cachedDrivingOriginLat,
+          originLon: h.cachedDrivingOriginLon,
+        })
+      }
+      return next
+    })
   }, [])
+
+  useEffect(() => {
+    getAllPlanned(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
+  }, [applyList])
+
+  // A background pull (another device added/edited/deleted a planned hike, or this device just
+  // caught up after being offline) lands in the local cache without any user action on this page —
+  // without this, the gallery would stay frozen on the pre-pull list until a manual reload.
+  useCtsUpdated(() => { getAllPlanned().then(applyList).catch(() => {}) })
 
   // Riempie in background la distanza in auto per ogni percorso della galleria che ne è ancora
   // privo (o il cui valore cachato risale a un indirizzo diverso da quello attuale) — così il dato

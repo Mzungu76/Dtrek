@@ -1,6 +1,6 @@
 // Sottotitolo da copertina — scritto da Giulia al momento della generazione della guida (vedi
 // app/api/guide/route.ts's SYSTEM prompt), non estratto a posteriori dal testo. Stesso principio
-// dei tag [curiosita]/[indovinello]/[epoca]: un blocco delimitato su una riga dedicata. A
+// dei tag [curiosita]/[epoca]: un blocco delimitato su una riga dedicata. A
 // differenza di quelli, però, il tag va rimosso dal testo salvato — non è contenuto dell'articolo,
 // serve solo per la copertina della card chiusa.
 const SUBTITLE_BLOCK_RE = /\[sottotitolo\]([\s\S]*?)\[\/sottotitolo\]\s*/i

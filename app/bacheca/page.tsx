@@ -14,6 +14,7 @@ import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { computeStreaks, getPersonalRecords } from '@/lib/stats'
 import { computeBadges } from '@/lib/badges'
 import { computeTrainingLoad, activityStress, currentForm } from '@/lib/trainingLoad'
@@ -75,6 +76,8 @@ export default function BachecaPage() {
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
   }, [])
+
+  useCtsUpdated(() => { getAllActivities().then(setActivities) })
 
   const streaks = useMemo(() => computeStreaks(activities), [activities])
   const badges  = useMemo(() => computeBadges(activities, streaks), [activities, streaks])

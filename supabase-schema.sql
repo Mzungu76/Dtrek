@@ -173,16 +173,10 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_ts_total DOUBLE PRECIS
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS si_score_raw float;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS si_density_factor float;
 
--- Trail riddles ("indovinelli per tappa") extracted from the generated guide text —
--- see lib/riddles.ts. Each entry carries its own lat/lon (matched against cached_pois/
--- cached_poi_wiki at extraction time), so the navigator can trigger them with the same
--- proximity mechanism as POIs without depending on the guide text at runtime.
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_riddles JSONB;
-
--- Stratigrafia temporale ("cosa vedresti da qui" per epoca) — stesso principio dei riddle,
--- vedi lib/epochPois.ts. Ogni voce porta la propria epoca (etrusca/romana/medievale/oggi)
--- e coordinate reali già note, così lo slider epoca del navigatore filtra e mostra i testi
--- senza bisogno di generazione in tempo reale (funziona offline).
+-- Stratigrafia temporale ("cosa vedresti da qui" per epoca) — vedi lib/epochPois.ts. Ogni voce
+-- porta la propria epoca (etrusca/romana/medievale/oggi) e coordinate reali già note, così lo
+-- slider epoca del navigatore filtra e mostra i testi senza bisogno di generazione in tempo
+-- reale (funziona offline).
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cached_epoch_pois JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_planned_trail_score ON planned_hikes (cached_trail_score DESC NULLS LAST);
@@ -966,6 +960,40 @@ CREATE TRIGGER trg_hike_questionnaires_updated_at
 -- planned_hikes (vedi colonna "favorite" più sopra), ora replicato per le escursioni concluse.
 -- ═══════════════════════════════════════════════════════════
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT false;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- Realtime (postgres_changes) sulle tabelle sincronizzate localmente — vedi
+-- lib/sync/realtimeSync.ts e supabase/migrations/enable_realtime_sync_tables.sql. Senza questa
+-- pubblicazione il client resta sul solo polling di lib/sync/pullEngine.ts (apertura app,
+-- riconnessione, tab tornata visibile, safety net ogni 5 minuti) — un dispositivo lasciato aperto
+-- in primo piano può restare fino a 5 minuti indietro rispetto a una modifica fatta altrove. Le
+-- policy RLS "*_owner" già definite sopra restano l'unico confine di sicurezza: Realtime consegna
+-- solo le righe che l'utente autenticato potrebbe leggere comunque via RLS.
+-- ═══════════════════════════════════════════════════════════
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'activities'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE activities;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'planned_hikes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE planned_hikes;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'user_settings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE user_settings;
+  END IF;
+END $$;
 
 
 -- ═══════════════════════════════════════════════════════════
