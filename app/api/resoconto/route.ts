@@ -48,7 +48,8 @@ Non usare bullet point: preferisci narrazione fluida e densa di dettagli.
 Per curiosità, fatti insoliti o dati sorprendenti, racchiudili in: [curiosita] testo [/curiosita]
 
 Se nel materiale fornito trovi risposte dell'escursionista a un questionario guidato, la sezione "## Cronaca" va scritta in PRIMA PERSONA (io/ho raggiunto/mi sono fermato), come se fosse l'escursionista stesso a raccontare: assorbi il contenuto e il tono emotivo delle risposte e fondili nella narrazione, mantenendo l'ordine cronologico dei punti del percorso a cui si riferiscono. NON riportarle mai come citazioni testuali né tra virgolette. Le altre sezioni restano in terza persona oggettiva come il resto del reportage — è uno stile volutamente misto: cronaca personale dentro un reportage giornalistico.
-Se invece non trovi risposte a un questionario, NON scrivere affatto la sezione "## Cronaca": il reportage in quel caso ha solo tre sezioni.`
+Se invece non trovi risposte a un questionario, NON scrivere affatto la sezione "## Cronaca": il reportage in quel caso ha solo tre sezioni.
+In questo caso compensa l'assenza del contributo diretto dell'escursionista appoggiandoti con più ricchezza di dettaglio su fotografie, punti di interesse, guida del percorso e dati naturalistici disponibili: il reportage deve restare comunque specifico e vivido, mai generico o intercambiabile con un'altra escursione.`
 
 interface PhotoMeta {
   caption: string

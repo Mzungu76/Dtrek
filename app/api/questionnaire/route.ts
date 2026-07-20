@@ -30,10 +30,11 @@ const QUESTIONNAIRE_SCHEMA = {
       items: {
         type: 'object',
         properties: {
-          anchorIndex: { type: 'integer' },
-          question:    { type: 'string' },
-          inputType:   { type: 'string', enum: ['choice', 'text', 'freewrite'] },
-          choices:     { type: 'array', items: { type: 'string' } },
+          anchorIndex:      { type: 'integer' },
+          question:         { type: 'string' },
+          inputType:        { type: 'string', enum: ['choice', 'text', 'freewrite'] },
+          choices:          { type: 'array', items: { type: 'string' } },
+          suggestedAnswers: { type: 'array', items: { type: 'string' } },
         },
         required: ['anchorIndex', 'question', 'inputType'],
         additionalProperties: false,
@@ -71,6 +72,7 @@ interface QuestionnaireQuestion {
   question: string
   inputType: 'choice' | 'text' | 'freewrite'
   choices?: string[]
+  suggestedAnswers?: string[]
   isFreeWrite: boolean
 }
 
@@ -206,6 +208,7 @@ interface RawQuestion {
   question: string
   inputType: 'choice' | 'text' | 'freewrite'
   choices?: string[]
+  suggestedAnswers?: string[]
 }
 
 function buildUserPrompt(activity: Record<string, unknown>, anchors: Anchor[], aiUseBiometricData = true): string {
@@ -237,7 +240,8 @@ Crea tra 5 e 8 domande, una per ciascuno dei punti di ancoraggio più significat
 Le domande devono essere specifiche per quel punto del percorso (la salita, la foto, la vetta, il rifugio...), non generiche o intercambiabili.
 Scegli 1 o 2 punti tra quelli più "emotivamente densi" (una vetta, una foto significativa) per invitare l'escursionista a scrivere liberamente con parole sue: in quel caso usa inputType "freewrite" e la domanda deve invitarlo esplicitamente a raccontare cosa ha provato o pensato in quel momento.
 Per gli altri punti usa inputType "text" (risposta breve) oppure "choice" con 3-4 opzioni quando ha senso una scelta rapida (es. percezione di difficoltà, stato d'animo).
-Il campo "choices" va incluso solo quando inputType è "choice", con almeno 2 opzioni.`
+Il campo "choices" va incluso solo quando inputType è "choice", con almeno 2 opzioni.
+Per le domande di tipo "text", includi anche il campo "suggestedAnswers" con 2-3 risposte brevi e plausibili, specifiche per quel preciso punto del percorso (non generiche): l'escursionista potrà toccarne una come scorciatoia e poi modificarla invece di scrivere da zero.`
 }
 
 function parseQuestions(items: RawQuestion[], anchors: Anchor[]): QuestionnaireQuestion[] | null {
@@ -256,6 +260,10 @@ function parseQuestions(items: RawQuestion[], anchors: Anchor[]): QuestionnaireQ
       : undefined
     if (item.inputType === 'choice' && (!choices || choices.length < 2)) continue
 
+    const suggestedAnswers = item.inputType === 'text' && Array.isArray(item.suggestedAnswers)
+      ? item.suggestedAnswers.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+      : undefined
+
     out.push({
       id:          `q${out.length}`,
       anchorType:  anchor.type,
@@ -265,6 +273,7 @@ function parseQuestions(items: RawQuestion[], anchors: Anchor[]): QuestionnaireQ
       question:    item.question.trim(),
       inputType:   item.inputType,
       choices,
+      suggestedAnswers: suggestedAnswers && suggestedAnswers.length > 0 ? suggestedAnswers : undefined,
       isFreeWrite: item.inputType === 'freewrite',
     })
   }
