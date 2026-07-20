@@ -19,6 +19,23 @@ export default function ServiceWorkerRegister() {
       .register('/sw.js', { scope: '/' })
       .then((registration) => { registration.update().catch(() => {}) })
       .catch((err) => console.warn('[SW] Registration failed:', err))
+
+    // Standard reload-once-on-takeover pattern: even once the browser DOES finish detecting and
+    // activating a new service worker (confirmed to take up to ~60s after the previous one was
+    // first installed — a real, measured Chromium delay, not a bug in this app), the ALREADY-OPEN
+    // page keeps running whatever JS it loaded with and won't retroactively pick up new fetch
+    // behavior on its own. Reloading the instant the new worker actually takes control (not
+    // before) guarantees the update becomes visible automatically instead of requiring the user
+    // to notice and manually refresh again — `refreshing` guards against a double reload if the
+    // event fires more than once before navigation completes.
+    let refreshing = false
+    const onControllerChange = () => {
+      if (refreshing) return
+      refreshing = true
+      window.location.reload()
+    }
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
   }, [])
   return null
 }
