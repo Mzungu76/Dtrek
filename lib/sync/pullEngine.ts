@@ -16,6 +16,7 @@
 import { lsGet, lsSet, lsDel } from '@/lib/localStore'
 import { getPendingRecordIds } from './syncEngine'
 import { isStaleSwResponse } from '@/lib/apiFetch'
+import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 
 export interface DigestRow {
   id: string
@@ -170,6 +171,19 @@ export async function pullAll(onProgress?: (p: PullProgress) => void): Promise<v
   // unconditionally is no less safe and no longer depends on a heuristic that can lie.
   pulling = true
   try {
+    // Confirmed via production logs: every pullAll() trigger (app open, tab becoming visible after
+    // being backgrounded for a while, reconnect) fires its authenticated fetch()es immediately,
+    // racing the Supabase SDK's own session restore/refresh (components/SessionKeepAlive.tsx just
+    // arms that timer — it doesn't block anything on it). If the access token cookie had already
+    // expired while the app was closed/backgrounded, that race is lost: the digest fetch below goes
+    // out with a stale cookie, gets a 401, and every reconciler treats a non-ok response as "pull
+    // failed, retry next trigger" — silently freezing the local cache until whatever the next
+    // trigger happens to be (up to 5 minutes later, or longer). getSession() awaits the SDK's own
+    // initialization/refresh-if-needed before returning, so this closes the race instead of
+    // reacting to it after the fact. Local reads (getAllActivities() et al.) never depend on this —
+    // only the background reconciliation triggered here does.
+    try { await getBrowserSupabase().auth.getSession() } catch {}
+
     let base = 0
     for (const puller of pullers) {
       let lastTotal = 0

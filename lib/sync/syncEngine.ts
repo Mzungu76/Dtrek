@@ -10,6 +10,7 @@
  */
 
 import { obGetAll, obGetByEntity, obDelete, type OutboxRow } from '@/lib/localStore'
+import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 
 export interface FlushResult {
   /** outboxId of every row that was successfully applied server-side and can be removed from the queue. */
@@ -71,6 +72,11 @@ export async function flush(): Promise<void> {
   try {
     const rows = await obGetAll()
     if (rows.length === 0) return
+
+    // Only pay for this once there's actually something to send — see lib/sync/pullEngine.ts's
+    // pullAll() for the full reasoning (same race: this can fire immediately on app open/becoming
+    // visible, before the Supabase SDK has finished restoring/refreshing an expired session cookie).
+    try { await getBrowserSupabase().auth.getSession() } catch {}
 
     const byEntity = new Map<string, OutboxRow[]>()
     for (const row of rows) {
