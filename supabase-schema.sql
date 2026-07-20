@@ -1005,6 +1005,14 @@ ALTER TABLE planned_hikes REPLICA IDENTITY FULL;
 ALTER TABLE user_settings REPLICA IDENTITY FULL;
 
 
+-- Profilo di scrittura derivato dalle risposte testuali (text/freewrite) al questionario guidato
+-- (lunghezza/verbosità media) — usato per calibrare il tono delle domande generate e lo stile della
+-- sezione "Cronaca" del resoconto sul registro reale dell'utente. Aggiornamento incrementale, vedi
+-- lib/writingStyleProfile.ts (stesso pattern di hiker_history_stats sopra). NULL finché non ci sono
+-- abbastanza risposte per essere significativo.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS writing_style_profile JSONB;
+
+
 -- ═══════════════════════════════════════════════════════════
 -- PostgREST tiene una cache dello schema (nomi di tabelle/colonne) e non la
 -- ricarica da sola quando una ALTER TABLE aggiunge una colonna — il client

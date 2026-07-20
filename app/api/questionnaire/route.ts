@@ -10,6 +10,7 @@ import { POI_META }        from '@/lib/overpass'
 import { fetchNatureContext, type NatureContext } from '@/lib/aiNatureContext'
 import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
 import { jsonSchemaFormat, parseWithRetry } from '@/lib/aiJsonOutput'
+import { readProfile, isProfileReady, formatStyleProfileBlock, updateProfileWithAnswer, type WritingStyleProfile } from '@/lib/writingStyleProfile'
 
 export const dynamic = 'force-dynamic'
 
@@ -211,7 +212,12 @@ interface RawQuestion {
   suggestedAnswers?: string[]
 }
 
-function buildUserPrompt(activity: Record<string, unknown>, anchors: Anchor[], aiUseBiometricData = true): string {
+function buildUserPrompt(
+  activity: Record<string, unknown>,
+  anchors: Anchor[],
+  aiUseBiometricData = true,
+  styleProfile: WritingStyleProfile | null = null,
+): string {
   const avgHR = aiUseBiometricData ? activity.avg_heart_rate as number | undefined : undefined
   const maxHR = aiUseBiometricData ? activity.max_heart_rate as number | undefined : undefined
   const cal   = aiUseBiometricData ? activity.calories       as number | undefined : undefined
@@ -220,6 +226,8 @@ function buildUserPrompt(activity: Record<string, unknown>, anchors: Anchor[], a
     maxHR && maxHR > 0 ? `FC MASSIMA: ${Math.round(maxHR)} bpm` : '',
     cal   && cal   > 0 ? `CALORIE: ${cal} kcal` : '',
   ].filter(Boolean).join(', ')
+
+  const styleLine = styleProfile && isProfileReady(styleProfile) ? formatStyleProfileBlock(styleProfile) : ''
 
   const anchorLines = anchors.map((a, i) =>
     `${i}. [${a.type}] ${a.label} — al ${Math.round(a.progress * 100)}% del percorso${a.detail ? ` (${a.detail})` : ''}`,
@@ -232,6 +240,7 @@ DISTANZA: ${((activity.distance_meters as number ?? 0) / 1000).toFixed(1)} km
 DISLIVELLO POSITIVO: ${Math.round((activity.elevation_gain as number) ?? 0)} m
 DURATA: ${formatDuration((activity.total_time_seconds as number) ?? 0)}
 ${biometricBlock ? `DATI BIOMETRICI: ${biometricBlock}` : ''}
+${styleLine}
 
 PUNTI DI ANCORAGGIO LUNGO IL PERCORSO (in ordine cronologico, usa l'indice per riferirti a ciascuno):
 ${anchorLines}
@@ -241,7 +250,7 @@ Le domande devono essere specifiche per quel punto del percorso (la salita, la f
 Scegli 1 o 2 punti tra quelli più "emotivamente densi" (una vetta, una foto significativa) per invitare l'escursionista a scrivere liberamente con parole sue: in quel caso usa inputType "freewrite" e la domanda deve invitarlo esplicitamente a raccontare cosa ha provato o pensato in quel momento.
 Per gli altri punti usa inputType "text" (risposta breve) oppure "choice" con 3-4 opzioni quando ha senso una scelta rapida (es. percezione di difficoltà, stato d'animo).
 Il campo "choices" va incluso solo quando inputType è "choice", con almeno 2 opzioni.
-Per le domande di tipo "text", includi anche il campo "suggestedAnswers" con 2-3 risposte brevi e plausibili, specifiche per quel preciso punto del percorso (non generiche): l'escursionista potrà toccarne una come scorciatoia e poi modificarla invece di scrivere da zero.`
+Per le domande di tipo "text", includi anche il campo "suggestedAnswers" con 2-3 risposte brevi e plausibili, specifiche per quel preciso punto del percorso (non generiche): l'escursionista potrà toccarne una come scorciatoia e poi modificarla invece di scrivere da zero.${styleLine ? '\nSe fornito, tieni conto dello STILE ABITUALE DI RISPOSTA sopra nel formulare le domande: non chiedere elaborazioni lunghe a chi risponde tipicamente breve, né limitare chi tende a scrivere di più.' : ''}`
 }
 
 function parseQuestions(items: RawQuestion[], anchors: Anchor[]): QuestionnaireQuestion[] | null {
@@ -414,8 +423,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  const styleProfile = await readProfile(user.id)
+
   const client = new Anthropic({ apiKey })
-  const prompt = buildUserPrompt(activity, anchors, aiUseBiometricData)
+  const prompt = buildUserPrompt(activity, anchors, aiUseBiometricData, styleProfile)
 
   let output: QuestionnaireOutput
   try {
@@ -503,7 +514,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data: existing, error: fetchErr } = await supabase
     .from('hike_questionnaires')
-    .select('answers')
+    .select('answers, questions')
     .eq('id', id)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -521,6 +532,14 @@ export async function PATCH(req: NextRequest) {
       text:       answer.text ?? '',
       skipped:    !!answer.skipped,
       answeredAt: new Date().toISOString(),
+    }
+
+    // Alimenta il profilo di scrittura persistente (lib/writingStyleProfile.ts) solo con risposte
+    // scritte per davvero — le "choice" sono scelte rapide, non rappresentative dello stile.
+    const questions = (existing.questions as QuestionnaireQuestion[]) ?? []
+    const questionType = questions.find(q => q.id === questionId)?.inputType
+    if (!answer.skipped && answer.text?.trim() && (questionType === 'text' || questionType === 'freewrite')) {
+      void updateProfileWithAnswer(user.id, answer.text)
     }
   }
 

@@ -174,6 +174,7 @@ export default function ReportReader({
   const [publishError,  setPublishError]  = useState<string | null>(null)
   const [questionnaireStatus, setQuestionnaireStatus] = useState<'none' | 'in_progress' | 'completed' | 'skipped'>('none')
   const [questionnaireCounts, setQuestionnaireCounts] = useState({ answered: 0, total: 0 })
+  const [writingStyleReady, setWritingStyleReady] = useState(false)
   const [editorMode,       setEditorMode]       = useState<'view' | 'manual'>('view')
   const [showAiPanel,      setShowAiPanel]      = useState(true)
   const [reportSections,   setReportSections]   = useState<ReportSection[]>([])
@@ -215,6 +216,18 @@ export default function ReportReader({
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [id])
+
+  // Badge "nel tuo stile" — pronto quando il profilo di scrittura (lib/writingStyleProfile.ts) ha
+  // abbastanza risposte al questionario da essere un segnale affidabile. A livello utente, non di
+  // singola attività: nessuna dipendenza da `id`.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/user-settings')
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setWritingStyleReady(!!d.writingStyleReady) })
+      .catch(() => null)
+    return () => { cancelled = true }
+  }, [])
 
   // Load existing PDF share link
   useEffect(() => {
@@ -411,6 +424,11 @@ export default function ReportReader({
       }`}>
         {materialScore.score}% materiale {materialScore.label}
       </span>
+      {writingStyleReady && (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-display font-bold uppercase tracking-wide bg-forest-50 text-forest-700">
+          Stile riconosciuto
+        </span>
+      )}
       {materialScore.suggestion && (
         <span className="text-xs text-stone-400 italic">{materialScore.suggestion}</span>
       )}

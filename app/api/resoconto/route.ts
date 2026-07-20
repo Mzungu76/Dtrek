@@ -12,6 +12,7 @@ import { fetchNatureContext, formatNatureContextBlock, type NatureContext } from
 import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
 import { tryAcquireCooldown } from '@/lib/aiCooldown'
 import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
+import { readProfile, isProfileReady, formatStyleProfileBlock, type WritingStyleProfile } from '@/lib/writingStyleProfile'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -147,6 +148,7 @@ function buildPrompt(
   /** Consenso dell'utente all'uso dei dati biometrici (FC, calorie) nei prompt AI — vedi
    *  components/profilo/SectionAiPrivacy.tsx. */
   aiUseBiometricData = true,
+  styleProfile: WritingStyleProfile | null = null,
 ): { text: string; imageBlocks: Anthropic.ImageBlockParam[] } {
   const dateStr = activity.start_time
     ? format(new Date(activity.start_time as string), "EEEE d MMMM yyyy", { locale: it })
@@ -236,6 +238,7 @@ function buildPrompt(
     : ''
 
   const hasQa = !!(qa && qa.length > 0)
+  const styleLine = styleProfile && isProfileReady(styleProfile) ? formatStyleProfileBlock(styleProfile) : ''
   const cronacaBlock = hasQa
     ? `
 ## Cronaca
@@ -245,6 +248,7 @@ narrazione: cosa mostrano, in quale tratto del percorso, cosa aggiungono alla co
 Eventuali dati biometrici possono essere citati qui se aiutano a descrivere il ritmo o la fatica.
 Integra le risposte dell'escursionista al questionario guidato, seguendo l'ordine cronologico dei punti
 del percorso a cui si riferiscono, fondendole nella narrazione senza mai citarle alla lettera.
+${styleLine ? `${styleLine}\nCalibra la lunghezza e il ritmo delle frasi di questa sezione su questo registro reale, non su un tono "medio" generico.` : ''}
 `
     : ''
 
@@ -478,8 +482,10 @@ export async function POST(req: NextRequest) {
     if (built.length > 0) qa = built
   }
 
+  const styleProfile = await readProfile(user.id)
+
   const client  = new Anthropic({ apiKey })
-  const { text: prompt, imageBlocks } = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData)
+  const { text: prompt, imageBlocks } = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData, styleProfile)
   const { maxTokens } = LENGTH_CONFIG[length]
 
   let fullText = ''
