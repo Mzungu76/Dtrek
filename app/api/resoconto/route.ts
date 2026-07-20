@@ -32,6 +32,10 @@ const LENGTH_CONFIG: Record<ResocontoLength, { maxTokens: number; instruction: s
   },
 }
 
+// Quante foto posizionate allegare come immagini reali (vision) oltre alla didascalia testuale —
+// un tetto per lunghezza del resoconto, a scalare con quanto testo l'AI dovrà comunque produrre.
+const VISION_PHOTO_CAP: Record<ResocontoLength, number> = { breve: 4, media: 6, lunga: 8 }
+
 const SYSTEM = `Sei un giornalista outdoor di punta, specializzato in reportage per riviste come Meridiani
 Montagne e National Geographic Traveller Italia — con solida formazione in geografia, storia
 naturale e medicina dello sport, che usi per dare ad ogni articolo dati precisi e contesto
@@ -42,6 +46,13 @@ persona con tono oggettivo ma evocativo. Usa i dati biometrici (frequenza cardia
 come elementi narrativi che raccontano lo sforzo fisico, integra riferimenti storici, geologici e
 naturalistici tratti dalla guida disponibile, e descrivi le fotografie come dispacci visivi: cosa
 immortalano, in quale punto del cammino, cosa rivelano del territorio.
+
+Alcune fotografie ti vengono allegate come immagini vere e proprie, numerate nell'ordine in cui
+compaiono nella DOCUMENTAZIONE FOTOGRAFICA più sotto: per quelle, guardale realmente e descrivi con
+precisione ciò che mostrano — inquadratura, luce, elementi del paesaggio — senza mai inventare
+dettagli visivi in contraddizione con quello che vedi. Per le foto presenti solo come didascalia
+testuale (nessuna immagine allegata), continua a basarti unicamente su didascalia e posizione lungo
+il percorso, senza descrivere contenuti visivi che non ti sono stati mostrati.
 
 Per i titoli delle sezioni usa ## (due cancelletti seguiti da spazio). Non usare asterischi per il grassetto.
 Non usare bullet point: preferisci narrazione fluida e densa di dettagli.
@@ -57,6 +68,7 @@ interface PhotoMeta {
   lon?: number
   progress: number
   hasExifGps?: boolean
+  url?: string
 }
 
 interface QaItem {
@@ -115,6 +127,14 @@ function buildQa(questions: QuestionnaireQuestionRow[], answers: Record<string, 
     }))
 }
 
+/** Campiona a passo fisso lungo l'array (già ordinato) invece di prendere solo i primi `max`,
+ *  così la selezione copre l'intero percorso anche quando ci sono molte più foto del tetto. */
+function sampleEvenly<T>(items: T[], max: number): T[] {
+  if (items.length <= max) return items
+  const step = Math.ceil(items.length / max)
+  return items.filter((_, i) => i % step === 0).slice(0, max)
+}
+
 function buildPrompt(
   activity: Record<string, unknown>,
   length: ResocontoLength,
@@ -126,7 +146,7 @@ function buildPrompt(
   /** Consenso dell'utente all'uso dei dati biometrici (FC, calorie) nei prompt AI — vedi
    *  components/profilo/SectionAiPrivacy.tsx. */
   aiUseBiometricData = true,
-): string {
+): { text: string; imageBlocks: Anthropic.ImageBlockParam[] } {
   const dateStr = activity.start_time
     ? format(new Date(activity.start_time as string), "EEEE d MMMM yyyy", { locale: it })
     : null
@@ -157,6 +177,13 @@ function buildPrompt(
   // Distinguish positioned photos (GPS or manually placed) from unpositioned ones
   const positionedPhotos = sortedPhotos.filter(p => p.hasExifGps || p.progress !== 0.5)
   const genericPhotos    = sortedPhotos.filter(p => !p.hasExifGps && p.progress === 0.5)
+
+  // Sottoinsieme delle foto posizionate allegato come immagine vera (vision), non solo didascalia —
+  // stessi indici "Foto N" del blocco testuale qui sotto, per mantenere la corrispondenza numero↔immagine.
+  const visionPhotoSet = new Set(sampleEvenly(positionedPhotos.filter(p => p.url), VISION_PHOTO_CAP[length]))
+  const imageBlocks: Anthropic.ImageBlockParam[] = positionedPhotos
+    .filter(p => visionPhotoSet.has(p))
+    .map(p => ({ type: 'image', source: { type: 'url', url: p.url! } }))
 
   const positionedBlock = positionedPhotos.length > 0
     ? positionedPhotos.map((p, i) =>
@@ -209,7 +236,7 @@ del percorso a cui si riferiscono, fondendole nella narrazione senza mai citarle
 `
     : ''
 
-  return `Scrivi un reportage giornalistico di questa escursione per una rivista outdoor italiana di qualità:
+  const text = `Scrivi un reportage giornalistico di questa escursione per una rivista outdoor italiana di qualità:
 
 TITOLO ESCURSIONE: ${activity.title ?? 'Escursione'}
 ${dateStr ? `DATA: ${dateStr}` : ''}
@@ -252,6 +279,7 @@ LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}
 
 IMPORTANTE: Completa obbligatoriamente tutte e ${hasQa ? 'quattro le sezioni' : 'tre le sezioni'}${hasQa ? '' : ' (NON scrivere "## Cronaca")'}.`
 
+  return { text, imageBlocks }
 }
 
 
@@ -437,7 +465,7 @@ export async function POST(req: NextRequest) {
   }
 
   const client  = new Anthropic({ apiKey })
-  const prompt  = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData)
+  const { text: prompt, imageBlocks } = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData)
   const { maxTokens } = LENGTH_CONFIG[length]
 
   let fullText = ''
@@ -446,7 +474,7 @@ export async function POST(req: NextRequest) {
     model:      claudeModel,
     max_tokens: maxTokens,
     system:     SYSTEM,
-    messages:   [{ role: 'user', content: prompt }],
+    messages:   [{ role: 'user', content: [...imageBlocks, { type: 'text', text: prompt }] }],
   })
 
   const readable = new ReadableStream({
