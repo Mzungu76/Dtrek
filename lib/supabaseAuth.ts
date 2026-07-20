@@ -21,6 +21,15 @@ function anonClientForRequest(request: NextRequest): SupabaseClient {
         getAll: () => request.cookies.getAll(),
         setAll: () => {},  // read-only — session refresh happens in middleware
       },
+      global: {
+        // See lib/supabase.ts — Next.js's server-side fetch() patch caches third-party fetches
+        // (including this SDK's own auth calls) unless explicitly opted out, independent of the
+        // calling route's own dynamic/caching config. A cached getUser()/getSession() response
+        // here would mean a request keeps getting treated as unauthenticated (or as a stale user)
+        // long after the real session has changed — the exact same failure mode confirmed for
+        // data reads, just applied to auth instead.
+        fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
+      },
     },
   )
 }
