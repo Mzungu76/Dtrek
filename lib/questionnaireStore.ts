@@ -18,6 +18,7 @@ export interface QuestionnaireQuestion {
   question: string
   inputType: QuestionInputType
   choices?: string[]
+  suggestedAnswers?: string[]
   isFreeWrite: boolean
 }
 

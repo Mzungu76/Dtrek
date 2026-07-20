@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ArrowLeft, ArrowRight, SkipForward } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ArrowLeft, ArrowRight, SkipForward, Mic, Square } from 'lucide-react'
 import RouteTimeline, { type RouteTimelinePhoto } from '@/app/components/RouteTimeline'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { QuestionnaireQuestion, QuestionnaireAnswer } from '@/lib/questionnaireStore'
+import { useSpeechDictation } from '@/lib/useSpeechDictation'
 
 export default function QuestionnaireWizard({
   questions,
@@ -32,8 +33,18 @@ export default function QuestionnaireWizard({
 
   const [value, setValue] = useState(existing?.text ?? '')
 
+  const baseValueRef = useRef('')
+  const { recording, supported: micSupported, toggleRecording } = useSpeechDictation(
+    transcript => setValue(baseValueRef.current ? `${baseValueRef.current} ${transcript}` : transcript),
+  )
+  const handleMicToggle = () => {
+    if (!recording) baseValueRef.current = value
+    toggleRecording()
+  }
+
   useEffect(() => {
     setValue(existing?.text ?? '')
+    if (recording) toggleRecording()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question?.id])
 
@@ -89,13 +100,36 @@ export default function QuestionnaireWizard({
             ))}
           </div>
         ) : (
-          <textarea
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            rows={question.inputType === 'freewrite' ? 6 : 3}
-            placeholder="Scrivi qui…"
-            className="w-full bg-stone-50 border border-stone-200 rounded-xl p-4 font-body text-sm text-stone-700 leading-relaxed outline-none focus:border-forest-400 resize-y"
-          />
+          <>
+            {question.inputType === 'text' && question.suggestedAnswers && question.suggestedAnswers.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {question.suggestedAnswers.map(s => (
+                  <button key={s} onClick={() => setValue(s)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-medium border border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100 hover:border-stone-300 transition-colors">
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-start gap-2">
+              <textarea
+                value={value}
+                onChange={e => setValue(e.target.value)}
+                rows={question.inputType === 'freewrite' ? 6 : 3}
+                placeholder="Scrivi qui…"
+                className="flex-1 bg-stone-50 border border-stone-200 rounded-xl p-4 font-body text-sm text-stone-700 leading-relaxed outline-none focus:border-forest-400 resize-y"
+              />
+              {micSupported && (
+                <button type="button" onClick={handleMicToggle}
+                  title={recording ? 'Interrompi registrazione' : 'Rispondi a voce'}
+                  className={`flex items-center justify-center w-10 h-10 rounded-xl border shrink-0 transition-colors ${
+                    recording ? 'bg-red-500 border-red-500 text-white animate-pulse' : 'bg-forest-50 border-forest-200 text-forest-600 hover:bg-forest-100'
+                  }`}>
+                  {recording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
 
