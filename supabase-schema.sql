@@ -995,6 +995,15 @@ BEGIN
   END IF;
 END $$;
 
+-- Con l'identità di default (solo chiave primaria) un evento DELETE porta con sé solo l'id della
+-- riga eliminata: user_id risulta NULL nel record che Realtime valuta per la RLS ("*_owner":
+-- auth.uid() = user_id), la policy nega l'autorizzazione e l'evento viene scartato in silenzio —
+-- nessun client lo riceve, nemmeno il proprietario. FULL include tutte le colonne anche nel record
+-- vecchio, rendendo la valutazione RLS corretta per ogni tipo di evento (INSERT/UPDATE/DELETE).
+ALTER TABLE activities    REPLICA IDENTITY FULL;
+ALTER TABLE planned_hikes REPLICA IDENTITY FULL;
+ALTER TABLE user_settings REPLICA IDENTITY FULL;
+
 
 -- ═══════════════════════════════════════════════════════════
 -- MIGRAZIONE DATI ESISTENTI

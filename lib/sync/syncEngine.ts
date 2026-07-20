@@ -63,7 +63,9 @@ export function scheduleFlush() {
  */
 export async function flush(): Promise<void> {
   if (flushing) return
-  if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) return
+  // Deliberately NOT gated on navigator.onLine — see lib/sync/pullEngine.ts's pullAll() for why:
+  // the flag can false-negative on mobile, silently skipping the flush with no retry until the
+  // next trigger. Each handler below already leaves its rows pending on a real network failure.
   flushing = true
   if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
   try {

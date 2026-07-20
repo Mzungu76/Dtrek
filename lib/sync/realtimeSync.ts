@@ -24,11 +24,17 @@
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { pullAll } from './pullEngine'
 import type { RealtimeChannel, AuthChangeEvent, Session } from '@supabase/supabase-js'
+import { REALTIME_SUBSCRIBE_STATES } from '@supabase/supabase-js'
 
 const SYNCED_TABLES = ['activities', 'planned_hikes', 'user_settings'] as const
+const RETRY_DELAY_MS = 5_000
 
 let channel: RealtimeChannel | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+// Bumped on every teardown so a retry scheduled for a since-superseded subscription (user
+// switched, or the component unmounted) becomes a no-op instead of resurrecting a stale channel.
+let generation = 0
 
 function scheduleRepull() {
   if (debounceTimer) clearTimeout(debounceTimer)
@@ -37,7 +43,7 @@ function scheduleRepull() {
   debounceTimer = setTimeout(() => { pullAll() }, 400)
 }
 
-function subscribeFor(userId: string) {
+function subscribeFor(userId: string, gen: number) {
   const supabase = getBrowserSupabase()
   let ch = supabase.channel(`dtrek-sync-${userId}`)
   for (const table of SYNCED_TABLES) {
@@ -47,12 +53,28 @@ function subscribeFor(userId: string) {
       scheduleRepull,
     )
   }
-  ch.subscribe()
+  // A channel-level failure (transient auth-token race on first connect, dropped WebSocket the
+  // underlying client doesn't retry at this level, etc.) would otherwise leave this subscription
+  // silently dead for the rest of the session, with only the 5-minute polling safety net left —
+  // exactly the "instant" guarantee this module exists to provide. Retry with a fixed backoff as
+  // long as this is still the current generation (i.e. nothing else has superseded it since).
+  ch.subscribe((status: `${REALTIME_SUBSCRIBE_STATES}`) => {
+    if (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT' && status !== 'CLOSED') return
+    if (gen !== generation) return
+    if (retryTimer) clearTimeout(retryTimer)
+    retryTimer = setTimeout(() => {
+      if (gen !== generation) return
+      supabase.removeChannel(ch)
+      subscribeFor(userId, gen)
+    }, RETRY_DELAY_MS)
+  })
   channel = ch
 }
 
 function teardown() {
+  generation++
   if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
   if (channel) { getBrowserSupabase().removeChannel(channel); channel = null }
 }
 
@@ -69,7 +91,7 @@ export function startRealtimeSync(): () => void {
     if (userId === currentUserId) return
     teardown()
     currentUserId = userId
-    if (userId) subscribeFor(userId)
+    if (userId) subscribeFor(userId, generation)
   }
 
   supabase.auth.getUser().then(({ data }: { data: { user: { id: string } | null } }) => applyUser(data.user?.id ?? null)).catch(() => {})
