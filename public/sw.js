@@ -116,6 +116,13 @@ self.addEventListener('fetch', (event) => {
       }),
       async () => {
         const cached = await caches.match(request, { cacheName: API_CACHE }).catch(() => null);
+        // The cached Response keeps the origin's original `Date` header from when it was first
+        // fetched — lib/sync/pullEngine.ts's reconciler reads that timestamp to tell a stale
+        // fallback (this branch only runs when the live fetch above failed/timed out) apart
+        // from a genuinely fresh response, instead of trusting whatever it gets as
+        // authoritative. Without that check, a record missing from a stale cached digest looks
+        // identical to "deleted on another device" and gets pruned from IndexedDB — silently
+        // reverting this device to an older state instead of just failing closed.
         return cached ?? new Response(JSON.stringify({ error: 'offline' }), {
           status: 503,
           headers: { 'Content-Type': 'application/json' },

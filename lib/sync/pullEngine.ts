@@ -16,6 +16,12 @@
 import { lsGet, lsSet, lsDel } from '@/lib/localStore'
 import { getPendingRecordIds } from './syncEngine'
 
+// How old a digest response's `Date` header can be before it's treated as a stale
+// service-worker cache fallback rather than a genuinely fresh answer from the server — see the
+// registerListReconciler digest fetch below. Generous enough to cover a slow round-trip, tight
+// enough to catch a fallback response that's actually minutes/hours/days old.
+const STALE_RESPONSE_THRESHOLD_MS = 30_000
+
 export interface DigestRow {
   id: string
   updatedAt: string
@@ -58,6 +64,15 @@ export function registerListReconciler<TMeta extends { id: string; updatedAt?: s
     try {
       const res = await fetch(cfg.digestUrl)
       if (!res.ok) return
+      // A response served from public/sw.js's offline fallback cache (only happens when the
+      // live network fetch failed or timed out) keeps the origin's original `Date` header from
+      // whenever it was first cached — not now. A digest that's actually stale like this would
+      // make the pruning loop below think every id missing from it was deleted elsewhere,
+      // silently reverting this device to an older state instead of just skipping the cycle. A
+      // genuinely fresh response's Date is always within a few seconds of "now" (network
+      // round-trip only); anything older is treated exactly like a failed fetch.
+      const responseDate = res.headers.get('date')
+      if (responseDate && Date.now() - new Date(responseDate).getTime() > STALE_RESPONSE_THRESHOLD_MS) return
       digest = await res.json()
     } catch {
       return
