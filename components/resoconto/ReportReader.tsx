@@ -276,18 +276,18 @@ export default function ReportReader({
   // ── Narrative chapters + fixed data sections ─────────────────────────────
   const sections = useMemo(() => parseSections(content), [content])
 
-  // "Galleria fotografica" compare solo se ci sono foto caricate — altrimenti sarebbe una sezione
-  // vuota nel sommario (niente mappa foto, niente "le tue foto", niente gestione foto).
+  // "Galleria fotografica" resta sempre presente (come le altre sezioni fisse) anche senza foto:
+  // è l'unico punto da cui caricarle (vedi ActivityPhotoManager dentro il suo widget), quindi
+  // nasconderla in assenza di foto renderebbe impossibile aggiungerne la prima.
   const displaySections = useMemo<DisplaySection[]>(() => {
     const narrative: DisplaySection[] = sections.map((s, i) => ({
       key: `narrative-${i}`, title: s.title, narrativeIndex: i, ...narrativeStyleFor(i),
     }))
-    const fixedKeys = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).filter(k => k !== 'galleria_foto' || photos.length > 0)
-    const fixed: DisplaySection[] = fixedKeys.map(k => ({
+    const fixed: DisplaySection[] = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).map(k => ({
       key: k, title: REPORT_SECTION_TITLE[k], ...REPORT_SECTION_STYLE[k],
     }))
     return [...narrative, ...fixed]
-  }, [sections, photos.length])
+  }, [sections])
 
   // Foto di ogni capitolo — se il racconto ha una struttura editata a mano (reportSections, in
   // sync 1:1 con i capitoli attuali) si usa la scelta esplicita dell'utente (foto principale +
