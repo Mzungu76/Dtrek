@@ -40,3 +40,25 @@ npm run dev
 
 Push su GitHub → import su Vercel, deploy automatico ad ogni push. Il progetto Supabase va
 configurato separatamente (schema in `supabase-schema.sql` e `supabase/migrations/`).
+
+## Note operative — sincronizzazione tra dispositivi
+
+Un guasto reale (mesi di `PATCH`/`POST` falliti in silenzio su `activities`/`planned_hikes`,
+poi un service worker rimasto bloccato su una versione vecchia) ha reso i salvataggi invisibili
+tra un dispositivo e l'altro. Punti da tenere a mente per non farlo ripetere:
+
+- **Dopo qualunque `ALTER TABLE` su `activities`, `planned_hikes` o `user_settings`** (tabelle già
+  in uso), esegui sempre `NOTIFY pgrst, 'reload schema';` — PostgREST non ricarica da solo la
+  cache dello schema quando si aggiunge una colonna, e ogni upsert/update che la referenzia fallisce
+  con `PGRST204` finché non lo fai. Vedi il blocco dedicato in fondo a `supabase-schema.sql` e
+  `supabase/migrations/reload_postgrest_schema_cache.sql`.
+- **`public/sw.js`** ha `Cache-Control: no-cache` (vedi `next.config.js`) e
+  `components/ServiceWorkerRegister.tsx` chiama `registration.update()` ad ogni apertura
+  dell'app, così un dispositivo non può restare bloccato per ore su una versione vecchia del
+  service worker (e quindi sulla sua logica di fetch API vecchia) come è successo prima di
+  questa correzione.
+- La sincronizzazione tra dispositivi combina pull periodico/su trigger (apertura app,
+  riconnessione, tab tornata visibile — `lib/sync/pullEngine.ts`,
+  `components/SyncEngineProvider.tsx`) e push istantaneo via Supabase Realtime
+  (`lib/sync/realtimeSync.ts`, richiede le tabelle nella pubblicazione `supabase_realtime` e
+  `REPLICA IDENTITY FULL` — altrimenti gli eventi DELETE vengono scartati in silenzio dalla RLS).
