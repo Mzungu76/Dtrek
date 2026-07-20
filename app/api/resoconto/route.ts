@@ -11,6 +11,7 @@ import type { WikiPage }     from '@/lib/wikipedia'
 import { fetchNatureContext, formatNatureContextBlock, type NatureContext } from '@/lib/aiNatureContext'
 import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
 import { tryAcquireCooldown } from '@/lib/aiCooldown'
+import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -164,6 +165,17 @@ function buildPrompt(
     cal    && cal    > 0 ? `CALORIE BRUCIATE: ${cal} kcal` : '',
   ].filter(Boolean).join('\n')
 
+  // Meteo reale del giorno dell'escursione — già in DB (activities.weather_at_hike), prima non
+  // arrivava mai al prompt del resoconto nonostante fosse un dato oggettivo pronto all'uso.
+  const weather = activity.weather_at_hike as WeatherAtHike | null | undefined
+  const weatherLine = weather
+    ? `METEO IL GIORNO DELL'ESCURSIONE: ${wmoInfo(weather.weathercode).label}, ${Math.round(weather.temperature)}°C (min ${Math.round(weather.tempMin)}° max ${Math.round(weather.tempMax)}°), vento ${Math.round(weather.windspeed)} km/h${weather.precipitation > 0 ? `, precipitazioni ${weather.precipitation.toFixed(1)} mm` : ''}`
+    : ''
+
+  // Tag assegnati dall'utente al percorso — anch'essi già in DB (activities.tags) ma mai passati.
+  const tags = Array.isArray(activity.tags) ? (activity.tags as string[]).filter(Boolean) : []
+  const tagsLine = tags.length > 0 ? `TAG DEL PERCORSO: ${tags.join(', ')}` : ''
+
   // Photos sorted start→end (progress 0.0 → 1.0)
   const sortedPhotos = [...photos].sort((a, b) => a.progress - b.progress)
   function progressLabel(p: number): string {
@@ -247,6 +259,8 @@ DISLIVELLO POSITIVO: ${Math.round(activity.elevation_gain as number)} m
 DISLIVELLO NEGATIVO: ${Math.round((activity.elevation_loss as number) ?? 0)} m
 DURATA EFFETTIVA: ${formatDuration(activity.total_time_seconds as number)}
 ${(activity.altitude_max as number) > 0 ? `QUOTA MASSIMA RAGGIUNTA: ${Math.round(activity.altitude_max as number)} m slm` : ''}
+${weatherLine}
+${tagsLine}
 ${biometricBlock ? `\nDATI DI RIFERIMENTO (usa solo se rilevanti, non come sezione separata):\n${biometricBlock}` : ''}
 ${activity.user_notes ? `\nNOTE DELL'ESCURSIONISTA:\n${activity.user_notes}` : ''}
 ${guideBlock}
@@ -261,7 +275,7 @@ Scrivi il reportage strutturato in queste ${hasQa ? 'quattro' : 'tre'} sezioni (
 ## Il percorso
 Descrivi il tracciato e il territorio attraversato: paesaggio, morfologia del terreno,
 punti panoramici, cambi di vegetazione. Contestualizza geograficamente il percorso
-senza usare toni enfatici. Usa i dati di distanza, dislivello e quota come ancoraggio.
+senza usare toni enfatici. Usa i dati di distanza, dislivello e quota come ancoraggio.${weatherLine ? ' Se rilevante, integra il METEO IL GIORNO DELL\'ESCURSIONE fornito sopra come elemento narrativo (luce, condizioni del sentiero, visibilità), non come sezione a parte.' : ''}
 ${cronacaBlock}
 ## Natura e storia
 Approfondisci i luoghi attraversati: geologia, flora, fauna, siti storici o
