@@ -1,6 +1,7 @@
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from './localStore'
 import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
 import { revalidateInBackground } from './sync/pullEngine'
+import { isStaleSwResponse } from './apiFetch'
 
 const ENTITY_TYPE = 'hike_questionnaire'
 
@@ -67,6 +68,10 @@ function rowToQuestionnaire(row: Record<string, unknown>): Questionnaire {
 async function fetchQuestionnaireFromServer(activityId: string): Promise<Questionnaire | null> {
   const res = await fetch(`/api/questionnaire?activityId=${encodeURIComponent(activityId)}`)
   if (!res.ok) throw new Error(`API /api/questionnaire → ${res.status}`)
+  // See lib/apiFetch.ts's isStaleSwResponse — a response served from the service worker's
+  // offline fallback cache must not be trusted as the current server state (getQuestionnaire's
+  // no-local-copy path below would otherwise seed the cache with stale data).
+  if (isStaleSwResponse(res)) throw new Error('served from a stale offline cache')
   const row = await res.json()
   return row ? rowToQuestionnaire(row) : null
 }

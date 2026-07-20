@@ -16,6 +16,7 @@
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from '@/lib/localStore'
 import { registerEntityFlusher, scheduleFlush } from './syncEngine'
 import { registerPullTask } from './pullEngine'
+import { isStaleSwResponse } from '@/lib/apiFetch'
 
 export interface UserSettingsData {
   hasKey: boolean
@@ -73,6 +74,12 @@ const CACHE_KEY    = LS_KEYS.userSettings
 async function fetchFromServer(): Promise<UserSettingsData> {
   const res = await fetch('/api/user-settings')
   if (!res.ok) throw new Error(`/api/user-settings → ${res.status}`)
+  // See lib/apiFetch.ts's isStaleSwResponse. Unlike the list entities, this row has no
+  // conditional guard at all before overwriting the cache (refreshUserSettings below applies
+  // whatever it gets unconditionally, every pull cycle) — a stale response served from the
+  // service worker's offline fallback cache would otherwise silently roll back a genuine
+  // settings change made moments ago or on another device.
+  if (isStaleSwResponse(res)) throw new Error('served from a stale offline cache')
   return res.json()
 }
 

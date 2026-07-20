@@ -4,6 +4,7 @@ import { getBrowserSupabase } from './supabaseBrowser'
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from './localStore'
 import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
 import { revalidateListInBackground } from './sync/pullEngine'
+import { isStaleSwResponse } from './apiFetch'
 
 const BUCKET = 'dtrek-photos'
 const LEGACY_PREFIX = 'dtrek_vp_'
@@ -93,6 +94,11 @@ async function saveMetadata(params: {
 async function fetchFromServer(activityId: string): Promise<RoutePhoto[]> {
   const res = await fetch(`/api/activity-photos?activityId=${encodeURIComponent(activityId)}`)
   if (!res.ok) throw new Error('Impossibile caricare le foto')
+  // See lib/apiFetch.ts's isStaleSwResponse — revalidateListInBackground has no timestamp to
+  // compare for photos, so a stale response served from the service worker's offline fallback
+  // cache would otherwise look just as valid as a fresh one and silently overwrite a newer local
+  // list (or seed a first-ever load) with old data.
+  if (isStaleSwResponse(res)) throw new Error('served from a stale offline cache')
   const rows = await res.json() as Array<{
     id: string; url: string; caption: string; progress: number
     hasExifGps: boolean; lat?: number; lon?: number; updatedAt?: string
