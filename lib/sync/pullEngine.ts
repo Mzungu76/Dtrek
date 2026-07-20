@@ -15,6 +15,7 @@
 
 import { lsGet, lsSet, lsDel } from '@/lib/localStore'
 import { getPendingRecordIds } from './syncEngine'
+import { isStaleSwResponse } from '@/lib/apiFetch'
 
 export interface DigestRow {
   id: string
@@ -58,6 +59,11 @@ export function registerListReconciler<TMeta extends { id: string; updatedAt?: s
     try {
       const res = await fetch(cfg.digestUrl)
       if (!res.ok) return
+      // See lib/apiFetch.ts's isStaleSwResponse: a digest served from the service worker's
+      // offline fallback cache would make the pruning loop below think every id missing from it
+      // was deleted elsewhere, silently reverting this device to an older state instead of just
+      // skipping the cycle.
+      if (isStaleSwResponse(res)) return
       digest = await res.json()
     } catch {
       return
