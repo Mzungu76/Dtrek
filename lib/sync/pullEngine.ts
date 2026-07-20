@@ -132,6 +132,11 @@ export function registerPullTask(fn: () => Promise<void>) {
 }
 
 let pulling = false
+// Timestamp of the last completed pullAll() cycle — read by components/SyncDebugPanel.tsx (a
+// temporary, query-param-gated diagnostic view) to show whether pulls are actually running at
+// all on a given device, without needing to walk someone through devtools by voice/chat.
+let lastPullAt: number | null = null
+export function getLastPullAt(): number | null { return lastPullAt }
 
 // Global progress broadcast, independent of which trigger actually called pullAll() (mount,
 // reconnect, becoming visible, periodic safety net can all be racing for the same in-flight
@@ -178,6 +183,7 @@ export async function pullAll(onProgress?: (p: PullProgress) => void): Promise<v
     }
   } finally {
     pulling = false
+    lastPullAt = Date.now()
     notifyProgress(null)
   }
 }
