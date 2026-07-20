@@ -528,24 +528,30 @@ export async function PATCH(req: NextRequest) {
   if (sections) update.sections = sections
   if (authoredBy) update.authored_by = authoredBy
 
-  // hike_reports.title is NOT NULL — resolve a fallback so the upsert can't
-  // fail on INSERT when no report row exists yet (e.g. a brand-new manual
-  // report that was never AI-generated first).
+  // hike_reports.title is NOT NULL — always resolve and include a value.
+  // Supabase's upsert() compiles to a single INSERT ... ON CONFLICT DO UPDATE: Postgres builds
+  // the full candidate row (and checks its NOT NULL constraints) before it even looks at the
+  // conflict clause, so omitting `title` here breaks on every edit of an ALREADY-existing report
+  // — not just the first-time INSERT this was originally guarding — because the upsert payload
+  // simply never carries a title for Postgres to fall back to. Preserve the existing title when
+  // there is one instead of dropping the field entirely.
   const { data: existingReport } = await supabase
     .from('hike_reports')
     .select('title')
     .eq('id', `report-${activityId}`)
     .maybeSingle()
 
-  if (!existingReport?.title) {
+  let title = existingReport?.title as string | undefined
+  if (!title) {
     const { data: act } = await supabase
       .from('activities')
       .select('title')
       .eq('id', activityId)
       .eq('user_id', user.id)
       .maybeSingle()
-    update.title = (act?.title as string) ?? 'Escursione'
+    title = (act?.title as string) ?? 'Escursione'
   }
+  update.title = title
 
   const { error } = await supabase
     .from('hike_reports')
