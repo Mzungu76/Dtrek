@@ -151,7 +151,12 @@ function notifyProgress(p: PullProgress | null) {
  */
 export async function pullAll(onProgress?: (p: PullProgress) => void): Promise<void> {
   if (pulling) return
-  if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) return
+  // Deliberately NOT gated on navigator.onLine: that flag is known to false-negative on mobile
+  // (stale after a network switch, unreliable in some WebView/PWA combos) — a false "offline"
+  // reading here silently skipped every pull with no retry until the next trigger, which is
+  // indistinguishable from updates just not arriving. Each puller below already fails closed on a
+  // real network error (its own try/catch swallows the rejected fetch), so attempting the pull
+  // unconditionally is no less safe and no longer depends on a heuristic that can lie.
   pulling = true
   try {
     let base = 0
@@ -183,7 +188,7 @@ export function revalidateInBackground<T extends { updated_at?: string; updatedA
   local: T | null,
   fetchFresh: () => Promise<T | null>,
 ): void {
-  if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) return
+  // See pullAll() above — not gated on navigator.onLine, same reasoning.
   const localTs = local?.updatedAt ?? local?.updated_at
   fetchFresh().then(async (fresh) => {
     if (!fresh) return
@@ -203,7 +208,7 @@ export function revalidateListInBackground<T>(
   local: T[] | null,
   fetchFresh: () => Promise<T[]>,
 ): void {
-  if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) return
+  // See pullAll() above — not gated on navigator.onLine, same reasoning.
   fetchFresh().then(async (fresh) => {
     if (JSON.stringify(fresh) === JSON.stringify(local ?? [])) return
     await lsSet(cacheKey, fresh)
