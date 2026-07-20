@@ -1006,6 +1006,24 @@ ALTER TABLE user_settings REPLICA IDENTITY FULL;
 
 
 -- ═══════════════════════════════════════════════════════════
+-- PostgREST tiene una cache dello schema (nomi di tabelle/colonne) e non la
+-- ricarica da sola quando una ALTER TABLE aggiunge una colonna — il client
+-- continua a ricevere PGRST204 "Could not find the '<col>' column in the
+-- schema cache" per QUALSIASI riga che referenzi quella colonna, upsert o
+-- update, finché la cache non viene invalidata esplicitamente. È esattamente
+-- quello che ha rotto per mesi ogni salvataggio di planned_hikes (colonne
+-- favorite/cached_in_protected_area, migliaia di scritture fallite in
+-- silenzio dal lato client — vedi lib/blobStore.ts's saveActivity()/
+-- lib/plannedStore.ts, che il fallimento lo assorbono nell'outbox invece di
+-- interrompere il salvataggio locale) prima che qualcuno se ne accorgesse.
+-- Esegui SEMPRE questo NOTIFY dopo un ALTER TABLE su una tabella già in uso
+-- (anche da questo script, se lo rilanci su un database esistente) — è
+-- idempotente e innocuo se non c'è nulla da ricaricare.
+-- ═══════════════════════════════════════════════════════════
+NOTIFY pgrst, 'reload schema';
+
+
+-- ═══════════════════════════════════════════════════════════
 -- MIGRAZIONE DATI ESISTENTI
 -- Esegui DOPO aver creato il tuo account su DTrek.
 -- Sostituisci 'INCOLLA-QUI-IL-TUO-UUID' con il tuo user_id
