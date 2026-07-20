@@ -243,7 +243,7 @@ export default function ReportReader({
     setGenerating(true)
     setContent('')
     setApiError(null)
-    const photoMeta = photos.map(p => ({ caption: p.caption, lat: p.lat, lon: p.lon, progress: p.progress, hasExifGps: p.hasExifGps }))
+    const photoMeta = photos.map(p => ({ caption: p.caption, lat: p.lat, lon: p.lon, progress: p.progress, hasExifGps: p.hasExifGps, url: p.url }))
 
     try {
       const full = await streamFetchText('/api/resoconto', { activityId: id, length, photos: photoMeta }, setContent)
