@@ -21,6 +21,7 @@ import { getReport, saveReportContent, cacheReport } from '@/lib/sync/hikeReport
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
 import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
+import { computeMaterialScore } from '@/lib/materialScore'
 import SectionNav from '@/components/editorial/SectionNav'
 import SectionCard from '@/components/editorial/SectionCard'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
@@ -172,6 +173,7 @@ export default function ReportReader({
   const [publishing,    setPublishing]    = useState(false)
   const [publishError,  setPublishError]  = useState<string | null>(null)
   const [questionnaireStatus, setQuestionnaireStatus] = useState<'none' | 'in_progress' | 'completed' | 'skipped'>('none')
+  const [questionnaireCounts, setQuestionnaireCounts] = useState({ answered: 0, total: 0 })
   const [editorMode,       setEditorMode]       = useState<'view' | 'manual'>('view')
   const [showAiPanel,      setShowAiPanel]      = useState(true)
   const [reportSections,   setReportSections]   = useState<ReportSection[]>([])
@@ -206,6 +208,10 @@ export default function ReportReader({
         setReport(null); setContent(''); setReportSections([]); setReportAuthoredBy('ai'); setShowAiPanel(true)
       }
       setQuestionnaireStatus(questionnaire?.status ?? 'none')
+      const answered = questionnaire
+        ? Object.values(questionnaire.answers).filter(a => !a.skipped && a.text?.trim()).length
+        : 0
+      setQuestionnaireCounts({ answered, total: questionnaire?.questions.length ?? 0 })
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [id])
@@ -383,6 +389,33 @@ export default function ReportReader({
     const idx = photos.findIndex(p => p.id === photoId)
     if (idx >= 0) setLightboxIndex(idx)
   }
+
+  // Quanto materiale reale c'è per un resoconto ricco — mostrato prima di generare, mai un vincolo.
+  const materialScore = useMemo(() => computeMaterialScore({
+    photoCount:            photos.length,
+    positionedPhotoCount:  photos.filter(p => p.hasExifGps || p.progress !== 0.5).length,
+    questionnaireStatus,
+    questionnaireAnswered: questionnaireCounts.answered,
+    questionnaireTotal:    questionnaireCounts.total,
+    hasUserNotes:          !!activity.userNotes?.trim(),
+    hasWeather:            !!activity.weatherAtHike,
+    hasGuideOrPoi:         !!activity.linkedPlannedId || pois.length > 0,
+  }), [photos, questionnaireStatus, questionnaireCounts, activity.userNotes, activity.weatherAtHike, activity.linkedPlannedId, pois.length])
+
+  const materialBadge = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-display font-bold uppercase tracking-wide ${
+        materialScore.label === 'ottimo' ? 'bg-forest-50 text-forest-700'
+        : materialScore.label === 'buono' ? 'bg-amber-50 text-amber-700'
+        : 'bg-stone-100 text-stone-500'
+      }`}>
+        {materialScore.score}% materiale {materialScore.label}
+      </span>
+      {materialScore.suggestion && (
+        <span className="text-xs text-stone-400 italic">{materialScore.suggestion}</span>
+      )}
+    </div>
+  )
 
   const hasContent = content.trim().length > 0
   const categoryBadge = (activity.tags?.[0] ?? activity.sport ?? 'Escursione').toUpperCase()
@@ -691,9 +724,7 @@ export default function ReportReader({
                         <div className="flex items-center justify-between flex-wrap gap-4">
                           <div>
                             <p className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm mb-1">Genera nuovo resoconto</p>
-                            <p className="text-xs text-stone-400 italic">
-                              {photos.length > 0 ? `${photos.length} foto disponibili · L'AI userà le tue immagini` : 'Aggiungi foto dalla mappa 3D per un resoconto più ricco'}
-                            </p>
+                            {materialBadge}
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <div className="flex rounded-xl overflow-hidden border border-stone-200">
@@ -737,7 +768,8 @@ export default function ReportReader({
                         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col items-start">
                           <BookOpen className="w-10 h-10 text-forest-400 mb-3" />
                           <p className="font-display font-bold uppercase tracking-wide text-stone-700 mb-2">Genera con AI</p>
-                          <p className="text-sm text-stone-500 italic mb-4">L&apos;AI scrive un reportage giornalistico completo basato sui tuoi dati GPS, biometrici e foto.</p>
+                          <p className="text-sm text-stone-500 italic mb-2">L&apos;AI scrive un reportage giornalistico completo basato sui tuoi dati GPS, biometrici e foto.</p>
+                          <div className="mb-4">{materialBadge}</div>
                           <div className="flex items-center gap-2 mt-auto flex-wrap">
                             <div className="flex rounded-xl overflow-hidden border border-stone-200">
                               {(['breve', 'media', 'lunga'] as const).map(l => (
