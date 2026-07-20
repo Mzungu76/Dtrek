@@ -82,9 +82,6 @@ export async function GET(req: NextRequest) {
         .eq('user_id', user.id)
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-      // Temporary — investigating a live discrepancy between this endpoint's row count and a
-      // direct Postgres query for the same user_id (10 vs 9). Logs only ids, safe for prod logs.
-      console.log('[digest]', user.id, (data ?? []).length, (data ?? []).map((r: Record<string, unknown>) => r.id))
       return NextResponse.json(
         (data ?? []).map((r: Record<string, unknown>) => ({ id: r.id as string, updatedAt: r.updated_at as string })),
       )
