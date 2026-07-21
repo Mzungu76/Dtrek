@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { tsColor, useCountUp } from '@/components/ScoreRing'
+import { ctsLabel } from '@/lib/trailScore'
 import type { SafetyScore } from '@/lib/safetyScore'
 
 export type SafetyPreview = Pick<SafetyScore, 'overall' | 'color' | 'label'>
@@ -8,9 +9,8 @@ export type SafetyPreview = Pick<SafetyScore, 'overall' | 'color' | 'label'>
 export interface TrailScoreGaugeBadgeProps {
   /** Trail Score v2 aggregato, 0-100 — anello interno, spesso, e numero al centro. */
   total: number | null
-  /** Comfort TrailScore grezzo, pre-cancello (prima del taglio di Sicurezza), 0-100 — usato solo
-   *  per comporre la didascalia ("Buon valore, rischio alto"), non disegnato. Assente ⇒ la
-   *  didascalia cade indietro alla sola etichetta della Sicurezza. */
+  /** Comfort TrailScore grezzo, pre-cancello (prima del taglio di Sicurezza), 0-100 — non più usato
+   *  dalla didascalia (vedi sotto), mantenuto per compatibilità dei chiamanti esistenti. */
   value?: number | null
   /** Sicurezza, 0-100 — anello esterno, sottile, sulla propria scala di colore (non su quella
    *  del TS): due indicatori chiaramente separati invece di un'unica scala che li confonde. Vedi
@@ -20,8 +20,10 @@ export interface TrailScoreGaugeBadgeProps {
   loading?: boolean
   vetoed?: boolean
   size?: number
-  /** Didascalia a fianco del badge (Sicurezza, o Valore+Sicurezza se `value` è passato) —
-   *  disattivata negli usi molto compatti (es. la miniatura di galleria) dove non c'è spazio. */
+  /** Didascalia a fianco del badge: due righe etichettate esplicitamente ("Trail Score" ed
+   *  "Sicurezza" con la relativa fascia — es. "Molto buono"/"Sicuro") invece di una singola frase
+   *  ambigua ("Buon valore, sicuro") che non diceva a cosa si riferisse ciascun numero.
+   *  Disattivata negli usi molto compatti (es. la miniatura di galleria) dove non c'è spazio. */
   showLabel?: boolean
   /** Avvisi trovati dalla ricerca web di Giulia (vedi lib/guideNotices.ts) — disegnati come
    *  puntini colorati sull'anello Sicurezza, uno per avviso. Puramente informativo: non cambia il
@@ -44,20 +46,6 @@ const MAX_NOTICE_DOTS = 5
 
 const NEUTRAL_TRACK = 'rgba(255,255,255,0.18)'
 
-function valuePhrase(value: number): string {
-  if (value > 75) return 'Valore alto'
-  if (value > 50) return 'Buon valore'
-  if (value > 25) return 'Valore modesto'
-  return 'Valore essenziale'
-}
-function safetyPhrase(overall: number): string {
-  if (overall >= 80) return 'molto sicuro'
-  if (overall >= 60) return 'sicuro'
-  if (overall >= 40) return 'rischio moderato'
-  if (overall >= 20) return 'rischio alto'
-  return 'rischio elevato'
-}
-
 /**
  * Badge compatto del Trail Score: due anelli concentrici — l'anello esterno sottile è la
  * Sicurezza (il cancello che può azzerare tutto), l'anello interno spesso è il TS finale
@@ -75,7 +63,7 @@ function safetyPhrase(overall: number): string {
  * `<button>` qui dentro anniderebbe due elementi interattivi, HTML non valido oltre che
  * problematico per il click della tile in galleria.
  */
-export function TrailScoreGaugeBadge({ total, value, safety, loading, vetoed, size = 80, showLabel = true, notices }: TrailScoreGaugeBadgeProps) {
+export function TrailScoreGaugeBadge({ total, safety, loading, vetoed, size = 80, showLabel = true, notices }: TrailScoreGaugeBadgeProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     const raf = requestAnimationFrame(() => setMounted(true))
@@ -108,9 +96,7 @@ export function TrailScoreGaugeBadge({ total, value, safety, loading, vetoed, si
   const outerLen = mounted ? cOuter * safetyPct : 0
   const innerLen = mounted ? cInner * totalPct : 0
 
-  const caption = value != null && safety != null
-    ? `${valuePhrase(value)}, ${safetyPhrase(safety.overall)}`
-    : safety?.label
+  const tsCaption = total != null ? ctsLabel(total).label : null
 
   // Distribuiti sull'anello Sicurezza, non ammucchiati in un angolo — a partire da alto-destra
   // (non esattamente in cima, dove parte l'arco stesso) e girando in senso orario.
@@ -167,13 +153,21 @@ export function TrailScoreGaugeBadge({ total, value, safety, loading, vetoed, si
           </span>
         )}
       </div>
-      {showLabel && caption && (
-        <span
-          className="text-white text-[11px] sm:text-xs font-bold uppercase tracking-wide"
-          style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}
-        >
-          {caption}
-        </span>
+      {showLabel && (tsCaption || safety) && (
+        <div className="flex flex-col gap-1">
+          {tsCaption && (
+            <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+              <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Trail Score</span>
+              {tsCaption}
+            </span>
+          )}
+          {safety && (
+            <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+              <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza</span>
+              {safety.label}
+            </span>
+          )}
+        </div>
       )}
     </div>
   )
