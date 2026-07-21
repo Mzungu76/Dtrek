@@ -44,6 +44,14 @@ interface LegacyPhoto {
 
 async function getUserId(): Promise<string> {
   const supabase = getBrowserSupabase()
+  // getSession() (unlike getUser()) proactively refreshes an expired/near-expiry access token
+  // before returning. Without this, a tab left open for a while — autoRefreshToken's timer gets
+  // throttled/paused by the browser while backgrounded, common when switching apps on mobile —
+  // can still pass the getUser() check below with a stale token (Supabase's Auth server still
+  // accepts it for that one read), yet the *separate* network call right after this (the Storage
+  // upload in uploadPhotoBlob) sends that same stale token and gets silently rejected by
+  // Storage's RLS check, surfacing as a generic upload/connection error instead of an auth one.
+  await supabase.auth.getSession()
   const { data } = await supabase.auth.getUser()
   if (!data.user) throw new Error('Utente non autenticato')
   return data.user.id
