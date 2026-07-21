@@ -68,10 +68,14 @@ export function computeTrainingLoad(
   return days
 }
 
+// Etichette deliberatamente distinte da quelle del Recovery Score (lib/bioMetrics.ts,
+// computeRecoveryScore) anche se entrambe partono dallo stesso TSB — le due card di Bacheca
+// raccontano due cose diverse (prontezza del giorno vs bilancio dell'allenamento nel tempo) e
+// condividere le stesse parole ("Neutro", "Affaticato"...) le faceva sembrare duplicate.
 export function currentForm(tsb: number): FormStatus {
-  if (tsb >= 15)  return { label: 'Fresco',    color: '#16a34a', description: 'Forma ottima, pronto per uno sforzo importante' }
-  if (tsb >= 5)   return { label: 'In forma',  color: '#65a30d', description: 'Buon equilibrio tra carico e recupero' }
-  if (tsb >= -5)  return { label: 'Neutro',    color: '#ca8a04', description: 'Carico bilanciato, mantieni il ritmo' }
-  if (tsb >= -15) return { label: 'Affaticato', color: '#ea580c', description: 'Accumulo di fatica, considera un giorno di recupero' }
-  return { label: 'Sovraccarico', color: '#dc2626', description: 'Fatica elevata — riposo consigliato prima di impegni intensi' }
+  if (tsb >= 15)  return { label: 'In Slancio',    color: '#16a34a', description: 'Forma ottima, pronto per uno sforzo importante' }
+  if (tsb >= 5)   return { label: 'In Crescita',   color: '#65a30d', description: 'Buon equilibrio tra carico e recupero' }
+  if (tsb >= -5)  return { label: 'In Equilibrio', color: '#ca8a04', description: 'Carico bilanciato, mantieni il ritmo' }
+  if (tsb >= -15) return { label: 'In Calo',       color: '#ea580c', description: 'Accumulo di fatica, considera un giorno di recupero' }
+  return { label: 'In Debito', color: '#dc2626', description: 'Fatica elevata — riposo consigliato prima di impegni intensi' }
 }

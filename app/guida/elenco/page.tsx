@@ -130,7 +130,7 @@ export default function GuidaIndexPage() {
                       <span>{formatDuration(hike.estimatedTimeSeconds)} stim.</span>
                       {ctsData && (
                         <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
-                          CTS {Math.round(ctsScore!)}
+                          {ctsData.label}
                         </span>
                       )}
                     </div>

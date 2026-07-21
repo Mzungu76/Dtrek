@@ -159,7 +159,7 @@ export const GUIDE_CONTENT: Record<string, GuideEntry> = {
     body: <p>Come varia la frequenza cardiaca media nel tempo. Una linea in discesa a parità di sforzo percepito è il segnale che il tuo cuore sta diventando più efficiente — progresso aerobico in atto.</p>,
   },
   'training-load': {
-    icon: '🧠', title: 'CTL, ATL e TSB (modello Banister)',
+    icon: '🧠', title: 'Bilancio Fisico — CTL, ATL e TSB (modello Banister)',
     body: <>
       <p>Il modello di <strong>Training Load</strong> — usato da coach professionisti e piattaforme come TrainingPeaks — descrive la tua forma tramite tre indici:</p>
       <ul className="list-disc list-outside pl-4 space-y-3 mt-2">
@@ -182,6 +182,7 @@ export const GUIDE_CONTENT: Record<string, GuideEntry> = {
         </li>
       </ul>
       <Tip>Il picco di prestazione si raggiunge quando CTL è alto e TSB è leggermente positivo (5–15). Per un&apos;uscita importante, riduci il carico 7–10 giorni prima.</Tip>
+      <Note>Diverso dal <strong>Recovery Score</strong>: qui si racconta l&apos;andamento dell&apos;allenamento nel tempo, mentre il Recovery Score è la prontezza del solo giorno di oggi.</Note>
     </>,
   },
   tss: {
@@ -244,6 +245,7 @@ export const GUIDE_CONTENT: Record<string, GuideEntry> = {
         <li>0–30 — recupero necessario prima di uno sforzo intenso</li>
       </ul>
       <Tip>Un Recovery Score basso non impedisce di uscire: una camminata lenta in Z1–Z2 favorisce il recupero attivo.</Tip>
+      <Note>Diverso dal <strong>Bilancio Fisico</strong>: qui si guarda solo alla prontezza di oggi, mentre il Bilancio Fisico racconta la direzione dell&apos;allenamento nel tempo (CTL vs ATL).</Note>
     </>,
   },
   'fitness-score': {
