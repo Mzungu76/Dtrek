@@ -6,7 +6,7 @@ import { getISOWeek } from 'date-fns'
 // carico-cronico/fatica-acuta (direzione dell'allenamento nel tempo), non sulla
 // prontezza del singolo giorno come per il Recovery Score.
 export const FORMA_PHRASES: Record<string, string[]> = {
-  Fresco: [
+  'In Slancio': [
     'Il carico cronico è ben al di sopra della fatica recente — hai margine per uno sforzo importante.',
     'Settimane di lavoro si sono trasformate in riserva: oggi puoi attingerci.',
     'Stato di forma ottimale: la base costruita nelle ultime settimane è pronta per essere usata.',
@@ -33,7 +33,7 @@ export const FORMA_PHRASES: Record<string, string[]> = {
     'Stato di forma che ripaga la costanza — il momento di raccoglierne i frutti.',
     'Il divario tra fitness e fatica è ampio: oggi puoi permetterti l\'eccezione.',
   ],
-  'In forma': [
+  'In Crescita': [
     'Buon equilibrio tra carico cronico e fatica recente — margine per un impegno concreto.',
     'Stato solido: la base costruita regge bene rispetto allo sforzo recente.',
     'In forma: il lavoro di fondo sta dando i suoi frutti senza eccessi di fatica.',
@@ -60,7 +60,7 @@ export const FORMA_PHRASES: Record<string, string[]> = {
     'In forma: la base costruita nelle ultime settimane sostiene bene lo sforzo.',
     'Buon equilibrio: puoi spendere parte del margine accumulato con fiducia.',
   ],
-  Neutro: [
+  'In Equilibrio': [
     'Carico bilanciato: la forma attuale sostiene il ritmo che stai già tenendo.',
     'Stato neutro: né in costruzione né in affanno, un buon equilibrio di base.',
     'Il bilancio tra fondo e fatica è nella norma — mantieni il passo attuale.',
@@ -87,7 +87,7 @@ export const FORMA_PHRASES: Record<string, string[]> = {
     'Il carico attuale sostiene la base senza intaccarla né rinforzarla molto.',
     'Neutro: un buon momento per proseguire con metodo, senza forzare la mano.',
   ],
-  Affaticato: [
+  'In Calo': [
     'La fatica recente ha superato la base costruita — considera un giorno di recupero.',
     'Stato di forma affaticato: il carico acuto pesa più del fondo attuale.',
     'Il bilancio tra fitness e fatica pende verso la fatica — meglio moderare.',
@@ -114,7 +114,7 @@ export const FORMA_PHRASES: Record<string, string[]> = {
     'Il fondo costruito rischia di essere intaccato se il carico continua così.',
     'Affaticato: il momento di dare respiro alla base prima di richiederle altro.',
   ],
-  Sovraccarico: [
+  'In Debito': [
     'Il carico acuto ha superato di molto la base costruita — serve un recupero vero.',
     'Stato di forma in sovraccarico: la fatica ha preso il sopravvento sul fondo.',
     'Il bilancio è compromesso: continuare così rischia di intaccare la base a lungo termine.',

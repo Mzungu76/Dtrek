@@ -76,7 +76,7 @@ export default function TabForma({ activities }: Props) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
             <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1 flex items-center gap-1.5 flex-wrap">
-              <Brain className="w-3.5 h-3.5" /> Stato forma attuale
+              <Brain className="w-3.5 h-3.5" /> Bilancio fisico attuale
               <InfoButton section="training-load" />
             </p>
             <p className="text-2xl font-bold mt-1" style={{ color: latestForm.status.color }}>{latestForm.status.label}</p>

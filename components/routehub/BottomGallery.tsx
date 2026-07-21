@@ -7,6 +7,7 @@ import { Mountain, ArrowUpDown, Upload, Star } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import { ctsLabel } from '@/lib/trailScore'
 import type { HubMode, RouteHubItem, SortValues } from './types'
 
 // Dimensione del badge a doppio anello nella miniatura di galleria (80×80px) — più grande del
@@ -266,7 +267,16 @@ export default function BottomGallery({
                 <ThumbBadge sortBy={sortBy} item={item} />
               </div>
             )}
-            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-3 bg-gradient-to-t from-black/75 to-transparent">
+            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">
+              {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
+                  alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
+                  qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
+                  non un nuovo testo inventato ad hoc. */}
+              {mode === 'guida' && item.scorePreview && item.safetyPreview && (
+                <span className="block text-[8px] font-semibold text-white/75 truncate leading-tight mb-0.5">
+                  {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
+                </span>
+              )}
               <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
             </div>
           </button>

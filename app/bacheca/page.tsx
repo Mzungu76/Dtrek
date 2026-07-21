@@ -87,6 +87,11 @@ interface GalleryItem {
   /** Sottotitolo pescato da un banco di frasi pre-scritte (lib/*Phrases.ts) invece che un dato
    *  puramente descrittivo — mostra l'etichetta "Lettura" per distinguerlo dagli altri. */
   insight?: boolean
+  /** Etichetta qualitativa (es. "Neutro", "In Equilibrio") mostrata come pillola colorata sotto il
+   *  titolo — usata quando il titolo grande è il nome dello score (es. "Recovery Score") e non più
+   *  l'etichetta stessa, per non perdere il giudizio sintetico a colpo d'occhio. */
+  statusLabel?: string
+  statusColor?: string
 }
 
 // Bacheca (ex "Stato") — sezione di apertura dell'app (vedi app/page.tsx e public/manifest.json):
@@ -239,9 +244,10 @@ export default function BachecaPage() {
   const galleryItems = useMemo<GalleryItem[]>(() => {
     const items: Omit<GalleryItem, 'category'>[] = [
       {
-        id: 'recovery', title: recovery.label, subtitle: hasEnoughHistory ? recoveryPhrase : lowHistoryNote,
+        id: 'recovery', title: 'Recovery Score', subtitle: hasEnoughHistory ? recoveryPhrase : lowHistoryNote,
         illustration: 'pulse', gradientColor: recovery.color, badgeText: `${recovery.score}`,
         visual: 'ring', ringValue: recovery.score, guideSection: 'recovery-score', insight: hasEnoughHistory,
+        statusLabel: recovery.label, statusColor: recovery.color,
       },
       {
         id: 'badge',
@@ -255,9 +261,9 @@ export default function BachecaPage() {
         highlight: badgeIsClose, guideSection: 'badge',
       },
       {
-        id: 'forma', title: forma.label, subtitle: hasEnoughHistory ? formaPhrase : lowHistoryNote,
-        illustration: 'trend', gradientColor: forma.color, badgeText: forma.label, visual: 'chart', guideSection: 'training-load',
-        insight: hasEnoughHistory,
+        id: 'forma', title: 'Bilancio Fisico', subtitle: hasEnoughHistory ? formaPhrase : lowHistoryNote,
+        illustration: 'trend', gradientColor: forma.color, badgeText: forma.label.replace(/^In /, ''), visual: 'chart', guideSection: 'training-load',
+        insight: hasEnoughHistory, statusLabel: forma.label, statusColor: forma.color,
         chart: hasEnoughHistory && trainingLoadData.length > 0 ? (
           <ResponsiveContainer width="100%" height={160}>
             <LineChart data={trainingLoadData}>
@@ -590,6 +596,14 @@ export default function BachecaPage() {
                 <InfoToggleButton section={selected.guideSection} open={infoOpen} onToggle={() => setInfoOpen(o => !o)} onDark />
               )}
             </div>
+            {selected.statusLabel && (
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-bold mt-1.5"
+                style={{ background: `${selected.statusColor}33`, color: selected.statusColor, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
+              >
+                {selected.statusLabel}
+              </span>
+            )}
             {selected.insight && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-amber-300 mt-1.5">
                 <Sparkles className="w-3 h-3" /> Lettura della settimana
