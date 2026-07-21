@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Navbar from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import QuestionnaireWizard from '@/app/components/QuestionnaireWizard'
 import type { RouteTimelinePhoto } from '@/app/components/RouteTimeline'
@@ -120,7 +120,7 @@ export default function RacconaPage() {
   }, [id, router])
 
   if ((loading || !activity) && !error) return (
-    <div className="min-h-screen bg-stone-50">
+    <div className={`min-h-screen bg-stone-50 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
         <Loader2 className="w-6 h-6 animate-spin" /><span>Sto preparando le domande…</span>

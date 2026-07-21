@@ -1,4 +1,4 @@
-import Navbar from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 
 interface CreditSource {
   name: string
@@ -36,7 +36,7 @@ const SOURCES: CreditSource[] = [
 
 export default function FontiECreditiPage() {
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className={`min-h-screen bg-stone-50 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <div className="max-w-3xl mx-auto px-4 py-10">
         <h1 className="font-lora text-2xl text-stone-800 mb-2">Fonti e crediti</h1>

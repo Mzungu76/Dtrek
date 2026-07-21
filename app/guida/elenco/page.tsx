@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Navbar from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
@@ -46,7 +46,7 @@ export default function GuidaIndexPage() {
   })
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-28 md:pb-0">
+    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
 
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden bg-gradient-to-br from-sky-800 to-sky-900 bg-topography">

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import Navbar from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
@@ -58,7 +58,7 @@ function StatisticheContent() {
   const streaks = useMemo(() => computeStreaks(activities),         [activities])
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
+    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-5 sm:py-8 fade-up">
 
