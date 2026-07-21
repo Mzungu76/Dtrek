@@ -166,7 +166,8 @@ export default function ActivityPhotoManager({
         setEditingId(added[0].id)
         setEditCaption(added[0].caption)
       }
-    } catch {
+    } catch (e) {
+      console.error('addActivityPhoto:', e)
       setError('Caricamento foto non riuscito. Controlla la connessione e riprova.')
     } finally {
       setUploading(false)
@@ -178,7 +179,8 @@ export default function ActivityPhotoManager({
     try {
       await removeActivityPhoto(id)
       onPhotosChange(photos.filter(p => p.id !== id))
-    } catch {
+    } catch (e) {
+      console.error('removeActivityPhoto:', e)
       setError('Eliminazione foto non riuscita. Riprova.')
     }
   }
@@ -197,7 +199,8 @@ export default function ActivityPhotoManager({
     try {
       await updateActivityPhoto(id, { caption })
       onPhotosChange(photos.map(p => p.id === id ? { ...p, caption } : p))
-    } catch {
+    } catch (e) {
+      console.error('updateActivityPhoto:', e)
       setError('Aggiornamento didascalia non riuscito. Riprova.')
     }
   }
