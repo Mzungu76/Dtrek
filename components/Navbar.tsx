@@ -82,6 +82,11 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
   )
 }
 
+// Altezza riservata dalla MobileTopBar fissa in alto — le pagine "normali" (non a schermo
+// intero) applicano questa classe al loro contenitore per non finire sotto la barra.
+// Un'unica costante per restare "uniformi" (punto 4): cambiarla qui la cambia ovunque.
+export const MOBILE_TOPBAR_SPACER = 'pt-[calc(env(safe-area-inset-top,0px)+60px)] md:pt-0'
+
 // ── Desktop top bar ──────────────────────────────────────────────────────────
 
 function DesktopNav() {
@@ -121,34 +126,37 @@ function DesktopNav() {
   )
 }
 
-// ── Mobile: floating pill tab bar + avatar persistente ──────────────────────────
+// ── Mobile: barra unica in alto, discreta, coerente con HubNavBar ───────────────
+// Sostituisce la vecchia tab bar flottante in basso (punto 4): stessa forma a pillola +
+// avatar di HubNavBar (Bacheca/Guida/Resoconto/Diario), ma fissa in cima e più compatta,
+// così ogni sezione dell'app condivide la stessa barra invece di due stili diversi.
 
-function MobileTabBar() {
+function MobileTopBar() {
   const path = usePathname()
   return (
     <nav
-      className="md:hidden fixed z-40 left-4 right-4 bottom-0 flex items-center gap-2"
-      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}
+      className="md:hidden fixed z-40 inset-x-0 top-0 flex items-center gap-2 px-3"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)', paddingBottom: 8 }}
     >
-      <div className="flex-1 flex items-center justify-around bg-forest-900/95 backdrop-blur-md rounded-[28px] px-2 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
+      <div className="flex-1 flex items-center justify-around bg-forest-900/95 backdrop-blur-md rounded-full px-1.5 py-1 shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
         {NAV_LINKS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href, path)
           return (
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-2xl transition-colors ${
+              className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
                 active ? 'text-white' : 'text-forest-300'
               }`}
             >
-              <Icon className="w-[19px] h-[19px]" strokeWidth={2} />
+              <Icon className="w-4 h-4" strokeWidth={2} />
               <span className="text-[9px] font-bold leading-none">{label}</span>
             </Link>
           )
         })}
       </div>
-      <div className="shrink-0 bg-forest-900/95 backdrop-blur-md rounded-full p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
-        <ProfileAvatar size={40} iconSize={18} />
+      <div className="shrink-0 bg-forest-900/95 backdrop-blur-md rounded-full p-1 shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
+        <ProfileAvatar size={32} iconSize={14} />
       </div>
     </nav>
   )
@@ -160,7 +168,7 @@ export default function Navbar() {
   return (
     <>
       <DesktopNav />
-      <MobileTabBar />
+      <MobileTopBar />
     </>
   )
 }

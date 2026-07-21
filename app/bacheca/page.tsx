@@ -4,7 +4,10 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { AreaChart, Area, LineChart, Line, XAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { TrendingUp, Flame, BarChart3, Loader2, Mountain, Upload, ArrowRight, Sparkles } from 'lucide-react'
+import {
+  TrendingUp, Flame, BarChart3, Loader2, Mountain, Upload, ArrowRight, Sparkles,
+  HeartPulse, Trophy, Award, Backpack, LayoutGrid, Images, X,
+} from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
@@ -37,6 +40,33 @@ const HERO_TINT_GRADIENT = 'linear-gradient(160deg, rgba(129,54,25,0.35) 0%, rgb
 
 type Visual = 'ring' | 'chart' | 'plain'
 
+// Tipologie per raggruppare la galleria e i filtri sopra di essa (punto 2) — un elemento per
+// categoria pescato per id (vedi categoryFor), non un campo scritto a mano su ogni voce.
+const CATEGORIES = [
+  { id: 'fisiologia', label: 'Fisiologia', icon: HeartPulse },
+  { id: 'andamento',  label: 'Andamento',  icon: TrendingUp },
+  { id: 'traguardi',  label: 'Traguardi',  icon: Trophy     },
+  { id: 'record',     label: 'Record',     icon: Award      },
+  { id: 'totali',     label: 'Totali',     icon: Backpack   },
+] as const
+
+type Category = typeof CATEGORIES[number]['id']
+
+function categoryFor(id: string): Category {
+  if (id.startsWith('record-')) return 'record'
+  switch (id) {
+    case 'recovery': case 'forma': case 'tss': case 'efficienza': case 'ef-nel-tempo':
+    case 'iev-nel-tempo': case 'fc-trend': case 'zone-fc': case 'vo2max': case 'calorie-metabolismo':
+      return 'fisiologia'
+    case 'badge': case 'streak':
+      return 'traguardi'
+    case 'totali': case 'giorni-attivi':
+      return 'totali'
+    default:
+      return 'andamento'
+  }
+}
+
 interface GalleryItem {
   id: string
   title: string
@@ -45,6 +75,7 @@ interface GalleryItem {
   gradientColor: string
   badgeText: string
   visual: Visual
+  category: Category
   ringValue?: number
   emoji?: string
   routePolyline?: [number, number][]
@@ -79,6 +110,8 @@ export default function BachecaPage() {
   const [photoIndex, setPhotoIndex] = useState(0)
   const [selectedId, setSelectedId] = useState('recovery')
   const [infoOpen, setInfoOpen] = useState(false)
+  const [activeCategory, setActiveCategory] = useState<Category | 'all'>('all')
+  const [gridOpen, setGridOpen] = useState(false)
   const [userSettings, setUserSettings] = useState<{ hrMax?: number | null; derivedFCmax?: number; hrRest?: number | null; userWeightKg?: number }>({})
 
   useEffect(() => { setInfoOpen(false) }, [selectedId])
@@ -204,7 +237,7 @@ export default function BachecaPage() {
   ]
 
   const galleryItems = useMemo<GalleryItem[]>(() => {
-    const items: GalleryItem[] = [
+    const items: Omit<GalleryItem, 'category'>[] = [
       {
         id: 'recovery', title: recovery.label, subtitle: hasEnoughHistory ? recoveryPhrase : lowHistoryNote,
         illustration: 'pulse', gradientColor: recovery.color, badgeText: `${recovery.score}`,
@@ -432,7 +465,7 @@ export default function BachecaPage() {
       })
     }
 
-    return items
+    return items.map(it => ({ ...it, category: categoryFor(it.id) }))
   }, [
     activities, recovery, hasEnoughHistory, recoveryPhrase, forma, formaPhrase, trainingLoadData,
     nearestBadge, badgeIsClose, currentWeekKm, volumePhrase, weeklyVolume, streakPhrase,
@@ -443,6 +476,29 @@ export default function BachecaPage() {
   const selected = galleryItems.find(g => g.id === selectedId) ?? galleryItems[0]
   const ambientPhoto = ambientPhotos.length > 0 ? ambientPhotos[photoIndex % ambientPhotos.length] : FALLBACK_HERO
   const heroPhoto = (selected?.activityId && coverPhotos[selected.activityId]) || ambientPhoto
+
+  // Categorie realmente presenti tra i dati calcolati — i filtri mostrano solo quelle con voci.
+  const availableCategories = useMemo(
+    () => CATEGORIES.filter(c => galleryItems.some(g => g.category === c.id)),
+    [galleryItems]
+  )
+
+  // Galleria raggruppata per tipologia (ordine fisso delle categorie, stabile all'interno di
+  // ciascuna) + filtro opzionale su una singola categoria — entrambi richiesti dal punto 2.
+  const displayedItems = useMemo(() => {
+    const order = CATEGORIES.map(c => c.id)
+    const base = activeCategory === 'all' ? galleryItems : galleryItems.filter(g => g.category === activeCategory)
+    return activeCategory === 'all'
+      ? [...base].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category))
+      : base
+  }, [galleryItems, activeCategory])
+
+  // Se il filtro nasconde l'elemento selezionato, sposta la selezione sul primo visibile.
+  useEffect(() => {
+    if (displayedItems.length > 0 && !displayedItems.some(i => i.id === selectedId)) {
+      setSelectedId(displayedItems[0].id)
+    }
+  }, [displayedItems, selectedId])
 
   if (loading) {
     return (
@@ -561,8 +617,39 @@ export default function BachecaPage() {
           )}
         </div>
 
+        {/* Filtri per tipologia + toggle vista a griglia — sopra alla galleria (punti 2-3) */}
+        <div className="flex items-center gap-1.5 px-4 sm:px-10 overflow-x-auto pb-0.5">
+          <button
+            onClick={() => setActiveCategory('all')}
+            className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors ${
+              activeCategory === 'all' ? 'bg-white text-stone-800' : 'bg-white/15 text-white/80 hover:bg-white/25'
+            }`}
+          >
+            Tutto
+          </button>
+          {availableCategories.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveCategory(id)}
+              className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors ${
+                activeCategory === id ? 'bg-white text-stone-800' : 'bg-white/15 text-white/80 hover:bg-white/25'
+              }`}
+            >
+              <Icon className="w-3 h-3" /> {label}
+            </button>
+          ))}
+          <button
+            onClick={() => setGridOpen(true)}
+            title="Vista a griglia"
+            aria-label="Vista a griglia"
+            className="shrink-0 ml-auto flex items-center justify-center w-7 h-7 rounded-full bg-white/15 text-white/80 hover:bg-white/25 transition-colors"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
         <div className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
-          {galleryItems.map(item => (
+          {displayedItems.map(item => (
             <FilmstripTile key={item.id} item={item} selected={item.id === selectedId} onSelect={() => setSelectedId(item.id)} />
           ))}
           <Link
@@ -575,6 +662,17 @@ export default function BachecaPage() {
           </Link>
         </div>
       </div>
+
+      {gridOpen && (
+        <GridView
+          items={displayedItems}
+          categories={availableCategories}
+          activeCategory={activeCategory}
+          onSetCategory={setActiveCategory}
+          onSelect={id => { setSelectedId(id); setGridOpen(false) }}
+          onClose={() => setGridOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -615,6 +713,114 @@ function FilmstripTile({ item, selected, onSelect }: { item: GalleryItem; select
       </div>
       <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-3 bg-gradient-to-t from-black/75 to-transparent">
         <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
+      </div>
+    </button>
+  )
+}
+
+// ── Vista a griglia: panoramica generale con scorrimento verticale, alternativa alla galleria
+// orizzontale — raggruppata per tipologia come il filmstrip, con gli stessi filtri in cima. ──
+function GridView({
+  items, categories, activeCategory, onSetCategory, onSelect, onClose,
+}: {
+  items: GalleryItem[]
+  categories: readonly (typeof CATEGORIES)[number][]
+  activeCategory: Category | 'all'
+  onSetCategory: (c: Category | 'all') => void
+  onSelect: (id: string) => void
+  onClose: () => void
+}) {
+  const groups = categories
+    .map(cat => ({ cat, items: items.filter(i => i.category === cat.id) }))
+    .filter(g => g.items.length > 0)
+
+  return (
+    <div className="absolute inset-0 z-30 bg-[#0b1a24]/97 backdrop-blur-md flex flex-col">
+      <div className="px-4 sm:px-10 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-2 shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
+            <Images className="w-4 h-4 text-white/70" /> Tutte le statistiche
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="Chiudi vista a griglia"
+            className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto mt-3 pb-0.5">
+          <button
+            onClick={() => onSetCategory('all')}
+            className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors ${
+              activeCategory === 'all' ? 'bg-white text-stone-800' : 'bg-white/15 text-white/80 hover:bg-white/25'
+            }`}
+          >
+            Tutto
+          </button>
+          {categories.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => onSetCategory(id)}
+              className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors ${
+                activeCategory === id ? 'bg-white text-stone-800' : 'bg-white/15 text-white/80 hover:bg-white/25'
+              }`}
+            >
+              <Icon className="w-3 h-3" /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 sm:px-10 pb-[calc(env(safe-area-inset-bottom,0px)+20px)]">
+        {groups.map(({ cat, items: catItems }) => (
+          <div key={cat.id} className="mb-5">
+            <div className="flex items-center gap-1.5 text-white/60 text-[11px] font-bold uppercase tracking-wide mb-2">
+              <cat.icon className="w-3.5 h-3.5" /> {cat.label}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {catItems.map(item => <GridTile key={item.id} item={item} onSelect={() => onSelect(item.id)} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function GridTile({ item, onSelect }: { item: GalleryItem; onSelect: () => void }) {
+  return (
+    <button
+      onClick={onSelect}
+      className="aspect-square rounded-2xl overflow-hidden relative border-[1.5px] border-white/15 hover:border-white/35 transition-colors text-left"
+    >
+      {item.routePolyline ? (
+        <div className="absolute inset-0 bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
+          <div className="absolute inset-2">
+            <RouteThumb polyline={item.routePolyline} color="#2d7a3d" strokeWidth={2} />
+          </div>
+        </div>
+      ) : (
+        <div className="absolute inset-0">
+          <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, ${item.gradientColor}33, #f8f7f4)` }} />
+          <div className="absolute inset-0 bg-topography" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            {item.emoji
+              ? <span className="text-3xl">{item.emoji}</span>
+              : <TileIllustration kind={item.illustration} tone={item.gradientColor} className="w-10 h-10" />}
+          </div>
+        </div>
+      )}
+      <div className="absolute top-1.5 left-1.5">
+        <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold shadow-sm leading-none ${
+          item.highlight ? 'bg-amber-400 text-amber-950' : 'bg-white/90 text-stone-800'
+        }`}>
+          {item.badgeText}
+        </span>
+      </div>
+      <div className="absolute bottom-0 inset-x-0 px-2 pb-1.5 pt-6 bg-gradient-to-t from-black/80 to-transparent">
+        <span className="block text-[11px] font-bold text-white truncate leading-tight">{item.title}</span>
+        <span className="block text-[9px] text-white/70 truncate leading-tight mt-0.5">{item.subtitle}</span>
       </div>
     </button>
   )

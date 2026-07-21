@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import Navbar from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { getAllActivities, getActivityById, type ActivityMeta } from '@/lib/blobStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
@@ -138,7 +138,7 @@ export default function VettePage() {
   const highest = peaks.length > 0 ? peaks.reduce((m, p) => p.ele > m.ele ? p : m, peaks[0]) : null
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
+    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <main className="max-w-4xl mx-auto px-3 sm:px-4 py-5 sm:py-8 fade-up">
 

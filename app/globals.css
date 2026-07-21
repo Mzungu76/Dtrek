@@ -46,6 +46,18 @@ body {
 /* Leaflet override z-index */
 .leaflet-container { z-index: 0; }
 
+/* Mobile: nascondi la scrollbar orizzontale su gallerie/filmstrip/tab a scorrimento —
+   lo scroll resta attivo, solo l'indicatore visivo sparisce (coerente col resto dell'app). */
+@media (max-width: 767px) {
+  .overflow-x-auto, .overflow-x-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .overflow-x-auto::-webkit-scrollbar, .overflow-x-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Drag & drop zone */
 .drop-zone {
   border: 2px dashed #c4be9d;

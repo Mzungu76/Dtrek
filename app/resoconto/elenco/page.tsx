@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import Navbar from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
@@ -267,7 +267,7 @@ export default function ResocontoIndexPage() {
   const heroRoute = heroActivity?.routePolyline && heroActivity.routePolyline.length > 1 ? heroActivity.routePolyline : null
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-28 md:pb-0">
+    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
 
       {/* ── Hero ── */}

@@ -1,7 +1,7 @@
 'use client'
 import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import Navbar from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
 import ManualImportChoice from '@/components/upload/ManualImportChoice'
@@ -26,7 +26,7 @@ function UploadPageInner() {
   const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>('file')
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-20 md:pb-0">
+    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 py-8 sm:py-12 fade-up">
         <div className="text-center mb-8">
