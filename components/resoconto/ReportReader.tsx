@@ -18,6 +18,7 @@ import {
   type ReportSection, type ReportAuthoredBy, type HikeReport,
 } from '@/lib/reportStore'
 import { getReport, saveReportContent, cacheReport } from '@/lib/sync/hikeReportStore'
+import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
 import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
@@ -228,6 +229,22 @@ export default function ReportReader({
       .catch(() => null)
     return () => { cancelled = true }
   }, [])
+
+  // getReport() above only reads the local cache once on mount; a newer version fetched by
+  // lib/sync/pullEngine.ts's background revalidation (e.g. a regeneration done on another device)
+  // lands in IndexedDB and fires this event, but without listening for it here this already-open
+  // reader kept showing whatever it first rendered — indistinguishable from the update having been
+  // lost, until the page was manually reloaded. getReport() itself is cache-first and cheap here:
+  // by the time this fires the newer copy is already in IndexedDB, so this just re-reads it.
+  useCtsUpdated(() => {
+    getReport(id).then(rep => {
+      if (!rep) return
+      setReport(rep)
+      setContent(rep.content ?? '')
+      if (Array.isArray(rep.sections) && rep.sections.length > 0) setReportSections(rep.sections)
+      setReportAuthoredBy(rep.authored_by ?? 'ai')
+    }).catch(() => {})
+  })
 
   // Load existing PDF share link
   useEffect(() => {
