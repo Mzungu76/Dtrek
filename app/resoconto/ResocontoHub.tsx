@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
@@ -427,6 +427,10 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
     if (section === 'featured') {
       return (
+        // ReportReader usa useSearchParams() (per rilevare il ritorno dal racconto guidato con
+        // ?generate=1) — Next.js richiede un confine Suspense attorno a chi lo chiama, altrimenti
+        // il build fallisce ("should be wrapped in a suspense boundary").
+        <Suspense fallback={null}>
         <ReportReader
           activity={activity}
           photos={photos}
@@ -455,6 +459,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
           scrollToSectionKey={pendingScrollSection}
           onScrollToSectionConsumed={() => setPendingScrollSection(null)}
         />
+        </Suspense>
       )
     }
 
