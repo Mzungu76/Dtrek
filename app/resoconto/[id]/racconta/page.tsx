@@ -84,7 +84,9 @@ export default function RacconaPage() {
       currentIndex: newIndex,
       status:       isLast ? 'completed' : q.status,
     } : q)
-    if (isLast) router.push(`/resoconto/${encodeURIComponent(id)}`)
+    // ?generate=1 → ReportReader avvia subito la generazione al ritorno, invece di lasciare
+    // all'utente un secondo click "Genera" separato (le risposte sono già pronte, non serve altro).
+    if (isLast) router.push(`/resoconto/${encodeURIComponent(id)}?generate=1`)
   }, [questionnaire, id, router])
 
   const handleSkip = useCallback(async (questionId: string) => {
@@ -98,7 +100,7 @@ export default function RacconaPage() {
       currentIndex: newIndex,
       status:       isLast ? 'completed' : q.status,
     } : q)
-    if (isLast) router.push(`/resoconto/${encodeURIComponent(id)}`)
+    if (isLast) router.push(`/resoconto/${encodeURIComponent(id)}?generate=1`)
   }, [questionnaire, id, router])
 
   const handleBack = useCallback(() => {
@@ -107,11 +109,14 @@ export default function RacconaPage() {
 
   const handleSkipAll = useCallback(async () => {
     await setQuestionnaireStatus(id, 'skipped')
-    router.push(`/resoconto/${encodeURIComponent(id)}`)
+    router.push(`/resoconto/${encodeURIComponent(id)}?generate=1`)
   }, [id, router])
 
+  // Usata sia dalla schermata "questionario già completato/saltato" sia dal fallback errore
+  // ("usa la generazione rapida"): in entrambi i casi le risposte (o l'assenza di risposte) sono
+  // già definitive, quindi tornare al resoconto genera subito invece di lasciare un altro click.
   const goToResoconto = useCallback(() => {
-    router.push(`/resoconto/${encodeURIComponent(id)}`)
+    router.push(`/resoconto/${encodeURIComponent(id)}?generate=1`)
   }, [id, router])
 
   if ((loading || !activity) && !error) return (

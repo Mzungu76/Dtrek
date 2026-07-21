@@ -1,6 +1,6 @@
 'use client'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
@@ -50,7 +50,7 @@ import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import {
-  Pencil, Loader2, Images, BookOpen, Share2, Copy, Link2Off, ExternalLink,
+  Pencil, Loader2, BookOpen, Share2, Copy, Link2Off, ExternalLink,
   Compass, Layers, RefreshCw, Heart, Zap, Flame,
 } from 'lucide-react'
 
@@ -158,12 +158,23 @@ export default function ReportReader({
   scrollToSectionKey, onScrollToSectionConsumed,
 }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const id = activity.id
 
   const [report,      setReport]      = useState<HikeReport | null>(null)
   const [content,     setContent]     = useState('')
   const [generating,  setGenerating]  = useState(false)
-  const [length,      setLength]      = useState<ResocontoLength>('media')
+  // Persistita per-attività: la scelta sopravvive al giro di andata/ritorno dal questionario
+  // guidato (/racconta), che rimonta questa pagina da zero al rientro.
+  const [length,      setLength]      = useState<ResocontoLength>(() => {
+    if (typeof window === 'undefined') return 'media'
+    const saved = window.localStorage.getItem(`dtrek:resoconto-length:${activity.id}`)
+    return saved === 'breve' || saved === 'media' || saved === 'lunga' ? saved : 'media'
+  })
+  const setLengthPersisted = useCallback((l: ResocontoLength) => {
+    setLength(l)
+    window.localStorage.setItem(`dtrek:resoconto-length:${id}`, l)
+  }, [id])
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [apiError,    setApiError]    = useState<string | null>(null)
@@ -291,6 +302,16 @@ export default function ReportReader({
       setGenerating(false)
     }
   }, [activity.title, id, length, photos])
+
+  // Ritorno dal questionario guidato (/racconta) con risposte già pronte (o già saltate): genera
+  // subito invece di lasciare all'utente un secondo click "Genera" separato — vedi
+  // app/resoconto/[id]/racconta/page.tsx (handleSkipAll/handleAdvance/goToResoconto).
+  useEffect(() => {
+    if (loading || searchParams.get('generate') !== '1') return
+    router.replace(`/resoconto/${encodeURIComponent(id)}`)
+    generateReport()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams])
 
   // ── Narrative chapters + fixed data sections ─────────────────────────────
   const sections = useMemo(() => parseSections(content), [content])
@@ -436,6 +457,25 @@ export default function ReportReader({
   )
 
   const hasContent = content.trim().length > 0
+
+  // Un solo pulsante d'azione per la generazione, mai due in competizione: se il questionario è
+  // già completato o saltato le risposte (o l'assenza di risposte) sono definitive, quindi genera
+  // subito; altrimenti porta al racconto guidato, dove saltare genera comunque subito da lì.
+  const questionnaireLocked = questionnaireStatus === 'completed' || questionnaireStatus === 'skipped'
+  const primaryAction = questionnaireLocked
+    ? { label: hasContent ? 'Rigenera' : 'Genera', onClick: generateReport, Icon: BookOpen }
+    : {
+        label: questionnaireStatus === 'in_progress' ? 'Riprendi il racconto guidato' : 'Racconta il tuo percorso',
+        onClick: () => router.push(`/resoconto/${encodeURIComponent(id)}/racconta`),
+        Icon: Pencil,
+      }
+  const primaryActionButton = (
+    <button onClick={primaryAction.onClick} disabled={generating}
+      className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
+      {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</> : <><primaryAction.Icon className="w-4 h-4" /> {primaryAction.label}</>}
+    </button>
+  )
+
   const categoryBadge = (activity.tags?.[0] ?? activity.sport ?? 'Escursione').toUpperCase()
   const gpsPoints = activity.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
   const hasGps = gpsPoints.length > 0
@@ -741,30 +781,19 @@ export default function ReportReader({
                       <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5">
                         <div className="flex items-center justify-between flex-wrap gap-4">
                           <div>
-                            <p className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm mb-1">Genera nuovo resoconto</p>
+                            <p className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm mb-2">Rigenera il resoconto</p>
                             {materialBadge}
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <div className="flex rounded-xl overflow-hidden border border-stone-200">
                               {(['breve', 'media', 'lunga'] as const).map(l => (
-                                <button key={l} onClick={() => setLength(l)}
+                                <button key={l} onClick={() => setLengthPersisted(l)}
                                   className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-wide transition-colors ${length === l ? 'bg-forest-600 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
                                   {l}
                                 </button>
                               ))}
                             </div>
-                            <button onClick={onOpenMap3D} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-display font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
-                              <Images className="w-3.5 h-3.5" /> Mappa 3D
-                            </button>
-                            <button onClick={() => router.push(`/resoconto/${encodeURIComponent(id)}/racconta`)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-forest-200 text-xs font-display font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
-                              <Pencil className="w-3.5 h-3.5" />
-                              {questionnaireStatus === 'in_progress' ? 'Riprendi il racconto guidato' : 'Racconta il tuo percorso'}
-                            </button>
-                            <button onClick={generateReport} disabled={generating}
-                              className="flex items-center gap-2 px-5 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
-                              {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</> : <><BookOpen className="w-4 h-4" /> Genera</>}
-                            </button>
+                            {primaryActionButton}
                           </div>
                         </div>
                         {apiError && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{apiError}</div>}
@@ -791,16 +820,13 @@ export default function ReportReader({
                           <div className="flex items-center gap-2 mt-auto flex-wrap">
                             <div className="flex rounded-xl overflow-hidden border border-stone-200">
                               {(['breve', 'media', 'lunga'] as const).map(l => (
-                                <button key={l} onClick={() => setLength(l)}
+                                <button key={l} onClick={() => setLengthPersisted(l)}
                                   className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-wide transition-colors ${length === l ? 'bg-forest-600 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}>
                                   {l}
                                 </button>
                               ))}
                             </div>
-                            <button onClick={generateReport} disabled={generating}
-                              className="flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
-                              {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generazione…</> : <><BookOpen className="w-4 h-4" /> Genera</>}
-                            </button>
+                            {primaryActionButton}
                           </div>
                           {apiError && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 w-full">{apiError}</div>}
                         </div>
@@ -834,7 +860,7 @@ export default function ReportReader({
                         setEditorMode('manual')
                       }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-display font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
-                      <Pencil className="w-3.5 h-3.5" /> Editor strutturato
+                      <Pencil className="w-3.5 h-3.5" /> Modifica
                     </button>
                   </div>
                 )}
