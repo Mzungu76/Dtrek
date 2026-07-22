@@ -40,6 +40,11 @@ interface GeocodeResult { lat: string; lon: string; display_name: string }
 
 const MIN_KM = 1
 const MAX_KM = 20
+// Obiettivo minimo di risultati per ricerca (costruiti + trovati insieme) imposto dall'utente:
+// se la ricerca trova meno percorsi già esistenti di questo numero, il wizard costruisce sempre
+// anche percorsi algoritmici per completare — mai fermarsi a 1 solo risultato quando è possibile
+// costruire di più (vedi runSearch).
+const MIN_TOTAL_RESULTS = 10
 // Cap sui candidati "trovati" dalla chat di Giulia (Livello 2) da tentare di risolvere con una
 // traccia reale prima di mostrarli — stesso principio del cap lato server per i livelli 0/1 (vedi
 // app/api/route-build/search/route.ts), qui applicato lato client perché la chat è conversazionale.
@@ -365,9 +370,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         setLon(data.place.lon)
         setQuery(data.place.displayName)
       }
+      // Valori effettivi da usare SUBITO (per l'eventuale costruzione automatica qui sotto): non
+      // si può leggere lo stato appena impostato con le setXxx sopra/sotto, gli aggiornamenti sono
+      // asincroni e non ancora rispecchiati nelle variabili di chiusura di questa stessa chiamata.
+      const effectiveRouteType: RouteType = data.prefill?.routeType ?? routeType
+      const effectiveDistanceKm = typeof data.prefill?.targetDistanceKm === 'number'
+        ? Math.min(MAX_KM, Math.max(MIN_KM, data.prefill.targetDistanceKm)) : targetDistanceKm
+      const effectiveElevationM = typeof data.prefill?.targetElevationM === 'number'
+        ? data.prefill.targetElevationM : (targetElevationM.trim() ? Number(targetElevationM) : null)
+      const effectiveDesiredPoiTypes = Array.isArray(data.prefill?.desiredPoiTypes) ? data.prefill.desiredPoiTypes : desiredPoiTypes
+      const effectiveEnvironmentPrefs = Array.isArray(data.prefill?.environmentPrefs) ? data.prefill.environmentPrefs : environmentPrefs
+
       if (data.prefill) {
         if (data.prefill.routeType) setRouteType(data.prefill.routeType)
-        if (typeof data.prefill.targetDistanceKm === 'number') setTargetDistanceKm(Math.min(MAX_KM, Math.max(MIN_KM, data.prefill.targetDistanceKm)))
+        if (typeof data.prefill.targetDistanceKm === 'number') setTargetDistanceKm(effectiveDistanceKm)
         if (typeof data.prefill.targetElevationM === 'number') setTargetElevationM(String(data.prefill.targetElevationM))
         if (Array.isArray(data.prefill.desiredPoiTypes)) setDesiredPoiTypes(data.prefill.desiredPoiTypes)
         if (Array.isArray(data.prefill.environmentPrefs)) setEnvironmentPrefs(data.prefill.environmentPrefs)
@@ -388,11 +404,32 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         setResults(prev => [...prev.filter(x => x.kind !== 'found'), ...items])
       }
 
+      // Obiettivo minimo di risultati (vedi MIN_TOTAL_RESULTS): la ricerca da sola può trovare
+      // pochi (anche un solo) percorso già esistente — costruire sempre anche algoritmicamente per
+      // completare fino al minimo, che si sia trovato qualcosa o no, non solo quando non si trova
+      // nulla. Serve un punto di partenza noto: quello appena risolto da questa ricerca, o quello
+      // già impostato in precedenza (tocco sulla mappa, ricerca precedente).
+      const buildFromLat = data.place?.lat ?? lat
+      const buildFromLon = data.place?.lon ?? lon
+      let builtCount = 0
+      if (buildFromLat != null && buildFromLon != null && found.length < MIN_TOTAL_RESULTS) {
+        builtCount = await runBuild({
+          lat: buildFromLat, lon: buildFromLon, routeType: effectiveRouteType, targetDistanceKm: effectiveDistanceKm,
+          targetElevationM: effectiveElevationM, environmentPrefs: effectiveEnvironmentPrefs, desiredPoiTypes: effectiveDesiredPoiTypes,
+          destinationLat: null, destinationLon: null,
+        })
+      }
+
       if (data.escalateToAi && useAi) {
+        // La chat di Giulia (Livello 2) resta da mostrare — non si naviga via dallo step "Partenza"
+        // finché è ancora in attesa, altrimenti sparirebbe. I costruiti (se presenti) sono comunque
+        // già in `results`, visibili non appena si prosegue.
         setGiuliaSeed(query.trim())
         setShowGiulia(true)
-      } else if (!data.place && found.length === 0) {
+      } else if (found.length + builtCount === 0) {
         setErrorMsg('Nessun risultato — prova a scrivere diversamente o tocca la mappa.')
+      } else {
+        setStep('results')
       }
     } catch {
       setErrorMsg('Errore di rete, riprova.')
@@ -457,8 +494,24 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function generate() {
-    if (lat == null || lon == null || generating) return
+  interface BuildParams {
+    lat: number
+    lon: number
+    routeType: RouteType
+    targetDistanceKm: number
+    targetElevationM: number | null
+    environmentPrefs: HikerEnvironmentPrefKey[]
+    desiredPoiTypes: PoiType[]
+    destinationLat: number | null
+    destinationLon: number | null
+  }
+
+  /** Nucleo condiviso della costruzione algoritmica — usato sia dal click esplicito "Genera
+   *  percorsi" sia dall'innesco automatico in runSearch() (vedi MIN_TOTAL_RESULTS): quest'ultimo
+   *  passa i parametri espliciti invece di leggerli dallo stato, perché potrebbero essere appena
+   *  stati precompilati dall'AI (data.prefill) e non ancora rispecchiati nello stato del componente
+   *  al momento della chiamata. Ritorna il numero di percorsi costruiti ottenuti (0 se falliti). */
+  async function runBuild(params: BuildParams): Promise<number> {
     setGenerating(true)
     setErrorMsg('')
     setResultsMessage('')
@@ -466,29 +519,36 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const res = await fetch('/api/route-build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lat, lon, routeType, targetDistanceKm,
-          targetElevationM: targetElevationM.trim() ? Number(targetElevationM) : null,
-          environmentPrefs,
-          desiredPoiTypes,
-          destinationLat: routeType !== 'anello' ? destLat : null,
-          destinationLon: routeType !== 'anello' ? destLon : null,
-        }),
+        body: JSON.stringify(params),
       })
       const data = await res.json()
       if (!res.ok) {
         setErrorMsg(data.message || data.error || 'Generazione non riuscita, riprova.')
-        return
+        return 0
       }
       const built = (data.candidates ?? []) as BuiltCandidate[]
       setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...built.map(d => ({ kind: 'built' as const, data: d }))])
       setResultsMessage(data.message ?? '')
-      setStep('results')
+      return built.length
     } catch {
       setErrorMsg('Errore di rete, riprova.')
+      return 0
     } finally {
       setGenerating(false)
     }
+  }
+
+  async function generate() {
+    if (lat == null || lon == null || generating) return
+    const count = await runBuild({
+      lat, lon, routeType, targetDistanceKm,
+      targetElevationM: targetElevationM.trim() ? Number(targetElevationM) : null,
+      environmentPrefs,
+      desiredPoiTypes,
+      destinationLat: routeType !== 'anello' ? destLat : null,
+      destinationLon: routeType !== 'anello' ? destLon : null,
+    })
+    if (count > 0) setStep('results')
   }
 
   function chooseCandidate(item: ResultItem, i: number) {

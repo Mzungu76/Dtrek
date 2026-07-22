@@ -17,18 +17,20 @@ import { nearestGraphNode, type WalkNetwork } from './osmGraph'
 
 // Tolleranza sulla lunghezza target: un candidato la cui lunghezza reale si discosta oltre questa
 // percentuale dal target richiesto viene scartato — meglio pochi candidati affidabili che uno
-// fuori misura pur di riempire la lista. Alzata da 0.3 a 0.4 per aumentare la resa di candidati
-// (l'utente ha chiesto esplicitamente più risultati tra cui scegliere, ordinati per affinità).
-const LENGTH_TOLERANCE = 0.4
+// fuori misura pur di riempire la lista. Alzata da 0.3 a 0.4 e poi a 0.45: l'utente ha imposto un
+// minimo di 10 percorsi per ricerca (built+trovati insieme), quindi ammettere qualche candidato in
+// più leggermente più lontano dal target è preferibile a restarne sotto.
+const LENGTH_TOLERANCE = 0.45
 // Moltiplicatore di penalità sugli archi già usati nell'andata quando si cerca il ritorno di un
 // anello: abbastanza alto da farli evitare se esiste un'alternativa reale, non così alto da
 // rendere il grafo instabile se quella è l'unica via percorribile (rete rada).
 const REUSED_EDGE_PENALTY = 6
 // Numero di settori direzionali (da bearing rispetto al punto di partenza) usati solo per
 // scegliere candidati in direzioni diverse tra loro — non per la ricerca del percorso in sé, che
-// lavora sempre su nodi già raggiungibili nel grafo. Alzato da 6 a 10 per lo stesso motivo della
-// tolleranza sopra: più direzioni tentate, più candidati grezzi tra cui il punteggio finale sceglie.
-const NUM_DIRECTION_BUCKETS = 10
+// lavora sempre su nodi già raggiungibili nel grafo. Alzato da 6 a 10 e poi a 16: più direzioni
+// tentate, più candidati grezzi tra cui il punteggio finale sceglie — necessario per arrivare in
+// modo affidabile al minimo di 10 risultati per ricerca imposto dall'utente.
+const NUM_DIRECTION_BUCKETS = 16
 // Due candidati che condividono più di questa frazione di nodi sono considerati "lo stesso
 // percorso" — si tiene solo il migliore dei due invece di proporli entrambi.
 const DEDUPE_NODE_OVERLAP = 0.6
@@ -235,7 +237,7 @@ export function generateOutAndBackCandidates(
   network: WalkNetwork,
   startNodeId: number,
   targetDistanceM: number,
-  maxCandidates = 8,
+  maxCandidates = 14,
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
@@ -265,7 +267,7 @@ export function generateOneWayCandidates(
   network: WalkNetwork,
   startNodeId: number,
   targetDistanceM: number,
-  maxCandidates = 8,
+  maxCandidates = 14,
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
@@ -292,7 +294,7 @@ export function generateLoopCandidates(
   network: WalkNetwork,
   startNodeId: number,
   targetDistanceM: number,
-  maxCandidates = 8,
+  maxCandidates = 14,
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
