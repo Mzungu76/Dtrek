@@ -185,6 +185,18 @@ function withinTolerance(distanceM: number, targetDistanceM: number): boolean {
   return Math.abs(distanceM - targetDistanceM) / targetDistanceM <= LENGTH_TOLERANCE
 }
 
+// Diagnostica: quando "candidati grezzi: 0" arriva insieme a una rete di dimensioni normali (vedi
+// log applicativo in app/api/route-build/route.ts), la causa più probabile è che il nodo di
+// partenza sia agganciato a un frammento di rete piccolo/isolato rispetto al totale scaricato —
+// questi due numeri lo confermano o lo escludono senza dover indovinare.
+function logReachDiagnostics(dist: Map<number, number>, totalNodes: number, targetOneWayM: number) {
+  // Somma/riduzione manuale invece di Math.max(...values) — con reti di decine di migliaia di
+  // nodi lo spread come argomenti di funzione rischia il limite dell'engine sugli argomenti.
+  let maxReachM = 0
+  for (const d of Array.from(dist.values())) if (d > maxReachM) maxReachM = d
+  console.log(`[route-build] nodi raggiungibili dal punto di partenza: ${dist.size}/${totalNodes}, distanza massima raggiunta: ${Math.round(maxReachM)}m (target un ramo: ${Math.round(targetOneWayM)}m)`)
+}
+
 /**
  * Sceglie, tra i nodi la cui distanza reale da start rientra nella tolleranza attorno a
  * `targetOneWayM`, il migliore per ciascun settore direzionale — così i candidati risultano in
@@ -227,6 +239,7 @@ export function generateOutAndBackCandidates(
   if (!start) return []
 
   const { dist, prev } = dijkstraAll(network, startNodeId)
+  logReachDiagnostics(dist, network.nodes.size, targetDistanceM / 2)
   const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM / 2, maxCandidates)
 
   const candidates: (RouteCandidate & { nodeSet: Set<number> })[] = []
@@ -254,6 +267,7 @@ export function generateLoopCandidates(
   if (!start) return []
 
   const { dist, prev } = dijkstraAll(network, startNodeId)
+  logReachDiagnostics(dist, network.nodes.size, targetDistanceM / 2)
   // Più candidati grezzi del necessario: per un anello il tratto di ritorno (via diversa) può
   // allungare il totale oltre tolleranza anche quando l'andata era ben piazzata, quindi conviene
   // provarne qualcuno in più prima di scartare.
