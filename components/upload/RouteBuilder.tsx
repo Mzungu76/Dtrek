@@ -239,13 +239,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // tipo e sempre con una traccia reale.
   const [results, setResults] = useState<ResultItem[]>([])
   const [resultsMessage, setResultsMessage] = useState('')
-  // Parallelo a `results` (stessa lunghezza/indice) — null per le voci 'found' (il punteggio di un
-  // percorso trovato si calcola solo per il selezionato, vedi confirmScore sotto).
+  // Parallelo a `results` (stessa lunghezza/indice) — calcolato per ogni candidato, costruito o
+  // trovato, non appena arriva (vedi effetto sotto) — riusato anche in "Conferma" via
+  // `selectedIndex`, nessun ricalcolo separato lì.
   const [scores, setScores] = useState<(CandidateScorePreview | null)[]>([])
 
   const [selected, setSelected] = useState<ResultItem | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const [confirmScore, setConfirmScore] = useState<CandidateScorePreview | null>(null)
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
   const [saving, setSaving] = useState(false)
@@ -270,20 +270,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       .catch(() => {})
   }, [defaultsLoaded])
 
-  // Calcola Trail Score + Sicurezza per ogni candidato "costruito" non appena arrivano i risultati
-  // — stessa pipeline usata per un percorso già salvato (computeCtsCore/computeSafetyCore, vedi
-  // lib/computeCtsForHike.ts e lib/computeSafetyForHike.ts), qui su candidati non ancora salvati. I
-  // candidati "trovati" restano null qui (vedi commento sulla dichiarazione di `scores`).
+  // Calcola Trail Score + Sicurezza per ogni candidato, costruito o trovato, non appena arrivano i
+  // risultati — stessa pipeline usata per un percorso già salvato (computeCtsCore/computeSafetyCore,
+  // vedi lib/computeCtsForHike.ts e lib/computeSafetyForHike.ts). Un candidato "trovato" ha sempre
+  // una traccia reale già risolta (vedi FoundRouteItem) prima di finire in questa lista, quindi il
+  // calcolo può partire subito qui, senza dover attendere la selezione — stesso indice di `results`,
+  // riusato anche nello step "Conferma" invece di un calcolo separato lì.
   useEffect(() => {
-    const hasBuilt = results.some(r => r.kind === 'built')
-    if (!hasBuilt) { setScores(results.map(() => null)); return }
-    setScores(results.map(r => (r.kind === 'built' ? { total: null, safety: null, vetoed: false, loading: true } : null)))
+    if (results.length === 0) { setScores([]); return }
+    setScores(results.map(() => ({ total: null, safety: null, vetoed: false, loading: true })))
     results.forEach((r, i) => {
-      if (r.kind !== 'built') return
-      const c = r.data
+      const hikeForScore = r.kind === 'built' ? r.data : r.data.track
       Promise.all([
-        computeCtsCore(c).catch(() => null),
-        computeSafetyCore(c).catch(() => null),
+        computeCtsCore(hikeForScore).catch(() => null),
+        computeSafetyCore(hikeForScore).catch(() => null),
       ]).then(([cts, safety]) => {
         const v2 = computeTrailScoreV2({ cts: cts?.ts ?? null, safety: safety?.overall ?? null })
         setScores(prev => {
@@ -301,39 +301,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results])
-
-  // Trail Score + Sicurezza per un candidato "trovato" selezionato — la traccia è già garantita
-  // reale (vedi FoundRouteItem), quindi il calcolo può partire subito, non deve attendere una
-  // risoluzione separata come prima di questo giro.
-  useEffect(() => {
-    if (!selected || selected.kind !== 'found') { setConfirmScore(null); return }
-    const track = selected.data.track
-    if (!track.trackPoints.length) { setConfirmScore(null); return }
-    setConfirmScore({ total: null, safety: null, vetoed: false, loading: true })
-    const hikeForScore = {
-      trackPoints: track.trackPoints,
-      distanceMeters: track.distanceMeters,
-      elevationGain: track.elevationGain,
-      elevationLoss: track.elevationLoss,
-      altitudeMax: track.altitudeMax,
-      altitudeMin: track.altitudeMin,
-      estimatedTimeSeconds: track.estimatedTimeSeconds,
-      routePolyline: track.routePolyline,
-    }
-    Promise.all([
-      computeCtsCore(hikeForScore).catch(() => null),
-      computeSafetyCore(hikeForScore).catch(() => null),
-    ]).then(([cts, safety]) => {
-      const v2 = computeTrailScoreV2({ cts: cts?.ts ?? null, safety: safety?.overall ?? null })
-      setConfirmScore({
-        total: v2?.score ?? null,
-        safety: safety ? { overall: safety.overall, color: safety.color, label: safety.label } : null,
-        vetoed: v2?.breakdown.vetoed ?? false,
-        loading: false,
-      })
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected])
 
   // Usato solo dal campo destinazione (step "Parametri") — risoluzione di un singolo luogo per
   // nome, non una ricerca di percorso: invariato rispetto a prima di questo giro.
@@ -560,6 +527,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   function renderFoundCard(data: FoundRouteItem, i: number) {
     const vs = data.comfortVerdict ? verdictStyle(data.comfortVerdict) : null
     const track = data.track
+    const scorePreview = scores[i]
     return (
       <div key={`found-${i}`} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
         <TrailPreviewMap polyline={track.routePolyline} height="180px" />
@@ -573,23 +541,35 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             {data.zone && <p className="text-xs text-stone-400 mt-0.5">{data.zone}</p>}
           </div>
 
-          <div className="flex gap-4 text-sm">
-            <div>
-              <span className="font-semibold text-stone-800">{(track.distanceMeters / 1000).toFixed(1)} km</span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
-            </div>
-            <div>
-              <span className="font-semibold text-stone-800 flex items-center gap-0.5">
-                <TrendingUp className="w-3 h-3" />{track.hasElevation ? `${Math.round(track.elevationGain)} m` : '—'}
-              </span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
-            </div>
-            {data.difficulty && (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex gap-4 text-sm">
               <div>
-                <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Difficoltà</p>
+                <span className="font-semibold text-stone-800">{(track.distanceMeters / 1000).toFixed(1)} km</span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
               </div>
-            )}
+              <div>
+                <span className="font-semibold text-stone-800 flex items-center gap-0.5">
+                  <TrendingUp className="w-3 h-3" />{track.hasElevation ? `${Math.round(track.elevationGain)} m` : '—'}
+                </span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
+              </div>
+              {data.difficulty && (
+                <div>
+                  <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
+                  <p className="text-[10px] uppercase tracking-wide text-stone-400">Difficoltà</p>
+                </div>
+              )}
+            </div>
+            <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
+              <TrailScoreGaugeBadge
+                total={scorePreview?.total ?? null}
+                safety={scorePreview?.safety ?? null}
+                loading={scorePreview?.loading ?? true}
+                vetoed={scorePreview?.vetoed}
+                size={52}
+                showLabel={false}
+              />
+            </div>
           </div>
 
           {vs && (
@@ -918,7 +898,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const foundData = selected.kind === 'found' ? selected.data : null
     const builtData = selected.kind === 'built' ? selected.data : null
     const vs = foundData?.comfortVerdict ? verdictStyle(foundData.comfortVerdict) : null
-    const builtScore = selectedIndex != null ? scores[selectedIndex] : null
+    const selectedScore = selectedIndex != null ? scores[selectedIndex] : null
 
     return (
       <div className="space-y-4">
@@ -957,10 +937,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 </div>
                 <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
                   <TrailScoreGaugeBadge
-                    total={builtScore?.total ?? null}
-                    safety={builtScore?.safety ?? null}
-                    loading={builtScore?.loading ?? true}
-                    vetoed={builtScore?.vetoed}
+                    total={selectedScore?.total ?? null}
+                    safety={selectedScore?.safety ?? null}
+                    loading={selectedScore?.loading ?? true}
+                    vetoed={selectedScore?.vetoed}
                     size={52}
                     showLabel={false}
                   />
@@ -992,10 +972,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 </div>
                 <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
                   <TrailScoreGaugeBadge
-                    total={confirmScore?.total ?? null}
-                    safety={confirmScore?.safety ?? null}
-                    loading={confirmScore?.loading ?? false}
-                    vetoed={confirmScore?.vetoed}
+                    total={selectedScore?.total ?? null}
+                    safety={selectedScore?.safety ?? null}
+                    loading={selectedScore?.loading ?? true}
+                    vetoed={selectedScore?.vetoed}
                     size={52}
                     showLabel={false}
                   />

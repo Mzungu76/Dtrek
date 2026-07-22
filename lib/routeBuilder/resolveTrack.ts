@@ -9,6 +9,15 @@ import { resolveGeometryFallback } from '@/lib/trailConditions/geometry'
 import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
 import { downloadAndParseGpx } from '@/lib/gpxSourceFetch'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
+import { haversineM } from '@/lib/geoUtils'
+
+function polylineDistanceM(points: [number, number][]): number {
+  let total = 0
+  for (let i = 0; i < points.length - 1; i++) {
+    total += haversineM(points[i][0], points[i][1], points[i + 1][0], points[i + 1][1])
+  }
+  return total
+}
 
 export interface ResolvedTrack {
   ok: true
@@ -74,19 +83,25 @@ export async function resolveTrackForCandidate(
   const enriched = await enrichGeometryWithElevation(fallback.geometry)
   if (!enriched) {
     // Traccia trovata ma senza copertura DTM per la quota — il chiamante può comunque usarla con
-    // la sola geometria (mappa disponibile, profilo altimetrico no), come un import manuale.
+    // la sola geometria (mappa disponibile, profilo altimetrico no), come un import manuale. La
+    // distanza però è comunque calcolabile dalla geometria reale (bug precedente: veniva
+    // restituita 0 qui, mascherato prima d'ora solo perché AiRouteSearch aveva una propria stima
+    // di riserva su cui ripiegare — questo endpoint condiviso non ce l'ha, va calcolata qui).
+    const distanceMeters = polylineDistanceM(fallback.geometry)
     return {
       ok: true,
       osmId,
       source: 'osm',
       routePolyline: downsamplePolyline(fallback.geometry.map(([lat, lon]) => ({ time: '', lat, lon }))),
       trackPoints: [],
-      distanceMeters: 0,
+      distanceMeters,
       elevationGain: 0,
       elevationLoss: 0,
       altitudeMax: 0,
       altitudeMin: 0,
-      estimatedTimeSeconds: 0,
+      // Stima a passo costante (4 km/h) in assenza di dati altimetrici — stesso fattore già usato
+      // altrove nell'app per una stima di riserva (vedi buildHikeFromFound in RouteBuilder.tsx).
+      estimatedTimeSeconds: Math.round((distanceMeters / 1000 / 4) * 3600),
       hasElevation: false,
     }
   }
