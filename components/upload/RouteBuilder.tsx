@@ -412,23 +412,35 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const buildFromLat = data.place?.lat ?? lat
       const buildFromLon = data.place?.lon ?? lon
       let builtCount = 0
+      let buildMessage: string | null = null
       if (buildFromLat != null && buildFromLon != null && found.length < MIN_TOTAL_RESULTS) {
-        builtCount = await runBuild({
+        const buildResult = await runBuild({
           lat: buildFromLat, lon: buildFromLon, routeType: effectiveRouteType, targetDistanceKm: effectiveDistanceKm,
           targetElevationM: effectiveElevationM, environmentPrefs: effectiveEnvironmentPrefs, desiredPoiTypes: effectiveDesiredPoiTypes,
           destinationLat: null, destinationLon: null,
         })
+        builtCount = buildResult.count
+        buildMessage = buildResult.message
       }
 
       if (data.escalateToAi && useAi) {
         // La chat di Giulia (Livello 2) resta da mostrare — non si naviga via dallo step "Partenza"
         // finché è ancora in attesa, altrimenti sparirebbe. I costruiti (se presenti) sono comunque
-        // già in `results`, visibili non appena si prosegue.
+        // già in `results`, visibili non appena si prosegue. Nessun errore residuo dal tentativo di
+        // costruzione: la prossima mossa proposta è la chat, non un fallimento.
+        setErrorMsg('')
         setGiuliaSeed(query.trim())
         setShowGiulia(true)
       } else if (found.length + builtCount === 0) {
-        setErrorMsg('Nessun risultato — prova a scrivere diversamente o tocca la mappa.')
+        // Nessun risultato da nessuno dei due motori: mostra il motivo specifico del tentativo di
+        // costruzione se c'è (es. "rete sentieri non trovata vicino al punto scelto"), altrimenti
+        // il messaggio generico.
+        setErrorMsg(buildMessage ?? 'Nessun risultato — prova a scrivere diversamente o tocca la mappa.')
       } else {
+        // Almeno un risultato valido da mostrare (trovato e/o costruito) — nessun errore residuo,
+        // anche se uno dei due tentativi ha fallito: non deve sembrare che la ricerca sia fallita
+        // quando invece ha prodotto qualcosa.
+        setErrorMsg('')
         setStep('results')
       }
     } catch {
@@ -510,10 +522,12 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
    *  percorsi" sia dall'innesco automatico in runSearch() (vedi MIN_TOTAL_RESULTS): quest'ultimo
    *  passa i parametri espliciti invece di leggerli dallo stato, perché potrebbero essere appena
    *  stati precompilati dall'AI (data.prefill) e non ancora rispecchiati nello stato del componente
-   *  al momento della chiamata. Ritorna il numero di percorsi costruiti ottenuti (0 se falliti). */
-  async function runBuild(params: BuildParams): Promise<number> {
+   *  al momento della chiamata. Non tocca `errorMsg` direttamente — ritorna il numero di percorsi
+   *  ottenuti e un eventuale messaggio, lasciando al chiamante decidere se mostrarlo: un fallimento
+   *  qui non deve mai sembrare un errore quando la ricerca ha comunque trovato qualcos'altro da
+   *  mostrare (vedi runSearch). */
+  async function runBuild(params: BuildParams): Promise<{ count: number; message: string | null }> {
     setGenerating(true)
-    setErrorMsg('')
     setResultsMessage('')
     try {
       const res = await fetch('/api/route-build', {
@@ -523,16 +537,14 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       })
       const data = await res.json()
       if (!res.ok) {
-        setErrorMsg(data.message || data.error || 'Generazione non riuscita, riprova.')
-        return 0
+        return { count: 0, message: data.message || data.error || 'Generazione non riuscita, riprova.' }
       }
       const built = (data.candidates ?? []) as BuiltCandidate[]
       setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...built.map(d => ({ kind: 'built' as const, data: d }))])
       setResultsMessage(data.message ?? '')
-      return built.length
+      return { count: built.length, message: built.length === 0 ? (data.message ?? null) : null }
     } catch {
-      setErrorMsg('Errore di rete, riprova.')
-      return 0
+      return { count: 0, message: 'Errore di rete, riprova.' }
     } finally {
       setGenerating(false)
     }
@@ -540,7 +552,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
   async function generate() {
     if (lat == null || lon == null || generating) return
-    const count = await runBuild({
+    setErrorMsg('')
+    const { count, message } = await runBuild({
       lat, lon, routeType, targetDistanceKm,
       targetElevationM: targetElevationM.trim() ? Number(targetElevationM) : null,
       environmentPrefs,
@@ -549,6 +562,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       destinationLon: routeType !== 'anello' ? destLon : null,
     })
     if (count > 0) setStep('results')
+    else if (message) setErrorMsg(message)
   }
 
   function chooseCandidate(item: ResultItem, i: number) {
@@ -788,15 +802,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                     {destGeocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setUseAi(v => !v)}
-                  className={`mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                    useAi ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-500'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" /> Prova con l&apos;AI se non trovo il luogo
-                </button>
                 {destGeocodeResults.length > 0 && (
                   <div className="space-y-1.5 mt-1.5">
                     {destGeocodeResults.map((r, i) => (
