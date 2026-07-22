@@ -35,7 +35,16 @@ export async function fetchDtmTile(bbox: string): Promise<DtmTile | null> {
     throw new DtmUnavailableError('OPENTOPOGRAPHY_API_KEY not set (see .env.example)')
   }
 
-  if (isCircuitOpen(BREAKER_KEY)) return null
+  // Se il breaker è aperto (3+ fallimenti reali consecutivi entro l'ultimo minuto — vedi
+  // lib/geo/circuitBreaker.ts), questa chiamata torna null SENZA nemmeno provare a contattare
+  // OpenTopography — un punto cieco reale: senza questo log, un breaker aperto è indistinguibile
+  // da un fallimento appena avvenuto, e su un'istanza Vercel "calda" riusata tra richieste
+  // ravvicinate può far sembrare che ogni tentativo fallisca dal vivo quando in realtà i
+  // tentativi reali sono stati solo i primi 3.
+  if (isCircuitOpen(BREAKER_KEY)) {
+    console.warn(`[dtm] circuit breaker aperto per ${BREAKER_KEY} — richiesta per bbox ${bbox} saltata senza contattare OpenTopography`)
+    return null
+  }
 
   try {
     const buf = await fetchGlobalDem(bbox, { timeoutMs: DTM_TIMEOUT_MS })
