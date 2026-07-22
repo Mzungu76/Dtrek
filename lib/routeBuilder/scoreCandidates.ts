@@ -13,6 +13,7 @@ import { fetchOverpassPois } from '@/lib/pois/overpassSource'
 import { deduplicateByProximity } from '@/lib/pois/dedupe'
 import type { PoiItem } from '@/lib/overpass'
 import type { HikerConcernKey, HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
+import { DtmUnavailableError } from '@/lib/dtm/dtmClient'
 import type { RouteCandidate } from './loopBuilder'
 
 export interface ScoredCandidate {
@@ -132,11 +133,21 @@ export async function scoreAndEnrichCandidates(
     // singolo candidato senza chiave configurata farebbe fallire l'intera Promise.all e quindi
     // l'intera richiesta, invece di limitarsi a scartare quel candidato come "nessun profilo
     // altimetrico disponibile" (stesso esito pratico di un ritorno null per mancata copertura).
+    // Il log distingue i due casi silenziosi altrimenti indistinguibili dall'esterno: chiave
+    // mancante (fix di configurazione) contro nessuna tile DTM per questo bbox specifico (limite
+    // di copertura dati, non un bug).
     const [enrichedTrack, pois] = await Promise.all([
-      enrichGeometryWithElevation(candidate.polyline).catch(() => null),
+      enrichGeometryWithElevation(candidate.polyline).catch(e => {
+        if (e instanceof DtmUnavailableError) console.error('[route-build] DTM non configurato (OPENTOPOGRAPHY_API_KEY mancante):', e.message)
+        else console.error('[route-build] enrichGeometryWithElevation errore inatteso:', e)
+        return null
+      }),
       fetchPoisNearPolyline(candidate.polyline).catch(() => [] as PoiItem[]),
     ])
-    if (!enrichedTrack) return null
+    if (!enrichedTrack) {
+      console.log('[route-build] candidato scartato: nessuna quota disponibile per questo bbox')
+      return null
+    }
 
     const hasSteepSections = maxGradePct(enrichedTrack.trackPoints) >= STEEP_GRADE_PCT
     const waterPoiCount = pois.filter(p => WATER_POI_TYPES.has(p.type)).length
