@@ -175,6 +175,18 @@ export async function resolveComuneFromLatLon(lat: number, lon: number): Promise
 // per nome senza indicare un'area.
 export const ITALY_BBOX: [number, number, number, number] = [35.2, 6.6, 47.1, 18.6]
 
+// Oltre questa lunghezza, un testo non è più un plausibile nome di luogo/percorso ma una frase
+// libera (es. "Percorsi tra borghi storici entro 50 km") — usarlo comunque come query di una
+// ricerca Overpass per nome estesa a tutta Italia (ITALY_BBOX) significherebbe far girare un
+// regex su migliaia di elementi a livello nazionale, la stessa categoria di query pesante che ha
+// già causato dei 504 in produzione (vedi lib/routeBuilder/osmGraph.ts). Usato da
+// lib/routeBuilder/resolvePlace.ts e app/api/route-build/search/route.ts per saltare quel
+// fallback nazionale quando non c'è un'area a restringere il bbox.
+const MAX_PLAUSIBLE_NAME_WORDS = 6
+export function looksLikePlaceName(text: string): boolean {
+  return text.trim().split(/\s+/).filter(Boolean).length <= MAX_PLAUSIBLE_NAME_WORDS
+}
+
 /**
  * Espande un bbox di radiusKm in ogni direzione — usata dal fallback "cerca sentieri nei
  * dintorni" di app/api/route-search-plain/route.ts: il bbox di Nominatim per un paese/frazione o

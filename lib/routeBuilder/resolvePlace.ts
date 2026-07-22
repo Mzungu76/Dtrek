@@ -12,7 +12,7 @@
 //     luogo (che rientra poi nello stesso livello 2 sopra) oppure, se la trova da una fonte
 //     affidabile (es. un infobox Wikipedia), una coordinata diretta come scorciatoia.
 import Anthropic from '@anthropic-ai/sdk'
-import { fetchOverpass, resolveAreaBbox, padBbox, ITALY_BBOX } from '@/lib/overpassTrails'
+import { fetchOverpass, resolveAreaBbox, padBbox, ITALY_BBOX, looksLikePlaceName } from '@/lib/overpassTrails'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { HIKER_ENVIRONMENT_PREFS, type HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
 import type { RouteType } from './loopBuilder'
@@ -267,13 +267,17 @@ export async function interpretSearchRequest(query: string, apiKey: string, mode
 /**
  * Risolve un nome libero a una coordinata. Se la query è nella forma "nome, area" (es. "Cascata
  * del Picchio, Blera"), l'area viene usata per restringere il bbox della ricerca Overpass di
- * fallback quando Nominatim non trova nulla per la query intera. Senza una virgola (es. solo
- * "Cascata del Picchio"), la ricerca Overpass gira comunque, ma sull'intero bbox Italia (stesso
+ * fallback quando Nominatim non trova nulla per la query intera. Senza una virgola ma con un testo
+ * che è ancora un plausibile nome di luogo (es. solo "Cascata del Picchio", vedi
+ * looksLikePlaceName), la ricerca Overpass gira comunque, ma sull'intero bbox Italia (stesso
  * fallback di searchHikingRoutesByName in lib/overpassTrails.ts) — più lenta ma non saltata:
- * l'utente spesso conosce il nome del luogo ma non l'area amministrativa esatta in cui ricade.
- * Se anche questo fallisce e il chiamante passa `ai` (chiave Claude personale dell'utente — mai la
- * condivisa, vedi resolveViaAI), tenta un terzo livello con ricerca web. Ritorna null se nessuna
- * fonte trova un risultato.
+ * l'utente spesso conosce il nome del luogo ma non l'area amministrativa esatta in cui ricade. Se
+ * invece il testo è una frase libera troppo lunga per essere un nome (es. una descrizione di
+ * percorso passata dal wizard di ricerca unificato), quel fallback nazionale viene saltato — non
+ * ha senso far girare un regex su tutta Italia su una frase, e costerebbe una query Overpass
+ * pesante per nulla (stessa categoria di 504 già vista in passato). Se anche questo fallisce e il
+ * chiamante passa `ai` (chiave Claude personale dell'utente — mai la condivisa, vedi resolveViaAI),
+ * tenta un terzo livello con ricerca web. Ritorna null se nessuna fonte trova un risultato.
  */
 export async function resolvePlaceName(
   query: string,
@@ -290,9 +294,9 @@ export async function resolvePlaceName(
   const nameQuery = parts.length >= 2 ? parts.slice(0, -1).join(' ') : trimmed
 
   const areaBbox = areaHint ? await resolveAreaBbox(areaHint) : null
-  const bbox = areaBbox ? padBbox(areaBbox, 15) : ITALY_BBOX
+  const bbox = areaBbox ? padBbox(areaBbox, 15) : (looksLikePlaceName(nameQuery) ? ITALY_BBOX : null)
 
-  const viaOverpass = await resolveViaOverpassByName(nameQuery, bbox)
+  const viaOverpass = bbox ? await resolveViaOverpassByName(nameQuery, bbox) : null
   if (viaOverpass) return viaOverpass
 
   if (ai) return resolveViaAI(trimmed, ai.apiKey, ai.model)
