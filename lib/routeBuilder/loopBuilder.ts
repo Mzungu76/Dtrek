@@ -14,8 +14,10 @@ const EARTH_RADIUS_M = 6371000
 const CANDIDATE_BEARINGS_DEG = [0, 60, 120, 180, 240, 300]
 // Tolleranza sulla lunghezza target: un candidato la cui lunghezza reale si discosta oltre questa
 // percentuale dal target richiesto viene scartato — meglio pochi candidati affidabili che uno
-// fuori misura pur di riempire la lista.
-const LENGTH_TOLERANCE = 0.25
+// fuori misura pur di riempire la lista. Anche con il punto lontano agganciato correttamente
+// (vedi FAR_NODE_SNAP_THRESHOLD_M sotto), la distanza reale sui sentieri diverge dalla linea retta
+// per via di tornanti/aggiramenti — 0.3 lascia margine per questo senza essere permissiva a vuoto.
+const LENGTH_TOLERANCE = 0.3
 // Moltiplicatore di penalità sugli archi già usati nell'andata quando si cerca il ritorno di un
 // anello: abbastanza alto da farli evitare se esiste un'alternativa reale, non così alto da
 // rendere il grafo instabile se quella è l'unica via percorribile (rete rada).
@@ -23,6 +25,14 @@ const REUSED_EDGE_PENALTY = 6
 // Due candidati che condividono più di questa frazione di nodi sono considerati "lo stesso
 // percorso" — si tiene solo il migliore dei due invece di proporli entrambi.
 const DEDUPE_NODE_OVERLAP = 0.6
+// Raggio massimo entro cui agganciare il "punto lontano" calcolato per bearing a un nodo reale
+// della rete. Deve restare piccolo rispetto alla lunghezza target: usare targetDistanceM/2 (come
+// in una versione precedente) accettava un nodo fino a metà dell'intera lunghezza target di
+// distanza dal punto ideale, cioè un nodo praticamente ovunque nel bbox — il percorso risultante
+// finiva quasi sempre fuori dalla tolleranza di lunghezza e veniva scartato, facendo fallire la
+// generazione quasi ogni volta. Un raggio fisso e contenuto mantiene il punto agganciato vicino a
+// dove dovrebbe stare geometricamente.
+const FAR_NODE_SNAP_THRESHOLD_M = 1200
 
 export type RouteType = 'anello' | 'andata_ritorno'
 
@@ -195,7 +205,7 @@ export function generateOutAndBackCandidates(
 
   for (const bearingDeg of CANDIDATE_BEARINGS_DEG) {
     const far = destinationPoint(start.lat, start.lon, bearingDeg, targetDistanceM / 2)
-    const farNode = nearestGraphNode(network, far.lat, far.lon, targetDistanceM / 2)
+    const farNode = nearestGraphNode(network, far.lat, far.lon, FAR_NODE_SNAP_THRESHOLD_M)
     if (!farNode) continue
 
     const outPath = dijkstra(network, startNodeId, farNode.nodeId)
@@ -229,7 +239,7 @@ export function generateLoopCandidates(
 
   for (const bearingDeg of CANDIDATE_BEARINGS_DEG) {
     const far = destinationPoint(start.lat, start.lon, bearingDeg, targetDistanceM / 2)
-    const farNode = nearestGraphNode(network, far.lat, far.lon, targetDistanceM / 2)
+    const farNode = nearestGraphNode(network, far.lat, far.lon, FAR_NODE_SNAP_THRESHOLD_M)
     if (!farNode) continue
 
     const outPath = dijkstra(network, startNodeId, farNode.nodeId)
