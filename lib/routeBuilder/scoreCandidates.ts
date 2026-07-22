@@ -179,12 +179,14 @@ function buildMatchNote(opts: {
 /**
  * Arricchisce ogni candidato con quota reale (DTM) e POI lungo il tracciato, poi ordina per
  * vicinanza al target di lunghezza/dislivello — i candidati senza copertura DTM vengono scartati
- * (nessun profilo altimetrico affidabile da proporre). Ritorna al più `maxResults` percorsi.
+ * (nessun profilo altimetrico affidabile da proporre). Ritorna al più `maxResults` percorsi —
+ * alzato da 8 a 14 insieme al maxCandidates di lib/routeBuilder/loopBuilder.ts, per il minimo di
+ * 10 risultati per ricerca (costruiti+trovati insieme) imposto dall'utente.
  */
 export async function scoreAndEnrichCandidates(
   raw: RouteCandidate[],
   opts: ScoreOptions,
-  maxResults = 8,
+  maxResults = 14,
 ): Promise<ScoredCandidate[]> {
   // Una sola query per l'intera richiesta (non per candidato) — condivisa da tutti i candidati
   // valutati qui sotto.

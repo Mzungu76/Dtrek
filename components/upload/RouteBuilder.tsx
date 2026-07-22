@@ -40,6 +40,11 @@ interface GeocodeResult { lat: string; lon: string; display_name: string }
 
 const MIN_KM = 1
 const MAX_KM = 20
+// Obiettivo minimo di risultati per ricerca (costruiti + trovati insieme) imposto dall'utente:
+// se la ricerca trova meno percorsi già esistenti di questo numero, il wizard costruisce sempre
+// anche percorsi algoritmici per completare — mai fermarsi a 1 solo risultato quando è possibile
+// costruire di più (vedi runSearch).
+const MIN_TOTAL_RESULTS = 10
 // Cap sui candidati "trovati" dalla chat di Giulia (Livello 2) da tentare di risolvere con una
 // traccia reale prima di mostrarli — stesso principio del cap lato server per i livelli 0/1 (vedi
 // app/api/route-build/search/route.ts), qui applicato lato client perché la chat è conversazionale.
@@ -239,13 +244,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // tipo e sempre con una traccia reale.
   const [results, setResults] = useState<ResultItem[]>([])
   const [resultsMessage, setResultsMessage] = useState('')
-  // Parallelo a `results` (stessa lunghezza/indice) — null per le voci 'found' (il punteggio di un
-  // percorso trovato si calcola solo per il selezionato, vedi confirmScore sotto).
+  // Parallelo a `results` (stessa lunghezza/indice) — calcolato per ogni candidato, costruito o
+  // trovato, non appena arriva (vedi effetto sotto) — riusato anche in "Conferma" via
+  // `selectedIndex`, nessun ricalcolo separato lì.
   const [scores, setScores] = useState<(CandidateScorePreview | null)[]>([])
 
   const [selected, setSelected] = useState<ResultItem | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const [confirmScore, setConfirmScore] = useState<CandidateScorePreview | null>(null)
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
   const [saving, setSaving] = useState(false)
@@ -270,20 +275,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       .catch(() => {})
   }, [defaultsLoaded])
 
-  // Calcola Trail Score + Sicurezza per ogni candidato "costruito" non appena arrivano i risultati
-  // — stessa pipeline usata per un percorso già salvato (computeCtsCore/computeSafetyCore, vedi
-  // lib/computeCtsForHike.ts e lib/computeSafetyForHike.ts), qui su candidati non ancora salvati. I
-  // candidati "trovati" restano null qui (vedi commento sulla dichiarazione di `scores`).
+  // Calcola Trail Score + Sicurezza per ogni candidato, costruito o trovato, non appena arrivano i
+  // risultati — stessa pipeline usata per un percorso già salvato (computeCtsCore/computeSafetyCore,
+  // vedi lib/computeCtsForHike.ts e lib/computeSafetyForHike.ts). Un candidato "trovato" ha sempre
+  // una traccia reale già risolta (vedi FoundRouteItem) prima di finire in questa lista, quindi il
+  // calcolo può partire subito qui, senza dover attendere la selezione — stesso indice di `results`,
+  // riusato anche nello step "Conferma" invece di un calcolo separato lì.
   useEffect(() => {
-    const hasBuilt = results.some(r => r.kind === 'built')
-    if (!hasBuilt) { setScores(results.map(() => null)); return }
-    setScores(results.map(r => (r.kind === 'built' ? { total: null, safety: null, vetoed: false, loading: true } : null)))
+    if (results.length === 0) { setScores([]); return }
+    setScores(results.map(() => ({ total: null, safety: null, vetoed: false, loading: true })))
     results.forEach((r, i) => {
-      if (r.kind !== 'built') return
-      const c = r.data
+      const hikeForScore = r.kind === 'built' ? r.data : r.data.track
       Promise.all([
-        computeCtsCore(c).catch(() => null),
-        computeSafetyCore(c).catch(() => null),
+        computeCtsCore(hikeForScore).catch(() => null),
+        computeSafetyCore(hikeForScore).catch(() => null),
       ]).then(([cts, safety]) => {
         const v2 = computeTrailScoreV2({ cts: cts?.ts ?? null, safety: safety?.overall ?? null })
         setScores(prev => {
@@ -301,39 +306,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results])
-
-  // Trail Score + Sicurezza per un candidato "trovato" selezionato — la traccia è già garantita
-  // reale (vedi FoundRouteItem), quindi il calcolo può partire subito, non deve attendere una
-  // risoluzione separata come prima di questo giro.
-  useEffect(() => {
-    if (!selected || selected.kind !== 'found') { setConfirmScore(null); return }
-    const track = selected.data.track
-    if (!track.trackPoints.length) { setConfirmScore(null); return }
-    setConfirmScore({ total: null, safety: null, vetoed: false, loading: true })
-    const hikeForScore = {
-      trackPoints: track.trackPoints,
-      distanceMeters: track.distanceMeters,
-      elevationGain: track.elevationGain,
-      elevationLoss: track.elevationLoss,
-      altitudeMax: track.altitudeMax,
-      altitudeMin: track.altitudeMin,
-      estimatedTimeSeconds: track.estimatedTimeSeconds,
-      routePolyline: track.routePolyline,
-    }
-    Promise.all([
-      computeCtsCore(hikeForScore).catch(() => null),
-      computeSafetyCore(hikeForScore).catch(() => null),
-    ]).then(([cts, safety]) => {
-      const v2 = computeTrailScoreV2({ cts: cts?.ts ?? null, safety: safety?.overall ?? null })
-      setConfirmScore({
-        total: v2?.score ?? null,
-        safety: safety ? { overall: safety.overall, color: safety.color, label: safety.label } : null,
-        vetoed: v2?.breakdown.vetoed ?? false,
-        loading: false,
-      })
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected])
 
   // Usato solo dal campo destinazione (step "Parametri") — risoluzione di un singolo luogo per
   // nome, non una ricerca di percorso: invariato rispetto a prima di questo giro.
@@ -398,9 +370,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         setLon(data.place.lon)
         setQuery(data.place.displayName)
       }
+      // Valori effettivi da usare SUBITO (per l'eventuale costruzione automatica qui sotto): non
+      // si può leggere lo stato appena impostato con le setXxx sopra/sotto, gli aggiornamenti sono
+      // asincroni e non ancora rispecchiati nelle variabili di chiusura di questa stessa chiamata.
+      const effectiveRouteType: RouteType = data.prefill?.routeType ?? routeType
+      const effectiveDistanceKm = typeof data.prefill?.targetDistanceKm === 'number'
+        ? Math.min(MAX_KM, Math.max(MIN_KM, data.prefill.targetDistanceKm)) : targetDistanceKm
+      const effectiveElevationM = typeof data.prefill?.targetElevationM === 'number'
+        ? data.prefill.targetElevationM : (targetElevationM.trim() ? Number(targetElevationM) : null)
+      const effectiveDesiredPoiTypes = Array.isArray(data.prefill?.desiredPoiTypes) ? data.prefill.desiredPoiTypes : desiredPoiTypes
+      const effectiveEnvironmentPrefs = Array.isArray(data.prefill?.environmentPrefs) ? data.prefill.environmentPrefs : environmentPrefs
+
       if (data.prefill) {
         if (data.prefill.routeType) setRouteType(data.prefill.routeType)
-        if (typeof data.prefill.targetDistanceKm === 'number') setTargetDistanceKm(Math.min(MAX_KM, Math.max(MIN_KM, data.prefill.targetDistanceKm)))
+        if (typeof data.prefill.targetDistanceKm === 'number') setTargetDistanceKm(effectiveDistanceKm)
         if (typeof data.prefill.targetElevationM === 'number') setTargetElevationM(String(data.prefill.targetElevationM))
         if (Array.isArray(data.prefill.desiredPoiTypes)) setDesiredPoiTypes(data.prefill.desiredPoiTypes)
         if (Array.isArray(data.prefill.environmentPrefs)) setEnvironmentPrefs(data.prefill.environmentPrefs)
@@ -421,11 +404,32 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         setResults(prev => [...prev.filter(x => x.kind !== 'found'), ...items])
       }
 
+      // Obiettivo minimo di risultati (vedi MIN_TOTAL_RESULTS): la ricerca da sola può trovare
+      // pochi (anche un solo) percorso già esistente — costruire sempre anche algoritmicamente per
+      // completare fino al minimo, che si sia trovato qualcosa o no, non solo quando non si trova
+      // nulla. Serve un punto di partenza noto: quello appena risolto da questa ricerca, o quello
+      // già impostato in precedenza (tocco sulla mappa, ricerca precedente).
+      const buildFromLat = data.place?.lat ?? lat
+      const buildFromLon = data.place?.lon ?? lon
+      let builtCount = 0
+      if (buildFromLat != null && buildFromLon != null && found.length < MIN_TOTAL_RESULTS) {
+        builtCount = await runBuild({
+          lat: buildFromLat, lon: buildFromLon, routeType: effectiveRouteType, targetDistanceKm: effectiveDistanceKm,
+          targetElevationM: effectiveElevationM, environmentPrefs: effectiveEnvironmentPrefs, desiredPoiTypes: effectiveDesiredPoiTypes,
+          destinationLat: null, destinationLon: null,
+        })
+      }
+
       if (data.escalateToAi && useAi) {
+        // La chat di Giulia (Livello 2) resta da mostrare — non si naviga via dallo step "Partenza"
+        // finché è ancora in attesa, altrimenti sparirebbe. I costruiti (se presenti) sono comunque
+        // già in `results`, visibili non appena si prosegue.
         setGiuliaSeed(query.trim())
         setShowGiulia(true)
-      } else if (!data.place && found.length === 0) {
+      } else if (found.length + builtCount === 0) {
         setErrorMsg('Nessun risultato — prova a scrivere diversamente o tocca la mappa.')
+      } else {
+        setStep('results')
       }
     } catch {
       setErrorMsg('Errore di rete, riprova.')
@@ -490,8 +494,24 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function generate() {
-    if (lat == null || lon == null || generating) return
+  interface BuildParams {
+    lat: number
+    lon: number
+    routeType: RouteType
+    targetDistanceKm: number
+    targetElevationM: number | null
+    environmentPrefs: HikerEnvironmentPrefKey[]
+    desiredPoiTypes: PoiType[]
+    destinationLat: number | null
+    destinationLon: number | null
+  }
+
+  /** Nucleo condiviso della costruzione algoritmica — usato sia dal click esplicito "Genera
+   *  percorsi" sia dall'innesco automatico in runSearch() (vedi MIN_TOTAL_RESULTS): quest'ultimo
+   *  passa i parametri espliciti invece di leggerli dallo stato, perché potrebbero essere appena
+   *  stati precompilati dall'AI (data.prefill) e non ancora rispecchiati nello stato del componente
+   *  al momento della chiamata. Ritorna il numero di percorsi costruiti ottenuti (0 se falliti). */
+  async function runBuild(params: BuildParams): Promise<number> {
     setGenerating(true)
     setErrorMsg('')
     setResultsMessage('')
@@ -499,29 +519,36 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const res = await fetch('/api/route-build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lat, lon, routeType, targetDistanceKm,
-          targetElevationM: targetElevationM.trim() ? Number(targetElevationM) : null,
-          environmentPrefs,
-          desiredPoiTypes,
-          destinationLat: routeType !== 'anello' ? destLat : null,
-          destinationLon: routeType !== 'anello' ? destLon : null,
-        }),
+        body: JSON.stringify(params),
       })
       const data = await res.json()
       if (!res.ok) {
         setErrorMsg(data.message || data.error || 'Generazione non riuscita, riprova.')
-        return
+        return 0
       }
       const built = (data.candidates ?? []) as BuiltCandidate[]
       setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...built.map(d => ({ kind: 'built' as const, data: d }))])
       setResultsMessage(data.message ?? '')
-      setStep('results')
+      return built.length
     } catch {
       setErrorMsg('Errore di rete, riprova.')
+      return 0
     } finally {
       setGenerating(false)
     }
+  }
+
+  async function generate() {
+    if (lat == null || lon == null || generating) return
+    const count = await runBuild({
+      lat, lon, routeType, targetDistanceKm,
+      targetElevationM: targetElevationM.trim() ? Number(targetElevationM) : null,
+      environmentPrefs,
+      desiredPoiTypes,
+      destinationLat: routeType !== 'anello' ? destLat : null,
+      destinationLon: routeType !== 'anello' ? destLon : null,
+    })
+    if (count > 0) setStep('results')
   }
 
   function chooseCandidate(item: ResultItem, i: number) {
@@ -560,6 +587,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   function renderFoundCard(data: FoundRouteItem, i: number) {
     const vs = data.comfortVerdict ? verdictStyle(data.comfortVerdict) : null
     const track = data.track
+    const scorePreview = scores[i]
     return (
       <div key={`found-${i}`} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
         <TrailPreviewMap polyline={track.routePolyline} height="180px" />
@@ -573,23 +601,35 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             {data.zone && <p className="text-xs text-stone-400 mt-0.5">{data.zone}</p>}
           </div>
 
-          <div className="flex gap-4 text-sm">
-            <div>
-              <span className="font-semibold text-stone-800">{(track.distanceMeters / 1000).toFixed(1)} km</span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
-            </div>
-            <div>
-              <span className="font-semibold text-stone-800 flex items-center gap-0.5">
-                <TrendingUp className="w-3 h-3" />{track.hasElevation ? `${Math.round(track.elevationGain)} m` : '—'}
-              </span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
-            </div>
-            {data.difficulty && (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex gap-4 text-sm">
               <div>
-                <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Difficoltà</p>
+                <span className="font-semibold text-stone-800">{(track.distanceMeters / 1000).toFixed(1)} km</span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
               </div>
-            )}
+              <div>
+                <span className="font-semibold text-stone-800 flex items-center gap-0.5">
+                  <TrendingUp className="w-3 h-3" />{track.hasElevation ? `${Math.round(track.elevationGain)} m` : '—'}
+                </span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
+              </div>
+              {data.difficulty && (
+                <div>
+                  <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
+                  <p className="text-[10px] uppercase tracking-wide text-stone-400">Difficoltà</p>
+                </div>
+              )}
+            </div>
+            <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
+              <TrailScoreGaugeBadge
+                total={scorePreview?.total ?? null}
+                safety={scorePreview?.safety ?? null}
+                loading={scorePreview?.loading ?? true}
+                vetoed={scorePreview?.vetoed}
+                size={52}
+                showLabel={false}
+              />
+            </div>
           </div>
 
           {vs && (
@@ -918,7 +958,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const foundData = selected.kind === 'found' ? selected.data : null
     const builtData = selected.kind === 'built' ? selected.data : null
     const vs = foundData?.comfortVerdict ? verdictStyle(foundData.comfortVerdict) : null
-    const builtScore = selectedIndex != null ? scores[selectedIndex] : null
+    const selectedScore = selectedIndex != null ? scores[selectedIndex] : null
 
     return (
       <div className="space-y-4">
@@ -957,10 +997,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 </div>
                 <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
                   <TrailScoreGaugeBadge
-                    total={builtScore?.total ?? null}
-                    safety={builtScore?.safety ?? null}
-                    loading={builtScore?.loading ?? true}
-                    vetoed={builtScore?.vetoed}
+                    total={selectedScore?.total ?? null}
+                    safety={selectedScore?.safety ?? null}
+                    loading={selectedScore?.loading ?? true}
+                    vetoed={selectedScore?.vetoed}
                     size={52}
                     showLabel={false}
                   />
@@ -992,10 +1032,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 </div>
                 <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
                   <TrailScoreGaugeBadge
-                    total={confirmScore?.total ?? null}
-                    safety={confirmScore?.safety ?? null}
-                    loading={confirmScore?.loading ?? false}
-                    vetoed={confirmScore?.vetoed}
+                    total={selectedScore?.total ?? null}
+                    safety={selectedScore?.safety ?? null}
+                    loading={selectedScore?.loading ?? true}
+                    vetoed={selectedScore?.vetoed}
                     size={52}
                     showLabel={false}
                   />
