@@ -105,7 +105,24 @@ async function tier0(query: string): Promise<{ place: ResolvedPlace | null; foun
 // Livello 0 (sempre, gratuito) → Livello 1 (solo se il Livello 0 non trova nulla, e solo con AI
 // attiva + chiave personale) → altrimenti `escalateToAi` segnala al client di aprire la chat
 // completa di Giulia (Livello 2, /api/route-search, non gestito qui perché conversazionale).
+//
+// Tutto il corpo gira dentro handlePost/try-catch di POST: senza questa rete di sicurezza
+// un'eccezione imprevista (es. la piattaforma che termina la funzione oltre maxDuration) può
+// risultare in una risposta non-JSON che il client legge come "errore di rete" generico,
+// mascherando la causa reale.
 export async function POST(req: NextRequest) {
+  try {
+    return await handlePost(req)
+  } catch (e) {
+    console.error('[route-build/search] Errore imprevisto:', e)
+    return NextResponse.json(
+      { error: 'Errore interno', message: 'Ricerca non riuscita per un errore interno, riprova.' },
+      { status: 500 },
+    )
+  }
+}
+
+async function handlePost(req: NextRequest): Promise<NextResponse> {
   const { user, authUnavailable, degraded } = await getUserFromRequestDetailed(req)
   if (!user && !degraded) {
     return NextResponse.json(
