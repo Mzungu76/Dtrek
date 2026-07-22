@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { padBbox } from '@/lib/overpassTrails'
+import { haversineM } from '@/lib/geoUtils'
 import { fetchWalkNetwork, nearestGraphNode } from '@/lib/routeBuilder/osmGraph'
-import { generateLoopCandidates, generateOutAndBackCandidates, type RouteType } from '@/lib/routeBuilder/loopBuilder'
+import { generateLoopCandidates, generateOutAndBackCandidates, generateOutAndBackToPoint, type RouteType } from '@/lib/routeBuilder/loopBuilder'
 import { scoreAndEnrichCandidates } from '@/lib/routeBuilder/scoreCandidates'
 import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
 import { sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
+import { POI_META, type PoiType } from '@/lib/overpass'
+
+const VALID_POI_TYPES = new Set(Object.keys(POI_META))
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -60,6 +64,15 @@ interface BuildRequestBody {
   routeType: RouteType
   targetDistanceKm: number
   targetElevationM: number | null
+  // Destinazione esatta (luogo noto risolto per nome, vedi lib/routeBuilder/resolvePlace.ts) —
+  // solo per andata_ritorno: qui la lunghezza è un risultato del percorso reale verso quel punto,
+  // non un vincolo, quindi targetDistanceKm viene ignorato quando presente.
+  destinationLat: number | null
+  destinationLon: number | null
+  // Precompilati dal profilo (GET sopra) ma modificabili per questa singola ricerca — null
+  // significa "non inviato dal client", si ricade sul profilo come faceva già il codice originale.
+  environmentPrefs: ReturnType<typeof sanitizeHikerEnvironmentPrefs> | null
+  desiredPoiTypes: PoiType[]
 }
 
 function parseBody(raw: unknown): BuildRequestBody {
@@ -75,7 +88,19 @@ function parseBody(raw: unknown): BuildRequestBody {
   }
   const targetElevationRaw = Number(body.targetElevationM)
   const targetElevationM = body.targetElevationM != null && Number.isFinite(targetElevationRaw) ? targetElevationRaw : null
-  return { lat, lon, routeType: body.routeType, targetDistanceKm, targetElevationM }
+
+  const destLatRaw = Number(body.destinationLat)
+  const destLonRaw = Number(body.destinationLon)
+  const hasDestination = body.destinationLat != null && body.destinationLon != null && Number.isFinite(destLatRaw) && Number.isFinite(destLonRaw)
+  const destinationLat = hasDestination ? destLatRaw : null
+  const destinationLon = hasDestination ? destLonRaw : null
+
+  const environmentPrefs = Array.isArray(body.environmentPrefs) ? sanitizeHikerEnvironmentPrefs(body.environmentPrefs) : null
+  const desiredPoiTypes = Array.isArray(body.desiredPoiTypes)
+    ? body.desiredPoiTypes.filter((t): t is PoiType => typeof t === 'string' && VALID_POI_TYPES.has(t))
+    : []
+
+  return { lat, lon, routeType: body.routeType, targetDistanceKm, targetElevationM, destinationLat, destinationLon, environmentPrefs, desiredPoiTypes }
 }
 
 export async function POST(req: NextRequest) {
@@ -96,20 +121,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Richiesta non valida' }, { status: 400 })
   }
 
-  let environmentPrefs: ReturnType<typeof sanitizeHikerEnvironmentPrefs> = []
   let concerns: ReturnType<typeof sanitizeHikerConcerns> = []
+  let environmentPrefs = params.environmentPrefs ?? []
   if (user) {
     const profile = await fetchHikerProfile(user.id)
-    environmentPrefs = sanitizeHikerEnvironmentPrefs(profile.environmentPrefs)
     concerns = sanitizeHikerConcerns(profile.concerns)
+    if (params.environmentPrefs == null) environmentPrefs = sanitizeHikerEnvironmentPrefs(profile.environmentPrefs)
   }
 
-  // Raggio del bbox attorno al punto di partenza: un anello/andata-ritorno di L km non cammina in
-  // linea retta, quindi serve margine oltre al semplice L/2 geometrico per la rete effettivamente
-  // interrogata — coperto da un fattore emprico (0.6) invece del minimo teorico (0.5). Tetto
-  // abbassato da 15 a 10 km: oltre, il bbox interrogato via Overpass diventa abbastanza grande da
-  // rischiare di superare il tempo disponibile prima del kill della funzione lato piattaforma.
-  const bboxRadiusKm = Math.min(Math.max(params.targetDistanceKm * 0.6, 2), 10)
+  // La destinazione si applica solo ad andata_ritorno (per un anello si torna comunque al punto di
+  // partenza) — se il client la manda insieme a 'anello' (non dovrebbe succedere con la UI
+  // prevista) viene semplicemente ignorata invece di far fallire la richiesta.
+  const hasDestination = params.routeType === 'andata_ritorno' && params.destinationLat != null && params.destinationLon != null
+
+  // Raggio del bbox attorno al punto di partenza. Senza destinazione: un anello/andata-ritorno di
+  // L km non cammina in linea retta, quindi serve margine oltre al semplice L/2 geometrico per la
+  // rete effettivamente interrogata — coperto da un fattore emprico (0.6) invece del minimo
+  // teorico (0.5). Con destinazione: il raggio deve contenere il punto esatto richiesto, non un
+  // target di lunghezza scelto dall'utente (che qui non è più un vincolo) — si usa la distanza in
+  // linea d'aria verso la destinazione con lo stesso margine. Tetto a 10 km in entrambi i casi:
+  // oltre, il bbox interrogato via Overpass diventa abbastanza grande da rischiare di superare il
+  // tempo disponibile prima del kill della funzione lato piattaforma.
+  const bboxRadiusKm = hasDestination
+    ? Math.min(Math.max(haversineM(params.lat, params.lon, params.destinationLat!, params.destinationLon!) / 1000 * 0.6, 2), 10)
+    : Math.min(Math.max(params.targetDistanceKm * 0.6, 2), 10)
   const bbox = padBbox([params.lat, params.lon, params.lat, params.lon], bboxRadiusKm)
 
   let network
@@ -130,10 +165,27 @@ export async function POST(req: NextRequest) {
     }, { status: 404 })
   }
 
-  const targetDistanceM = params.targetDistanceKm * 1000
-  const rawCandidates = params.routeType === 'anello'
-    ? generateLoopCandidates(network, startNode.nodeId, targetDistanceM)
-    : generateOutAndBackCandidates(network, startNode.nodeId, targetDistanceM)
+  let rawCandidates
+  let targetDistanceM: number
+
+  if (hasDestination) {
+    const destinationCandidate = generateOutAndBackToPoint(network, startNode.nodeId, params.destinationLat!, params.destinationLon!)
+    if (!destinationCandidate) {
+      return NextResponse.json({
+        error: 'destination_unreachable',
+        message: 'La destinazione indicata non è abbastanza vicina a sentieri o strade percorribili, o non è raggiungibile dal punto di partenza — prova un\'altra destinazione.',
+      }, { status: 404 })
+    }
+    // La lunghezza reale ottenuta diventa il target per il punteggio di affinità — qui non c'è un
+    // vincolo di lunghezza da rispettare, quindi non va penalizzato l'unico risultato possibile.
+    targetDistanceM = destinationCandidate.distanceM
+    rawCandidates = [destinationCandidate]
+  } else {
+    targetDistanceM = params.targetDistanceKm * 1000
+    rawCandidates = params.routeType === 'anello'
+      ? generateLoopCandidates(network, startNode.nodeId, targetDistanceM)
+      : generateOutAndBackCandidates(network, startNode.nodeId, targetDistanceM)
+  }
 
   console.log(`[route-build] candidati grezzi entro tolleranza: ${rawCandidates.length}`)
 
@@ -151,6 +203,8 @@ export async function POST(req: NextRequest) {
       targetElevationM: params.targetElevationM,
       environmentPrefs,
       concerns,
+      desiredPoiTypes: params.desiredPoiTypes,
+      bbox,
     })
   } catch (e) {
     console.error('[route-build] scoreAndEnrichCandidates failed:', e)
