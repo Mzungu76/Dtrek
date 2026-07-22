@@ -6,12 +6,16 @@ import { fetchOverpass } from '@/lib/overpassTrails'
 import { haversineM } from '@/lib/geoUtils'
 
 // Tag highway ammessi per un percorso escursionistico: sentieri/tracciati/carrarecce (comprese le
-// "strade bianche", tipicamente track/unclassified). Esclusi deliberatamente sia i tag stradali
-// maggiori (motorway/primary/secondary/trunk) sia residential/service: in un bbox che contiene un
-// paese o una frazione, l'intera rete stradale urbana viene restituita da Overpass insieme ai
-// sentieri, gonfiando enormemente tempo di risposta e dimensione del grafo per dati che non
-// servono a un percorso escursionistico — causa concreta di un 504 osservato in produzione.
-const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified'
+// "strade bianche", tipicamente track/unclassified) più residential — necessario perché un punto
+// di partenza scelto in un paese (il caso più comune) è spesso collegato ai sentieri veri fuori
+// centro abitato proprio tramite le sue strade residenziali: escluderle del tutto (come in una
+// versione precedente, per contenere il tempo di risposta di Overpass) lasciava il nodo di
+// partenza agganciato a un frammento di rete isolato, senza nessun cammino reale verso nessun
+// altro punto — la generazione falliva sempre, non per dati scarsi ma per grafo disconnesso.
+// `service` resta escluso (accessi/parcheggi interni, numerosissimi e non utili per un percorso
+// escursionistico) insieme ai tag stradali maggiori (motorway/primary/secondary/trunk) e agli
+// accessi privati/vietati.
+const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified|residential'
 
 export interface GraphNode {
   lat: number
