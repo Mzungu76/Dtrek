@@ -15,9 +15,12 @@ interface ChatMessage {
  * che come schermata a sé stante. Stessa identica logica di chat multi-turno (comprese le eventuali
  * domande di chiarimento di Giulia) — solo dimensionato per stare inline in uno step, e senza vista
  * risultati/conferma propria: i candidati trovati vengono passati al chiamante via `onFound`, che li
- * fonde nella lista unica del wizard invece di mostrarli qui.
+ * fonde nella lista unica del wizard invece di mostrarli qui. `initialQuery`, se presente, viene
+ * inviato automaticamente come primo messaggio al mount — questo pannello compare solo come
+ * ultima risorsa (Livello 2), dopo che i livelli gratuiti/economici non hanno trovato nulla per la
+ * stessa query, quindi non ha senso chiedere all'utente di riscriverla.
  */
-export default function GiuliaSearchPanel({ onFound }: { onFound: (candidates: SearchResultCandidate[]) => void }) {
+export default function GiuliaSearchPanel({ onFound, initialQuery }: { onFound: (candidates: SearchResultCandidate[]) => void; initialQuery?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [options, setOptions] = useState<string[]>([])
@@ -27,6 +30,11 @@ export default function GiuliaSearchPanel({ onFound }: { onFound: (candidates: S
 
   const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }) }, [messages, sending])
+
+  useEffect(() => {
+    if (initialQuery?.trim()) send(initialQuery)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function send(text: string) {
     const trimmed = text.trim()

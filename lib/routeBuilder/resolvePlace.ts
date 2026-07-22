@@ -13,6 +13,9 @@
 //     affidabile (es. un infobox Wikipedia), una coordinata diretta come scorciatoia.
 import Anthropic from '@anthropic-ai/sdk'
 import { fetchOverpass, resolveAreaBbox, padBbox, ITALY_BBOX } from '@/lib/overpassTrails'
+import { POI_META, type PoiType } from '@/lib/overpass'
+import { HIKER_ENVIRONMENT_PREFS, type HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
+import type { RouteType } from './loopBuilder'
 
 const NOMINATIM_USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
 
@@ -154,6 +157,109 @@ async function resolveViaAI(query: string, apiKey: string, model: string): Promi
     return null
   } catch (e) {
     console.error('[resolvePlace] resolveViaAI failed:', e)
+    return null
+  }
+}
+
+export interface InterpretedPlace {
+  /** Testo da ripassare tale e quale al Livello 0 (resolvePlaceName + ricerca percorsi esistenti
+   *  non-AI) — non una coordinata: questo livello interpreta, non cerca. */
+  query: string
+}
+
+export interface InterpretedPreferences {
+  routeType?: RouteType
+  targetDistanceKm?: number
+  targetElevationM?: number
+  desiredPoiTypes?: PoiType[]
+  environmentPrefs?: HikerEnvironmentPrefKey[]
+}
+
+export interface InterpretedRequest {
+  /** Uno o più luoghi/zone candidati — plurale perché una richiesta vaga ("un anello con una
+   *  cascata vicino Soriano") può ammettere più interpretazioni valide, non una sola. */
+  places: InterpretedPlace[]
+  prefs: InterpretedPreferences
+}
+
+const INTERPRET_LUOGHI_RE = /\[luoghi\]([\s\S]*?)\[\/luoghi\]/
+const INTERPRET_PREFS_RE = /\[preferenze\]([\s\S]*?)\[\/preferenze\]/
+
+function buildInterpretSystemPrompt(): string {
+  const poiTypesList = Object.keys(POI_META).join(', ')
+  const envPrefsList = HIKER_ENVIRONMENT_PREFS.map(p => p.key).join(', ')
+  return `Sei un assistente che interpreta una richiesta di ricerca percorso escursionistico scritta in italiano da un utente dell'app Dtrek, PRIMA che venga cercata su OpenStreetMap — il tuo compito è capire cosa intende, NON cercare nulla: non hai accesso alla ricerca web in questo passaggio.
+
+Estrai:
+1. Uno o più nomi di luogo/percorso da cercare — una feature specifica (es. "Cascata del Picchio, Blera") o una zona/comune più ampia se non c'è un punto specifico (es. "Monti Cimini, Soriano nel Cimino"). Nella forma "nome, area" quando possibile.
+2. Le preferenze di percorso desumibili dal testo, SOLO se esplicite o chiaramente implicite — non inventare valori altrimenti:
+   - routeType: uno tra "anello", "andata_ritorno", "solo_andata" (solo_andata = punto A a punto B, senza tornare indietro)
+   - targetDistanceKm: numero, se una lunghezza è indicata
+   - targetElevationM: numero, se un dislivello è indicato
+   - desiredPoiTypes: array, solo valori tra: ${poiTypesList}
+   - environmentPrefs: array, solo valori tra: ${envPrefsList}
+
+Rispondi SOLO in questo formato, senza altro testo:
+[luoghi]primo luogo o zona|secondo luogo o zona (se pertinente)[/luoghi]
+[preferenze]{"routeType":"...","targetDistanceKm":NUM,"targetElevationM":NUM,"desiredPoiTypes":[...],"environmentPrefs":[...]}[/preferenze]
+
+Ometti dal JSON delle preferenze ogni campo non desumibile dal testo (non usare null, ometti la chiave). Se il testo non permette di identificare NESSUN luogo o zona, rispondi solo [nessuno][/nessuno].`
+}
+
+/**
+ * Primo livello AI (economico: nessun tool di ricerca web, solo interpretazione del testo già
+ * scritto dall'utente) — usato SOLO quando il Livello 0 (Nominatim/Overpass, non-AI) non trova
+ * nulla per il testo originale. Individua uno o più luoghi/zone da ripassare esattamente al
+ * Livello 0 (mai ricorsivamente a questo stesso livello o al Livello 2 di ricerca web) più le
+ * preferenze di percorso desumibili dal testo originale (vedi app/api/route-build/search/route.ts).
+ * Stessa regola del terzo livello di resolvePlaceName: mai la chiave condivisa di emergenza, solo
+ * quella personale dell'utente.
+ */
+export async function interpretSearchRequest(query: string, apiKey: string, model: string): Promise<InterpretedRequest | null> {
+  try {
+    const client = new Anthropic({ apiKey })
+    const response = await client.messages.create({
+      model,
+      max_tokens: 512,
+      system: buildInterpretSystemPrompt(),
+      messages: [{ role: 'user', content: query }],
+    })
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+
+    const luoghiMatch = INTERPRET_LUOGHI_RE.exec(text)
+    if (!luoghiMatch) return null
+    const places = luoghiMatch[1].split('|').map(s => s.trim()).filter(Boolean).map(q => ({ query: q }))
+    if (places.length === 0) return null
+
+    const prefs: InterpretedPreferences = {}
+    const prefsMatch = INTERPRET_PREFS_RE.exec(text)
+    if (prefsMatch) {
+      try {
+        const parsed = JSON.parse(prefsMatch[1]) as Record<string, unknown>
+        if (parsed.routeType === 'anello' || parsed.routeType === 'andata_ritorno' || parsed.routeType === 'solo_andata') {
+          prefs.routeType = parsed.routeType
+        }
+        if (typeof parsed.targetDistanceKm === 'number') prefs.targetDistanceKm = parsed.targetDistanceKm
+        if (typeof parsed.targetElevationM === 'number') prefs.targetElevationM = parsed.targetElevationM
+        if (Array.isArray(parsed.desiredPoiTypes)) {
+          const validPoiTypes = new Set(Object.keys(POI_META))
+          prefs.desiredPoiTypes = parsed.desiredPoiTypes.filter((t): t is PoiType => typeof t === 'string' && validPoiTypes.has(t))
+        }
+        if (Array.isArray(parsed.environmentPrefs)) {
+          const validEnvPrefs = new Set<string>(HIKER_ENVIRONMENT_PREFS.map(p => p.key))
+          prefs.environmentPrefs = parsed.environmentPrefs.filter((k): k is HikerEnvironmentPrefKey => typeof k === 'string' && validEnvPrefs.has(k))
+        }
+      } catch {
+        // preferenze malformate — prosegue solo con i luoghi, nessuna precompilazione
+      }
+    }
+
+    return { places, prefs }
+  } catch (e) {
+    console.error('[resolvePlace] interpretSearchRequest failed:', e)
     return null
   }
 }

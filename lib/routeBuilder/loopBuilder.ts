@@ -33,7 +33,7 @@ const NUM_DIRECTION_BUCKETS = 10
 // percorso" — si tiene solo il migliore dei due invece di proporli entrambi.
 const DEDUPE_NODE_OVERLAP = 0.6
 
-export type RouteType = 'anello' | 'andata_ritorno'
+export type RouteType = 'anello' | 'andata_ritorno' | 'solo_andata'
 
 export interface RouteCandidate {
   type: RouteType
@@ -258,6 +258,35 @@ export function generateOutAndBackCandidates(
   return dedupeCandidates(candidates)
 }
 
+/** Genera candidati "solo andata" (punto A → punto B, nessun ritorno): stesso schema di
+ *  generateOutAndBackCandidates ma senza raddoppiare il tratto — targetDistanceM qui è già la
+ *  distanza di un solo ramo, non va dimezzata come per l'andata-e-ritorno. */
+export function generateOneWayCandidates(
+  network: WalkNetwork,
+  startNodeId: number,
+  targetDistanceM: number,
+  maxCandidates = 8,
+): RouteCandidate[] {
+  const start = network.nodes.get(startNodeId)
+  if (!start) return []
+
+  const { dist, prev } = dijkstraAll(network, startNodeId)
+  logReachDiagnostics(dist, network.nodes.size, targetDistanceM)
+  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM, maxCandidates)
+
+  const candidates: (RouteCandidate & { nodeSet: Set<number> })[] = []
+  for (const { nodeId, distanceM } of picked) {
+    const outPath = reconstructPath(prev, startNodeId, nodeId)
+    if (!outPath) continue
+    const polyline = pathToPolyline(network, outPath)
+    const bearingDeg = bearingFromStart(start, network.nodes.get(nodeId)!)
+    candidates.push({ type: 'solo_andata', polyline, distanceM, bearingDeg, nodeSet: new Set(outPath) })
+  }
+
+  candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
+  return dedupeCandidates(candidates)
+}
+
 /** Genera candidati ad anello: verso un nodo la cui distanza reale è vicina a metà della lunghezza target, ritorno per una via diversa quando possibile. */
 export function generateLoopCandidates(
   network: WalkNetwork,
@@ -306,11 +335,12 @@ export function generateLoopCandidates(
 const DESTINATION_SNAP_THRESHOLD_M = 1500
 
 /**
- * Genera un singolo candidato andata-e-ritorno verso una destinazione ESATTA (un luogo noto
- * risolto per nome, non un target di lunghezza) — nessun filtro di tolleranza sulla lunghezza,
- * qui la distanza è un risultato del percorso reale verso quel punto, non un vincolo da
- * rispettare. Ritorna null se la destinazione non è abbastanza vicina alla rete percorribile, o se
- * non è raggiungibile dal punto di partenza nello stesso bbox.
+ * Genera un singolo candidato verso una destinazione ESATTA (un luogo noto risolto per nome, non
+ * un target di lunghezza) — nessun filtro di tolleranza sulla lunghezza, qui la distanza è un
+ * risultato del percorso reale verso quel punto, non un vincolo da rispettare. Ritorna null se la
+ * destinazione non è abbastanza vicina alla rete percorribile, o se non è raggiungibile dal punto
+ * di partenza nello stesso bbox. `oneWay` sceglie andata-e-ritorno (default, raddoppia il tratto)
+ * o solo andata (un unico ramo, per il RouteType 'solo_andata').
  */
 export function generateOutAndBackToPoint(
   network: WalkNetwork,
@@ -318,6 +348,7 @@ export function generateOutAndBackToPoint(
   destLat: number,
   destLon: number,
   snapThresholdM = DESTINATION_SNAP_THRESHOLD_M,
+  oneWay = false,
 ): RouteCandidate | null {
   const start = network.nodes.get(startNodeId)
   if (!start) return null
@@ -329,10 +360,14 @@ export function generateOutAndBackToPoint(
   const outPath = reconstructPath(prev, startNodeId, destNode.nodeId)
   if (!outPath) return null
 
+  const bearingDeg = bearingFromStart(start, network.nodes.get(destNode.nodeId)!)
+  if (oneWay) {
+    return { type: 'solo_andata', polyline: pathToPolyline(network, outPath), distanceM: pathDistanceM(network, outPath), bearingDeg }
+  }
+
   const backPath = [...outPath].reverse().slice(1)
   const polyline = pathToPolyline(network, [...outPath, ...backPath])
   const distanceM = pathDistanceM(network, outPath) * 2
-  const bearingDeg = bearingFromStart(start, network.nodes.get(destNode.nodeId)!)
 
   return { type: 'andata_ritorno', polyline, distanceM, bearingDeg }
 }
