@@ -12,6 +12,11 @@ export interface HikerProfileBlock {
   experienceLevel: string | null
   concerns: string[]
   environmentPrefs: string[]
+  /** Default per il terzo livello (AI) della risoluzione di un luogo noto nel route builder — vedi
+   *  lib/routeBuilder/resolvePlace.ts. Solo route-build/route.ts lo usa (route-search non ha un
+   *  campo equivalente), letto qui comunque perché entrambi condividono la stessa query su
+   *  user_settings. */
+  routeBuildAiPlaceSearch: boolean
 }
 
 export interface ActivityHistorySummary {
@@ -25,13 +30,14 @@ export interface ActivityHistorySummary {
 export async function fetchHikerProfile(userId: string): Promise<HikerProfileBlock> {
   const { data } = await supabase
     .from('user_settings')
-    .select('hiker_experience_level, hiker_concerns, hiker_environment_prefs')
+    .select('hiker_experience_level, hiker_concerns, hiker_environment_prefs, route_build_ai_place_search')
     .eq('user_id', userId)
     .maybeSingle()
   return {
     experienceLevel: (data?.hiker_experience_level as string | null) ?? null,
     concerns: (data?.hiker_concerns as string[] | null) ?? [],
     environmentPrefs: (data?.hiker_environment_prefs as string[] | null) ?? [],
+    routeBuildAiPlaceSearch: (data?.route_build_ai_place_search as boolean | null) ?? true,
   }
 }
 

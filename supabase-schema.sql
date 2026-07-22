@@ -329,6 +329,14 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_use_history_data BOOLEAN N
 -- web è il motore stesso della funzione, non un extra disattivabile.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_web_search BOOLEAN NOT NULL DEFAULT true;
 
+-- Consenso al terzo livello (AI + ricerca web) della risoluzione di un luogo noto nel route
+-- builder (lib/routeBuilder/resolvePlace.ts) — usato solo quando Nominatim e la ricerca Overpass
+-- per nome non trovano nulla. Default ON/opt-out come gli altri due sopra, ma logicamente separato
+-- (un luogo specifico digitato dall'utente, non l'intera generazione del percorso): disattivarlo
+-- lascia comunque disponibili i primi due livelli, gratuiti. Sovrascrivibile per singola ricerca
+-- nel wizard (vedi components/upload/RouteBuilder.tsx) — questa colonna è solo il default.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS route_build_ai_place_search BOOLEAN NOT NULL DEFAULT true;
+
 -- Lunghezza del testo AI scelta dall'utente per ciascuna sezione della guida (essenziale /
 -- approfondita / molto_approfondita — vedi lib/guideSections.ts's GuideTextLength). JSONB perché
 -- è una mappa sezione→valore, non un elenco come guide_breve_sections. NULL/chiave assente ⇒

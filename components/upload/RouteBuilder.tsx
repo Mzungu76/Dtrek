@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, ChevronRight, Loader2, TrendingUp, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
+  ArrowLeft, ChevronRight, Loader2, TrendingUp, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon, Sparkles,
 } from 'lucide-react'
 import LocationPickerMap from '@/components/LocationPickerMap'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
@@ -82,6 +82,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [environmentPrefs, setEnvironmentPrefs] = useState<HikerEnvironmentPrefKey[]>([])
   const [desiredPoiTypes, setDesiredPoiTypes] = useState<PoiType[]>([])
   const [defaultsLoaded, setDefaultsLoaded] = useState(false)
+  // Terzo livello (AI + ricerca web) della risoluzione di un luogo noto per nome — vedi
+  // lib/routeBuilder/resolvePlace.ts. Parte dal default salvato in profilo (Profilo → AI,
+  // components/profilo/SectionAiPrivacy.tsx) ma resta modificabile per questa singola ricerca,
+  // finché il default non arriva viene assunto acceso (stesso default OFF-to-ON dell'app).
+  const [useAi, setUseAi] = useState(true)
 
   // Destinazione esatta (solo per andata_ritorno) — un luogo noto risolto per nome, usato come
   // destinazione fissa invece di lasciare che l'algoritmo scelga in base a lunghezza/direzione.
@@ -104,11 +109,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
   const [errorMsg, setErrorMsg] = useState('')
 
-  // Precompila lunghezza/dislivello/preferenze dallo storico e dal profilo dell'utente (stesso
-  // segnale usato da Giulia in route-search) al primo ingresso nello step dei parametri — solo un
-  // suggerimento, l'utente resta libero di cambiarlo per questa singola ricerca.
+  // Precompila lunghezza/dislivello/preferenze/interruttore AI dallo storico e dal profilo
+  // dell'utente (stesso segnale usato da Giulia in route-search) — solo un suggerimento, l'utente
+  // resta libero di cambiarlo per questa singola ricerca. Caricato subito al mount (non più solo al
+  // primo ingresso nello step dei parametri) perché l'interruttore AI serve già nello step "start",
+  // dove si cerca il punto di partenza per nome.
   useEffect(() => {
-    if (step !== 'params' || defaultsLoaded) return
+    if (defaultsLoaded) return
     setDefaultsLoaded(true)
     fetch('/api/route-build')
       .then(res => (res.ok ? res.json() : null))
@@ -116,9 +123,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         if (data?.suggestedDistanceKm) setTargetDistanceKm(Math.min(MAX_KM, Math.max(MIN_KM, data.suggestedDistanceKm)))
         if (data?.suggestedElevationM) setTargetElevationM(String(data.suggestedElevationM))
         if (Array.isArray(data?.environmentPrefs)) setEnvironmentPrefs(data.environmentPrefs)
+        if (typeof data?.routeBuildAiPlaceSearch === 'boolean') setUseAi(data.routeBuildAiPlaceSearch)
       })
       .catch(() => {})
-  }, [step, defaultsLoaded])
+  }, [defaultsLoaded])
 
   // Calcola Trail Score + Sicurezza per ogni candidato non appena arrivano i risultati — stessa
   // pipeline usata per un percorso già salvato (computeCtsCore/computeSafetyCore, vedi
@@ -156,8 +164,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
     // Nominatim non ha trovato nulla — prova la risoluzione dedicata (utile per feature naturali
     // locali poco note, es. "Cascata del Picchio, Blera", vedi lib/routeBuilder/resolvePlace.ts).
+    // useAi qui riflette lo stato corrente dell'interruttore (default di profilo, sovrascrivibile
+    // per questa ricerca) — il server prova comunque prima Nominatim/Overpass per nome, l'AI entra
+    // solo come terzo livello quando anche questi falliscono.
     try {
-      const fallbackRes = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(q)}`)
+      const fallbackRes = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(q)}&useAi=${useAi}`)
       const fallbackData = await fallbackRes.json()
       if (fallbackData?.place) {
         return [{ lat: String(fallbackData.place.lat), lon: String(fallbackData.place.lon), display_name: fallbackData.place.displayName }]
@@ -308,6 +319,16 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           </button>
         </div>
 
+        <button
+          type="button"
+          onClick={() => setUseAi(v => !v)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+            useAi ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-500'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" /> Prova con l&apos;AI se non trovo il luogo
+        </button>
+
         {geocodeResults.length > 0 && (
           <div className="space-y-1.5">
             {geocodeResults.map((r, i) => (
@@ -386,6 +407,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                     {destGeocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setUseAi(v => !v)}
+                  className={`mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    useAi ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-500'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Prova con l&apos;AI se non trovo il luogo
+                </button>
                 {destGeocodeResults.length > 0 && (
                   <div className="space-y-1.5 mt-1.5">
                     {destGeocodeResults.map((r, i) => (

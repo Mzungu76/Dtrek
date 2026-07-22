@@ -170,8 +170,10 @@ export async function resolveComuneFromLatLon(lat: number, lon: number): Promise
 }
 
 // Bbox approssimativo dell'Italia — usato come limite quando resolveAreaBbox non ha risolto
-// nulla, per tenere la query Overpass comunque limitata invece che davvero globale.
-const ITALY_BBOX: [number, number, number, number] = [35.2, 6.6, 47.1, 18.6]
+// nulla, per tenere la query Overpass comunque limitata invece che davvero globale. Esportato per
+// lib/routeBuilder/resolvePlace.ts, che lo riusa come stesso fallback quando l'utente cerca un POI
+// per nome senza indicare un'area.
+export const ITALY_BBOX: [number, number, number, number] = [35.2, 6.6, 47.1, 18.6]
 
 /**
  * Espande un bbox di radiusKm in ogni direzione — usata dal fallback "cerca sentieri nei

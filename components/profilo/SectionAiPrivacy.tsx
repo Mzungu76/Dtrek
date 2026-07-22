@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Loader2, ShieldCheck, HeartPulse, History, Radar } from 'lucide-react'
+import { Loader2, ShieldCheck, HeartPulse, History, Radar, Search } from 'lucide-react'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -17,19 +17,24 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   )
 }
 
-/** Consenso all'uso di dati personali/ricerca web nei prompt AI — 3 interruttori separati (dati
- *  fisiologici/biometrici, storico/preferenze, ricerca web), tutti attivi di default (scelta
- *  esplicita dell'utente: default acceso, opt-out). Disattivarli non impedisce l'uso dell'AI, la
- *  rende solo meno personalizzata/aggiornata — vedi app/lib/guide/resolveApiKeyAndSettings.ts per
- *  dove vengono letti. */
+/** Consenso all'uso di dati personali/ricerca web nei prompt AI — 4 interruttori separati (dati
+ *  fisiologici/biometrici, storico/preferenze, ricerca web, ricerca luoghi noti nel route builder),
+ *  tutti attivi di default (scelta esplicita dell'utente: default acceso, opt-out). Disattivarli
+ *  non impedisce l'uso dell'AI, la rende solo meno personalizzata/aggiornata — vedi
+ *  app/lib/guide/resolveApiKeyAndSettings.ts per dove vengono letti i primi tre. Il quarto
+ *  (routeBuildAiPlaceSearch) è solo il default salvato in profilo per il wizard "Costruisci un
+ *  percorso" (components/upload/RouteBuilder.tsx), che può comunque sovrascriverlo per la singola
+ *  ricerca — vedi lib/routeBuilder/resolvePlace.ts. */
 export default function SectionAiPrivacy() {
   const [loading,  setLoading]  = useState(true)
   const [biometric, setBiometric] = useState(true)
   const [history,   setHistory]   = useState(true)
   const [webSearch, setWebSearch] = useState(true)
+  const [routeBuildPlaceSearch, setRouteBuildPlaceSearch] = useState(true)
   const [savingBiometric, setSavingBiometric] = useState(false)
   const [savingHistory,   setSavingHistory]   = useState(false)
   const [savingWebSearch, setSavingWebSearch] = useState(false)
+  const [savingRouteBuildPlaceSearch, setSavingRouteBuildPlaceSearch] = useState(false)
 
   useEffect(() => {
     getUserSettingsCached()
@@ -37,6 +42,7 @@ export default function SectionAiPrivacy() {
         if (typeof d.aiUseBiometricData === 'boolean') setBiometric(d.aiUseBiometricData)
         if (typeof d.aiUseHistoryData === 'boolean') setHistory(d.aiUseHistoryData)
         if (typeof d.aiUseWebSearch === 'boolean') setWebSearch(d.aiUseWebSearch)
+        if (typeof d.routeBuildAiPlaceSearch === 'boolean') setRouteBuildPlaceSearch(d.routeBuildAiPlaceSearch)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -61,6 +67,13 @@ export default function SectionAiPrivacy() {
     setSavingWebSearch(true)
     await updateUserSettings({ aiUseWebSearch: v })
     setSavingWebSearch(false)
+  }
+
+  async function handleRouteBuildPlaceSearchChange(v: boolean) {
+    setRouteBuildPlaceSearch(v)
+    setSavingRouteBuildPlaceSearch(true)
+    await updateUserSettings({ routeBuildAiPlaceSearch: v })
+    setSavingRouteBuildPlaceSearch(false)
   }
 
   return (
@@ -119,6 +132,22 @@ export default function SectionAiPrivacy() {
                 si basa solo sui dati già raccolti dall&apos;app (mappa, punteggi, storico) — resta
                 comunque affidabile, solo senza questo controllo aggiuntivo in tempo reale. Genera più
                 veloce e a costo inferiore.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Toggle checked={routeBuildPlaceSearch} onChange={handleRouteBuildPlaceSearchChange} disabled={savingRouteBuildPlaceSearch} />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-stone-800 flex items-center gap-1.5">
+                <Search className="w-3.5 h-3.5 text-stone-400" /> Ricerca AI di luoghi noti in &quot;Costruisci un percorso&quot;
+              </p>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Quando cerchi un punto di partenza o d&apos;arrivo per nome (es. &quot;Cascata del
+                Picchio&quot;) e le mappe non lo trovano da sole, Giulia prova a identificarlo con una
+                ricerca web, usando la tua chiave Claude personale. Disattivandola, la ricerca resta
+                comunque disponibile sulle mappe, solo senza questo ultimo tentativo. Puoi anche
+                scegliere per la singola ricerca, nel wizard.
               </p>
             </div>
           </div>

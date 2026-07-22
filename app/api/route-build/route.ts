@@ -42,7 +42,10 @@ export async function GET(req: NextRequest) {
   }
 
   if (!user) {
-    return NextResponse.json({ suggestedDistanceKm: null, suggestedElevationM: null, environmentPrefs: [], concerns: [] })
+    return NextResponse.json({
+      suggestedDistanceKm: null, suggestedElevationM: null, environmentPrefs: [], concerns: [],
+      routeBuildAiPlaceSearch: true,
+    })
   }
 
   const [profile, history] = await Promise.all([fetchHikerProfile(user.id), fetchActivitySummary(user.id)])
@@ -51,6 +54,7 @@ export async function GET(req: NextRequest) {
     suggestedElevationM: history.count > 0 ? Math.round(history.avgElevationM) : null,
     environmentPrefs: sanitizeHikerEnvironmentPrefs(profile.environmentPrefs),
     concerns: sanitizeHikerConcerns(profile.concerns),
+    routeBuildAiPlaceSearch: profile.routeBuildAiPlaceSearch,
   })
 }
 

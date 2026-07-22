@@ -65,6 +65,10 @@ export interface UserSettingsData {
   aiUseBiometricData: boolean
   aiUseHistoryData: boolean
   aiUseWebSearch: boolean
+  /** Default per il terzo livello (AI) della risoluzione di un luogo noto nel route builder — vedi
+   *  lib/routeBuilder/resolvePlace.ts e components/upload/RouteBuilder.tsx. Sovrascrivibile per
+   *  singola ricerca nel wizard, questa è solo la scelta di partenza salvata in profilo. */
+  routeBuildAiPlaceSearch: boolean
 }
 
 const ENTITY_TYPE = 'user_settings'
