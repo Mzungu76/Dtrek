@@ -140,14 +140,16 @@ export default function SectionAiPrivacy() {
             <Toggle checked={routeBuildPlaceSearch} onChange={handleRouteBuildPlaceSearchChange} disabled={savingRouteBuildPlaceSearch} />
             <div className="flex-1">
               <p className="text-sm font-medium text-stone-800 flex items-center gap-1.5">
-                <Search className="w-3.5 h-3.5 text-stone-400" /> Ricerca AI di luoghi noti in &quot;Costruisci un percorso&quot;
+                <Search className="w-3.5 h-3.5 text-stone-400" /> Ricerca AI in &quot;Costruisci un percorso&quot;
               </p>
               <p className="text-xs text-stone-500 mt-0.5">
-                Quando cerchi un punto di partenza o d&apos;arrivo per nome (es. &quot;Cascata del
-                Picchio&quot;) e le mappe non lo trovano da sole, Giulia prova a identificarlo con una
-                ricerca web, usando la tua chiave Claude personale. Disattivandola, la ricerca resta
-                comunque disponibile sulle mappe, solo senza questo ultimo tentativo. Puoi anche
-                scegliere per la singola ricerca, nel wizard.
+                Governa due cose nel wizard: quando cerchi un punto di partenza o d&apos;arrivo per
+                nome (es. &quot;Cascata del Picchio&quot;) e le mappe non lo trovano da sole, Giulia
+                prova a identificarlo con una ricerca web; e la ricerca facoltativa di un percorso
+                già documentato che le descrivi a parole, i cui risultati si affiancano a quelli
+                costruiti. Entrambe usano la tua chiave Claude personale. Disattivandola, il wizard
+                resta comunque disponibile — costruisce percorsi sulle mappe, solo senza questi due
+                aiuti AI. Puoi anche scegliere per la singola ricerca, nel wizard.
               </p>
             </div>
           </div>

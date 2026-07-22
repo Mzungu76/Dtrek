@@ -2,12 +2,14 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, ChevronRight, Loader2, TrendingUp, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon, Sparkles,
+  ArrowLeft, ChevronRight, Loader2, TrendingUp, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
+  Sparkles, Route, MapPin, ExternalLink, AlertTriangle, Check,
 } from 'lucide-react'
 import LocationPickerMap from '@/components/LocationPickerMap'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
+import GiuliaSearchPanel from './GiuliaSearchPanel'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
 import { fetchPoisNearTrack } from '@/lib/poisProxy'
@@ -19,6 +21,7 @@ import { HIKER_ENVIRONMENT_PREFS, type HikerEnvironmentPrefKey } from '@/lib/hik
 import { POI_META, type PoiItem, type PoiType } from '@/lib/overpass'
 import { defaultPendingExpiresAt } from './sharedHelpers'
 import type { ScoredCandidate as BuiltCandidate } from '@/lib/routeBuilder/scoreCandidates'
+import type { SearchResultCandidate } from '@/app/api/route-search/route'
 
 type Step = 'start' | 'params' | 'results' | 'confirm'
 type RouteType = 'anello' | 'andata_ritorno'
@@ -38,6 +41,30 @@ interface CandidateScorePreview {
   safety: { overall: number; color: string; label: string } | null
   vetoed: boolean
   loading: boolean
+}
+
+// Un percorso "costruito" (algoritmo, cammina la rete OSM reale) o "trovato" da Giulia (ricerca AI
+// di un percorso già documentato altrove) — fusi nella stessa lista risultati, distinti da un tag,
+// invece di un bivio esclusivo (vedi commento sopra il componente).
+type ResultItem =
+  | { kind: 'built'; data: BuiltCandidate }
+  | { kind: 'found'; data: SearchResultCandidate }
+
+interface ResolvedTrack {
+  trackPoints: PlannedHike['trackPoints']
+  distanceMeters: number
+  elevationGain: number
+  elevationLoss: number
+  altitudeMax: number
+  altitudeMin: number
+  estimatedTimeSeconds: number
+  hasElevation: boolean
+}
+
+function verdictStyle(v: string) {
+  if (v === 'adatto') return { badge: 'bg-forest-50 text-forest-700 border-forest-200', Icon: Check, label: 'Adatto a te' }
+  if (v === 'sconsigliato') return { badge: 'bg-red-50 text-red-700 border-red-200', Icon: XIcon, label: 'Sconsigliato per te' }
+  return { badge: 'bg-amber-50 text-amber-700 border-amber-200', Icon: AlertTriangle, label: 'Da valutare' }
 }
 
 function PoiPreviewRow({ pois }: { pois: PoiItem[] }) {
@@ -60,11 +87,77 @@ function PoiPreviewRow({ pois }: { pois: PoiItem[] }) {
   )
 }
 
+function buildHikeFromBuilt(data: BuiltCandidate, title: string, date: string, pendingExpiresAt: string): PlannedHike {
+  return {
+    id: 'routebuild_' + Date.now().toString(36),
+    title: title.trim() || 'Percorso costruito',
+    plannedDate: date || undefined,
+    createdAt: new Date().toISOString(),
+    distanceMeters: data.distanceMeters,
+    elevationGain: data.elevationGain,
+    elevationLoss: data.elevationLoss,
+    altitudeMax: data.altitudeMax,
+    altitudeMin: data.altitudeMin,
+    estimatedTimeSeconds: data.estimatedTimeSeconds,
+    trackPoints: data.trackPoints,
+    routePolyline: downsamplePolyline(data.trackPoints),
+    pendingExpiresAt,
+  }
+}
+
+function buildHikeFromFound(data: SearchResultCandidate, resolved: ResolvedTrack | null, title: string, date: string, pendingExpiresAt: string): PlannedHike {
+  const distanceMeters = resolved?.distanceMeters || (data.distanceKm ? data.distanceKm * 1000 : 0)
+  const elevationGain = resolved?.elevationGain ?? (data.elevationGainM ?? 0)
+  return {
+    id: 'aisearch_' + Date.now().toString(36),
+    title: title.trim() || data.name,
+    plannedDate: date || undefined,
+    userNotes: data.description,
+    createdAt: new Date().toISOString(),
+    distanceMeters,
+    elevationGain,
+    elevationLoss: resolved?.elevationLoss ?? 0,
+    altitudeMax: resolved?.altitudeMax ?? 0,
+    altitudeMin: resolved?.altitudeMin ?? 0,
+    estimatedTimeSeconds: resolved?.estimatedTimeSeconds || Math.round((distanceMeters / 1000 / 4) * 3600),
+    osmId: data.osmId ?? undefined,
+    trackPoints: resolved?.trackPoints?.length ? resolved.trackPoints : undefined,
+    routePolyline: resolved?.trackPoints?.length ? downsamplePolyline(resolved.trackPoints) : undefined,
+    pendingExpiresAt,
+    // Metadati che sopravvivono solo per un percorso "trovato" — vedi lib/plannedStore.ts.
+    sourceUrl: data.sourceUrl ?? undefined,
+    comfortVerdict: data.comfortVerdict,
+    comfortNote: data.comfortNote,
+    zone: data.zone,
+    difficulty: data.difficulty,
+  }
+}
+
+/** Arricchisce in place con POI/Wikipedia lungo la traccia — condiviso tra i due rami di
+ *  salvataggio (percorso costruito o trovato), stesso blocco che prima era duplicato in
+ *  RouteBuilder.tsx e AiRouteSearch.tsx. */
+async function enrichWithPois(hike: PlannedHike): Promise<void> {
+  const gps = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]) ?? []
+  if (gps.length < 2) return
+  try {
+    const deadline = new Promise<null>(r => setTimeout(() => r(null), 7000))
+    const pois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline])
+    if (pois?.length) {
+      hike.cachedPois = pois
+      const poiWiki = await Promise.race([fetchWikiForNamedPois(pois), deadline])
+      if (poiWiki?.length) hike.cachedPoiWiki = poiWiki
+    }
+  } catch {}
+}
+
 /**
- * Wizard "Costruisci un percorso": a differenza di AiRouteSearch (che cerca un percorso già
- * documentato), qui il percorso viene generato camminando sulla rete OSM reale attorno a un punto
- * di partenza (vedi lib/routeBuilder/*, app/api/route-build/route.ts) — nessuna chiamata AI, puro
- * calcolo su grafo + arricchimento DTM/POI.
+ * Wizard "Costruisci un percorso": due motori fusi in un solo ingresso. Il principale cammina la
+ * rete OSM reale attorno a un punto di partenza per generare un percorso NUOVO su misura di
+ * lunghezza/dislivello/preferenze (lib/routeBuilder/*, app/api/route-build/route.ts) — nessuna
+ * chiamata AI, puro calcolo su grafo + arricchimento DTM/POI. Il secondo, facoltativo e sempre
+ * dietro l'interruttore AI (`useAi`), è la ricerca di Giulia (GiuliaSearchPanel, /api/route-search)
+ * per un percorso GIÀ documentato altrove — non un bivio esclusivo: i risultati dei due motori si
+ * fondono nella stessa lista, distinti da un tag ("Costruito su misura" / "Percorso trovato").
  */
 export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const router = useRouter()
@@ -82,11 +175,16 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [environmentPrefs, setEnvironmentPrefs] = useState<HikerEnvironmentPrefKey[]>([])
   const [desiredPoiTypes, setDesiredPoiTypes] = useState<PoiType[]>([])
   const [defaultsLoaded, setDefaultsLoaded] = useState(false)
-  // Terzo livello (AI + ricerca web) della risoluzione di un luogo noto per nome — vedi
-  // lib/routeBuilder/resolvePlace.ts. Parte dal default salvato in profilo (Profilo → AI,
-  // components/profilo/SectionAiPrivacy.tsx) ma resta modificabile per questa singola ricerca,
-  // finché il default non arriva viene assunto acceso (stesso default OFF-to-ON dell'app).
+  // Interruttore AI unico, condiviso da due usi: (1) terzo livello di risoluzione di un luogo noto
+  // per nome (lib/routeBuilder/resolvePlace.ts, quando Nominatim/Overpass non trovano nulla), e (2)
+  // la ricerca facoltativa di Giulia qui sotto (GiuliaSearchPanel) — se OFF, quest'ultima non parte
+  // proprio: nessuna domanda, nessuna classificazione nascosta. Parte dal default salvato in
+  // profilo (Profilo → AI, components/profilo/SectionAiPrivacy.tsx) ma resta modificabile per
+  // questa singola ricerca, finché il default non arriva viene assunto acceso.
   const [useAi, setUseAi] = useState(true)
+  // Pannello chat di Giulia collassato di default — un'azione facoltativa e scopribile, non una
+  // seconda casella sempre aperta che implicherebbe di doverla compilare per forza.
+  const [giuliaOpen, setGiuliaOpen] = useState(false)
 
   // Destinazione esatta (solo per andata_ritorno) — un luogo noto risolto per nome, usato come
   // destinazione fissa invece di lasciare che l'algoritmo scelga in base a lunghezza/direzione.
@@ -98,11 +196,21 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [destDisplayName, setDestDisplayName] = useState('')
 
   const [generating, setGenerating] = useState(false)
-  const [candidates, setCandidates] = useState<BuiltCandidate[]>([])
+  // Lista unica: candidati "costruiti" (da Genera percorsi) e "trovati" (da Giulia, popolati anche
+  // mentre si è ancora sullo step "Partenza") convivono qui, ciascuno taggato per tipo.
+  const [results, setResults] = useState<ResultItem[]>([])
   const [resultsMessage, setResultsMessage] = useState('')
-  const [scores, setScores] = useState<CandidateScorePreview[]>([])
+  // Parallelo a `results` (stessa lunghezza/indice) — null per le voci 'found' (mai calcolato nella
+  // lista risultati, vedi PoiPreviewRow/nota sotto la card trovata: richiederebbe di risolvere ogni
+  // candidato solo per l'anteprima, lo stesso spreco di chiamate Overpass/DTM/GPX che
+  // app/api/route-search/resolve/route.ts evita risolvendo solo quello scelto).
+  const [scores, setScores] = useState<(CandidateScorePreview | null)[]>([])
 
-  const [selected, setSelected] = useState<BuiltCandidate | null>(null)
+  const [selected, setSelected] = useState<ResultItem | null>(null)
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [resolving, setResolving] = useState(false)
+  const [resolvedTrack, setResolvedTrack] = useState<ResolvedTrack | null>(null)
+  const [confirmScore, setConfirmScore] = useState<CandidateScorePreview | null>(null)
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
   const [saving, setSaving] = useState(false)
@@ -113,7 +221,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // dell'utente (stesso segnale usato da Giulia in route-search) — solo un suggerimento, l'utente
   // resta libero di cambiarlo per questa singola ricerca. Caricato subito al mount (non più solo al
   // primo ingresso nello step dei parametri) perché l'interruttore AI serve già nello step "start",
-  // dove si cerca il punto di partenza per nome.
+  // dove si cerca il punto di partenza per nome e dove vive il pannello di Giulia.
   useEffect(() => {
     if (defaultsLoaded) return
     setDefaultsLoaded(true)
@@ -128,20 +236,24 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       .catch(() => {})
   }, [defaultsLoaded])
 
-  // Calcola Trail Score + Sicurezza per ogni candidato non appena arrivano i risultati — stessa
-  // pipeline usata per un percorso già salvato (computeCtsCore/computeSafetyCore, vedi
-  // lib/computeCtsForHike.ts e lib/computeSafetyForHike.ts), qui su candidati non ancora salvati.
+  // Calcola Trail Score + Sicurezza per ogni candidato "costruito" non appena arrivano i risultati
+  // — stessa pipeline usata per un percorso già salvato (computeCtsCore/computeSafetyCore, vedi
+  // lib/computeCtsForHike.ts e lib/computeSafetyForHike.ts), qui su candidati non ancora salvati. I
+  // candidati "trovati" restano null qui (vedi commento sulla dichiarazione di `scores`).
   useEffect(() => {
-    if (candidates.length === 0) { setScores([]); return }
-    setScores(candidates.map(() => ({ total: null, safety: null, vetoed: false, loading: true })))
-    candidates.forEach((c, i) => {
+    const hasBuilt = results.some(r => r.kind === 'built')
+    if (!hasBuilt) { setScores(results.map(() => null)); return }
+    setScores(results.map(r => (r.kind === 'built' ? { total: null, safety: null, vetoed: false, loading: true } : null)))
+    results.forEach((r, i) => {
+      if (r.kind !== 'built') return
+      const c = r.data
       Promise.all([
         computeCtsCore(c).catch(() => null),
         computeSafetyCore(c).catch(() => null),
       ]).then(([cts, safety]) => {
         const v2 = computeTrailScoreV2({ cts: cts?.ts ?? null, safety: safety?.overall ?? null })
         setScores(prev => {
-          if (prev.length !== candidates.length) return prev
+          if (prev.length !== results.length) return prev
           const next = [...prev]
           next[i] = {
             total: v2?.score ?? null,
@@ -154,13 +266,48 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidates])
+  }, [results])
+
+  // Trail Score + Sicurezza per un candidato "trovato" — solo dopo la risoluzione (resolvedTrack),
+  // quando esistono finalmente trackPoints reali su cui calcolarli (vedi §4 del piano: nessuno
+  // spreco di chiamate per candidati mai scelti, il calcolo avviene solo qui, per il solo
+  // selezionato).
+  useEffect(() => {
+    if (!selected || selected.kind !== 'found' || !resolvedTrack?.trackPoints?.length) {
+      setConfirmScore(null)
+      return
+    }
+    setConfirmScore({ total: null, safety: null, vetoed: false, loading: true })
+    const hikeForScore = {
+      trackPoints: resolvedTrack.trackPoints,
+      distanceMeters: resolvedTrack.distanceMeters,
+      elevationGain: resolvedTrack.elevationGain,
+      elevationLoss: resolvedTrack.elevationLoss,
+      altitudeMax: resolvedTrack.altitudeMax,
+      altitudeMin: resolvedTrack.altitudeMin,
+      estimatedTimeSeconds: resolvedTrack.estimatedTimeSeconds,
+      routePolyline: downsamplePolyline(resolvedTrack.trackPoints),
+    }
+    Promise.all([
+      computeCtsCore(hikeForScore).catch(() => null),
+      computeSafetyCore(hikeForScore).catch(() => null),
+    ]).then(([cts, safety]) => {
+      const v2 = computeTrailScoreV2({ cts: cts?.ts ?? null, safety: safety?.overall ?? null })
+      setConfirmScore({
+        total: v2?.score ?? null,
+        safety: safety ? { overall: safety.overall, color: safety.color, label: safety.label } : null,
+        vetoed: v2?.breakdown.vetoed ?? false,
+        loading: false,
+      })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, resolvedTrack])
 
   async function resolveQuery(q: string): Promise<GeocodeResult[]> {
     const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`)
     const data = await res.json()
-    const results: GeocodeResult[] = Array.isArray(data) ? data.slice(0, 5) : []
-    if (results.length > 0) return results
+    const geoResults: GeocodeResult[] = Array.isArray(data) ? data.slice(0, 5) : []
+    if (geoResults.length > 0) return geoResults
 
     // Nominatim non ha trovato nulla — prova la risoluzione dedicata (utile per feature naturali
     // locali poco note, es. "Cascata del Picchio, Blera", vedi lib/routeBuilder/resolvePlace.ts).
@@ -205,6 +352,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setDesiredPoiTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])
   }
 
+  // Popolato da GiuliaSearchPanel quando trova percorsi già documentati — si fonde in `results`
+  // sostituendo solo le voci 'found' precedenti (una nuova ricerca rimpiazza l'ultima), senza
+  // toccare eventuali candidati 'built' già generati. Nessun avanzamento automatico di step: chi
+  // cerca solo un percorso esistente li vede comparire subito qui nello step "Partenza" e può
+  // scegliere direttamente, senza dover impostare un punto di partenza o passare da "Parametri".
+  function handleFound(found: SearchResultCandidate[]) {
+    setResults(prev => [...prev.filter(r => r.kind !== 'found'), ...found.map(data => ({ kind: 'found' as const, data }))])
+  }
+
   async function generate() {
     if (lat == null || lon == null || generating) return
     setGenerating(true)
@@ -228,7 +384,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         setErrorMsg(data.message || data.error || 'Generazione non riuscita, riprova.')
         return
       }
-      setCandidates(data.candidates ?? [])
+      const built = (data.candidates ?? []) as BuiltCandidate[]
+      setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...built.map(d => ({ kind: 'built' as const, data: d }))])
       setResultsMessage(data.message ?? '')
       setStep('results')
     } catch {
@@ -238,12 +395,30 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
   }
 
-  function chooseCandidate(c: BuiltCandidate, i: number) {
-    setSelected(c)
-    setTitle(`${routeType === 'anello' ? 'Anello' : 'Andata e ritorno'} costruito ${i + 1}`)
-    setDate('')
+  async function chooseCandidate(item: ResultItem, i: number) {
+    setSelected(item)
+    setSelectedIndex(i)
+    setResolvedTrack(null)
     setErrorMsg('')
+    setDate('')
+    setTitle(item.kind === 'built' ? `${routeType === 'anello' ? 'Anello' : 'Andata e ritorno'} costruito ${i + 1}` : item.data.name)
     setStep('confirm')
+    if (item.kind !== 'found') return
+
+    const c = item.data
+    if (c.hasGpsTrack && (c.osmId != null || c.gpxUrl)) {
+      setResolving(true)
+      try {
+        const res = await fetch('/api/route-search/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ osmId: c.osmId, gpxUrl: c.gpxUrl }),
+        })
+        const data = await res.json()
+        if (data.ok) setResolvedTrack(data)
+      } catch {}
+      setResolving(false)
+    }
   }
 
   async function handleSave() {
@@ -251,34 +426,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setSaving(true)
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
-      const hike: PlannedHike = {
-        id: 'routebuild_' + Date.now().toString(36),
-        title: title.trim() || 'Percorso costruito',
-        plannedDate: date || undefined,
-        createdAt: new Date().toISOString(),
-        distanceMeters: selected.distanceMeters,
-        elevationGain: selected.elevationGain,
-        elevationLoss: selected.elevationLoss,
-        altitudeMax: selected.altitudeMax,
-        altitudeMin: selected.altitudeMin,
-        estimatedTimeSeconds: selected.estimatedTimeSeconds,
-        trackPoints: selected.trackPoints,
-        routePolyline: downsamplePolyline(selected.trackPoints),
-        pendingExpiresAt,
-      }
+      const hike: PlannedHike = selected.kind === 'built'
+        ? buildHikeFromBuilt(selected.data, title, date, pendingExpiresAt)
+        : buildHikeFromFound(selected.data, resolvedTrack, title, date, pendingExpiresAt)
 
-      const gps = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]) ?? []
-      if (gps.length >= 2) {
-        try {
-          const deadline = new Promise<null>(r => setTimeout(() => r(null), 7000))
-          const pois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline])
-          if (pois?.length) {
-            hike.cachedPois = pois
-            const poiWiki = await Promise.race([fetchWikiForNamedPois(pois), deadline])
-            if (poiWiki?.length) hike.cachedPoiWiki = poiWiki
-          }
-        } catch {}
-      }
+      await enrichWithPois(hike)
 
       await savePlanned(hike)
       computeCtsForHike(hike).catch(() => {})
@@ -290,71 +442,160 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
   }
 
-  // ── Punto di partenza ───────────────────────────────────────────────────────
+  // Card di un percorso "trovato" da Giulia — riusata sia nell'anteprima inline dello step
+  // "Partenza" sia nello step "Risultati" fuso, per non duplicare il markup due volte.
+  function renderFoundCard(data: SearchResultCandidate, i: number) {
+    const vs = verdictStyle(data.comfortVerdict)
+    return (
+      <div key={`found-${i}`} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+        <div className={`h-1 ${data.hasGpsTrack ? 'bg-forest-500' : 'bg-stone-300'}`} />
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
+              <Sparkles className="w-3 h-3" /> Percorso trovato
+            </span>
+            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide ${data.hasGpsTrack ? 'bg-forest-50 text-forest-700' : 'bg-stone-100 text-stone-500'}`}>
+              <MapPin className="w-3 h-3" /> {data.hasGpsTrack ? 'Traccia GPS trovata' : 'Nessuna traccia GPS'}
+            </span>
+          </div>
 
-  if (step === 'start') return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2.5">
-        <button onClick={onBack} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-700 transition-colors shrink-0">
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div>
-          <p className="text-sm font-semibold text-stone-800">Costruisci un percorso</p>
-          <p className="text-xs text-stone-400">Scegli il punto di partenza</p>
+          <div>
+            <h4 className="font-display text-base font-semibold text-stone-800">{data.name}</h4>
+            <p className="text-xs text-stone-400 mt-0.5">{data.zone}</p>
+          </div>
+
+          <div className="flex gap-4 text-sm">
+            <div>
+              <span className="font-semibold text-stone-800">{data.distanceKm != null ? `${data.hasGpsTrack ? '' : '~'}${data.distanceKm.toFixed(1)} km` : '—'}</span>
+              <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
+            </div>
+            <div>
+              <span className="font-semibold text-stone-800 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{data.elevationGainM != null ? `${data.hasGpsTrack ? '' : '~'}${Math.round(data.elevationGainM)} m` : '—'}</span>
+              <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
+            </div>
+            <div>
+              <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
+              <p className="text-[10px] uppercase tracking-wide text-stone-400">Difficoltà</p>
+            </div>
+          </div>
+
+          <div className={`flex items-start gap-2 px-3 py-2 rounded-xl border text-xs ${vs.badge}`}>
+            <vs.Icon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">{vs.label}</p>
+              {data.comfortNote && <p className="mt-0.5 opacity-90">{data.comfortNote}</p>}
+            </div>
+          </div>
+
+          <p className="text-sm text-stone-600 leading-relaxed">{data.description}</p>
+
+          <div className="flex items-center justify-between pt-1">
+            {data.sourceUrl ? (
+              <a href={data.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition-colors">
+                <ExternalLink className="w-3 h-3" /> Fonte
+              </a>
+            ) : <span />}
+            <button onClick={() => chooseCandidate({ kind: 'found', data }, i)}
+              className="px-4 py-2 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-xs font-semibold uppercase tracking-wide transition-colors">
+              Scegli questo percorso
+            </button>
+          </div>
         </div>
       </div>
+    )
+  }
 
-      <div className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
-        <div className="flex gap-2">
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') runGeocode() }}
-            placeholder="Comune, o un luogo noto (es. Gole del Biedano, Blera)"
-            className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white"
-          />
-          <button onClick={runGeocode} disabled={geocoding || !query.trim()}
-            className="w-10 h-10 rounded-xl bg-stone-100 hover:bg-stone-200 disabled:opacity-40 text-stone-600 flex items-center justify-center shrink-0 transition-colors">
-            {geocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
+  // ── Punto di partenza ───────────────────────────────────────────────────────
+
+  if (step === 'start') {
+    const foundEntries = results
+      .map((item, i) => ({ item, i }))
+      .filter((x): x is { item: Extract<ResultItem, { kind: 'found' }>; i: number } => x.item.kind === 'found')
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2.5">
+          <button onClick={onBack} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-700 transition-colors shrink-0">
+            <ArrowLeft className="w-4 h-4" />
           </button>
+          <div>
+            <p className="text-sm font-semibold text-stone-800">Costruisci o trova un percorso</p>
+            <p className="text-xs text-stone-400">Scegli il punto di partenza</p>
+          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setUseAi(v => !v)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-            useAi ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-500'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5" /> Prova con l&apos;AI se non trovo il luogo
-        </button>
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
+          <div className="flex gap-2">
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') runGeocode() }}
+              placeholder="Comune, o un luogo noto (es. Gole del Biedano, Blera)"
+              className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white"
+            />
+            <button onClick={runGeocode} disabled={geocoding || !query.trim()}
+              className="w-10 h-10 rounded-xl bg-stone-100 hover:bg-stone-200 disabled:opacity-40 text-stone-600 flex items-center justify-center shrink-0 transition-colors">
+              {geocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
+            </button>
+          </div>
 
-        {geocodeResults.length > 0 && (
-          <div className="space-y-1.5">
-            {geocodeResults.map((r, i) => (
-              <button
-                key={i}
-                onClick={() => { setLat(parseFloat(r.lat)); setLon(parseFloat(r.lon)); setGeocodeResults([]); setQuery(r.display_name) }}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs text-stone-600 bg-stone-50 hover:bg-stone-100 transition-colors"
-              >
-                {r.display_name}
-              </button>
-            ))}
+          <button
+            type="button"
+            onClick={() => setUseAi(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              useAi ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-500'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" /> Prova con l&apos;AI se non trovo il luogo
+          </button>
+
+          {geocodeResults.length > 0 && (
+            <div className="space-y-1.5">
+              {geocodeResults.map((r, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setLat(parseFloat(r.lat)); setLon(parseFloat(r.lon)); setGeocodeResults([]); setQuery(r.display_name) }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs text-stone-600 bg-stone-50 hover:bg-stone-100 transition-colors"
+                >
+                  {r.display_name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <LocationPickerMap lat={lat ?? undefined} lon={lon ?? undefined} onPick={(pLat, pLon) => { setLat(pLat); setLon(pLon) }} />
+          <p className="text-xs text-stone-400">Tocca la mappa per scegliere il punto di partenza esatto, o trascina il marker.</p>
+        </div>
+
+        {useAi && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setGiuliaOpen(v => !v)}
+              className="w-full flex items-center gap-2 px-4 py-3 rounded-2xl border border-terra-200 bg-terra-50 text-terra-700 text-sm font-medium hover:border-terra-300 transition-colors"
+            >
+              <Sparkles className="w-4 h-4 shrink-0" />
+              {giuliaOpen ? 'Nascondi la ricerca di Giulia' : 'Conosci già un percorso specifico? Descrivilo a Giulia'}
+            </button>
+            {giuliaOpen && <GiuliaSearchPanel onFound={handleFound} />}
           </div>
         )}
 
-        <LocationPickerMap lat={lat ?? undefined} lon={lon ?? undefined} onPick={(pLat, pLon) => { setLat(pLat); setLon(pLon) }} />
-        <p className="text-xs text-stone-400">Tocca la mappa per scegliere il punto di partenza esatto, o trascina il marker.</p>
+        {foundEntries.length > 0 && (
+          <div className="space-y-3">
+            {foundEntries.map(({ item, i }) => renderFoundCard(item.data, i))}
+          </div>
+        )}
+
+        {errorMsg && <p className="text-red-500 text-xs">{errorMsg}</p>}
+
+        <button onClick={() => setStep('params')} disabled={lat == null || lon == null}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
+          Continua <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
-
-      {errorMsg && <p className="text-red-500 text-xs">{errorMsg}</p>}
-
-      <button onClick={() => setStep('params')} disabled={lat == null || lon == null}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
-        Continua <ChevronRight className="w-4 h-4" />
-      </button>
-    </div>
-  )
+    )
+  }
 
   // ── Tipo e obiettivi ────────────────────────────────────────────────────────
 
@@ -506,18 +747,25 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         <ArrowLeft className="w-4 h-4" /> Cambia obiettivi
       </button>
 
-      {candidates.length === 0 && (
+      {results.length === 0 && (
         <div className="bg-white rounded-2xl border border-stone-200 p-4 text-sm text-stone-600">
           {resultsMessage || 'Nessun percorso trovato con questi vincoli — prova una lunghezza diversa o un altro punto di partenza.'}
         </div>
       )}
 
-      {candidates.map((c, i) => {
+      {results.map((item, i) => {
+        if (item.kind === 'found') return renderFoundCard(item.data, i)
+
+        const c = item.data
         const scorePreview = scores[i]
         return (
-          <div key={i} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+          <div key={`built-${i}`} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
             <TrailPreviewMap polyline={c.routePolyline} height="180px" />
             <div className="p-4 space-y-2.5">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
+                <Route className="w-3 h-3" /> Costruito su misura
+              </span>
+
               <div className="flex items-center justify-between gap-3">
                 <div className="flex gap-4 text-sm">
                   <div>
@@ -553,7 +801,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">Presenta tratti ripidi</p>
               )}
 
-              <button onClick={() => chooseCandidate(c, i)}
+              <button onClick={() => chooseCandidate(item, i)}
                 className="w-full py-2.5 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-xs font-semibold uppercase tracking-wide transition-colors">
                 Scegli questo percorso
               </button>
@@ -566,54 +814,135 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
   // ── Conferma ────────────────────────────────────────────────────────────────
 
-  if (step === 'confirm' && selected) return (
-    <div className="space-y-4">
-      <button onClick={() => setStep('results')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Torna ai risultati
-      </button>
+  if (step === 'confirm' && selected) {
+    const isFound = selected.kind === 'found'
+    const foundData = selected.kind === 'found' ? selected.data : null
+    const builtData = selected.kind === 'built' ? selected.data : null
+    const vs = foundData ? verdictStyle(foundData.comfortVerdict) : null
+    const foundDistanceKm = resolvedTrack?.distanceMeters ? resolvedTrack.distanceMeters / 1000 : foundData?.distanceKm ?? null
+    const foundElevGain = resolvedTrack?.elevationGain ?? foundData?.elevationGainM ?? null
+    const foundEstimated = !resolvedTrack?.hasElevation
+    const builtScore = selectedIndex != null ? scores[selectedIndex] : null
 
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-stone-600 mb-1">Nome del percorso</label>
-          <input value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
+    return (
+      <div className="space-y-4">
+        <button onClick={() => setStep('results')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Torna ai risultati
+        </button>
+
+        <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Nome del percorso</label>
+            <input value={title} onChange={e => setTitle(e.target.value)}
+              className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-600 mb-1">Data <span className="font-normal text-stone-400">(opzionale)</span></label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              className="border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-700 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
+          </div>
+
+          {builtData && (
+            <>
+              <TrailPreviewMap polyline={builtData.routePolyline} />
+              <div className="flex items-center justify-between gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
+                  {[
+                    { label: 'Distanza', val: `${(builtData.distanceMeters / 1000).toFixed(1)} km` },
+                    { label: 'Dislivello +', val: `${Math.round(builtData.elevationGain)} m` },
+                    { label: 'Quota max', val: `${Math.round(builtData.altitudeMax)} m` },
+                    { label: 'Tipo', val: builtData.type === 'anello' ? 'Anello' : 'Andata e ritorno' },
+                  ].map(s => (
+                    <div key={s.label} className="bg-stone-50 rounded-xl border border-stone-150 p-3">
+                      <p className="text-[10px] text-stone-400">{s.label}</p>
+                      <p className="text-sm font-semibold text-stone-800">{s.val}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
+                  <TrailScoreGaugeBadge
+                    total={builtScore?.total ?? null}
+                    safety={builtScore?.safety ?? null}
+                    loading={builtScore?.loading ?? true}
+                    vetoed={builtScore?.vetoed}
+                    size={52}
+                    showLabel={false}
+                  />
+                </div>
+              </div>
+
+              <PoiPreviewRow pois={builtData.pois ?? []} />
+
+              {builtData.matchNote && <p className="text-sm text-stone-600 leading-relaxed">{builtData.matchNote}</p>}
+            </>
+          )}
+
+          {foundData && (
+            <>
+              {resolving ? (
+                <div className="flex items-center gap-2 text-stone-400 text-sm py-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Recupero traccia e quota reali…
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
+                    {[
+                      { label: 'Distanza', val: foundDistanceKm != null ? `${foundEstimated ? '~' : ''}${foundDistanceKm.toFixed(1)} km` : '—' },
+                      { label: 'Dislivello +', val: foundElevGain != null ? `${foundEstimated ? '~' : ''}${Math.round(foundElevGain)} m` : '—' },
+                      { label: 'Quota max', val: resolvedTrack?.altitudeMax ? `${Math.round(resolvedTrack.altitudeMax)} m` : '—' },
+                      { label: 'Difficoltà', val: foundData.difficulty },
+                    ].map(s => (
+                      <div key={s.label} className="bg-stone-50 rounded-xl border border-stone-150 p-3">
+                        <p className="text-[10px] text-stone-400">{s.label}</p>
+                        <p className="text-sm font-semibold text-stone-800">{s.val}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
+                    <TrailScoreGaugeBadge
+                      total={confirmScore?.total ?? null}
+                      safety={confirmScore?.safety ?? null}
+                      loading={confirmScore?.loading ?? false}
+                      vetoed={confirmScore?.vetoed}
+                      size={52}
+                      showLabel={false}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {vs && (
+                <div className={`flex items-start gap-2 px-3.5 py-3 rounded-xl border text-sm ${vs.badge}`}>
+                  <vs.Icon className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold">{vs.label}</p>
+                    {foundData.comfortNote && <p className="mt-0.5 text-xs opacity-90">{foundData.comfortNote}</p>}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-start gap-2 px-3.5 py-3 rounded-xl bg-sky-50 border border-sky-100 text-xs text-sky-800">
+                <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <p>
+                  {resolvedTrack?.trackPoints?.length
+                    ? 'Come un import GPX: mappa, profilo altimetrico e punti di interesse verranno elaborati automaticamente dopo l\'import.'
+                    : 'Percorso senza traccia GPS reale: la guida verrà comunque generata, ma senza mappa né profilo altimetrico — come un import manuale.'}
+                </p>
+              </div>
+            </>
+          )}
         </div>
-        <div>
-          <label className="block text-sm font-medium text-stone-600 mb-1">Data <span className="font-normal text-stone-400">(opzionale)</span></label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            className="border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-700 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
-        </div>
 
-        <TrailPreviewMap polyline={selected.routePolyline} />
+        {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Distanza', val: `${(selected.distanceMeters / 1000).toFixed(1)} km` },
-            { label: 'Dislivello +', val: `${Math.round(selected.elevationGain)} m` },
-            { label: 'Quota max', val: `${Math.round(selected.altitudeMax)} m` },
-            { label: 'Tipo', val: selected.type === 'anello' ? 'Anello' : 'Andata e ritorno' },
-          ].map(s => (
-            <div key={s.label} className="bg-stone-50 rounded-xl border border-stone-150 p-3">
-              <p className="text-[10px] text-stone-400">{s.label}</p>
-              <p className="text-sm font-semibold text-stone-800">{s.val}</p>
-            </div>
-          ))}
-        </div>
-
-        <PoiPreviewRow pois={selected.pois ?? []} />
-
-        {selected.matchNote && <p className="text-sm text-stone-600 leading-relaxed">{selected.matchNote}</p>}
+        <button onClick={handleSave} disabled={saving || resolving}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+          Salva e apri la guida
+        </button>
       </div>
-
-      {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-
-      <button onClick={handleSave} disabled={saving}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
-        {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-        Salva e apri la guida
-      </button>
-    </div>
-  )
+    )
+  }
 
   return null
 }
