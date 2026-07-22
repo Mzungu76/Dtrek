@@ -11,7 +11,11 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const MIN_TARGET_DISTANCE_KM = 1
-const MAX_TARGET_DISTANCE_KM = 20
+// Abbassato da 20 a 15: un target più alto allarga il bbox interrogato via Overpass (vedi
+// bboxRadiusKm sotto) fino a superare, in aree con rete fitta, il tempo disponibile prima che la
+// funzione venga terminata dalla piattaforma (504 osservato in produzione) — vedi anche il
+// restringimento dei tag highway in lib/routeBuilder/osmGraph.ts, la causa principale dello stesso problema.
+const MAX_TARGET_DISTANCE_KM = 15
 // Un punto di partenza a più di questa distanza da qualunque nodo della rete percorribile non ha
 // abbastanza rete nei dintorni per costruire un percorso — meglio un errore chiaro che un anello
 // costruito su un frammento isolato di strada.
@@ -102,8 +106,10 @@ export async function POST(req: NextRequest) {
 
   // Raggio del bbox attorno al punto di partenza: un anello/andata-ritorno di L km non cammina in
   // linea retta, quindi serve margine oltre al semplice L/2 geometrico per la rete effettivamente
-  // interrogata — coperto da un fattore emprico (0.75) invece che il minimo teorico (0.5).
-  const bboxRadiusKm = Math.min(Math.max(params.targetDistanceKm * 0.75, 2), 15)
+  // interrogata — coperto da un fattore emprico (0.6) invece del minimo teorico (0.5). Tetto
+  // abbassato da 15 a 10 km: oltre, il bbox interrogato via Overpass diventa abbastanza grande da
+  // rischiare di superare il tempo disponibile prima del kill della funzione lato piattaforma.
+  const bboxRadiusKm = Math.min(Math.max(params.targetDistanceKm * 0.6, 2), 10)
   const bbox = padBbox([params.lat, params.lon, params.lat, params.lon], bboxRadiusKm)
 
   let network

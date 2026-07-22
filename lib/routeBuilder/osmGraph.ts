@@ -6,10 +6,12 @@ import { fetchOverpass } from '@/lib/overpassTrails'
 import { haversineM } from '@/lib/geoUtils'
 
 // Tag highway ammessi per un percorso escursionistico: sentieri/tracciati/carrarecce (comprese le
-// "strade bianche", tipicamente track/unclassified) più le vie minori che possono fare da
-// connettore tra due tratti di sentiero. Esclusi deliberatamente i tag stradali maggiori
-// (motorway/primary/secondary/trunk) e gli accessi privati/vietati.
-const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified|residential|service'
+// "strade bianche", tipicamente track/unclassified). Esclusi deliberatamente sia i tag stradali
+// maggiori (motorway/primary/secondary/trunk) sia residential/service: in un bbox che contiene un
+// paese o una frazione, l'intera rete stradale urbana viene restituita da Overpass insieme ai
+// sentieri, gonfiando enormemente tempo di risposta e dimensione del grafo per dati che non
+// servono a un percorso escursionistico — causa concreta di un 504 osservato in produzione.
+const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified'
 
 export interface GraphNode {
   lat: number
@@ -62,12 +64,16 @@ function addEdge(nodes: Map<number, GraphNode>, fromId: number, toId: number, wa
  */
 export async function fetchWalkNetwork(bbox: [number, number, number, number]): Promise<WalkNetwork> {
   const [minLat, minLon, maxLat, maxLon] = bbox
-  const query = `[out:json][timeout:25][maxsize:1073741824];
+  const query = `[out:json][timeout:18][maxsize:536870912];
 way["highway"~"^(${WALKABLE_HIGHWAY})$"]["access"!~"^(private|no)$"](${minLat},${minLon},${maxLat},${maxLon});
 (._;>;);
 out skel qt;`
 
-  const json = await fetchOverpass<{ elements: OverpassEl[] }>(query, 30_000)
+  // Timeout client allineato al [timeout:18] della query — fetchOverpass ritenta una volta sola
+  // dopo una breve pausa (vedi lib/overpassTrails.ts), quindi il caso peggiore resta ~37s invece
+  // di superare da solo il budget della funzione (maxDuration=60 su app/api/route-build/route.ts,
+  // che deve lasciare margine anche per pathfinding e arricchimento DTM/POI a valle).
+  const json = await fetchOverpass<{ elements: OverpassEl[] }>(query, 18_000)
   const elements = json.elements ?? []
 
   const nodes = new Map<number, GraphNode>()

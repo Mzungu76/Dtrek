@@ -7,9 +7,11 @@ import { nearestGraphNode, type WalkNetwork } from './osmGraph'
 
 const EARTH_RADIUS_M = 6371000
 // Direzioni provate per generare i candidati "lontani" da cui costruire andata/ritorno o anello —
-// 8 punti cardinali/intercardinali danno varietà di forma senza esplodere il numero di Dijkstra da
-// calcolare (ognuno costa una visita completa del grafo del bbox).
-const CANDIDATE_BEARINGS_DEG = [0, 45, 90, 135, 180, 225, 270, 315]
+// 6 punti danno comunque varietà di forma senza moltiplicare troppo il numero di Dijkstra da
+// calcolare (ognuno costa una visita completa del grafo del bbox, e per un anello se ne fanno due
+// per bearing): con 8 il tempo totale di pathfinding contribuiva al rischio di 504 osservato in
+// produzione insieme alla query Overpass più pesante — vedi osmGraph.ts.
+const CANDIDATE_BEARINGS_DEG = [0, 60, 120, 180, 240, 300]
 // Tolleranza sulla lunghezza target: un candidato la cui lunghezza reale si discosta oltre questa
 // percentuale dal target richiesto viene scartato — meglio pochi candidati affidabili che uno
 // fuori misura pur di riempire la lista.
