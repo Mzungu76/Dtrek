@@ -120,6 +120,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Rete sentieri non disponibile in questo momento, riprova.' }, { status: 502 })
   }
 
+  console.log(`[route-build] rete: ${network.nodes.size} nodi, bbox raggio ${bboxRadiusKm.toFixed(1)}km`)
+
   const startNode = nearestGraphNode(network, params.lat, params.lon, START_SNAP_THRESHOLD_M)
   if (!startNode) {
     return NextResponse.json({
@@ -132,6 +134,8 @@ export async function POST(req: NextRequest) {
   const rawCandidates = params.routeType === 'anello'
     ? generateLoopCandidates(network, startNode.nodeId, targetDistanceM)
     : generateOutAndBackCandidates(network, startNode.nodeId, targetDistanceM)
+
+  console.log(`[route-build] candidati grezzi entro tolleranza: ${rawCandidates.length}`)
 
   if (rawCandidates.length === 0) {
     return NextResponse.json({
