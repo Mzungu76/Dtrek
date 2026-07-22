@@ -13,20 +13,22 @@
 // target — la geometria (bearing) serve solo a scegliere candidati in direzioni diverse tra loro,
 // mai a decidere se un nodo è raggiungibile.
 import { haversineM } from '@/lib/geoUtils'
-import type { WalkNetwork } from './osmGraph'
+import { nearestGraphNode, type WalkNetwork } from './osmGraph'
 
 // Tolleranza sulla lunghezza target: un candidato la cui lunghezza reale si discosta oltre questa
 // percentuale dal target richiesto viene scartato — meglio pochi candidati affidabili che uno
-// fuori misura pur di riempire la lista.
-const LENGTH_TOLERANCE = 0.3
+// fuori misura pur di riempire la lista. Alzata da 0.3 a 0.4 per aumentare la resa di candidati
+// (l'utente ha chiesto esplicitamente più risultati tra cui scegliere, ordinati per affinità).
+const LENGTH_TOLERANCE = 0.4
 // Moltiplicatore di penalità sugli archi già usati nell'andata quando si cerca il ritorno di un
 // anello: abbastanza alto da farli evitare se esiste un'alternativa reale, non così alto da
 // rendere il grafo instabile se quella è l'unica via percorribile (rete rada).
 const REUSED_EDGE_PENALTY = 6
 // Numero di settori direzionali (da bearing rispetto al punto di partenza) usati solo per
 // scegliere candidati in direzioni diverse tra loro — non per la ricerca del percorso in sé, che
-// lavora sempre su nodi già raggiungibili nel grafo.
-const NUM_DIRECTION_BUCKETS = 6
+// lavora sempre su nodi già raggiungibili nel grafo. Alzato da 6 a 10 per lo stesso motivo della
+// tolleranza sopra: più direzioni tentate, più candidati grezzi tra cui il punteggio finale sceglie.
+const NUM_DIRECTION_BUCKETS = 10
 // Due candidati che condividono più di questa frazione di nodi sono considerati "lo stesso
 // percorso" — si tiene solo il migliore dei due invece di proporli entrambi.
 const DEDUPE_NODE_OVERLAP = 0.6
@@ -233,7 +235,7 @@ export function generateOutAndBackCandidates(
   network: WalkNetwork,
   startNodeId: number,
   targetDistanceM: number,
-  maxCandidates = 4,
+  maxCandidates = 8,
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
@@ -261,7 +263,7 @@ export function generateLoopCandidates(
   network: WalkNetwork,
   startNodeId: number,
   targetDistanceM: number,
-  maxCandidates = 4,
+  maxCandidates = 8,
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
@@ -296,4 +298,41 @@ export function generateLoopCandidates(
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
   return dedupeCandidates(candidates).slice(0, maxCandidates)
+}
+
+// Un luogo noto scelto dall'utente (vedi lib/routeBuilder/resolvePlace.ts) è un punto esatto, non
+// una stima geometrica come i "punti lontani" usati sopra — può quindi ammettere una soglia di
+// aggancio più larga di FAR_NODE_SNAP_THRESHOLD_M (qui non serve, il chiamante la passa esplicita).
+const DESTINATION_SNAP_THRESHOLD_M = 1500
+
+/**
+ * Genera un singolo candidato andata-e-ritorno verso una destinazione ESATTA (un luogo noto
+ * risolto per nome, non un target di lunghezza) — nessun filtro di tolleranza sulla lunghezza,
+ * qui la distanza è un risultato del percorso reale verso quel punto, non un vincolo da
+ * rispettare. Ritorna null se la destinazione non è abbastanza vicina alla rete percorribile, o se
+ * non è raggiungibile dal punto di partenza nello stesso bbox.
+ */
+export function generateOutAndBackToPoint(
+  network: WalkNetwork,
+  startNodeId: number,
+  destLat: number,
+  destLon: number,
+  snapThresholdM = DESTINATION_SNAP_THRESHOLD_M,
+): RouteCandidate | null {
+  const start = network.nodes.get(startNodeId)
+  if (!start) return null
+
+  const destNode = nearestGraphNode(network, destLat, destLon, snapThresholdM)
+  if (!destNode) return null
+
+  const { prev } = dijkstraAll(network, startNodeId)
+  const outPath = reconstructPath(prev, startNodeId, destNode.nodeId)
+  if (!outPath) return null
+
+  const backPath = [...outPath].reverse().slice(1)
+  const polyline = pathToPolyline(network, [...outPath, ...backPath])
+  const distanceM = pathDistanceM(network, outPath) * 2
+  const bearingDeg = bearingFromStart(start, network.nodes.get(destNode.nodeId)!)
+
+  return { type: 'andata_ritorno', polyline, distanceM, bearingDeg }
 }
