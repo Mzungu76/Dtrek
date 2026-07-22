@@ -42,7 +42,12 @@ export async function fetchDtmTile(bbox: string): Promise<DtmTile | null> {
     const tile = await parseDtmGeoTiff(buf)
     recordSuccess(BREAKER_KEY)
     return tile
-  } catch {
+  } catch (e) {
+    // Non cambia il contratto (resta "nessuna copertura", mai un errore per il chiamante) — solo
+    // visibilità sul motivo reale, altrimenti indistinguibile dall'esterno tra bbox genuinamente
+    // fuori copertura, rate limit (50 chiamate/24h per chiavi non accademiche, vedi
+    // scripts/probe-dtm.ts), chiave non valida o timeout.
+    console.warn(`[dtm] fetchDtmTile fallito per bbox ${bbox}:`, e instanceof Error ? e.message : e)
     recordFailure(BREAKER_KEY)
     return null
   }
