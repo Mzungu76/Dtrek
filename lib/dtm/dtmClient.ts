@@ -25,10 +25,13 @@ export interface DtmTile {
   bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number }
 }
 
-// Tighter than openTopographyClient.ts's own 30s default: this runs inside
-// app/api/tei-dtm/route.ts's request-scoped fetch, so failing fast matters more than
-// tolerating a slow upstream once one is actually configured.
-const DTM_TIMEOUT_MS = 8000
+// Alzato da 8s a 20s: gli 8s originali (motivati da "tei-dtm deve fallire in fretta") si sono
+// rivelati in produzione troppo stretti per una risposta REALE e riuscita di OpenTopography (log
+// confermato: "The operation was aborted due to timeout" su ogni tentativo, mai un vero errore
+// HTTP) — l'API genera/ritaglia il DEM al volo e può richiedere più di 8s anche quando funziona
+// correttamente. 20s resta ampiamente entro il budget di ogni chiamante attuale (tei-dtm:
+// maxDuration 30s: route-search/resolve, route-import, route-build: maxDuration 60s).
+const DTM_TIMEOUT_MS = 20000
 
 export async function fetchDtmTile(bbox: string): Promise<DtmTile | null> {
   if (!process.env.OPENTOPOGRAPHY_API_KEY) {
