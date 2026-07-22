@@ -3,7 +3,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
 import { resolvePlaceName, interpretSearchRequest, type ResolvedPlace, type InterpretedPreferences } from '@/lib/routeBuilder/resolvePlace'
 import {
-  searchHikingRoutesByName, queryHikingRelationsInBbox, resolveAreaBbox, padBbox,
+  searchHikingRoutesByName, queryHikingRelationsInBbox, resolveAreaBbox, padBbox, looksLikePlaceName,
   type HikingRouteCandidate,
 } from '@/lib/overpassTrails'
 import { resolveTrackForCandidate } from '@/lib/routeBuilder/resolveTrack'
@@ -52,9 +52,15 @@ function splitQuery(query: string): { nameQuery: string; areaHint: string | null
 
 // Stessa logica di app/api/route-search-plain/route.ts ("Cerca senza AI"), non spostata — solo
 // riusata come funzioni di lib/overpassTrails.ts, per non duplicarne l'implementazione ma senza
-// dover toccare quell'endpoint/quella card, che restano indipendenti.
+// dover toccare quell'endpoint/quella card, che restano indipendenti. Senza un'area a restringere
+// il bbox, una query Overpass per nome su tutta Italia ha senso solo se il testo è un plausibile
+// nome di percorso (vedi looksLikePlaceName) — una frase libera lunga (com'è tipico ora che questo
+// endpoint riceve anche descrizioni discorsive dal wizard di ricerca unificato) farebbe girare lo
+// stesso tipo di regex nazionale pesante che ha già causato dei 504 in passato, per nulla.
 async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | null): Promise<HikingRouteCandidate[]> {
   const areaBbox = areaHint ? await resolveAreaBbox(areaHint) : null
+  if (!areaBbox && !looksLikePlaceName(nameQuery)) return []
+
   let candidates = await searchHikingRoutesByName(nameQuery, areaBbox, 8)
   if (candidates.length === 0) {
     const nearbyBbox = areaBbox ?? await resolveAreaBbox(nameQuery)
