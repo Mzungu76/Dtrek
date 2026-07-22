@@ -3,7 +3,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { padBbox } from '@/lib/overpassTrails'
 import { haversineM } from '@/lib/geoUtils'
 import { fetchWalkNetwork, nearestGraphNode } from '@/lib/routeBuilder/osmGraph'
-import { generateLoopCandidates, generateOutAndBackCandidates, generateOutAndBackToPoint, type RouteType } from '@/lib/routeBuilder/loopBuilder'
+import { generateLoopCandidates, generateOutAndBackCandidates, generateOneWayCandidates, generateOutAndBackToPoint, type RouteType } from '@/lib/routeBuilder/loopBuilder'
 import { scoreAndEnrichCandidates } from '@/lib/routeBuilder/scoreCandidates'
 import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
 import { sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
@@ -69,8 +69,9 @@ interface BuildRequestBody {
   targetDistanceKm: number
   targetElevationM: number | null
   // Destinazione esatta (luogo noto risolto per nome, vedi lib/routeBuilder/resolvePlace.ts) —
-  // solo per andata_ritorno: qui la lunghezza è un risultato del percorso reale verso quel punto,
-  // non un vincolo, quindi targetDistanceKm viene ignorato quando presente.
+  // opzionale per andata_ritorno e solo_andata (per un anello non ha senso, si torna comunque al
+  // punto di partenza): qui la lunghezza è un risultato del percorso reale verso quel punto, non
+  // un vincolo, quindi targetDistanceKm viene ignorato quando presente.
   destinationLat: number | null
   destinationLon: number | null
   // Precompilati dal profilo (GET sopra) ma modificabili per questa singola ricerca — null
@@ -85,7 +86,9 @@ function parseBody(raw: unknown): BuildRequestBody {
   const lat = Number(body.lat)
   const lon = Number(body.lon)
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error('Coordinate di partenza non valide')
-  if (body.routeType !== 'anello' && body.routeType !== 'andata_ritorno') throw new Error('Tipo di percorso non valido')
+  if (body.routeType !== 'anello' && body.routeType !== 'andata_ritorno' && body.routeType !== 'solo_andata') {
+    throw new Error('Tipo di percorso non valido')
+  }
   const targetDistanceKm = Number(body.targetDistanceKm)
   if (!Number.isFinite(targetDistanceKm) || targetDistanceKm < MIN_TARGET_DISTANCE_KM || targetDistanceKm > MAX_TARGET_DISTANCE_KM) {
     throw new Error(`Lunghezza target fuori range (${MIN_TARGET_DISTANCE_KM}-${MAX_TARGET_DISTANCE_KM} km)`)
@@ -133,10 +136,10 @@ export async function POST(req: NextRequest) {
     if (params.environmentPrefs == null) environmentPrefs = sanitizeHikerEnvironmentPrefs(profile.environmentPrefs)
   }
 
-  // La destinazione si applica solo ad andata_ritorno (per un anello si torna comunque al punto di
-  // partenza) — se il client la manda insieme a 'anello' (non dovrebbe succedere con la UI
-  // prevista) viene semplicemente ignorata invece di far fallire la richiesta.
-  const hasDestination = params.routeType === 'andata_ritorno' && params.destinationLat != null && params.destinationLon != null
+  // La destinazione si applica ad andata_ritorno e solo_andata (per un anello non ha senso, si
+  // torna comunque al punto di partenza) — se il client la manda insieme a 'anello' (non dovrebbe
+  // succedere con la UI prevista) viene semplicemente ignorata invece di far fallire la richiesta.
+  const hasDestination = params.routeType !== 'anello' && params.destinationLat != null && params.destinationLon != null
 
   // Raggio del bbox attorno al punto di partenza. Senza destinazione: un anello/andata-ritorno di
   // L km non cammina in linea retta, quindi serve margine oltre al semplice L/2 geometrico per la
@@ -173,7 +176,10 @@ export async function POST(req: NextRequest) {
   let targetDistanceM: number
 
   if (hasDestination) {
-    const destinationCandidate = generateOutAndBackToPoint(network, startNode.nodeId, params.destinationLat!, params.destinationLon!)
+    const destinationCandidate = generateOutAndBackToPoint(
+      network, startNode.nodeId, params.destinationLat!, params.destinationLon!,
+      undefined, params.routeType === 'solo_andata',
+    )
     if (!destinationCandidate) {
       return NextResponse.json({
         error: 'destination_unreachable',
@@ -186,9 +192,16 @@ export async function POST(req: NextRequest) {
     rawCandidates = [destinationCandidate]
   } else {
     targetDistanceM = params.targetDistanceKm * 1000
-    rawCandidates = params.routeType === 'anello'
-      ? generateLoopCandidates(network, startNode.nodeId, targetDistanceM)
-      : generateOutAndBackCandidates(network, startNode.nodeId, targetDistanceM)
+    switch (params.routeType) {
+      case 'anello':
+        rawCandidates = generateLoopCandidates(network, startNode.nodeId, targetDistanceM)
+        break
+      case 'solo_andata':
+        rawCandidates = generateOneWayCandidates(network, startNode.nodeId, targetDistanceM)
+        break
+      default:
+        rawCandidates = generateOutAndBackCandidates(network, startNode.nodeId, targetDistanceM)
+    }
   }
 
   console.log(`[route-build] candidati grezzi entro tolleranza: ${rawCandidates.length}`)
