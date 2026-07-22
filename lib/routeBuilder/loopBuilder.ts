@@ -2,37 +2,34 @@
 // una lunghezza target, genera candidati "andata e ritorno" o "anello" camminando sugli archi
 // reali della rete (sentieri, tracciati, strade bianche) invece di limitarsi a cercare un percorso
 // già segnato per nome.
+//
+// Approccio (dopo un primo tentativo scartato — vedi git log): NON si piazza un punto geometrico
+// "a metà lunghezza in una data direzione" e si spera di trovare un nodo di rete vicino — i
+// sentieri reali seguono valli/creste, non si irradiano come raggi dal punto di partenza, quindi
+// quel punto geometrico spesso non ha nessun nodo di rete nelle vicinanze anche quando esiste un
+// percorso perfettamente valido nella zona (verificato con un grafo sintetico a zigzag). Si
+// calcola invece un solo Dijkstra dal punto di partenza verso TUTTA la rete raggiungibile, e si
+// scelgono come candidati i nodi la cui distanza REALE (non in linea d'aria) è già vicina al
+// target — la geometria (bearing) serve solo a scegliere candidati in direzioni diverse tra loro,
+// mai a decidere se un nodo è raggiungibile.
 import { haversineM } from '@/lib/geoUtils'
-import { nearestGraphNode, type WalkNetwork } from './osmGraph'
+import type { WalkNetwork } from './osmGraph'
 
-const EARTH_RADIUS_M = 6371000
-// Direzioni provate per generare i candidati "lontani" da cui costruire andata/ritorno o anello —
-// 6 punti danno comunque varietà di forma senza moltiplicare troppo il numero di Dijkstra da
-// calcolare (ognuno costa una visita completa del grafo del bbox, e per un anello se ne fanno due
-// per bearing): con 8 il tempo totale di pathfinding contribuiva al rischio di 504 osservato in
-// produzione insieme alla query Overpass più pesante — vedi osmGraph.ts.
-const CANDIDATE_BEARINGS_DEG = [0, 60, 120, 180, 240, 300]
 // Tolleranza sulla lunghezza target: un candidato la cui lunghezza reale si discosta oltre questa
 // percentuale dal target richiesto viene scartato — meglio pochi candidati affidabili che uno
-// fuori misura pur di riempire la lista. Anche con il punto lontano agganciato correttamente
-// (vedi FAR_NODE_SNAP_THRESHOLD_M sotto), la distanza reale sui sentieri diverge dalla linea retta
-// per via di tornanti/aggiramenti — 0.3 lascia margine per questo senza essere permissiva a vuoto.
+// fuori misura pur di riempire la lista.
 const LENGTH_TOLERANCE = 0.3
 // Moltiplicatore di penalità sugli archi già usati nell'andata quando si cerca il ritorno di un
 // anello: abbastanza alto da farli evitare se esiste un'alternativa reale, non così alto da
 // rendere il grafo instabile se quella è l'unica via percorribile (rete rada).
 const REUSED_EDGE_PENALTY = 6
+// Numero di settori direzionali (da bearing rispetto al punto di partenza) usati solo per
+// scegliere candidati in direzioni diverse tra loro — non per la ricerca del percorso in sé, che
+// lavora sempre su nodi già raggiungibili nel grafo.
+const NUM_DIRECTION_BUCKETS = 6
 // Due candidati che condividono più di questa frazione di nodi sono considerati "lo stesso
 // percorso" — si tiene solo il migliore dei due invece di proporli entrambi.
 const DEDUPE_NODE_OVERLAP = 0.6
-// Raggio massimo entro cui agganciare il "punto lontano" calcolato per bearing a un nodo reale
-// della rete. Deve restare piccolo rispetto alla lunghezza target: usare targetDistanceM/2 (come
-// in una versione precedente) accettava un nodo fino a metà dell'intera lunghezza target di
-// distanza dal punto ideale, cioè un nodo praticamente ovunque nel bbox — il percorso risultante
-// finiva quasi sempre fuori dalla tolleranza di lunghezza e veniva scartato, facendo fallire la
-// generazione quasi ogni volta. Un raggio fisso e contenuto mantiene il punto agganciato vicino a
-// dove dovrebbe stare geometricamente.
-const FAR_NODE_SNAP_THRESHOLD_M = 1200
 
 export type RouteType = 'anello' | 'andata_ritorno'
 
@@ -43,14 +40,13 @@ export interface RouteCandidate {
   bearingDeg: number
 }
 
-function destinationPoint(lat: number, lon: number, bearingDeg: number, distM: number): { lat: number; lon: number } {
-  const δ = distM / EARTH_RADIUS_M
-  const θ = (bearingDeg * Math.PI) / 180
-  const φ1 = (lat * Math.PI) / 180
-  const λ1 = (lon * Math.PI) / 180
-  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ))
-  const λ2 = λ1 + Math.atan2(Math.sin(θ) * Math.sin(δ) * Math.cos(φ1), Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2))
-  return { lat: (φ2 * 180) / Math.PI, lon: (((λ2 * 180) / Math.PI + 540) % 360) - 180 }
+function bearingFromStart(start: { lat: number; lon: number }, node: { lat: number; lon: number }): number {
+  const dLon = (node.lon - start.lon) * Math.PI / 180
+  const lat1 = start.lat * Math.PI / 180
+  const lat2 = node.lat * Math.PI / 180
+  const y = Math.sin(dLon) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
 }
 
 // Min-heap minimale per Dijkstra — il grafo di un bbox di ricerca (decine di migliaia di nodi al
@@ -97,19 +93,19 @@ function edgeKey(a: number, b: number): string {
   return a < b ? `${a}_${b}` : `${b}_${a}`
 }
 
+interface DijkstraResult {
+  dist: Map<number, number>
+  prev: Map<number, number>
+}
+
 /**
- * Dijkstra tra due nodi del grafo. `penalizedEdges`, se presente, moltiplica il costo (non la
- * distanza reale riportata) degli archi già usati in un altro tratto — usato per il tratto di
- * ritorno di un anello, per preferire un percorso diverso dall'andata senza escluderlo del tutto
- * se è l'unica via.
+ * Dijkstra a sorgente singola verso TUTTA la rete raggiungibile (non si ferma a un nodo target) —
+ * usato sia per mappare le distanze reali da cui scegliere i candidati, sia per il tratto di
+ * ritorno di un anello. `penalizedEdges`, se presente, moltiplica il costo (non la distanza reale)
+ * degli archi già usati in un altro tratto, per preferire un percorso diverso senza escluderlo del
+ * tutto se è l'unica via.
  */
-function dijkstra(
-  network: WalkNetwork,
-  startId: number,
-  endId: number,
-  penalizedEdges?: Set<string>,
-): number[] | null {
-  if (startId === endId) return [startId]
+function dijkstraAll(network: WalkNetwork, startId: number, penalizedEdges?: Set<string>): DijkstraResult {
   const dist = new Map<number, number>([[startId, 0]])
   const prev = new Map<number, number>()
   const visited = new Set<number>()
@@ -120,7 +116,6 @@ function dijkstra(
     const cur = heap.pop()!
     if (visited.has(cur.nodeId)) continue
     visited.add(cur.nodeId)
-    if (cur.nodeId === endId) break
 
     const node = network.nodes.get(cur.nodeId)
     if (!node) continue
@@ -136,7 +131,11 @@ function dijkstra(
     }
   }
 
-  if (!dist.has(endId)) return null
+  return { dist, prev }
+}
+
+function reconstructPath(prev: Map<number, number>, startId: number, endId: number): number[] | null {
+  if (startId === endId) return [startId]
   const path: number[] = [endId]
   let at = endId
   while (at !== startId) {
@@ -173,24 +172,51 @@ function nodeSetOverlap(a: Set<number>, b: Set<number>): number {
   return shared / small.size
 }
 
-function dedupeCandidates(candidates: RouteCandidate[], farNodeByBearing: Map<number, Set<number>>): RouteCandidate[] {
-  const kept: RouteCandidate[] = []
-  const keptNodeSets: Set<number>[] = []
-  const sorted = [...candidates]
-  for (const c of sorted) {
-    const nodes = farNodeByBearing.get(c.bearingDeg)
-    if (!nodes) { kept.push(c); keptNodeSets.push(new Set()); continue }
-    const isDuplicate = keptNodeSets.some(existing => nodeSetOverlap(existing, nodes) > DEDUPE_NODE_OVERLAP)
-    if (!isDuplicate) { kept.push(c); keptNodeSets.push(nodes) }
+function dedupeCandidates(candidates: (RouteCandidate & { nodeSet: Set<number> })[]): RouteCandidate[] {
+  const kept: (RouteCandidate & { nodeSet: Set<number> })[] = []
+  for (const c of candidates) {
+    const isDuplicate = kept.some(existing => nodeSetOverlap(existing.nodeSet, c.nodeSet) > DEDUPE_NODE_OVERLAP)
+    if (!isDuplicate) kept.push(c)
   }
-  return kept
+  return kept.map(({ nodeSet: _nodeSet, ...rest }) => rest)
 }
 
 function withinTolerance(distanceM: number, targetDistanceM: number): boolean {
   return Math.abs(distanceM - targetDistanceM) / targetDistanceM <= LENGTH_TOLERANCE
 }
 
-/** Genera candidati andata-e-ritorno: un ramo verso un punto a ~metà della lunghezza target, poi lo stesso ramo invertito. */
+/**
+ * Sceglie, tra i nodi la cui distanza reale da start rientra nella tolleranza attorno a
+ * `targetOneWayM`, il migliore per ciascun settore direzionale — così i candidati risultano in
+ * direzioni diverse tra loro invece di ammassarsi tutti sullo stesso sentiero principale.
+ */
+function pickCandidateNodesByDirection(
+  network: WalkNetwork,
+  start: { lat: number; lon: number },
+  dist: Map<number, number>,
+  targetOneWayM: number,
+  maxCandidates: number,
+): { nodeId: number; distanceM: number }[] {
+  const inTolerance = Array.from(dist)
+    .filter(([, d]) => withinTolerance(d, targetOneWayM))
+
+  const bestPerBucket = new Map<number, { nodeId: number; distanceM: number }>()
+  for (const [nodeId, distanceM] of inTolerance) {
+    const node = network.nodes.get(nodeId)
+    if (!node) continue
+    const bucket = Math.floor(bearingFromStart(start, node) / (360 / NUM_DIRECTION_BUCKETS))
+    const current = bestPerBucket.get(bucket)
+    if (!current || Math.abs(distanceM - targetOneWayM) < Math.abs(current.distanceM - targetOneWayM)) {
+      bestPerBucket.set(bucket, { nodeId, distanceM })
+    }
+  }
+
+  return Array.from(bestPerBucket.values())
+    .sort((a, b) => Math.abs(a.distanceM - targetOneWayM) - Math.abs(b.distanceM - targetOneWayM))
+    .slice(0, maxCandidates)
+}
+
+/** Genera candidati andata-e-ritorno: verso un nodo la cui distanza reale è vicina a metà della lunghezza target, poi lo stesso ramo invertito. */
 export function generateOutAndBackCandidates(
   network: WalkNetwork,
   startNodeId: number,
@@ -200,31 +226,24 @@ export function generateOutAndBackCandidates(
   const start = network.nodes.get(startNodeId)
   if (!start) return []
 
-  const candidates: RouteCandidate[] = []
-  const farNodeSets = new Map<number, Set<number>>()
+  const { dist, prev } = dijkstraAll(network, startNodeId)
+  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM / 2, maxCandidates)
 
-  for (const bearingDeg of CANDIDATE_BEARINGS_DEG) {
-    const far = destinationPoint(start.lat, start.lon, bearingDeg, targetDistanceM / 2)
-    const farNode = nearestGraphNode(network, far.lat, far.lon, FAR_NODE_SNAP_THRESHOLD_M)
-    if (!farNode) continue
-
-    const outPath = dijkstra(network, startNodeId, farNode.nodeId)
+  const candidates: (RouteCandidate & { nodeSet: Set<number> })[] = []
+  for (const { nodeId, distanceM: oneWayM } of picked) {
+    const outPath = reconstructPath(prev, startNodeId, nodeId)
     if (!outPath) continue
-
-    const distanceM = pathDistanceM(network, outPath) * 2
-    if (!withinTolerance(distanceM, targetDistanceM)) continue
-
     const backPath = [...outPath].reverse().slice(1)
     const polyline = pathToPolyline(network, [...outPath, ...backPath])
-    candidates.push({ type: 'andata_ritorno', polyline, distanceM, bearingDeg })
-    farNodeSets.set(bearingDeg, new Set(outPath))
+    const bearingDeg = bearingFromStart(start, network.nodes.get(nodeId)!)
+    candidates.push({ type: 'andata_ritorno', polyline, distanceM: oneWayM * 2, bearingDeg, nodeSet: new Set(outPath) })
   }
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
-  return dedupeCandidates(candidates, farNodeSets).slice(0, maxCandidates)
+  return dedupeCandidates(candidates)
 }
 
-/** Genera candidati ad anello: verso un punto a ~metà della lunghezza target, ritorno per una via diversa quando possibile. */
+/** Genera candidati ad anello: verso un nodo la cui distanza reale è vicina a metà della lunghezza target, ritorno per una via diversa quando possibile. */
 export function generateLoopCandidates(
   network: WalkNetwork,
   startNodeId: number,
@@ -234,21 +253,22 @@ export function generateLoopCandidates(
   const start = network.nodes.get(startNodeId)
   if (!start) return []
 
-  const candidates: RouteCandidate[] = []
-  const nodeSets = new Map<number, Set<number>>()
+  const { dist, prev } = dijkstraAll(network, startNodeId)
+  // Più candidati grezzi del necessario: per un anello il tratto di ritorno (via diversa) può
+  // allungare il totale oltre tolleranza anche quando l'andata era ben piazzata, quindi conviene
+  // provarne qualcuno in più prima di scartare.
+  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM / 2, maxCandidates * 2)
 
-  for (const bearingDeg of CANDIDATE_BEARINGS_DEG) {
-    const far = destinationPoint(start.lat, start.lon, bearingDeg, targetDistanceM / 2)
-    const farNode = nearestGraphNode(network, far.lat, far.lon, FAR_NODE_SNAP_THRESHOLD_M)
-    if (!farNode) continue
-
-    const outPath = dijkstra(network, startNodeId, farNode.nodeId)
+  const candidates: (RouteCandidate & { nodeSet: Set<number> })[] = []
+  for (const { nodeId: farNodeId } of picked) {
+    const outPath = reconstructPath(prev, startNodeId, farNodeId)
     if (!outPath) continue
 
     const usedEdges = new Set<string>()
     for (let i = 0; i < outPath.length - 1; i++) usedEdges.add(edgeKey(outPath[i], outPath[i + 1]))
 
-    const backPath = dijkstra(network, farNode.nodeId, startNodeId, usedEdges)
+    const { prev: backPrev } = dijkstraAll(network, farNodeId, usedEdges)
+    const backPath = reconstructPath(backPrev, farNodeId, startNodeId)
     if (!backPath) continue
 
     const fullPath = [...outPath, ...backPath.slice(1)]
@@ -256,10 +276,10 @@ export function generateLoopCandidates(
     if (!withinTolerance(distanceM, targetDistanceM)) continue
 
     const polyline = pathToPolyline(network, fullPath)
-    candidates.push({ type: 'anello', polyline, distanceM, bearingDeg })
-    nodeSets.set(bearingDeg, new Set(fullPath))
+    const bearingDeg = bearingFromStart(start, network.nodes.get(farNodeId)!)
+    candidates.push({ type: 'anello', polyline, distanceM, bearingDeg, nodeSet: new Set(fullPath) })
   }
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
-  return dedupeCandidates(candidates, nodeSets).slice(0, maxCandidates)
+  return dedupeCandidates(candidates).slice(0, maxCandidates)
 }
