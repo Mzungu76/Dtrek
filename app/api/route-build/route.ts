@@ -140,12 +140,18 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const candidates = await scoreAndEnrichCandidates(rawCandidates, {
-    targetDistanceM,
-    targetElevationM: params.targetElevationM,
-    environmentPrefs,
-    concerns,
-  })
+  let candidates
+  try {
+    candidates = await scoreAndEnrichCandidates(rawCandidates, {
+      targetDistanceM,
+      targetElevationM: params.targetElevationM,
+      environmentPrefs,
+      concerns,
+    })
+  } catch (e) {
+    console.error('[route-build] scoreAndEnrichCandidates failed:', e)
+    return NextResponse.json({ error: 'Arricchimento dei percorsi non riuscito, riprova.' }, { status: 502 })
+  }
 
   if (candidates.length === 0) {
     return NextResponse.json({

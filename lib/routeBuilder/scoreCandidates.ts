@@ -127,8 +127,13 @@ export async function scoreAndEnrichCandidates(
   maxResults = 4,
 ): Promise<ScoredCandidate[]> {
   const enriched = await Promise.all(raw.map(async candidate => {
+    // enrichGeometryWithElevation lancia (non ritorna null) solo per il caso statico "DTM non
+    // configurato" (DtmUnavailableError, vedi lib/dtm/dtmClient.ts) — senza questo catch, un
+    // singolo candidato senza chiave configurata farebbe fallire l'intera Promise.all e quindi
+    // l'intera richiesta, invece di limitarsi a scartare quel candidato come "nessun profilo
+    // altimetrico disponibile" (stesso esito pratico di un ritorno null per mancata copertura).
     const [enrichedTrack, pois] = await Promise.all([
-      enrichGeometryWithElevation(candidate.polyline),
+      enrichGeometryWithElevation(candidate.polyline).catch(() => null),
       fetchPoisNearPolyline(candidate.polyline).catch(() => [] as PoiItem[]),
     ])
     if (!enrichedTrack) return null
