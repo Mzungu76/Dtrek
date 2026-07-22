@@ -656,6 +656,20 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS flora_computed_at timestamptz
 
 
 -- ═══════════════════════════════════════════════════════════
+-- Metadati di un percorso "trovato" da Giulia (ricerca AI di un percorso già documentato altrove,
+-- fusa nel wizard "Costruisci un percorso" — vedi components/upload/RouteBuilder.tsx e
+-- GiuliaSearchPanel.tsx) invece che costruito algoritmicamente. Assenti su un percorso costruito o
+-- importato in altro modo. Stesso blocco anche in
+-- supabase/migrations/add_found_route_metadata_columns.sql.
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS source_url      TEXT;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS comfort_verdict TEXT;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS comfort_note    TEXT;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS zone            TEXT;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS difficulty      TEXT;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- Meteo storico al momento dell'escursione (Blocco 1.2 piano DTrek)
 -- ═══════════════════════════════════════════════════════════
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS weather_at_hike jsonb;
