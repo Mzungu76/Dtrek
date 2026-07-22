@@ -113,7 +113,11 @@ const AREA_RE = /\[area\]([\s\S]*?)\[\/area\]/
  */
 async function resolveViaAI(query: string, apiKey: string, model: string): Promise<ResolvedPlace | null> {
   try {
-    const client = new Anthropic({ apiKey })
+    // Timeout esplicito: senza, l'SDK aspetterebbe molto più a lungo del budget della funzione
+    // (60s, vedi maxDuration in app/api/route-build/search/route.ts) — una risposta lenta
+    // ucciderebbe l'intera funzione lato piattaforma con un errore non-JSON, che il client legge
+    // come generico "errore di rete" invece del vero motivo. Con ricerca web: più margine (25s).
+    const client = new Anthropic({ apiKey, timeout: 25_000 })
     const response = await client.messages.create({
       model,
       max_tokens: 1024,
@@ -217,7 +221,10 @@ Ometti dal JSON delle preferenze ogni campo non desumibile dal testo (non usare 
  */
 export async function interpretSearchRequest(query: string, apiKey: string, model: string): Promise<InterpretedRequest | null> {
   try {
-    const client = new Anthropic({ apiKey })
+    // Timeout esplicito, più stretto di resolveViaAI: nessuna ricerca web qui, solo
+    // interpretazione del testo — se impiega più di 15s qualcosa non va, meglio rinunciare che
+    // rischiare di far scadere il budget della funzione (60s) e restituire un errore non-JSON.
+    const client = new Anthropic({ apiKey, timeout: 15_000 })
     const response = await client.messages.create({
       model,
       max_tokens: 512,

@@ -110,7 +110,22 @@ function parseBody(raw: unknown): BuildRequestBody {
   return { lat, lon, routeType: body.routeType, targetDistanceKm, targetElevationM, destinationLat, destinationLon, environmentPrefs, desiredPoiTypes }
 }
 
+// Rete di sicurezza: un'eccezione imprevista nel calcolo (es. il grafo, il pathfinding) senza
+// questo wrapper può risultare in una risposta non-JSON che il client legge come "errore di rete"
+// generico, mascherando la causa reale — stesso principio già applicato a route-build/search.
 export async function POST(req: NextRequest) {
+  try {
+    return await handlePost(req)
+  } catch (e) {
+    console.error('[route-build] Errore imprevisto:', e)
+    return NextResponse.json(
+      { error: 'Errore interno', message: 'Generazione non riuscita per un errore interno, riprova.' },
+      { status: 500 },
+    )
+  }
+}
+
+async function handlePost(req: NextRequest): Promise<NextResponse> {
   const { user, authUnavailable, degraded } = await getUserFromRequestDetailed(req)
   if (!user && !degraded) {
     return NextResponse.json(
