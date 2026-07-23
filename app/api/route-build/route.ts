@@ -43,6 +43,13 @@ const MIN_BUILT_RESULTS = 8
 // un tentativo a ~6 km e uno a ~10 km) — comunque clampati entro MIN/MAX_TARGET_DISTANCE_KM.
 const RETRY_DISTANCE_FACTORS = [0.75, 1.25]
 const MAX_BUILT_RESULTS = 14
+// Quanti candidati grezzi arricchire davvero (DTM + POI) per passata — i generatori li restituiscono
+// già ordinati dal più vicino al target di lunghezza (vedi loopBuilder.ts), quindi tagliare qui
+// tiene i migliori. Arricchire tutti e 14 in una volta (fino a poco fa) significava fino a 14
+// chiamate DTM concorrenti più altrettante POI — un fattore concreto nei timeout di produzione
+// osservati in aree con rete rada (dove ogni candidato aggiunto pesa, senza aumentare di molto le
+// probabilità di successo). Il ritentativo esiste apposta per recuperare se questi non bastano.
+const ENRICH_CAP = 8
 // Se il primo tentativo (fetch rete + arricchimento) ha già consumato più di questo, il
 // ritentativo viene saltato — meglio pochi risultati garantiti entro il tetto di 60s della
 // funzione (maxDuration sopra) che rischiare un kill della piattaforma a metà ritentativo, che non
@@ -369,7 +376,7 @@ async function executeBuild(
 
   let candidates: ScoredCandidate[]
   try {
-    candidates = await scoreAndEnrichCandidates(rawCandidates, {
+    candidates = await scoreAndEnrichCandidates(rawCandidates.slice(0, ENRICH_CAP), {
       targetDistanceM,
       targetElevationM: params.targetElevationM,
       environmentPrefs,
@@ -407,7 +414,7 @@ async function executeBuild(
           // Il punteggio resta ancorato all'obiettivo originale, non alla lunghezza del
           // ritentativo — questi candidati sono un ripiego per avere più opzioni, non una nuova
           // richiesta dell'utente.
-          return await scoreAndEnrichCandidates(altRaw, {
+          return await scoreAndEnrichCandidates(altRaw.slice(0, ENRICH_CAP), {
             targetDistanceM,
             targetElevationM: params.targetElevationM,
             environmentPrefs,
