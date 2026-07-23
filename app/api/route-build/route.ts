@@ -8,6 +8,7 @@ import { scoreAndEnrichCandidates } from '@/lib/routeBuilder/scoreCandidates'
 import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
 import { sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
 import { POI_META, type PoiType } from '@/lib/overpass'
+import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 
 const VALID_POI_TYPES = new Set(Object.keys(POI_META))
 
@@ -179,6 +180,28 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Richiesta non valida' }, { status: 400 })
   }
 
+  const startedAt = Date.now()
+  // Riepilogo comune a ogni possibile esito di questa richiesta, per il log privato consultabile
+  // su /profilo/log-ricerche — ogni return da qui in poi chiama logBuild prima di uscire, così
+  // anche gli esiti "pochi/nessun risultato" restano visibili senza dover leggere i log Vercel.
+  async function logBuild(fields: {
+    tierReached: string
+    message?: string | null
+    builtCount?: number | null
+    retried?: boolean
+    details?: Record<string, unknown> | null
+  }) {
+    await logRouteBuildEvent({
+      userId: user?.id ?? null,
+      kind: 'build',
+      routeType: params.routeType,
+      targetDistanceKm: params.targetDistanceKm,
+      useAi: false,
+      durationMs: Date.now() - startedAt,
+      ...fields,
+    })
+  }
+
   let concerns: ReturnType<typeof sanitizeHikerConcerns> = []
   let environmentPrefs = params.environmentPrefs ?? []
   if (user) {
@@ -210,6 +233,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     network = await fetchWalkNetwork(bbox)
   } catch (e) {
     console.error('[route-build] fetchWalkNetwork failed:', e)
+    await logBuild({ tierReached: 'error', message: 'rete sentieri non disponibile' })
     return NextResponse.json({ error: 'Rete sentieri non disponibile in questo momento, riprova.' }, { status: 502 })
   }
 
@@ -217,6 +241,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
 
   const startNode = nearestGraphNode(network, params.lat, params.lon, START_SNAP_THRESHOLD_M)
   if (!startNode) {
+    await logBuild({ tierReached: 'no_network_nearby', details: { networkNodes: network.nodes.size } })
     return NextResponse.json({
       error: 'no_network_nearby',
       message: 'Non ho trovato sentieri o strade percorribili abbastanza vicino al punto scelto — prova un punto di partenza diverso.',
@@ -232,6 +257,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       undefined, params.routeType === 'solo_andata',
     )
     if (!destinationCandidate) {
+      await logBuild({ tierReached: 'destination_unreachable' })
       return NextResponse.json({
         error: 'destination_unreachable',
         message: 'La destinazione indicata non è abbastanza vicina a sentieri o strade percorribili, o non è raggiungibile dal punto di partenza — prova un\'altra destinazione.',
@@ -249,6 +275,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   console.log(`[route-build] candidati grezzi entro tolleranza: ${rawCandidates.length}`)
 
   if (rawCandidates.length === 0) {
+    await logBuild({ tierReached: 'no_raw_candidates', builtCount: 0 })
     return NextResponse.json({
       candidates: [],
       message: 'Nessun percorso trovato con questi vincoli nella zona scelta — prova una lunghezza diversa o un punto di partenza differente.',
@@ -267,12 +294,15 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     })
   } catch (e) {
     console.error('[route-build] scoreAndEnrichCandidates failed:', e)
+    await logBuild({ tierReached: 'error', message: 'arricchimento fallito' })
     return NextResponse.json({ error: 'Arricchimento dei percorsi non riuscito, riprova.' }, { status: 502 })
   }
 
+  let retried = false
   // Ritentativo con lunghezze alternative se, senza destinazione, ne sono sopravvissuti troppo
   // pochi — solo se serve (mai per la destinazione, dove l'unico risultato possibile è già quello).
   if (!hasDestination && candidates.length < MIN_BUILT_RESULTS) {
+    retried = true
     console.log(`[route-build] solo ${candidates.length} candidati validi, ritento con lunghezze alternative`)
     const seen = new Set(candidates.map(candidateSignature))
     for (const factor of RETRY_DISTANCE_FACTORS) {
@@ -311,11 +341,19 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   }
 
   if (candidates.length === 0) {
+    await logBuild({ tierReached: 'no_dtm_coverage', builtCount: 0, retried, details: { rawCount: rawCandidates.length } })
     return NextResponse.json({
       candidates: [],
       message: 'Ho trovato percorsi possibili ma senza copertura del modello altimetrico in questa zona — prova un punto di partenza differente.',
     })
   }
+
+  await logBuild({
+    tierReached: retried ? 'retry_built' : 'built',
+    builtCount: candidates.length,
+    retried,
+    details: { rawCount: rawCandidates.length, hasDestination },
+  })
 
   return NextResponse.json({ candidates })
 }

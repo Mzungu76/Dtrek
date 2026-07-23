@@ -7,6 +7,7 @@ import {
   sortByDistanceFrom, type HikingRouteCandidate,
 } from '@/lib/overpassTrails'
 import { resolveTrackForCandidate } from '@/lib/routeBuilder/resolveTrack'
+import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 import type { TrackPoint } from '@/lib/tcxParser'
 
 export const dynamic = 'force-dynamic'
@@ -152,9 +153,12 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
+  const startedAt = Date.now()
   let place: ResolvedPlace | null = null
   let foundRoutes: FoundRouteResult[] = []
   let prefill: InterpretedPreferences | null = null
+  let tierReached: 'tier0' | 'tier1' = 'tier0'
+  let interpretedPlacesCount = 0
 
   try {
     const level0 = await tier0(query)
@@ -168,12 +172,14 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // una chiave personale disponibile — mai la chiave condivisa di emergenza (stessa scelta già
   // fatta per il livello AI di resolvePlaceName).
   if (!place && foundRoutes.length === 0 && useAi && user) {
+    tierReached = 'tier1'
     try {
       const { apiKey, claudeModel } = await resolveApiKeyAndSettings(user.id, 'routeBuildInterpretRequest')
       if (apiKey) {
         const interpreted = await interpretSearchRequest(query, apiKey, claudeModel)
         if (interpreted) {
           prefill = interpreted.prefs
+          interpretedPlacesCount = interpreted.places.length
           for (const p of interpreted.places.slice(0, MAX_INTERPRETED_PLACES)) {
             const rerun = await tier0(p.query)
             if (!place && rerun.place) place = rerun.place
@@ -191,6 +197,19 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // Nessun risultato da nessuno dei due livelli gratuiti/economici — se l'AI è attiva, il client
   // apre la chat completa di Giulia (Livello 2, ricerca web) come ultima risorsa.
   const escalateToAi = useAi && !place && foundRoutes.length === 0
+
+  await logRouteBuildEvent({
+    userId: user?.id ?? null,
+    kind: 'search',
+    query,
+    useAi,
+    tierReached: escalateToAi ? `${tierReached}_escalated` : tierReached,
+    placeName: place?.displayName ?? null,
+    foundCount: foundRoutes.length,
+    escalatedToAi: escalateToAi,
+    durationMs: Date.now() - startedAt,
+    details: { interpretedPlacesCount },
+  })
 
   return NextResponse.json({ place, prefill, foundRoutes, escalateToAi })
 }
