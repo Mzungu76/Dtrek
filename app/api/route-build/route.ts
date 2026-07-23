@@ -26,10 +26,11 @@ const MAX_TARGET_DISTANCE_KM = 15
 // costruito su un frammento isolato di strada.
 const START_SNAP_THRESHOLD_M = 500
 // Tagli ammessi per il filtro "raggio di ricerca" del wizard (visibile in mappa, condiviso da
-// ricerca base e avanzata — vedi components/upload/RouteBuilder.tsx). Qui si applica solo come
-// tetto AGGIUNTIVO al raggio del bbox già calcolato dalla lunghezza target: puà solo restringere,
-// mai allargare oltre il tetto di sicurezza esistente (10 km, vedi bboxRadiusKm), per non
-// reintrodurre il rischio di query Overpass troppo pesanti che ha già causato dei 504 in passato.
+// ricerca base e avanzata — vedi components/upload/RouteBuilder.tsx). Qui in route-build ha effetto
+// SOLO in modalità 'dintorni' (allarga l'aggancio alla rete e il bbox, clampato a
+// BUILD_DINTORNI_MAX_KM) — in modalità 'esatto' non restringe più il bbox (vedi bboxRadiusKm): resta
+// solo il tetto fisso di sicurezza di 10 km, per non reintrodurre il rischio di query Overpass
+// troppo pesanti che ha già causato dei 504 in passato.
 const ALLOWED_RADIUS_KM = [5, 10, 20, 50, 100]
 const DEFAULT_RADIUS_KM = 20
 // Tetto per la modalità "dintorni" (vedi BuildRequestBody.startMode): il raggio scelto dall'utente
@@ -321,15 +322,18 @@ async function executeBuild(
   // target di lunghezza scelto dall'utente (che qui non è più un vincolo) — si usa la distanza in
   // linea d'aria verso la destinazione con lo stesso margine. Tetto a 10 km in entrambi i casi:
   // oltre, il bbox interrogato via Overpass diventa abbastanza grande da rischiare di superare il
-  // tempo disponibile prima del kill della funzione lato piattaforma. Il filtro raggio scelto
-  // dall'utente (params.radiusKm) si applica qui SOLO come ulteriore restrizione — se più piccolo
-  // del tetto di sicurezza lo sostituisce, se più grande (es. 50/100 km, pensati soprattutto per i
-  // percorsi "trovati") viene ignorato, mai per allargare il bbox oltre 10 km.
+  // tempo disponibile prima del kill della funzione lato piattaforma.
   // In modalità 'dintorni' il punto dato è solo un centro d'interesse (un luogo, un POI) — l'aggancio
   // alla rete percorribile può cercarsi entro un raggio più ampio (clampato a BUILD_DINTORNI_MAX_KM)
   // invece del tetto fisso START_SNAP_THRESHOLD_M pensato per un punto di partenza già esatto — e il
   // bbox interrogato deve coprire almeno quel raggio, altrimenti l'aggancio non troverebbe nulla da
   // vedere oltre i pochi km di rete già previsti dalla lunghezza target.
+  // In modalità 'esatto' invece params.radiusKm NON viene più usato per restringere questo bbox
+  // (bug corretto: prima un raggio piccolo, es. 5 km, scelto dall'utente insieme a una lunghezza
+  // target maggiore poteva far collassare il bbox sotto il minimo geometrico necessario, causando
+  // "nessun percorso trovato" per una combinazione radius/lunghezza del tutto legittima) — solo il
+  // tetto fisso di sicurezza (10 km) resta, coerente col testo mostrato nel wizard che dichiara il
+  // raggio "solo un tetto di sicurezza" in questa modalità (vedi components/upload/RouteBuilder.tsx).
   const dintorniRadiusKm = params.startMode === 'dintorni' ? Math.min(params.radiusKm, BUILD_DINTORNI_MAX_KM) : 0
   const bboxRadiusKm = Math.min(
     Math.max(
@@ -338,7 +342,7 @@ async function executeBuild(
         : Math.min(Math.max(params.targetDistanceKm * 0.6, 2), 10),
       dintorniRadiusKm,
     ),
-    params.startMode === 'dintorni' ? 10 : params.radiusKm,
+    10,
   )
   const bbox = padBbox([params.lat, params.lon, params.lat, params.lon], bboxRadiusKm)
 

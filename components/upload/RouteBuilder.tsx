@@ -248,6 +248,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // un'apertura manuale che implicherebbe di dover scegliere a priori se "cercare con l'AI".
   const [showGiulia, setShowGiulia] = useState(false)
   const [giuliaSeed, setGiuliaSeed] = useState('')
+  // Incrementato a ogni nuova escalation (vedi runSearch/runSuMisura) e usato come `key` di
+  // GiuliaSearchPanel: senza, riaprire la chat per una query diversa mentre il pannello precedente
+  // era già montato (es. dopo aver cambiato modalità di ricerca senza chiuderlo) non lo faceva
+  // ripartire da zero — restava la stessa istanza React con la vecchia conversazione, e la nuova
+  // `initialQuery` non veniva mai inviata (l'effetto che invia il messaggio iniziale gira solo al
+  // mount). Forzare un remount è l'unico modo per garantire una chat pulita per ogni escalation.
+  const [giuliaSessionId, setGiuliaSessionId] = useState(0)
   // Da quale modalità è partita l'escalation a Giulia — in "Esistenti" lo scopo è mostrare i
   // percorsi che trova; in "Su misura" (vedi runSuMisura) lo scopo è solo risolvere un luogo/POI
   // troppo raro per la risoluzione economica, quindi appena Giulia dà un punto utilizzabile si
@@ -464,12 +471,23 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         setErrorMsg('')
         setGiuliaOrigin('esistenti')
         setGiuliaSeed(query.trim())
+        setGiuliaSessionId(id => id + 1)
         setShowGiulia(true)
       } else if (found.length === 0) {
         // Ricerca "Esistenti" pura: nessuna costruzione automatica di riserva (quella è l'azione
         // "Su misura", un motore distinto scelto esplicitamente dall'utente, non un ripiego
         // silenzioso qui) — se non si trova nulla, il messaggio invita a provare l'altra modalità.
-        setErrorMsg('Nessun percorso esistente trovato — prova a scrivere diversamente, tocca la mappa, o prova "Su misura" per generarne uno.')
+        //
+        // Distinzione importante: il server calcola `escalateToAi` PRIMA del filtro per tipo qui
+        // sopra, quindi se ha trovato percorsi ma nessuno ha il tipo selezionato (es. solo anelli
+        // quando l'utente ha scelto "Andata e ritorno"), `escalateToAi` resta false — Giulia non
+        // verrebbe mai offerta, e senza questo ramo il messaggio genericamente diceva "nessun
+        // percorso trovato" anche quando in realtà ce n'erano, solo del tipo sbagliato (stesso
+        // problema di fondo già segnalato con "seleziono anello ma non compare mai").
+        const rawFoundCount = (data.foundRoutes ?? []).length
+        setErrorMsg(rawFoundCount > 0
+          ? `Trovati ${rawFoundCount} percorsi in questa zona, ma nessuno del tipo selezionato — prova ad ampliare il filtro "Tipo di percorso", o disattivalo.`
+          : 'Nessun percorso esistente trovato — prova a scrivere diversamente, tocca la mappa, o prova "Su misura" per generarne uno.')
       } else {
         setErrorMsg('')
         setStep('results')
@@ -663,6 +681,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           // percorsi già documentati.
           setGiuliaOrigin('su_misura')
           setGiuliaSeed(query.trim())
+          setGiuliaSessionId(id => id + 1)
           setShowGiulia(true)
         } else {
           setErrorMsg('Luogo non trovato — prova a scrivere diversamente, tocca la mappa, o attiva "Usa l\'AI se non trovo nulla".')
@@ -892,7 +911,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           </button>
           <div className="pointer-events-auto bg-white/95 backdrop-blur rounded-xl px-3 py-1.5 shadow-md">
             <p className="text-sm font-semibold text-stone-800">Costruisci o trova un percorso</p>
-            <p className="text-[11px] text-stone-400">Tocca la mappa o scrivi cosa cerchi</p>
+            {/* Il tocco sulla mappa imposta un punto di partenza, usato solo da "Su misura" —
+                "Esistenti" cerca esclusivamente per testo (nessun endpoint di ricerca "vicino a un
+                punto" per i percorsi già documentati): un unico messaggio per entrambe le modalità
+                prometteva un tocco che in "Esistenti" non aveva alcun effetto sulla ricerca. */}
+            <p className="text-[11px] text-stone-400">
+              {searchMode === 'esistenti' ? 'Scrivi cosa cerchi' : 'Tocca la mappa o scrivi il luogo di partenza'}
+            </p>
           </div>
         </div>
 
@@ -1066,12 +1091,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
           {showGiulia && useAi && (
             <div className="space-y-2">
-              <p className="text-xs text-terra-700 bg-terra-50 border border-terra-200 rounded-xl px-3 py-2">
-                {giuliaOrigin === 'su_misura'
-                  ? '✨ Luogo raro — provo a individuarlo con Giulia (può farti qualche domanda).'
-                  : '✨ Nessun risultato senza AI — provo a cercarlo con Giulia.'}
-              </p>
-              <GiuliaSearchPanel onFound={handleFound} initialQuery={giuliaSeed} />
+              <div className="flex items-start justify-between gap-2 bg-terra-50 border border-terra-200 rounded-xl px-3 py-2">
+                <p className="text-xs text-terra-700">
+                  {giuliaOrigin === 'su_misura'
+                    ? '✨ Luogo raro — provo a individuarlo con Giulia (può farti qualche domanda).'
+                    : '✨ Nessun risultato senza AI — provo a cercarlo con Giulia.'}
+                </p>
+                {/* Prima non c'era modo di chiudere la chat una volta aperta, se non disattivare
+                    l'interruttore AI (che ha anche altri effetti) — chiusura esplicita e innocua. */}
+                <button type="button" onClick={() => setShowGiulia(false)} aria-label="Chiudi"
+                  className="shrink-0 text-terra-400 hover:text-terra-700 transition-colors">
+                  <XIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <GiuliaSearchPanel key={giuliaSessionId} onFound={handleFound} initialQuery={giuliaSeed} />
             </div>
           )}
 
