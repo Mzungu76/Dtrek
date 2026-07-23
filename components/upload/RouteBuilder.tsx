@@ -239,6 +239,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // un'unica ricerca che le combina entrambe. Stesso motore di prima (Livello 0/1/2 per "Esistenti",
   // algoritmo di generazione per "Su misura"), solo diviso invece che sempre eseguito insieme.
   const [searchMode, setSearchMode] = useState<'esistenti' | 'su_misura'>('esistenti')
+  // Solo per "Su misura": il luogo/POI digitato è il punto di partenza esatto, o solo un centro
+  // d'interesse nei cui dintorni cercare il miglior aggancio alla rete percorribile (utile per un
+  // luogo generico come una città, o un POI senza sentieri esattamente addosso, es. "Cascata del
+  // Picchio") — vedi startMode in app/api/route-build/route.ts.
+  const [startMode, setStartMode] = useState<'esatto' | 'dintorni'>('esatto')
   // Rivelato automaticamente solo quando i livelli 0/1 (gratuito/economico) non trovano nulla — mai
   // un'apertura manuale che implicherebbe di dover scegliere a priori se "cercare con l'AI".
   const [showGiulia, setShowGiulia] = useState(false)
@@ -352,6 +357,25 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     else if (hasEsistenti) setResultsTab('esistenti')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
+
+  // Anteprima immediata (con debounce) del luogo digitato in "Su misura": aggiorna solo
+  // lat/lon (mai il testo, per non correggere quello che l'utente sta ancora scrivendo) così la
+  // mappa e il cerchio del raggio di ricerca si spostano subito, prima ancora di premere il
+  // pulsante — sempre senza AI (risoluzione economica, chiamata a ogni pausa nella digitazione:
+  // usare qui il livello AI sarebbe uno spreco). La risoluzione "ufficiale" (che rispetta
+  // l'interruttore AI e aggiorna anche il testo con il nome risolto) resta quella di runSuMisura,
+  // eseguita solo alla conferma.
+  useEffect(() => {
+    if (searchMode !== 'su_misura' || !query.trim()) return
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(query.trim())}&useAi=false`)
+        const data = await res.json()
+        if (data?.place) { setLat(data.place.lat); setLon(data.place.lon) }
+      } catch {}
+    }, 600)
+    return () => clearTimeout(handle)
+  }, [query, searchMode])
 
   // Selezione multipla dei tipi di percorso — sempre almeno un tipo attivo, non si può deselezionare
   // l'ultimo rimasto.
@@ -518,6 +542,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     targetElevationM: number | null
     environmentPrefs: HikerEnvironmentPrefKey[]
     desiredPoiTypes: PoiType[]
+    startMode: 'esatto' | 'dintorni'
   }
 
   /** Nucleo condiviso della costruzione algoritmica — usato dalla modalità "Su misura" (generate/
@@ -568,6 +593,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       targetElevationM: targetElevationM.trim() ? Number(targetElevationM) : null,
       environmentPrefs,
       desiredPoiTypes,
+      startMode,
     })
     if (count > 0) setStep('results')
     else if (message) setErrorMsg(message)
@@ -861,6 +887,31 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             <Sparkles className="w-3.5 h-3.5" /> Usa l&apos;AI se non trovo nulla
           </button>
 
+          {searchMode === 'su_misura' && (
+            <div>
+              <p className="text-xs font-medium text-stone-600 mb-1.5">Il luogo digitato è...</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button type="button" onClick={() => setStartMode('esatto')}
+                  className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                    startMode === 'esatto' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                  }`}>
+                  Il punto di partenza
+                </button>
+                <button type="button" onClick={() => setStartMode('dintorni')}
+                  className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                    startMode === 'dintorni' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                  }`}>
+                  Un centro d&apos;interesse nei dintorni
+                </button>
+              </div>
+              {startMode === 'dintorni' && (
+                <p className="text-xs text-stone-400 mt-1.5">
+                  Utile per un luogo generico (es. una città) o un punto d&apos;interesse senza sentieri esattamente addosso (es. una cascata) — cerca il miglior punto di partenza entro il raggio scelto qui sotto, invece di richiedere che sia già lì.
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <p className="text-xs font-medium text-stone-600 mb-1.5">Raggio di ricerca dal punto/luogo</p>
             <div className="grid grid-cols-5 gap-1.5">
@@ -873,6 +924,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 </button>
               ))}
             </div>
+            {searchMode === 'su_misura' && startMode === 'esatto' && (
+              <p className="text-xs text-stone-400 mt-1.5">
+                Con &quot;Il punto di partenza&quot; il raggio si applica solo come tetto di sicurezza, non allarga la ricerca — passa a &quot;Un centro d&apos;interesse nei dintorni&quot; per usarlo davvero.
+              </p>
+            )}
           </div>
 
           <button
