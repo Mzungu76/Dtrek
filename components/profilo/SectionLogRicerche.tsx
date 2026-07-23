@@ -47,7 +47,14 @@ export default function SectionLogRicerche() {
     setLoading(true); setError(null)
     try {
       const res = await fetch('/api/route-build/logs')
-      const data = await res.json()
+      let data: { logs?: LogRow[]; error?: string }
+      try {
+        data = await res.json()
+      } catch {
+        // Risposta non-JSON (pagina d'errore della piattaforma) — messaggio comprensibile invece
+        // del testo grezzo dell'errore di parsing.
+        throw new Error(`Il server non ha risposto correttamente (status ${res.status})`)
+      }
       if (!res.ok) throw new Error(data?.error ?? `Errore ${res.status}`)
       setLogs(data.logs ?? [])
     } catch (e) {
