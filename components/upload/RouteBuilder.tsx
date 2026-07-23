@@ -552,7 +552,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       if (startPoint) {
         setShowGiulia(false)
         await generate({ lat: startPoint.lat, lon: startPoint.lon })
+      } else {
+        // Giulia ha risposto ma nessuno dei candidati ha prodotto una traccia reale né un luogo
+        // risolvibile (es. un punto d'interesse troppo minuto anche per lei) — senza questo ramo
+        // la richiesta finiva nel nulla: chat aperta, nessuna card, nessun messaggio, nessun modo
+        // di capire cosa fare (bug osservato con "cascata del picchio").
+        setErrorMsg('Giulia non è riuscita a individuare un punto di partenza preciso per questo luogo — prova a scrivere diversamente, o tocca la mappa per scegliere il punto di partenza.')
       }
+    } else if (resolvedItems.length === 0 && !fallbackPlace) {
+      setErrorMsg('Giulia non ha trovato un percorso con una traccia reale per questa ricerca — prova a scrivere diversamente.')
     }
   }
 
