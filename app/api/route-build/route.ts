@@ -48,6 +48,13 @@ const MAX_BUILT_RESULTS = 14
 // funzione (maxDuration sopra) che rischiare un kill della piattaforma a metà ritentativo, che non
 // lascia scrivere né una risposta né una riga di log (vedi commento sul ritentativo sotto).
 const BUILD_TIME_BUDGET_MS = 40_000
+// Tetto morbido sull'intera richiesta (fetch rete + arricchimento + eventuale ritentativo),
+// deciso da noi con margine rispetto al tetto duro di 60s della piattaforma (maxDuration sopra):
+// un kill della piattaforma non è un'eccezione JS, nessun try/catch può intercettarlo, quindi non
+// lascia scrivere né una risposta né una riga di log — osservato in produzione (Vercel Runtime
+// Errors: "Task timed out after 60 seconds" su questo stesso endpoint). Rispondere noi prima,
+// anche con un esito vuoto ma spiegato, è sempre meglio di un silenzio totale.
+const SOFT_DEADLINE_MS = 45_000
 
 // ── GET: valori suggeriti per precompilare il wizard (storico attività + profilo) ───────────────
 // Nessun costo AI qui — solo letture Supabase già esistenti (lib/hikerContext.ts, stesse usate da
@@ -232,8 +239,28 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // fetchHikerProfile prima di questa correzione) veniva comunque intercettata dal wrapper esterno
   // di POST, ma senza mai scrivere una riga di log — un fallimento reale restava invisibile su
   // /profilo/log-ricerche, visibile solo nei log Vercel.
+  //
+  // In produzione (vedi Vercel Runtime Errors) executeBuild colpisce a volte il tetto DURO di 60s
+  // della piattaforma — tipicamente in zone con rete sentieri rada (es. Blera), dove il
+  // ritentativo scatta quasi sempre. Un kill della piattaforma non è un'eccezione JS: nessun
+  // try/catch (né qui né altrove) può intercettarlo, quindi non veniva mai scritta né una
+  // risposta né una riga di log — esattamente il sintomo "nessuna Costruzione nel log, mai".
+  // Il Promise.race sotto impone un tetto MORBIDO, deciso da noi con margine, così rispondiamo
+  // (e logghiamo) sempre prima che la piattaforma tolga la parola alla funzione.
   try {
-    return await executeBuild(user, params, logBuild, startedAt)
+    const outcome = await Promise.race([
+      executeBuild(user, params, logBuild, startedAt).then(response => ({ kind: 'done' as const, response })),
+      new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), SOFT_DEADLINE_MS)),
+    ])
+    if (outcome.kind === 'timeout') {
+      console.error(`[route-build] tetto morbido di ${SOFT_DEADLINE_MS}ms superato, rispondo prima del kill della piattaforma`)
+      await logBuild({ tierReached: 'timeout', builtCount: 0, message: 'generazione troppo lenta in questa zona' })
+      return NextResponse.json({
+        candidates: [],
+        message: 'La generazione ha impiegato troppo tempo in questa zona — prova un raggio di ricerca più piccolo o un punto di partenza diverso.',
+      })
+    }
+    return outcome.response
   } catch (e) {
     console.error('[route-build] Errore interno imprevisto in executeBuild:', e)
     await logBuild({ tierReached: 'error', message: 'errore interno imprevisto' })
