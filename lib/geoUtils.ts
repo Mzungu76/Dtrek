@@ -22,24 +22,50 @@ export function haversineM(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-// Soglia entro cui inizio e fine di una traccia sono considerati "lo stesso punto" — un anello
-// pubblicato raramente chiude esattamente sull'ultimo metro (es. un breve tratto di accesso al
-// trailhead), mentre un percorso lineare punto-punto ha capi ben distanti. Usata per classificare
-// un percorso "trovato" (senza tag affidabile anello/andata-ritorno nei dati OSM) come anello o
-// meno — vedi components/upload/RouteBuilder.tsx.
+// Soglia entro cui inizio e fine di una traccia sono considerati "lo stesso punto" — un anello o
+// un andata-ritorno pubblicato raramente chiude esattamente sull'ultimo metro (es. un breve tratto
+// di accesso al trailhead), mentre un percorso lineare punto-punto ha capi ben distanti.
 const LOOP_CLOSURE_THRESHOLD_M = 500
+// Rapporto lunghezza-totale/massima-distanza-dal-partenza sotto il quale una traccia "chiusa" è
+// considerata un andata-ritorno (ripercorre lo stesso tratto) invece di un anello (percorso
+// diverso all'andata e al ritorno). Un vero andata-ritorno ha rapporto ~2 (si cammina lo stesso
+// tratto due volte); un anello ha un rapporto ben più alto — un cerchio, il caso più compatto
+// possibile, ha già circonferenza/diametro = π ≈ 3.14. La soglia sta a metà, con margine per un
+// tracciato reale (mai un cerchio perfetto né un andata-ritorno perfettamente rettilineo).
+const OUT_AND_BACK_RATIO_THRESHOLD = 2.5
+
+export type TrackShape = 'loop' | 'out_and_back' | 'linear'
 
 /**
- * Un percorso è un anello se il primo e l'ultimo punto della traccia sono vicini — l'unico segnale
- * geometrico disponibile per un percorso "trovato" (le relazioni OSM non portano un tag affidabile
- * di questo tipo). Falso per una traccia troppo corta per avere senso (serve almeno un punto oltre
- * a inizio/fine).
+ * Classifica la forma di una traccia GPS in assenza di un tag esplicito (le relazioni OSM non
+ * portano un dato affidabile anello/andata-ritorno/solo-andata) — usata per i percorsi "trovati"
+ * in components/upload/RouteBuilder.tsx, dove serve capire quale tipo di percorso rappresentano.
+ *
+ * 1. Se inizio e fine sono lontani, il percorso è "lineare" — non può essere un anello, e non si
+ *    distingue andata-ritorno da solo andata dalla sola geometria (la differenza è se si torna sui
+ *    propri passi, non deducibile da una singola traccia).
+ * 2. Se inizio e fine coincidono, si torna comunque al punto di partenza sia per un anello sia per
+ *    un andata-ritorno — la differenza è se il ritorno RIPERCORRE lo stesso tratto (andata-ritorno)
+ *    o ne segue uno diverso (anello). Segnale usato: il rapporto tra lunghezza totale e la massima
+ *    distanza raggiunta dal punto di partenza (vedi OUT_AND_BACK_RATIO_THRESHOLD).
  */
-export function isClosedLoop(polyline: [number, number][]): boolean {
-  if (polyline.length < 3) return false
-  const [firstLat, firstLon] = polyline[0]
-  const [lastLat, lastLon] = polyline[polyline.length - 1]
-  return haversineM(firstLat, firstLon, lastLat, lastLon) <= LOOP_CLOSURE_THRESHOLD_M
+export function classifyTrackShape(polyline: [number, number][]): TrackShape {
+  if (polyline.length < 3) return 'linear'
+  const [startLat, startLon] = polyline[0]
+  const [endLat, endLon] = polyline[polyline.length - 1]
+  if (haversineM(startLat, startLon, endLat, endLon) > LOOP_CLOSURE_THRESHOLD_M) return 'linear'
+
+  let totalDistance = 0
+  let maxDispFromStart = 0
+  for (let i = 1; i < polyline.length; i++) {
+    totalDistance += haversineM(polyline[i - 1][0], polyline[i - 1][1], polyline[i][0], polyline[i][1])
+  }
+  for (const [lat, lon] of polyline) {
+    const d = haversineM(startLat, startLon, lat, lon)
+    if (d > maxDispFromStart) maxDispFromStart = d
+  }
+  if (maxDispFromStart === 0) return 'loop'
+  return (totalDistance / maxDispFromStart) <= OUT_AND_BACK_RATIO_THRESHOLD ? 'out_and_back' : 'loop'
 }
 
 const EARTH_R_M = 6371000
