@@ -26,6 +26,7 @@ import type { RouteType } from '@/lib/routeBuilder/loopBuilder'
 import type { SearchResultCandidate } from '@/app/api/route-search/route'
 import type { FoundRouteResult } from '@/app/api/route-build/search/route'
 import type { TrackPoint } from '@/lib/tcxParser'
+import { isClosedLoop } from '@/lib/geoUtils'
 
 type Step = 'start' | 'results' | 'confirm'
 
@@ -35,6 +36,18 @@ function routeTypeLabel(t: RouteType): string {
   if (t === 'anello') return 'Anello'
   if (t === 'solo_andata') return 'Solo andata'
   return 'Andata e ritorno'
+}
+
+// Un percorso "trovato" (ricerca non-AI/AI) non porta con sé un tipo anello/andata-ritorno/solo
+// andata — le relazioni OSM non hanno un tag affidabile per distinguerli — quindi si classifica
+// dalla geometria stessa (isClosedLoop): un anello ha inizio e fine vicini, un percorso lineare no.
+// Per un percorso lineare non si può distinguere andata-ritorno da solo andata dalla sola
+// geometria (la differenza è se si torna sugli stessi passi, non deducibile da una traccia sola):
+// un lineare soddisfa quindi entrambe le selezioni "Andata e ritorno"/"Solo andata".
+function foundRouteMatchesTypes(routePolyline: [number, number][], selectedTypes: RouteType[]): boolean {
+  const loop = isClosedLoop(routePolyline)
+  if (loop) return selectedTypes.includes('anello')
+  return selectedTypes.includes('andata_ritorno') || selectedTypes.includes('solo_andata')
 }
 
 const MIN_KM = 1
@@ -378,7 +391,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         if (Array.isArray(data.prefill.desiredPoiTypes)) setDesiredPoiTypes(data.prefill.desiredPoiTypes)
         if (Array.isArray(data.prefill.environmentPrefs)) setEnvironmentPrefs(data.prefill.environmentPrefs)
       }
-      const found = (data.foundRoutes ?? []) as FoundRouteResult[]
+      // Solo i percorsi trovati compatibili col tipo selezionato (vedi foundRouteMatchesTypes) —
+      // altrimenti selezionare "Anello" nella ricerca avanzata non aveva alcun effetto sui
+      // percorsi trovati, che passavano tutti indipendentemente dal tipo.
+      const found = ((data.foundRoutes ?? []) as FoundRouteResult[])
+        .filter(r => foundRouteMatchesTypes(r.routePolyline, effectiveRouteTypes))
       if (found.length > 0) {
         const items: ResultItem[] = found.map(r => ({
           kind: 'found',
@@ -462,7 +479,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           if (data.ok) track = data
         } catch {}
       }
-      if (track) {
+      // Stesso filtro per tipo dei livelli 0/1 (vedi foundRouteMatchesTypes in runSearch) — un
+      // candidato di Giulia con un tipo incompatibile con quello selezionato viene scartato qui,
+      // non solo omesso dalla lista: altrimenti "Anello" non avrebbe effetto nemmeno sui risultati
+      // della chat.
+      if (track && foundRouteMatchesTypes(track.routePolyline, routeTypes)) {
         resolvedItems.push({
           kind: 'found',
           data: {
@@ -626,6 +647,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                   <TrendingUp className="w-3 h-3" />{track.hasElevation ? `${Math.round(track.elevationGain)} m` : '—'}
                 </span>
                 <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
+              </div>
+              <div>
+                <span className="font-semibold text-stone-800">{isClosedLoop(track.routePolyline) ? 'Anello' : 'Lineare'}</span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
               </div>
               {data.difficulty && (
                 <div>

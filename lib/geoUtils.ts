@@ -22,6 +22,26 @@ export function haversineM(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+// Soglia entro cui inizio e fine di una traccia sono considerati "lo stesso punto" — un anello
+// pubblicato raramente chiude esattamente sull'ultimo metro (es. un breve tratto di accesso al
+// trailhead), mentre un percorso lineare punto-punto ha capi ben distanti. Usata per classificare
+// un percorso "trovato" (senza tag affidabile anello/andata-ritorno nei dati OSM) come anello o
+// meno — vedi components/upload/RouteBuilder.tsx.
+const LOOP_CLOSURE_THRESHOLD_M = 500
+
+/**
+ * Un percorso è un anello se il primo e l'ultimo punto della traccia sono vicini — l'unico segnale
+ * geometrico disponibile per un percorso "trovato" (le relazioni OSM non portano un tag affidabile
+ * di questo tipo). Falso per una traccia troppo corta per avere senso (serve almeno un punto oltre
+ * a inizio/fine).
+ */
+export function isClosedLoop(polyline: [number, number][]): boolean {
+  if (polyline.length < 3) return false
+  const [firstLat, firstLon] = polyline[0]
+  const [lastLat, lastLon] = polyline[polyline.length - 1]
+  return haversineM(firstLat, firstLon, lastLat, lastLon) <= LOOP_CLOSURE_THRESHOLD_M
+}
+
 const EARTH_R_M = 6371000
 
 function toLocalXY(lat: number, lon: number, lat0: number): [number, number] {
