@@ -8,6 +8,7 @@ import { scoreAndEnrichCandidates } from '@/lib/routeBuilder/scoreCandidates'
 import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
 import { sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
 import { POI_META, type PoiType } from '@/lib/overpass'
+import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 
 const VALID_POI_TYPES = new Set(Object.keys(POI_META))
 
@@ -24,6 +25,17 @@ const MAX_TARGET_DISTANCE_KM = 15
 // abbastanza rete nei dintorni per costruire un percorso — meglio un errore chiaro che un anello
 // costruito su un frammento isolato di strada.
 const START_SNAP_THRESHOLD_M = 500
+
+// Sotto questa soglia di percorsi costruiti algoritmicamente (senza destinazione), l'app ritenta
+// con lunghezze leggermente diverse (vedi RETRY_DISTANCE_FACTORS): in una rete di sentieri rada
+// attorno al punto di partenza, un'unica lunghezza target può lasciare sopravvivere pochi
+// candidati realmente distinti (troppe direzioni finiscono per ripercorrere lo stesso tratto),
+// mentre lunghezze leggermente diverse seguono spesso percorsi geometricamente diversi.
+const MIN_BUILT_RESULTS = 8
+// Fattori di lunghezza alternativi provati in caso di scarsità (es. per un obiettivo di 8 km:
+// un tentativo a ~6 km e uno a ~10 km) — comunque clampati entro MIN/MAX_TARGET_DISTANCE_KM.
+const RETRY_DISTANCE_FACTORS = [0.75, 1.25]
+const MAX_BUILT_RESULTS = 14
 
 // ── GET: valori suggeriti per precompilare il wizard (storico attività + profilo) ───────────────
 // Nessun costo AI qui — solo letture Supabase già esistenti (lib/hikerContext.ts, stesse usate da
@@ -110,6 +122,31 @@ function parseBody(raw: unknown): BuildRequestBody {
   return { lat, lon, routeType: body.routeType, targetDistanceKm, targetElevationM, destinationLat, destinationLon, environmentPrefs, desiredPoiTypes }
 }
 
+// Stessa scelta del ramo anello/andata_ritorno/solo_andata usato per il tentativo principale in
+// handlePost — estratta per essere riusabile anche dai ritentativi con lunghezza alternativa.
+function generateRawCandidatesForLength(
+  network: Awaited<ReturnType<typeof fetchWalkNetwork>>, startNodeId: number, routeType: RouteType, distanceM: number,
+) {
+  switch (routeType) {
+    case 'anello':
+      return generateLoopCandidates(network, startNodeId, distanceM)
+    case 'solo_andata':
+      return generateOneWayCandidates(network, startNodeId, distanceM)
+    default:
+      return generateOutAndBackCandidates(network, startNodeId, distanceM)
+  }
+}
+
+// Firma approssimata di un candidato (bucket di lunghezza + punto vicino alla partenza) usata per
+// non ripetere nel merge lo stesso tragitto emerso da due tentativi con lunghezza diversa — non
+// serve un'identità esatta, solo evitare doppioni palesi.
+function candidateSignature(c: { distanceMeters: number; routePolyline: [number, number][] }): string {
+  const distBucket = Math.round(c.distanceMeters / 100)
+  const p = c.routePolyline[Math.min(3, c.routePolyline.length - 1)]
+  const dirKey = p ? `${p[0].toFixed(3)},${p[1].toFixed(3)}` : ''
+  return `${distBucket}_${dirKey}`
+}
+
 // Rete di sicurezza: un'eccezione imprevista nel calcolo (es. il grafo, il pathfinding) senza
 // questo wrapper può risultare in una risposta non-JSON che il client legge come "errore di rete"
 // generico, mascherando la causa reale — stesso principio già applicato a route-build/search.
@@ -143,6 +180,28 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Richiesta non valida' }, { status: 400 })
   }
 
+  const startedAt = Date.now()
+  // Riepilogo comune a ogni possibile esito di questa richiesta, per il log privato consultabile
+  // su /profilo/log-ricerche — ogni return da qui in poi chiama logBuild prima di uscire, così
+  // anche gli esiti "pochi/nessun risultato" restano visibili senza dover leggere i log Vercel.
+  async function logBuild(fields: {
+    tierReached: string
+    message?: string | null
+    builtCount?: number | null
+    retried?: boolean
+    details?: Record<string, unknown> | null
+  }) {
+    await logRouteBuildEvent({
+      userId: user?.id ?? null,
+      kind: 'build',
+      routeType: params.routeType,
+      targetDistanceKm: params.targetDistanceKm,
+      useAi: false,
+      durationMs: Date.now() - startedAt,
+      ...fields,
+    })
+  }
+
   let concerns: ReturnType<typeof sanitizeHikerConcerns> = []
   let environmentPrefs = params.environmentPrefs ?? []
   if (user) {
@@ -174,6 +233,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     network = await fetchWalkNetwork(bbox)
   } catch (e) {
     console.error('[route-build] fetchWalkNetwork failed:', e)
+    await logBuild({ tierReached: 'error', message: 'rete sentieri non disponibile' })
     return NextResponse.json({ error: 'Rete sentieri non disponibile in questo momento, riprova.' }, { status: 502 })
   }
 
@@ -181,6 +241,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
 
   const startNode = nearestGraphNode(network, params.lat, params.lon, START_SNAP_THRESHOLD_M)
   if (!startNode) {
+    await logBuild({ tierReached: 'no_network_nearby', details: { networkNodes: network.nodes.size } })
     return NextResponse.json({
       error: 'no_network_nearby',
       message: 'Non ho trovato sentieri o strade percorribili abbastanza vicino al punto scelto — prova un punto di partenza diverso.',
@@ -196,6 +257,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       undefined, params.routeType === 'solo_andata',
     )
     if (!destinationCandidate) {
+      await logBuild({ tierReached: 'destination_unreachable' })
       return NextResponse.json({
         error: 'destination_unreachable',
         message: 'La destinazione indicata non è abbastanza vicina a sentieri o strade percorribili, o non è raggiungibile dal punto di partenza — prova un\'altra destinazione.',
@@ -207,21 +269,13 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     rawCandidates = [destinationCandidate]
   } else {
     targetDistanceM = params.targetDistanceKm * 1000
-    switch (params.routeType) {
-      case 'anello':
-        rawCandidates = generateLoopCandidates(network, startNode.nodeId, targetDistanceM)
-        break
-      case 'solo_andata':
-        rawCandidates = generateOneWayCandidates(network, startNode.nodeId, targetDistanceM)
-        break
-      default:
-        rawCandidates = generateOutAndBackCandidates(network, startNode.nodeId, targetDistanceM)
-    }
+    rawCandidates = generateRawCandidatesForLength(network, startNode.nodeId, params.routeType, targetDistanceM)
   }
 
   console.log(`[route-build] candidati grezzi entro tolleranza: ${rawCandidates.length}`)
 
   if (rawCandidates.length === 0) {
+    await logBuild({ tierReached: 'no_raw_candidates', builtCount: 0 })
     return NextResponse.json({
       candidates: [],
       message: 'Nessun percorso trovato con questi vincoli nella zona scelta — prova una lunghezza diversa o un punto di partenza differente.',
@@ -240,15 +294,66 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     })
   } catch (e) {
     console.error('[route-build] scoreAndEnrichCandidates failed:', e)
+    await logBuild({ tierReached: 'error', message: 'arricchimento fallito' })
     return NextResponse.json({ error: 'Arricchimento dei percorsi non riuscito, riprova.' }, { status: 502 })
   }
 
+  let retried = false
+  // Ritentativo con lunghezze alternative se, senza destinazione, ne sono sopravvissuti troppo
+  // pochi — solo se serve (mai per la destinazione, dove l'unico risultato possibile è già quello).
+  if (!hasDestination && candidates.length < MIN_BUILT_RESULTS) {
+    retried = true
+    console.log(`[route-build] solo ${candidates.length} candidati validi, ritento con lunghezze alternative`)
+    const seen = new Set(candidates.map(candidateSignature))
+    for (const factor of RETRY_DISTANCE_FACTORS) {
+      const altDistanceM = Math.min(Math.max(targetDistanceM * factor, MIN_TARGET_DISTANCE_KM * 1000), MAX_TARGET_DISTANCE_KM * 1000)
+      const altRaw = generateRawCandidatesForLength(network, startNode.nodeId, params.routeType, altDistanceM)
+      if (altRaw.length === 0) continue
+      let altCandidates
+      try {
+        altCandidates = await scoreAndEnrichCandidates(altRaw, {
+          // Il punteggio resta ancorato all'obiettivo originale, non alla lunghezza del
+          // ritentativo — questi candidati sono un ripiego per avere più opzioni, non una nuova
+          // richiesta dell'utente.
+          targetDistanceM,
+          targetElevationM: params.targetElevationM,
+          environmentPrefs,
+          concerns,
+          desiredPoiTypes: params.desiredPoiTypes,
+          bbox,
+        })
+      } catch (e) {
+        console.error('[route-build] ritentativo con lunghezza alternativa fallito:', e)
+        continue
+      }
+      for (const c of altCandidates) {
+        const sig = candidateSignature(c)
+        if (seen.has(sig)) continue
+        seen.add(sig)
+        candidates.push(c)
+      }
+      if (candidates.length >= MIN_BUILT_RESULTS) break
+    }
+    candidates = candidates
+      .sort((a, b) => Math.abs(a.distanceMeters - targetDistanceM) - Math.abs(b.distanceMeters - targetDistanceM))
+      .slice(0, MAX_BUILT_RESULTS)
+    console.log(`[route-build] dopo ritentativo: ${candidates.length} candidati totali`)
+  }
+
   if (candidates.length === 0) {
+    await logBuild({ tierReached: 'no_dtm_coverage', builtCount: 0, retried, details: { rawCount: rawCandidates.length } })
     return NextResponse.json({
       candidates: [],
       message: 'Ho trovato percorsi possibili ma senza copertura del modello altimetrico in questa zona — prova un punto di partenza differente.',
     })
   }
+
+  await logBuild({
+    tierReached: retried ? 'retry_built' : 'built',
+    builtCount: candidates.length,
+    retried,
+    details: { rawCount: rawCandidates.length, hasDestination },
+  })
 
   return NextResponse.json({ candidates })
 }

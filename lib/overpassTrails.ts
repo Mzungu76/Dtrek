@@ -3,6 +3,7 @@
 // REST API (hiking.waymarkedtrails.org/api/v1) blocks datacenter-origin
 // requests with 403, so only its tile overlay is used directly client-side —
 // these routes fetch the underlying OSM hiking-route data from Overpass instead.
+import { haversineM } from './geoUtils'
 
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -58,6 +59,11 @@ export interface HikingRouteCandidate {
   hasName: boolean
   ref?: string
   network?: string
+  // Centro geometrico della relazione (da "out center", vedi mapAndSortCandidates) — assente solo
+  // se Overpass non lo calcola per qualche elemento incompleto. Usato per ordinare i risultati dal
+  // più vicino al più lontano rispetto al luogo/punto cercato (vedi sortByDistanceFrom).
+  lat?: number
+  lon?: number
 }
 
 const NETWORK_RANK: Record<string, number> = { iwn: 4, nwn: 3, rwn: 2, lwn: 1 }
@@ -81,7 +87,7 @@ function mapAndSortCandidates(elements: (OsmRelation | OsmWay)[]): HikingRouteCa
     .filter((e): e is OsmRelation => e.type === 'relation')
     .map(e => {
       const { name, hasName } = displayName(e.tags, e.id)
-      return { id: e.id, name, hasName, ref: e.tags?.ref, network: e.tags?.network }
+      return { id: e.id, name, hasName, ref: e.tags?.ref, network: e.tags?.network, lat: e.center?.lat, lon: e.center?.lon }
     })
 
   // Named trails first (more likely to be well-known, recognizable routes),
@@ -99,7 +105,7 @@ export async function queryHikingRelationsInBbox(
 ): Promise<HikingRouteCandidate[]> {
   const query = `[out:json][timeout:25][maxsize:8388608];
 relation["type"="route"]["route"="hiking"](${minLat},${minLon},${maxLat},${maxLon});
-out tags ${limit};`
+out center tags ${limit};`
 
   const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
   return mapAndSortCandidates(json.elements ?? [])
@@ -217,7 +223,7 @@ export async function searchHikingRoutesByName(
   const escaped = nameQuery.replace(/[[\]{}()*+?.,\\^$|#\s]/g, s => s === ' ' ? '.*' : `\\${s}`)
   const query = `[out:json][timeout:25][maxsize:8388608];
 relation["type"="route"]["route"="hiking"]["name"~"${escaped}",i](${minLat},${minLon},${maxLat},${maxLon});
-out tags ${limit};`
+out center tags ${limit};`
 
   const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
   return mapAndSortCandidates(json.elements ?? [])
@@ -236,6 +242,23 @@ export interface OsmRelation {
   id: number
   members?: Array<{ type: string; ref: number; role: string }>
   tags?: Record<string, string>
+  // Presente solo quando la query Overpass chiede "out center" (vedi queryHikingRelationsInBbox e
+  // searchHikingRoutesByName) — centro geometrico approssimato della relazione.
+  center?: { lat: number; lon: number }
+}
+
+/**
+ * Ordina candidati con centro noto dal più vicino al più lontano rispetto a un punto di
+ * riferimento (tipicamente il luogo risolto dalla ricerca, vedi app/api/route-build/search/route.ts)
+ * — quelli senza centro (Overpass non l'ha calcolato) restano in fondo, non scartati.
+ */
+export function sortByDistanceFrom<T extends { lat?: number; lon?: number }>(
+  candidates: T[], lat: number, lon: number,
+): T[] {
+  return candidates
+    .map(c => ({ c, d: c.lat != null && c.lon != null ? haversineM(lat, lon, c.lat, c.lon) : Infinity }))
+    .sort((a, b) => a.d - b.d)
+    .map(({ c }) => c)
 }
 
 export interface OsmWay {

@@ -4,21 +4,26 @@ import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettin
 import { resolvePlaceName, interpretSearchRequest, type ResolvedPlace, type InterpretedPreferences } from '@/lib/routeBuilder/resolvePlace'
 import {
   searchHikingRoutesByName, queryHikingRelationsInBbox, resolveAreaBbox, padBbox, looksLikePlaceName,
-  type HikingRouteCandidate,
+  sortByDistanceFrom, type HikingRouteCandidate,
 } from '@/lib/overpassTrails'
 import { resolveTrackForCandidate } from '@/lib/routeBuilder/resolveTrack'
+import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 import type { TrackPoint } from '@/lib/tcxParser'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// Stesso raggio del fallback "sentieri nei dintorni" di app/api/route-search-plain/route.ts.
-const NEARBY_RADIUS_KM = 12
+// Raggio di ricerca "sentieri nei dintorni" attorno al luogo/punto risolto — alzato da 12 a 20 km
+// (richiesta esplicita) rispetto al fallback storico di app/api/route-search-plain/route.ts, che
+// resta invariato a 12.
+const NEARBY_RADIUS_KM = 20
 // Quanti candidati "trovati" (non-AI o dal Livello 1) risolvere subito con una traccia reale — un
 // cap esplicito per limitare il costo Overpass/DTM aggiuntivo introdotto dalla risoluzione eager
 // (vedi §2 del piano): solo quelli che risolvono sopravvivono come 'found', mai una card senza
-// traccia.
-const MAX_EAGER_RESOLVE = 3
+// traccia. Alzato da 3 a 8 — i candidati arrivano già ordinati dal più vicino al più lontano
+// (vedi tier0), quindi il cap più alto si traduce in più risultati realmente vicini, non in
+// risultati casuali lontani.
+const MAX_EAGER_RESOLVE = 8
 // Quanti luoghi suggeriti dal Livello 1 (interpretazione AI) vengono ripassati al Livello 0 —
 // una richiesta vaga può ammettere più interpretazioni valide, ma senza un tetto il costo
 // Overpass/DTM per una singola ricerca crescerebbe senza controllo.
@@ -61,12 +66,12 @@ async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | nul
   const areaBbox = areaHint ? await resolveAreaBbox(areaHint) : null
   if (!areaBbox && !looksLikePlaceName(nameQuery)) return []
 
-  let candidates = await searchHikingRoutesByName(nameQuery, areaBbox, 8)
+  let candidates = await searchHikingRoutesByName(nameQuery, areaBbox, 12)
   if (candidates.length === 0) {
     const nearbyBbox = areaBbox ?? await resolveAreaBbox(nameQuery)
     if (nearbyBbox) {
       const [minLat, minLon, maxLat, maxLon] = padBbox(nearbyBbox, NEARBY_RADIUS_KM)
-      candidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 12)
+      candidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
     }
   }
   return candidates
@@ -97,7 +102,11 @@ async function tier0(query: string): Promise<{ place: ResolvedPlace | null; foun
     resolvePlaceName(query),
     findExistingRoutesNonAi(nameQuery, areaHint),
   ])
-  const foundRoutes = await resolveFoundRoutes(rawCandidates, MAX_EAGER_RESOLVE)
+  // Dal più vicino al più lontano rispetto al luogo risolto — sia per mostrarli in quell'ordine,
+  // sia perché MAX_EAGER_RESOLVE risolve solo i primi: meglio che siano i più vicini, non i primi
+  // arrivati da Overpass in un ordine arbitrario.
+  const orderedCandidates = place ? sortByDistanceFrom(rawCandidates, place.lat, place.lon) : rawCandidates
+  const foundRoutes = await resolveFoundRoutes(orderedCandidates, MAX_EAGER_RESOLVE)
   return { place, foundRoutes }
 }
 
@@ -144,9 +153,12 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
+  const startedAt = Date.now()
   let place: ResolvedPlace | null = null
   let foundRoutes: FoundRouteResult[] = []
   let prefill: InterpretedPreferences | null = null
+  let tierReached: 'tier0' | 'tier1' = 'tier0'
+  let interpretedPlacesCount = 0
 
   try {
     const level0 = await tier0(query)
@@ -160,12 +172,14 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // una chiave personale disponibile — mai la chiave condivisa di emergenza (stessa scelta già
   // fatta per il livello AI di resolvePlaceName).
   if (!place && foundRoutes.length === 0 && useAi && user) {
+    tierReached = 'tier1'
     try {
       const { apiKey, claudeModel } = await resolveApiKeyAndSettings(user.id, 'routeBuildInterpretRequest')
       if (apiKey) {
         const interpreted = await interpretSearchRequest(query, apiKey, claudeModel)
         if (interpreted) {
           prefill = interpreted.prefs
+          interpretedPlacesCount = interpreted.places.length
           for (const p of interpreted.places.slice(0, MAX_INTERPRETED_PLACES)) {
             const rerun = await tier0(p.query)
             if (!place && rerun.place) place = rerun.place
@@ -183,6 +197,19 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // Nessun risultato da nessuno dei due livelli gratuiti/economici — se l'AI è attiva, il client
   // apre la chat completa di Giulia (Livello 2, ricerca web) come ultima risorsa.
   const escalateToAi = useAi && !place && foundRoutes.length === 0
+
+  await logRouteBuildEvent({
+    userId: user?.id ?? null,
+    kind: 'search',
+    query,
+    useAi,
+    tierReached: escalateToAi ? `${tierReached}_escalated` : tierReached,
+    placeName: place?.displayName ?? null,
+    foundCount: foundRoutes.length,
+    escalatedToAi: escalateToAi,
+    durationMs: Date.now() - startedAt,
+    details: { interpretedPlacesCount },
+  })
 
   return NextResponse.json({ place, prefill, foundRoutes, escalateToAi })
 }
