@@ -37,10 +37,12 @@ function routeTypeLabel(t: RouteType): string {
   return 'Andata e ritorno'
 }
 
-interface GeocodeResult { lat: string; lon: string; display_name: string }
-
 const MIN_KM = 1
-const MAX_KM = 20
+// Deve coincidere con MAX_TARGET_DISTANCE_KM di app/api/route-build/route.ts — uno slider che
+// arriva più in alto di quanto il server accetti produce una richiesta di costruzione respinta
+// (400) ogni volta che l'utente sposta la lunghezza oltre questo limite, un errore che restava
+// silenzioso finché c'erano comunque percorsi "trovati" da mostrare (vedi runSearch).
+const MAX_KM = 15
 // Obiettivo minimo di risultati per ricerca (costruiti + trovati insieme) imposto dall'utente:
 // se la ricerca trova meno percorsi già esistenti di questo numero, il wizard costruisce sempre
 // anche percorsi algoritmici per completare — mai fermarsi a 1 solo risultato quando è possibile
@@ -220,7 +222,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // wizard.
   const [showAdvanced, setShowAdvanced] = useState(false)
 
-  const [routeType, setRouteType] = useState<RouteType>('anello')
+  // Selezione multipla, non esclusiva: l'utente può cercare/costruire più tipi di percorso insieme
+  // (es. sia Anello che Andata e ritorno), risultati mescolati nella stessa lista — vedi
+  // toggleRouteType e runBuildForTypes. Sempre almeno un tipo selezionato.
+  const [routeTypes, setRouteTypes] = useState<RouteType[]>(['anello'])
   const [targetDistanceKm, setTargetDistanceKm] = useState(8)
   const [targetElevationM, setTargetElevationM] = useState('')
   const [environmentPrefs, setEnvironmentPrefs] = useState<HikerEnvironmentPrefKey[]>([])
@@ -234,15 +239,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // components/profilo/SectionAiPrivacy.tsx) ma resta modificabile per questa singola ricerca,
   // finché il default non arriva viene assunto acceso.
   const [useAi, setUseAi] = useState(true)
-
-  // Destinazione esatta (per andata_ritorno e solo_andata) — un luogo noto risolto per nome, usato
-  // come destinazione fissa invece di lasciare che l'algoritmo scelga in base a lunghezza/direzione.
-  const [destQuery, setDestQuery] = useState('')
-  const [destGeocodeResults, setDestGeocodeResults] = useState<GeocodeResult[]>([])
-  const [destGeocoding, setDestGeocoding] = useState(false)
-  const [destLat, setDestLat] = useState<number | null>(null)
-  const [destLon, setDestLon] = useState<number | null>(null)
-  const [destDisplayName, setDestDisplayName] = useState('')
 
   const [generating, setGenerating] = useState(false)
   // Lista unica: candidati "costruiti" (da Genera percorsi) e "trovati" (dalla ricerca unificata,
@@ -313,34 +309,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results])
 
-  // Usato solo dal campo destinazione (step "Parametri") — risoluzione di un singolo luogo per
-  // nome, non una ricerca di percorso: invariato rispetto a prima di questo giro.
-  async function resolveQuery(q: string): Promise<GeocodeResult[]> {
-    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`)
-    const data = await res.json()
-    const geoResults: GeocodeResult[] = Array.isArray(data) ? data.slice(0, 5) : []
-    if (geoResults.length > 0) return geoResults
-
-    // Nominatim non ha trovato nulla — prova la risoluzione dedicata (utile per feature naturali
-    // locali poco note, es. "Cascata del Picchio, Blera", vedi lib/routeBuilder/resolvePlace.ts).
-    try {
-      const fallbackRes = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(q)}&useAi=${useAi}`)
-      const fallbackData = await fallbackRes.json()
-      if (fallbackData?.place) {
-        return [{ lat: String(fallbackData.place.lat), lon: String(fallbackData.place.lon), display_name: fallbackData.place.displayName }]
-      }
-    } catch {}
-    return []
-  }
-
-  async function runDestGeocode() {
-    if (!destQuery.trim() || destGeocoding) return
-    setDestGeocoding(true)
-    setDestGeocodeResults([])
-    try {
-      setDestGeocodeResults(await resolveQuery(destQuery.trim()))
-    } catch {}
-    setDestGeocoding(false)
+  // Selezione multipla dei tipi di percorso — sempre almeno un tipo attivo, non si può deselezionare
+  // l'ultimo rimasto.
+  function toggleRouteType(t: RouteType) {
+    setRouteTypes(prev => {
+      if (prev.includes(t)) return prev.length > 1 ? prev.filter(x => x !== t) : prev
+      return [...prev, t]
+    })
   }
 
   function toggleEnvironmentPref(key: HikerEnvironmentPrefKey) {
@@ -379,7 +354,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       // Valori effettivi da usare SUBITO (per l'eventuale costruzione automatica qui sotto): non
       // si può leggere lo stato appena impostato con le setXxx sopra/sotto, gli aggiornamenti sono
       // asincroni e non ancora rispecchiati nelle variabili di chiusura di questa stessa chiamata.
-      const effectiveRouteType: RouteType = data.prefill?.routeType ?? routeType
+      const effectiveRouteTypes: RouteType[] = data.prefill?.routeType ? [data.prefill.routeType] : routeTypes
       const effectiveDistanceKm = typeof data.prefill?.targetDistanceKm === 'number'
         ? Math.min(MAX_KM, Math.max(MIN_KM, data.prefill.targetDistanceKm)) : targetDistanceKm
       const effectiveElevationM = typeof data.prefill?.targetElevationM === 'number'
@@ -388,7 +363,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const effectiveEnvironmentPrefs = Array.isArray(data.prefill?.environmentPrefs) ? data.prefill.environmentPrefs : environmentPrefs
 
       if (data.prefill) {
-        if (data.prefill.routeType) setRouteType(data.prefill.routeType)
+        if (data.prefill.routeType) setRouteTypes([data.prefill.routeType])
         if (typeof data.prefill.targetDistanceKm === 'number') setTargetDistanceKm(effectiveDistanceKm)
         if (typeof data.prefill.targetElevationM === 'number') setTargetElevationM(String(data.prefill.targetElevationM))
         if (Array.isArray(data.prefill.desiredPoiTypes)) setDesiredPoiTypes(data.prefill.desiredPoiTypes)
@@ -420,10 +395,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       let builtCount = 0
       let buildMessage: string | null = null
       if (buildFromLat != null && buildFromLon != null && found.length < MIN_TOTAL_RESULTS) {
-        const buildResult = await runBuild({
-          lat: buildFromLat, lon: buildFromLon, routeType: effectiveRouteType, targetDistanceKm: effectiveDistanceKm,
+        const buildResult = await runBuildForTypes(effectiveRouteTypes, {
+          lat: buildFromLat, lon: buildFromLon, targetDistanceKm: effectiveDistanceKm,
           targetElevationM: effectiveElevationM, environmentPrefs: effectiveEnvironmentPrefs, desiredPoiTypes: effectiveDesiredPoiTypes,
-          destinationLat: null, destinationLon: null,
         })
         builtCount = buildResult.count
         buildMessage = buildResult.message
@@ -512,45 +486,49 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
   }
 
-  interface BuildParams {
+  interface BuildParamsCommon {
     lat: number
     lon: number
-    routeType: RouteType
     targetDistanceKm: number
     targetElevationM: number | null
     environmentPrefs: HikerEnvironmentPrefKey[]
     desiredPoiTypes: PoiType[]
-    destinationLat: number | null
-    destinationLon: number | null
   }
 
   /** Nucleo condiviso della costruzione algoritmica — usato sia dal click esplicito "Genera
    *  percorsi" sia dall'innesco automatico in runSearch() (vedi MIN_TOTAL_RESULTS): quest'ultimo
    *  passa i parametri espliciti invece di leggerli dallo stato, perché potrebbero essere appena
    *  stati precompilati dall'AI (data.prefill) e non ancora rispecchiati nello stato del componente
-   *  al momento della chiamata. Non tocca `errorMsg` direttamente — ritorna il numero di percorsi
-   *  ottenuti e un eventuale messaggio, lasciando al chiamante decidere se mostrarlo: un fallimento
-   *  qui non deve mai sembrare un errore quando la ricerca ha comunque trovato qualcos'altro da
-   *  mostrare (vedi runSearch). */
-  async function runBuild(params: BuildParams): Promise<{ count: number; message: string | null }> {
+   *  al momento della chiamata. Un tipo di percorso selezionato è una richiesta indipendente
+   *  all'endpoint (l'algoritmo di generazione è strutturalmente diverso per anello/andata-ritorno/
+   *  solo andata) — con più tipi selezionati, gira una richiesta per tipo in parallelo e i risultati
+   *  si fondono in un'unica lista, ciascuno già etichettato col proprio tipo (vedi ScoredCandidate.type).
+   *  Non tocca `errorMsg` direttamente — ritorna il numero totale di percorsi ottenuti e un eventuale
+   *  messaggio, lasciando al chiamante decidere se mostrarlo: un fallimento qui non deve mai sembrare
+   *  un errore quando la ricerca ha comunque trovato qualcos'altro da mostrare (vedi runSearch). */
+  async function runBuildForTypes(types: RouteType[], common: BuildParamsCommon): Promise<{ count: number; message: string | null }> {
     setGenerating(true)
     setResultsMessage('')
     try {
-      const res = await fetch('/api/route-build', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        return { count: 0, message: data.message || data.error || 'Generazione non riuscita, riprova.' }
-      }
-      const built = (data.candidates ?? []) as BuiltCandidate[]
-      setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...built.map(d => ({ kind: 'built' as const, data: d }))])
-      setResultsMessage(data.message ?? '')
-      return { count: built.length, message: built.length === 0 ? (data.message ?? null) : null }
-    } catch {
-      return { count: 0, message: 'Errore di rete, riprova.' }
+      const outcomes = await Promise.all(types.map(async routeType => {
+        try {
+          const res = await fetch('/api/route-build', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...common, routeType, destinationLat: null, destinationLon: null }),
+          })
+          const data = await res.json()
+          if (!res.ok) return { candidates: [] as BuiltCandidate[], message: data.message || data.error || 'Generazione non riuscita, riprova.' }
+          return { candidates: (data.candidates ?? []) as BuiltCandidate[], message: (data.message ?? null) as string | null }
+        } catch {
+          return { candidates: [] as BuiltCandidate[], message: 'Errore di rete, riprova.' }
+        }
+      }))
+      const allBuilt = outcomes.flatMap(o => o.candidates)
+      setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...allBuilt.map(d => ({ kind: 'built' as const, data: d }))])
+      const firstEmptyMessage = outcomes.find(o => o.candidates.length === 0)?.message ?? null
+      setResultsMessage(allBuilt.length === 0 ? (firstEmptyMessage ?? '') : '')
+      return { count: allBuilt.length, message: allBuilt.length === 0 ? firstEmptyMessage : null }
     } finally {
       setGenerating(false)
     }
@@ -559,13 +537,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   async function generate() {
     if (lat == null || lon == null || generating) return
     setErrorMsg('')
-    const { count, message } = await runBuild({
-      lat, lon, routeType, targetDistanceKm,
+    const { count, message } = await runBuildForTypes(routeTypes, {
+      lat, lon, targetDistanceKm,
       targetElevationM: targetElevationM.trim() ? Number(targetElevationM) : null,
       environmentPrefs,
       desiredPoiTypes,
-      destinationLat: routeType !== 'anello' ? destLat : null,
-      destinationLon: routeType !== 'anello' ? destLon : null,
     })
     if (count > 0) setStep('results')
     else if (message) setErrorMsg(message)
@@ -585,7 +561,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setSelectedIndex(i)
     setErrorMsg('')
     setDate('')
-    setTitle(item.kind === 'built' ? `${routeTypeLabel(routeType)} costruito ${i + 1}` : item.data.name)
+    setTitle(item.kind === 'built' ? `${routeTypeLabel(item.data.type)} costruito ${i + 1}` : item.data.name)
     setStep('confirm')
   }
 
@@ -697,9 +673,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // della pagina, che ha una propria animazione con transform e diventerebbe il suo contenitore di
   // posizionamento, vanificando l'effetto a pieno schermo), con la ricerca in un pannello sovrapposto.
   if (step === 'start') {
-    const foundEntries = results
-      .map((item, i) => ({ item, i }))
-      .filter((x): x is { item: Extract<ResultItem, { kind: 'found' }>; i: number } => x.item.kind === 'found')
     const canGo = !searching && !generating && (query.trim() !== '' || (lat != null && lon != null))
 
     return createPortal(
@@ -760,81 +733,32 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           {showAdvanced && (
             <div className="space-y-4 pt-1 border-t border-stone-100">
               <div>
-                <label className="block text-sm font-medium text-stone-600 mb-2">Tipo di percorso</label>
+                <label className="block text-sm font-medium text-stone-600 mb-1">Tipo di percorso</label>
+                <p className="text-xs text-stone-400 mb-2">Puoi selezionarne più di uno insieme.</p>
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => setRouteType('anello')}
-                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'anello' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                  <button onClick={() => toggleRouteType('anello')}
+                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('anello') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
                     Anello
                   </button>
-                  <button onClick={() => setRouteType('andata_ritorno')}
-                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'andata_ritorno' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                  <button onClick={() => toggleRouteType('andata_ritorno')}
+                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('andata_ritorno') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
                     Andata e ritorno
                   </button>
-                  <button onClick={() => setRouteType('solo_andata')}
-                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'solo_andata' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                  <button onClick={() => toggleRouteType('solo_andata')}
+                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('solo_andata') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
                     Solo andata
                   </button>
                 </div>
               </div>
 
-              {routeType !== 'anello' && (
-                <div>
-                  <label className="block text-sm font-medium text-stone-600 mb-1">
-                    Destinazione <span className="font-normal text-stone-400">(opzionale — es. Cascata del Picchio, Blera)</span>
-                  </label>
-                  {destLat != null ? (
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-forest-50 border border-forest-200">
-                      <span className="text-xs text-forest-800 truncate">{destDisplayName}</span>
-                      <button onClick={() => { setDestLat(null); setDestLon(null); setDestDisplayName(''); setDestQuery('') }}
-                        className="shrink-0 text-forest-600 hover:text-forest-800">
-                        <XIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex gap-2">
-                        <input
-                          value={destQuery}
-                          onChange={e => setDestQuery(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') runDestGeocode() }}
-                          placeholder="Nome del luogo di arrivo"
-                          className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white"
-                        />
-                        <button onClick={runDestGeocode} disabled={destGeocoding || !destQuery.trim()}
-                          className="w-10 h-10 rounded-xl bg-stone-100 hover:bg-stone-200 disabled:opacity-40 text-stone-600 flex items-center justify-center shrink-0 transition-colors">
-                          {destGeocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      {destGeocodeResults.length > 0 && (
-                        <div className="space-y-1.5 mt-1.5">
-                          {destGeocodeResults.map((r, i) => (
-                            <button
-                              key={i}
-                              onClick={() => { setDestLat(parseFloat(r.lat)); setDestLon(parseFloat(r.lon)); setDestDisplayName(r.display_name); setDestGeocodeResults([]) }}
-                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-stone-600 bg-stone-50 hover:bg-stone-100 transition-colors"
-                            >
-                              {r.display_name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-sm font-medium text-stone-600">Lunghezza target</label>
-                  {destLat == null && <span className="text-sm font-semibold text-stone-800">{targetDistanceKm.toFixed(1)} km</span>}
+                  <span className="text-sm font-semibold text-stone-800">{targetDistanceKm.toFixed(1)} km</span>
                 </div>
-                {destLat != null ? (
-                  <p className="text-xs text-stone-400">La lunghezza sarà quella del percorso reale verso la destinazione scelta.</p>
-                ) : (
-                  <input type="range" min={MIN_KM} max={MAX_KM} step={0.5} value={targetDistanceKm}
-                    onChange={e => setTargetDistanceKm(Number(e.target.value))}
-                    className="w-full accent-terra-500" />
-                )}
+                <input type="range" min={MIN_KM} max={MAX_KM} step={0.5} value={targetDistanceKm}
+                  onChange={e => setTargetDistanceKm(Number(e.target.value))}
+                  className="w-full accent-terra-500" />
               </div>
 
               <div>
@@ -884,12 +808,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 ✨ Nessun risultato senza AI — provo a cercarlo con Giulia.
               </p>
               <GiuliaSearchPanel onFound={handleFound} initialQuery={giuliaSeed} />
-            </div>
-          )}
-
-          {foundEntries.length > 0 && (
-            <div className="space-y-3">
-              {foundEntries.map(({ item, i }) => renderFoundCard(item.data, i))}
             </div>
           )}
 
