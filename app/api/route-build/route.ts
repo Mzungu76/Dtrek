@@ -240,6 +240,16 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   }
 
   const startedAt = Date.now()
+  // Diventa true quando il tetto morbido scatta (vedi Promise.race sotto) — `executeBuild` non
+  // viene davvero interrotto a quel punto (Promise.race abbandona la promessa perdente, non la
+  // cancella: fetchWalkNetwork/scoreAndEnrichCandidates continuano a girare in background, consumando
+  // comunque budget Overpass/DTM/POI per un risultato che non verrà mai consegnato) — se in seguito
+  // completa comunque e chiama logBuild, la riga di log verrebbe letta come un successo puntuale,
+  // indistinguibile da una richiesta mai andata in timeout. Confermato in log di produzione: una riga
+  // "timeout" e una "built" per la stessa identica richiesta (stesso tipo/lunghezza), 60s dopo. Questo
+  // flag marca quella seconda riga come tale invece di lasciarla ambigua — non risolve lo spreco di
+  // calcolo, che richiederebbe una vera cancellazione (AbortSignal) nelle chiamate di rete sottostanti.
+  let timedOut = false
   // Riepilogo comune a ogni possibile esito di questa richiesta, per il log privato consultabile
   // su /profilo/log-ricerche — ogni return da qui in poi chiama logBuild prima di uscire, così
   // anche gli esiti "pochi/nessun risultato" restano visibili senza dover leggere i log Vercel.
@@ -252,6 +262,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       useAi: false,
       durationMs: Date.now() - startedAt,
       ...fields,
+      tierReached: timedOut && fields.tierReached !== 'timeout' ? `${fields.tierReached}_after_deadline` : fields.tierReached,
     })
   }
 
@@ -274,6 +285,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), SOFT_DEADLINE_MS)),
     ])
     if (outcome.kind === 'timeout') {
+      timedOut = true
       console.error(`[route-build] tetto morbido di ${SOFT_DEADLINE_MS}ms superato, rispondo prima del kill della piattaforma`)
       await logBuild({ tierReached: 'timeout', builtCount: 0, message: 'generazione troppo lenta in questa zona' })
       return NextResponse.json({

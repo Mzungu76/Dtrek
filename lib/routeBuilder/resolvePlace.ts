@@ -296,9 +296,15 @@ export async function resolvePlaceName(
   const viaNominatim = await resolveViaNominatim(trimmed)
   if (viaNominatim) return viaNominatim
 
+  // Solo con ESATTAMENTE 2 parti (convenzione "nome, area") — un indirizzo completo alla Nominatim
+  // con più segmenti (comune, provincia, regione, CAP, stato) romperebbe lo split allo stesso modo
+  // del bug gemello corretto in splitQuery di app/api/route-build/search/route.ts, prendendo
+  // l'ultimo segmento (spesso "Italia") come area e il resto come nome. Qui il caso è più raro
+  // (si arriva solo se Nominatim fallisce sull'intera stringa, che di norma risolve bene un proprio
+  // displayName), ma la stessa difesa evita di ripetere l'errore se mai capita.
   const parts = trimmed.split(',').map(p => p.trim()).filter(Boolean)
-  const areaHint = parts.length >= 2 ? parts[parts.length - 1] : null
-  const nameQuery = parts.length >= 2 ? parts.slice(0, -1).join(' ') : trimmed
+  const areaHint = parts.length === 2 ? parts[1] : null
+  const nameQuery = parts.length === 2 ? parts[0] : trimmed
 
   const areaBbox = areaHint ? await resolveAreaBbox(areaHint) : null
   const bbox = areaBbox ? padBbox(areaBbox, 15) : (looksLikePlaceName(nameQuery) ? ITALY_BBOX : null)
