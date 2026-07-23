@@ -248,6 +248,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // un'apertura manuale che implicherebbe di dover scegliere a priori se "cercare con l'AI".
   const [showGiulia, setShowGiulia] = useState(false)
   const [giuliaSeed, setGiuliaSeed] = useState('')
+  // Da quale modalità è partita l'escalation a Giulia — in "Esistenti" lo scopo è mostrare i
+  // percorsi che trova; in "Su misura" (vedi runSuMisura) lo scopo è solo risolvere un luogo/POI
+  // troppo raro per la risoluzione economica, quindi appena Giulia dà un punto utilizzabile si
+  // prosegue subito con la costruzione invece di restare sulla chat (vedi handleFound).
+  const [giuliaOrigin, setGiuliaOrigin] = useState<'esistenti' | 'su_misura'>('esistenti')
   // Ricerca avanzata (tipo di percorso, destinazione, lunghezza, dislivello, preferenze) —
   // raggiungibile fin dal primo schermo invece di essere nascosta dietro un "Continua" dopo la
   // ricerca: chiusa di default per non sovraccaricare lo schermo, ma mai un passo separato del
@@ -457,6 +462,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         // La chat di Giulia (Livello 2) resta da mostrare — non si naviga via dallo step "Partenza"
         // finché è ancora in attesa, altrimenti sparirebbe.
         setErrorMsg('')
+        setGiuliaOrigin('esistenti')
         setGiuliaSeed(query.trim())
         setShowGiulia(true)
       } else if (found.length === 0) {
@@ -532,6 +538,21 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       setLat(fallbackPlace.lat)
       setLon(fallbackPlace.lon)
       setQuery(fallbackPlace.displayName)
+    }
+
+    // Se l'escalation è partita da "Su misura" (luogo/POI troppo raro per la risoluzione
+    // economica — vedi runSuMisura), lo scopo di Giulia era solo trovare il punto di partenza:
+    // appena ne abbiamo uno utilizzabile (dal fallback, o dal primo punto di un percorso
+    // trovato), si chiude la chat e si prosegue subito con la costruzione.
+    if (giuliaOrigin === 'su_misura') {
+      const startPoint = fallbackPlace
+        ?? (resolvedItems[0]?.kind === 'found'
+          ? { lat: resolvedItems[0].data.track.routePolyline[0][0], lon: resolvedItems[0].data.track.routePolyline[0][1] }
+          : null)
+      if (startPoint) {
+        setShowGiulia(false)
+        await generate({ lat: startPoint.lat, lon: startPoint.lon })
+      }
     }
   }
 
@@ -614,7 +635,19 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const res = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(query.trim())}&useAi=${useAi}`)
       const data = await res.json()
       if (!data?.place) {
-        setErrorMsg('Luogo non trovato — prova a scrivere diversamente o tocca la mappa.')
+        if (useAi) {
+          // Anche il tentativo AI di resolve-place (un'unica chiamata, senza dialogo) non ha
+          // trovato nulla — per un luogo/POI davvero raro (una piccola cascata, un toponimo
+          // locale) può servire una ricerca web più approfondita e, se serve, una domanda di
+          // chiarimento all'utente: la chat completa di Giulia (Livello 2), qui usata solo per
+          // individuare il punto di partenza (vedi handleFound/giuliaOrigin), non per cercare
+          // percorsi già documentati.
+          setGiuliaOrigin('su_misura')
+          setGiuliaSeed(query.trim())
+          setShowGiulia(true)
+        } else {
+          setErrorMsg('Luogo non trovato — prova a scrivere diversamente, tocca la mappa, o attiva "Usa l\'AI se non trovo nulla".')
+        }
         return
       }
       setLat(data.place.lat)
@@ -1015,7 +1048,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           {showGiulia && useAi && (
             <div className="space-y-2">
               <p className="text-xs text-terra-700 bg-terra-50 border border-terra-200 rounded-xl px-3 py-2">
-                ✨ Nessun risultato senza AI — provo a cercarlo con Giulia.
+                {giuliaOrigin === 'su_misura'
+                  ? '✨ Luogo raro — provo a individuarlo con Giulia (può farti qualche domanda).'
+                  : '✨ Nessun risultato senza AI — provo a cercarlo con Giulia.'}
               </p>
               <GiuliaSearchPanel onFound={handleFound} initialQuery={giuliaSeed} />
             </div>
