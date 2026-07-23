@@ -147,6 +147,14 @@ function candidateSignature(c: { distanceMeters: number; routePolyline: [number,
   return `${distBucket}_${dirKey}`
 }
 
+type LogBuildFn = (fields: {
+  tierReached: string
+  message?: string | null
+  builtCount?: number | null
+  retried?: boolean
+  details?: Record<string, unknown> | null
+}) => Promise<void>
+
 // Rete di sicurezza: un'eccezione imprevista nel calcolo (es. il grafo, il pathfinding) senza
 // questo wrapper può risultare in una risposta non-JSON che il client legge come "errore di rete"
 // generico, mascherando la causa reale — stesso principio già applicato a route-build/search.
@@ -184,13 +192,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // Riepilogo comune a ogni possibile esito di questa richiesta, per il log privato consultabile
   // su /profilo/log-ricerche — ogni return da qui in poi chiama logBuild prima di uscire, così
   // anche gli esiti "pochi/nessun risultato" restano visibili senza dover leggere i log Vercel.
-  async function logBuild(fields: {
-    tierReached: string
-    message?: string | null
-    builtCount?: number | null
-    retried?: boolean
-    details?: Record<string, unknown> | null
-  }) {
+  const logBuild: LogBuildFn = async fields => {
     await logRouteBuildEvent({
       userId: user?.id ?? null,
       kind: 'build',
@@ -202,12 +204,37 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     })
   }
 
+  // Tutto il resto gira in executeBuild, con questo try/catch a fare da rete di sicurezza: senza
+  // di esso, un'eccezione imprevista in un punto NON già coperto da un try/catch specifico (es.
+  // fetchHikerProfile prima di questa correzione) veniva comunque intercettata dal wrapper esterno
+  // di POST, ma senza mai scrivere una riga di log — un fallimento reale restava invisibile su
+  // /profilo/log-ricerche, visibile solo nei log Vercel.
+  try {
+    return await executeBuild(user, params, logBuild)
+  } catch (e) {
+    console.error('[route-build] Errore interno imprevisto in executeBuild:', e)
+    await logBuild({ tierReached: 'error', message: 'errore interno imprevisto' })
+    return NextResponse.json(
+      { error: 'Errore interno', message: 'Generazione non riuscita per un errore interno, riprova.' },
+      { status: 500 },
+    )
+  }
+}
+
+async function executeBuild(user: { id: string } | null, params: BuildRequestBody, logBuild: LogBuildFn): Promise<NextResponse> {
   let concerns: ReturnType<typeof sanitizeHikerConcerns> = []
   let environmentPrefs = params.environmentPrefs ?? []
   if (user) {
-    const profile = await fetchHikerProfile(user.id)
-    concerns = sanitizeHikerConcerns(profile.concerns)
-    if (params.environmentPrefs == null) environmentPrefs = sanitizeHikerEnvironmentPrefs(profile.environmentPrefs)
+    try {
+      const profile = await fetchHikerProfile(user.id)
+      concerns = sanitizeHikerConcerns(profile.concerns)
+      if (params.environmentPrefs == null) environmentPrefs = sanitizeHikerEnvironmentPrefs(profile.environmentPrefs)
+    } catch (e) {
+      // Un profilo non recuperabile (es. Supabase momentaneamente non raggiungibile) non deve far
+      // fallire l'intera costruzione — si prosegue con i valori di default/quelli passati dal
+      // client, stessa tolleranza già usata altrove per la modalità degradata.
+      console.error('[route-build] fetchHikerProfile fallito, proseguo con i valori di default:', e)
+    }
   }
 
   // La destinazione si applica ad andata_ritorno e solo_andata (per un anello non ha senso, si
