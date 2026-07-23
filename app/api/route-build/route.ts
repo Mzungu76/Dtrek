@@ -4,7 +4,7 @@ import { padBbox } from '@/lib/overpassTrails'
 import { haversineM } from '@/lib/geoUtils'
 import { fetchWalkNetwork, nearestGraphNode } from '@/lib/routeBuilder/osmGraph'
 import { generateLoopCandidates, generateOutAndBackCandidates, generateOneWayCandidates, generateOutAndBackToPoint, type RouteType } from '@/lib/routeBuilder/loopBuilder'
-import { scoreAndEnrichCandidates } from '@/lib/routeBuilder/scoreCandidates'
+import { scoreAndEnrichCandidates, type ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
 import { sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
 import { POI_META, type PoiType } from '@/lib/overpass'
@@ -36,6 +36,11 @@ const MIN_BUILT_RESULTS = 8
 // un tentativo a ~6 km e uno a ~10 km) — comunque clampati entro MIN/MAX_TARGET_DISTANCE_KM.
 const RETRY_DISTANCE_FACTORS = [0.75, 1.25]
 const MAX_BUILT_RESULTS = 14
+// Se il primo tentativo (fetch rete + arricchimento) ha già consumato più di questo, il
+// ritentativo viene saltato — meglio pochi risultati garantiti entro il tetto di 60s della
+// funzione (maxDuration sopra) che rischiare un kill della piattaforma a metà ritentativo, che non
+// lascia scrivere né una risposta né una riga di log (vedi commento sul ritentativo sotto).
+const BUILD_TIME_BUDGET_MS = 40_000
 
 // ── GET: valori suggeriti per precompilare il wizard (storico attività + profilo) ───────────────
 // Nessun costo AI qui — solo letture Supabase già esistenti (lib/hikerContext.ts, stesse usate da
@@ -210,7 +215,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // di POST, ma senza mai scrivere una riga di log — un fallimento reale restava invisibile su
   // /profilo/log-ricerche, visibile solo nei log Vercel.
   try {
-    return await executeBuild(user, params, logBuild)
+    return await executeBuild(user, params, logBuild, startedAt)
   } catch (e) {
     console.error('[route-build] Errore interno imprevisto in executeBuild:', e)
     await logBuild({ tierReached: 'error', message: 'errore interno imprevisto' })
@@ -221,7 +226,9 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-async function executeBuild(user: { id: string } | null, params: BuildRequestBody, logBuild: LogBuildFn): Promise<NextResponse> {
+async function executeBuild(
+  user: { id: string } | null, params: BuildRequestBody, logBuild: LogBuildFn, startedAt: number,
+): Promise<NextResponse> {
   let concerns: ReturnType<typeof sanitizeHikerConcerns> = []
   let environmentPrefs = params.environmentPrefs ?? []
   if (user) {
@@ -309,7 +316,7 @@ async function executeBuild(user: { id: string } | null, params: BuildRequestBod
     })
   }
 
-  let candidates
+  let candidates: ScoredCandidate[]
   try {
     candidates = await scoreAndEnrichCandidates(rawCandidates, {
       targetDistanceM,
@@ -327,44 +334,54 @@ async function executeBuild(user: { id: string } | null, params: BuildRequestBod
 
   let retried = false
   // Ritentativo con lunghezze alternative se, senza destinazione, ne sono sopravvissuti troppo
-  // pochi — solo se serve (mai per la destinazione, dove l'unico risultato possibile è già quello).
+  // pochi — solo se serve (mai per la destinazione, dove l'unico risultato possibile è già quello)
+  // e solo se resta abbastanza budget di tempo: i due tentativi girano in parallelo (non in
+  // sequenza, come nella prima versione) proprio per non rischiare di superare il tetto di 60s
+  // della funzione — un kill della piattaforma a metà non lascia scrivere né una risposta né una
+  // riga di log, un fallimento del tutto invisibile che il ritentativo sequenziale rischiava di
+  // causare più spesso proprio nei casi (rete rada) in cui scatta più spesso.
   if (!hasDestination && candidates.length < MIN_BUILT_RESULTS) {
-    retried = true
-    console.log(`[route-build] solo ${candidates.length} candidati validi, ritento con lunghezze alternative`)
-    const seen = new Set(candidates.map(candidateSignature))
-    for (const factor of RETRY_DISTANCE_FACTORS) {
-      const altDistanceM = Math.min(Math.max(targetDistanceM * factor, MIN_TARGET_DISTANCE_KM * 1000), MAX_TARGET_DISTANCE_KM * 1000)
-      const altRaw = generateRawCandidatesForLength(network, startNode.nodeId, params.routeType, altDistanceM)
-      if (altRaw.length === 0) continue
-      let altCandidates
-      try {
-        altCandidates = await scoreAndEnrichCandidates(altRaw, {
+    const elapsedMs = Date.now() - startedAt
+    if (elapsedMs > BUILD_TIME_BUDGET_MS) {
+      console.log(`[route-build] salto il ritentativo: già ${(elapsedMs / 1000).toFixed(1)}s trascorsi`)
+    } else {
+      retried = true
+      console.log(`[route-build] solo ${candidates.length} candidati validi, ritento con lunghezze alternative (in parallelo)`)
+      const seen = new Set(candidates.map(candidateSignature))
+      const altBatches = await Promise.all(RETRY_DISTANCE_FACTORS.map(async factor => {
+        const altDistanceM = Math.min(Math.max(targetDistanceM * factor, MIN_TARGET_DISTANCE_KM * 1000), MAX_TARGET_DISTANCE_KM * 1000)
+        const altRaw = generateRawCandidatesForLength(network, startNode.nodeId, params.routeType, altDistanceM)
+        if (altRaw.length === 0) return [] as ScoredCandidate[]
+        try {
           // Il punteggio resta ancorato all'obiettivo originale, non alla lunghezza del
           // ritentativo — questi candidati sono un ripiego per avere più opzioni, non una nuova
           // richiesta dell'utente.
-          targetDistanceM,
-          targetElevationM: params.targetElevationM,
-          environmentPrefs,
-          concerns,
-          desiredPoiTypes: params.desiredPoiTypes,
-          bbox,
-        })
-      } catch (e) {
-        console.error('[route-build] ritentativo con lunghezza alternativa fallito:', e)
-        continue
+          return await scoreAndEnrichCandidates(altRaw, {
+            targetDistanceM,
+            targetElevationM: params.targetElevationM,
+            environmentPrefs,
+            concerns,
+            desiredPoiTypes: params.desiredPoiTypes,
+            bbox,
+          })
+        } catch (e) {
+          console.error('[route-build] ritentativo con lunghezza alternativa fallito:', e)
+          return [] as ScoredCandidate[]
+        }
+      }))
+      for (const altCandidates of altBatches) {
+        for (const c of altCandidates) {
+          const sig = candidateSignature(c)
+          if (seen.has(sig)) continue
+          seen.add(sig)
+          candidates.push(c)
+        }
       }
-      for (const c of altCandidates) {
-        const sig = candidateSignature(c)
-        if (seen.has(sig)) continue
-        seen.add(sig)
-        candidates.push(c)
-      }
-      if (candidates.length >= MIN_BUILT_RESULTS) break
+      candidates = candidates
+        .sort((a, b) => Math.abs(a.distanceMeters - targetDistanceM) - Math.abs(b.distanceMeters - targetDistanceM))
+        .slice(0, MAX_BUILT_RESULTS)
+      console.log(`[route-build] dopo ritentativo: ${candidates.length} candidati totali`)
     }
-    candidates = candidates
-      .sort((a, b) => Math.abs(a.distanceMeters - targetDistanceM) - Math.abs(b.distanceMeters - targetDistanceM))
-      .slice(0, MAX_BUILT_RESULTS)
-    console.log(`[route-build] dopo ritentativo: ${candidates.length} candidati totali`)
   }
 
   if (candidates.length === 0) {
