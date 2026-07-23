@@ -13,10 +13,20 @@ import type { TrackPoint } from '@/lib/tcxParser'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// Raggio di ricerca "sentieri nei dintorni" attorno al luogo/punto risolto — alzato da 12 a 20 km
-// (richiesta esplicita) rispetto al fallback storico di app/api/route-search-plain/route.ts, che
-// resta invariato a 12.
-const NEARBY_RADIUS_KM = 20
+// Raggio di ricerca "sentieri nei dintorni" attorno al luogo/punto risolto — ora scelto
+// dall'utente (filtro raggio in components/upload/RouteBuilder.tsx, tagli 5/10/20/50/100 km),
+// con questo come ripiego se il client non lo manda. Non tocca il fallback storico e separato
+// di app/api/route-search-plain/route.ts, che resta invariato a 12.
+const DEFAULT_RADIUS_KM = 20
+const ALLOWED_RADIUS_KM = [5, 10, 20, 50, 100]
+
+function sanitizeRadiusKm(raw: unknown): number {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return DEFAULT_RADIUS_KM
+  // Il più vicino tra i tagli ammessi, invece di un rifiuto secco, per tollerare un valore non
+  // esatto senza far fallire la richiesta.
+  return ALLOWED_RADIUS_KM.reduce((best, v) => Math.abs(v - n) < Math.abs(best - n) ? v : best)
+}
 // Quanti candidati "trovati" (non-AI o dal Livello 1) risolvere subito con una traccia reale — un
 // cap esplicito per limitare il costo Overpass/DTM aggiuntivo introdotto dalla risoluzione eager
 // (vedi §2 del piano): solo quelli che risolvono sopravvivono come 'found', mai una card senza
@@ -62,7 +72,7 @@ function splitQuery(query: string): { nameQuery: string; areaHint: string | null
 // nome di percorso (vedi looksLikePlaceName) — una frase libera lunga (com'è tipico ora che questo
 // endpoint riceve anche descrizioni discorsive dal wizard di ricerca unificato) farebbe girare lo
 // stesso tipo di regex nazionale pesante che ha già causato dei 504 in passato, per nulla.
-async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | null): Promise<HikingRouteCandidate[]> {
+async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | null, radiusKm: number): Promise<HikingRouteCandidate[]> {
   const areaBbox = areaHint ? await resolveAreaBbox(areaHint) : null
   if (!areaBbox && !looksLikePlaceName(nameQuery)) return []
 
@@ -70,7 +80,7 @@ async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | nul
   if (candidates.length === 0) {
     const nearbyBbox = areaBbox ?? await resolveAreaBbox(nameQuery)
     if (nearbyBbox) {
-      const [minLat, minLon, maxLat, maxLon] = padBbox(nearbyBbox, NEARBY_RADIUS_KM)
+      const [minLat, minLon, maxLat, maxLon] = padBbox(nearbyBbox, radiusKm)
       candidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
     }
   }
@@ -96,11 +106,11 @@ async function resolveFoundRoutes(candidates: HikingRouteCandidate[], cap: numbe
 // parallelo con la ricerca di percorsi esistenti (non-AI, Overpass). Chiamato sia per la query
 // originale sia, dal Livello 1, per ciascun luogo interpretato dall'AI — mai con un parametro `ai`,
 // per non richiamare ricorsivamente l'AI su un risultato AI.
-async function tier0(query: string): Promise<{ place: ResolvedPlace | null; foundRoutes: FoundRouteResult[] }> {
+async function tier0(query: string, radiusKm: number): Promise<{ place: ResolvedPlace | null; foundRoutes: FoundRouteResult[] }> {
   const { nameQuery, areaHint } = splitQuery(query)
   const [place, rawCandidates] = await Promise.all([
     resolvePlaceName(query),
-    findExistingRoutesNonAi(nameQuery, areaHint),
+    findExistingRoutesNonAi(nameQuery, areaHint, radiusKm),
   ])
   // Dal più vicino al più lontano rispetto al luogo risolto — sia per mostrarli in quell'ordine,
   // sia perché MAX_EAGER_RESOLVE risolve solo i primi: meglio che siano i più vicini, non i primi
@@ -144,11 +154,13 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
 
   let query: string
   let useAi: boolean
+  let radiusKm: number
   try {
     const body = await req.json()
     if (typeof body.query !== 'string' || !body.query.trim()) throw new Error('query mancante')
     query = body.query.trim().slice(0, 300)
     useAi = body.useAi === true
+    radiusKm = sanitizeRadiusKm(body.radiusKm)
   } catch {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
@@ -161,7 +173,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   let interpretedPlacesCount = 0
 
   try {
-    const level0 = await tier0(query)
+    const level0 = await tier0(query, radiusKm)
     place = level0.place
     foundRoutes = level0.foundRoutes
   } catch (e) {
@@ -181,7 +193,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
           prefill = interpreted.prefs
           interpretedPlacesCount = interpreted.places.length
           for (const p of interpreted.places.slice(0, MAX_INTERPRETED_PLACES)) {
-            const rerun = await tier0(p.query)
+            const rerun = await tier0(p.query, radiusKm)
             if (!place && rerun.place) place = rerun.place
             if (rerun.foundRoutes.length > 0) {
               foundRoutes = [...foundRoutes, ...rerun.foundRoutes].slice(0, MAX_EAGER_RESOLVE)
@@ -208,7 +220,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     foundCount: foundRoutes.length,
     escalatedToAi: escalateToAi,
     durationMs: Date.now() - startedAt,
-    details: { interpretedPlacesCount },
+    details: { interpretedPlacesCount, radiusKm },
   })
 
   return NextResponse.json({ place, prefill, foundRoutes, escalateToAi })

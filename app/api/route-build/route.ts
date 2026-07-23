@@ -25,6 +25,13 @@ const MAX_TARGET_DISTANCE_KM = 15
 // abbastanza rete nei dintorni per costruire un percorso — meglio un errore chiaro che un anello
 // costruito su un frammento isolato di strada.
 const START_SNAP_THRESHOLD_M = 500
+// Tagli ammessi per il filtro "raggio di ricerca" del wizard (visibile in mappa, condiviso da
+// ricerca base e avanzata — vedi components/upload/RouteBuilder.tsx). Qui si applica solo come
+// tetto AGGIUNTIVO al raggio del bbox già calcolato dalla lunghezza target: puà solo restringere,
+// mai allargare oltre il tetto di sicurezza esistente (10 km, vedi bboxRadiusKm), per non
+// reintrodurre il rischio di query Overpass troppo pesanti che ha già causato dei 504 in passato.
+const ALLOWED_RADIUS_KM = [5, 10, 20, 50, 100]
+const DEFAULT_RADIUS_KM = 20
 
 // Sotto questa soglia di percorsi costruiti algoritmicamente (senza destinazione), l'app ritenta
 // con lunghezze leggermente diverse (vedi RETRY_DISTANCE_FACTORS): in una rete di sentieri rada
@@ -95,6 +102,15 @@ interface BuildRequestBody {
   // significa "non inviato dal client", si ricade sul profilo come faceva già il codice originale.
   environmentPrefs: ReturnType<typeof sanitizeHikerEnvironmentPrefs> | null
   desiredPoiTypes: PoiType[]
+  // Filtro raggio di ricerca (5/10/20/50/100 km) — qui usato solo per restringere ulteriormente
+  // il bbox interrogato, mai per allargarlo oltre il tetto di sicurezza esistente.
+  radiusKm: number
+}
+
+function sanitizeRadiusKm(raw: unknown): number {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return DEFAULT_RADIUS_KM
+  return ALLOWED_RADIUS_KM.reduce((best, v) => Math.abs(v - n) < Math.abs(best - n) ? v : best)
 }
 
 function parseBody(raw: unknown): BuildRequestBody {
@@ -124,7 +140,9 @@ function parseBody(raw: unknown): BuildRequestBody {
     ? body.desiredPoiTypes.filter((t): t is PoiType => typeof t === 'string' && VALID_POI_TYPES.has(t))
     : []
 
-  return { lat, lon, routeType: body.routeType, targetDistanceKm, targetElevationM, destinationLat, destinationLon, environmentPrefs, desiredPoiTypes }
+  const radiusKm = sanitizeRadiusKm(body.radiusKm)
+
+  return { lat, lon, routeType: body.routeType, targetDistanceKm, targetElevationM, destinationLat, destinationLon, environmentPrefs, desiredPoiTypes, radiusKm }
 }
 
 // Stessa scelta del ramo anello/andata_ritorno/solo_andata usato per il tentativo principale in
@@ -256,10 +274,16 @@ async function executeBuild(
   // target di lunghezza scelto dall'utente (che qui non è più un vincolo) — si usa la distanza in
   // linea d'aria verso la destinazione con lo stesso margine. Tetto a 10 km in entrambi i casi:
   // oltre, il bbox interrogato via Overpass diventa abbastanza grande da rischiare di superare il
-  // tempo disponibile prima del kill della funzione lato piattaforma.
-  const bboxRadiusKm = hasDestination
-    ? Math.min(Math.max(haversineM(params.lat, params.lon, params.destinationLat!, params.destinationLon!) / 1000 * 0.6, 2), 10)
-    : Math.min(Math.max(params.targetDistanceKm * 0.6, 2), 10)
+  // tempo disponibile prima del kill della funzione lato piattaforma. Il filtro raggio scelto
+  // dall'utente (params.radiusKm) si applica qui SOLO come ulteriore restrizione — se più piccolo
+  // del tetto di sicurezza lo sostituisce, se più grande (es. 50/100 km, pensati soprattutto per i
+  // percorsi "trovati") viene ignorato, mai per allargare il bbox oltre 10 km.
+  const bboxRadiusKm = Math.min(
+    hasDestination
+      ? Math.min(Math.max(haversineM(params.lat, params.lon, params.destinationLat!, params.destinationLon!) / 1000 * 0.6, 2), 10)
+      : Math.min(Math.max(params.targetDistanceKm * 0.6, 2), 10),
+    params.radiusKm,
+  )
   const bbox = padBbox([params.lat, params.lon, params.lat, params.lon], bboxRadiusKm)
 
   let network

@@ -43,6 +43,10 @@ const MIN_KM = 1
 // (400) ogni volta che l'utente sposta la lunghezza oltre questo limite, un errore che restava
 // silenzioso finché c'erano comunque percorsi "trovati" da mostrare (vedi runSearch).
 const MAX_KM = 15
+// Tagli del filtro "raggio di ricerca" — condiviso da ricerca base e avanzata (stesso stato, vedi
+// searchRadiusKm), visibile in mappa come cerchio attorno al punto/luogo cercato. Deve coincidere
+// con ALLOWED_RADIUS_KM di app/api/route-build/search/route.ts e app/api/route-build/route.ts.
+const RADIUS_OPTIONS_KM = [5, 10, 20, 50, 100] as const
 // Obiettivo minimo di risultati per ricerca (costruiti + trovati insieme) imposto dall'utente:
 // se la ricerca trova meno percorsi già esistenti di questo numero, il wizard costruisce sempre
 // anche percorsi algoritmici per completare — mai fermarsi a 1 solo risultato quando è possibile
@@ -221,6 +225,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // ricerca: chiusa di default per non sovraccaricare lo schermo, ma mai un passo separato del
   // wizard.
   const [showAdvanced, setShowAdvanced] = useState(false)
+  // Raggio di ricerca — visibile nella ricerca base (non nascosto nella sezione avanzata), si
+  // applica a entrambe: al motore "trovati" (raggio attorno al luogo risolto) e a quello
+  // "costruiti" (come tetto aggiuntivo, mai per allargare oltre il limite di sicurezza esistente
+  // — vedi app/api/route-build/route.ts). Mostrato anche come cerchio sulla mappa.
+  const [searchRadiusKm, setSearchRadiusKm] = useState<number>(20)
 
   // Selezione multipla, non esclusiva: l'utente può cercare/costruire più tipi di percorso insieme
   // (es. sia Anello che Andata e ritorno), risultati mescolati nella stessa lista — vedi
@@ -338,7 +347,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const res = await fetch('/api/route-build/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query.trim(), useAi }),
+        body: JSON.stringify({ query: query.trim(), useAi, radiusKm: searchRadiusKm }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -515,7 +524,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           const res = await fetch('/api/route-build', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...common, routeType, destinationLat: null, destinationLon: null }),
+            body: JSON.stringify({ ...common, routeType, radiusKm: searchRadiusKm, destinationLat: null, destinationLon: null }),
           })
           const data = await res.json()
           if (!res.ok) return { candidates: [] as BuiltCandidate[], message: data.message || data.error || 'Generazione non riuscita, riprova.' }
@@ -682,6 +691,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             lat={lat ?? undefined} lon={lon ?? undefined}
             onPick={(pLat, pLon) => { setLat(pLat); setLon(pLon) }}
             height="100%" rounded={false}
+            radiusKm={lat != null && lon != null ? searchRadiusKm : undefined}
           />
         </div>
 
@@ -720,6 +730,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           >
             <Sparkles className="w-3.5 h-3.5" /> Usa l&apos;AI se non trovo nulla
           </button>
+
+          <div>
+            <p className="text-xs font-medium text-stone-600 mb-1.5">Raggio di ricerca dal punto/luogo</p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {RADIUS_OPTIONS_KM.map(km => (
+                <button key={km} type="button" onClick={() => setSearchRadiusKm(km)}
+                  className={`py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    searchRadiusKm === km ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                  }`}>
+                  {km} km
+                </button>
+              ))}
+            </div>
+          </div>
 
           <button
             type="button"
