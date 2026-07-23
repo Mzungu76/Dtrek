@@ -239,10 +239,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // un'unica ricerca che le combina entrambe. Stesso motore di prima (Livello 0/1/2 per "Esistenti",
   // algoritmo di generazione per "Su misura"), solo diviso invece che sempre eseguito insieme.
   const [searchMode, setSearchMode] = useState<'esistenti' | 'su_misura'>('esistenti')
+  // Solo per "Su misura": il luogo/POI digitato è il punto di partenza esatto, o solo un centro
+  // d'interesse nei cui dintorni cercare il miglior aggancio alla rete percorribile (utile per un
+  // luogo generico come una città, o un POI senza sentieri esattamente addosso, es. "Cascata del
+  // Picchio") — vedi startMode in app/api/route-build/route.ts.
+  const [startMode, setStartMode] = useState<'esatto' | 'dintorni'>('esatto')
   // Rivelato automaticamente solo quando i livelli 0/1 (gratuito/economico) non trovano nulla — mai
   // un'apertura manuale che implicherebbe di dover scegliere a priori se "cercare con l'AI".
   const [showGiulia, setShowGiulia] = useState(false)
   const [giuliaSeed, setGiuliaSeed] = useState('')
+  // Da quale modalità è partita l'escalation a Giulia — in "Esistenti" lo scopo è mostrare i
+  // percorsi che trova; in "Su misura" (vedi runSuMisura) lo scopo è solo risolvere un luogo/POI
+  // troppo raro per la risoluzione economica, quindi appena Giulia dà un punto utilizzabile si
+  // prosegue subito con la costruzione invece di restare sulla chat (vedi handleFound).
+  const [giuliaOrigin, setGiuliaOrigin] = useState<'esistenti' | 'su_misura'>('esistenti')
   // Ricerca avanzata (tipo di percorso, destinazione, lunghezza, dislivello, preferenze) —
   // raggiungibile fin dal primo schermo invece di essere nascosta dietro un "Continua" dopo la
   // ricerca: chiusa di default per non sovraccaricare lo schermo, ma mai un passo separato del
@@ -353,6 +363,25 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
 
+  // Anteprima immediata (con debounce) del luogo digitato in "Su misura": aggiorna solo
+  // lat/lon (mai il testo, per non correggere quello che l'utente sta ancora scrivendo) così la
+  // mappa e il cerchio del raggio di ricerca si spostano subito, prima ancora di premere il
+  // pulsante — sempre senza AI (risoluzione economica, chiamata a ogni pausa nella digitazione:
+  // usare qui il livello AI sarebbe uno spreco). La risoluzione "ufficiale" (che rispetta
+  // l'interruttore AI e aggiorna anche il testo con il nome risolto) resta quella di runSuMisura,
+  // eseguita solo alla conferma.
+  useEffect(() => {
+    if (searchMode !== 'su_misura' || !query.trim()) return
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(query.trim())}&useAi=false`)
+        const data = await res.json()
+        if (data?.place) { setLat(data.place.lat); setLon(data.place.lon) }
+      } catch {}
+    }, 600)
+    return () => clearTimeout(handle)
+  }, [query, searchMode])
+
   // Selezione multipla dei tipi di percorso — sempre almeno un tipo attivo, non si può deselezionare
   // l'ultimo rimasto.
   function toggleRouteType(t: RouteType) {
@@ -433,6 +462,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         // La chat di Giulia (Livello 2) resta da mostrare — non si naviga via dallo step "Partenza"
         // finché è ancora in attesa, altrimenti sparirebbe.
         setErrorMsg('')
+        setGiuliaOrigin('esistenti')
         setGiuliaSeed(query.trim())
         setShowGiulia(true)
       } else if (found.length === 0) {
@@ -509,6 +539,21 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       setLon(fallbackPlace.lon)
       setQuery(fallbackPlace.displayName)
     }
+
+    // Se l'escalation è partita da "Su misura" (luogo/POI troppo raro per la risoluzione
+    // economica — vedi runSuMisura), lo scopo di Giulia era solo trovare il punto di partenza:
+    // appena ne abbiamo uno utilizzabile (dal fallback, o dal primo punto di un percorso
+    // trovato), si chiude la chat e si prosegue subito con la costruzione.
+    if (giuliaOrigin === 'su_misura') {
+      const startPoint = fallbackPlace
+        ?? (resolvedItems[0]?.kind === 'found'
+          ? { lat: resolvedItems[0].data.track.routePolyline[0][0], lon: resolvedItems[0].data.track.routePolyline[0][1] }
+          : null)
+      if (startPoint) {
+        setShowGiulia(false)
+        await generate({ lat: startPoint.lat, lon: startPoint.lon })
+      }
+    }
   }
 
   interface BuildParamsCommon {
@@ -518,6 +563,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     targetElevationM: number | null
     environmentPrefs: HikerEnvironmentPrefKey[]
     desiredPoiTypes: PoiType[]
+    startMode: 'esatto' | 'dintorni'
   }
 
   /** Nucleo condiviso della costruzione algoritmica — usato dalla modalità "Su misura" (generate/
@@ -568,6 +614,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       targetElevationM: targetElevationM.trim() ? Number(targetElevationM) : null,
       environmentPrefs,
       desiredPoiTypes,
+      startMode,
     })
     if (count > 0) setStep('results')
     else if (message) setErrorMsg(message)
@@ -588,7 +635,19 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const res = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(query.trim())}&useAi=${useAi}`)
       const data = await res.json()
       if (!data?.place) {
-        setErrorMsg('Luogo non trovato — prova a scrivere diversamente o tocca la mappa.')
+        if (useAi) {
+          // Anche il tentativo AI di resolve-place (un'unica chiamata, senza dialogo) non ha
+          // trovato nulla — per un luogo/POI davvero raro (una piccola cascata, un toponimo
+          // locale) può servire una ricerca web più approfondita e, se serve, una domanda di
+          // chiarimento all'utente: la chat completa di Giulia (Livello 2), qui usata solo per
+          // individuare il punto di partenza (vedi handleFound/giuliaOrigin), non per cercare
+          // percorsi già documentati.
+          setGiuliaOrigin('su_misura')
+          setGiuliaSeed(query.trim())
+          setShowGiulia(true)
+        } else {
+          setErrorMsg('Luogo non trovato — prova a scrivere diversamente, tocca la mappa, o attiva "Usa l\'AI se non trovo nulla".')
+        }
         return
       }
       setLat(data.place.lat)
@@ -861,6 +920,31 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             <Sparkles className="w-3.5 h-3.5" /> Usa l&apos;AI se non trovo nulla
           </button>
 
+          {searchMode === 'su_misura' && (
+            <div>
+              <p className="text-xs font-medium text-stone-600 mb-1.5">Il luogo digitato è...</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button type="button" onClick={() => setStartMode('esatto')}
+                  className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                    startMode === 'esatto' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                  }`}>
+                  Il punto di partenza
+                </button>
+                <button type="button" onClick={() => setStartMode('dintorni')}
+                  className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                    startMode === 'dintorni' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                  }`}>
+                  Un centro d&apos;interesse nei dintorni
+                </button>
+              </div>
+              {startMode === 'dintorni' && (
+                <p className="text-xs text-stone-400 mt-1.5">
+                  Utile per un luogo generico (es. una città) o un punto d&apos;interesse senza sentieri esattamente addosso (es. una cascata) — cerca il miglior punto di partenza entro il raggio scelto qui sotto, invece di richiedere che sia già lì.
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <p className="text-xs font-medium text-stone-600 mb-1.5">Raggio di ricerca dal punto/luogo</p>
             <div className="grid grid-cols-5 gap-1.5">
@@ -873,6 +957,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 </button>
               ))}
             </div>
+            {searchMode === 'su_misura' && startMode === 'esatto' && (
+              <p className="text-xs text-stone-400 mt-1.5">
+                Con &quot;Il punto di partenza&quot; il raggio si applica solo come tetto di sicurezza, non allarga la ricerca — passa a &quot;Un centro d&apos;interesse nei dintorni&quot; per usarlo davvero.
+              </p>
+            )}
           </div>
 
           <button
@@ -959,7 +1048,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           {showGiulia && useAi && (
             <div className="space-y-2">
               <p className="text-xs text-terra-700 bg-terra-50 border border-terra-200 rounded-xl px-3 py-2">
-                ✨ Nessun risultato senza AI — provo a cercarlo con Giulia.
+                {giuliaOrigin === 'su_misura'
+                  ? '✨ Luogo raro — provo a individuarlo con Giulia (può farti qualche domanda).'
+                  : '✨ Nessun risultato senza AI — provo a cercarlo con Giulia.'}
               </p>
               <GiuliaSearchPanel onFound={handleFound} initialQuery={giuliaSeed} />
             </div>

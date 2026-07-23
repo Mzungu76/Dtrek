@@ -32,6 +32,11 @@ const START_SNAP_THRESHOLD_M = 500
 // reintrodurre il rischio di query Overpass troppo pesanti che ha già causato dei 504 in passato.
 const ALLOWED_RADIUS_KM = [5, 10, 20, 50, 100]
 const DEFAULT_RADIUS_KM = 20
+// Tetto per la modalità "dintorni" (vedi BuildRequestBody.startMode): il raggio scelto dall'utente
+// può arrivare a 100 km, ma qui va clampato allo stesso tetto di sicurezza del bbox (10 km) — oltre,
+// sia la ricerca del punto d'aggancio sia il bbox interrogato via Overpass rischierebbero lo stesso
+// tipo di query pesante che ha già causato dei 504/timeout in passato.
+const BUILD_DINTORNI_MAX_KM = 8
 
 // Sotto questa soglia di percorsi costruiti algoritmicamente (senza destinazione), l'app ritenta
 // con lunghezze leggermente diverse (vedi RETRY_DISTANCE_FACTORS): in una rete di sentieri rada
@@ -117,8 +122,15 @@ interface BuildRequestBody {
   environmentPrefs: ReturnType<typeof sanitizeHikerEnvironmentPrefs> | null
   desiredPoiTypes: PoiType[]
   // Filtro raggio di ricerca (5/10/20/50/100 km) — qui usato solo per restringere ulteriormente
-  // il bbox interrogato, mai per allargarlo oltre il tetto di sicurezza esistente.
+  // il bbox interrogato, mai per allargarlo oltre il tetto di sicurezza esistente. Con
+  // startMode 'dintorni', lo stesso raggio (clampato più stretto, vedi BUILD_DINTORNI_MAX_KM)
+  // diventa anche la distanza massima entro cui agganciare il punto di partenza reale.
   radiusKm: number
+  // 'esatto' (default): il punto dato deve avere rete percorribile nel raggio fisso
+  // START_SNAP_THRESHOLD_M. 'dintorni': il punto è un centro d'interesse (una città, un POI) non
+  // necessariamente vicino a un sentiero — si cerca il miglior aggancio alla rete entro radiusKm
+  // invece di richiedere che il punto stesso sia già a ridosso di un sentiero.
+  startMode: 'esatto' | 'dintorni'
 }
 
 function sanitizeRadiusKm(raw: unknown): number {
@@ -155,8 +167,9 @@ function parseBody(raw: unknown): BuildRequestBody {
     : []
 
   const radiusKm = sanitizeRadiusKm(body.radiusKm)
+  const startMode = body.startMode === 'dintorni' ? 'dintorni' : 'esatto'
 
-  return { lat, lon, routeType: body.routeType, targetDistanceKm, targetElevationM, destinationLat, destinationLon, environmentPrefs, desiredPoiTypes, radiusKm }
+  return { lat, lon, routeType: body.routeType, targetDistanceKm, targetElevationM, destinationLat, destinationLon, environmentPrefs, desiredPoiTypes, radiusKm, startMode }
 }
 
 // Stessa scelta del ramo anello/andata_ritorno/solo_andata usato per il tentativo principale in
@@ -312,11 +325,20 @@ async function executeBuild(
   // dall'utente (params.radiusKm) si applica qui SOLO come ulteriore restrizione — se più piccolo
   // del tetto di sicurezza lo sostituisce, se più grande (es. 50/100 km, pensati soprattutto per i
   // percorsi "trovati") viene ignorato, mai per allargare il bbox oltre 10 km.
+  // In modalità 'dintorni' il punto dato è solo un centro d'interesse (un luogo, un POI) — l'aggancio
+  // alla rete percorribile può cercarsi entro un raggio più ampio (clampato a BUILD_DINTORNI_MAX_KM)
+  // invece del tetto fisso START_SNAP_THRESHOLD_M pensato per un punto di partenza già esatto — e il
+  // bbox interrogato deve coprire almeno quel raggio, altrimenti l'aggancio non troverebbe nulla da
+  // vedere oltre i pochi km di rete già previsti dalla lunghezza target.
+  const dintorniRadiusKm = params.startMode === 'dintorni' ? Math.min(params.radiusKm, BUILD_DINTORNI_MAX_KM) : 0
   const bboxRadiusKm = Math.min(
-    hasDestination
-      ? Math.min(Math.max(haversineM(params.lat, params.lon, params.destinationLat!, params.destinationLon!) / 1000 * 0.6, 2), 10)
-      : Math.min(Math.max(params.targetDistanceKm * 0.6, 2), 10),
-    params.radiusKm,
+    Math.max(
+      hasDestination
+        ? Math.min(Math.max(haversineM(params.lat, params.lon, params.destinationLat!, params.destinationLon!) / 1000 * 0.6, 2), 10)
+        : Math.min(Math.max(params.targetDistanceKm * 0.6, 2), 10),
+      dintorniRadiusKm,
+    ),
+    params.startMode === 'dintorni' ? 10 : params.radiusKm,
   )
   const bbox = padBbox([params.lat, params.lon, params.lat, params.lon], bboxRadiusKm)
 
@@ -331,12 +353,15 @@ async function executeBuild(
 
   console.log(`[route-build] rete: ${network.nodes.size} nodi, bbox raggio ${bboxRadiusKm.toFixed(1)}km`)
 
-  const startNode = nearestGraphNode(network, params.lat, params.lon, START_SNAP_THRESHOLD_M)
+  const startSnapThresholdM = params.startMode === 'dintorni' ? dintorniRadiusKm * 1000 : START_SNAP_THRESHOLD_M
+  const startNode = nearestGraphNode(network, params.lat, params.lon, startSnapThresholdM)
   if (!startNode) {
-    await logBuild({ tierReached: 'no_network_nearby', details: { networkNodes: network.nodes.size } })
+    await logBuild({ tierReached: 'no_network_nearby', details: { networkNodes: network.nodes.size, startMode: params.startMode } })
     return NextResponse.json({
       error: 'no_network_nearby',
-      message: 'Non ho trovato sentieri o strade percorribili abbastanza vicino al punto scelto — prova un punto di partenza diverso.',
+      message: params.startMode === 'dintorni'
+        ? 'Non ho trovato sentieri o strade percorribili nei dintorni di questo luogo, entro il raggio scelto — prova un raggio più ampio o un luogo diverso.'
+        : 'Non ho trovato sentieri o strade percorribili abbastanza vicino al punto scelto — prova un punto di partenza diverso, o la modalità "Nei dintorni".',
     }, { status: 404 })
   }
 
