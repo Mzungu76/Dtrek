@@ -7,9 +7,6 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
 import { computeBbox, haversineM, minDistToTrack } from '@/lib/geoUtils'
 import { fetchOverpass } from '@/lib/overpassTrails'
-import { fetchGnaPois } from '@/lib/pois/gnaSource'
-import { fetchPtprPois } from '@/lib/pois/ptprSource'
-import { fetchWikidataPois } from '@/lib/pois/wikidataSource'
 import { fetchOverpassPois } from '@/lib/pois/overpassSource'
 import { deduplicateByProximity } from '@/lib/pois/dedupe'
 import type { PoiItem, PoiType } from '@/lib/overpass'
@@ -73,29 +70,20 @@ const WATER_POI_TYPES = new Set(['spring', 'waterfall'])
 // (i nodi del percorso non cadono mai esattamente sui nodi della way originale).
 const STEPS_PROXIMITY_M = 20
 
-// Stesse 4 fonti e stessa deduplica di app/api/pois/route.ts (usato lato client da
-// lib/poisProxy.ts), chiamate qui direttamente lato server per evitare un giro HTTP verso se
-// stessi — niente cache poi_cache: i bbox di una ricerca "Costruisci" sono tipicamente unici per
-// utente, il beneficio della cache condivisa è marginale rispetto al costo di replicarla qui.
+// Solo Overpass, non le 4 fonti di app/api/pois/route.ts (usato lato client da
+// lib/poisProxy.ts) — GNA/PTPR/Wikidata sono API pubbliche più lente/meno affidabili, e qui
+// vengono interrogate una volta PER CANDIDATO (fino a ENRICH_CAP in route-build/route.ts, in
+// parallelo con l'arricchimento DTM): con 4 fonti invece di una, un'unica fonte lenta su un solo
+// candidato basta a rallentare l'intera richiesta, un fattore concreto nei timeout di produzione
+// osservati su aree con rete rada. L'anteprima qui è solo per la scheda risultato (matchNote,
+// bonus di punteggio) — l'arricchimento completo a 4 fonti avviene comunque di nuovo al momento
+// del salvataggio (enrichWithPois in RouteBuilder.tsx), quindi il percorso salvato non perde nulla.
 async function fetchPoisNearPolyline(polyline: [number, number][], radiusM = 300): Promise<PoiItem[]> {
   const bbox = computeBbox(polyline)
-  const [gna, ptpr, wikidata, overpass] = await Promise.allSettled([
-    fetchGnaPois(bbox),
-    fetchPtprPois(bbox),
-    fetchWikidataPois(bbox),
-    fetchOverpassPois(bbox),
-  ])
-  const all = [
-    ...(gna.status      === 'fulfilled' ? gna.value      : []),
-    ...(ptpr.status     === 'fulfilled' ? ptpr.value     : []),
-    ...(wikidata.status === 'fulfilled' ? wikidata.value : []),
-    ...(overpass.status === 'fulfilled' ? overpass.value : []),
-  ]
-  // Le fonti impostano distFromTrack a 0 al momento del fetch (calcolato solo per bbox, non per
-  // tracciato) — va ricalcolato qui rispetto alla polilinea reale, stesso pattern di
-  // lib/poisProxy.ts's fetchPoisNearTrack (uso lato client, non riusabile qui: fa una fetch a URL
-  // relativo pensata per il browser, non per una route API server-side).
-  return deduplicateByProximity(all, 50)
+  const pois = await fetchOverpassPois(bbox).catch(() => [] as PoiItem[])
+  // distFromTrack è calcolato dalla fonte solo per bbox, non per tracciato — va ricalcolato qui
+  // rispetto alla polilinea reale, stesso pattern di lib/poisProxy.ts's fetchPoisNearTrack.
+  return deduplicateByProximity(pois, 50)
     .map(poi => ({ ...poi, distFromTrack: Math.round(minDistToTrack(poi.lat, poi.lon, polyline)) }))
     .filter(poi => poi.distFromTrack <= radiusM)
 }

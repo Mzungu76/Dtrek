@@ -26,6 +26,7 @@ import type { RouteType } from '@/lib/routeBuilder/loopBuilder'
 import type { SearchResultCandidate } from '@/app/api/route-search/route'
 import type { FoundRouteResult } from '@/app/api/route-build/search/route'
 import type { TrackPoint } from '@/lib/tcxParser'
+import { classifyTrackShape } from '@/lib/geoUtils'
 
 type Step = 'start' | 'results' | 'confirm'
 
@@ -35,6 +36,20 @@ function routeTypeLabel(t: RouteType): string {
   if (t === 'anello') return 'Anello'
   if (t === 'solo_andata') return 'Solo andata'
   return 'Andata e ritorno'
+}
+
+// Un percorso "trovato" (ricerca non-AI/AI) non porta con sé un tipo anello/andata-ritorno/solo
+// andata — le relazioni OSM non hanno un tag affidabile per distinguerli — quindi si classifica
+// dalla geometria stessa (classifyTrackShape, vedi lib/geoUtils.ts): un anello e un
+// andata-ritorno tornano entrambi al punto di partenza, la differenza è se il ritorno ripercorre
+// lo stesso tratto o no. Per un percorso lineare non si distingue andata-ritorno da solo andata
+// dalla sola geometria (la differenza è se si torna sugli stessi passi, non deducibile da una
+// traccia sola): un lineare soddisfa quindi entrambe le selezioni.
+function foundRouteMatchesTypes(routePolyline: [number, number][], selectedTypes: RouteType[]): boolean {
+  const shape = classifyTrackShape(routePolyline)
+  if (shape === 'loop') return selectedTypes.includes('anello')
+  if (shape === 'out_and_back') return selectedTypes.includes('andata_ritorno')
+  return selectedTypes.includes('andata_ritorno') || selectedTypes.includes('solo_andata')
 }
 
 const MIN_KM = 1
@@ -205,12 +220,18 @@ async function enrichWithPois(hike: PlannedHike): Promise<void> {
  * senza AI (Nominatim/Overpass), poi — solo se necessario e con l'interruttore AI attivo — un
  * livello economico che interpreta la richiesta e ripassa il risultato allo stesso livello senza
  * AI, infine la chat di Giulia con ricerca web come ultima risorsa. I risultati dei due motori si
- * fondono nella stessa lista, distinti da un tag ("Costruito su misura" / "Percorso trovato") — e
- * ogni risultato mostrato ha sempre una traccia reale su mappa, mai solo statistiche testuali.
+ * fondono nella stessa lista, mostrati in due tab separati ("Esistenti" / "Su misura") — e ogni
+ * risultato mostrato ha sempre una traccia reale su mappa, mai solo statistiche testuali.
  */
 export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const router = useRouter()
   const [step, setStep] = useState<Step>('start')
+  // Tab dello step "Risultati": percorsi già esistenti (trovati) vs generati su misura
+  // (costruiti) — non più mescolati in un'unica lista, per non confondere le due categorie
+  // (un percorso "esistente" ha una storia/fonte/community dietro, uno "su misura" è generato
+  // apposta per i criteri di questa ricerca). Sincronizzato all'ingresso nello step (vedi
+  // l'effetto dedicato) con quello che ha risultati, non fissato a priori.
+  const [resultsTab, setResultsTab] = useState<'esistenti' | 'su_misura'>('esistenti')
 
   const [lat, setLat] = useState<number | null>(null)
   const [lon, setLon] = useState<number | null>(null)
@@ -318,6 +339,18 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results])
 
+  // All'ingresso nello step "Risultati", apre il tab che ha davvero qualcosa da mostrare invece di
+  // aprire sempre "Esistenti" anche quando è vuoto — solo al cambio di step, non ad ogni
+  // aggiornamento di `results`, per non scavalcare una scelta manuale dell'utente nel frattempo.
+  useEffect(() => {
+    if (step !== 'results') return
+    const hasEsistenti = results.some(r => r.kind === 'found')
+    const hasSuMisura = results.some(r => r.kind === 'built')
+    if (!hasEsistenti && hasSuMisura) setResultsTab('su_misura')
+    else if (hasEsistenti) setResultsTab('esistenti')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
+
   // Selezione multipla dei tipi di percorso — sempre almeno un tipo attivo, non si può deselezionare
   // l'ultimo rimasto.
   function toggleRouteType(t: RouteType) {
@@ -378,7 +411,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         if (Array.isArray(data.prefill.desiredPoiTypes)) setDesiredPoiTypes(data.prefill.desiredPoiTypes)
         if (Array.isArray(data.prefill.environmentPrefs)) setEnvironmentPrefs(data.prefill.environmentPrefs)
       }
-      const found = (data.foundRoutes ?? []) as FoundRouteResult[]
+      // Solo i percorsi trovati compatibili col tipo selezionato (vedi foundRouteMatchesTypes) —
+      // altrimenti selezionare "Anello" nella ricerca avanzata non aveva alcun effetto sui
+      // percorsi trovati, che passavano tutti indipendentemente dal tipo.
+      const found = ((data.foundRoutes ?? []) as FoundRouteResult[])
+        .filter(r => foundRouteMatchesTypes(r.routePolyline, effectiveRouteTypes))
       if (found.length > 0) {
         const items: ResultItem[] = found.map(r => ({
           kind: 'found',
@@ -462,7 +499,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           if (data.ok) track = data
         } catch {}
       }
-      if (track) {
+      // Stesso filtro per tipo dei livelli 0/1 (vedi foundRouteMatchesTypes in runSearch) — un
+      // candidato di Giulia con un tipo incompatibile con quello selezionato viene scartato qui,
+      // non solo omesso dalla lista: altrimenti "Anello" non avrebbe effetto nemmeno sui risultati
+      // della chat.
+      if (track && foundRouteMatchesTypes(track.routePolyline, routeTypes)) {
         resolvedItems.push({
           kind: 'found',
           data: {
@@ -627,6 +668,12 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 </span>
                 <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
               </div>
+              <div>
+                <span className="font-semibold text-stone-800">
+                  {{ loop: 'Anello', out_and_back: 'Andata e ritorno', linear: 'Lineare' }[classifyTrackShape(track.routePolyline)]}
+                </span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
+              </div>
               {data.difficulty && (
                 <div>
                   <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
@@ -669,6 +716,62 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               Scegli questo percorso
             </button>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Card di un percorso "su misura" (generato dall'algoritmo) — riusata sia nello step "Risultati"
+  // (tab "Su misura") sia, potenzialmente, altrove: stesso pattern di renderFoundCard sopra.
+  function renderBuiltCard(c: BuiltCandidate, i: number) {
+    const scorePreview = scores[i]
+    return (
+      <div key={`built-${i}`} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+        <TrailPreviewMap polyline={c.routePolyline} height="180px" />
+        <div className="p-4 space-y-2.5">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
+            <Route className="w-3 h-3" /> Su misura per te
+          </span>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex gap-4 text-sm">
+              <div>
+                <span className="font-semibold text-stone-800">{(c.distanceMeters / 1000).toFixed(1)} km</span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
+              </div>
+              <div>
+                <span className="font-semibold text-stone-800 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{Math.round(c.elevationGain)} m</span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
+              </div>
+              <div>
+                <span className="font-semibold text-stone-800">{routeTypeLabel(c.type)}</span>
+                <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
+              </div>
+            </div>
+            <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
+              <TrailScoreGaugeBadge
+                total={scorePreview?.total ?? null}
+                safety={scorePreview?.safety ?? null}
+                loading={scorePreview?.loading ?? true}
+                vetoed={scorePreview?.vetoed}
+                size={52}
+                showLabel={false}
+              />
+            </div>
+          </div>
+
+          <PoiPreviewRow pois={c.pois ?? []} />
+
+          {c.matchNote && <p className="text-sm text-stone-600 leading-relaxed">{c.matchNote}</p>}
+
+          {c.hasSteepSections && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">Presenta tratti ripidi</p>
+          )}
+
+          <button onClick={() => chooseCandidate({ kind: 'built', data: c }, i)}
+            className="w-full py-2.5 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-xs font-semibold uppercase tracking-wide transition-colors">
+            Scegli questo percorso
+          </button>
         </div>
       </div>
     )
@@ -851,77 +954,45 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   }
 
   // ── Risultati ───────────────────────────────────────────────────────────────
+  // Due tab invece di un'unica lista mescolata: "Esistenti" (percorsi già documentati altrove,
+  // con una loro storia/fonte) e "Su misura" (generati apposta per i criteri di questa ricerca) —
+  // due categorie diverse per natura, non solo per etichetta, quindi separate invece che intrecciate.
 
-  if (step === 'results') return (
-    <div className="space-y-3">
-      <button onClick={() => setStep('start')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Cambia ricerca
-      </button>
+  if (step === 'results') {
+    const entries = results.map((item, i) => ({ item, i }))
+    const esistentiEntries = entries.filter((e): e is { item: Extract<ResultItem, { kind: 'found' }>; i: number } => e.item.kind === 'found')
+    const suMisuraEntries = entries.filter((e): e is { item: Extract<ResultItem, { kind: 'built' }>; i: number } => e.item.kind === 'built')
+    const activeEntries = resultsTab === 'esistenti' ? esistentiEntries : suMisuraEntries
 
-      {results.length === 0 && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-4 text-sm text-stone-600">
-          {resultsMessage || 'Nessun percorso trovato con questi vincoli — prova una lunghezza diversa o un altro punto di partenza.'}
+    return (
+      <div className="space-y-3">
+        <button onClick={() => setStep('start')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Cambia ricerca
+        </button>
+
+        <div className="flex bg-stone-100 rounded-xl p-1">
+          <button onClick={() => setResultsTab('esistenti')}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${resultsTab === 'esistenti' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'}`}>
+            Esistenti{esistentiEntries.length > 0 && ` (${esistentiEntries.length})`}
+          </button>
+          <button onClick={() => setResultsTab('su_misura')}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${resultsTab === 'su_misura' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'}`}>
+            Su misura{suMisuraEntries.length > 0 && ` (${suMisuraEntries.length})`}
+          </button>
         </div>
-      )}
 
-      {results.map((item, i) => {
-        if (item.kind === 'found') return renderFoundCard(item.data, i)
-
-        const c = item.data
-        const scorePreview = scores[i]
-        return (
-          <div key={`built-${i}`} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-            <TrailPreviewMap polyline={c.routePolyline} height="180px" />
-            <div className="p-4 space-y-2.5">
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
-                <Route className="w-3 h-3" /> Costruito su misura
-              </span>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex gap-4 text-sm">
-                  <div>
-                    <span className="font-semibold text-stone-800">{(c.distanceMeters / 1000).toFixed(1)} km</span>
-                    <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-stone-800 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{Math.round(c.elevationGain)} m</span>
-                    <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-stone-800">{routeTypeLabel(c.type)}</span>
-                    <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
-                  </div>
-                </div>
-                <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
-                  <TrailScoreGaugeBadge
-                    total={scorePreview?.total ?? null}
-                    safety={scorePreview?.safety ?? null}
-                    loading={scorePreview?.loading ?? true}
-                    vetoed={scorePreview?.vetoed}
-                    size={52}
-                    showLabel={false}
-                  />
-                </div>
-              </div>
-
-              <PoiPreviewRow pois={c.pois ?? []} />
-
-              {c.matchNote && <p className="text-sm text-stone-600 leading-relaxed">{c.matchNote}</p>}
-
-              {c.hasSteepSections && (
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">Presenta tratti ripidi</p>
-              )}
-
-              <button onClick={() => chooseCandidate(item, i)}
-                className="w-full py-2.5 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-xs font-semibold uppercase tracking-wide transition-colors">
-                Scegli questo percorso
-              </button>
-            </div>
+        {activeEntries.length === 0 && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-4 text-sm text-stone-600">
+            {resultsTab === 'esistenti'
+              ? 'Nessun percorso già esistente trovato per questi criteri.'
+              : (resultsMessage || 'Nessun percorso generato per questi criteri — prova una lunghezza diversa o un altro punto di partenza.')}
           </div>
-        )
-      })}
-    </div>
-  )
+        )}
+
+        {activeEntries.map(({ item, i }) => item.kind === 'found' ? renderFoundCard(item.data, i) : renderBuiltCard(item.data, i))}
+      </div>
+    )
+  }
 
   // ── Conferma ────────────────────────────────────────────────────────────────
 
