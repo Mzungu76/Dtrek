@@ -7,13 +7,17 @@ interface Props {
   lon?: number
   onPick: (lat: number, lon: number) => void
   height?: string
+  // Angoli arrotondati di default (card interna) — disattivato per un uso a pieno schermo
+  // (es. componenti/upload/RouteBuilder.tsx, step "Partenza"), dove il bordo deve arrivare a
+  // filo schermo.
+  rounded?: boolean
 }
 
 const DEFAULT_CENTER: [number, number] = [42.5, 12.5] // centro Italia
 const DEFAULT_ZOOM = 5
 
 /** Click-to-pick map: shows a draggable marker, calls onPick(lat, lon) on click/drag. */
-export default function LocationPickerMap({ lat, lon, onPick, height = '260px' }: Props) {
+export default function LocationPickerMap({ lat, lon, onPick, height = '260px', rounded = true }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<unknown>(null)
   const markerRef      = useRef<unknown>(null)
@@ -79,7 +83,7 @@ export default function LocationPickerMap({ lat, lon, onPick, height = '260px' }
     <div
       ref={containerRef}
       style={{ height }}
-      className="w-full rounded-xl overflow-hidden bg-stone-100 cursor-crosshair"
+      className={`w-full overflow-hidden bg-stone-100 cursor-crosshair ${rounded ? 'rounded-xl' : ''}`}
     />
   )
 }

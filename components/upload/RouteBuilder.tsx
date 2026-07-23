@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, ChevronRight, Loader2, TrendingUp, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
+  ArrowLeft, ChevronDown, ChevronUp, Loader2, TrendingUp, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
   Sparkles, Route, MapPin, ExternalLink, AlertTriangle, Check,
 } from 'lucide-react'
 import LocationPickerMap from '@/components/LocationPickerMap'
@@ -26,7 +27,7 @@ import type { SearchResultCandidate } from '@/app/api/route-search/route'
 import type { FoundRouteResult } from '@/app/api/route-build/search/route'
 import type { TrackPoint } from '@/lib/tcxParser'
 
-type Step = 'start' | 'params' | 'results' | 'confirm'
+type Step = 'start' | 'results' | 'confirm'
 
 // Etichetta breve per i tre RouteType — usata sia nel titolo di default alla scelta di un
 // candidato "costruito" sia nella tile "Tipo" della conferma.
@@ -213,6 +214,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // un'apertura manuale che implicherebbe di dover scegliere a priori se "cercare con l'AI".
   const [showGiulia, setShowGiulia] = useState(false)
   const [giuliaSeed, setGiuliaSeed] = useState('')
+  // Ricerca avanzata (tipo di percorso, destinazione, lunghezza, dislivello, preferenze) —
+  // raggiungibile fin dal primo schermo invece di essere nascosta dietro un "Continua" dopo la
+  // ricerca: chiusa di default per non sovraccaricare lo schermo, ma mai un passo separato del
+  // wizard.
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const [routeType, setRouteType] = useState<RouteType>('anello')
   const [targetDistanceKm, setTargetDistanceKm] = useState(8)
@@ -565,6 +571,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     else if (message) setErrorMsg(message)
   }
 
+  // Unica azione primaria dello step "Partenza" (niente più "Continua" separato da "Genera
+  // percorsi"): con un testo di ricerca, cerca (che già costruisce in automatico se serve, vedi
+  // MIN_TOTAL_RESULTS); senza testo ma con un punto scelto sulla mappa, costruisce direttamente
+  // con le preferenze già impostate nella ricerca avanzata.
+  async function handlePrimaryAction() {
+    if (query.trim()) await runSearch()
+    else if (lat != null && lon != null) await generate()
+  }
+
   function chooseCandidate(item: ResultItem, i: number) {
     setSelected(item)
     setSelectedIndex(i)
@@ -674,26 +689,41 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     )
   }
 
-  // ── Punto di partenza ───────────────────────────────────────────────────────
-
+  // ── Punto di partenza (ricerca + ricerca avanzata, mappa a pieno schermo) ───────────────────
+  // Un solo schermo invece di due: la ricerca avanzata (tipo di percorso, destinazione, lunghezza,
+  // dislivello, preferenze) è raggiungibile fin da subito in una sezione a comparsa, non più dietro
+  // un "Continua" separato — vedi showAdvanced. La mappa riempie tutto lo schermo (createPortal su
+  // document.body: altrimenti l'elemento "fixed" resterebbe intrappolato dentro il contenitore
+  // della pagina, che ha una propria animazione con transform e diventerebbe il suo contenitore di
+  // posizionamento, vanificando l'effetto a pieno schermo), con la ricerca in un pannello sovrapposto.
   if (step === 'start') {
     const foundEntries = results
       .map((item, i) => ({ item, i }))
       .filter((x): x is { item: Extract<ResultItem, { kind: 'found' }>; i: number } => x.item.kind === 'found')
+    const canGo = !searching && !generating && (query.trim() !== '' || (lat != null && lon != null))
 
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-2.5">
-          <button onClick={onBack} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:text-stone-700 transition-colors shrink-0">
+    return createPortal(
+      <div className="fixed inset-0 z-[60] bg-stone-100 flex flex-col">
+        <div className="absolute inset-0">
+          <LocationPickerMap
+            lat={lat ?? undefined} lon={lon ?? undefined}
+            onPick={(pLat, pLon) => { setLat(pLat); setLon(pLon) }}
+            height="100%" rounded={false}
+          />
+        </div>
+
+        <div className="relative z-10 flex items-center gap-2.5 p-3 pointer-events-none">
+          <button onClick={onBack}
+            className="pointer-events-auto w-9 h-9 rounded-full bg-white shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
+          <div className="pointer-events-auto bg-white/95 backdrop-blur rounded-xl px-3 py-1.5 shadow-md">
             <p className="text-sm font-semibold text-stone-800">Costruisci o trova un percorso</p>
-            <p className="text-xs text-stone-400">Un luogo, un percorso conosciuto, o tocca la mappa</p>
+            <p className="text-[11px] text-stone-400">Tocca la mappa o scrivi cosa cerchi</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
+        <div className="relative z-10 mt-auto max-h-[75vh] overflow-y-auto bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,0.15)] p-4 space-y-3">
           <div className="flex gap-2">
             <input
               value={query}
@@ -718,178 +748,172 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             <Sparkles className="w-3.5 h-3.5" /> Usa l&apos;AI se non trovo nulla
           </button>
 
-          <LocationPickerMap lat={lat ?? undefined} lon={lon ?? undefined} onPick={(pLat, pLon) => { setLat(pLat); setLon(pLon) }} />
-          <p className="text-xs text-stone-400">Tocca la mappa per scegliere il punto di partenza esatto, o trascina il marker.</p>
-        </div>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(v => !v)}
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors"
+          >
+            <span>Ricerca avanzata — tipo, lunghezza, dislivello, preferenze</span>
+            {showAdvanced ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+          </button>
 
-        {showGiulia && useAi && (
-          <div className="space-y-2">
-            <p className="text-xs text-terra-700 bg-terra-50 border border-terra-200 rounded-xl px-3 py-2">
-              ✨ Nessun risultato senza AI — provo a cercarlo con Giulia.
-            </p>
-            <GiuliaSearchPanel onFound={handleFound} initialQuery={giuliaSeed} />
-          </div>
-        )}
-
-        {foundEntries.length > 0 && (
-          <div className="space-y-3">
-            {foundEntries.map(({ item, i }) => renderFoundCard(item.data, i))}
-          </div>
-        )}
-
-        {errorMsg && <p className="text-red-500 text-xs">{errorMsg}</p>}
-
-        <button onClick={() => setStep('params')} disabled={lat == null || lon == null}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
-          Continua <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
-    )
-  }
-
-  // ── Tipo e obiettivi ────────────────────────────────────────────────────────
-
-  if (step === 'params') return (
-    <div className="space-y-3">
-      <button onClick={() => setStep('start')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Cambia punto di partenza
-      </button>
-
-      <div className="bg-white rounded-2xl border border-stone-200 p-4 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-stone-600 mb-2">Tipo di percorso</label>
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => setRouteType('anello')}
-              className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'anello' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
-              Anello
-            </button>
-            <button onClick={() => setRouteType('andata_ritorno')}
-              className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'andata_ritorno' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
-              Andata e ritorno
-            </button>
-            <button onClick={() => setRouteType('solo_andata')}
-              className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'solo_andata' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
-              Solo andata
-            </button>
-          </div>
-        </div>
-
-        {routeType !== 'anello' && (
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">
-              Destinazione <span className="font-normal text-stone-400">(opzionale — es. Cascata del Picchio, Blera)</span>
-            </label>
-            {destLat != null ? (
-              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-forest-50 border border-forest-200">
-                <span className="text-xs text-forest-800 truncate">{destDisplayName}</span>
-                <button onClick={() => { setDestLat(null); setDestLon(null); setDestDisplayName(''); setDestQuery('') }}
-                  className="shrink-0 text-forest-600 hover:text-forest-800">
-                  <XIcon className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="flex gap-2">
-                  <input
-                    value={destQuery}
-                    onChange={e => setDestQuery(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') runDestGeocode() }}
-                    placeholder="Nome del luogo di arrivo"
-                    className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white"
-                  />
-                  <button onClick={runDestGeocode} disabled={destGeocoding || !destQuery.trim()}
-                    className="w-10 h-10 rounded-xl bg-stone-100 hover:bg-stone-200 disabled:opacity-40 text-stone-600 flex items-center justify-center shrink-0 transition-colors">
-                    {destGeocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
+          {showAdvanced && (
+            <div className="space-y-4 pt-1 border-t border-stone-100">
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-2">Tipo di percorso</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => setRouteType('anello')}
+                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'anello' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                    Anello
+                  </button>
+                  <button onClick={() => setRouteType('andata_ritorno')}
+                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'andata_ritorno' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                    Andata e ritorno
+                  </button>
+                  <button onClick={() => setRouteType('solo_andata')}
+                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeType === 'solo_andata' ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                    Solo andata
                   </button>
                 </div>
-                {destGeocodeResults.length > 0 && (
-                  <div className="space-y-1.5 mt-1.5">
-                    {destGeocodeResults.map((r, i) => (
-                      <button
-                        key={i}
-                        onClick={() => { setDestLat(parseFloat(r.lat)); setDestLon(parseFloat(r.lon)); setDestDisplayName(r.display_name); setDestGeocodeResults([]) }}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs text-stone-600 bg-stone-50 hover:bg-stone-100 transition-colors"
-                      >
-                        {r.display_name}
+              </div>
+
+              {routeType !== 'anello' && (
+                <div>
+                  <label className="block text-sm font-medium text-stone-600 mb-1">
+                    Destinazione <span className="font-normal text-stone-400">(opzionale — es. Cascata del Picchio, Blera)</span>
+                  </label>
+                  {destLat != null ? (
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-forest-50 border border-forest-200">
+                      <span className="text-xs text-forest-800 truncate">{destDisplayName}</span>
+                      <button onClick={() => { setDestLat(null); setDestLon(null); setDestDisplayName(''); setDestQuery('') }}
+                        className="shrink-0 text-forest-600 hover:text-forest-800">
+                        <XIcon className="w-4 h-4" />
                       </button>
-                    ))}
-                  </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <input
+                          value={destQuery}
+                          onChange={e => setDestQuery(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') runDestGeocode() }}
+                          placeholder="Nome del luogo di arrivo"
+                          className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white"
+                        />
+                        <button onClick={runDestGeocode} disabled={destGeocoding || !destQuery.trim()}
+                          className="w-10 h-10 rounded-xl bg-stone-100 hover:bg-stone-200 disabled:opacity-40 text-stone-600 flex items-center justify-center shrink-0 transition-colors">
+                          {destGeocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {destGeocodeResults.length > 0 && (
+                        <div className="space-y-1.5 mt-1.5">
+                          {destGeocodeResults.map((r, i) => (
+                            <button
+                              key={i}
+                              onClick={() => { setDestLat(parseFloat(r.lat)); setDestLon(parseFloat(r.lon)); setDestDisplayName(r.display_name); setDestGeocodeResults([]) }}
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs text-stone-600 bg-stone-50 hover:bg-stone-100 transition-colors"
+                            >
+                              {r.display_name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-stone-600">Lunghezza target</label>
+                  {destLat == null && <span className="text-sm font-semibold text-stone-800">{targetDistanceKm.toFixed(1)} km</span>}
+                </div>
+                {destLat != null ? (
+                  <p className="text-xs text-stone-400">La lunghezza sarà quella del percorso reale verso la destinazione scelta.</p>
+                ) : (
+                  <input type="range" min={MIN_KM} max={MAX_KM} step={0.5} value={targetDistanceKm}
+                    onChange={e => setTargetDistanceKm(Number(e.target.value))}
+                    className="w-full accent-terra-500" />
                 )}
-              </>
-            )}
-          </div>
-        )}
+              </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-sm font-medium text-stone-600">Lunghezza target</label>
-            {destLat == null && <span className="text-sm font-semibold text-stone-800">{targetDistanceKm.toFixed(1)} km</span>}
-          </div>
-          {destLat != null ? (
-            <p className="text-xs text-stone-400">La lunghezza sarà quella del percorso reale verso la destinazione scelta.</p>
-          ) : (
-            <input type="range" min={MIN_KM} max={MAX_KM} step={0.5} value={targetDistanceKm}
-              onChange={e => setTargetDistanceKm(Number(e.target.value))}
-              className="w-full accent-terra-500" />
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">
+                  Dislivello target <span className="font-normal text-stone-400">(opzionale, in metri)</span>
+                </label>
+                <input type="number" min={0} value={targetElevationM} onChange={e => setTargetElevationM(e.target.value)}
+                  placeholder="es. 300"
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-2">Preferenze ambientali</label>
+                <div className="flex flex-wrap gap-2">
+                  {HIKER_ENVIRONMENT_PREFS.map(p => (
+                    <button key={p.key} onClick={() => toggleEnvironmentPref(p.key)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        environmentPrefs.includes(p.key) ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                      }`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-2">
+                  Vorrei incontrare <span className="font-normal text-stone-400">(opzionale)</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {DESIRABLE_POI_TYPES.map(type => (
+                    <button key={type} onClick={() => toggleDesiredPoiType(type)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        desiredPoiTypes.includes(type) ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                      }`}>
+                      {POI_META[type].emoji} {POI_META[type].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
+
+          {showGiulia && useAi && (
+            <div className="space-y-2">
+              <p className="text-xs text-terra-700 bg-terra-50 border border-terra-200 rounded-xl px-3 py-2">
+                ✨ Nessun risultato senza AI — provo a cercarlo con Giulia.
+              </p>
+              <GiuliaSearchPanel onFound={handleFound} initialQuery={giuliaSeed} />
+            </div>
+          )}
+
+          {foundEntries.length > 0 && (
+            <div className="space-y-3">
+              {foundEntries.map(({ item, i }) => renderFoundCard(item.data, i))}
+            </div>
+          )}
+
+          {errorMsg && <p className="text-red-500 text-xs">{errorMsg}</p>}
+
+          <button onClick={handlePrimaryAction} disabled={!canGo}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
+            {(searching || generating)
+              ? <Loader2 className="w-5 h-5 animate-spin" />
+              : query.trim() ? <SearchIcon className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
+            {searching ? 'Cerco…' : generating ? 'Genero i percorsi…' : 'Cerca percorsi'}
+          </button>
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-stone-600 mb-1">
-            Dislivello target <span className="font-normal text-stone-400">(opzionale, in metri)</span>
-          </label>
-          <input type="number" min={0} value={targetElevationM} onChange={e => setTargetElevationM(e.target.value)}
-            placeholder="es. 300"
-            className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-stone-600 mb-2">Preferenze ambientali</label>
-          <div className="flex flex-wrap gap-2">
-            {HIKER_ENVIRONMENT_PREFS.map(p => (
-              <button key={p.key} onClick={() => toggleEnvironmentPref(p.key)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                  environmentPrefs.includes(p.key) ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
-                }`}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-stone-600 mb-2">
-            Vorrei incontrare <span className="font-normal text-stone-400">(opzionale)</span>
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {DESIRABLE_POI_TYPES.map(type => (
-              <button key={type} onClick={() => toggleDesiredPoiType(type)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                  desiredPoiTypes.includes(type) ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'
-                }`}>
-                {POI_META[type].emoji} {POI_META[type].label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-
-      <button onClick={generate} disabled={generating}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
-        {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-        {generating ? 'Genero i percorsi…' : 'Genera percorsi'}
-      </button>
-    </div>
-  )
+      </div>,
+      document.body,
+    )
+  }
 
   // ── Risultati ───────────────────────────────────────────────────────────────
 
   if (step === 'results') return (
     <div className="space-y-3">
-      <button onClick={() => setStep('params')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Cambia obiettivi
+      <button onClick={() => setStep('start')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
+        <ArrowLeft className="w-4 h-4" /> Cambia ricerca
       </button>
 
       {results.length === 0 && (
