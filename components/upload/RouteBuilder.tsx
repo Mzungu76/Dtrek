@@ -543,7 +543,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     // Se l'escalation è partita da "Su misura" (luogo/POI troppo raro per la risoluzione
     // economica — vedi runSuMisura), lo scopo di Giulia era solo trovare il punto di partenza:
     // appena ne abbiamo uno utilizzabile (dal fallback, o dal primo punto di un percorso
-    // trovato), si chiude la chat e si prosegue subito con la costruzione.
+    // trovato), si chiude la chat e si prosegue subito con la costruzione. `generate()` gestisce
+    // da sé il passaggio allo step risultati in caso di successo.
     if (giuliaOrigin === 'su_misura') {
       const startPoint = fallbackPlace
         ?? (resolvedItems[0]?.kind === 'found'
@@ -559,7 +560,17 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         // di capire cosa fare (bug osservato con "cascata del picchio").
         setErrorMsg('Giulia non è riuscita a individuare un punto di partenza preciso per questo luogo — prova a scrivere diversamente, o tocca la mappa per scegliere il punto di partenza.')
       }
-    } else if (resolvedItems.length === 0 && !fallbackPlace) {
+    } else if (resolvedItems.length > 0) {
+      // Origine "Esistenti": Giulia ha risolto almeno un percorso con traccia reale — stesso
+      // passaggio allo step "risultati" che runSearch fa per i livelli 0/1 senza Giulia. Prima di
+      // questo fix mancava: le card appena aggiunte a `results` (sopra) restavano invisibili
+      // perché lo step non cambiava mai da "start" a "results" — il bug di layout segnalato
+      // dall'utente, non un problema di ricerca/Giulia.
+      setShowGiulia(false)
+      setStep('results')
+    } else if (fallbackPlace) {
+      setErrorMsg('Giulia non ha trovato un percorso già documentato per questa ricerca, ma ha individuato il luogo — prova "Su misura" per generarne uno da lì, oppure scrivi diversamente.')
+    } else {
       setErrorMsg('Giulia non ha trovato un percorso con una traccia reale per questa ricerca — prova a scrivere diversamente.')
     }
   }
