@@ -55,6 +55,29 @@ export function buildHikeFromFound(data: FoundRouteItem, title: string, date: st
   }
 }
 
+/**
+ * Sostituisce la quota STIMATA di un candidato "Su misura" (vedi lib/routeBuilder/scoreCandidates.ts,
+ * che in ricerca non chiama mai il DTM reale) con la quota vera — una sola chiamata, un solo
+ * candidato, solo quando l'utente sceglie/importa questo percorso specifico (mai per l'intera lista
+ * di risultati). Tollerante: se la chiamata fallisce o va oltre il tetto morbido del server, ritorna
+ * il candidato invariato (resta con la quota stimata, `hasElevation: false`) — un errore qui non
+ * deve mai impedire di salvare il percorso.
+ */
+export async function enrichBuiltCandidateForImport(candidate: BuiltCandidate): Promise<BuiltCandidate> {
+  try {
+    const res = await fetch('/api/route-build/enrich-elevation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ candidate }),
+    })
+    if (!res.ok) return candidate
+    const data = await res.json()
+    return data?.candidate ?? candidate
+  } catch {
+    return candidate
+  }
+}
+
 /** Arricchisce in place con POI/Wikipedia lungo la traccia — condiviso tra i rami di salvataggio
  *  (percorso costruito o trovato, dal wizard o da "Percorsi per te"), stesso blocco che prima era
  *  duplicato in RouteBuilder.tsx e AiRouteSearch.tsx. */

@@ -4,7 +4,7 @@
 // personalizzazione già usati da app/api/route-search/route.ts (vedi lib/hikerContext.ts), qui
 // applicati a percorsi generati invece che a percorsi trovati per nome.
 import type { TrackPoint } from '@/lib/tcxParser'
-import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
+import { enrichGeometryWithElevation, estimateElevationForGeometry } from '@/lib/dtm/elevationEnrich'
 import { computeBbox, haversineM, minDistToTrack } from '@/lib/geoUtils'
 import { fetchOverpass } from '@/lib/overpassTrails'
 import { fetchOverpassPois } from '@/lib/pois/overpassSource'
@@ -31,6 +31,12 @@ export interface ScoredCandidate {
   matchNote: string
   hasSteepSections: boolean
   pois: PoiItem[]
+  // false in ogni risultato di ricerca (vedi scoreAndEnrichCandidates): elevationGain/Loss/
+  // altitudeMax/Min sono una stima geometrica, non la quota reale dal DTM — diventa true solo dopo
+  // enrichBuiltCandidateWithRealElevation, chiamata una sola volta quando l'utente sceglie/importa
+  // il candidato (mai per l'intera lista di risultati). Stesso concetto già usato da ResolvedTrack
+  // per i percorsi "trovati", qui sempre false finché non arriva l'arricchimento reale.
+  hasElevation: boolean
 }
 
 // NOTA su 'ombra' (HIKER_ENVIRONMENT_PREFS): deliberatamente non punteggiata in questo giro.
@@ -165,11 +171,14 @@ function buildMatchNote(opts: {
 }
 
 /**
- * Arricchisce ogni candidato con quota reale (DTM) e POI lungo il tracciato, poi ordina per
- * vicinanza al target di lunghezza/dislivello — i candidati senza copertura DTM vengono scartati
- * (nessun profilo altimetrico affidabile da proporre). Ritorna al più `maxResults` percorsi —
- * alzato da 8 a 14 insieme al maxCandidates di lib/routeBuilder/loopBuilder.ts, per il minimo di
- * 10 risultati per ricerca (costruiti+trovati insieme) imposto dall'utente.
+ * Arricchisce ogni candidato con una STIMA di quota (nessuna chiamata DTM — vedi
+ * lib/dtm/elevationEnrich.ts's estimateElevationForGeometry) e POI lungo il tracciato, poi ordina
+ * per vicinanza al target di lunghezza/dislivello. La quota reale arriva solo dopo, una sola volta,
+ * quando l'utente sceglie/importa un candidato (enrichBuiltCandidateWithRealElevation sotto) — non
+ * più qui, per non consumare la quota rate-limited di OpenTopography su candidati che potrebbero
+ * non essere mai scelti. Ritorna al più `maxResults` percorsi — alzato da 8 a 14 insieme al
+ * maxCandidates di lib/routeBuilder/loopBuilder.ts, per il minimo di 10 risultati per ricerca
+ * (costruiti+trovati insieme) imposto dall'utente.
  */
 export async function scoreAndEnrichCandidates(
   raw: RouteCandidate[],
@@ -181,37 +190,28 @@ export async function scoreAndEnrichCandidates(
   const stepsWaysPromise = fetchStepsGeometries(opts.bbox)
 
   const enriched = await Promise.all(raw.map(async candidate => {
-    // enrichGeometryWithElevation lancia (non ritorna null) solo per il caso statico "DTM non
-    // configurato" (DtmUnavailableError, vedi lib/dtm/dtmClient.ts) — senza questo catch, un
-    // singolo candidato senza chiave configurata farebbe fallire l'intera Promise.all e quindi
-    // l'intera richiesta, invece di limitarsi a scartare quel candidato come "nessun profilo
-    // altimetrico disponibile" (stesso esito pratico di un ritorno null per mancata copertura).
-    // Il log distingue i due casi silenziosi altrimenti indistinguibili dall'esterno: chiave
-    // mancante (fix di configurazione) contro nessuna tile DTM per questo bbox specifico (limite
-    // di copertura dati, non un bug).
+    if (candidate.polyline.length < 2) return null
     const [enrichedTrack, pois, stepsWays] = await Promise.all([
-      enrichGeometryWithElevation(candidate.polyline).catch(e => {
-        if (e instanceof DtmUnavailableError) console.error('[route-build] DTM non configurato (OPENTOPOGRAPHY_API_KEY mancante):', e.message)
-        else console.error('[route-build] enrichGeometryWithElevation errore inatteso:', e)
-        return null
-      }),
+      Promise.resolve(estimateElevationForGeometry(candidate.polyline)),
       fetchPoisNearPolyline(candidate.polyline).catch(() => [] as PoiItem[]),
       stepsWaysPromise,
     ])
-    if (!enrichedTrack) {
-      console.log('[route-build] candidato scartato: nessuna quota disponibile per questo bbox')
-      return null
-    }
 
+    // maxGradePct salta le coppie senza altitudeMeters (vedi sopra) — sempre 0/false qui, dato che
+    // la stima non porta quota per-punto: coerente con l'assenza di dati reali, si affina
+    // all'importazione insieme al resto.
     const hasSteepSections = maxGradePct(enrichedTrack.trackPoints) >= STEEP_GRADE_PCT
     const hasSteps = crossesSteps(candidate.polyline, stepsWays)
     const waterPoiCount = pois.filter(p => WATER_POI_TYPES.has(p.type)).length
     const desiredPoiCount = opts.desiredPoiTypes.length > 0 ? pois.filter(p => opts.desiredPoiTypes.includes(p.type)).length : 0
 
     const distanceScore = 1 - Math.min(1, Math.abs(enrichedTrack.distanceMeters - opts.targetDistanceM) / opts.targetDistanceM)
-    const elevationScore = opts.targetElevationM != null
-      ? 1 - Math.min(1, Math.abs(enrichedTrack.elevationGain - opts.targetElevationM) / Math.max(opts.targetElevationM, 1))
-      : 0.5
+    // Sempre neutro (0.5): enrichedTrack.elevationGain qui è una stima geometrica generica (vedi
+    // estimateElevationForGeometry), non la quota reale — confrontarla contro targetElevationM
+    // darebbe una falsa precisione nel ranking, dato che la stima non varia per il dislivello REALE
+    // di candidati diversi con lunghezza simile. Si affina solo dopo l'importazione, quando la
+    // quota è quella vera (ma il ranking di ricerca, per costruzione, è già passato).
+    const elevationScore = 0.5
     const environmentScore = opts.environmentPrefs.includes('acqua') ? Math.min(1, waterPoiCount / 3) : 0
     const poiMatchScore = opts.desiredPoiTypes.length > 0 ? Math.min(1, desiredPoiCount / 2) : 0
     const concernsPenalty = hasSteepSections && (
@@ -230,7 +230,11 @@ export async function scoreAndEnrichCandidates(
       distanceMeters: enrichedTrack.distanceMeters,
       elevationGain: enrichedTrack.elevationGain,
       targetDistanceM: opts.targetDistanceM,
-      targetElevationM: opts.targetElevationM,
+      // Non enrichedTrack.elevationGain è una stima, non la quota reale (vedi sopra) — confrontarla
+      // col dislivello desiderato dell'utente e mostrare "dislivello in linea con la tua richiesta"
+      // sarebbe una rassicurazione non veritiera. Il testo torna a comparire (con il dato vero)
+      // solo se il chiamante ricalcola il matchNote dopo l'arricchimento reale.
+      targetElevationM: undefined,
       waterPoiCount,
       desiredPoiCount,
       environmentPrefs: opts.environmentPrefs,
@@ -251,6 +255,7 @@ export async function scoreAndEnrichCandidates(
       matchNote,
       hasSteepSections,
       pois: pois.slice().sort((a, b) => a.distFromTrack - b.distFromTrack).slice(0, MAX_POIS_IN_RESULT),
+      hasElevation: false,
     }
     return { scored, score }
   }))
@@ -260,4 +265,34 @@ export async function scoreAndEnrichCandidates(
     .sort((a, b) => b.score - a.score)
     .slice(0, maxResults)
     .map(e => e.scored)
+}
+
+/**
+ * Arricchisce UN SOLO candidato già scelto/importato dall'utente con la quota reale dal DTM —
+ * chiamata da app/api/route-build/enrich-elevation/route.ts, mai durante la ricerca stessa (vedi
+ * scoreAndEnrichCandidates sopra). Se il DTM non ha copertura per questo bbox (o non è configurato,
+ * DtmUnavailableError), il candidato torna invariato — resta con la quota stimata,
+ * `hasElevation: false` — stesso comportamento tollerante già usato da resolveTrack.ts per i
+ * percorsi "trovati": un profilo altimetrico mancante non deve mai impedire di salvare il percorso.
+ */
+export async function enrichBuiltCandidateWithRealElevation(candidate: ScoredCandidate): Promise<ScoredCandidate> {
+  const enrichedTrack = await enrichGeometryWithElevation(candidate.routePolyline).catch(e => {
+    if (e instanceof DtmUnavailableError) console.error('[route-build] DTM non configurato (OPENTOPOGRAPHY_API_KEY mancante):', e.message)
+    else console.error('[route-build] enrichBuiltCandidateWithRealElevation errore inatteso:', e)
+    return null
+  })
+  if (!enrichedTrack) return candidate
+
+  return {
+    ...candidate,
+    trackPoints: enrichedTrack.trackPoints,
+    distanceMeters: enrichedTrack.distanceMeters,
+    elevationGain: enrichedTrack.elevationGain,
+    elevationLoss: enrichedTrack.elevationLoss,
+    altitudeMax: enrichedTrack.altitudeMax,
+    altitudeMin: enrichedTrack.altitudeMin,
+    estimatedTimeSeconds: enrichedTrack.estimatedTimeSeconds,
+    hasSteepSections: maxGradePct(enrichedTrack.trackPoints) >= STEEP_GRADE_PCT,
+    hasElevation: true,
+  }
 }
