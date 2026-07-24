@@ -5,8 +5,9 @@
 // (app/api/route-build/search/route.ts), che deve risolvere la traccia di più candidati in
 // parallelo senza un self-call HTTP.
 import type { TrackPoint } from '@/lib/tcxParser'
+import type { ResolvedTrack as PlainResolvedTrack } from '@/lib/routeBuilder/foundRoute'
 import { resolveGeometryFallback } from '@/lib/trailConditions/geometry'
-import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
+import { enrichGeometryWithElevation, estimateElevationForGeometry } from '@/lib/dtm/elevationEnrich'
 import { downloadAndParseGpx } from '@/lib/gpxSourceFetch'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
 import { haversineM } from '@/lib/geoUtils'
@@ -49,6 +50,7 @@ export type ResolveTrackResult = ResolvedTrack | ResolveTrackFailure
  */
 export async function resolveTrackForCandidate(
   { osmId, gpxUrl }: { osmId: number | null; gpxUrl: string | null },
+  opts?: { estimateOnly?: boolean },
 ): Promise<ResolveTrackResult> {
   if (osmId == null && !gpxUrl) return { ok: false, reason: 'missing_input' }
 
@@ -79,6 +81,29 @@ export async function resolveTrackForCandidate(
 
   const fallback = await resolveGeometryFallback(osmId!)
   if (!fallback) return { ok: false, reason: 'geometry_not_found' }
+
+  // estimateOnly: usato dalla generazione automatica di "Percorsi per te" (vedi
+  // generateRecommendations.ts) — niente chiamata DTM reale (fino a 30s, rate-limited su
+  // OpenTopography) per candidati che l'utente potrebbe non aprire mai. La quota reale arriva solo
+  // quando l'utente sceglie/apre questa card specifica (stesso principio già applicato al percorso
+  // "Su misura", vedi enrichBuiltCandidateWithRealElevation).
+  if (opts?.estimateOnly) {
+    const estimated = estimateElevationForGeometry(fallback.geometry)
+    return {
+      ok: true,
+      osmId,
+      source: 'osm',
+      routePolyline: downsamplePolyline(estimated.trackPoints),
+      trackPoints: estimated.trackPoints,
+      distanceMeters: estimated.distanceMeters,
+      elevationGain: estimated.elevationGain,
+      elevationLoss: estimated.elevationLoss,
+      altitudeMax: estimated.altitudeMax,
+      altitudeMin: estimated.altitudeMin,
+      estimatedTimeSeconds: estimated.estimatedTimeSeconds,
+      hasElevation: false,
+    }
+  }
 
   const enriched = await enrichGeometryWithElevation(fallback.geometry)
   if (!enriched) {
@@ -111,6 +136,31 @@ export async function resolveTrackForCandidate(
     osmId,
     source: 'osm',
     routePolyline: downsamplePolyline(enriched.trackPoints),
+    trackPoints: enriched.trackPoints,
+    distanceMeters: enriched.distanceMeters,
+    elevationGain: enriched.elevationGain,
+    elevationLoss: enriched.elevationLoss,
+    altitudeMax: enriched.altitudeMax,
+    altitudeMin: enriched.altitudeMin,
+    estimatedTimeSeconds: enriched.estimatedTimeSeconds,
+    hasElevation: true,
+  }
+}
+
+/**
+ * Sostituisce la quota STIMATA di una traccia "trovata" (vedi resolveTrackForCandidate con
+ * estimateOnly, e la cache `trails`, mai arricchite col DTM reale in generateRecommendations.ts)
+ * con la quota vera — una sola chiamata, una sola traccia, solo quando l'utente sceglie/apre
+ * questa card specifica. Tollerante: se il DTM non ha copertura o va oltre il tetto morbido del
+ * chiamante, ritorna la traccia invariata (resta con la quota stimata) — un errore qui non deve mai
+ * impedire di salvare il percorso. Stesso principio già applicato a
+ * enrichBuiltCandidateWithRealElevation (lib/routeBuilder/scoreCandidates.ts) per "Su misura".
+ */
+export async function enrichTrackWithRealElevation(track: PlainResolvedTrack): Promise<PlainResolvedTrack> {
+  const enriched = await enrichGeometryWithElevation(track.routePolyline).catch(() => null)
+  if (!enriched) return track
+  return {
+    ...track,
     trackPoints: enriched.trackPoints,
     distanceMeters: enriched.distanceMeters,
     elevationGain: enriched.elevationGain,

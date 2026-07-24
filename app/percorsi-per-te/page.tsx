@@ -10,7 +10,7 @@ import { Loader2, MapPin } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { FoundRouteCard, BuiltRouteCard, type FeedbackControls } from '@/components/RouteResultCard'
-import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
+import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport, enrichFoundCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
 import { savePlanned } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
@@ -77,12 +77,13 @@ export default function PercorsiPerTePage() {
     setErrorMsg('')
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
-      // Stessa logica di RouteBuilder.tsx's handleSave: la card "Su misura" arriva con quota
-      // stimata (generateRecommendations.ts riusa la stessa pipeline di ricerca, mai il DTM
-      // reale) — arricchita qui, una sola volta, per la sola card scelta.
+      // Stessa logica di RouteBuilder.tsx's handleSave: ENTRAMBI i tipi di card arrivano con quota
+      // stimata (generateRecommendations.ts non chiama mai il DTM reale durante la generazione, né
+      // per "Su misura" né per "Esistenti") — arricchita qui, una sola volta, per la sola card
+      // scelta.
       const hike = card.kind === 'built'
         ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(card.data as ScoredCandidate), `${routeTypeLabel((card.data as ScoredCandidate).type)} per te`, '', pendingExpiresAt)
-        : buildHikeFromFound(card.data as FoundRouteItem, (card.data as FoundRouteItem).name, '', pendingExpiresAt)
+        : buildHikeFromFound(await enrichFoundCandidateForImport(card.data as FoundRouteItem), (card.data as FoundRouteItem).name, '', pendingExpiresAt)
       await enrichWithPois(hike)
       await savePlanned(hike)
       computeCtsForHike(hike).catch(() => {})
