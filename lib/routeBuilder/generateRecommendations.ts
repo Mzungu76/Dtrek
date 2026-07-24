@@ -3,29 +3,28 @@
 // wizard "Costruisci o trova un percorso" (components/upload/RouteBuilder.tsx), solo orchestrato
 // automaticamente invece che su richiesta esplicita dell'utente.
 //
-// Le card "Su misura" riusano executeBuild (app/api/route-build/route.ts) tal quale — nessuna
-// duplicazione della pipeline pathfinding+arricchimento. Le card "Esistenti" vengono prima cercate
-// nella cache `trails` (lib/trailsCache.ts, popolata lazy dalla navigazione normale dell'app) per
-// prossimità al punto di partenza reale dell'utente (vedi deriveOrigin), e solo se la cache non
-// basta si ricade su una ricerca Overpass live (queryHikingRelationsInBbox, gratuita/non-AI) — ogni
-// candidato risolto dal fallback live viene anche scritto nella cache, così il generatore stesso
-// aiuta a popolarla per i cicli futuri (per questo utente o altri vicini), non solo l'apertura
-// manuale di un sentiero altrove nell'app. La ricerca è "a raggiera" (vedi SEARCH_RADII_KM): si
-// parte vicino a casa e ci si allarga solo finché non bastano 5 card in totale.
+// Solo card "Esistenti" — niente "Su misura" (executeBuild/pathfinding, rimosso interamente da
+// questo file). Due tentativi successivi di far convivere le due cose (raggiera su entrambe, poi
+// raggiera solo su "Esistenti" con "Su misura" tentato una volta sola) hanno comunque riprodotto
+// il timeout di 60s della piattaforma in produzione — la pipeline "Su misura" (grafo dell'intera
+// rete percorribile + Dijkstra + propri ritentativi interni) resta troppo pesante/fragile per
+// un'esecuzione automatica e silenziosa su un punto arbitrario, a differenza della ricerca
+// interattiva del wizard dove l'utente stesso può aggiustare punto/parametri se va storta. Le card
+// vengono quindi cercate SOLO nella cache `trails` (lib/trailsCache.ts, popolata lazy dalla
+// navigazione normale dell'app) per prossimità al punto di partenza reale dell'utente (vedi
+// deriveOrigin), e solo se la cache non basta si ricade su una ricerca Overpass live
+// (queryHikingRelationsInBbox, gratuita/non-AI, la stessa identica procedura già collaudata dalla
+// ricerca "Cerca esistenti" del wizard) — ogni candidato risolto dal fallback live viene anche
+// scritto nella cache, così il generatore stesso aiuta a popolarla per i cicli futuri (per questo
+// utente o altri vicini). La ricerca è "a raggiera" (vedi SEARCH_RADII_KM): si parte vicino a casa
+// e ci si allarga solo finché non bastano 5 card in totale.
 //
 // IMPORTANTE: nessun punteggio (Trail Score/Sicurezza) viene calcolato qui — computeCtsCore/
-// computeSafetyCore fanno fetch a URL relativi, funzionano solo lato browser. Si genera e salva
-// solo il percorso (con quota STIMATA per le card "Su misura", vedi scoreCandidates.ts); il
-// doppio anello si calcola solo dopo che l'utente sceglie/importa una card (vedi
-// enrichBuiltCandidateForImport in lib/routeBuilder/buildHikeFromCandidate.ts) — mai per l'intera
-// lista di 5 card mostrate, che oggi restano senza punteggio finché non importate.
+// computeSafetyCore fanno fetch a URL relativi, funzionano solo lato browser; si calcola pigro,
+// lato client, ad ogni apertura di /percorsi-per-te.
 import { supabase } from '@/lib/supabase'
-import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
-import { sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
-import {
-  executeBuild, candidateSignature, MIN_TARGET_DISTANCE_KM, MAX_TARGET_DISTANCE_KM, DEFAULT_RADIUS_KM,
-  type BuildRequestBody, type LogBuildFn,
-} from '@/app/api/route-build/route'
+import { fetchActivitySummary } from '@/lib/hikerContext'
+import { MIN_TARGET_DISTANCE_KM, MAX_TARGET_DISTANCE_KM } from '@/app/api/route-build/route'
 import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 import { findCachedTrailsNearPoint, upsertTrailCache, type TrailCacheRow } from '@/lib/trailsCache'
 import { queryHikingRelationsInBbox, padBbox, type HikingRouteCandidate } from '@/lib/overpassTrails'
@@ -36,6 +35,9 @@ import { classifyTrackShape, haversineM } from '@/lib/geoUtils'
 import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem, ResolvedTrack } from '@/lib/routeBuilder/foundRoute'
 
+// Il tipo unione resta (invece di restringerlo a solo 'found') perché descrive anche le righe già
+// salvate da generazioni precedenti, che possono ancora contenere card 'built' finché il prossimo
+// giro del cron non le sovrascrive — non più prodotto da generateRecommendationsForUser sotto.
 export interface RecommendationCard {
   id: string
   kind: 'built' | 'found'
@@ -48,13 +50,6 @@ export interface GenerateRecommendationsResult {
   centroid: { lat: number; lon: number } | null
 }
 
-// Su 5 card totali: fino a 3 "su misura" + il resto "esistenti". Se il lato "su misura" è corto,
-// "esistenti" compensa fino al totale (il verso opposto — esistenti corto compensato da più
-// costruiti — non è implementato: un secondo giro di executeBuild costerebbe quanto l'intera
-// generazione per un guadagno marginale in un caso già accettato come "risultati scarsi", non un
-// errore). Nessun dedup incrociato tra un "costruito" e un "esistente" che tracciano lo stesso
-// percorso fisico — forme diverse, nessuna chiave di identità condivisa, probabilità bassa.
-const TARGET_BUILT_CARDS = 3
 const TOTAL_CARDS = 5
 // Lunghezza target per un utente senza storico attività — lo stesso identico caso già gestito nel
 // wizard (nessun default salvato, si assume una gita "media" invece di rifiutare la generazione).
@@ -65,13 +60,11 @@ const DEFAULT_NEW_USER_DISTANCE_KM = 6
 // più lontano. Valori scelti per coprire sia chi vive già in montagna (5km spesso bastano) sia chi
 // deve allontanarsi parecchio dalla città per trovare sentieri (40km).
 const SEARCH_RADII_KM = [5, 10, 20, 40]
-// Tetto sulla sola raggiera "Esistenti" (tutti i raggi messi insieme) — si somma al tetto morbido
-// di "Su misura" sopra (BUILT_CANDIDATE_SOFT_DEADLINE_MS, tentato una sola volta PRIMA di questa
-// raggiera, mai dentro di essa — vedi generateRecommendationsForUser), quindi il totale peggiore
-// resta 25s + 15s = 40s, con margine reale sotto il tetto morbido di 45s del bootstrap di
-// app/api/percorsi-per-te/route.ts (e sotto il budget per-utente del cron). Il raggio in corso
-// finisce comunque il proprio tentativo; solo il raggio SUCCESSIVO viene saltato.
-const TOTAL_RING_BUDGET_MS = 15_000
+// Tetto sull'intera raggiera (tutti i raggi messi insieme) — con margine reale sotto il tetto
+// morbido di 45s del bootstrap di app/api/percorsi-per-te/route.ts (e sotto il budget per-utente
+// del cron). Il raggio in corso finisce comunque il proprio tentativo; solo il raggio SUCCESSIVO
+// viene saltato.
+const TOTAL_RING_BUDGET_MS = 30_000
 
 function clampDistanceKm(km: number): number {
   return Math.min(MAX_TARGET_DISTANCE_KM, Math.max(MIN_TARGET_DISTANCE_KM, km))
@@ -232,83 +225,18 @@ async function enrichGeometryOrSkip(geometry: [number, number][]): Promise<Resol
   return { ...enriched, routePolyline: downsamplePolyline(enriched.trackPoints), hasElevation: true }
 }
 
-// Tetto morbido SOLO per questa singola chiamata a executeBuild — a differenza dell'endpoint
-// interattivo (app/api/route-build/route.ts's handlePost), che avvolge executeBuild nel proprio
-// Promise.race, qui la funzione viene chiamata direttamente (nessun giro HTTP, vedi commento in
-// testa al file), quindi non eredita automaticamente quella protezione. Senza un tetto proprio, un
-// singolo utente lento potrebbe da solo esaurire il budget dell'intero giro del cron (che ha il suo
-// proprio tetto morbido tra un utente e l'altro, non dentro la chiamata stessa) o quello di
-// app/api/percorsi-per-te/route.ts al primo accesso — stesso principio già stabilito altrove in
-// questo route builder: mai lasciare che una singola chiamata di rete/calcolo diventi l'unico punto
-// senza un limite esplicito.
-const BUILT_CANDIDATE_SOFT_DEADLINE_MS = 25_000
-
-async function gatherBuiltCandidates(
-  userId: string, origin: { lat: number; lon: number }, radiusKm: number, targetDistanceKm: number, targetElevationM: number | null,
-  environmentPrefs: string[], logBuild: LogBuildFn,
-): Promise<ScoredCandidate[]> {
-  const params: BuildRequestBody = {
-    lat: origin.lat, lon: origin.lon, routeType: 'anello', targetDistanceKm,
-    targetElevationM, destinationLat: null, destinationLon: null,
-    environmentPrefs: sanitizeHikerEnvironmentPrefs(environmentPrefs), desiredPoiTypes: [],
-    radiusKm, startMode: 'dintorni',
-  }
-  try {
-    const outcome = await Promise.race([
-      executeBuild({ id: userId }, params, logBuild, Date.now()).then(res => ({ kind: 'done' as const, res })),
-      new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), BUILT_CANDIDATE_SOFT_DEADLINE_MS)),
-    ])
-    if (outcome.kind === 'timeout') {
-      console.error(`[generateRecommendations] executeBuild oltre ${BUILT_CANDIDATE_SOFT_DEADLINE_MS}ms per l'utente ${userId}, proseguo senza candidati "su misura" per questo giro`)
-      return []
-    }
-    const body = (await outcome.res.json()) as { candidates?: ScoredCandidate[] }
-    return (body.candidates ?? []).slice(0, TARGET_BUILT_CARDS)
-  } catch (e) {
-    console.error('[generateRecommendations] executeBuild fallito:', e)
-    return []
-  }
-}
-
 export async function generateRecommendationsForUser(userId: string): Promise<GenerateRecommendationsResult> {
   const origin = await deriveOrigin(userId)
   if (!origin) return { status: 'empty_no_location', cards: [], centroid: null }
 
-  const [profile, history] = await Promise.all([fetchHikerProfile(userId), fetchActivitySummary(userId)])
+  const history = await fetchActivitySummary(userId)
   const targetDistanceKm = clampDistanceKm(history.count > 0 ? history.avgDistanceKm : DEFAULT_NEW_USER_DISTANCE_KM)
-  const targetElevationM = history.count > 0 ? Math.round(history.avgElevationM) : null
 
-  const logBuild: LogBuildFn = async fields => {
-    await logRouteBuildEvent({
-      userId, kind: 'build', routeType: 'anello', targetDistanceKm, useAi: false, durationMs: 0,
-      ...fields,
-      details: { ...(fields.details ?? {}), source: 'recommendations_cron' },
-    })
-  }
-
-  // "Su misura" (executeBuild) è la pipeline pesante — costruisce un grafo dell'intera rete
-  // percorribile e ci fa girare Dijkstra sopra, con i propri ritentativi interni a lunghezze
-  // alternative — chiamarla una volta per ogni raggio della raggiera (come nella prima versione
-  // di questa riprogettazione) ne moltiplicava il costo fino a 4 volte, causa concreta di un nuovo
-  // timeout di 60s osservato in produzione subito dopo. Va tentata UNA SOLA VOLTA, a un raggio
-  // fisso ragionevole — esattamente come faceva prima di questa riprogettazione, e come continua a
-  // fare la ricerca interattiva del wizard (mai a raggiera lì).
-  const builtCandidatesRaw = await gatherBuiltCandidates(userId, origin, DEFAULT_RADIUS_KM, targetDistanceKm, targetElevationM, profile.environmentPrefs, logBuild)
-  const builtSeen = new Set<string>()
-  const builtCandidates: ScoredCandidate[] = []
-  for (const c of builtCandidatesRaw) {
-    if (builtCandidates.length >= TARGET_BUILT_CARDS) break
-    const sig = candidateSignature(c)
-    if (builtSeen.has(sig)) continue
-    builtSeen.add(sig)
-    builtCandidates.push(c)
-  }
-
-  // "Esistenti" invece è la STESSA identica procedura, economica e già affidabile, della ricerca
-  // "Cerca esistenti" del wizard (app/api/route-build/search/route.ts's tier0: queryHikingRelationsInBbox
-  // + resolveTrackForCandidate, nessun grafo/pathfinding) — qui applicata a raggiera perché non
-  // parte da un nome/luogo digitato dall'utente ma dal suo punto reale (vedi deriveOrigin): si
-  // allarga solo finché non completa le 5 card totali (o esaurisce i raggi, o il budget).
+  // Stessa identica procedura, economica e già affidabile, della ricerca "Cerca esistenti" del
+  // wizard (app/api/route-build/search/route.ts's tier0: queryHikingRelationsInBbox +
+  // resolveTrackForCandidate, nessun grafo/pathfinding) — qui applicata a raggiera perché non parte
+  // da un nome/luogo digitato dall'utente ma dal suo punto reale (vedi deriveOrigin): si allarga
+  // solo finché non completa le 5 card totali (o esaurisce i raggi, o il budget).
   const foundItems: FoundRouteItem[] = []
   const foundSeen = new Set<number>()
   const startedAt = Date.now()
@@ -316,23 +244,22 @@ export async function generateRecommendationsForUser(userId: string): Promise<Ge
 
   for (const radiusKm of SEARCH_RADII_KM) {
     lastFoundRadiusKm = radiusKm
-    if (builtCandidates.length + foundItems.length >= TOTAL_CARDS) break
+    if (foundItems.length >= TOTAL_CARDS) break
     if (Date.now() - startedAt > TOTAL_RING_BUDGET_MS) {
-      console.error(`[generateRecommendations] tetto complessivo di ${TOTAL_RING_BUDGET_MS}ms raggiunto a raggio ${radiusKm}km, mi fermo con ${builtCandidates.length + foundItems.length} card`)
+      console.error(`[generateRecommendations] tetto complessivo di ${TOTAL_RING_BUDGET_MS}ms raggiunto a raggio ${radiusKm}km, mi fermo con ${foundItems.length} card`)
       break
     }
 
-    const stillWanted = TOTAL_CARDS - builtCandidates.length - foundItems.length
-    if (stillWanted <= 0) break
+    const stillWanted = TOTAL_CARDS - foundItems.length
     const newFound = await gatherFoundCandidates(origin, targetDistanceKm, radiusKm, stillWanted, foundSeen)
     foundItems.push(...newFound)
   }
 
   // Stessa convenzione di logging della ricerca interattiva (kind:'search', vedi tier0 in
-  // app/api/route-build/search/route.ts) — mancava del tutto per questo percorso: le ricerche
-  // "Esistenti" di Percorsi per te non comparivano mai in /profilo/log-ricerche, solo quelle "Su
-  // misura" (già loggate da executeBuild stesso). `tierReached` riporta il raggio finale raggiunto,
-  // per distinguere a colpo d'occhio "trovato subito vicino" da "servito allargarsi molto".
+  // app/api/route-build/search/route.ts) — mancava del tutto per questo percorso: le ricerche di
+  // Percorsi per te non comparivano mai in /profilo/log-ricerche. `tierReached` riporta il raggio
+  // finale raggiunto, per distinguere a colpo d'occhio "trovato subito vicino" da "servito
+  // allargarsi molto".
   await logRouteBuildEvent({
     userId, kind: 'search', useAi: false, tierReached: `ring_${lastFoundRadiusKm}km`,
     // Nessun testo digitato da mostrare (ricerca automatica dal punto dell'utente, non da un nome)
@@ -343,10 +270,9 @@ export async function generateRecommendationsForUser(userId: string): Promise<Ge
     details: { source: 'recommendations_cron', radiusKm: lastFoundRadiusKm },
   })
 
-  const cards: RecommendationCard[] = [
-    ...builtCandidates.map(c => ({ id: `built:${candidateSignature(c)}`, kind: 'built' as const, data: c })),
-    ...foundItems.map(f => ({ id: `found:${f.osmId}`, kind: 'found' as const, data: f })),
-  ].slice(0, TOTAL_CARDS)
+  const cards: RecommendationCard[] = foundItems
+    .map(f => ({ id: `found:${f.osmId}`, kind: 'found' as const, data: f }))
+    .slice(0, TOTAL_CARDS)
 
   return { status: 'ok', cards, centroid: origin }
 }
