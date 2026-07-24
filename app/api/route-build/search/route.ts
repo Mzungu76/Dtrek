@@ -58,10 +58,20 @@ export interface FoundRouteResult {
 
 // Stessa convenzione "nome, area" di lib/routeBuilder/resolvePlace.ts's resolvePlaceName — l'ultimo
 // segmento dopo una virgola è un'area che restringe la ricerca, il resto è il nome/la zona.
+//
+// Solo con ESATTAMENTE 2 parti: un indirizzo completo alla Nominatim (es. il displayName che
+// runSearch riscrive nel campo di ricerca dopo una risoluzione riuscita — "Nepi, Viterbo, Lazio,
+// 01036, Italia") ha 5 segmenti, e applicare la stessa regola prenderebbe "Italia" come area e
+// "Nepi Viterbo Lazio 01036" come nome — una query che non corrisponde a nessun percorso reale.
+// Bug confermato in log di produzione: la stessa ricerca ("Nepi") trovava 7 percorsi da sola ma 0
+// una volta che il campo conteneva l'indirizzo completo risolto in precedenza. Con più di 2 parti
+// non si può indovinare in modo affidabile quale segmento sia davvero l'area (dipende dal formato
+// del geocoder, non è garantito), quindi si rinuncia allo split e si usa l'intera stringa come
+// nome, esattamente come per una singola parola.
 function splitQuery(query: string): { nameQuery: string; areaHint: string | null } {
   const parts = query.split(',').map(p => p.trim()).filter(Boolean)
-  const areaHint = parts.length >= 2 ? parts[parts.length - 1] : null
-  const nameQuery = parts.length >= 2 ? parts.slice(0, -1).join(' ') : query.trim()
+  const areaHint = parts.length === 2 ? parts[1] : null
+  const nameQuery = parts.length === 2 ? parts[0] : query.trim()
   return { nameQuery, areaHint }
 }
 

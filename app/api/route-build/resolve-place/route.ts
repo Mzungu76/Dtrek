@@ -4,6 +4,13 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
 
 export const dynamic = 'force-dynamic'
+// Mancava rispetto a ogni altro endpoint di questa famiglia (route-build/search, route-build,
+// route-search...) — senza una dichiarazione esplicita la piattaforma applica il tetto di default
+// del piano (10s su Hobby), che resolvePlaceName può superare abbondantemente non appena serve il
+// livello 2 (Overpass per nome, fino a 20s) o il livello 3 (AI + ricerca web, fino a 25s): la
+// funzione veniva uccisa a metà, il client leggeva un errore di rete generico e la risoluzione del
+// luogo falliva in silenzio — causa plausibile dei casi osservati di luoghi rari mai risolti.
+export const maxDuration = 60
 
 // I primi due livelli di resolvePlaceName (Nominatim, Overpass per nome) restano anonimi, stesso
 // trattamento di app/api/geocode/route.ts (un thin proxy di lookup, nessun costo/dato per-utente) —
