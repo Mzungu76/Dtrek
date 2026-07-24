@@ -3,6 +3,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { padBbox } from '@/lib/overpassTrails'
 import { haversineM } from '@/lib/geoUtils'
 import { fetchWalkNetwork, nearestGraphNode } from '@/lib/routeBuilder/osmGraph'
+import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
 import { generateLoopCandidates, generateOutAndBackCandidates, generateOneWayCandidates, generateOutAndBackToPoint, type RouteType } from '@/lib/routeBuilder/loopBuilder'
 import { scoreAndEnrichCandidates, type ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
@@ -366,7 +367,7 @@ export async function executeBuild(
 
   let network
   try {
-    network = await fetchWalkNetwork(bbox)
+    network = await fetchWalkNetworkCached(bbox)
   } catch (e) {
     console.error('[route-build] fetchWalkNetwork failed:', e)
     await logBuild({ tierReached: 'error', message: 'rete sentieri non disponibile' })
