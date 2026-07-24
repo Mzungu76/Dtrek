@@ -758,7 +758,6 @@ async function generateGuide(req: NextRequest): Promise<Response> {
 
   let hike: PlannedHike
   let scores: DataScores
-  let s2: Parameters<typeof fetchNatureContext>[0]['s2']
   let trackPoints: TrackPoint[]
   // Testo/epoche già esistenti su cui fondere il risultato di un "Approfondisci" per
   // sezione (vedi persistenza più sotto) — vuoti quando non è una richiesta di quel tipo, o quando
@@ -811,7 +810,6 @@ async function generateGuide(req: NextRequest): Promise<Response> {
       hike = hikeFromFallback(hikeId, hikeFallback)
       scores = { difficultyMarkers: [] }
       trackPoints = hikeFallback.trackPoints ?? []
-      s2 = undefined
       // existingGuideText/existingEpochPois restano vuoti (già inizializzati sopra) — non c'è
       // nulla da leggere finché la riga non esiste ancora.
     } else {
@@ -850,14 +848,6 @@ async function generateGuide(req: NextRequest): Promise<Response> {
       }
 
       trackPoints = Array.isArray(data.track_points) ? data.track_points : []
-      s2 = {
-        available:          data.s2_available,
-        phenologyPeakMonth: data.s2_phenology_peak_month,
-        ndviDelta:          data.s2_ndvi_delta,
-        landscapeVariety:   data.s2_landscape_variety,
-        shadeScore:         data.s2_shade_score,
-        waterSources:       data.s2_water_sources,
-      }
       existingGuideText = data.cached_guide ?? ''
       existingEpochPois = data.cached_epoch_pois ?? []
       existingGuideNotices = data.cached_guide_notices ?? []
@@ -866,9 +856,9 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   } else {
     // Emergenza (degraded): Supabase irraggiungibile, nessun accesso al percorso lato server —
     // si usa solo la copia che il client ha già in locale (lib/plannedStore.ts, cache-first),
-    // mandata insieme alla richiesta. Punteggi/dati satellitari cached_* non sono disponibili in
-    // questa modalità (non mirrorati client-side): la guida resta generabile, solo un po' meno
-    // arricchita di quei dettagli specifici finché Supabase non torna raggiungibile.
+    // mandata insieme alla richiesta. Punteggi cached_* non sono disponibili in questa modalità
+    // (non mirrorati client-side): la guida resta generabile, solo un po' meno arricchita di
+    // quei dettagli specifici finché Supabase non torna raggiungibile.
     if (!hikeFallback) {
       return new Response(JSON.stringify({ error: 'Percorso non trovato' }), {
         status: 404, headers: { 'Content-Type': 'application/json' },
@@ -877,14 +867,12 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     hike = hikeFromFallback(hikeId, hikeFallback)
     scores = { difficultyMarkers: [] }
     trackPoints = hikeFallback.trackPoints ?? []
-    s2 = undefined
   }
 
   const nature = await fetchNatureContext({
     trackPoints,
     altitudeMax: hike.altitudeMax,
     month: hike.plannedDate ? new Date(hike.plannedDate + 'T12:00').getMonth() + 1 : new Date().getMonth() + 1,
-    s2,
   })
 
   const isFirstGeneration = !existingGuideText

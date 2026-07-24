@@ -96,12 +96,6 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [offlineReady, setOfflineReady] = useState(false)
   const [showOfflineSheet, setShowOfflineSheet] = useState(false)
   const [showNatura2000, setShowNatura2000] = useState(false)
-  // Geologia layer intentionally has no UI trigger for now (see NavigationMapLibre.tsx's
-  // showGeologia prop) — the WMS/REST endpoints it depends on (ISPRA's ArcGIS service) were
-  // confirmed down at the infrastructure level (both operations return the same 503,
-  // independent of anything in our request), so the toggle and its error notice were removed
-  // rather than leave a control that can't currently do anything. The map component, the proxy
-  // route, and the wiring all still work — this is a silent, ready-to-re-enable predisposition.
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
   const [turnBackDismissed, setTurnBackDismissed] = useState(false)
@@ -557,7 +551,7 @@ export default function ActiveNavigationView({ hike }: Props) {
         <NavigationMapLibre
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
-          natura2000Features={natura2000Features} showNatura2000={showNatura2000} showGeologia={false}
+          natura2000Features={natura2000Features} showNatura2000={showNatura2000}
         />
       )}
 

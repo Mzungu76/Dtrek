@@ -1,19 +1,19 @@
 // Mirrors app/api/tei-dtm/route.ts's contract shape (force-dynamic, never throws to the
 // client, neutral fallback on any failure) and the same ?track= (JSON [lat,lon][]) query
 // shape — computeTrailTerrainProfile needs the real segmentation (segmentGpx), a bbox alone
-// isn't enough. GeologiaUnavailableError/UsoSuoloUnavailableError (datasets not configured)
-// propagate out of computeTrailTerrainProfile and are folded into the same neutral fallback
-// here, same as any other failure — the route boundary doesn't need to distinguish the reason.
+// isn't enough. UsoSuoloUnavailableError (dataset not configured) propagates out of
+// computeTrailTerrainProfile and is folded into the same neutral fallback here, same as any
+// other failure — the route boundary doesn't need to distinguish the reason.
 import { NextRequest, NextResponse } from 'next/server'
 import { computeTrailTerrainProfile, type TrailTerrainProfile } from '@/lib/terrain/trailTerrainProfile'
 import { SUCCESS_CACHE_CONTROL } from '@/lib/apiCacheHeaders'
 
 export const dynamic = 'force-dynamic'
 
-// Was previously unset, which let a stalled upstream (WMS ISPRA geologia, Supabase cache
-// lookups) run this function all the way out to the account's max duration (300s) on every
-// bad invocation — the single biggest driver of the account's Active CPU usage. Same cap as
-// the other trails routes (conditions, guardian-dogs, flora).
+// Was previously unset, which let a stalled upstream (WFS uso-suolo, Supabase cache lookups)
+// run this function all the way out to the account's max duration (300s) on every bad
+// invocation — the single biggest driver of the account's Active CPU usage. Same cap as the
+// other trails routes (conditions, guardian-dogs, flora).
 export const maxDuration = 30
 const COMPUTE_TIMEOUT_MS = 25000
 
