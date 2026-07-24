@@ -15,12 +15,14 @@ const VALID_POI_TYPES = new Set(Object.keys(POI_META))
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const MIN_TARGET_DISTANCE_KM = 1
+// Esportate (invariate) perché lib/routeBuilder/generateRecommendations.ts deve clampare agli
+// stessi limiti invece di duplicare i numeri.
+export const MIN_TARGET_DISTANCE_KM = 1
 // Abbassato da 20 a 15: un target più alto allarga il bbox interrogato via Overpass (vedi
 // bboxRadiusKm sotto) fino a superare, in aree con rete fitta, il tempo disponibile prima che la
 // funzione venga terminata dalla piattaforma (504 osservato in produzione) — vedi anche il
 // restringimento dei tag highway in lib/routeBuilder/osmGraph.ts, la causa principale dello stesso problema.
-const MAX_TARGET_DISTANCE_KM = 15
+export const MAX_TARGET_DISTANCE_KM = 15
 // Un punto di partenza a più di questa distanza da qualunque nodo della rete percorribile non ha
 // abbastanza rete nei dintorni per costruire un percorso — meglio un errore chiaro che un anello
 // costruito su un frammento isolato di strada.
@@ -32,7 +34,7 @@ const START_SNAP_THRESHOLD_M = 500
 // solo il tetto fisso di sicurezza di 10 km, per non reintrodurre il rischio di query Overpass
 // troppo pesanti che ha già causato dei 504 in passato.
 const ALLOWED_RADIUS_KM = [5, 10, 20, 50, 100]
-const DEFAULT_RADIUS_KM = 20
+export const DEFAULT_RADIUS_KM = 20
 // Tetto per la modalità "dintorni" (vedi BuildRequestBody.startMode): il raggio scelto dall'utente
 // può arrivare a 100 km, ma qui va clampato allo stesso tetto di sicurezza del bbox (10 km) — oltre,
 // sia la ricerca del punto d'aggancio sia il bbox interrogato via Overpass rischierebbero lo stesso
@@ -106,7 +108,7 @@ export async function GET(req: NextRequest) {
 // Puro calcolo (Overpass + grafo + pathfinding + arricchimento DTM/POI): a differenza di
 // route-search, nessuna chiamata Anthropic, quindi nessuna chiave AI richiesta all'utente.
 
-interface BuildRequestBody {
+export interface BuildRequestBody {
   lat: number
   lon: number
   routeType: RouteType
@@ -190,15 +192,16 @@ function generateRawCandidatesForLength(
 
 // Firma approssimata di un candidato (bucket di lunghezza + punto vicino alla partenza) usata per
 // non ripetere nel merge lo stesso tragitto emerso da due tentativi con lunghezza diversa — non
-// serve un'identità esatta, solo evitare doppioni palesi.
-function candidateSignature(c: { distanceMeters: number; routePolyline: [number, number][] }): string {
+// serve un'identità esatta, solo evitare doppioni palesi. Esportata perché
+// lib/routeBuilder/generateRecommendations.ts la riusa come id stabile per le card "su misura".
+export function candidateSignature(c: { distanceMeters: number; routePolyline: [number, number][] }): string {
   const distBucket = Math.round(c.distanceMeters / 100)
   const p = c.routePolyline[Math.min(3, c.routePolyline.length - 1)]
   const dirKey = p ? `${p[0].toFixed(3)},${p[1].toFixed(3)}` : ''
   return `${distBucket}_${dirKey}`
 }
 
-type LogBuildFn = (fields: {
+export type LogBuildFn = (fields: {
   tierReached: string
   message?: string | null
   builtCount?: number | null
@@ -304,7 +307,10 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-async function executeBuild(
+// Esportata perché lib/routeBuilder/generateRecommendations.ts la riusa direttamente (stessa
+// pipeline "Su misura", nessuna duplicazione) — invariata, NextResponse è una Response normale,
+// leggibile con .json() in-memory senza un giro HTTP.
+export async function executeBuild(
   user: { id: string } | null, params: BuildRequestBody, logBuild: LogBuildFn, startedAt: number,
 ): Promise<NextResponse> {
   let concerns: ReturnType<typeof sanitizeHikerConcerns> = []

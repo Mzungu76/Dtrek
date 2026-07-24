@@ -37,6 +37,16 @@ const DEDUPE_NODE_OVERLAP = 0.6
 
 export type RouteType = 'anello' | 'andata_ritorno' | 'solo_andata'
 
+// Etichetta breve — usata dal wizard (components/upload/RouteBuilder.tsx, sia nel titolo di
+// default alla scelta di un candidato "costruito" sia nella tile "Tipo"), da
+// components/RouteResultCard.tsx e da app/percorsi-per-te/page.tsx (titolo di default all'azione
+// "Apri"). Colocata col tipo che etichetta invece che duplicata in ciascun chiamante.
+export function routeTypeLabel(t: RouteType): string {
+  if (t === 'anello') return 'Anello'
+  if (t === 'solo_andata') return 'Solo andata'
+  return 'Andata e ritorno'
+}
+
 export interface RouteCandidate {
   type: RouteType
   polyline: [number, number][]

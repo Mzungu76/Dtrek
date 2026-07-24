@@ -1,42 +1,32 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, ChevronDown, ChevronUp, Loader2, TrendingUp, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
-  Sparkles, Route, MapPin, ExternalLink, AlertTriangle, Check,
+  ArrowLeft, ChevronDown, ChevronUp, Loader2, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
+  Sparkles, MapPin,
 } from 'lucide-react'
 import LocationPickerMap from '@/components/LocationPickerMap'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
-import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
+import { FoundRouteCard, BuiltRouteCard, verdictStyle, PoiPreviewRow } from '@/components/RouteResultCard'
 import GiuliaSearchPanel from './GiuliaSearchPanel'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
-import { downsamplePolyline } from '@/lib/downsamplePolyline'
-import { fetchPoisNearTrack } from '@/lib/poisProxy'
-import { fetchWikiForNamedPois, isSpecificName } from '@/lib/wikipedia'
-import { computeCtsForHike, computeCtsCore } from '@/lib/computeCtsForHike'
-import { computeSafetyForHike, computeSafetyCore } from '@/lib/computeSafetyForHike'
-import { computeTrailScoreV2 } from '@/lib/trailScoreV2'
+import { computeCtsForHike } from '@/lib/computeCtsForHike'
+import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
+import { useCandidateScores } from '@/lib/routeBuilder/useCandidateScores'
+import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois } from '@/lib/routeBuilder/buildHikeFromCandidate'
 import { HIKER_ENVIRONMENT_PREFS, type HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
-import { POI_META, type PoiItem, type PoiType } from '@/lib/overpass'
+import { POI_META, type PoiType } from '@/lib/overpass'
 import { defaultPendingExpiresAt } from './sharedHelpers'
 import type { ScoredCandidate as BuiltCandidate } from '@/lib/routeBuilder/scoreCandidates'
-import type { RouteType } from '@/lib/routeBuilder/loopBuilder'
+import { routeTypeLabel, type RouteType } from '@/lib/routeBuilder/loopBuilder'
 import type { SearchResultCandidate } from '@/app/api/route-search/route'
 import type { FoundRouteResult } from '@/app/api/route-build/search/route'
-import type { TrackPoint } from '@/lib/tcxParser'
+import type { FoundRouteItem, ResolvedTrack } from '@/lib/routeBuilder/foundRoute'
 import { classifyTrackShape } from '@/lib/geoUtils'
 
 type Step = 'start' | 'results' | 'confirm'
-
-// Etichetta breve per i tre RouteType — usata sia nel titolo di default alla scelta di un
-// candidato "costruito" sia nella tile "Tipo" della conferma.
-function routeTypeLabel(t: RouteType): string {
-  if (t === 'anello') return 'Anello'
-  if (t === 'solo_andata') return 'Solo andata'
-  return 'Andata e ritorno'
-}
 
 // Un percorso "trovato" (ricerca non-AI/AI) non porta con sé un tipo anello/andata-ritorno/solo
 // andata — le relazioni OSM non hanno un tag affidabile per distinguerli — quindi si classifica
@@ -72,44 +62,6 @@ const MAX_GIULIA_RESOLVE = 3
 // per essere un criterio utile).
 const DESIRABLE_POI_TYPES: PoiType[] = ['waterfall', 'viewpoint', 'spring', 'cave', 'peak', 'pass', 'ruins', 'castle']
 
-interface CandidateScorePreview {
-  total: number | null
-  safety: { overall: number; color: string; label: string } | null
-  vetoed: boolean
-  loading: boolean
-}
-
-// Traccia reale garantita di un percorso "trovato" — mai mostrata finché non risolta (vedi §2 del
-// piano). Stessa forma dei campi restituiti da /api/route-search/resolve (lib/routeBuilder/resolveTrack.ts),
-// letta qui via JSON e non importata come tipo server (quel modulo importa librerie server-only).
-interface ResolvedTrack {
-  trackPoints: TrackPoint[]
-  routePolyline: [number, number][]
-  distanceMeters: number
-  elevationGain: number
-  elevationLoss: number
-  altitudeMax: number
-  altitudeMin: number
-  estimatedTimeSeconds: number
-  hasElevation: boolean
-}
-
-// Un percorso "trovato" normalizzato — sia che venga dalla ricerca non-AI (Livello 0/1,
-// app/api/route-build/search/route.ts) sia dalla chat AI di Giulia (Livello 2) — con una traccia
-// reale SEMPRE presente: un candidato che non risolve una traccia non diventa mai un FoundRouteItem
-// (vedi handleFound/runSearch), quindi questa forma non ha bisogno di un ramo "senza traccia".
-interface FoundRouteItem {
-  name: string
-  zone?: string
-  difficulty?: string
-  description?: string
-  sourceUrl?: string
-  comfortVerdict?: SearchResultCandidate['comfortVerdict']
-  comfortNote?: string
-  osmId?: number
-  track: ResolvedTrack
-}
-
 // Un percorso "costruito" (algoritmo, cammina la rete OSM reale) o "trovato" (ricerca non-AI o AI
 // di un percorso già documentato altrove) — fusi nella stessa lista risultati, distinti da un tag,
 // invece di un bivio esclusivo (vedi commento sopra il componente). Entrambi hanno sempre una
@@ -117,94 +69,6 @@ interface FoundRouteItem {
 type ResultItem =
   | { kind: 'built'; data: BuiltCandidate }
   | { kind: 'found'; data: FoundRouteItem }
-
-function verdictStyle(v: string) {
-  if (v === 'adatto') return { badge: 'bg-forest-50 text-forest-700 border-forest-200', Icon: Check, label: 'Adatto a te' }
-  if (v === 'sconsigliato') return { badge: 'bg-red-50 text-red-700 border-red-200', Icon: XIcon, label: 'Sconsigliato per te' }
-  return { badge: 'bg-amber-50 text-amber-700 border-amber-200', Icon: AlertTriangle, label: 'Da valutare' }
-}
-
-function PoiPreviewRow({ pois }: { pois: PoiItem[] }) {
-  if (pois.length === 0) return null
-  const named: PoiItem[] = []
-  const groups = new Map<PoiType, PoiItem[]>()
-  for (const poi of pois) {
-    if (poi.name && isSpecificName(poi.name)) named.push(poi)
-    else {
-      const arr = groups.get(poi.type)
-      if (arr) arr.push(poi)
-      else groups.set(poi.type, [poi])
-    }
-  }
-  return (
-    <div data-hscroll className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1">
-      {named.map(poi => <NamedPoiIcon key={poi.id} poi={poi} highlighted={false} />)}
-      {Array.from(groups.entries()).map(([type, ps]) => <GroupPoiBadge key={type} type={type} pois={ps} />)}
-    </div>
-  )
-}
-
-function buildHikeFromBuilt(data: BuiltCandidate, title: string, date: string, pendingExpiresAt: string): PlannedHike {
-  return {
-    id: 'routebuild_' + Date.now().toString(36),
-    title: title.trim() || 'Percorso costruito',
-    plannedDate: date || undefined,
-    createdAt: new Date().toISOString(),
-    distanceMeters: data.distanceMeters,
-    elevationGain: data.elevationGain,
-    elevationLoss: data.elevationLoss,
-    altitudeMax: data.altitudeMax,
-    altitudeMin: data.altitudeMin,
-    estimatedTimeSeconds: data.estimatedTimeSeconds,
-    trackPoints: data.trackPoints,
-    routePolyline: downsamplePolyline(data.trackPoints),
-    pendingExpiresAt,
-  }
-}
-
-function buildHikeFromFound(data: FoundRouteItem, title: string, date: string, pendingExpiresAt: string): PlannedHike {
-  const track = data.track
-  return {
-    id: 'aisearch_' + Date.now().toString(36),
-    title: title.trim() || data.name,
-    plannedDate: date || undefined,
-    userNotes: data.description,
-    createdAt: new Date().toISOString(),
-    distanceMeters: track.distanceMeters,
-    elevationGain: track.elevationGain,
-    elevationLoss: track.elevationLoss,
-    altitudeMax: track.altitudeMax,
-    altitudeMin: track.altitudeMin,
-    estimatedTimeSeconds: track.estimatedTimeSeconds,
-    osmId: data.osmId,
-    trackPoints: track.trackPoints.length ? track.trackPoints : undefined,
-    routePolyline: track.routePolyline,
-    pendingExpiresAt,
-    // Metadati che sopravvivono solo per un percorso "trovato" — vedi lib/plannedStore.ts.
-    sourceUrl: data.sourceUrl,
-    comfortVerdict: data.comfortVerdict,
-    comfortNote: data.comfortNote,
-    zone: data.zone,
-    difficulty: data.difficulty,
-  }
-}
-
-/** Arricchisce in place con POI/Wikipedia lungo la traccia — condiviso tra i due rami di
- *  salvataggio (percorso costruito o trovato), stesso blocco che prima era duplicato in
- *  RouteBuilder.tsx e AiRouteSearch.tsx. */
-async function enrichWithPois(hike: PlannedHike): Promise<void> {
-  const gps = hike.trackPoints?.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]) ?? []
-  if (gps.length < 2) return
-  try {
-    const deadline = new Promise<null>(r => setTimeout(() => r(null), 7000))
-    const pois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline])
-    if (pois?.length) {
-      hike.cachedPois = pois
-      const poiWiki = await Promise.race([fetchWikiForNamedPois(pois), deadline])
-      if (poiWiki?.length) hike.cachedPoiWiki = poiWiki
-    }
-  } catch {}
-}
 
 /**
  * Wizard "Costruisci o trova un percorso": due motori, scelti esplicitamente dall'utente PRIMA di
@@ -295,10 +159,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // tipo e sempre con una traccia reale.
   const [results, setResults] = useState<ResultItem[]>([])
   const [resultsMessage, setResultsMessage] = useState('')
-  // Parallelo a `results` (stessa lunghezza/indice) — calcolato per ogni candidato, costruito o
-  // trovato, non appena arriva (vedi effetto sotto) — riusato anche in "Conferma" via
-  // `selectedIndex`, nessun ricalcolo separato lì.
-  const [scores, setScores] = useState<(CandidateScorePreview | null)[]>([])
 
   const [selected, setSelected] = useState<ResultItem | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
@@ -326,37 +186,12 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       .catch(() => {})
   }, [defaultsLoaded])
 
-  // Calcola Trail Score + Sicurezza per ogni candidato, costruito o trovato, non appena arrivano i
-  // risultati — stessa pipeline usata per un percorso già salvato (computeCtsCore/computeSafetyCore,
-  // vedi lib/computeCtsForHike.ts e lib/computeSafetyForHike.ts). Un candidato "trovato" ha sempre
-  // una traccia reale già risolta (vedi FoundRouteItem) prima di finire in questa lista, quindi il
-  // calcolo può partire subito qui, senza dover attendere la selezione — stesso indice di `results`,
-  // riusato anche nello step "Conferma" invece di un calcolo separato lì.
-  useEffect(() => {
-    if (results.length === 0) { setScores([]); return }
-    setScores(results.map(() => ({ total: null, safety: null, vetoed: false, loading: true })))
-    results.forEach((r, i) => {
-      const hikeForScore = r.kind === 'built' ? r.data : r.data.track
-      Promise.all([
-        computeCtsCore(hikeForScore).catch(() => null),
-        computeSafetyCore(hikeForScore).catch(() => null),
-      ]).then(([cts, safety]) => {
-        const v2 = computeTrailScoreV2({ cts: cts?.ts ?? null, safety: safety?.overall ?? null })
-        setScores(prev => {
-          if (prev.length !== results.length) return prev
-          const next = [...prev]
-          next[i] = {
-            total: v2?.score ?? null,
-            safety: safety ? { overall: safety.overall, color: safety.color, label: safety.label } : null,
-            vetoed: v2?.breakdown.vetoed ?? false,
-            loading: false,
-          }
-          return next
-        })
-      })
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results])
+  // Trail Score + Sicurezza per ogni candidato, costruito o trovato, non appena arrivano i
+  // risultati — riusato anche nello step "Conferma" via `selectedIndex`, nessun ricalcolo separato
+  // lì. `hikesForScore` va memoizzato sull'identità di `results` (vedi useCandidateScores) — un
+  // `.map()` non memoizzato rifarebbe ripartire il calcolo ad ogni render.
+  const hikesForScore = useMemo(() => results.map(r => r.kind === 'built' ? r.data : r.data.track), [results])
+  const scores = useCandidateScores(hikesForScore)
 
   // All'ingresso nello step "Risultati", apre il tab che ha davvero qualcosa da mostrare invece di
   // aprire sempre "Esistenti" anche quando è vuoto — solo al cambio di step, non ad ogni
@@ -740,147 +575,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
   }
 
-  // Card di un percorso "trovato" — riusata sia nell'anteprima inline dello step "Partenza" sia
-  // nello step "Risultati" fuso. La traccia è sempre reale (vedi FoundRouteItem), quindi mostra
-  // sempre una mappa, mai solo statistiche testuali.
-  function renderFoundCard(data: FoundRouteItem, i: number) {
-    const vs = data.comfortVerdict ? verdictStyle(data.comfortVerdict) : null
-    const track = data.track
-    const scorePreview = scores[i]
-    return (
-      <div key={`found-${i}`} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-        <TrailPreviewMap polyline={track.routePolyline} height="180px" />
-        <div className="p-4 space-y-2.5">
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
-            <Sparkles className="w-3 h-3" /> Percorso trovato
-          </span>
-
-          <div>
-            <h4 className="font-display text-base font-semibold text-stone-800">{data.name}</h4>
-            {data.zone && <p className="text-xs text-stone-400 mt-0.5">{data.zone}</p>}
-          </div>
-
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex gap-4 text-sm">
-              <div>
-                <span className="font-semibold text-stone-800">{(track.distanceMeters / 1000).toFixed(1)} km</span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
-              </div>
-              <div>
-                <span className="font-semibold text-stone-800 flex items-center gap-0.5">
-                  <TrendingUp className="w-3 h-3" />{track.hasElevation ? `${Math.round(track.elevationGain)} m` : '—'}
-                </span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
-              </div>
-              <div>
-                <span className="font-semibold text-stone-800">
-                  {{ loop: 'Anello', out_and_back: 'Andata e ritorno', linear: 'Lineare' }[classifyTrackShape(track.routePolyline)]}
-                </span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
-              </div>
-              {data.difficulty && (
-                <div>
-                  <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
-                  <p className="text-[10px] uppercase tracking-wide text-stone-400">Difficoltà</p>
-                </div>
-              )}
-            </div>
-            <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
-              <TrailScoreGaugeBadge
-                total={scorePreview?.total ?? null}
-                safety={scorePreview?.safety ?? null}
-                loading={scorePreview?.loading ?? true}
-                vetoed={scorePreview?.vetoed}
-                size={52}
-                showLabel={false}
-              />
-            </div>
-          </div>
-
-          {vs && (
-            <div className={`flex items-start gap-2 px-3 py-2 rounded-xl border text-xs ${vs.badge}`}>
-              <vs.Icon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">{vs.label}</p>
-                {data.comfortNote && <p className="mt-0.5 opacity-90">{data.comfortNote}</p>}
-              </div>
-            </div>
-          )}
-
-          {data.description && <p className="text-sm text-stone-600 leading-relaxed">{data.description}</p>}
-
-          <div className="flex items-center justify-between pt-1">
-            {data.sourceUrl ? (
-              <a href={data.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition-colors">
-                <ExternalLink className="w-3 h-3" /> Fonte
-              </a>
-            ) : <span />}
-            <button onClick={() => chooseCandidate({ kind: 'found', data }, i)}
-              className="px-4 py-2 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-xs font-semibold uppercase tracking-wide transition-colors">
-              Scegli questo percorso
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Card di un percorso "su misura" (generato dall'algoritmo) — riusata sia nello step "Risultati"
-  // (tab "Su misura") sia, potenzialmente, altrove: stesso pattern di renderFoundCard sopra.
-  function renderBuiltCard(c: BuiltCandidate, i: number) {
-    const scorePreview = scores[i]
-    return (
-      <div key={`built-${i}`} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-        <TrailPreviewMap polyline={c.routePolyline} height="180px" />
-        <div className="p-4 space-y-2.5">
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
-            <Route className="w-3 h-3" /> Su misura per te
-          </span>
-
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex gap-4 text-sm">
-              <div>
-                <span className="font-semibold text-stone-800">{(c.distanceMeters / 1000).toFixed(1)} km</span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
-              </div>
-              <div>
-                <span className="font-semibold text-stone-800 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{Math.round(c.elevationGain)} m</span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
-              </div>
-              <div>
-                <span className="font-semibold text-stone-800">{routeTypeLabel(c.type)}</span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
-              </div>
-            </div>
-            <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
-              <TrailScoreGaugeBadge
-                total={scorePreview?.total ?? null}
-                safety={scorePreview?.safety ?? null}
-                loading={scorePreview?.loading ?? true}
-                vetoed={scorePreview?.vetoed}
-                size={52}
-                showLabel={false}
-              />
-            </div>
-          </div>
-
-          <PoiPreviewRow pois={c.pois ?? []} />
-
-          {c.matchNote && <p className="text-sm text-stone-600 leading-relaxed">{c.matchNote}</p>}
-
-          {c.hasSteepSections && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">Presenta tratti ripidi</p>
-          )}
-
-          <button onClick={() => chooseCandidate({ kind: 'built', data: c }, i)}
-            className="w-full py-2.5 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-xs font-semibold uppercase tracking-wide transition-colors">
-            Scegli questo percorso
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   // ── Punto di partenza (ricerca + ricerca avanzata, mappa a pieno schermo) ───────────────────
   // Un solo schermo invece di due: la ricerca avanzata (tipo di percorso, destinazione, lunghezza,
   // dislivello, preferenze) è raggiungibile fin da subito in una sezione a comparsa, non più dietro
@@ -1162,7 +856,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {activeEntries.map(({ item, i }) => item.kind === 'found' ? renderFoundCard(item.data, i) : renderBuiltCard(item.data, i))}
+        {activeEntries.map(({ item, i }) => item.kind === 'found'
+          ? <FoundRouteCard key={`found-${i}`} data={item.data} scorePreview={scores[i]} onChoose={() => chooseCandidate({ kind: 'found', data: item.data }, i)} />
+          : <BuiltRouteCard key={`built-${i}`} data={item.data} scorePreview={scores[i]} onChoose={() => chooseCandidate({ kind: 'built', data: item.data }, i)} />)}
       </div>
     )
   }

@@ -2,6 +2,7 @@
 // Always goes through the service-role client (lib/supabase.ts) — this table
 // has no per-user data and no RLS, it's a shared reference cache.
 import { supabase } from '@/lib/supabase'
+import { padBbox } from '@/lib/overpassTrails'
 
 export type DataQuality = 'osm_tags' | 'calculated' | 'estimated'
 export type RouteType = 'loop' | 'out_and_back' | 'point_to_point'
@@ -74,6 +75,27 @@ export async function getCachedTrailsInBbox(osmRelationIds: number[]): Promise<M
     .in('osm_relation_id', osmRelationIds)
 
   return new Map((data ?? []).map(row => [row.osm_relation_id, mapCacheRow(row)]))
+}
+
+// Percorsi cachati la cui estensione (bbox) ricade almeno in parte entro radiusKm da (lat, lon) —
+// usata da lib/routeBuilder/generateRecommendations.ts per le card "Esistenti" senza dover
+// richiamare Overpass ad ogni generazione. Test di overlap tra due rettangoli (il bbox della query,
+// centrato sul punto e allargato di radiusKm, e il bbox salvato di ciascun sentiero) sulle colonne
+// generate bbox_min_lat/bbox_max_lat/bbox_min_lon/bbox_max_lon (vedi
+// supabase/migrations/add_trails_bbox_indexed_columns.sql) — non un test "punto dentro un solo
+// bbox", che mancherebbe sentieri vicini la cui estensione non include esattamente il centroide.
+export async function findCachedTrailsNearPoint(lat: number, lon: number, radiusKm: number, limit = 20): Promise<TrailCacheRow[]> {
+  const [minLat, minLon, maxLat, maxLon] = padBbox([lat, lon, lat, lon], radiusKm)
+  const { data } = await supabase
+    .from('trails')
+    .select('*')
+    .lte('bbox_min_lat', maxLat)
+    .gte('bbox_max_lat', minLat)
+    .lte('bbox_min_lon', maxLon)
+    .gte('bbox_max_lon', minLon)
+    .limit(limit)
+
+  return (data ?? []).map(mapCacheRow)
 }
 
 export async function upsertTrailCache(row: TrailCacheRow): Promise<void> {
