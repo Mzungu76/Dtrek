@@ -60,10 +60,11 @@ const DEFAULT_NEW_USER_DISTANCE_KM = 6
 // più lontano. Valori scelti per coprire sia chi vive già in montagna (5km spesso bastano) sia chi
 // deve allontanarsi parecchio dalla città per trovare sentieri (40km).
 const SEARCH_RADII_KM = [5, 10, 20, 40]
-// Tetto sull'intera raggiera (tutti i raggi messi insieme) — con margine reale sotto il tetto
-// morbido di 45s del bootstrap di app/api/percorsi-per-te/route.ts (e sotto il budget per-utente
-// del cron). Il raggio in corso finisce comunque il proprio tentativo; solo il raggio SUCCESSIVO
-// viene saltato.
+// Tetto complessivo di riserva sull'intera raggiera (tutti i raggi messi insieme) — ridondante nel
+// caso normale, dato che ogni singolo raggio ha già il proprio tetto morbido più stretto
+// (PER_RADIUS_SOFT_DEADLINE_MS, vedi sotto: 4 raggi × 10s = 40s nel caso peggiore), ma resta come
+// seconda rete di sicurezza. Con margine reale sotto il tetto morbido di 45s del bootstrap di
+// app/api/percorsi-per-te/route.ts (e sotto il budget per-utente del cron).
 const TOTAL_RING_BUDGET_MS = 30_000
 
 function clampDistanceKm(km: number): number {
@@ -225,6 +226,33 @@ async function enrichGeometryOrSkip(geometry: [number, number][]): Promise<Resol
   return { ...enriched, routePolyline: downsamplePolyline(enriched.trackPoints), hasElevation: true }
 }
 
+// Tetto morbido PER SINGOLO RAGGIO — senza questo, un solo raggio poteva da solo superare i 60s:
+// fetchOverpass (lib/overpassTrails.ts) corre tutti e 3 i mirror in parallelo ma con un intero
+// ritentativo se falliscono tutti (fino a ~2×20s+1.2s ≈ 41s per una sola query), e
+// resolveTrackForCandidate chiama comunque il DTM reale (fino a 30s di timeout in
+// lib/dtm/openTopographyClient.ts se il circuit breaker non è ancora aperto) per OGNI candidato
+// del fallback Overpass live — le due cose in sequenza, su un solo raggio, bastano a superare il
+// tetto duro di 60s della piattaforma anche con "Su misura" già tolto di mezzo (osservato in
+// produzione: due richieste consecutive, entrambe "Task timed out after 60 seconds", nessuna delle
+// due arrivata al controllo tra un raggio e l'altro). Un tetto qui, attorno all'INTERO raggio (cache
+// + fallback Overpass + tutte le chiamate DTM che ne conseguono), è l'unico punto che può davvero
+// impedirlo, indipendentemente dalla causa specifica della lentezza in quel momento.
+const PER_RADIUS_SOFT_DEADLINE_MS = 10_000
+
+async function gatherFoundCandidatesWithDeadline(
+  origin: { lat: number; lon: number }, targetDistanceKm: number, radiusKm: number, wanted: number, seen: Set<number>,
+): Promise<FoundRouteItem[]> {
+  const outcome = await Promise.race([
+    gatherFoundCandidates(origin, targetDistanceKm, radiusKm, wanted, seen).then(res => ({ kind: 'done' as const, res })),
+    new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), PER_RADIUS_SOFT_DEADLINE_MS)),
+  ])
+  if (outcome.kind === 'timeout') {
+    console.error(`[generateRecommendations] raggio ${radiusKm}km oltre ${PER_RADIUS_SOFT_DEADLINE_MS}ms, salto al raggio successivo senza i suoi risultati`)
+    return []
+  }
+  return outcome.res
+}
+
 export async function generateRecommendationsForUser(userId: string): Promise<GenerateRecommendationsResult> {
   const origin = await deriveOrigin(userId)
   if (!origin) return { status: 'empty_no_location', cards: [], centroid: null }
@@ -251,7 +279,7 @@ export async function generateRecommendationsForUser(userId: string): Promise<Ge
     }
 
     const stillWanted = TOTAL_CARDS - foundItems.length
-    const newFound = await gatherFoundCandidates(origin, targetDistanceKm, radiusKm, stillWanted, foundSeen)
+    const newFound = await gatherFoundCandidatesWithDeadline(origin, targetDistanceKm, radiusKm, stillWanted, foundSeen)
     foundItems.push(...newFound)
   }
 
