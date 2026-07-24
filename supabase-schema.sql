@@ -801,6 +801,26 @@ DROP POLICY IF EXISTS "dtm_cache_public_read" ON dtm_cache;
 CREATE POLICY "dtm_cache_public_read" ON dtm_cache FOR SELECT USING (true);
 
 
+-- ── Cache rete cammini OSM (route builder "Su misura") ────────────────────────
+-- Stesso blocco anche in supabase/migrations/add_walk_network_cache_table.sql. Stesso pattern di
+-- dtm_cache sopra — vedi lib/routeBuilder/walkNetworkCache.ts. TTL più corto del DTM (45gg, non
+-- 180): la rete cammini cambia più della quota del terreno, ma non abbastanza da giustificare un
+-- TTL breve come uso_suolo_cache.
+CREATE TABLE IF NOT EXISTS walk_network_cache (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  bbox_key      text NOT NULL UNIQUE,
+  network       jsonb,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_walk_network_cache_expires_at ON walk_network_cache (expires_at);
+
+ALTER TABLE walk_network_cache ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "walk_network_cache_public_read" ON walk_network_cache;
+CREATE POLICY "walk_network_cache_public_read" ON walk_network_cache FOR SELECT USING (true);
+
+
 -- ═══════════════════════════════════════════════════════════
 -- Geoportale Nazionale MASE/ISPRA — Fase 5 (Rete Natura 2000)
 -- Stesso blocco anche in supabase/migrations/add_natura2000_tables.sql

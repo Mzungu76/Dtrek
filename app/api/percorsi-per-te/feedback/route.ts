@@ -4,10 +4,22 @@ import { supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+// Rete di sicurezza: stesso principio già applicato in app/api/percorsi-per-te/route.ts — senza
+// questo wrapper un'eccezione imprevista farebbe crashare la funzione invece di rispondere con un
+// errore JSON pulito.
+export async function POST(req: NextRequest) {
+  try {
+    return await handlePost(req)
+  } catch (e) {
+    console.error('[percorsi-per-te/feedback] Errore imprevisto:', e)
+    return NextResponse.json({ error: 'Salvataggio non riuscito per un errore interno, riprova.' }, { status: 500 })
+  }
+}
+
 // Segnale esplicito "mi piace / non fa per me" per una card di Percorsi per te — solo raccolto qui
 // (feedback JSONB su route_recommendations), nessun ranking/apprendimento ancora costruito sopra:
 // il prossimo passo (rendere l'app "più brava" nel tempo) userà questi dati, non li produce.
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest): Promise<NextResponse> {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
 
