@@ -482,7 +482,7 @@ CREATE TABLE IF NOT EXISTS trails (
 CREATE INDEX IF NOT EXISTS idx_trails_osm_relation_id ON trails (osm_relation_id);
 
 
--- ── Security Index (SI) + Sentinel-2 enrichment ───────────────────────────────
+-- ── Security Index (SI) ────────────────────────────────────────────────────────
 -- Stesso blocco di supabase/migrations/add_si_sentinel2_columns.sql, qui per
 -- coerenza con la convenzione di questo file (ALTER dopo il CREATE TABLE).
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_score int;
@@ -501,22 +501,6 @@ ALTER TABLE trails ADD COLUMN IF NOT EXISTS dominant_warning text;
 -- per trasparenza/debug, nessuna logica di ricalcolo dipende da loro.
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_score_raw float;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_density_factor float;
-
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_ndvi_monthly jsonb;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_ndvi_delta float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_ndwi_current float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_nbr_current float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_evi_current float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_bsi_current float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_fire_detected boolean DEFAULT false;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_flood_detected boolean DEFAULT false;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_landslide_risk boolean DEFAULT false;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_shade_score float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_landscape_variety float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_water_sources jsonb;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_phenology_peak_month int;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_computed_at timestamptz;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_available boolean DEFAULT false;
 
 -- ── Indici per la ricerca "Cerca in quest'area" (sezione Esplora) ────────────
 -- Stesso blocco anche in supabase/migrations/add_trails_search_indexes.sql.
@@ -575,32 +559,6 @@ CREATE POLICY "route_recommendations_owner"
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-
--- ═══════════════════════════════════════════════════════════
--- Geoportale Nazionale MASE/ISPRA — Fase 1 (PAI)
--- Stesso blocco anche in supabase/migrations/add_pai_tables.sql
--- ═══════════════════════════════════════════════════════════
-
--- ── Cache poligoni PAI (rischio idrogeologico ufficiale) ──────────────────────
--- bbox-keyed, stesso pattern lazy-cleanup di poi_cache (app/api/pois/route.ts) —
--- TTL lungo (90gg, gestito lato applicativo) perché i piani di bacino cambiano
--- su scala di anni, non vale ri-interrogare il WFS ad ogni calcolo SI.
--- source_authority non è una colonna qui: ogni feature in `features` porta già
--- il proprio sourceAuthority (vedi PaiFeature in lib/pai/paiClient.ts), dato che
--- un singolo bbox può attraversare più Autorità di Bacino.
-CREATE TABLE IF NOT EXISTS pai_polygon_cache (
-  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  bbox_key      text NOT NULL UNIQUE,
-  features      jsonb NOT NULL,
-  fetched_at    timestamptz NOT NULL DEFAULT now(),
-  expires_at    timestamptz NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_pai_polygon_cache_expires_at ON pai_polygon_cache (expires_at);
-
-ALTER TABLE pai_polygon_cache ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "pai_polygon_cache_public_read" ON pai_polygon_cache;
-CREATE POLICY "pai_polygon_cache_public_read" ON pai_polygon_cache FOR SELECT USING (true);
 
 -- ── Backfill: ptpr_pois (drift preesistente, mai documentata in questo file) ──
 -- Usata da app/api/pois/route.ts (fetchPtprPois) e popolata da scripts/import-ptpr.ts;
@@ -745,26 +703,9 @@ ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS sections JSONB;
 
 
 -- ═══════════════════════════════════════════════════════════
--- Geoportale Nazionale MASE/ISPRA — Fase 4 (Geologia CARG + Uso del suolo)
+-- Geoportale Nazionale MASE/ISPRA — Fase 4 (Uso del suolo)
 -- Stesso blocco anche in supabase/migrations/add_geologia_usosuolo_tables.sql
 -- ═══════════════════════════════════════════════════════════
-
--- ── Cache geologia (litologia CARG, per-punto via WMS GetFeatureInfo) ─────────
--- point_key (non bbox_key): GetFeatureInfo risponde per un singolo punto, non
--- un'area — stesso rounding a 2 decimali (~1km) di normalizeBboxKey, riusato su
--- "lat,lon" invece che su un bbox a 4 valori. feature può essere JSON null
--- (nessun dato litologico in quel punto) — stesso stato cacheable di un array
--- vuoto in pai_polygon_cache. TTL lungo (180gg): la litologia non cambia nel
--- tempo a parità di punto.
-CREATE TABLE IF NOT EXISTS geologia_cache (
-  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  point_key     text NOT NULL UNIQUE,
-  feature       jsonb NOT NULL,
-  fetched_at    timestamptz NOT NULL DEFAULT now(),
-  expires_at    timestamptz NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_geologia_cache_expires_at ON geologia_cache (expires_at);
 
 -- ── Cache uso del suolo (land-cover, bbox-keyed via WCS GetCoverage) ──────────
 -- tile serializza UsoSuoloTile con classCodes come number[] (jsonb non supporta
@@ -952,7 +893,6 @@ CREATE POLICY "activity_photos_owner"
 -- ═══════════════════════════════════════════════════════════
 
 ALTER TABLE gallery_cascade_cache  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE geologia_cache         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE n2000_site_species     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE natura2000_cache       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE poi_cache              ENABLE ROW LEVEL SECURITY;
@@ -963,9 +903,6 @@ ALTER TABLE uso_suolo_cache        ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "gallery_cascade_cache_public_read" ON gallery_cascade_cache;
 CREATE POLICY "gallery_cascade_cache_public_read" ON gallery_cascade_cache FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "geologia_cache_public_read" ON geologia_cache;
-CREATE POLICY "geologia_cache_public_read" ON geologia_cache FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "n2000_site_species_public_read" ON n2000_site_species;
 CREATE POLICY "n2000_site_species_public_read" ON n2000_site_species FOR SELECT USING (true);

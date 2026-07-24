@@ -21,6 +21,7 @@ import { POI_META, type PoiType } from '@/lib/overpass'
 import { defaultPendingExpiresAt } from './sharedHelpers'
 import type { ScoredCandidate as BuiltCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import { routeTypeLabel, type RouteType } from '@/lib/routeBuilder/loopBuilder'
+import { resolvePlaceClientFirst } from '@/lib/routeBuilder/resolvePlaceClient'
 import type { SearchResultCandidate } from '@/app/api/route-search/route'
 import type { FoundRouteResult } from '@/app/api/route-build/search/route'
 import type { FoundRouteItem, ResolvedTrack } from '@/lib/routeBuilder/foundRoute'
@@ -215,11 +216,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (searchMode !== 'su_misura' || !query.trim()) return
     const handle = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(query.trim())}&useAi=false`)
-        const data = await res.json()
-        if (data?.place) { setLat(data.place.lat); setLon(data.place.lon) }
-      } catch {}
+      const place = await resolvePlaceClientFirst(query.trim(), false)
+      if (place) { setLat(place.lat); setLon(place.lon) }
     }, 600)
     return () => clearTimeout(handle)
   }, [query, searchMode])
@@ -374,13 +372,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       }
       if (!fallbackPlace && lat == null) {
         const q = [c.searchName, c.searchArea].filter(Boolean).join(', ')
-        if (q.trim()) {
-          try {
-            const r = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(q)}&useAi=false`)
-            const d = await r.json()
-            if (d?.place) fallbackPlace = d.place
-          } catch {}
-        }
+        if (q.trim()) fallbackPlace = await resolvePlaceClientFirst(q, false)
       }
     }
 
@@ -504,9 +496,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
     setSearching(true)
     try {
-      const res = await fetch(`/api/route-build/resolve-place?q=${encodeURIComponent(query.trim())}&useAi=${useAi}`)
-      const data = await res.json()
-      if (!data?.place) {
+      const place = await resolvePlaceClientFirst(query.trim(), useAi)
+      if (!place) {
         if (useAi) {
           // Anche il tentativo AI di resolve-place (un'unica chiamata, senza dialogo) non ha
           // trovato nulla — per un luogo/POI davvero raro (una piccola cascata, un toponimo
@@ -523,10 +514,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         }
         return
       }
-      setLat(data.place.lat)
-      setLon(data.place.lon)
-      setQuery(data.place.displayName)
-      await generate({ lat: data.place.lat, lon: data.place.lon })
+      setLat(place.lat)
+      setLon(place.lon)
+      setQuery(place.displayName)
+      await generate({ lat: place.lat, lon: place.lon })
     } catch {
       setErrorMsg('Errore di rete, riprova.')
     } finally {

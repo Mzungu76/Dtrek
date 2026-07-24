@@ -29,16 +29,6 @@ export interface DatasetEndpoint {
 // rimossi. Il backend attuale è OpenTopography (REST pubblico globale, non MASE/ISPRA — vedi
 // lib/dtm/openTopographyClient.ts), che non appartiene a questo registro per definizione.
 
-export const GEOLOGIA_DATASET: DatasetEndpoint = {
-  name: "Carta Geologica d'Italia (progetto CARG)",
-  agency: 'ISPRA',
-  protocol: 'WMS',
-  baseUrl: 'https://sinacloud.isprambiente.it/arcgisgeo/services/geo/SGI_ISPRA_Geologia25k/MapServer/WMSServer',
-  layerName: '0',
-  verifiedAt: '2026-06-25',
-  notes: 'ArcGIS Server WMS 1.3.0 — confermato WMS-only, nessun WFS vettoriale su questo endpoint. Layer "0" = "Unità geologiche" (litologia); layer "8" = "Quadro unione Fogli" (solo griglia indice, non usato). GetFeatureInfo richiede infoFormat=application/geo+json — questo ArcGIS Server non supporta application/json puro (vedi lib/geologia/geologiaClient.ts).',
-}
-
 export const USO_SUOLO_DATASET: DatasetEndpoint = {
   name: 'Uso/copertura del suolo (Corine Land Cover 2018, livello III)',
   agency: 'ISPRA',
@@ -60,7 +50,6 @@ export const NATURA2000_DATASET: DatasetEndpoint = {
 }
 
 export const ALL_DATASETS: DatasetEndpoint[] = [
-  GEOLOGIA_DATASET,
   USO_SUOLO_DATASET,
   NATURA2000_DATASET,
 ]
