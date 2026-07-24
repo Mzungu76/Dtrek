@@ -78,6 +78,27 @@ export async function enrichBuiltCandidateForImport(candidate: BuiltCandidate): 
   }
 }
 
+/**
+ * Gemella di enrichBuiltCandidateForImport, per una card "Esistenti" — la sua traccia arriva con
+ * quota STIMATA da generateRecommendations.ts (mai il DTM reale, per non spendere la quota
+ * rate-limited di OpenTopography su card che l'utente potrebbe non aprire mai). Sostituita con la
+ * quota vera solo qui, quando l'utente sceglie/apre proprio questa card.
+ */
+export async function enrichFoundCandidateForImport(data: FoundRouteItem): Promise<FoundRouteItem> {
+  try {
+    const res = await fetch('/api/route-build/enrich-track-elevation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track: data.track }),
+    })
+    if (!res.ok) return data
+    const body = await res.json()
+    return body?.track ? { ...data, track: body.track } : data
+  } catch {
+    return data
+  }
+}
+
 /** Arricchisce in place con POI/Wikipedia lungo la traccia — condiviso tra i rami di salvataggio
  *  (percorso costruito o trovato, dal wizard o da "Percorsi per te"), stesso blocco che prima era
  *  duplicato in RouteBuilder.tsx e AiRouteSearch.tsx. */

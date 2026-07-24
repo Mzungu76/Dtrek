@@ -22,6 +22,15 @@
 // IMPORTANTE: nessun punteggio (Trail Score/Sicurezza) viene calcolato qui — computeCtsCore/
 // computeSafetyCore fanno fetch a URL relativi, funzionano solo lato browser; si calcola pigro,
 // lato client, ad ogni apertura di /percorsi-per-te.
+//
+// IMPORTANTE (2): nessuna chiamata DTM reale viene fatta qui — causa concreta osservata in
+// produzione di ricerche che restituivano "0 trovati" anche in zone con percorsi noti (Vetralla:
+// 8 percorsi trovati dalla ricerca interattiva, 0 dalla raggiera automatica), perché il tetto
+// morbido per raggio scadeva prima che il DTM (fino a 30s per candidato) finisse. Le card cache-hit
+// usano i valori già calcolati al momento in cui la riga è stata cachata; le card dal fallback
+// Overpass live usano una stima geometrica (estimateOnly, vedi resolveTrackForCandidate). La quota
+// reale arriva solo quando l'utente apre/salva proprio quella card (app/percorsi-per-te/page.tsx's
+// handleOpen) — stesso principio già applicato a "Su misura" (lib/routeBuilder/scoreCandidates.ts).
 import { supabase } from '@/lib/supabase'
 import { fetchActivitySummary } from '@/lib/hikerContext'
 import { MIN_TARGET_DISTANCE_KM, MAX_TARGET_DISTANCE_KM } from '@/app/api/route-build/route'
@@ -29,8 +38,6 @@ import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 import { findCachedTrailsNearPoint, upsertTrailCache, type TrailCacheRow } from '@/lib/trailsCache'
 import { queryHikingRelationsInBbox, padBbox, type HikingRouteCandidate } from '@/lib/overpassTrails'
 import { resolveTrackForCandidate } from '@/lib/routeBuilder/resolveTrack'
-import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
-import { downsamplePolyline } from '@/lib/downsamplePolyline'
 import { classifyTrackShape, haversineM } from '@/lib/geoUtils'
 import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem, ResolvedTrack } from '@/lib/routeBuilder/foundRoute'
@@ -62,10 +69,11 @@ const DEFAULT_NEW_USER_DISTANCE_KM = 6
 const SEARCH_RADII_KM = [5, 10, 20, 40]
 // Tetto complessivo di riserva sull'intera raggiera (tutti i raggi messi insieme) — ridondante nel
 // caso normale, dato che ogni singolo raggio ha già il proprio tetto morbido più stretto
-// (PER_RADIUS_SOFT_DEADLINE_MS, vedi sotto: 4 raggi × 10s = 40s nel caso peggiore), ma resta come
-// seconda rete di sicurezza. Con margine reale sotto il tetto morbido di 45s del bootstrap di
+// (PER_RADIUS_SOFT_DEADLINE_MS, vedi sotto: 4 raggi × 15s = 60s nel caso peggiore), ma resta come
+// seconda rete di sicurezza che interrompe la raggiera TRA un raggio e l'altro, prima ancora di
+// iniziarne uno nuovo. Con margine reale sotto il tetto morbido di 45s del bootstrap di
 // app/api/percorsi-per-te/route.ts (e sotto il budget per-utente del cron).
-const TOTAL_RING_BUDGET_MS = 30_000
+const TOTAL_RING_BUDGET_MS = 35_000
 
 function clampDistanceKm(km: number): number {
   return Math.min(MAX_TARGET_DISTANCE_KM, Math.max(MIN_TARGET_DISTANCE_KM, km))
@@ -154,7 +162,11 @@ async function gatherFoundCandidates(
 ): Promise<FoundRouteItem[]> {
   const items: FoundRouteItem[] = []
 
-  // 1) Cache `trails` — economica, nessuna chiamata di rete oltre Supabase.
+  // 1) Cache `trails` — davvero economica: nessuna chiamata di rete, DTM incluso. Le righe cachate
+  // hanno già distanza/dislivello/tempo stimato calcolati al momento in cui sono state scritte
+  // (upsertTrailCache, sotto) — richiamare di nuovo il DTM qui su geometria già nota era un secondo
+  // costo pesante e inutile (causa concreta osservata in produzione dei "0 trovati": il tetto
+  // morbido per raggio scadeva prima che questa ri-elaborazione finisse, anche con la cache piena).
   try {
     const cached = await findCachedTrailsNearPoint(origin.lat, origin.lon, radiusKm, 20)
     const candidates = cached
@@ -168,24 +180,37 @@ async function gatherFoundCandidates(
 
     for (const { row } of candidates) {
       if (items.length >= wanted) break
-      const enriched = await enrichGeometryOrSkip(row.geometrySimplified)
-      if (!enriched) continue
       seen.add(row.osmRelationId)
+      const distanceKm = row.distanceKm as number
+      const track: ResolvedTrack = {
+        trackPoints: [],
+        routePolyline: row.geometrySimplified,
+        distanceMeters: Math.round(distanceKm * 1000),
+        elevationGain: row.elevationGain ?? 0,
+        elevationLoss: row.elevationLoss ?? 0,
+        altitudeMax: 0,
+        altitudeMin: 0,
+        estimatedTimeSeconds: (row.estimatedTimeMin ?? Math.round((distanceKm / 4) * 60)) * 60,
+        hasElevation: row.dataQuality === 'calculated',
+      }
       items.push({
         name: row.name,
         difficulty: row.difficulty ?? undefined,
-        description: foundReason(enriched.distanceMeters / 1000, targetDistanceKm),
+        description: foundReason(distanceKm, targetDistanceKm),
         sourceUrl: `https://www.openstreetmap.org/relation/${row.osmRelationId}`,
         osmId: row.osmRelationId,
-        track: enriched,
+        track,
       })
     }
   } catch (e) {
     console.error('[generateRecommendations] lettura cache trails fallita:', e)
   }
 
-  // 2) Fallback Overpass live (gratuito, non-AI) solo se la cache non ha bastato — ogni candidato
-  // risolto viene anche cachato per i cicli futuri.
+  // 2) Fallback Overpass live (gratuito, non-AI) solo se la cache non ha bastato — traccia risolta
+  // con quota STIMATA (estimateOnly: mai il DTM reale in questo giro, vedi resolveTrackForCandidate
+  // — la quota vera arriva solo se l'utente apre proprio questa card, app/percorsi-per-te/page.tsx's
+  // handleOpen). Ogni candidato risolto viene comunque cachato per i cicli futuri (per questo utente
+  // o altri vicini), coi campi stimati: si affina da solo quando qualcuno lo apre davvero.
   if (items.length < wanted) {
     try {
       const [minLat, minLon, maxLat, maxLon] = padBbox([origin.lat, origin.lon, origin.lat, origin.lon], radiusKm)
@@ -193,7 +218,7 @@ async function gatherFoundCandidates(
       for (const candidate of relations) {
         if (items.length >= wanted) break
         if (seen.has(candidate.id)) continue
-        const resolved = await resolveTrackForCandidate({ osmId: candidate.id, gpxUrl: null })
+        const resolved = await resolveTrackForCandidate({ osmId: candidate.id, gpxUrl: null }, { estimateOnly: true })
         if (!resolved.ok) continue
         seen.add(candidate.id)
         const track: ResolvedTrack = {
@@ -218,26 +243,16 @@ async function gatherFoundCandidates(
   return items
 }
 
-// Wrapper minimo attorno a enrichGeometryWithElevation per uniformare il tipo di ritorno a
-// ResolvedTrack (routePolyline + hasElevation, non presenti in EnrichedTrack).
-async function enrichGeometryOrSkip(geometry: [number, number][]): Promise<ResolvedTrack | null> {
-  const enriched = await enrichGeometryWithElevation(geometry)
-  if (!enriched) return null
-  return { ...enriched, routePolyline: downsamplePolyline(enriched.trackPoints), hasElevation: true }
-}
-
 // Tetto morbido PER SINGOLO RAGGIO — senza questo, un solo raggio poteva da solo superare i 60s:
 // fetchOverpass (lib/overpassTrails.ts) corre tutti e 3 i mirror in parallelo ma con un intero
-// ritentativo se falliscono tutti (fino a ~2×20s+1.2s ≈ 41s per una sola query), e
-// resolveTrackForCandidate chiama comunque il DTM reale (fino a 30s di timeout in
-// lib/dtm/openTopographyClient.ts se il circuit breaker non è ancora aperto) per OGNI candidato
-// del fallback Overpass live — le due cose in sequenza, su un solo raggio, bastano a superare il
-// tetto duro di 60s della piattaforma anche con "Su misura" già tolto di mezzo (osservato in
-// produzione: due richieste consecutive, entrambe "Task timed out after 60 seconds", nessuna delle
-// due arrivata al controllo tra un raggio e l'altro). Un tetto qui, attorno all'INTERO raggio (cache
-// + fallback Overpass + tutte le chiamate DTM che ne conseguono), è l'unico punto che può davvero
-// impedirlo, indipendentemente dalla causa specifica della lentezza in quel momento.
-const PER_RADIUS_SOFT_DEADLINE_MS = 10_000
+// ritentativo se falliscono tutti (fino a ~2×20s+1.2s ≈ 41s per una sola query). Il DTM reale NON è
+// più in gioco qui (cache-hit usa i valori già calcolati nella riga cachata, il fallback Overpass
+// live risolve solo con quota STIMATA — vedi resolveTrackForCandidate con estimateOnly): un raggio
+// costa ormai al più una query Overpass (bbox o per-relazione), non anche fino a 30s di DTM PER
+// CANDIDATO come prima. 15s restano comunque un tetto, non una garanzia — un raggio insolitamente
+// lento (mirror Overpass tutti lenti) viene comunque abbandonato invece di rischiare il tetto duro
+// della piattaforma, con 0 risultati per quel raggio piuttosto che nessuna risposta.
+const PER_RADIUS_SOFT_DEADLINE_MS = 15_000
 
 async function gatherFoundCandidatesWithDeadline(
   origin: { lat: number; lon: number }, targetDistanceKm: number, radiusKm: number, wanted: number, seen: Set<number>,
