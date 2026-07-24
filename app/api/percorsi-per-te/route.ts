@@ -12,6 +12,19 @@ export const maxDuration = 60
 // piattaforma a metà non lascia scrivere nessuna risposta, meglio rispondere noi prima con uno
 // stato "pending" (l'utente riprova a breve) che un errore generico o un timeout non gestito.
 const BOOTSTRAP_SOFT_DEADLINE_MS = 45_000
+// Le due letture Supabase dirette sotto (fuori dal Promise.race del bootstrap) non erano protette
+// da nessun tetto — un 504 osservato in produzione su questo endpoint, anche per un utente che ha
+// già una riga (quindi non dovrebbe mai toccare il bootstrap), punta a uno stallo di rete su una di
+// queste letture non protetta fino al maxDuration/kill della piattaforma. Stesso principio già
+// applicato in lib/dtm/dtmCache.ts's CACHE_LOOKUP_TIMEOUT_MS.
+const SUPABASE_READ_TIMEOUT_MS = 8_000
+
+function withTimeout<T>(p: PromiseLike<T>, ms: number): Promise<T> {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ])
+}
 
 // Rete di sicurezza: senza questo wrapper, un'eccezione imprevista in una qualunque delle chiamate
 // sotto (Supabase, refreshRecommendationsForUser e tutto ciò che chiama — Overpass, DTM, POI...)
@@ -47,11 +60,19 @@ async function handleGet(req: NextRequest): Promise<NextResponse> {
 
   const peek = req.nextUrl.searchParams.get('peek') === '1'
 
-  const { data: existing } = await supabase
-    .from('route_recommendations')
-    .select('status, cards, feedback, generated_at')
-    .eq('user_id', user.id)
-    .maybeSingle()
+  // null qui significa "lettura fallita/scaduta" (distinto da un risultato riuscito con nessuna
+  // riga, che ha comunque forma {data:null, error:null}) — non si prosegue mai al bootstrap in
+  // questo caso: un Supabase lento non deve poter innescare una generazione forse-duplicata solo
+  // perché non siamo riusciti a verificare se una riga esiste già.
+  const existingResult = await withTimeout(
+    supabase.from('route_recommendations').select('status, cards, feedback, generated_at').eq('user_id', user.id).maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+  ).catch(() => null)
+
+  if (existingResult === null) {
+    return NextResponse.json({ status: 'pending', cards: [], feedback: {}, generatedAt: null })
+  }
+  const { data: existing } = existingResult
 
   if (existing) {
     return NextResponse.json({
@@ -80,11 +101,18 @@ async function handleGet(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ status: 'pending', cards: [], feedback: {}, generatedAt: null })
   }
 
-  const { data: fresh } = await supabase
-    .from('route_recommendations')
-    .select('status, cards, feedback, generated_at')
-    .eq('user_id', user.id)
-    .maybeSingle()
+  // La generazione è comunque finita (outcome.kind === 'done') — se questa lettura di conferma
+  // fallisce/scade, 'pending' è la risposta onesta (la riga c'è quasi certamente, riprovare basta),
+  // non 'error' che implicherebbe un fallimento della generazione stessa.
+  const freshResult = await withTimeout(
+    supabase.from('route_recommendations').select('status, cards, feedback, generated_at').eq('user_id', user.id).maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+  ).catch(() => null)
+
+  if (freshResult === null) {
+    return NextResponse.json({ status: 'pending', cards: [], feedback: {}, generatedAt: null })
+  }
+  const { data: fresh } = freshResult
 
   if (!fresh) {
     return NextResponse.json({ status: 'error', cards: [], feedback: {}, generatedAt: null })
