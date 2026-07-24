@@ -17,7 +17,19 @@ const SWEEP_BATCH_CAP = 25
 const SOFT_DEADLINE_MS = 45_000
 const STALE_AFTER_DAYS = 7
 
+// Rete di sicurezza: stesso principio già applicato in ogni altro endpoint di questa famiglia —
+// un'eccezione imprevista qui farebbe fallire l'intero giro del cron senza log utile, invece di una
+// risposta JSON che almeno registra quanti utenti sono stati processati prima del problema.
 export async function GET(req: NextRequest) {
+  try {
+    return await handleGet(req)
+  } catch (e) {
+    console.error('[cron/refresh-recommendations] Errore imprevisto:', e)
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
+  }
+}
+
+async function handleGet(req: NextRequest): Promise<NextResponse> {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
