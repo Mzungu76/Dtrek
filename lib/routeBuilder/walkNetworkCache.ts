@@ -37,7 +37,15 @@ function deserialize(stored: StoredNetwork): WalkNetwork {
   return { nodes: new Map(stored) }
 }
 
-export async function fetchWalkNetworkCached(bbox: [number, number, number, number]): Promise<WalkNetwork> {
+// `awaitWrite`: di norma la scrittura in cache dopo un fetch a freddo è non bloccante (un
+// fallimento non deve mai far fallire la generazione, solo lasciare quella zona senza cache per
+// questo giro). La pipeline "Su misura" a step (lib/routeBuilder/buildSteps.ts's prepareNetworkStep,
+// chiamata da app/api/route-build/step/network/route.ts) è l'eccezione: lo step successivo
+// (step/candidates) rilegge la rete dalla stessa cache in una richiesta HTTP separata, quindi qui
+// la scrittura deve essere GARANTITA completa prima di rispondere al client — altrimenti lo step 2
+// rischierebbe un cache-miss e un fetch Overpass a freddo ripetuto, vanificando il vantaggio della
+// cache proprio nel caso in cui serve di più.
+export async function fetchWalkNetworkCached(bbox: [number, number, number, number], awaitWrite = false): Promise<WalkNetwork> {
   const bboxKey = normalizeBboxKey(bbox.join(','))
 
   if (shouldRunCleanup('walk_network_cache')) {
@@ -63,12 +71,16 @@ export async function fetchWalkNetworkCached(bbox: [number, number, number, numb
   // eccezione, esattamente come prima di questa cache: il chiamante (executeBuild) lo gestisce già.
   const network = await fetchWalkNetwork(bbox)
 
-  // Scrittura non bloccante — un fallimento qui non deve mai far fallire la generazione, solo
-  // lasciare quella zona senza cache per questo giro (si ritenta al prossimo).
   const expiresAt = new Date(Date.now() + WALK_NETWORK_CACHE_TTL_MS).toISOString()
-  supabase.from('walk_network_cache')
+  const upsert = supabase.from('walk_network_cache')
     .upsert({ bbox_key: bboxKey, network: serialize(network), expires_at: expiresAt }, { onConflict: 'bbox_key' })
-    .then(({ error }) => { if (error) console.error('[walk_network_cache] upsert error:', error.message) })
+
+  if (awaitWrite) {
+    const { error } = await upsert
+    if (error) console.error('[walk_network_cache] upsert error:', error.message)
+  } else {
+    upsert.then(({ error }) => { if (error) console.error('[walk_network_cache] upsert error:', error.message) })
+  }
 
   return network
 }

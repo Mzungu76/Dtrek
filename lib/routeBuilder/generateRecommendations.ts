@@ -33,7 +33,7 @@
 // handleOpen) — stesso principio già applicato a "Su misura" (lib/routeBuilder/scoreCandidates.ts).
 import { supabase } from '@/lib/supabase'
 import { fetchActivitySummary } from '@/lib/hikerContext'
-import { MIN_TARGET_DISTANCE_KM, MAX_TARGET_DISTANCE_KM } from '@/app/api/route-build/route'
+import { MIN_TARGET_DISTANCE_KM, MAX_TARGET_DISTANCE_KM } from '@/lib/routeBuilder/buildConstants'
 import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 import { findCachedTrailsNearPoint, upsertTrailCache, type TrailCacheRow } from '@/lib/trailsCache'
 import { queryHikingRelationsInBbox, padBbox, type HikingRouteCandidate } from '@/lib/overpassTrails'

@@ -24,6 +24,11 @@ import type { SearchResultCandidate } from '@/app/api/route-search/route'
 import type { FoundRouteResult } from '@/app/api/route-build/search/route'
 import type { FoundRouteItem, ResolvedTrack } from '@/lib/routeBuilder/foundRoute'
 import { classifyTrackShape } from '@/lib/geoUtils'
+import {
+  MIN_TARGET_DISTANCE_KM, MAX_TARGET_DISTANCE_KM, MIN_BUILT_RESULTS, RETRY_DISTANCE_FACTORS,
+  MAX_BUILT_RESULTS, candidateSignature,
+} from '@/lib/routeBuilder/buildConstants'
+import type { RouteCandidate } from '@/lib/routeBuilder/loopBuilder'
 
 type Step = 'start' | 'results' | 'confirm'
 
@@ -153,6 +158,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [useAi, setUseAi] = useState(true)
 
   const [generating, setGenerating] = useState(false)
+  // Avanzamento della pipeline "Su misura" a step (vedi runStepBuild) — sostituisce un unico
+  // spinner statico con un feedback reale di cosa sta succedendo, dato che ora sono 2-4 chiamate
+  // HTTP in sequenza invece di una sola. Con più tipi di percorso selezionati le chiamate girano in
+  // parallelo: l'ultimo stage scritto "vince", non è un contatore preciso per tipo, solo un'indicazione.
+  const [buildStage, setBuildStage] = useState('')
   // Lista unica: candidati "costruiti" (da Genera percorsi) e "trovati" (dalla ricerca unificata,
   // popolati anche mentre si è ancora sullo step "Partenza") convivono qui, ciascuno taggato per
   // tipo e sempre con una traccia reale.
@@ -420,31 +430,130 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     startMode: 'esatto' | 'dintorni'
   }
 
+  async function postJSON(url: string, body: unknown): Promise<{ ok: boolean; data: any }> {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await res.json()
+      return { ok: res.ok, data }
+    } catch {
+      return { ok: false, data: { message: 'Errore di rete, riprova.' } }
+    }
+  }
+
+  /**
+   * Genera i percorsi "Su misura" per UN tipo di percorso, in tre chiamate HTTP brevi invece di
+   * un'unica richiesta lunga (rete + pathfinding + arricchimento, fino a 45-83s osservati in
+   * produzione — vedi /profilo/log-ricerche): ogni step ha il proprio tetto di 60s "fresco", così
+   * nessuna singola invocazione della funzione serverless si avvicina più al limite duro della
+   * piattaforma (piano Hobby, non alzabile lato codice). Stessa identica logica/soglie della
+   * pipeline monolitica invariata (app/api/route-build/route.ts), solo spezzata in
+   * step/network → step/candidates → step/enrich, con lo stesso ritentativo a lunghezze
+   * alternative (RETRY_DISTANCE_FACTORS) orchestrato qui invece che dentro un'unica richiesta.
+   */
+  async function runStepBuild(
+    routeType: RouteType, common: BuildParamsCommon, onStage: (stage: string) => void,
+  ): Promise<{ candidates: BuiltCandidate[]; message: string | null }> {
+    const startedAt = Date.now()
+    const noResultsMessage = 'Nessun percorso trovato con questi vincoli nella zona scelta — prova una lunghezza diversa o un punto di partenza differente.'
+
+    function logResult(tierReached: string, builtCount: number, retried: boolean, message: string | null) {
+      postJSON('/api/route-build/step/log', {
+        routeType, targetDistanceKm: common.targetDistanceKm, tierReached, builtCount, retried, message,
+        durationMs: Date.now() - startedAt,
+      })
+    }
+
+    onStage('Cerco i sentieri della zona…')
+    const net = await postJSON('/api/route-build/step/network', {
+      lat: common.lat, lon: common.lon, routeType,
+      targetDistanceKm: common.targetDistanceKm, targetElevationM: common.targetElevationM,
+      destinationLat: null, destinationLon: null,
+      environmentPrefs: common.environmentPrefs, desiredPoiTypes: common.desiredPoiTypes,
+      radiusKm: searchRadiusKm, startMode: common.startMode,
+    })
+    if (!net.ok) {
+      const message = net.data.message || net.data.error || 'Generazione non riuscita, riprova.'
+      logResult(net.data.error ?? 'error', 0, false, message)
+      return { candidates: [], message }
+    }
+
+    const { bbox, startNodeId, targetDistanceM, hasDestination, rawCandidates: destRawCandidates, concerns, environmentPrefs: resolvedEnvPrefs } = net.data
+
+    // `silent`: true per i ritentativi con lunghezza alternativa (un fallimento lì è un ripiego che
+    // non deve interrompere gli altri, esattamente come nella pipeline monolitica originale, che li
+    // catturava e tornava [] senza propagare l'errore) — false per il tentativo primario, dove un
+    // fallimento di rete deve restare visibile invece di confondersi con un generico "nessun
+    // percorso trovato".
+    async function candidatesAndEnrich(distanceM: number, silent: boolean): Promise<{ candidates: BuiltCandidate[]; errorMessage: string | null }> {
+      let raw: RouteCandidate[]
+      if (hasDestination) {
+        raw = destRawCandidates ?? []
+      } else {
+        const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeId, routeType, targetDistanceM: distanceM })
+        if (!cRes.ok) return { candidates: [], errorMessage: silent ? null : (cRes.data.message || cRes.data.error) }
+        raw = cRes.data.rawCandidates ?? []
+      }
+      if (raw.length === 0) return { candidates: [], errorMessage: null }
+      const eRes = await postJSON('/api/route-build/step/enrich', {
+        rawCandidates: raw, targetDistanceM, targetElevationM: common.targetElevationM,
+        environmentPrefs: resolvedEnvPrefs, concerns, desiredPoiTypes: common.desiredPoiTypes, bbox,
+      })
+      if (!eRes.ok) return { candidates: [], errorMessage: silent ? null : (eRes.data.message || eRes.data.error) }
+      return { candidates: (eRes.data.candidates ?? []) as BuiltCandidate[], errorMessage: null }
+    }
+
+    onStage('Genero i percorsi…')
+    const primary = await candidatesAndEnrich(targetDistanceM, false)
+    if (primary.errorMessage) {
+      logResult('error', 0, false, primary.errorMessage)
+      return { candidates: [], message: primary.errorMessage }
+    }
+    let candidates = primary.candidates
+
+    let retried = false
+    if (!hasDestination && candidates.length < MIN_BUILT_RESULTS) {
+      retried = true
+      onStage('Provo lunghezze alternative…')
+      const seen = new Set(candidates.map(candidateSignature))
+      const altBatches = await Promise.all(RETRY_DISTANCE_FACTORS.map(async factor => {
+        const altDistanceM = Math.min(Math.max(targetDistanceM * factor, MIN_TARGET_DISTANCE_KM * 1000), MAX_TARGET_DISTANCE_KM * 1000)
+        return (await candidatesAndEnrich(altDistanceM, true)).candidates
+      }))
+      for (const altCandidates of altBatches) {
+        for (const c of altCandidates) {
+          const sig = candidateSignature(c)
+          if (seen.has(sig)) continue
+          seen.add(sig)
+          candidates.push(c)
+        }
+      }
+      candidates = candidates
+        .sort((a, b) => Math.abs(a.distanceMeters - targetDistanceM) - Math.abs(b.distanceMeters - targetDistanceM))
+        .slice(0, MAX_BUILT_RESULTS)
+    }
+
+    if (candidates.length === 0) {
+      logResult(retried ? 'no_dtm_coverage' : 'no_raw_candidates', 0, retried, noResultsMessage)
+      return { candidates: [], message: noResultsMessage }
+    }
+
+    logResult(retried ? 'retry_built' : 'built', candidates.length, retried, null)
+    return { candidates, message: null }
+  }
+
   /** Nucleo condiviso della costruzione algoritmica — usato dalla modalità "Su misura" (generate/
-   *  runSuMisura). Un tipo di percorso selezionato è una richiesta indipendente all'endpoint
-   *  (l'algoritmo di generazione è strutturalmente diverso per anello/andata-ritorno/solo andata)
-   *  — con più tipi selezionati, gira una richiesta per tipo in parallelo e i risultati si
-   *  fondono in un'unica lista, ciascuno già etichettato col proprio tipo (vedi ScoredCandidate.type).
+   *  runSuMisura). Un tipo di percorso selezionato è una richiesta indipendente (l'algoritmo di
+   *  generazione è strutturalmente diverso per anello/andata-ritorno/solo andata) — con più tipi
+   *  selezionati, gira una pipeline a step per tipo in parallelo e i risultati si fondono in
+   *  un'unica lista, ciascuno già etichettato col proprio tipo (vedi ScoredCandidate.type).
    *  Non tocca `errorMsg` direttamente — ritorna il numero totale di percorsi ottenuti e un eventuale
    *  messaggio, lasciando al chiamante decidere se mostrarlo. */
   async function runBuildForTypes(types: RouteType[], common: BuildParamsCommon): Promise<{ count: number; message: string | null }> {
     setGenerating(true)
     setResultsMessage('')
+    setBuildStage('')
     try {
-      const outcomes = await Promise.all(types.map(async routeType => {
-        try {
-          const res = await fetch('/api/route-build', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...common, routeType, radiusKm: searchRadiusKm, destinationLat: null, destinationLon: null }),
-          })
-          const data = await res.json()
-          if (!res.ok) return { candidates: [] as BuiltCandidate[], message: data.message || data.error || 'Generazione non riuscita, riprova.' }
-          return { candidates: (data.candidates ?? []) as BuiltCandidate[], message: (data.message ?? null) as string | null }
-        } catch {
-          return { candidates: [] as BuiltCandidate[], message: 'Errore di rete, riprova.' }
-        }
-      }))
+      const outcomes = await Promise.all(types.map(routeType => runStepBuild(routeType, common, setBuildStage)))
       const allBuilt = outcomes.flatMap(o => o.candidates)
       setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...allBuilt.map(d => ({ kind: 'built' as const, data: d }))])
       const firstEmptyMessage = outcomes.find(o => o.candidates.length === 0)?.message ?? null
@@ -452,6 +561,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       return { count: allBuilt.length, message: allBuilt.length === 0 ? firstEmptyMessage : null }
     } finally {
       setGenerating(false)
+      setBuildStage('')
     }
   }
 
@@ -795,7 +905,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               : searchMode === 'esistenti' ? <SearchIcon className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
             {searching
               ? (searchMode === 'esistenti' ? 'Cerco…' : 'Risolvo il luogo…')
-              : generating ? 'Genero il percorso…'
+              : generating ? (buildStage || 'Genero il percorso…')
               : searchMode === 'esistenti' ? 'Cerca percorsi esistenti' : 'Genera percorso su misura'}
           </button>
         </div>
