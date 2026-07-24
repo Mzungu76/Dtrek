@@ -4,14 +4,13 @@
 // rigenerazione dopo un'escursione completata), letto qui in sola lettura tranne il segnale
 // esplicito ♥/✕ per card. Nessuna azione di ricerca propria: per cercare/costruire un percorso su
 // misura si passa dal wizard esistente (components/upload/RouteBuilder.tsx).
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, MapPin } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { FoundRouteCard, BuiltRouteCard, type FeedbackControls } from '@/components/RouteResultCard'
-import { useCandidateScores } from '@/lib/routeBuilder/useCandidateScores'
-import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois } from '@/lib/routeBuilder/buildHikeFromCandidate'
+import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
 import { savePlanned } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
@@ -55,14 +54,6 @@ export default function PercorsiPerTePage() {
     return () => { cancelled = true }
   }, [])
 
-  // Memoizzato sull'identità di `cards` (vedi il contratto di useCandidateScores) — un .map()
-  // inline non memoizzato rifarebbe ripartire il calcolo dei punteggi ad ogni render.
-  const hikesForScore = useMemo(
-    () => cards.map(c => (c.kind === 'built' ? (c.data as ScoredCandidate) : (c.data as FoundRouteItem).track)),
-    [cards],
-  )
-  const scores = useCandidateScores(hikesForScore)
-
   async function setCardFeedback(cardId: string, value: 'like' | 'dislike') {
     // Ri-toccare lo stesso valore lo azzera (mi piace → mi piace = "annulla"), invece di un
     // interruttore che resta sempre acceso una volta scelto.
@@ -86,8 +77,11 @@ export default function PercorsiPerTePage() {
     setErrorMsg('')
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
+      // Stessa logica di RouteBuilder.tsx's handleSave: la card "Su misura" arriva con quota
+      // stimata (generateRecommendations.ts riusa la stessa pipeline di ricerca, mai il DTM
+      // reale) — arricchita qui, una sola volta, per la sola card scelta.
       const hike = card.kind === 'built'
-        ? buildHikeFromBuilt(card.data as ScoredCandidate, `${routeTypeLabel((card.data as ScoredCandidate).type)} per te`, '', pendingExpiresAt)
+        ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(card.data as ScoredCandidate), `${routeTypeLabel((card.data as ScoredCandidate).type)} per te`, '', pendingExpiresAt)
         : buildHikeFromFound(card.data as FoundRouteItem, (card.data as FoundRouteItem).name, '', pendingExpiresAt)
       await enrichWithPois(hike)
       await savePlanned(hike)
@@ -140,7 +134,7 @@ export default function PercorsiPerTePage() {
         {status === 'ok' && cards.length > 0 && (
           <div className="space-y-3">
             {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
-            {cards.map((card, i) => {
+            {cards.map((card) => {
               const controls: FeedbackControls = {
                 value: feedback[card.id] ?? null,
                 onLike: () => setCardFeedback(card.id, 'like'),
@@ -149,12 +143,12 @@ export default function PercorsiPerTePage() {
               return card.kind === 'found'
                 ? (
                   <FoundRouteCard
-                    key={card.id} data={card.data as FoundRouteItem} scorePreview={scores[i]}
+                    key={card.id} data={card.data as FoundRouteItem}
                     onChoose={() => handleOpen(card)} feedback={controls}
                   />
                 ) : (
                   <BuiltRouteCard
-                    key={card.id} data={card.data as ScoredCandidate} scorePreview={scores[i]}
+                    key={card.id} data={card.data as ScoredCandidate}
                     onChoose={() => handleOpen(card)} feedback={controls}
                   />
                 )

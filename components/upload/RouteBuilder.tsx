@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
@@ -8,14 +8,12 @@ import {
 } from 'lucide-react'
 import LocationPickerMap from '@/components/LocationPickerMap'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
-import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
-import { FoundRouteCard, BuiltRouteCard, verdictStyle, PoiPreviewRow } from '@/components/RouteResultCard'
+import { FoundRouteCard, BuiltRouteCard, verdictStyle, PoiPreviewRow, ScorePendingBadge } from '@/components/RouteResultCard'
 import GiuliaSearchPanel from './GiuliaSearchPanel'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
-import { useCandidateScores } from '@/lib/routeBuilder/useCandidateScores'
-import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois } from '@/lib/routeBuilder/buildHikeFromCandidate'
+import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
 import { HIKER_ENVIRONMENT_PREFS, type HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { defaultPendingExpiresAt } from './sharedHelpers'
@@ -162,7 +160,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [resultsMessage, setResultsMessage] = useState('')
 
   const [selected, setSelected] = useState<ResultItem | null>(null)
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
   const [saving, setSaving] = useState(false)
@@ -186,13 +183,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       })
       .catch(() => {})
   }, [defaultsLoaded])
-
-  // Trail Score + Sicurezza per ogni candidato, costruito o trovato, non appena arrivano i
-  // risultati — riusato anche nello step "Conferma" via `selectedIndex`, nessun ricalcolo separato
-  // lì. `hikesForScore` va memoizzato sull'identità di `results` (vedi useCandidateScores) — un
-  // `.map()` non memoizzato rifarebbe ripartire il calcolo ad ogni render.
-  const hikesForScore = useMemo(() => results.map(r => r.kind === 'built' ? r.data : r.data.track), [results])
-  const scores = useCandidateScores(hikesForScore)
 
   // All'ingresso nello step "Risultati", apre il tab che ha davvero qualcosa da mostrare invece di
   // aprire sempre "Esistenti" anche quando è vuoto — solo al cambio di step, non ad ogni
@@ -538,7 +528,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
   function chooseCandidate(item: ResultItem, i: number) {
     setSelected(item)
-    setSelectedIndex(i)
     setErrorMsg('')
     setDate('')
     setTitle(item.kind === 'built' ? `${routeTypeLabel(item.data.type)} costruito ${i + 1}` : item.data.name)
@@ -550,8 +539,12 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setSaving(true)
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
+      // Il candidato "Su misura" arriva dalla ricerca con quota stimata (nessuna chiamata DTM in
+      // quella fase) — qui, una sola volta per il solo percorso scelto, si arricchisce con la
+      // quota reale prima di costruire l'hike. Tollerante: se fallisce, si salva comunque con la
+      // stima (vedi enrichBuiltCandidateForImport).
       const hike: PlannedHike = selected.kind === 'built'
-        ? buildHikeFromBuilt(selected.data, title, date, pendingExpiresAt)
+        ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(selected.data), title, date, pendingExpiresAt)
         : buildHikeFromFound(selected.data, title, date, pendingExpiresAt)
 
       await enrichWithPois(hike)
@@ -848,8 +841,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         )}
 
         {activeEntries.map(({ item, i }) => item.kind === 'found'
-          ? <FoundRouteCard key={`found-${i}`} data={item.data} scorePreview={scores[i]} onChoose={() => chooseCandidate({ kind: 'found', data: item.data }, i)} />
-          : <BuiltRouteCard key={`built-${i}`} data={item.data} scorePreview={scores[i]} onChoose={() => chooseCandidate({ kind: 'built', data: item.data }, i)} />)}
+          ? <FoundRouteCard key={`found-${i}`} data={item.data} onChoose={() => chooseCandidate({ kind: 'found', data: item.data }, i)} />
+          : <BuiltRouteCard key={`built-${i}`} data={item.data} onChoose={() => chooseCandidate({ kind: 'built', data: item.data }, i)} />)}
       </div>
     )
   }
@@ -860,7 +853,6 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const foundData = selected.kind === 'found' ? selected.data : null
     const builtData = selected.kind === 'built' ? selected.data : null
     const vs = foundData?.comfortVerdict ? verdictStyle(foundData.comfortVerdict) : null
-    const selectedScore = selectedIndex != null ? scores[selectedIndex] : null
 
     return (
       <div className="space-y-4">
@@ -887,8 +879,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
                   {[
                     { label: 'Distanza', val: `${(builtData.distanceMeters / 1000).toFixed(1)} km` },
-                    { label: 'Dislivello +', val: `${Math.round(builtData.elevationGain)} m` },
-                    { label: 'Quota max', val: `${Math.round(builtData.altitudeMax)} m` },
+                    { label: `Dislivello +${builtData.hasElevation ? '' : ' (stima)'}`, val: `${builtData.hasElevation ? '' : '~'}${Math.round(builtData.elevationGain)} m` },
+                    { label: `Quota max${builtData.hasElevation ? '' : ' (stima)'}`, val: `${builtData.hasElevation ? '' : '~'}${Math.round(builtData.altitudeMax)} m` },
                     { label: 'Tipo', val: routeTypeLabel(builtData.type) },
                   ].map(s => (
                     <div key={s.label} className="bg-stone-50 rounded-xl border border-stone-150 p-3">
@@ -897,21 +889,19 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                     </div>
                   ))}
                 </div>
-                <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
-                  <TrailScoreGaugeBadge
-                    total={selectedScore?.total ?? null}
-                    safety={selectedScore?.safety ?? null}
-                    loading={selectedScore?.loading ?? true}
-                    vetoed={selectedScore?.vetoed}
-                    size={52}
-                    showLabel={false}
-                  />
-                </div>
+                <ScorePendingBadge />
               </div>
 
               <PoiPreviewRow pois={builtData.pois ?? []} />
 
               {builtData.matchNote && <p className="text-sm text-stone-600 leading-relaxed">{builtData.matchNote}</p>}
+
+              {!builtData.hasElevation && (
+                <div className="flex items-start gap-2 px-3.5 py-3 rounded-xl bg-sky-50 border border-sky-100 text-xs text-sky-800">
+                  <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <p>Dislivello e punteggio sono stimati — verranno calcolati con precisione al salvataggio.</p>
+                </div>
+              )}
             </>
           )}
 
@@ -932,16 +922,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                     </div>
                   ))}
                 </div>
-                <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
-                  <TrailScoreGaugeBadge
-                    total={selectedScore?.total ?? null}
-                    safety={selectedScore?.safety ?? null}
-                    loading={selectedScore?.loading ?? true}
-                    vetoed={selectedScore?.vetoed}
-                    size={52}
-                    showLabel={false}
-                  />
-                </div>
+                <ScorePendingBadge />
               </div>
 
               {vs && (

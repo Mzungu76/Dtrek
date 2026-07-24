@@ -6,16 +6,14 @@
 // Percorsi per te, che ha "Apri" al posto di "Scegli questo percorso" — passato comunque come
 // `onChoose`, l'etichetta resta la stessa: la differenza reale è title/date, non l'azione in sé);
 // `feedback` presente ⇒ mostra i bottoni ♥/✕ (solo in Percorsi per te, mai nel wizard).
-import { Sparkles, TrendingUp, Route, ExternalLink, AlertTriangle, Check, X, Heart } from 'lucide-react'
+import { Sparkles, TrendingUp, Route, ExternalLink, AlertTriangle, Check, X, Heart, Clock } from 'lucide-react'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
-import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import { isSpecificName } from '@/lib/wikipedia'
 import { classifyTrackShape } from '@/lib/geoUtils'
 import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
 import type { ScoredCandidate as BuiltCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
-import type { CandidateScorePreview } from '@/lib/routeBuilder/useCandidateScores'
 import type { PoiItem, PoiType } from '@/lib/overpass'
 
 export interface FeedbackControls {
@@ -79,9 +77,26 @@ export function PoiPreviewRow({ pois }: { pois: PoiItem[] }) {
   )
 }
 
-export function FoundRouteCard({ data, scorePreview, onChoose, feedback }: {
+// Al posto del pallino Trail Score/Sicurezza (che richiedeva una seconda chiamata DTM per-candidato,
+// vedi lib/routeBuilder/useCandidateScores.ts, rimosso): calcolare quel punteggio per OGNI
+// candidato mostrato — anche quelli che l'utente non sceglierà mai — raddoppiava di fatto le
+// chiamate DTM già fatte per l'arricchimento dei candidati "Su misura". Il punteggio si vede solo
+// dopo l'importazione (pagina guida), quando la quota è reale e il calcolo vale la pena di essere
+// fatto una volta sola, per il solo percorso scelto.
+export function ScorePendingBadge({ size = 52 }: { size?: number }) {
+  return (
+    <div
+      className="shrink-0 rounded-xl bg-stone-800 flex flex-col items-center justify-center text-center gap-0.5 px-1"
+      style={{ width: size, height: size }}
+    >
+      <Clock className="w-3.5 h-3.5 text-white/60" />
+      <span className="text-white/60 text-[8px] leading-tight font-medium">dopo l&apos;import</span>
+    </div>
+  )
+}
+
+export function FoundRouteCard({ data, onChoose, feedback }: {
   data: FoundRouteItem
-  scorePreview: CandidateScorePreview | null
   onChoose?: () => void
   feedback?: FeedbackControls
 }) {
@@ -125,16 +140,7 @@ export function FoundRouteCard({ data, scorePreview, onChoose, feedback }: {
               </div>
             )}
           </div>
-          <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
-            <TrailScoreGaugeBadge
-              total={scorePreview?.total ?? null}
-              safety={scorePreview?.safety ?? null}
-              loading={scorePreview?.loading ?? true}
-              vetoed={scorePreview?.vetoed}
-              size={52}
-              showLabel={false}
-            />
-          </div>
+          <ScorePendingBadge />
         </div>
 
         {vs && (
@@ -170,9 +176,8 @@ export function FoundRouteCard({ data, scorePreview, onChoose, feedback }: {
   )
 }
 
-export function BuiltRouteCard({ data, scorePreview, onChoose, feedback }: {
+export function BuiltRouteCard({ data, onChoose, feedback }: {
   data: BuiltCandidate
-  scorePreview: CandidateScorePreview | null
   onChoose?: () => void
   feedback?: FeedbackControls
 }) {
@@ -191,29 +196,28 @@ export function BuiltRouteCard({ data, scorePreview, onChoose, feedback }: {
               <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
             </div>
             <div>
-              <span className="font-semibold text-stone-800 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{Math.round(data.elevationGain)} m</span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
+              <span className="font-semibold text-stone-800 flex items-center gap-0.5">
+                <TrendingUp className="w-3 h-3" />{data.hasElevation ? '' : '~'}{Math.round(data.elevationGain)} m
+              </span>
+              <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello{data.hasElevation ? '' : ' (stima)'}</p>
             </div>
             <div>
               <span className="font-semibold text-stone-800">{routeTypeLabel(data.type)}</span>
               <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
             </div>
           </div>
-          <div className="shrink-0 bg-stone-800 rounded-xl p-1.5">
-            <TrailScoreGaugeBadge
-              total={scorePreview?.total ?? null}
-              safety={scorePreview?.safety ?? null}
-              loading={scorePreview?.loading ?? true}
-              vetoed={scorePreview?.vetoed}
-              size={52}
-              showLabel={false}
-            />
-          </div>
+          <ScorePendingBadge />
         </div>
 
         <PoiPreviewRow pois={data.pois ?? []} />
 
         {data.matchNote && <p className="text-sm text-stone-600 leading-relaxed">{data.matchNote}</p>}
+
+        {!data.hasElevation && (
+          <p className="text-xs text-sky-800 bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-1.5">
+            Dislivello stimato — verrà calcolato con precisione e il punteggio affinato quando scegli questo percorso.
+          </p>
+        )}
 
         {data.hasSteepSections && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">Presenta tratti ripidi</p>

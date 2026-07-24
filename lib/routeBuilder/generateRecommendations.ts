@@ -12,9 +12,11 @@
 // questo utente o altri vicini), non solo l'apertura manuale di un sentiero altrove nell'app.
 //
 // IMPORTANTE: nessun punteggio (Trail Score/Sicurezza) viene calcolato qui — computeCtsCore/
-// computeSafetyCore fanno fetch a URL relativi, funzionano solo lato browser (vedi
-// lib/routeBuilder/useCandidateScores.ts). Si genera e salva solo il percorso; il doppio anello si
-// calcola pigro, lato client, ad ogni apertura di /percorsi-per-te.
+// computeSafetyCore fanno fetch a URL relativi, funzionano solo lato browser. Si genera e salva
+// solo il percorso (con quota STIMATA per le card "Su misura", vedi scoreCandidates.ts); il
+// doppio anello si calcola solo dopo che l'utente sceglie/importa una card (vedi
+// enrichBuiltCandidateForImport in lib/routeBuilder/buildHikeFromCandidate.ts) — mai per l'intera
+// lista di 5 card mostrate, che oggi restano senza punteggio finché non importate.
 import { supabase } from '@/lib/supabase'
 import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
 import { sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
