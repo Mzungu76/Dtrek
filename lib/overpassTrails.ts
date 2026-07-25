@@ -100,11 +100,19 @@ function mapAndSortCandidates(elements: (OsmRelation | OsmWay)[]): HikingRouteCa
   return candidates
 }
 
+// route=hiking è il tag "giusto" per un percorso escursionistico, ma molte relazioni reali —
+// specialmente quelle mappate da comuni/pro-loco locali invece che da una sezione CAI — usano
+// route=foot (percorso pedonale generico) anche quando si tratta a tutti gli effetti di un
+// sentiero escursionistico: la distinzione OSM tra le due è più una convenzione di chi mappa che
+// una differenza reale sul terreno. Escludere route=foot faceva sembrare "senza percorsi
+// documentati" zone che in realtà ne hanno, solo taggati diversamente.
+const HIKING_ROUTE_FILTER = '["route"~"^(hiking|foot)$"]'
+
 export async function queryHikingRelationsInBbox(
   minLat: number, minLon: number, maxLat: number, maxLon: number, limit: number,
 ): Promise<HikingRouteCandidate[]> {
   const query = `[out:json][timeout:25][maxsize:8388608];
-relation["type"="route"]["route"="hiking"](${minLat},${minLon},${maxLat},${maxLon});
+relation["type"="route"]${HIKING_ROUTE_FILTER}(${minLat},${minLon},${maxLat},${maxLon});
 out center tags ${limit};`
 
   const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
@@ -222,7 +230,7 @@ export async function searchHikingRoutesByName(
   // percorsi), ma i caratteri regex-speciali vengono comunque neutralizzati per sicurezza.
   const escaped = nameQuery.replace(/[[\]{}()*+?.,\\^$|#\s]/g, s => s === ' ' ? '.*' : `\\${s}`)
   const query = `[out:json][timeout:25][maxsize:8388608];
-relation["type"="route"]["route"="hiking"]["name"~"${escaped}",i](${minLat},${minLon},${maxLat},${maxLon});
+relation["type"="route"]${HIKING_ROUTE_FILTER}["name"~"${escaped}",i](${minLat},${minLon},${maxLat},${maxLon});
 out center tags ${limit};`
 
   const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
