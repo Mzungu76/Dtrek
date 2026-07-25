@@ -10,6 +10,7 @@ import LocationPickerMap from '@/components/LocationPickerMap'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import { FoundRouteCard, BuiltRouteCard, verdictStyle, PoiPreviewRow, ScorePendingBadge } from '@/components/RouteResultCard'
 import GiuliaSearchPanel from './GiuliaSearchPanel'
+import SearchWaitingCard from './SearchWaitingCard'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
@@ -79,7 +80,10 @@ const WIZARD_ENVIRONMENT_PREFS = HIKER_ENVIRONMENT_PREFS.filter(p => p.key === '
 // di un percorso già documentato altrove) — fusi nella stessa lista risultati, distinti da un tag,
 // invece di un bivio esclusivo (vedi commento sopra il componente). Entrambi hanno sempre una
 // traccia reale su mappa.
-type ResultItem =
+// Esportato: stessa forma usata per persistere una ricerca completa (vedi
+// lib/routeBuilder/searchHistory.ts e app/profilo/ricerche-salvate/[id]/page.tsx, che la
+// ri-renderizza da Supabase con le stesse FoundRouteCard/BuiltRouteCard, senza ricalcolare nulla).
+export type ResultItem =
   | { kind: 'built'; data: BuiltCandidate }
   | { kind: 'found'; data: FoundRouteItem }
 
@@ -196,6 +200,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [date, setDate] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Import in blocco (vedi handleBulkImport): alternativa alla scelta singola (selected/title/date
+  // sopra), attivabile solo dallo step "Risultati" — le chiavi sono `${kind}-${indice in results}`,
+  // stabili anche tra i due tab Esistenti/Su misura perché l'indice è quello nell'array `results`
+  // intero, non quello filtrato per tab (così una selezione può includere risultati di entrambi).
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
+
   const [errorMsg, setErrorMsg] = useState('')
   // Popolato quando "Esistenti" risolve un luogo/POI specifico (es. una cascata, un sito
   // archeologico — vedi lib/routeBuilder/resolvePlace.ts's resolveViaOverpassByName) ma non trova
@@ -251,24 +264,26 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
   // Stessa anteprima immediata, per il campo destinazione (percorso tra 2 punti) — vuoto ⇒
   // nessuna destinazione impostata (destLat/destLon restano null, il percorso resta senza vincolo
-  // di punto d'arrivo).
+  // di punto d'arrivo). Disponibile in entrambe le modalità (vedi commento su ResultItem/searchMode
+  // più sopra): "Esistenti" filtra i percorsi già documentati che passano vicino a questo punto
+  // (lib/routeBuilder/searchSteps.ts), "Su misura" lo usa come vincolo di generazione.
   useEffect(() => {
-    if (searchMode !== 'su_misura' || !destQuery.trim()) { setDestLat(null); setDestLon(null); return }
+    if (!destQuery.trim()) { setDestLat(null); setDestLon(null); return }
     const handle = setTimeout(async () => {
       const place = await resolvePlaceClientFirst(destQuery.trim(), false)
       if (place) { setDestLat(place.lat); setDestLon(place.lon) }
     }, 600)
     return () => clearTimeout(handle)
-  }, [destQuery, searchMode])
+  }, [destQuery])
 
   // Il pulsante "tocca la mappa per la destinazione" resta attivo solo finché il campo destinazione
   // ha senso — altrimenti un tocco continuerebbe a muovere il punto sbagliato in una schermata dove
   // il controllo non è nemmeno più visibile.
   useEffect(() => {
-    if (searchMode !== 'su_misura' || !(routeTypes.includes('andata_ritorno') || routeTypes.includes('solo_andata'))) {
+    if (!(routeTypes.includes('andata_ritorno') || routeTypes.includes('solo_andata'))) {
       setMapTapTarget('partenza')
     }
-  }, [searchMode, routeTypes])
+  }, [routeTypes])
 
   // Il chip "Destinazione" è sempre visibile in "Su misura" (non più nascosto dietro la scelta del
   // tipo di percorso, il problema segnalato dall'utente: "non vedo dove poter inserire il secondo
@@ -312,7 +327,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setShowGiulia(false)
     const startedAt = Date.now()
     try {
-      const findRes = await postJSON('/api/route-build/step/search-find', { query: query.trim(), useAi, radiusKm: searchRadiusKm })
+      const findRes = await postJSON('/api/route-build/step/search-find', {
+        query: query.trim(), useAi, radiusKm: searchRadiusKm,
+        destLat: destLat ?? undefined, destLon: destLon ?? undefined,
+      })
       if (!findRes.ok) {
         setErrorMsg(findRes.data.message || findRes.data.error || 'Ricerca non riuscita, riprova.')
         return
@@ -325,7 +343,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         escalateToAi: boolean
       }
       const resolveRes = find.candidates.length > 0
-        ? await postJSON('/api/route-build/step/search-resolve', { candidates: find.candidates })
+        ? await postJSON('/api/route-build/step/search-resolve', {
+            candidates: find.candidates, destLat: destLat ?? undefined, destLon: destLon ?? undefined,
+          })
         : { ok: true, data: { foundRoutes: [] } }
       const data = { place: find.place, prefill: find.prefill, foundRoutes: resolveRes.data.foundRoutes ?? [], escalateToAi: find.escalateToAi }
 
@@ -374,6 +394,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           },
         }))
         setResults(prev => [...prev.filter(x => x.kind !== 'found'), ...items])
+        // Salvataggio della ricerca completa (vedi lib/routeBuilder/searchHistory.ts) — best-effort,
+        // non atteso: non deve mai rallentare né poter far fallire la ricerca stessa. `items` porta
+        // già tracce reali/POI/punteggio provvisorio: /profilo/ricerche-salvate la ri-mostra
+        // dall'archivio senza ricalcolare nulla.
+        postJSON('/api/route-build/search-history', {
+          mode: 'esistenti', query: query.trim(), placeName: data.place?.displayName ?? null,
+          params: { radiusKm: searchRadiusKm, routeTypes: effectiveRouteTypes, destQuery, destLat, destLon, useAi },
+          results: items,
+        })
       }
 
       setPoiBridge(null)
@@ -645,9 +674,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     try {
       const outcomes = await Promise.all(types.map(routeType => runStepBuild(routeType, common, setBuildStage)))
       const allBuilt = outcomes.flatMap(o => o.candidates)
-      setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...allBuilt.map(d => ({ kind: 'built' as const, data: d }))])
+      const builtItems: ResultItem[] = allBuilt.map(d => ({ kind: 'built' as const, data: d }))
+      setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...builtItems])
       const firstEmptyMessage = outcomes.find(o => o.candidates.length === 0)?.message ?? null
       setResultsMessage(allBuilt.length === 0 ? (firstEmptyMessage ?? '') : '')
+      if (builtItems.length > 0) {
+        // Stesso salvataggio best-effort del ramo "Esistenti" (vedi runSearch) — qui copre tutti i
+        // punti d'ingresso di "Su misura" (generate/runSuMisura/useSuMisuraFromBridge), che passano
+        // tutti da qui.
+        postJSON('/api/route-build/search-history', {
+          mode: 'su_misura', query: query.trim() || null, placeName: query.trim() || null,
+          params: { ...common, routeTypes: types },
+          results: builtItems,
+        })
+      }
       return { count: allBuilt.length, message: allBuilt.length === 0 ? firstEmptyMessage : null }
     } finally {
       setGenerating(false)
@@ -689,28 +729,36 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setSearching(true)
     try {
       const place = await resolvePlaceClientFirst(query.trim(), useAi)
-      if (!place) {
-        if (useAi) {
-          // Anche il tentativo AI di resolve-place (un'unica chiamata, senza dialogo) non ha
-          // trovato nulla — per un luogo/POI davvero raro (una piccola cascata, un toponimo
-          // locale) può servire una ricerca web più approfondita e, se serve, una domanda di
-          // chiarimento all'utente: la chat completa di Giulia (Livello 2), qui usata solo per
-          // individuare il punto di partenza (vedi handleFound/giuliaOrigin), non per cercare
-          // percorsi già documentati.
-          setGiuliaOrigin('su_misura')
-          setGiuliaSeed(query.trim())
-          setGiuliaSessionId(id => id + 1)
-          setShowGiulia(true)
-          setOpenSheet(null)
-        } else {
-          setErrorMsg('Luogo non trovato — prova a scrivere diversamente, tocca la mappa, o attiva l\'AI (chip in basso).')
-        }
+      if (place) {
+        setLat(place.lat)
+        setLon(place.lon)
+        setQuery(place.displayName)
+        await generate({ lat: place.lat, lon: place.lon })
         return
       }
-      setLat(place.lat)
-      setLon(place.lon)
-      setQuery(place.displayName)
-      await generate({ lat: place.lat, lon: place.lon })
+      // Il testo non si è risolto, ma se lat/lon sono già validi (es. tap sulla mappa, o testo
+      // rimasto da una ricerca precedente mentre l'utente ha poi scelto un punto sulla mappa) si
+      // procede comunque con quelle coordinate invece di bloccare la generazione: il testo nel
+      // campo può essere "sporco" senza che il punto scelto sulla mappa lo sia.
+      if (lat != null && lon != null) {
+        await generate({ lat, lon })
+        return
+      }
+      if (useAi) {
+        // Anche il tentativo AI di resolve-place (un'unica chiamata, senza dialogo) non ha
+        // trovato nulla — per un luogo/POI davvero raro (una piccola cascata, un toponimo
+        // locale) può servire una ricerca web più approfondita e, se serve, una domanda di
+        // chiarimento all'utente: la chat completa di Giulia (Livello 2), qui usata solo per
+        // individuare il punto di partenza (vedi handleFound/giuliaOrigin), non per cercare
+        // percorsi già documentati.
+        setGiuliaOrigin('su_misura')
+        setGiuliaSeed(query.trim())
+        setGiuliaSessionId(id => id + 1)
+        setShowGiulia(true)
+        setOpenSheet(null)
+      } else {
+        setErrorMsg('Luogo non trovato — prova a scrivere diversamente, tocca la mappa, o attiva l\'AI (chip in basso).')
+      }
     } catch {
       setErrorMsg('Errore di rete, riprova.')
     } finally {
@@ -744,12 +792,40 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     await generate({ lat: bLat, lon: bLon })
   }
 
+  function defaultTitleFor(item: ResultItem, i: number): string {
+    return item.kind === 'built' ? `${routeTypeLabel(item.data.type)} costruito ${i + 1}` : item.data.name
+  }
+
+  function resultKey(item: ResultItem, i: number): string {
+    return `${item.kind}-${i}`
+  }
+
   function chooseCandidate(item: ResultItem, i: number) {
     setSelected(item)
     setErrorMsg('')
     setDate('')
-    setTitle(item.kind === 'built' ? `${routeTypeLabel(item.data.type)} costruito ${i + 1}` : item.data.name)
+    setTitle(defaultTitleFor(item, i))
     setStep('confirm')
+  }
+
+  // Nucleo condiviso tra il salvataggio singolo (handleSave, dopo lo step "Conferma" con nome/data
+  // personalizzabili) e l'import in blocco (handleBulkImport, sempre con i valori di default —
+  // scegliere N percorsi implica rinunciare a personalizzare ciascuno). Ritorna l'hike salvato:
+  // handleSave naviga subito alla sua guida, handleBulkImport si limita a contarli.
+  async function saveResultItem(item: ResultItem, itemTitle: string, itemDate: string, pendingExpiresAt: string): Promise<PlannedHike> {
+    // Il candidato "Su misura" arriva dalla ricerca con quota stimata (nessuna chiamata DTM in
+    // quella fase) — qui, una sola volta per il solo percorso scelto, si arricchisce con la
+    // quota reale prima di costruire l'hike. Tollerante: se fallisce, si salva comunque con la
+    // stima (vedi enrichBuiltCandidateForImport).
+    const hike: PlannedHike = item.kind === 'built'
+      ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(item.data), itemTitle, itemDate, pendingExpiresAt)
+      : buildHikeFromFound(item.data, itemTitle, itemDate, pendingExpiresAt)
+
+    await enrichWithPois(hike)
+    await savePlanned(hike)
+    computeCtsForHike(hike).catch(() => {})
+    computeSafetyForHike(hike).catch(() => {})
+    return hike
   }
 
   async function handleSave() {
@@ -757,23 +833,53 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setSaving(true)
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
-      // Il candidato "Su misura" arriva dalla ricerca con quota stimata (nessuna chiamata DTM in
-      // quella fase) — qui, una sola volta per il solo percorso scelto, si arricchisce con la
-      // quota reale prima di costruire l'hike. Tollerante: se fallisce, si salva comunque con la
-      // stima (vedi enrichBuiltCandidateForImport).
-      const hike: PlannedHike = selected.kind === 'built'
-        ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(selected.data), title, date, pendingExpiresAt)
-        : buildHikeFromFound(selected.data, title, date, pendingExpiresAt)
-
-      await enrichWithPois(hike)
-
-      await savePlanned(hike)
-      computeCtsForHike(hike).catch(() => {})
-      computeSafetyForHike(hike).catch(() => {})
+      const hike = await saveResultItem(selected, title, date, pendingExpiresAt)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
       setSaving(false)
+    }
+  }
+
+  function toggleResultSelect(key: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  // Import in blocco — a differenza di handleSave (uno alla volta, nome/data scelti dall'utente
+  // nello step "Conferma"), qui si salvano più percorsi in sequenza con i valori di default:
+  // sequenziale, non in parallelo, perché ciascun salvataggio arricchisce già con DTM/POI (vedi
+  // saveResultItem) — N richieste pesanti insieme sovraccaricherebbero inutilmente le stesse API
+  // esterne. Al termine porta all'elenco dei percorsi in attesa (non a una singola guida: con più
+  // percorsi importati insieme non ce n'è uno "principale" verso cui navigare).
+  async function handleBulkImport() {
+    const items = results
+      .map((item, i) => ({ item, i }))
+      .filter(({ item, i }) => selectedIds.has(resultKey(item, i)))
+    if (items.length === 0) return
+    setBulkSaving(true)
+    setBulkProgress({ done: 0, total: items.length })
+    setErrorMsg('')
+    try {
+      const pendingExpiresAt = await defaultPendingExpiresAt()
+      let done = 0
+      for (const { item, i } of items) {
+        await saveResultItem(item, defaultTitleFor(item, i), '', pendingExpiresAt)
+        done += 1
+        setBulkProgress({ done, total: items.length })
+      }
+      setSelectedIds(new Set())
+      setSelectMode(false)
+      router.push('/guida/elenco')
+    } catch (e) {
+      setErrorMsg(`Errore nell'importazione: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBulkSaving(false)
+      setBulkProgress(null)
     }
   }
 
@@ -797,7 +903,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       searchRadiusKm !== 20,
       routeTypes.length > 1 || routeTypes[0] !== 'anello',
       searchMode === 'su_misura' && (targetDistanceKm !== 8 || targetElevationM.trim() !== ''),
-      searchMode === 'su_misura' && destLat != null,
+      destLat != null,
       environmentPrefs.length > 0 || desiredPoiTypes.length > 0,
     ].filter(Boolean).length
 
@@ -820,7 +926,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             radiusKm={lat != null && lon != null ? searchRadiusKm : undefined}
             secondaryLat={destLat ?? undefined}
             secondaryLon={destLon ?? undefined}
-            onPickSecondary={searchMode === 'su_misura' ? (pLat, pLon) => { setDestLat(pLat); setDestLon(pLon) } : undefined}
+            onPickSecondary={(pLat, pLon) => { setDestLat(pLat); setDestLon(pLon) }}
             activeTarget={mapTapTarget === 'destinazione' ? 'secondary' : 'primary'}
           />
         </div>
@@ -858,7 +964,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               </button>
             </div>
           </div>
-          {searchMode === 'su_misura' && mapTapTarget === 'destinazione' && (
+          {mapTapTarget === 'destinazione' && (
             <p className="text-center text-[11px] font-medium text-terra-700 bg-terra-50 border border-terra-200 rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
               Tocca la mappa per la destinazione
             </p>
@@ -891,15 +997,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               {destLat != null ? 'via destinazione' : `${targetDistanceKm.toFixed(1)} km${targetElevationM.trim() ? ` · +${targetElevationM} m` : ''}`}
             </button>
           )}
-          {searchMode === 'su_misura' && (
-            <button onClick={() => setOpenSheet('destinazione')}
-              className={`shrink-0 flex items-center gap-1.5 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold whitespace-nowrap ${
-                destLat != null ? 'bg-terra-500 text-white' : 'bg-white/95 text-terra-700'
-              }`}>
-              <Flag className="w-3.5 h-3.5" />
-              {destLat != null ? (destQuery.trim() || 'Destinazione impostata') : 'Destinazione'}
-            </button>
-          )}
+          <button onClick={() => setOpenSheet('destinazione')}
+            className={`shrink-0 flex items-center gap-1.5 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold whitespace-nowrap ${
+              destLat != null ? 'bg-terra-500 text-white' : 'bg-white/95 text-terra-700'
+            }`}>
+            <Flag className="w-3.5 h-3.5" />
+            {destLat != null ? (destQuery.trim() || 'Destinazione impostata') : 'Destinazione'}
+          </button>
           <button onClick={() => setOpenSheet('preferenze')}
             className="shrink-0 flex items-center gap-1.5 bg-white/95 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
             <ListFilter className="w-3.5 h-3.5 text-forest-600" />
@@ -942,11 +1046,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             : searchMode === 'esistenti' ? <SearchIcon className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
         </button>
         {(searching || generating) && (
-          <p className="absolute right-4 bottom-[92px] z-20 text-[11px] font-medium text-stone-600 bg-white/95 backdrop-blur rounded-full px-3 py-1.5 shadow-md whitespace-nowrap">
-            {searching
-              ? (searchMode === 'esistenti' ? 'Cerco…' : 'Risolvo il luogo…')
-              : (buildStage || 'Genero il percorso…')}
-          </p>
+          <SearchWaitingCard stageLabel={searching
+            ? (searchMode === 'esistenti' ? 'Cerco…' : 'Risolvo il luogo…')
+            : (buildStage || 'Genero il percorso…')} />
         )}
 
         {/* ── Foglio impostazioni: un solo parametro alla volta, si chiude toccando fuori o "Fatto"
@@ -1157,10 +1259,19 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const activeEntries = resultsTab === 'esistenti' ? esistentiEntries : suMisuraEntries
 
     return (
-      <div className="space-y-3">
-        <button onClick={() => setStep('start')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Cambia ricerca
-        </button>
+      <div className={`space-y-3 ${selectMode ? 'pb-20' : ''}`}>
+        <div className="flex items-center justify-between gap-2">
+          <button onClick={() => { setStep('start'); setSelectMode(false); setSelectedIds(new Set()) }}
+            className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Cambia ricerca
+          </button>
+          {results.length > 1 && (
+            <button onClick={() => { setSelectMode(v => !v); setSelectedIds(new Set()) }}
+              className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${selectMode ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>
+              {selectMode ? 'Annulla selezione' : 'Seleziona più percorsi'}
+            </button>
+          )}
+        </div>
 
         <div className="flex bg-stone-100 rounded-xl p-1">
           <button onClick={() => setResultsTab('esistenti')}
@@ -1181,9 +1292,29 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {activeEntries.map(({ item, i }) => item.kind === 'found'
-          ? <FoundRouteCard key={`found-${i}`} data={item.data} onChoose={() => chooseCandidate({ kind: 'found', data: item.data }, i)} />
-          : <BuiltRouteCard key={`built-${i}`} data={item.data} onChoose={() => chooseCandidate({ kind: 'built', data: item.data }, i)} />)}
+        {activeEntries.map(({ item, i }) => {
+          const key = resultKey(item, i)
+          const selectable = selectMode ? { selected: selectedIds.has(key), onToggle: () => toggleResultSelect(key) } : undefined
+          return item.kind === 'found'
+            ? <FoundRouteCard key={key} data={item.data} onChoose={() => chooseCandidate({ kind: 'found', data: item.data }, i)} selectable={selectable} />
+            : <BuiltRouteCard key={key} data={item.data} onChoose={() => chooseCandidate({ kind: 'built', data: item.data }, i)} selectable={selectable} />
+        })}
+
+        {selectMode && (
+          <div className="fixed left-0 right-0 bottom-0 z-40 bg-white border-t border-stone-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] p-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-stone-600">
+              {selectedIds.size === 0 ? 'Tocca "Seleziona" sulle card che vuoi importare' : `${selectedIds.size} selezionat${selectedIds.size === 1 ? 'o' : 'i'}`}
+            </p>
+            <button onClick={handleBulkImport} disabled={selectedIds.size === 0 || bulkSaving}
+              className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white text-sm font-semibold transition-colors">
+              {bulkSaving
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> {bulkProgress ? `${bulkProgress.done}/${bulkProgress.total}` : 'Importo…'}</>
+                : <><CheckCircle className="w-4 h-4" /> {selectedIds.size > 0 ? `Importa ${selectedIds.size}` : 'Importa'}</>}
+            </button>
+          </div>
+        )}
+
+        {errorMsg && selectMode && <p className="text-red-500 text-sm">{errorMsg}</p>}
       </div>
     )
   }
