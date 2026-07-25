@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, ChevronDown, ChevronUp, Loader2, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
-  Sparkles, MapPin,
+  ArrowLeft, Loader2, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
+  Sparkles, MapPin, Locate, CircleDot, Ruler, Flag, ListFilter,
 } from 'lucide-react'
 import LocationPickerMap from '@/components/LocationPickerMap'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
@@ -137,11 +137,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // troppo raro per la risoluzione economica, quindi appena Giulia dà un punto utilizzabile si
   // prosegue subito con la costruzione invece di restare sulla chat (vedi handleFound).
   const [giuliaOrigin, setGiuliaOrigin] = useState<'esistenti' | 'su_misura'>('esistenti')
-  // Ricerca avanzata (tipo di percorso, destinazione, lunghezza, dislivello, preferenze) —
-  // raggiungibile fin dal primo schermo invece di essere nascosta dietro un "Continua" dopo la
-  // ricerca: chiusa di default per non sovraccaricare lo schermo, ma mai un passo separato del
-  // wizard.
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  // Ogni parametro (ancoraggio, raggio, tipo, lunghezza, destinazione, preferenze) vive come un
+  // chip discreto sopra la mappa — vedi lo step "start" sotto — invece che dentro un'unica sezione
+  // "Ricerca avanzata" da aprire tutta insieme (bocciata: troppo lunga, copriva la mappa). Un solo
+  // foglio alla volta, dismissibile toccando fuori o "Fatto", per tornare subito alla mappa.
+  const [openSheet, setOpenSheet] = useState<'ancoraggio' | 'raggio' | 'tipo' | 'lunghezza' | 'destinazione' | 'preferenze' | null>(null)
   // Raggio di ricerca — visibile nella ricerca base (non nascosto nella sezione avanzata), si
   // applica a entrambe: al motore "trovati" (raggio attorno al luogo risolto) e a quello
   // "costruiti" (come tetto aggiuntivo, mai per allargare oltre il limite di sicurezza esistente
@@ -197,6 +197,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false)
 
   const [errorMsg, setErrorMsg] = useState('')
+  // Popolato quando "Esistenti" risolve un luogo/POI specifico (es. una cascata, un sito
+  // archeologico — vedi lib/routeBuilder/resolvePlace.ts's resolveViaOverpassByName) ma non trova
+  // nessun percorso documentato che ci passi vicino: il punto esiste ed è già sulla mappa, offrire
+  // "genera da qui con Su misura" invece di lasciare l'utente con un solo messaggio di rinuncia.
+  const [poiBridge, setPoiBridge] = useState<{ lat: number; lon: number; displayName: string } | null>(null)
 
   // Precompila lunghezza/dislivello/preferenze/interruttore AI dallo storico e dal profilo
   // dell'utente (stesso segnale usato da Giulia in route-search) — solo un suggerimento, l'utente
@@ -264,6 +269,17 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       setMapTapTarget('partenza')
     }
   }, [searchMode, routeTypes])
+
+  // Il chip "Destinazione" è sempre visibile in "Su misura" (non più nascosto dietro la scelta del
+  // tipo di percorso, il problema segnalato dall'utente: "non vedo dove poter inserire il secondo
+  // punto") — quindi appena una destinazione viene impostata (per nome o col tocco), qui si
+  // garantisce che almeno un tipo compatibile sia selezionato, invece di lasciarla silenziosamente
+  // senza effetto se l'utente ha lasciato "Anello" (che la ignora per costruzione).
+  useEffect(() => {
+    if (destLat != null && !(routeTypes.includes('andata_ritorno') || routeTypes.includes('solo_andata'))) {
+      setRouteTypes(prev => [...prev, 'andata_ritorno'])
+    }
+  }, [destLat, routeTypes])
 
   // Selezione multipla dei tipi di percorso — sempre almeno un tipo attivo, non si può deselezionare
   // l'ultimo rimasto.
@@ -360,6 +376,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         setResults(prev => [...prev.filter(x => x.kind !== 'found'), ...items])
       }
 
+      setPoiBridge(null)
       if (data.escalateToAi && useAi) {
         // La chat di Giulia (Livello 2) resta da mostrare — non si naviga via dallo step "Partenza"
         // finché è ancora in attesa, altrimenti sparirebbe.
@@ -368,6 +385,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         setGiuliaSeed(query.trim())
         setGiuliaSessionId(id => id + 1)
         setShowGiulia(true)
+        setOpenSheet(null)
       } else if (found.length === 0) {
         // Ricerca "Esistenti" pura: nessuna costruzione automatica di riserva (quella è l'azione
         // "Su misura", un motore distinto scelto esplicitamente dall'utente, non un ripiego
@@ -380,9 +398,17 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         // percorso trovato" anche quando in realtà ce n'erano, solo del tipo sbagliato (stesso
         // problema di fondo già segnalato con "seleziono anello ma non compare mai").
         const rawFoundCount = (data.foundRoutes ?? []).length
-        setErrorMsg(rawFoundCount > 0
-          ? `Trovati ${rawFoundCount} percorsi in questa zona, ma nessuno del tipo selezionato — prova ad ampliare il filtro "Tipo di percorso", o disattivalo.`
-          : 'Nessun percorso esistente trovato — prova a scrivere diversamente, tocca la mappa, o prova "Su misura" per generarne uno.')
+        if (rawFoundCount > 0) {
+          setErrorMsg('Trovati ' + rawFoundCount + ' percorsi in questa zona, ma nessuno del tipo selezionato — prova ad ampliare il filtro "Tipo di percorso", o disattivalo.')
+        } else if (data.place) {
+          // Un luogo/POI è stato risolto (es. una cascata, un sito archeologico — vedi
+          // lib/routeBuilder/resolvePlace.ts) ma nessun percorso documentato ci passa vicino: il
+          // punto è già sulla mappa, offrire di generarne uno da lì invece di solo dirlo a parole.
+          setErrorMsg(`"${query.trim()}" non ha percorsi documentati nelle vicinanze, ma ho trovato il punto sulla mappa.`)
+          setPoiBridge({ lat: data.place.lat, lon: data.place.lon, displayName: data.place.displayName })
+        } else {
+          setErrorMsg('Nessun percorso esistente trovato — prova a scrivere diversamente, tocca la mappa, o prova "Su misura" per generarne uno.')
+        }
       } else {
         setErrorMsg('')
         setStep('results')
@@ -675,8 +701,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           setGiuliaSeed(query.trim())
           setGiuliaSessionId(id => id + 1)
           setShowGiulia(true)
+          setOpenSheet(null)
         } else {
-          setErrorMsg('Luogo non trovato — prova a scrivere diversamente, tocca la mappa, o attiva "Usa l\'AI se non trovo nulla".')
+          setErrorMsg('Luogo non trovato — prova a scrivere diversamente, tocca la mappa, o attiva l\'AI (chip in basso).')
         }
         return
       }
@@ -700,6 +727,21 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     } else {
       await runSuMisura()
     }
+  }
+
+  // Azione del suggerimento "genera da qui" (vedi poiBridge sopra): passa a "Su misura" col punto
+  // già risolto da "Esistenti" e genera subito, invece di far ridigitare/ritoccare il luogo
+  // all'utente che l'ha già trovato un attimo prima.
+  async function useSuMisuraFromBridge() {
+    if (!poiBridge) return
+    const { lat: bLat, lon: bLon, displayName } = poiBridge
+    setSearchMode('su_misura')
+    setQuery(displayName)
+    setLat(bLat)
+    setLon(bLon)
+    setPoiBridge(null)
+    setErrorMsg('')
+    await generate({ lat: bLat, lon: bLon })
   }
 
   function chooseCandidate(item: ResultItem, i: number) {
@@ -735,20 +777,41 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
   }
 
-  // ── Punto di partenza (ricerca + ricerca avanzata, mappa a pieno schermo) ───────────────────
-  // Un solo schermo invece di due: la ricerca avanzata (tipo di percorso, destinazione, lunghezza,
-  // dislivello, preferenze) è raggiungibile fin da subito in una sezione a comparsa, non più dietro
-  // un "Continua" separato — vedi showAdvanced. La mappa riempie tutto lo schermo (createPortal su
-  // document.body: altrimenti l'elemento "fixed" resterebbe intrappolato dentro il contenitore
-  // della pagina, che ha una propria animazione con transform e diventerebbe il suo contenitore di
-  // posizionamento, vanificando l'effetto a pieno schermo), con la ricerca in un pannello sovrapposto.
+  // ── Punto di partenza — la mappa è il fulcro, sempre a pieno schermo e sempre visibile ─────────
+  // Layout "a chip" (Concept A del mockup approvato): barra di ricerca + tab modalità flottanti in
+  // alto, una fila di chip in basso (uno per parametro, valore sempre leggibile senza aprire nulla),
+  // ciascuno apre un foglio breve e mono-tematico invece dell'unica sezione "Ricerca avanzata" di
+  // prima (bocciata: copriva fino al 75% della mappa). createPortal su document.body: altrimenti
+  // l'elemento "fixed" resterebbe intrappolato dentro il contenitore della pagina, che ha una
+  // propria animazione con transform e diventerebbe il suo contenitore di posizionamento,
+  // vanificando l'effetto a pieno schermo.
   if (step === 'start') {
     const canGo = searchMode === 'esistenti'
       ? !searching && query.trim() !== ''
       : !searching && !generating && (query.trim() !== '' || (lat != null && lon != null))
 
+    // Solo per il badge sul pulsante Cerca — quanti parametri sono stati toccati rispetto al
+    // default, cioè quanto c'è "dentro" alla ricerca senza dover aprire nessun foglio per saperlo.
+    const activeFilterCount = [
+      searchMode === 'su_misura' && startMode === 'dintorni',
+      searchRadiusKm !== 20,
+      routeTypes.length > 1 || routeTypes[0] !== 'anello',
+      searchMode === 'su_misura' && (targetDistanceKm !== 8 || targetElevationM.trim() !== ''),
+      searchMode === 'su_misura' && destLat != null,
+      environmentPrefs.length > 0 || desiredPoiTypes.length > 0,
+    ].filter(Boolean).length
+
+    const sheetTitle: Record<NonNullable<typeof openSheet>, string> = {
+      ancoraggio: 'Punto di partenza',
+      raggio: 'Raggio di ricerca',
+      tipo: 'Tipo di percorso',
+      lunghezza: 'Lunghezza e dislivello',
+      destinazione: 'Destinazione',
+      preferenze: 'Preferenze',
+    }
+
     return createPortal(
-      <div className="fixed inset-0 z-[60] bg-stone-100 flex flex-col">
+      <div className="fixed inset-0 z-[60] bg-stone-100">
         <div className="absolute inset-0">
           <LocationPickerMap
             lat={lat ?? undefined} lon={lon ?? undefined}
@@ -762,172 +825,252 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           />
         </div>
 
-        <div className="relative z-10 flex items-center gap-2.5 p-3 pointer-events-none">
-          <button onClick={onBack}
-            className="pointer-events-auto w-9 h-9 rounded-full bg-white shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div className="pointer-events-auto bg-white/95 backdrop-blur rounded-xl px-3 py-1.5 shadow-md">
-            <p className="text-sm font-semibold text-stone-800">Costruisci o trova un percorso</p>
-            {/* Il tocco sulla mappa imposta un punto di partenza, usato solo da "Su misura" —
-                "Esistenti" cerca esclusivamente per testo (nessun endpoint di ricerca "vicino a un
-                punto" per i percorsi già documentati): un unico messaggio per entrambe le modalità
-                prometteva un tocco che in "Esistenti" non aveva alcun effetto sulla ricerca.
-                Quando il pulsante destinazione è attivo (mapTapTarget), il tocco sposta invece
-                quel punto — stesso principio, messaggio diverso per non promettere l'effetto
-                sbagliato. */}
-            <p className="text-[11px] text-stone-400">
-              {searchMode === 'esistenti'
-                ? 'Scrivi cosa cerchi'
-                : mapTapTarget === 'destinazione'
-                ? 'Tocca la mappa per la destinazione'
-                : 'Tocca la mappa o scrivi il luogo di partenza'}
-            </p>
+        {/* ── Chrome superiore: indietro + barra di ricerca + tab modalità — tutto flottante, la
+            mappa resta sempre visibile sotto. */}
+        <div className="absolute top-0 left-0 right-0 z-10 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <button onClick={onBack}
+              className="w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="flex-1 flex items-center gap-2 bg-white/95 backdrop-blur rounded-2xl shadow-md px-3.5 py-2.5 min-w-0">
+              <SearchIcon className="w-4 h-4 text-stone-400 shrink-0" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handlePrimaryAction() }}
+                placeholder={searchMode === 'esistenti'
+                  ? 'Es. Gole del Biedano, Blera…'
+                  : 'Luogo di partenza (o tocca la mappa)'}
+                className="flex-1 min-w-0 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-400"
+              />
+            </div>
           </div>
+          <div className="flex justify-center">
+            <div className="inline-flex bg-white/95 backdrop-blur rounded-full shadow-md p-1 gap-1">
+              <button type="button" onClick={() => { setSearchMode('esistenti'); setPoiBridge(null); setErrorMsg('') }}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${searchMode === 'esistenti' ? 'bg-stone-800 text-white' : 'text-stone-500'}`}>
+                Esistenti
+              </button>
+              <button type="button" onClick={() => { setSearchMode('su_misura'); setPoiBridge(null); setErrorMsg('') }}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${searchMode === 'su_misura' ? 'bg-stone-800 text-white' : 'text-stone-500'}`}>
+                Su misura
+              </button>
+            </div>
+          </div>
+          {searchMode === 'su_misura' && mapTapTarget === 'destinazione' && (
+            <p className="text-center text-[11px] font-medium text-terra-700 bg-terra-50 border border-terra-200 rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
+              Tocca la mappa per la destinazione
+            </p>
+          )}
         </div>
 
-        <div className="relative z-10 mt-auto max-h-[75vh] overflow-y-auto bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,0.15)] p-4 space-y-3">
-          <div className="flex bg-stone-100 rounded-xl p-1">
-            <button type="button" onClick={() => setSearchMode('esistenti')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${searchMode === 'esistenti' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'}`}>
-              Cerca esistenti
-            </button>
-            <button type="button" onClick={() => setSearchMode('su_misura')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${searchMode === 'su_misura' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'}`}>
-              Cerca su misura
-            </button>
-          </div>
-          <p className="text-xs text-stone-400 -mt-1.5">
-            {searchMode === 'esistenti'
-              ? 'Cerca un percorso già documentato altrove, per nome o descrizione.'
-              : 'Genera un percorso nuovo, su misura per i criteri scelti qui sotto.'}
-          </p>
-
-          <div className="flex gap-2">
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handlePrimaryAction() }}
-              placeholder={searchMode === 'esistenti'
-                ? 'Es. Gole del Biedano, Blera — o descrivi un percorso che conosci'
-                : 'Luogo di partenza (opzionale se tocchi la mappa)'}
-              className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white"
-            />
-            <button onClick={handlePrimaryAction} disabled={!canGo}
-              className="w-10 h-10 rounded-xl bg-stone-100 hover:bg-stone-200 disabled:opacity-40 text-stone-600 flex items-center justify-center shrink-0 transition-colors">
-              {(searching || generating) ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setUseAi(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-              useAi ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-500'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" /> Usa l&apos;AI se non trovo nulla
-          </button>
-
+        {/* ── Fila di chip: un parametro per chip, valore sempre visibile, apre un foglio breve. */}
+        <div className="absolute left-0 right-0 bottom-24 z-10 px-3 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {searchMode === 'su_misura' && (
-            <div>
-              <p className="text-xs font-medium text-stone-600 mb-1.5">Il luogo digitato è...</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button type="button" onClick={() => setStartMode('esatto')}
-                  className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                    startMode === 'esatto' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
-                  }`}>
-                  Il punto di partenza
-                </button>
-                <button type="button" onClick={() => setStartMode('dintorni')}
-                  className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                    startMode === 'dintorni' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
-                  }`}>
-                  Un centro d&apos;interesse nei dintorni
-                </button>
-              </div>
-              {startMode === 'dintorni' && (
-                <p className="text-xs text-stone-400 mt-1.5">
-                  Percorsi liberi nella zona: non partono necessariamente da questo punto esatto, ma esplorano l&apos;area entro il raggio scelto qui sotto — utile per un luogo generico (es. una città) o un punto d&apos;interesse senza sentieri esattamente addosso (es. una cascata).
-                </p>
-              )}
-            </div>
+            <button onClick={() => setOpenSheet('ancoraggio')}
+              className="shrink-0 flex items-center gap-1.5 bg-white/95 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
+              <Locate className="w-3.5 h-3.5 text-forest-600" />
+              {startMode === 'esatto' ? 'Punto esatto' : 'Dintorni'}
+            </button>
           )}
+          <button onClick={() => setOpenSheet('raggio')}
+            className="shrink-0 flex items-center gap-1.5 bg-white/95 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
+            <CircleDot className="w-3.5 h-3.5 text-forest-600" />
+            {searchRadiusKm} km
+          </button>
+          <button onClick={() => setOpenSheet('tipo')}
+            className="shrink-0 flex items-center gap-1.5 bg-white/95 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
+            <RefreshCw className="w-3.5 h-3.5 text-forest-600" />
+            {routeTypes.length === 1 ? routeTypeLabel(routeTypes[0]) : `${routeTypes.length} tipi`}
+          </button>
+          {searchMode === 'su_misura' && (
+            <button onClick={() => setOpenSheet('lunghezza')}
+              className="shrink-0 flex items-center gap-1.5 bg-white/95 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
+              <Ruler className="w-3.5 h-3.5 text-forest-600" />
+              {destLat != null ? 'via destinazione' : `${targetDistanceKm.toFixed(1)} km${targetElevationM.trim() ? ` · +${targetElevationM} m` : ''}`}
+            </button>
+          )}
+          {searchMode === 'su_misura' && (
+            <button onClick={() => setOpenSheet('destinazione')}
+              className={`shrink-0 flex items-center gap-1.5 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold whitespace-nowrap ${
+                destLat != null ? 'bg-terra-500 text-white' : 'bg-white/95 text-terra-700'
+              }`}>
+              <Flag className="w-3.5 h-3.5" />
+              {destLat != null ? (destQuery.trim() || 'Destinazione impostata') : 'Destinazione'}
+            </button>
+          )}
+          <button onClick={() => setOpenSheet('preferenze')}
+            className="shrink-0 flex items-center gap-1.5 bg-white/95 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-semibold text-stone-700 whitespace-nowrap">
+            <ListFilter className="w-3.5 h-3.5 text-forest-600" />
+            {environmentPrefs.length + desiredPoiTypes.length > 0 ? `${environmentPrefs.length + desiredPoiTypes.length} preferenze` : 'Preferenze'}
+          </button>
+          {/* AI in coda alla fila, discreto (nessuna etichetta lunga, nessun colore acceso quando
+              spento) — resta un ripiego disponibile, non più la prima cosa che si nota. */}
+          <button onClick={() => setUseAi(v => !v)}
+            className={`shrink-0 flex items-center gap-1.5 backdrop-blur shadow-md rounded-full pl-2.5 pr-3 py-2 text-xs font-medium whitespace-nowrap ${
+              useAi ? 'bg-forest-500 text-white' : 'bg-white/70 text-stone-400'
+            }`}>
+            <Sparkles className="w-3.5 h-3.5" /> AI
+          </button>
+        </div>
 
-          <div>
-            <p className="text-xs font-medium text-stone-600 mb-1.5">Raggio di ricerca dal punto/luogo</p>
-            <div className="grid grid-cols-5 gap-1.5">
-              {RADIUS_OPTIONS_KM.map(km => (
-                <button key={km} type="button" onClick={() => setSearchRadiusKm(km)}
-                  className={`py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                    searchRadiusKm === km ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
-                  }`}>
-                  {km} km
-                </button>
-              ))}
-            </div>
-            {searchMode === 'su_misura' && startMode === 'esatto' && (
-              <p className="text-xs text-stone-400 mt-1.5">
-                Con &quot;Il punto di partenza&quot; il raggio si applica solo come tetto di sicurezza, non allarga la ricerca — passa a &quot;Un centro d&apos;interesse nei dintorni&quot; per usarlo davvero.
-              </p>
+        {errorMsg && (
+          <div className={`absolute left-3 right-3 z-10 backdrop-blur rounded-xl px-3 py-2 shadow-md text-center space-y-1.5 ${
+            poiBridge ? 'bg-white/95' : 'bg-red-500/95'
+          }`} style={{ bottom: '92px' }}>
+            <p className={`text-xs ${poiBridge ? 'text-stone-600' : 'text-white'}`}>{errorMsg}</p>
+            {poiBridge && (
+              <button onClick={useSuMisuraFromBridge}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-forest-500 hover:bg-forest-600 text-white text-xs font-semibold transition-colors">
+                <RefreshCw className="w-3.5 h-3.5" /> Genera un percorso su misura da qui
+              </button>
             )}
           </div>
+        )}
 
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(v => !v)}
-            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-stone-200 text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors"
-          >
-            <span>Ricerca avanzata — tipo, lunghezza, dislivello, preferenze</span>
-            {showAdvanced ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
-          </button>
+        {/* ── Pulsante Cerca — sempre raggiungibile, mostra quanti parametri sono attivi. */}
+        <button onClick={handlePrimaryAction} disabled={!canGo}
+          className="absolute right-4 bottom-5 z-20 w-16 h-16 rounded-full bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white shadow-lg flex items-center justify-center transition-colors">
+          {activeFilterCount > 0 && !searching && !generating && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-forest-600 text-white text-[10px] font-bold flex items-center justify-center border-2 border-stone-100">
+              {activeFilterCount}
+            </span>
+          )}
+          {(searching || generating)
+            ? <Loader2 className="w-5 h-5 animate-spin" />
+            : searchMode === 'esistenti' ? <SearchIcon className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
+        </button>
+        {(searching || generating) && (
+          <p className="absolute right-4 bottom-[92px] z-20 text-[11px] font-medium text-stone-600 bg-white/95 backdrop-blur rounded-full px-3 py-1.5 shadow-md whitespace-nowrap">
+            {searching
+              ? (searchMode === 'esistenti' ? 'Cerco…' : 'Risolvo il luogo…')
+              : (buildStage || 'Genero il percorso…')}
+          </p>
+        )}
 
-          {showAdvanced && (
-            <div className="space-y-4 pt-1 border-t border-stone-100">
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">Tipo di percorso</label>
-                <p className="text-xs text-stone-400 mb-2">Puoi selezionarne più di uno insieme.</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => toggleRouteType('anello')}
-                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('anello') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
-                    Anello
-                  </button>
-                  <button onClick={() => toggleRouteType('andata_ritorno')}
-                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('andata_ritorno') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
-                    Andata e ritorno
-                  </button>
-                  <button onClick={() => toggleRouteType('solo_andata')}
-                    className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('solo_andata') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
-                    Solo andata
-                  </button>
-                </div>
+        {/* ── Foglio impostazioni: un solo parametro alla volta, si chiude toccando fuori o "Fatto"
+            — mai più di una sezione insieme a coprire la mappa. */}
+        {openSheet && (
+          <>
+            <div className="fixed inset-0 z-30 bg-stone-900/20" onClick={() => setOpenSheet(null)} />
+            <div className="fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,0.15)] p-4 pb-6 max-h-[65vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-3.5">
+                <p className="text-sm font-semibold text-stone-800">{sheetTitle[openSheet]}</p>
+                <button onClick={() => setOpenSheet(null)} aria-label="Fatto"
+                  className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors">
+                  <XIcon className="w-4 h-4" />
+                </button>
               </div>
 
-              {(routeTypes.includes('andata_ritorno') || routeTypes.includes('solo_andata')) && (
+              {openSheet === 'ancoraggio' && (
                 <div>
-                  <label className="block text-sm font-medium text-stone-600 mb-1">
-                    Destinazione <span className="font-normal text-stone-400">(opzionale — percorso tra 2 punti)</span>
-                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button type="button" onClick={() => setStartMode('esatto')}
+                      className={`py-2.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        startMode === 'esatto' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                      }`}>
+                      Il punto di partenza
+                    </button>
+                    <button type="button" onClick={() => setStartMode('dintorni')}
+                      className={`py-2.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        startMode === 'dintorni' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                      }`}>
+                      Un centro d&apos;interesse nei dintorni
+                    </button>
+                  </div>
+                  <p className="text-xs text-stone-400 mt-2">
+                    {startMode === 'dintorni'
+                      ? 'Percorsi liberi nella zona: non partono necessariamente da questo punto esatto, ma esplorano l’area entro il raggio scelto — utile per un luogo generico (es. una città) o un punto d’interesse senza sentieri esattamente addosso (es. una cascata).'
+                      : 'Il percorso parte esattamente da qui — il raggio scelto resta solo un tetto di sicurezza, non allarga la ricerca.'}
+                  </p>
+                </div>
+              )}
+
+              {openSheet === 'raggio' && (
+                <div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {RADIUS_OPTIONS_KM.map(km => (
+                      <button key={km} type="button" onClick={() => setSearchRadiusKm(km)}
+                        className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                          searchRadiusKm === km ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                        }`}>
+                        {km} km
+                      </button>
+                    ))}
+                  </div>
+                  {searchMode === 'su_misura' && startMode === 'esatto' && (
+                    <p className="text-xs text-stone-400 mt-2">
+                      Con &quot;Il punto di partenza&quot; il raggio è solo un tetto di sicurezza — passa a &quot;Dintorni&quot; per usarlo davvero.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {openSheet === 'tipo' && (
+                <div>
+                  <p className="text-xs text-stone-400 mb-2">Puoi selezionarne più di uno insieme.</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => toggleRouteType('anello')}
+                      className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('anello') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                      Anello
+                    </button>
+                    <button onClick={() => toggleRouteType('andata_ritorno')}
+                      className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('andata_ritorno') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                      Andata e ritorno
+                    </button>
+                    <button onClick={() => toggleRouteType('solo_andata')}
+                      className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${routeTypes.includes('solo_andata') ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                      Solo andata
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {openSheet === 'lunghezza' && (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-sm font-medium text-stone-600">Lunghezza target</label>
+                      <span className="text-sm font-semibold text-stone-800">{targetDistanceKm.toFixed(1)} km</span>
+                    </div>
+                    <input type="range" min={MIN_KM} max={MAX_KM} step={0.5} value={targetDistanceKm}
+                      disabled={destLat != null}
+                      onChange={e => setTargetDistanceKm(Number(e.target.value))}
+                      className="w-full accent-terra-500 disabled:opacity-40" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-600 mb-1">
+                      Dislivello target <span className="font-normal text-stone-400">(opzionale, in metri)</span>
+                    </label>
+                    <input type="number" min={0} value={targetElevationM} onChange={e => setTargetElevationM(e.target.value)}
+                      placeholder="es. 300"
+                      className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
+                  </div>
+                  {destLat != null && (
+                    <p className="text-xs text-stone-400">
+                      Con una destinazione impostata, la lunghezza non è più un vincolo: il percorso segue la via reale verso quel punto.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {openSheet === 'destinazione' && (
+                <div>
+                  <p className="text-xs text-stone-400 mb-2">Opzionale — percorso tra 2 punti (Andata e ritorno/Solo andata).</p>
                   <div className="flex gap-2">
                     <input value={destQuery} onChange={e => setDestQuery(e.target.value)}
                       placeholder="Es. Rifugio Città di Fano"
                       className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
-                    <button type="button" onClick={() => setMapTapTarget(t => t === 'destinazione' ? 'partenza' : 'destinazione')}
+                    <button type="button" onClick={() => { setMapTapTarget(t => t === 'destinazione' ? 'partenza' : 'destinazione'); setOpenSheet(null) }}
                       title="Tocca la mappa per impostare la destinazione"
-                      className={`shrink-0 w-10 h-10 rounded-xl border flex items-center justify-center transition-colors ${
-                        mapTapTarget === 'destinazione' ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white border-stone-300 text-stone-500'
-                      }`}>
+                      className="shrink-0 w-10 h-10 rounded-xl border border-stone-300 bg-white text-stone-500 flex items-center justify-center transition-colors">
                       <MapPin className="w-4 h-4" />
                     </button>
                   </div>
-                  {mapTapTarget === 'destinazione' && (
-                    <p className="text-xs text-orange-700 mt-1.5">Tocca la mappa per impostare la destinazione — il prossimo tocco sposta il punto arancione, non più quello di partenza.</p>
-                  )}
-                  {(destLat != null) && (
-                    <div className="flex items-center justify-between mt-1.5">
-                      <p className="text-xs text-stone-400">
-                        Con una destinazione impostata, la lunghezza qui sotto non è più un vincolo: il percorso segue la via reale verso quel punto (vale solo per Andata e ritorno/Solo andata, non per Anello).
-                      </p>
+                  {destLat != null && (
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-stone-400">Destinazione impostata.</p>
                       <button type="button" onClick={() => { setDestQuery(''); setDestLat(null); setDestLon(null); setMapTapTarget('partenza') }}
                         className="shrink-0 ml-2 text-xs text-stone-400 hover:text-stone-600 underline">
                         Rimuovi
@@ -935,73 +1078,59 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
                   {destLat == null && destQuery.trim() && (
-                    <p className="text-xs text-stone-400 mt-1.5">Risoluzione del luogo in corso…</p>
+                    <p className="text-xs text-stone-400 mt-2">Risoluzione del luogo in corso…</p>
                   )}
                 </div>
               )}
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-stone-600">Lunghezza target</label>
-                  <span className="text-sm font-semibold text-stone-800">{targetDistanceKm.toFixed(1)} km</span>
+              {openSheet === 'preferenze' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-stone-600 mb-2">Preferenze ambientali</label>
+                    <div className="flex flex-wrap gap-2">
+                      {WIZARD_ENVIRONMENT_PREFS.map(p => (
+                        <button key={p.key} onClick={() => toggleEnvironmentPref(p.key)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                            environmentPrefs.includes(p.key) ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                          }`}>
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-600 mb-2">
+                      Vorrei incontrare <span className="font-normal text-stone-400">(opzionale)</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {DESIRABLE_POI_TYPES.map(type => (
+                        <button key={type} onClick={() => toggleDesiredPoiType(type)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                            desiredPoiTypes.includes(type) ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+                          }`}>
+                          {POI_META[type].emoji} {POI_META[type].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <input type="range" min={MIN_KM} max={MAX_KM} step={0.5} value={targetDistanceKm}
-                  disabled={destLat != null}
-                  onChange={e => setTargetDistanceKm(Number(e.target.value))}
-                  className="w-full accent-terra-500 disabled:opacity-40" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">
-                  Dislivello target <span className="font-normal text-stone-400">(opzionale, in metri)</span>
-                </label>
-                <input type="number" min={0} value={targetElevationM} onChange={e => setTargetElevationM(e.target.value)}
-                  placeholder="es. 300"
-                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-2">Preferenze ambientali</label>
-                <div className="flex flex-wrap gap-2">
-                  {WIZARD_ENVIRONMENT_PREFS.map(p => (
-                    <button key={p.key} onClick={() => toggleEnvironmentPref(p.key)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                        environmentPrefs.includes(p.key) ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
-                      }`}>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-2">
-                  Vorrei incontrare <span className="font-normal text-stone-400">(opzionale)</span>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {DESIRABLE_POI_TYPES.map(type => (
-                    <button key={type} onClick={() => toggleDesiredPoiType(type)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                        desiredPoiTypes.includes(type) ? 'bg-terra-500 border-terra-500 text-white' : 'bg-white border-stone-300 text-stone-600'
-                      }`}>
-                      {POI_META[type].emoji} {POI_META[type].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
-          )}
+          </>
+        )}
 
-          {showGiulia && useAi && (
-            <div className="space-y-2">
+        {/* ── Chat di Giulia (escalation AI) — un foglio a parte, più grande, non condivide lo
+            spazio con le impostazioni sopra (si chiudono a vicenda). */}
+        {showGiulia && useAi && (
+          <>
+            <div className="fixed inset-0 z-30 bg-stone-900/20" onClick={() => setShowGiulia(false)} />
+            <div className="fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,0.15)] p-4 pb-6 max-h-[75vh] overflow-y-auto space-y-2">
               <div className="flex items-start justify-between gap-2 bg-terra-50 border border-terra-200 rounded-xl px-3 py-2">
                 <p className="text-xs text-terra-700">
                   {giuliaOrigin === 'su_misura'
                     ? '✨ Luogo raro — provo a individuarlo con Giulia (può farti qualche domanda).'
                     : '✨ Nessun risultato senza AI — provo a cercarlo con Giulia.'}
                 </p>
-                {/* Prima non c'era modo di chiudere la chat una volta aperta, se non disattivare
-                    l'interruttore AI (che ha anche altri effetti) — chiusura esplicita e innocua. */}
                 <button type="button" onClick={() => setShowGiulia(false)} aria-label="Chiudi"
                   className="shrink-0 text-terra-400 hover:text-terra-700 transition-colors">
                   <XIcon className="w-3.5 h-3.5" />
@@ -1009,21 +1138,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               </div>
               <GiuliaSearchPanel key={giuliaSessionId} onFound={handleFound} initialQuery={giuliaSeed} />
             </div>
-          )}
-
-          {errorMsg && <p className="text-red-500 text-xs">{errorMsg}</p>}
-
-          <button onClick={handlePrimaryAction} disabled={!canGo}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white rounded-xl font-semibold transition-colors">
-            {(searching || generating)
-              ? <Loader2 className="w-5 h-5 animate-spin" />
-              : searchMode === 'esistenti' ? <SearchIcon className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
-            {searching
-              ? (searchMode === 'esistenti' ? 'Cerco…' : 'Risolvo il luogo…')
-              : generating ? (buildStage || 'Genero il percorso…')
-              : searchMode === 'esistenti' ? 'Cerca percorsi esistenti' : 'Genera percorso su misura'}
-          </button>
-        </div>
+          </>
+        )}
       </div>,
       document.body,
     )
