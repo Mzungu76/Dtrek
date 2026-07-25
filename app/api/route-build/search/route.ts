@@ -1,134 +1,21 @@
+// Ricerca "Esistenti" — pipeline monolitica, mantenuta come endpoint per compatibilità (vedi
+// app/api/route-build/step/search-find e step/search-resolve per la stessa logica spezzata in due
+// chiamate HTTP brevi, usata dal client — components/upload/RouteBuilder.tsx). Logica condivisa in
+// lib/routeBuilder/searchSteps.ts, nessuna duplicazione.
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
-import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
-import { resolvePlaceName, interpretSearchRequest, type ResolvedPlace, type InterpretedPreferences } from '@/lib/routeBuilder/resolvePlace'
-import {
-  searchHikingRoutesByName, queryHikingRelationsInBbox, resolveAreaBbox, padBbox, looksLikePlaceName,
-  sortByDistanceFrom, type HikingRouteCandidate,
-} from '@/lib/overpassTrails'
-import { resolveTrackForCandidate } from '@/lib/routeBuilder/resolveTrack'
 import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
-import type { TrackPoint } from '@/lib/tcxParser'
+import {
+  findExistingRoutesForQuery, resolveFoundRoutesWithPoi, sanitizeSearchRadiusKm, MAX_EAGER_RESOLVE,
+  type FoundRouteResult,
+} from '@/lib/routeBuilder/searchSteps'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// Raggio di ricerca "sentieri nei dintorni" attorno al luogo/punto risolto — ora scelto
-// dall'utente (filtro raggio in components/upload/RouteBuilder.tsx, tagli 5/10/20/50/100 km),
-// con questo come ripiego se il client non lo manda. Non tocca il fallback storico e separato
-// di app/api/route-search-plain/route.ts, che resta invariato a 12.
-const DEFAULT_RADIUS_KM = 20
-const ALLOWED_RADIUS_KM = [5, 10, 20, 50, 100]
-
-function sanitizeRadiusKm(raw: unknown): number {
-  const n = Number(raw)
-  if (!Number.isFinite(n)) return DEFAULT_RADIUS_KM
-  // Il più vicino tra i tagli ammessi, invece di un rifiuto secco, per tollerare un valore non
-  // esatto senza far fallire la richiesta.
-  return ALLOWED_RADIUS_KM.reduce((best, v) => Math.abs(v - n) < Math.abs(best - n) ? v : best)
-}
-// Quanti candidati "trovati" (non-AI o dal Livello 1) risolvere subito con una traccia reale — un
-// cap esplicito per limitare il costo Overpass/DTM aggiuntivo introdotto dalla risoluzione eager
-// (vedi §2 del piano): solo quelli che risolvono sopravvivono come 'found', mai una card senza
-// traccia. Alzato da 3 a 8 — i candidati arrivano già ordinati dal più vicino al più lontano
-// (vedi tier0), quindi il cap più alto si traduce in più risultati realmente vicini, non in
-// risultati casuali lontani.
-const MAX_EAGER_RESOLVE = 8
-// Quanti luoghi suggeriti dal Livello 1 (interpretazione AI) vengono ripassati al Livello 0 —
-// una richiesta vaga può ammettere più interpretazioni valide, ma senza un tetto il costo
-// Overpass/DTM per una singola ricerca crescerebbe senza controllo.
-const MAX_INTERPRETED_PLACES = 3
-
-export interface FoundRouteResult {
-  id: number
-  name: string
-  hasName: boolean
-  ref: string | undefined
-  network: string | undefined
-  routePolyline: [number, number][]
-  trackPoints: TrackPoint[]
-  distanceMeters: number
-  elevationGain: number
-  elevationLoss: number
-  altitudeMax: number
-  altitudeMin: number
-  estimatedTimeSeconds: number
-  hasElevation: boolean
-}
-
-// Stessa convenzione "nome, area" di lib/routeBuilder/resolvePlace.ts's resolvePlaceName — l'ultimo
-// segmento dopo una virgola è un'area che restringe la ricerca, il resto è il nome/la zona.
-//
-// Solo con ESATTAMENTE 2 parti: un indirizzo completo alla Nominatim (es. il displayName che
-// runSearch riscrive nel campo di ricerca dopo una risoluzione riuscita — "Nepi, Viterbo, Lazio,
-// 01036, Italia") ha 5 segmenti, e applicare la stessa regola prenderebbe "Italia" come area e
-// "Nepi Viterbo Lazio 01036" come nome — una query che non corrisponde a nessun percorso reale.
-// Bug confermato in log di produzione: la stessa ricerca ("Nepi") trovava 7 percorsi da sola ma 0
-// una volta che il campo conteneva l'indirizzo completo risolto in precedenza. Con più di 2 parti
-// non si può indovinare in modo affidabile quale segmento sia davvero l'area (dipende dal formato
-// del geocoder, non è garantito), quindi si rinuncia allo split e si usa l'intera stringa come
-// nome, esattamente come per una singola parola.
-function splitQuery(query: string): { nameQuery: string; areaHint: string | null } {
-  const parts = query.split(',').map(p => p.trim()).filter(Boolean)
-  const areaHint = parts.length === 2 ? parts[1] : null
-  const nameQuery = parts.length === 2 ? parts[0] : query.trim()
-  return { nameQuery, areaHint }
-}
-
-// Stessa logica di app/api/route-search-plain/route.ts ("Cerca senza AI"), non spostata — solo
-// riusata come funzioni di lib/overpassTrails.ts, per non duplicarne l'implementazione ma senza
-// dover toccare quell'endpoint/quella card, che restano indipendenti. Senza un'area a restringere
-// il bbox, una query Overpass per nome su tutta Italia ha senso solo se il testo è un plausibile
-// nome di percorso (vedi looksLikePlaceName) — una frase libera lunga (com'è tipico ora che questo
-// endpoint riceve anche descrizioni discorsive dal wizard di ricerca unificato) farebbe girare lo
-// stesso tipo di regex nazionale pesante che ha già causato dei 504 in passato, per nulla.
-async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | null, radiusKm: number): Promise<HikingRouteCandidate[]> {
-  const areaBbox = areaHint ? await resolveAreaBbox(areaHint) : null
-  if (!areaBbox && !looksLikePlaceName(nameQuery)) return []
-
-  let candidates = await searchHikingRoutesByName(nameQuery, areaBbox, 12)
-  if (candidates.length === 0) {
-    const nearbyBbox = areaBbox ?? await resolveAreaBbox(nameQuery)
-    if (nearbyBbox) {
-      const [minLat, minLon, maxLat, maxLon] = padBbox(nearbyBbox, radiusKm)
-      candidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
-    }
-  }
-  return candidates
-}
-
-async function resolveFoundRoutes(candidates: HikingRouteCandidate[], cap: number): Promise<FoundRouteResult[]> {
-  const resolved = await Promise.all(candidates.slice(0, cap).map(async c => {
-    const track = await resolveTrackForCandidate({ osmId: c.id, gpxUrl: null })
-    if (!track.ok) return null
-    return {
-      id: c.id, name: c.name, hasName: c.hasName, ref: c.ref, network: c.network,
-      routePolyline: track.routePolyline, trackPoints: track.trackPoints,
-      distanceMeters: track.distanceMeters, elevationGain: track.elevationGain,
-      elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax, altitudeMin: track.altitudeMin,
-      estimatedTimeSeconds: track.estimatedTimeSeconds, hasElevation: track.hasElevation,
-    }
-  }))
-  return resolved.filter((r): r is FoundRouteResult => r != null)
-}
-
-// Livello 0: sempre, gratuito — risoluzione del luogo (non-AI, solo Nominatim/Overpass) in
-// parallelo con la ricerca di percorsi esistenti (non-AI, Overpass). Chiamato sia per la query
-// originale sia, dal Livello 1, per ciascun luogo interpretato dall'AI — mai con un parametro `ai`,
-// per non richiamare ricorsivamente l'AI su un risultato AI.
-async function tier0(query: string, radiusKm: number): Promise<{ place: ResolvedPlace | null; foundRoutes: FoundRouteResult[] }> {
-  const { nameQuery, areaHint } = splitQuery(query)
-  const [place, rawCandidates] = await Promise.all([
-    resolvePlaceName(query),
-    findExistingRoutesNonAi(nameQuery, areaHint, radiusKm),
-  ])
-  // Dal più vicino al più lontano rispetto al luogo risolto — sia per mostrarli in quell'ordine,
-  // sia perché MAX_EAGER_RESOLVE risolve solo i primi: meglio che siano i più vicini, non i primi
-  // arrivati da Overpass in un ordine arbitrario.
-  const orderedCandidates = place ? sortByDistanceFrom(rawCandidates, place.lat, place.lon) : rawCandidates
-  const foundRoutes = await resolveFoundRoutes(orderedCandidates, MAX_EAGER_RESOLVE)
-  return { place, foundRoutes }
-}
+// Ri-esportato (invariato) perché components/upload/RouteBuilder.tsx lo importa da qui — definito
+// canonicamente in lib/routeBuilder/searchSteps.ts (condiviso anche dai due endpoint a step).
+export type { FoundRouteResult }
 
 // Ricerca a livelli per il wizard "Costruisci o trova un percorso" (components/upload/RouteBuilder.tsx):
 // Livello 0 (sempre, gratuito) → Livello 1 (solo se il Livello 0 non trova nulla, e solo con AI
@@ -170,68 +57,27 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     if (typeof body.query !== 'string' || !body.query.trim()) throw new Error('query mancante')
     query = body.query.trim().slice(0, 300)
     useAi = body.useAi === true
-    radiusKm = sanitizeRadiusKm(body.radiusKm)
+    radiusKm = sanitizeSearchRadiusKm(body.radiusKm)
   } catch {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
   const startedAt = Date.now()
-  let place: ResolvedPlace | null = null
-  let foundRoutes: FoundRouteResult[] = []
-  let prefill: InterpretedPreferences | null = null
-  let tierReached: 'tier0' | 'tier1' = 'tier0'
-  let interpretedPlacesCount = 0
-
-  try {
-    const level0 = await tier0(query, radiusKm)
-    place = level0.place
-    foundRoutes = level0.foundRoutes
-  } catch (e) {
-    console.error('[route-build/search] Livello 0 fallito:', e)
-  }
-
-  // Livello 1: solo se il Livello 0 non ha trovato assolutamente nulla, e solo con l'AI attiva e
-  // una chiave personale disponibile — mai la chiave condivisa di emergenza (stessa scelta già
-  // fatta per il livello AI di resolvePlaceName).
-  if (!place && foundRoutes.length === 0 && useAi && user) {
-    tierReached = 'tier1'
-    try {
-      const { apiKey, claudeModel } = await resolveApiKeyAndSettings(user.id, 'routeBuildInterpretRequest')
-      if (apiKey) {
-        const interpreted = await interpretSearchRequest(query, apiKey, claudeModel)
-        if (interpreted) {
-          prefill = interpreted.prefs
-          interpretedPlacesCount = interpreted.places.length
-          for (const p of interpreted.places.slice(0, MAX_INTERPRETED_PLACES)) {
-            const rerun = await tier0(p.query, radiusKm)
-            if (!place && rerun.place) place = rerun.place
-            if (rerun.foundRoutes.length > 0) {
-              foundRoutes = [...foundRoutes, ...rerun.foundRoutes].slice(0, MAX_EAGER_RESOLVE)
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.error('[route-build/search] Livello 1 (interpretazione AI) fallito:', e)
-    }
-  }
-
-  // Nessun risultato da nessuno dei due livelli gratuiti/economici — se l'AI è attiva, il client
-  // apre la chat completa di Giulia (Livello 2, ricerca web) come ultima risorsa.
-  const escalateToAi = useAi && !place && foundRoutes.length === 0
+  const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi)
+  const foundRoutes = await resolveFoundRoutesWithPoi(find.candidates, MAX_EAGER_RESOLVE)
 
   await logRouteBuildEvent({
     userId: user?.id ?? null,
     kind: 'search',
     query,
     useAi,
-    tierReached: escalateToAi ? `${tierReached}_escalated` : tierReached,
-    placeName: place?.displayName ?? null,
+    tierReached: find.escalateToAi ? `${find.tierReached}_escalated` : find.tierReached,
+    placeName: find.place?.displayName ?? null,
     foundCount: foundRoutes.length,
-    escalatedToAi: escalateToAi,
+    escalatedToAi: find.escalateToAi,
     durationMs: Date.now() - startedAt,
-    details: { interpretedPlacesCount, radiusKm },
+    details: { interpretedPlacesCount: find.interpretedPlacesCount, radiusKm },
   })
 
-  return NextResponse.json({ place, prefill, foundRoutes, escalateToAi })
+  return NextResponse.json({ place: find.place, prefill: find.prefill, foundRoutes, escalateToAi: find.escalateToAi })
 }

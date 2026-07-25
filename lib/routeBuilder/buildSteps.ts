@@ -102,16 +102,72 @@ export function generateRawCandidatesForLength(
   }
 }
 
+// "Dintorni liberi" (startMode 'dintorni', vedi BuildRequestBody): il punto digitato/toccato non è
+// più un vincolo del percorso, solo un centro d'interesse — invece di un solo pathfinding dal nodo
+// più vicino a quel punto, se ne fanno FINO A 3 da punti diversi sparsi nel raggio di ricerca
+// (0°/120°/240° a metà raggio, più il punto esatto stesso), poi si fondono i candidati migliori da
+// ciascuno (vedi generateRawCandidatesForAnchors sotto). Un numero FISSO di ancore (non
+// proporzionale al raggio/all'area) tiene il costo aggiuntivo prevedibile: ogni ancora è un
+// Dijkstra sulla STESSA rete già scaricata una volta sola (nessun fetch Overpass aggiuntivo), non
+// una nuova ricerca di rete.
+const NUM_FREE_ANCHORS = 3
+
+function anchorSeedPoints(lat: number, lon: number, radiusKm: number): { lat: number; lon: number }[] {
+  const points = [{ lat, lon }]
+  const offsetKm = radiusKm * 0.5
+  const latRad = lat * Math.PI / 180
+  for (let i = 0; i < NUM_FREE_ANCHORS; i++) {
+    const bearingRad = (i * 360 / NUM_FREE_ANCHORS) * Math.PI / 180
+    const dLat = (offsetKm / 111) * Math.cos(bearingRad)
+    const dLon = (offsetKm / (111 * Math.max(Math.cos(latRad), 0.1))) * Math.sin(bearingRad)
+    points.push({ lat: lat + dLat, lon: lon + dLon })
+  }
+  return points
+}
+
+// Ritorna fino a NUM_FREE_ANCHORS+1 nodi di ancoraggio distinti (dedup per nodeId): il punto esatto
+// più i 3 punti sparsi nel raggio, ciascuno agganciato al nodo di rete più vicino entro
+// snapThresholdM — un punto che non ha rete abbastanza vicino viene semplicemente scartato invece
+// di far fallire l'intera ricerca, purché ne resti almeno uno valido.
+function collectFreeAnchors(
+  network: WalkNetwork, lat: number, lon: number, radiusKm: number, snapThresholdM: number,
+): number[] {
+  const seen = new Set<number>()
+  for (const p of anchorSeedPoints(lat, lon, radiusKm)) {
+    const node = nearestGraphNode(network, p.lat, p.lon, snapThresholdM)
+    if (node) seen.add(node.nodeId)
+  }
+  return Array.from(seen)
+}
+
+// Come generateRawCandidatesForLength, ma da PIÙ nodi di ancoraggio insieme (vedi collectFreeAnchors
+// sopra) — i candidati grezzi di ciascuna ancora si sommano, poi si riordina l'insieme per vicinanza
+// al target e si taglia a maxCandidates, così un'ancora particolarmente ricca di candidati non ne
+// esclude altre solo per essere stata esplorata per prima.
+export function generateRawCandidatesForAnchors(
+  network: WalkNetwork, startNodeIds: number[], routeType: RouteType, distanceM: number, maxCandidates = 14,
+): RouteCandidate[] {
+  const all = startNodeIds.flatMap(id => generateRawCandidatesForLength(network, id, routeType, distanceM))
+  return all
+    .sort((a, b) => Math.abs(a.distanceM - distanceM) - Math.abs(b.distanceM - distanceM))
+    .slice(0, maxCandidates)
+}
+
 export interface NetworkPrep {
   bbox: [number, number, number, number]
   network: WalkNetwork
-  startNodeId: number
+  // Sempre almeno 1 elemento. Più di uno SOLO in modalità 'dintorni' senza destinazione (vedi
+  // collectFreeAnchors) — 'esatto' e la modalità con destinazione restano ancorate a un unico nodo,
+  // per costruzione (una destinazione esatta ha un solo punto di partenza sensato: quello scelto
+  // dall'utente).
+  startNodeIds: number[]
   targetDistanceM: number
   hasDestination: boolean
   // Popolato SOLO nel caso "destinazione" (un unico candidato, già generato qui perché richiede
   // comunque la rete in memoria — un solo Dijkstra, economico) — vuoto altrimenti: senza
-  // destinazione, il pathfinding vero e proprio (esplorazione su più direzioni) è lo step successivo
-  // (generateRawCandidatesForLength, chiamato da executeBuild o da step/candidates).
+  // destinazione, il pathfinding vero e proprio (esplorazione su più direzioni, eventualmente da più
+  // ancore) è lo step successivo (generateRawCandidatesForAnchors, chiamato da executeBuild o da
+  // step/candidates).
   rawCandidates: RouteCandidate[]
   concerns: ReturnType<typeof sanitizeHikerConcerns>
   environmentPrefs: ReturnType<typeof sanitizeHikerEnvironmentPrefs>
@@ -175,8 +231,17 @@ export async function prepareNetworkStep(
   console.log(`[buildSteps] rete: ${network.nodes.size} nodi, bbox raggio ${bboxRadiusKm.toFixed(1)}km`)
 
   const startSnapThresholdM = params.startMode === 'dintorni' ? dintorniRadiusKm * 1000 : START_SNAP_THRESHOLD_M
-  const startNode = nearestGraphNode(network, params.lat, params.lon, startSnapThresholdM)
-  if (!startNode) {
+
+  // "Dintorni liberi" solo senza destinazione (vedi commento su NetworkPrep.startNodeIds) — con
+  // destinazione, o in modalità 'esatto', un solo nodo di ancoraggio: il punto scelto dall'utente.
+  const startNodeIds = params.startMode === 'dintorni' && !hasDestination
+    ? collectFreeAnchors(network, params.lat, params.lon, dintorniRadiusKm, startSnapThresholdM)
+    : (() => {
+        const node = nearestGraphNode(network, params.lat, params.lon, startSnapThresholdM)
+        return node ? [node.nodeId] : []
+      })()
+
+  if (startNodeIds.length === 0) {
     return {
       ok: false, status: 404, error: 'no_network_nearby',
       message: params.startMode === 'dintorni'
@@ -191,7 +256,7 @@ export async function prepareNetworkStep(
 
   if (hasDestination) {
     const destinationCandidate = generateOutAndBackToPoint(
-      network, startNode.nodeId, params.destinationLat!, params.destinationLon!,
+      network, startNodeIds[0], params.destinationLat!, params.destinationLon!,
       undefined, params.routeType === 'solo_andata',
     )
     if (!destinationCandidate) {
@@ -208,6 +273,6 @@ export async function prepareNetworkStep(
 
   return {
     ok: true,
-    prep: { bbox, network, startNodeId: startNode.nodeId, targetDistanceM, hasDestination, rawCandidates, concerns, environmentPrefs },
+    prep: { bbox, network, startNodeIds, targetDistanceM, hasDestination, rawCandidates, concerns, environmentPrefs },
   }
 }

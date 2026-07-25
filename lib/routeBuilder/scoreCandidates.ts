@@ -5,13 +5,12 @@
 // applicati a percorsi generati invece che a percorsi trovati per nome.
 import type { TrackPoint } from '@/lib/tcxParser'
 import { enrichGeometryWithElevation, estimateElevationForGeometry } from '@/lib/dtm/elevationEnrich'
-import { computeBbox, haversineM, minDistToTrack } from '@/lib/geoUtils'
-import { fetchOverpass } from '@/lib/overpassTrails'
-import { fetchOverpassPois } from '@/lib/pois/overpassSource'
-import { deduplicateByProximity } from '@/lib/pois/dedupe'
+import { haversineM } from '@/lib/geoUtils'
+import { fetchPoisNearPolyline } from './nearbyPois'
 import type { PoiItem, PoiType } from '@/lib/overpass'
 import type { HikerConcernKey, HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
 import { DtmUnavailableError } from '@/lib/dtm/dtmClient'
+import { computeProvisionalScore, type ProvisionalScore } from './provisionalScore'
 import type { RouteCandidate } from './loopBuilder'
 
 // Quanti POI (i più vicini al tracciato) portare con sé nel risultato — per l'anteprima grafica
@@ -37,6 +36,9 @@ export interface ScoredCandidate {
   // il candidato (mai per l'intera lista di risultati). Stesso concetto già usato da ResolvedTrack
   // per i percorsi "trovati", qui sempre false finché non arriva l'arricchimento reale.
   hasElevation: boolean
+  // Stima leggera (vedi provisionalScore.ts) — sempre presente, va mostrata con l'etichetta
+  // "Provvisorio", mai come il punteggio definitivo (quello arriva solo dopo l'importazione).
+  provisionalScore: ProvisionalScore
 }
 
 // NOTA su 'ombra' (HIKER_ENVIRONMENT_PREFS): deliberatamente non punteggiata in questo giro.
@@ -59,8 +61,10 @@ export interface ScoreOptions {
   // destinazione in app/api/route-build/route.ts), solo una preferenza di categoria che l'algoritmo
   // usa per scegliere/premiare tra i candidati già generati.
   desiredPoiTypes: PoiType[]
-  // Bbox dell'intera ricerca (stesso passato a fetchWalkNetwork in route-build/route.ts) — usato
-  // per un'unica query aggiuntiva e mirata (scalini/gradini), non per candidato.
+  // Bbox dell'intera ricerca (stesso passato a fetchWalkNetwork in route-build/route.ts) — non più
+  // usato per il rilevamento scalini (ora un flag esatto calcolato durante il pathfinding, vedi
+  // RouteCandidate.hasSteps in loopBuilder.ts), tenuto per eventuali arricchimenti futuri a livello
+  // di bbox intero (es. area protetta) invece che per candidato.
   bbox: [number, number, number, number]
 }
 
@@ -70,55 +74,6 @@ const STEEP_GRADE_PCT = 15
 const STEEP_MIN_SEGMENT_M = 15
 
 const WATER_POI_TYPES = new Set(['spring', 'waterfall'])
-
-// Un candidato che passa entro questa distanza da un tratto con gradini (highway=steps) è
-// considerato "attraversa scalini" — generoso abbastanza da assorbire l'imprecisione del grafo
-// (i nodi del percorso non cadono mai esattamente sui nodi della way originale).
-const STEPS_PROXIMITY_M = 20
-
-// Solo Overpass, non le 4 fonti di app/api/pois/route.ts (usato lato client da
-// lib/poisProxy.ts) — GNA/PTPR/Wikidata sono API pubbliche più lente/meno affidabili, e qui
-// vengono interrogate una volta PER CANDIDATO (fino a ENRICH_CAP in route-build/route.ts, in
-// parallelo con l'arricchimento DTM): con 4 fonti invece di una, un'unica fonte lenta su un solo
-// candidato basta a rallentare l'intera richiesta, un fattore concreto nei timeout di produzione
-// osservati su aree con rete rada. L'anteprima qui è solo per la scheda risultato (matchNote,
-// bonus di punteggio) — l'arricchimento completo a 4 fonti avviene comunque di nuovo al momento
-// del salvataggio (enrichWithPois in RouteBuilder.tsx), quindi il percorso salvato non perde nulla.
-async function fetchPoisNearPolyline(polyline: [number, number][], radiusM = 300): Promise<PoiItem[]> {
-  const bbox = computeBbox(polyline)
-  const pois = await fetchOverpassPois(bbox).catch(() => [] as PoiItem[])
-  // distFromTrack è calcolato dalla fonte solo per bbox, non per tracciato — va ricalcolato qui
-  // rispetto alla polilinea reale, stesso pattern di lib/poisProxy.ts's fetchPoisNearTrack.
-  return deduplicateByProximity(pois, 50)
-    .map(poi => ({ ...poi, distFromTrack: Math.round(minDistToTrack(poi.lat, poi.lon, polyline)) }))
-    .filter(poi => poi.distFromTrack <= radiusM)
-}
-
-// Query separata e minima (solo id/geometria di way "steps", niente altri tag) invece di
-// richiedere i tag su OGNI way della rete percorribile in lib/routeBuilder/osmGraph.ts — quella
-// query è già stata alleggerita apposta per evitare il 504 osservato in produzione (vedi git log),
-// quindi l'informazione aggiuntiva serve qui come query a parte, non riaprendo quella.
-async function fetchStepsGeometries(bbox: [number, number, number, number]): Promise<[number, number][][]> {
-  const [minLat, minLon, maxLat, maxLon] = bbox
-  const query = `[out:json][timeout:15];way["highway"="steps"](${minLat},${minLon},${maxLat},${maxLon});out geom;`
-  try {
-    const json = await fetchOverpass<{ elements: Array<{ type: string; geometry?: { lat: number; lon: number }[] }> }>(query, 15_000)
-    return (json.elements ?? [])
-      .filter(el => el.type === 'way' && (el.geometry?.length ?? 0) >= 2)
-      .map(el => el.geometry!.map(p => [p.lat, p.lon] as [number, number]))
-  } catch {
-    return []
-  }
-}
-
-function crossesSteps(polyline: [number, number][], stepsWays: [number, number][][]): boolean {
-  for (const way of stepsWays) {
-    for (const [lat, lon] of way) {
-      if (minDistToTrack(lat, lon, polyline) <= STEPS_PROXIMITY_M) return true
-    }
-  }
-  return false
-}
 
 function maxGradePct(trackPoints: TrackPoint[]): number {
   let max = 0
@@ -156,7 +111,10 @@ function buildMatchNote(opts: {
 
   if (opts.targetElevationM != null) {
     const gainOffPct = Math.abs(opts.elevationGain - opts.targetElevationM) / Math.max(opts.targetElevationM, 1)
-    if (gainOffPct <= 0.15) notes.push(`dislivello in linea con la tua richiesta`)
+    // "stimato" esplicito: qui elevationGain non è ancora la quota reale dal DTM (arriva solo
+    // all'importazione), solo una stima geometrica — onesto dirlo invece di suggerire una
+    // precisione che non c'è ancora.
+    if (gainOffPct <= 0.15) notes.push(`dislivello stimato in linea con la tua richiesta`)
   }
 
   if (opts.environmentPrefs.includes('acqua') && opts.waterPoiCount > 0) {
@@ -185,35 +143,40 @@ export async function scoreAndEnrichCandidates(
   opts: ScoreOptions,
   maxResults = 14,
 ): Promise<ScoredCandidate[]> {
-  // Una sola query per l'intera richiesta (non per candidato) — condivisa da tutti i candidati
-  // valutati qui sotto.
-  const stepsWaysPromise = fetchStepsGeometries(opts.bbox)
-
   const enriched = await Promise.all(raw.map(async candidate => {
     if (candidate.polyline.length < 2) return null
-    const [enrichedTrack, pois, stepsWays] = await Promise.all([
+    const [enrichedTrack, pois] = await Promise.all([
       Promise.resolve(estimateElevationForGeometry(candidate.polyline)),
       fetchPoisNearPolyline(candidate.polyline).catch(() => [] as PoiItem[]),
-      stepsWaysPromise,
     ])
 
     // maxGradePct salta le coppie senza altitudeMeters (vedi sopra) — sempre 0/false qui, dato che
     // la stima non porta quota per-punto: coerente con l'assenza di dati reali, si affina
     // all'importazione insieme al resto.
     const hasSteepSections = maxGradePct(enrichedTrack.trackPoints) >= STEEP_GRADE_PCT
-    const hasSteps = crossesSteps(candidate.polyline, stepsWays)
+    // Calcolato da lib/routeBuilder/loopBuilder.ts durante il pathfinding (arco highway=steps
+    // EFFETTIVAMENTE percorso) — non più una stima per prossimità (bug corretto: la vecchia euristica
+    // confrontava ogni scalinata dell'intero bbox di ricerca contro ogni punto del tracciato entro
+    // 20m, quasi sempre vera in una zona con più di un borgo/scalinata nei dintorni).
+    const hasSteps = candidate.hasSteps
     const waterPoiCount = pois.filter(p => WATER_POI_TYPES.has(p.type)).length
     const desiredPoiCount = opts.desiredPoiTypes.length > 0 ? pois.filter(p => opts.desiredPoiTypes.includes(p.type)).length : 0
 
     const distanceScore = 1 - Math.min(1, Math.abs(enrichedTrack.distanceMeters - opts.targetDistanceM) / opts.targetDistanceM)
-    // Sempre neutro (0.5): enrichedTrack.elevationGain qui è una stima geometrica generica (vedi
-    // estimateElevationForGeometry), non la quota reale — confrontarla contro targetElevationM
-    // darebbe una falsa precisione nel ranking, dato che la stima non varia per il dislivello REALE
-    // di candidati diversi con lunghezza simile. Si affina solo dopo l'importazione, quando la
-    // quota è quella vera (ma il ranking di ricerca, per costruzione, è già passato).
-    const elevationScore = 0.5
+    // Segnale reale solo se l'utente ha impostato un dislivello target: enrichedTrack.elevationGain
+    // resta una stima geometrica (nessuna chiamata DTM qui, vedi sopra), quindi il confronto è
+    // approssimato — ma è comunque più utile di un neutro fisso per ordinare i candidati tra loro
+    // quando l'utente ha davvero espresso una preferenza. Nessun target ⇒ nessun effetto (0.5,
+    // né bonus né penalità), esattamente come prima.
+    const elevationScore = opts.targetElevationM != null && opts.targetElevationM > 0
+      ? Math.max(0, 1 - Math.abs(enrichedTrack.elevationGain - opts.targetElevationM) / Math.max(opts.targetElevationM, 100))
+      : 0.5
     const environmentScore = opts.environmentPrefs.includes('acqua') ? Math.min(1, waterPoiCount / 3) : 0
     const poiMatchScore = opts.desiredPoiTypes.length > 0 ? Math.min(1, desiredPoiCount / 2) : 0
+    // Segnale generico (indipendente da desiredPoiTypes): un percorso con più punti di interesse
+    // nelle strette vicinanze è preferibile a parità di altri fattori — 5 POI entro 300m già
+    // massimizza il punteggio, oltre non c'è ulteriore vantaggio a contarli.
+    const poiDensityScore = Math.min(1, pois.length / 5)
     const concernsPenalty = hasSteepSections && (
       opts.concerns.includes('vertigini') || opts.concerns.includes('salite_ripide') || opts.concerns.includes('terreno_instabile')
     ) ? 0.4 : 0
@@ -224,23 +187,23 @@ export async function scoreAndEnrichCandidates(
       opts.concerns.includes('vertigini') || opts.concerns.includes('terreno_instabile') || opts.concerns.includes('orientamento')
     ) ? 0.3 : 0
 
-    const score = distanceScore * 0.4 + elevationScore * 0.25 + environmentScore * 0.15 + poiMatchScore * 0.2 - concernsPenalty - stepsPenalty
+    const score = distanceScore * 0.35 + elevationScore * 0.2 + environmentScore * 0.15 + poiMatchScore * 0.2 + poiDensityScore * 0.1 - concernsPenalty - stepsPenalty
 
     const matchNote = buildMatchNote({
       distanceMeters: enrichedTrack.distanceMeters,
       elevationGain: enrichedTrack.elevationGain,
       targetDistanceM: opts.targetDistanceM,
-      // Non enrichedTrack.elevationGain è una stima, non la quota reale (vedi sopra) — confrontarla
-      // col dislivello desiderato dell'utente e mostrare "dislivello in linea con la tua richiesta"
-      // sarebbe una rassicurazione non veritiera. Il testo torna a comparire (con il dato vero)
-      // solo se il chiamante ricalcola il matchNote dopo l'arricchimento reale.
-      targetElevationM: undefined,
+      // Ora un segnale reale (vedi elevationScore sopra) — passato con la stessa cautela "stima"
+      // nel testo (vedi buildMatchNote), non più forzato a undefined.
+      targetElevationM: opts.targetElevationM,
       waterPoiCount,
       desiredPoiCount,
       environmentPrefs: opts.environmentPrefs,
       hasSteepSections,
       hasSteps,
     })
+
+    const topPois = pois.slice().sort((a, b) => a.distFromTrack - b.distFromTrack).slice(0, MAX_POIS_IN_RESULT)
 
     const scored: ScoredCandidate = {
       type: candidate.type,
@@ -254,8 +217,19 @@ export async function scoreAndEnrichCandidates(
       estimatedTimeSeconds: enrichedTrack.estimatedTimeSeconds,
       matchNote,
       hasSteepSections,
-      pois: pois.slice().sort((a, b) => a.distFromTrack - b.distFromTrack).slice(0, MAX_POIS_IN_RESULT),
+      pois: topPois,
       hasElevation: false,
+      provisionalScore: computeProvisionalScore({
+        routePolyline: candidate.polyline,
+        trackPoints: enrichedTrack.trackPoints,
+        distanceMeters: enrichedTrack.distanceMeters,
+        elevationGain: enrichedTrack.elevationGain,
+        elevationLoss: enrichedTrack.elevationLoss,
+        altitudeMax: enrichedTrack.altitudeMax,
+        altitudeMin: enrichedTrack.altitudeMin,
+        estimatedTimeSeconds: enrichedTrack.estimatedTimeSeconds,
+        pois: topPois,
+      }),
     }
     return { scored, score }
   }))

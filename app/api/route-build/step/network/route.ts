@@ -10,7 +10,7 @@
 // La rete percorribile stessa (potenzialmente decine di migliaia di nodi) NON viaggia mai sul
 // filo verso il client: resta solo nella cache server-side (walk_network_cache, scrittura
 // GARANTITA qui — awaitCacheWrite:true — perché step/candidates deve poterla rileggere in una
-// richiesta separata), il client riceve solo bbox/startNodeId, dati leggeri sufficienti per
+// richiesta separata), il client riceve solo bbox/startNodeIds, dati leggeri sufficienti per
 // richiamare lo step successivo.
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
@@ -57,6 +57,6 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: outcome.error, message: outcome.message }, { status: outcome.status })
   }
 
-  const { bbox, startNodeId, targetDistanceM, hasDestination, rawCandidates, concerns, environmentPrefs } = outcome.prep
-  return NextResponse.json({ bbox, startNodeId, targetDistanceM, hasDestination, rawCandidates, concerns, environmentPrefs })
+  const { bbox, startNodeIds, targetDistanceM, hasDestination, rawCandidates, concerns, environmentPrefs } = outcome.prep
+  return NextResponse.json({ bbox, startNodeIds, targetDistanceM, hasDestination, rawCandidates, concerns, environmentPrefs })
 }

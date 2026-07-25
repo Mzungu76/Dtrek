@@ -3,6 +3,8 @@
 // e components/RouteResultCard.tsx ne hanno bisogno, senza importare l'uno dall'altro.
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { SearchResultCandidate } from '@/app/api/route-search/route'
+import type { PoiItem } from '@/lib/overpass'
+import type { ProvisionalScore } from './provisionalScore'
 
 // Traccia reale garantita di un percorso "trovato" — mai mostrata finché non risolta. Stessa forma
 // dei campi restituiti da /api/route-search/resolve (lib/routeBuilder/resolveTrack.ts), letta qui
@@ -34,4 +36,11 @@ export interface FoundRouteItem {
   comfortNote?: string
   osmId?: number
   track: ResolvedTrack
+  // POI vicini al tracciato (vedi lib/routeBuilder/nearbyPois.ts) — assente/vuoto per le righe già
+  // in cache `trails` da prima di questo campo (non ri-arricchite retroattivamente) o quando la
+  // ricerca POI fallisce; mai bloccante per mostrare comunque il percorso.
+  pois?: PoiItem[]
+  // Stima leggera (vedi lib/routeBuilder/provisionalScore.ts) — assente per lo stesso motivo di
+  // `pois` sopra (righe di cache precedenti a questo campo).
+  provisionalScore?: ProvisionalScore
 }

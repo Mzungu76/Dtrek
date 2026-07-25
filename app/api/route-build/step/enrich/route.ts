@@ -35,7 +35,7 @@ function parseCandidate(raw: unknown): RouteCandidate | null {
   const distanceM = Number(c.distanceM)
   const bearingDeg = Number(c.bearingDeg)
   if (!Number.isFinite(distanceM) || !Number.isFinite(bearingDeg)) return null
-  return { type: c.type as RouteCandidate['type'], polyline: c.polyline as [number, number][], distanceM, bearingDeg }
+  return { type: c.type as RouteCandidate['type'], polyline: c.polyline as [number, number][], distanceM, bearingDeg, hasSteps: c.hasSteps === true }
 }
 
 function parseBody(raw: unknown): EnrichRequestBody {

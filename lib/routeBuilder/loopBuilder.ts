@@ -52,6 +52,12 @@ export interface RouteCandidate {
   polyline: [number, number][]
   distanceM: number
   bearingDeg: number
+  // True solo se il percorso cammina DAVVERO su un arco taggato highway=steps (calcolato qui,
+  // durante il pathfinding, dagli archi realmente percorsi — vedi pathHasSteps) — non più una
+  // stima per prossimità (bug corretto: lib/routeBuilder/scoreCandidates.ts confrontava OGNI
+  // scalinata dell'intero bbox di ricerca, anche a km di distanza dal tracciato, contro OGNI punto
+  // del percorso entro 20m, risultando quasi sempre vero in una zona con molti borghi/scalinate).
+  hasSteps: boolean
 }
 
 function bearingFromStart(start: { lat: number; lon: number }, node: { lat: number; lon: number }): number {
@@ -179,6 +185,19 @@ function pathToPolyline(network: WalkNetwork, path: number[]): [number, number][
     .map(n => [n.lat, n.lon] as [number, number])
 }
 
+// Vero solo se un arco EFFETTIVAMENTE percorso da questo path è taggato highway=steps — usa i tag
+// già presenti sugli archi del grafo (vedi lib/routeBuilder/osmGraph.ts's GraphEdge.highway), zero
+// costo aggiuntivo (nessuna query Overpass separata, a differenza della vecchia euristica per
+// prossimità che confrontava l'intero bbox).
+function pathHasSteps(network: WalkNetwork, path: number[]): boolean {
+  for (let i = 0; i < path.length - 1; i++) {
+    const node = network.nodes.get(path[i])
+    const edge = node?.edges.find(e => e.to === path[i + 1])
+    if (edge?.highway === 'steps') return true
+  }
+  return false
+}
+
 function nodeSetOverlap(a: Set<number>, b: Set<number>): number {
   let shared = 0
   const [small, big] = a.size <= b.size ? [a, b] : [b, a]
@@ -261,9 +280,10 @@ export function generateOutAndBackCandidates(
     const outPath = reconstructPath(prev, startNodeId, nodeId)
     if (!outPath) continue
     const backPath = [...outPath].reverse().slice(1)
-    const polyline = pathToPolyline(network, [...outPath, ...backPath])
+    const fullPath = [...outPath, ...backPath]
+    const polyline = pathToPolyline(network, fullPath)
     const bearingDeg = bearingFromStart(start, network.nodes.get(nodeId)!)
-    candidates.push({ type: 'andata_ritorno', polyline, distanceM: oneWayM * 2, bearingDeg, nodeSet: new Set(outPath) })
+    candidates.push({ type: 'andata_ritorno', polyline, distanceM: oneWayM * 2, bearingDeg, hasSteps: pathHasSteps(network, fullPath), nodeSet: new Set(outPath) })
   }
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
@@ -292,7 +312,7 @@ export function generateOneWayCandidates(
     if (!outPath) continue
     const polyline = pathToPolyline(network, outPath)
     const bearingDeg = bearingFromStart(start, network.nodes.get(nodeId)!)
-    candidates.push({ type: 'solo_andata', polyline, distanceM, bearingDeg, nodeSet: new Set(outPath) })
+    candidates.push({ type: 'solo_andata', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, outPath), nodeSet: new Set(outPath) })
   }
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
@@ -334,7 +354,7 @@ export function generateLoopCandidates(
 
     const polyline = pathToPolyline(network, fullPath)
     const bearingDeg = bearingFromStart(start, network.nodes.get(farNodeId)!)
-    candidates.push({ type: 'anello', polyline, distanceM, bearingDeg, nodeSet: new Set(fullPath) })
+    candidates.push({ type: 'anello', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, fullPath), nodeSet: new Set(fullPath) })
   }
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
@@ -374,12 +394,16 @@ export function generateOutAndBackToPoint(
 
   const bearingDeg = bearingFromStart(start, network.nodes.get(destNode.nodeId)!)
   if (oneWay) {
-    return { type: 'solo_andata', polyline: pathToPolyline(network, outPath), distanceM: pathDistanceM(network, outPath), bearingDeg }
+    return {
+      type: 'solo_andata', polyline: pathToPolyline(network, outPath), distanceM: pathDistanceM(network, outPath),
+      bearingDeg, hasSteps: pathHasSteps(network, outPath),
+    }
   }
 
   const backPath = [...outPath].reverse().slice(1)
-  const polyline = pathToPolyline(network, [...outPath, ...backPath])
+  const fullPath = [...outPath, ...backPath]
+  const polyline = pathToPolyline(network, fullPath)
   const distanceM = pathDistanceM(network, outPath) * 2
 
-  return { type: 'andata_ritorno', polyline, distanceM, bearingDeg }
+  return { type: 'andata_ritorno', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, fullPath) }
 }
