@@ -89,10 +89,24 @@ async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | nul
 // (quello è il passo successivo, resolveFoundRoutesWithPoi, deliberatamente separato).
 async function findTier0(query: string, radiusKm: number, destination: DestinationPoint | null): Promise<{ place: ResolvedPlace | null; candidates: HikingRouteCandidate[] }> {
   const { nameQuery, areaHint } = splitQuery(query)
-  const [place, rawCandidates] = await Promise.all([
+  const [place, rawCandidatesInitial] = await Promise.all([
     resolvePlaceName(query),
     findExistingRoutesNonAi(nameQuery, areaHint, radiusKm),
   ])
+  let rawCandidates = rawCandidatesInitial
+  // Il testo digitato può risolversi in un luogo valido (place, via Nominatim in forma libera —
+  // vedi resolvePlaceName) pur non "sembrando" un nome di luogo cercabile per esteso (es. più nomi
+  // concatenati con virgola, come "Le mole, Il Molino, Nera Montoro, Narni": 7 parole, oltre la
+  // soglia di looksLikePlaceName) — in quel caso findExistingRoutesNonAi si è già arresa (torna [])
+  // senza nemmeno provare una ricerca per bbox, PUR AVENDO un punto valido in mano risolto in
+  // parallelo. Con un place disponibile non serve indovinare di nuovo l'area dal testo: si cerca
+  // direttamente nei dintorni di quelle coordinate, con lo stesso raggio scelto dall'utente — lo
+  // stesso identico fallback bbox già usato sopra, solo centrato sul punto anziché su un'area
+  // risolta dal nome.
+  if (rawCandidates.length === 0 && place) {
+    const [minLat, minLon, maxLat, maxLon] = padBbox([place.lat, place.lon, place.lat, place.lon], radiusKm)
+    rawCandidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
+  }
   let candidates = place ? sortByDistanceFrom(rawCandidates, place.lat, place.lon) : rawCandidates
   // Percorso "tra 2 punti" (vedi FoundRouteResult più sotto): senza la geometria completa (solo il
   // centroide della relazione è noto a questo livello) non si può ancora sapere se un candidato
