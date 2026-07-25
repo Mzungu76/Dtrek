@@ -80,6 +80,12 @@ interface Props {
   /** Draws small chevron markers along the route (Komoot-style) showing which way it goes —
    *  off by default so decorative/tiny renders (e.g. the guide hero thumbnail) stay uncluttered. */
   showDirectionArrows?: boolean
+  /** Increment right when the container's CSS size is about to change for a reason the
+   *  ResizeObserver below might not catch in time (e.g. the "schermo intero" class swap in
+   *  RouteMapSection/PoiMap) — forces an immediate invalidateSize()+refit instead of waiting for
+   *  the observer, so the map never gets stuck rendering tiles for its pre-fullscreen size while
+   *  the container is already the new one (leaflet's classic "partial gray map" symptom). */
+  resizeSignal?: number
 }
 
 // Distanza (metri) tra una freccia di direzione e la successiva — discreta: un tocco che indica
@@ -144,6 +150,7 @@ export default function MapView({
   focusPoints = null,
   focusSignal,
   showDirectionArrows = false,
+  resizeSignal,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<L.Map | null>(null)
@@ -223,13 +230,14 @@ export default function MapView({
         const AspectLegend = L.Control.extend({
           onAdd(): HTMLElement {
             const d = L.DomUtil.create('div', '')
-            d.style.cssText = 'background:white;padding:6px 10px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,0.2)'
+            d.style.cssText = 'background:white;padding:6px 10px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,0.2);max-width:190px'
             d.innerHTML = [
               '<b>Esposizione</b>',
-              `<span style="color:${aspectDegToColor(0)}">■</span> N`,
-              `<span style="color:${aspectDegToColor(90)}">■</span> E`,
-              `<span style="color:${aspectDegToColor(180)}">■</span> S`,
-              `<span style="color:${aspectDegToColor(270)}">■</span> O`,
+              `<span style="color:${aspectDegToColor(180)}">■</span> Sud — più caldo/soleggiato`,
+              `<span style="color:${aspectDegToColor(0)}">■</span> Nord — più freddo/in ombra`,
+              `<span style="color:${aspectDegToColor(90)}">■</span> Est — sole al mattino`,
+              `<span style="color:${aspectDegToColor(270)}">■</span> Ovest — sole al pomeriggio`,
+              '<span style="display:block;margin-top:3px;color:#9ca3af;font-size:10px;line-height:1.35">D\'estate i versanti sud scaldano di più, d\'inverno hanno meno neve/ghiaccio — dipende comunque da quota e stagione.</span>',
             ].join('<br>')
             return d
           },
@@ -422,6 +430,28 @@ export default function MapView({
     observer.observe(mapRef.current)
     return () => { cancelAnimationFrame(raf); observer.disconnect() }
   }, [mapReady])
+
+  // Correzione esplicita e immediata per lo stesso problema del ResizeObserver sopra — non lo
+  // sostituisce, lo affianca: la classe "schermo intero" può scambiare position:fixed/inset-0 nello
+  // stesso frame in cui l'utente preme il pulsante, e se invalidateSize() arriva anche solo un
+  // frame dopo che l'utente ha già iniziato a pizzicare/zoomare, Leaflet continua a renderizzare
+  // tile solo per l'area (più piccola) che conosceva PRIMA del cambio, lasciando grigio il resto
+  // del contenitore ormai più grande finché non arriva un altro resize — il sintomo "mappa parziale
+  // dopo ingrandimento/rimpicciolimento" segnalato dagli utenti. Il chiamante (RouteMapSection.tsx,
+  // PoiMap.tsx) incrementa `resizeSignal` nello stesso click handler che cambia la classe, quindi
+  // qui si corre PRIMA che l'utente possa interagire di nuovo con la mappa.
+  const resizeSignalRef = useRef(resizeSignal)
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current || !boundsRef.current) return
+    if (resizeSignal == null || resizeSignal === resizeSignalRef.current) return
+    resizeSignalRef.current = resizeSignal
+    const map = mapInstance.current
+    const bounds = boundsRef.current
+    requestAnimationFrame(() => {
+      map.invalidateSize()
+      map.fitBounds(bounds, { padding: [20, 20], animate: false })
+    })
+  }, [resizeSignal, mapReady])
 
   // Tracks whichever LatLng currently sits at the *visible* (unobscured) center — every user
   // pan/zoom (and our own corrective pans below) updates it, so "the point centered before the

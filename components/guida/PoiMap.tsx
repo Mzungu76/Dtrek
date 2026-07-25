@@ -41,6 +41,7 @@ export default function PoiMap({
   const [fullscreen, setFullscreen] = useState(false)
   const [fitTick, setFitTick] = useState(0)
   const [showArrows, setShowArrows] = useState(false)
+  const [resizeTick, setResizeTick] = useState(0)
 
   const highlightedIndices = useMemo(
     () => (!highlightedPoiIds || highlightedPoiIds.size === 0
@@ -58,6 +59,7 @@ export default function PoiMap({
       if (next) setLocked(false)
       return next
     })
+    setResizeTick(t => t + 1)
   }
 
   return (
@@ -75,6 +77,7 @@ export default function PoiMap({
         focusPoints={focusPoints}
         focusSignal={focusSignal}
         showDirectionArrows={showArrows}
+        resizeSignal={resizeTick}
       />
       <div
         className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"

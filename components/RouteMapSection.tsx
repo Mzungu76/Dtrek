@@ -52,6 +52,11 @@ export default function RouteMapSection({
   // Layer opzionale, spento di default — non tutti vogliono le frecce di direzione sempre visibili
   // sulla mappa del percorso, a differenza della navigazione live dove restano sempre attive.
   const [showArrows, setShowArrows] = useState(false)
+  // Incrementato ad ogni cambio schermo-intero — forza MapView a correggere subito la propria
+  // dimensione interna invece di aspettare il solo ResizeObserver (vedi commento in MapView.tsx),
+  // altrimenti una mappa aperta a schermo intero può restare "parziale" (grigia oltre l'area che
+  // conosceva prima del cambio) se l'utente inizia a zoomare prima che il resize venga rilevato.
+  const [resizeTick, setResizeTick] = useState(0)
 
   const hasGps = !!trackPoints?.some(p => p.lat && p.lon)
   if (!hasGps) return null
@@ -62,6 +67,7 @@ export default function RouteMapSection({
       if (next) setLocked(false) // richiesto: lo schermo intero attiva sempre la navigazione
       return next
     })
+    setResizeTick(t => t + 1)
   }
 
   // Pendenza mostrata sul tracciato solo mentre l'utente sposta il dito/mouse sul grafico
@@ -84,6 +90,7 @@ export default function RouteMapSection({
           transientGradient={transientGradient}
           fitSignal={fitTick}
           showDirectionArrows={showArrows}
+          resizeSignal={resizeTick}
         />
         <div
           className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
