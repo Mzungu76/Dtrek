@@ -13,7 +13,7 @@ import { it } from 'date-fns/locale'
 import {
   Mountain, Upload,
   ChevronLeft, ChevronRight, Loader2, CalendarDays, LayoutList, ArrowUpDown, PartyPopper,
-  SlidersHorizontal,
+  SlidersHorizontal, Search, X,
 } from 'lucide-react'
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -166,6 +166,8 @@ export default function ResocontoIndexPage() {
   const [sortBy,     setSortBy]     = useState<SortKey>('date')
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [query, setQuery] = useState('')
   const [reportStatus, setReportStatus] = useState<Record<string, ResocontoStatus>>({})
   const monthBarRef = useRef<HTMLDivElement>(null)
 
@@ -251,6 +253,19 @@ export default function ResocontoIndexPage() {
     }
     return [...monthActivities].sort(cmp[sortBy] ?? cmp.date)
   }, [monthActivities, sortBy])
+
+  const q = query.trim().toLowerCase()
+  const searchResults = useMemo(() => {
+    if (!q) return []
+    const cmp: Record<SortKey, (a: ActivityMeta, b: ActivityMeta) => number> = {
+      date:   (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
+      km:     (a, b) => b.distanceMeters - a.distanceMeters,
+      dplus:  (a, b) => b.elevationGain - a.elevationGain,
+      cts:    (a, b) => ((b as ActivityMeta & { trailScore?: number }).trailScore ?? -1) - ((a as ActivityMeta & { trailScore?: number }).trailScore ?? -1),
+      rating: (a, b) => (b.userRating ?? 0) - (a.userRating ?? 0),
+    }
+    return activities.filter(a => (a.title ?? 'Escursione').toLowerCase().includes(q)).sort(cmp[sortBy] ?? cmp.date)
+  }, [activities, q, sortBy])
 
   const cells: (number | null)[] = useMemo(() => {
     const daysInMonth = getDaysInMonth(new Date(year, month))
@@ -346,6 +361,13 @@ export default function ResocontoIndexPage() {
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
+                  onClick={() => setShowSearch(v => { const next = !v; if (!next) setQuery(''); return next })}
+                  title="Cerca un'escursione"
+                  className={`flex items-center justify-center w-9 h-9 rounded-full border transition-all shadow-sm ${showSearch ? 'bg-forest-600 border-forest-600 text-white' : 'bg-white border-stone-200 hover:border-forest-400 text-forest-700'}`}
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => setView(v => v === 'feed' ? 'calendar' : 'feed')}
                   title={view === 'feed' ? 'Vedi calendario' : 'Vedi elenco'}
                   className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-stone-200 hover:border-forest-400 text-forest-700 transition-all shadow-sm"
@@ -361,7 +383,40 @@ export default function ResocontoIndexPage() {
               </div>
             </div>
 
-            {view === 'calendar' ? (
+            {showSearch && (
+              <div className="relative">
+                <Search className="w-4 h-4 text-stone-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Cerca per titolo dell'escursione…"
+                  className="w-full pl-11 pr-10 py-3 rounded-xl border border-stone-200 bg-white text-sm text-stone-800 outline-none focus:border-forest-500 placeholder:text-stone-400"
+                />
+                {query && (
+                  <button onClick={() => setQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {q ? (
+              searchResults.length === 0 ? (
+                <p className="text-sm text-stone-400 text-center py-12">Nessun risultato per «{query.trim()}».</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {searchResults.map(activity => (
+                    <FeedActivityCard
+                      key={activity.id}
+                      activity={activity}
+                      showFullDate
+                      reportStatus={reportStatus[activity.id]}
+                    />
+                  ))}
+                </div>
+              )
+            ) : view === 'calendar' ? (
               <div>
                 {months.length > 1 && (
                   <div ref={monthBarRef} className="flex gap-1 overflow-x-auto mb-4 pb-1">

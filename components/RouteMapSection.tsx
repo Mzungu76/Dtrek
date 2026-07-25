@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed } from 'lucide-react'
+import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Compass } from 'lucide-react'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
@@ -18,6 +18,10 @@ interface Props {
   onOpenMap3D?: () => void
   showGradient?: boolean
   showAspect?: boolean
+  /** Mostra il chip "Esposizione" flottante sulla mappa — omesso quando il DTM non è disponibile
+   *  per questo percorso (stesso criterio già usato per il vecchio toggle in ScoresWidget). */
+  showAspectToggle?: boolean
+  onToggleAspect?: () => void
   dtmProfile?: TrailDtmProfile
   /** Track color: blue (planned, not yet hiked) vs green (completed) — mirrors MapView's own default. */
   planned?: boolean
@@ -39,7 +43,7 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  */
 export default function RouteMapSection({
   trackPoints, pois = [], highlightedPoiIndex = null, onPoiTap, onOpenMap3D,
-  showGradient, showAspect, dtmProfile, planned, showPois = true,
+  showGradient, showAspect, showAspectToggle, onToggleAspect, dtmProfile, planned, showPois = true,
 }: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
@@ -76,11 +80,21 @@ export default function RouteMapSection({
           showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
           transientGradient={transientGradient}
           fitSignal={fitTick}
+          showDirectionArrows
         />
         <div
           className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
           style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}
         >
+          {showAspectToggle && (
+            <button
+              onClick={onToggleAspect}
+              title="Esposizione dei versanti"
+              className={showAspect ? chipActive : chipIdle}
+            >
+              <Compass className="w-4 h-4" />
+            </button>
+          )}
           {onOpenMap3D && (
             <button onClick={onOpenMap3D} title="Vista 3D" className={chipIdle}>
               <Box className="w-4 h-4" />

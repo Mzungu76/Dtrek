@@ -44,6 +44,35 @@ const STATE_COLOR: Record<NavState, string> = {
 
 const ROUTE_SOURCE_ID = 'nav-route'
 const ROUTE_LAYER_ID = 'nav-route-line'
+const ROUTE_ARROW_LAYER_ID = 'nav-route-arrows'
+const ARROW_ICON_ID = 'nav-direction-arrow'
+// Pixel, non metri — MapLibre spazia i simboli lungo la linea in coordinate schermo, quindi la
+// densità delle frecce scala naturalmente con lo zoom (più frecce visibili quando si zooma).
+const ARROW_SYMBOL_SPACING_PX = 110
+
+/** Triangolo pieno bianco-bordato che punta "in su" — con symbol-placement:'line' e icon-rotate:90
+ *  (compensa la convenzione di MapLibre, che assume l'icona rivolta a destra) segue in automatico
+ *  la direzione del tracciato, stesso trattamento visivo delle frecce di MapView.tsx/NavigationMap.tsx. */
+function buildArrowIcon(size = 24, color = '#277134'): ImageData {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  ctx.translate(size / 2, size / 2)
+  ctx.beginPath()
+  ctx.moveTo(0, -size * 0.42)
+  ctx.lineTo(size * 0.36, size * 0.42)
+  ctx.lineTo(0, size * 0.24)
+  ctx.lineTo(-size * 0.36, size * 0.42)
+  ctx.closePath()
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = 'white'
+  ctx.lineWidth = size * 0.22
+  ctx.stroke()
+  ctx.fillStyle = color
+  ctx.fill()
+  return ctx.getImageData(0, 0, size, size)
+}
 const ACCURACY_SOURCE_ID = 'nav-accuracy'
 const ACCURACY_LAYER_ID = 'nav-accuracy-fill'
 const TERRAIN_SOURCE_ID = 'nav-terrain'
@@ -171,6 +200,24 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     } else {
       map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson })
       map.addLayer({ id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID, paint: { 'line-color': '#277134', 'line-width': 4, 'line-opacity': 0.85 } })
+    }
+    // setStyle() svuota anche le immagini custom insieme a source/layer — hasImage torna false
+    // dopo un cambio stile, quindi questa guardia la ri-registra invece di saltarla per sempre.
+    if (!map.hasImage(ARROW_ICON_ID)) map.addImage(ARROW_ICON_ID, buildArrowIcon(), { pixelRatio: 2 })
+    if (!map.getLayer(ROUTE_ARROW_LAYER_ID)) {
+      map.addLayer({
+        id: ROUTE_ARROW_LAYER_ID, type: 'symbol', source: ROUTE_SOURCE_ID,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': ARROW_SYMBOL_SPACING_PX,
+          'icon-image': ARROW_ICON_ID,
+          'icon-rotate': 90,
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-size': 0.65,
+        },
+      })
     }
   }
 

@@ -2,9 +2,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   fetchHistoricalWeather, fetchForecastWeather, fetchDayHourly,
-  clothingSuggestions, wmoInfo, windDirLabel, findGoodWeatherWindows,
+  clothingSuggestions, weatherAdvice, wmoInfo, windDirLabel, findGoodWeatherWindows,
 } from '@/lib/openmeteo'
-import type { HourlyWeather, HourlyWeatherFull, DailyWeather, ClothingItem } from '@/lib/openmeteo'
+import type { HourlyWeather, HourlyWeatherFull, DailyWeather, ClothingItem, WeatherAdviceItem } from '@/lib/openmeteo'
 
 function formatHour(iso: string): string {
   return iso.slice(11, 16)
@@ -43,6 +43,13 @@ function priorityStyle(p: ClothingItem['priority']) {
 }
 function priorityLabel(p: ClothingItem['priority']) {
   return p === 'essential' ? 'essenziale' : p === 'recommended' ? 'consigliato' : 'opzionale'
+}
+
+function adviceStyle(s: WeatherAdviceItem['severity']) {
+  return s === 'danger'   ? 'bg-red-50 border-red-200 text-red-800'
+       : s === 'caution'  ? 'bg-amber-50 border-amber-200 text-amber-800'
+       : s === 'positive' ? 'bg-forest-50 border-forest-200 text-forest-800'
+       : 'bg-sky-50 border-sky-200 text-sky-800'
 }
 
 // 7-day strip shared across modes
@@ -125,6 +132,18 @@ export default function WeatherWidget(props: Props) {
   const clothes = useMemo((): ClothingItem[] => {
     if (props.mode !== 'planned' || !hourlyFull.length) return []
     return clothingSuggestions(
+      hourlyFull.filter(h => {
+        const hh = parseInt(h.time.slice(11, 13))
+        return hh >= 6 && hh <= 20
+      }),
+      altitudeMax,
+      elevationGain,
+    )
+  }, [hourlyFull, props.mode, altitudeMax, elevationGain])
+
+  const advice = useMemo((): WeatherAdviceItem[] => {
+    if (props.mode !== 'planned' || !hourlyFull.length) return []
+    return weatherAdvice(
       hourlyFull.filter(h => {
         const hh = parseInt(h.time.slice(11, 13))
         return hh >= 6 && hh <= 20
@@ -324,6 +343,18 @@ export default function WeatherWidget(props: Props) {
           </div>
         )}
       </div>
+
+      {/* ── Consigli sulla situazione meteo ── */}
+      {advice.length > 0 && (
+        <div className="space-y-2">
+          {advice.map((a, i) => (
+            <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm ${adviceStyle(a.severity)}`}>
+              <span className="text-base leading-none shrink-0">{a.icon}</span>
+              <span className="flex-1">{a.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Clothing & gear suggestions ── */}
       {clothes.length > 0 && (

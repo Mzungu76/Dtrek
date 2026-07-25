@@ -43,7 +43,7 @@ function otherEntryDist(entry: OtherEntry): number {
   return entry.kind === 'named' ? entry.poi.distFromTrack : Math.min(...entry.pois.map(p => p.distFromTrack))
 }
 
-function PoiCard({ entry, highlighted, onTap }: { entry: GalleryEntry; highlighted: boolean; onTap?: () => void }) {
+function PoiCard({ entry, highlighted, dimmed, onTap }: { entry: GalleryEntry; highlighted: boolean; dimmed?: boolean; onTap?: () => void }) {
   return (
     <a
       href={entry.url}
@@ -52,7 +52,7 @@ function PoiCard({ entry, highlighted, onTap }: { entry: GalleryEntry; highlight
       onClick={onTap}
       className={`group flex flex-col shrink-0 w-40 sm:w-44 rounded-xl overflow-hidden border shadow-sm hover:shadow-md transition-all bg-white ${
         highlighted ? 'border-sky-400 ring-2 ring-sky-200' : 'border-stone-100 hover:border-stone-200'
-      }`}
+      } ${dimmed ? 'opacity-35 grayscale' : ''}`}
     >
       <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
         <Image
@@ -165,6 +165,7 @@ export default function PoiListWidget({
               key={`named-${entry.poi.id}`}
               poi={entry.poi}
               highlighted={entry.poi.id === highlightedPoiId}
+              dimmed={highlightedPoiId != null && entry.poi.id !== highlightedPoiId}
               onTap={() => onItemTap?.(entry.poi)}
             />
           ) : (
@@ -172,6 +173,7 @@ export default function PoiListWidget({
               key={`group-${entry.type}`}
               type={entry.type}
               pois={entry.pois}
+              dimmed={highlightedPoiId != null && !entry.pois.some(p => p.id === highlightedPoiId)}
               onTap={() => focusOnGroup(entry.pois)}
             />
           ))}
@@ -189,6 +191,7 @@ export default function PoiListWidget({
               key={entry.key}
               entry={entry}
               highlighted={entry.poiId != null && entry.poiId === highlightedPoiId}
+              dimmed={highlightedPoiId != null && entry.poiId !== highlightedPoiId}
               onTap={entry.poiId != null ? () => {
                 const poi = pois.find(p => p.id === entry.poiId)
                 if (poi) onItemTap?.(poi)

@@ -11,6 +11,7 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { colorSegmentsByDtm, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { slopeColorSigned, computeSignedSlopeSeries } from '@/lib/slopeColor'
+import { computeDirectionArrows } from '@/lib/geoUtils'
 import { useRouteTour, SPEEDS } from './mapview/useRouteTour'
 import TourControls from './mapview/TourControls'
 
@@ -74,7 +75,14 @@ interface Props {
   focusPoints?: { lat: number; lon: number }[] | null
   /** Increment to re-run the `focusPoints` fit/pan — mirrors the `fitSignal` pattern. */
   focusSignal?: number
+  /** Draws small chevron markers along the route (Komoot-style) showing which way it goes —
+   *  off by default so decorative/tiny renders (e.g. the guide hero thumbnail) stay uncluttered. */
+  showDirectionArrows?: boolean
 }
+
+// Distanza (metri) tra una freccia di direzione e la successiva — abbastanza fitta da restare
+// utile su un tornante, senza affollare la mappa su un rettilineo lungo.
+const DIRECTION_ARROW_SPACING_M = 200
 
 const DTM_MATCH_RADIUS_M = 25
 
@@ -128,6 +136,7 @@ export default function MapView({
   poiMarkerScale = 1,
   focusPoints = null,
   focusSignal,
+  showDirectionArrows = false,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<L.Map | null>(null)
@@ -286,6 +295,21 @@ export default function MapView({
         map.fitBounds(L.polyline(coords).getBounds(), { padding: [20, 20], animate: false })
       }
 
+      // Frecce di direzione lungo il tracciato (stile Komoot) — indipendenti da quale coloring
+      // branch sopra ha disegnato la linea, sempre sopra di essa.
+      if (showDirectionArrows) {
+        const arrowColor = routeColor ?? baseColor
+        for (const arrow of computeDirectionArrows(coords, DIRECTION_ARROW_SPACING_M)) {
+          const icon = L.divIcon({
+            html: `<div style="transform:rotate(${arrow.bearing}deg);width:16px;height:16px;display:flex;align-items:center;justify-content:center">
+                     <svg width="13" height="13" viewBox="0 0 24 24" fill="${arrowColor}" stroke="white" stroke-width="2.5"><path d="M12 2 L20 20 L12 15 L4 20 Z"/></svg>
+                   </div>`,
+            iconSize: [16, 16], iconAnchor: [8, 8], className: '',
+          })
+          L.marker([arrow.lat, arrow.lon], { icon, interactive: false, keyboard: false }).addTo(map)
+        }
+      }
+
       // Start / end markers (always shown)
       const mkIcon = (label: string, color: string) => L.divIcon({
         html: `<div style="background:${color};color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${label}</div>`,
@@ -306,7 +330,7 @@ export default function MapView({
         setMapReady(false)
       }
     }
-  }, [trackPoints, showGradient, showAspect, planned, routeColor, routeWeight, routeOpacity, showEndpointMarkers]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
+  }, [trackPoints, showGradient, showAspect, planned, routeColor, routeWeight, routeOpacity, showEndpointMarkers, showDirectionArrows]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
 
   // "Torna alla vista d'insieme" — re-fits the route's original extent without touching pan/zoom
   // locks or remounting the map. Only reacts to fitSignal actually changing (not its initial
@@ -437,9 +461,14 @@ export default function MapView({
 
       if (!showPoiLayer) return
 
+      // Un POI evidenziato attenua tutti gli altri pin (colpo d'occhio su un solo POI alla volta),
+      // in sincronia con lo stesso trattamento nella galleria sotto — vedi PoiIconChip.tsx.
+      const anyHighlighted = highlightedPoiIndex != null
+
       pois.forEach((poi, i) => {
         const meta = POI_META[poi.type]
         const isHighlighted = i === highlightedPoiIndex
+        const isDimmed = anyHighlighted && !isHighlighted
         const hasLink = poiHasLink(poi)
         const size = Math.round((isHighlighted ? 40 : 28) * poiMarkerScale)
         // POIs with a Wikipedia/website link get a blue ring + badge, so they stand out on the
@@ -449,7 +478,7 @@ export default function MapView({
              <div style="position:absolute;bottom:-1px;right:-1px;width:11px;height:11px;border-radius:50%;background:#2563eb;border:1.5px solid white"></div>`
           : ''
         const icon = L.divIcon({
-          html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;transition:width .2s,height .2s">
+          html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;transition:width .2s,height .2s,opacity .2s;opacity:${isDimmed ? 0.35 : 1};filter:${isDimmed ? 'grayscale(1)' : 'none'}">
                    ${ring}
                    ${poiBadgeMarkup(poi.type, meta.color, size, isHighlighted ? 4 : 2)}
                  </div>`,

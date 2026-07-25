@@ -9,7 +9,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import { ctsLabel } from '@/lib/trailScore'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { CalendarClock, Loader2, Mountain, Upload, Archive } from 'lucide-react'
+import { CalendarClock, Loader2, Mountain, Upload, Archive, Search, X } from 'lucide-react'
 
 function pendingBadge(hike: PlannedHikeMeta): { label: string; className: string } | null {
   if (hike.archivedAt) return null
@@ -29,6 +29,8 @@ function pendingBadge(hike: PlannedHikeMeta): { label: string; className: string
 export default function GuidaIndexPage() {
   const [planned, setPlanned] = useState<PlannedHikeMeta[] | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     getAllPlanned(setPlanned).then(setPlanned).catch(() => setPlanned([]))
@@ -36,7 +38,8 @@ export default function GuidaIndexPage() {
 
   useCtsUpdated(() => { getAllPlanned().then(setPlanned).catch(() => {}) })
 
-  const all      = planned ?? []
+  const q = query.trim().toLowerCase()
+  const all      = q ? (planned ?? []).filter(h => h.title.toLowerCase().includes(q)) : (planned ?? [])
   const active   = all.filter(h => !h.archivedAt)
   const archived = all.filter(h => h.archivedAt)
   const sorted = active.slice().sort((a, b) => {
@@ -58,19 +61,53 @@ export default function GuidaIndexPage() {
               Percorsi in attesa
             </h1>
           </div>
-          <Link
-            href="/upload?tab=gpx"
-            className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-white text-sky-900 rounded-xl font-semibold text-sm shadow-lg hover:bg-sky-50 transition-colors"
-          >
-            <Upload className="w-4 h-4" /> Importa
-          </Link>
+          <div className="shrink-0 flex items-center gap-2">
+            <button
+              onClick={() => setShowSearch(v => { const next = !v; if (!next) setQuery(''); return next })}
+              title="Cerca un percorso"
+              className={`flex items-center justify-center w-10 h-10 rounded-xl transition-colors ${showSearch ? 'bg-white text-sky-900' : 'bg-white/15 text-white hover:bg-white/25'}`}
+            >
+              <Search className="w-4 h-4" />
+            </button>
+            <Link
+              href="/upload?tab=gpx"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white text-sky-900 rounded-xl font-semibold text-sm shadow-lg hover:bg-sky-50 transition-colors"
+            >
+              <Upload className="w-4 h-4" /> Importa
+            </Link>
+          </div>
         </div>
       </div>
 
       <main className="max-w-[1400px] mx-auto px-4 py-6 sm:py-8">
+        {showSearch && (
+          <div className="relative mb-6">
+            <Search className="w-4 h-4 text-stone-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Cerca per titolo del percorso…"
+              className="w-full pl-11 pr-10 py-3 rounded-xl border border-stone-200 bg-white text-sm text-stone-800 outline-none focus:border-sky-500 placeholder:text-stone-400"
+            />
+            {query && (
+              <button onClick={() => setQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
         {planned === null ? (
           <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
             <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
+          </div>
+        ) : sorted.length === 0 && q ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-20 h-20 rounded-full bg-sky-50 border border-sky-200 flex items-center justify-center mb-6">
+              <Search className="w-10 h-10 text-sky-400" />
+            </div>
+            <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessun percorso trovato</h2>
+            <p className="text-stone-400 text-sm max-w-sm px-4">Nessun risultato per «{query.trim()}».</p>
           </div>
         ) : sorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
