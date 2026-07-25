@@ -61,15 +61,25 @@ interface OverpassNameEl {
 function buildNamedFeatureQuery(escapedName: string, bbox: [number, number, number, number]): string {
   const [minLat, minLon, maxLat, maxLon] = bbox
   const b = `${minLat},${minLon},${maxLat},${maxLon}`
+  // `historic`/`waterway=waterfall`/`tourism=attraction` prima cercavano solo su node — un sito
+  // archeologico "grande" (un intero pianoro, es. Luni sul Mignone) o una cascata con più salti è
+  // tipicamente mappato come way o relation (un'AREA), non un singolo punto: senza way/relation qui,
+  // quel genere di feature restava invisibile a questa ricerca pur essendo ben presente su OSM —
+  // bug osservato in produzione con ricerche di siti/cascate note che restituivano "nessun risultato".
+  // `tourism=attraction` aggiunto perché è il tag generico più usato per punti di interesse turistici
+  // senza una categoria OSM più specifica (spesso il caso di cascate/curiosità locali).
   return `[out:json][timeout:20];
 (
   node["name"~"${escapedName}",i]["natural"~"^(waterfall|valley|spring|cave_entrance|peak|saddle)$"](${b});
-  way["name"~"${escapedName}",i]["natural"~"^(valley|water|wood)$"](${b});
+  way["name"~"${escapedName}",i]["natural"~"^(waterfall|valley|water|wood)$"](${b});
   way["name"~"${escapedName}",i]["landuse"="forest"](${b});
   relation["name"~"${escapedName}",i]["landuse"="forest"](${b});
   node["name"~"${escapedName}",i]["waterway"="waterfall"](${b});
-  node["name"~"${escapedName}",i]["tourism"~"^(viewpoint|alpine_hut|wilderness_hut|picnic_site)$"](${b});
+  way["name"~"${escapedName}",i]["waterway"="waterfall"](${b});
+  node["name"~"${escapedName}",i]["tourism"~"^(viewpoint|alpine_hut|wilderness_hut|picnic_site|attraction)$"](${b});
   node["name"~"${escapedName}",i]["historic"](${b});
+  way["name"~"${escapedName}",i]["historic"](${b});
+  relation["name"~"${escapedName}",i]["historic"](${b});
 );
 out center 5;`
 }
