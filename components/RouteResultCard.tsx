@@ -16,11 +16,21 @@ import type { ScoredCandidate as BuiltCandidate } from '@/lib/routeBuilder/score
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
 import type { ProvisionalScore } from '@/lib/routeBuilder/provisionalScore'
 import type { PoiItem, PoiType } from '@/lib/overpass'
+import { MiniScoreRing } from '@/components/ScoreRing'
 
 export interface FeedbackControls {
   value: 'like' | 'dislike' | null
   onLike: () => void
   onDislike: () => void
+}
+
+// Selezione multipla dei risultati (import in blocco) — presente ⇒ il footer mostra un pulsante di
+// selezione al posto di "Scegli questo percorso"/onChoose (i due usi si escludono: o si sceglie
+// subito un percorso da personalizzare/confermare, o lo si spunta per un import in blocco con i
+// valori di default), e il bordo della card si evidenzia quando selezionata.
+export interface SelectableControls {
+  selected: boolean
+  onToggle: () => void
 }
 
 function FeedbackButtons({ feedback }: { feedback: FeedbackControls }) {
@@ -96,28 +106,40 @@ export function ScorePendingBadge({ size = 52 }: { size?: number }) {
 // Stima leggera (lib/routeBuilder/provisionalScore.ts) mostrata su ogni card dei risultati di
 // ricerca — MAI il punteggio definitivo (quello arriva solo dopo l'importazione, calcolato con dati
 // reali): l'etichetta "Provvisorio" resta sempre visibile per non farla scambiare per quello finale.
-export function ProvisionalScoreBadge({ score, size = 52 }: { score: ProvisionalScore; size?: number }) {
+// Stesso badge circolare a due colori (traccia grigia + arco colorato per soglia, numero intero al
+// centro) della sezione Guide — vedi MiniScoreRing in components/ScoreRing.tsx.
+export function ProvisionalScoreBadge({ score, size = 48 }: { score: ProvisionalScore; size?: number }) {
   return (
-    <div
-      className="shrink-0 rounded-xl bg-stone-800 flex flex-col items-center justify-center text-center gap-0.5 px-1"
-      style={{ width: size, height: size }}
-    >
-      <span className="text-white text-sm font-bold leading-none">{score.ts}</span>
-      <span className="text-[9px] font-semibold leading-none" style={{ color: score.safety.color }}>{score.safety.label}</span>
-      <span className="text-white/50 text-[7px] leading-tight font-medium uppercase tracking-wide">Provvisorio</span>
+    <div className="shrink-0 flex flex-col items-center gap-1">
+      <MiniScoreRing value={score.ts} size={size} />
+      <span className="text-[8px] font-semibold leading-none text-center" style={{ color: score.safety.color }}>{score.safety.label}</span>
+      <span className="text-stone-400 text-[7px] leading-none font-medium uppercase tracking-wide">Provvisorio</span>
     </div>
   )
 }
 
-export function FoundRouteCard({ data, onChoose, feedback }: {
+function SelectButton({ selectable }: { selectable: SelectableControls }) {
+  return (
+    <button onClick={selectable.onToggle}
+      className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wide transition-colors border ${
+        selectable.selected ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'
+      }`}>
+      {selectable.selected && <Check className="w-3.5 h-3.5" />}
+      {selectable.selected ? 'Selezionato' : 'Seleziona'}
+    </button>
+  )
+}
+
+export function FoundRouteCard({ data, onChoose, feedback, selectable }: {
   data: FoundRouteItem
   onChoose?: () => void
   feedback?: FeedbackControls
+  selectable?: SelectableControls
 }) {
   const vs = data.comfortVerdict ? verdictStyle(data.comfortVerdict) : null
   const track = data.track
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+    <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
       <TrailPreviewMap polyline={track.routePolyline} height="180px" />
       <div className="p-4 space-y-2.5">
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
@@ -180,7 +202,7 @@ export function FoundRouteCard({ data, onChoose, feedback }: {
             ) : <span />}
             {feedback && <FeedbackButtons feedback={feedback} />}
           </div>
-          {onChoose && (
+          {selectable ? <SelectButton selectable={selectable} /> : onChoose && (
             <button onClick={onChoose}
               className="px-4 py-2 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-xs font-semibold uppercase tracking-wide transition-colors">
               {feedback ? 'Apri' : 'Scegli questo percorso'}
@@ -192,13 +214,14 @@ export function FoundRouteCard({ data, onChoose, feedback }: {
   )
 }
 
-export function BuiltRouteCard({ data, onChoose, feedback }: {
+export function BuiltRouteCard({ data, onChoose, feedback, selectable }: {
   data: BuiltCandidate
   onChoose?: () => void
   feedback?: FeedbackControls
+  selectable?: SelectableControls
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+    <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
       <TrailPreviewMap polyline={data.routePolyline} height="180px" />
       <div className="p-4 space-y-2.5">
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
@@ -241,7 +264,7 @@ export function BuiltRouteCard({ data, onChoose, feedback }: {
 
         <div className="flex items-center justify-between gap-3 pt-1">
           {feedback ? <FeedbackButtons feedback={feedback} /> : <span />}
-          {onChoose && (
+          {selectable ? <SelectButton selectable={selectable} /> : onChoose && (
             <button onClick={onChoose}
               className={feedback
                 ? 'px-4 py-2 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-xs font-semibold uppercase tracking-wide transition-colors'

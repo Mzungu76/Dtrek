@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { PencilLine, ChevronRight, Link2, Search, Route } from 'lucide-react'
+import Link from 'next/link'
+import { PencilLine, ChevronRight, Link2, Search, Route, FolderSearch } from 'lucide-react'
 import ManualPlanUploader from './ManualPlanUploader'
 import UrlImportUploader from './UrlImportUploader'
 import PlainSearchUploader from './PlainSearchUploader'
@@ -45,6 +46,13 @@ export default function ManualImportChoice() {
           Inizia <ChevronRight className="w-3.5 h-3.5" />
         </span>
       </button>
+
+      <Link
+        href="/profilo/ricerche-salvate"
+        className="w-full flex items-center gap-2 text-sm text-stone-500 hover:text-stone-700 transition-colors px-1"
+      >
+        <FolderSearch className="w-4 h-4" /> Le mie ricerche salvate
+      </Link>
 
       <button
         onClick={() => setMode('url')}

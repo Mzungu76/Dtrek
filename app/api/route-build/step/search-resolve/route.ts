@@ -56,9 +56,11 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   const body = await req.json().catch(() => null)
   const rawCandidates = Array.isArray(body?.candidates) ? body.candidates : []
   const candidates = rawCandidates.map(parseCandidate).filter((c: HikingRouteCandidate | null): c is HikingRouteCandidate => c != null)
+  const destination = typeof body?.destLat === 'number' && typeof body?.destLon === 'number'
+    ? { lat: body.destLat, lon: body.destLon } : null
 
   const outcome = await Promise.race([
-    resolveFoundRoutesWithPoi(candidates, MAX_EAGER_RESOLVE).then(foundRoutes => ({ kind: 'done' as const, foundRoutes })),
+    resolveFoundRoutesWithPoi(candidates, MAX_EAGER_RESOLVE, destination).then(foundRoutes => ({ kind: 'done' as const, foundRoutes })),
     new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), SOFT_DEADLINE_MS)),
   ])
   if (outcome.kind === 'timeout') {

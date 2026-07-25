@@ -17,7 +17,13 @@ import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettin
 import { fetchPoisNearPolyline } from '@/lib/routeBuilder/nearbyPois'
 import { computeProvisionalScore } from '@/lib/routeBuilder/provisionalScore'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { DEFAULT_RADIUS_KM, ALLOWED_RADIUS_KM } from '@/lib/routeBuilder/buildConstants'
+import { DEFAULT_RADIUS_KM, ALLOWED_RADIUS_KM, DESTINATION_PROXIMITY_KM } from '@/lib/routeBuilder/buildConstants'
+import { haversineM, minDistToTrack } from '@/lib/geoUtils'
+
+export interface DestinationPoint {
+  lat: number
+  lon: number
+}
 
 // Quanti candidati "trovati" risolvere subito con una traccia reale — i candidati arrivano già
 // ordinati dal più vicino al più lontano (vedi findTier0), quindi il cap si traduce in risultati
@@ -81,13 +87,28 @@ async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | nul
 // Livello 0: sempre, gratuito — risoluzione del luogo (non-AI, solo Nominatim/Overpass) in
 // parallelo con la ricerca di percorsi esistenti (non-AI, Overpass) — SENZA risolvere le tracce
 // (quello è il passo successivo, resolveFoundRoutesWithPoi, deliberatamente separato).
-async function findTier0(query: string, radiusKm: number): Promise<{ place: ResolvedPlace | null; candidates: HikingRouteCandidate[] }> {
+async function findTier0(query: string, radiusKm: number, destination: DestinationPoint | null): Promise<{ place: ResolvedPlace | null; candidates: HikingRouteCandidate[] }> {
   const { nameQuery, areaHint } = splitQuery(query)
   const [place, rawCandidates] = await Promise.all([
     resolvePlaceName(query),
     findExistingRoutesNonAi(nameQuery, areaHint, radiusKm),
   ])
-  const candidates = place ? sortByDistanceFrom(rawCandidates, place.lat, place.lon) : rawCandidates
+  let candidates = place ? sortByDistanceFrom(rawCandidates, place.lat, place.lon) : rawCandidates
+  // Percorso "tra 2 punti" (vedi FoundRouteResult più sotto): senza la geometria completa (solo il
+  // centroide della relazione è noto a questo livello) non si può ancora sapere se un candidato
+  // passa davvero vicino alla destinazione — ma un candidato il cui centroide è già lontano da
+  // ENTRAMBI i punti è comunque improbabile che ci arrivi, quindi qui si riordina solo per portare
+  // in cima ai MAX_EAGER_RESOLVE risolti davvero (il passo successivo, più costoso) i candidati più
+  // plausibili, invece di sprecarli su relazioni che poi il filtro finale scarterà comunque.
+  if (destination) {
+    const worstCaseScore = (c: HikingRouteCandidate): number => {
+      if (c.lat == null || c.lon == null) return Infinity
+      const dOrigin = place ? haversineM(c.lat, c.lon, place.lat, place.lon) : 0
+      const dDest = haversineM(c.lat, c.lon, destination.lat, destination.lon)
+      return Math.max(dOrigin, dDest)
+    }
+    candidates = [...candidates].sort((a, b) => worstCaseScore(a) - worstCaseScore(b))
+  }
   return { place, candidates }
 }
 
@@ -108,6 +129,7 @@ export interface FindResult {
  */
 export async function findExistingRoutesForQuery(
   user: { id: string } | null, query: string, radiusKm: number, useAi: boolean,
+  destination: DestinationPoint | null = null,
 ): Promise<FindResult> {
   let place: ResolvedPlace | null = null
   let candidates: HikingRouteCandidate[] = []
@@ -116,7 +138,7 @@ export async function findExistingRoutesForQuery(
   let interpretedPlacesCount = 0
 
   try {
-    const level0 = await findTier0(query, radiusKm)
+    const level0 = await findTier0(query, radiusKm, destination)
     place = level0.place
     candidates = level0.candidates
   } catch (e) {
@@ -133,7 +155,7 @@ export async function findExistingRoutesForQuery(
           prefill = interpreted.prefs
           interpretedPlacesCount = interpreted.places.length
           for (const p of interpreted.places.slice(0, MAX_INTERPRETED_PLACES)) {
-            const rerun = await findTier0(p.query, radiusKm)
+            const rerun = await findTier0(p.query, radiusKm, destination)
             if (!place && rerun.place) place = rerun.place
             if (rerun.candidates.length > 0) candidates = [...candidates, ...rerun.candidates]
           }
@@ -155,10 +177,19 @@ export async function findExistingRoutesForQuery(
  * parte più pesante e variabile della ricerca "Esistenti" (fino a `cap` risoluzioni Overpass in
  * parallelo), isolata in un passo a parte per lo stesso motivo del pathfinding di "Su misura".
  */
-export async function resolveFoundRoutesWithPoi(candidates: HikingRouteCandidate[], cap: number): Promise<FoundRouteResult[]> {
+export async function resolveFoundRoutesWithPoi(
+  candidates: HikingRouteCandidate[], cap: number, destination: DestinationPoint | null = null,
+): Promise<FoundRouteResult[]> {
   const resolved = await Promise.all(candidates.slice(0, cap).map(async c => {
     const track = await resolveTrackForCandidate({ osmId: c.id, gpxUrl: null })
     if (!track.ok) return null
+    // Ora che si ha la geometria reale (non più solo il centroide usato per l'ordinamento in
+    // findTier0), si può verificare con precisione se il percorso passa davvero vicino alla
+    // destinazione richiesta — un centroide plausibile non garantisce che la traccia stessa ci
+    // arrivi (una relazione può estendersi molto oltre il suo centro).
+    if (destination && minDistToTrack(destination.lat, destination.lon, track.routePolyline) > DESTINATION_PROXIMITY_KM * 1000) {
+      return null
+    }
     const pois = await fetchPoisNearPolyline(track.routePolyline).catch(() => [])
     const provisionalScore = computeProvisionalScore({
       routePolyline: track.routePolyline, trackPoints: track.trackPoints, distanceMeters: track.distanceMeters,

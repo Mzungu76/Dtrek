@@ -17,6 +17,14 @@ export const MAX_TARGET_DISTANCE_KM = 15
 export const ALLOWED_RADIUS_KM = [5, 10, 20, 50, 100]
 export const DEFAULT_RADIUS_KM = 20
 
+// Tolleranza per "questo percorso trovato passa vicino alla destinazione" (ricerca "Esistenti" tra
+// 2 punti) — un percorso OSM reale e un punto risolto per nome (Nominatim/Overpass, es. un rifugio)
+// raramente coincidono al metro, ma un percorso che ci passa a chilometri di distanza chiaramente
+// non è "verso quel punto". Deliberatamente più stretta del raggio di ricerca generale attorno
+// all'origine (che delimita l'AREA di ricerca, non quanto vicino un singolo percorso deve passare
+// a un punto specifico).
+export const DESTINATION_PROXIMITY_KM = 1.5
+
 // Quanti candidati grezzi arricchire davvero (DTM + POI) per passata — i generatori li restituiscono
 // già ordinati dal più vicino al target di lunghezza (vedi loopBuilder.ts), quindi tagliare qui
 // tiene i migliori.

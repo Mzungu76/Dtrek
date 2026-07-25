@@ -36,16 +36,19 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   let query: string
   let useAi: boolean
   let radiusKm: number
+  let destination: { lat: number; lon: number } | null
   try {
     const body = await req.json()
     if (typeof body.query !== 'string' || !body.query.trim()) throw new Error('query mancante')
     query = body.query.trim().slice(0, 300)
     useAi = body.useAi === true
     radiusKm = sanitizeSearchRadiusKm(body.radiusKm)
+    destination = typeof body.destLat === 'number' && typeof body.destLon === 'number'
+      ? { lat: body.destLat, lon: body.destLon } : null
   } catch {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
-  const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi)
+  const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi, destination)
   return NextResponse.json(find)
 }
