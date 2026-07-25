@@ -19,7 +19,9 @@ interface Props {
 }
 
 const FOLLOW_ZOOM = 17
-const DIRECTION_ARROW_SPACING_M = 200
+const DIRECTION_ARROW_SPACING_M = 400
+const DIRECTION_ARROW_ICON_PX = 11
+const DIRECTION_ARROW_SVG_PX = 9
 
 const STATE_COLOR: Record<NavState, string> = {
   idle: '#64748b',
@@ -74,12 +76,13 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
         // Frecce di direzione lungo il percorso da seguire (stile Komoot) — distinte dalla
         // freccia dell'escursionista sotto, che indica invece dove sta guardando/andando ORA.
         for (const arrow of computeDirectionArrows(routePolyline, DIRECTION_ARROW_SPACING_M)) {
+          const px = DIRECTION_ARROW_ICON_PX
           const arrowIcon = L.divIcon({
             className: '',
-            html: `<div style="transform:rotate(${arrow.bearing}deg);width:16px;height:16px;display:flex;align-items:center;justify-content:center">
-                     <svg width="13" height="13" viewBox="0 0 24 24" fill="#277134" stroke="white" stroke-width="2.5"><path d="M12 2 L20 20 L12 15 L4 20 Z"/></svg>
+            html: `<div style="transform:rotate(${arrow.bearing}deg);width:${px}px;height:${px}px;display:flex;align-items:center;justify-content:center">
+                     <svg width="${DIRECTION_ARROW_SVG_PX}" height="${DIRECTION_ARROW_SVG_PX}" viewBox="0 0 24 24" fill="#277134" stroke="white" stroke-width="2.5"><path d="M12 2 L20 20 L12 15 L4 20 Z"/></svg>
                    </div>`,
-            iconSize: [16, 16], iconAnchor: [8, 8],
+            iconSize: [px, px], iconAnchor: [px / 2, px / 2],
           })
           L.marker([arrow.lat, arrow.lon], { icon: arrowIcon, interactive: false, keyboard: false }).addTo(map)
         }

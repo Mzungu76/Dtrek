@@ -394,35 +394,25 @@ const SEVERITY_RANK: Record<WeatherAdviceItem['severity'], number> = { danger: 0
  */
 const MAX_ADVICE_ITEMS = 4
 
-export function weatherAdvice(
-  daytimeHours: HourlyWeatherFull[],
-  altitudeMax = 0,
-  elevationGain = 0,
-): WeatherAdviceItem[] {
-  if (!daytimeHours.length) return []
+interface WeatherAdviceStats {
+  tempMax: number
+  summitTemp: number
+  maxWind: number
+  totalRain: number
+  maxHourRain: number
+  totalSnow: number
+  maxUV: number
+  hasStorm: boolean
+  afternoonStorm: boolean
+  hasFog: boolean
+  isHigh: boolean
+}
 
-  const temps      = daytimeHours.map(h => h.temperature)
-  const tempMin     = Math.min(...temps)
-  const tempMax     = Math.max(...temps)
-  const tempMid     = (tempMin + tempMax) / 2
-  const summitTemp  = tempMid - elevationGain * 0.0065
-  const maxWind     = Math.max(...daytimeHours.map(h => h.windspeed))
-  const totalRain   = daytimeHours.reduce((s, h) => s + h.precipitation, 0)
-  const maxHourRain = Math.max(...daytimeHours.map(h => h.precipitation))
-  const totalSnow   = daytimeHours.reduce((s, h) => s + (h.snowfall ?? 0), 0)
-  const maxUV       = Math.max(...daytimeHours.map(h => h.uvIndex ?? 0))
-  const codes       = daytimeHours.map(h => h.weathercode)
-  const hasStorm    = codes.some(c => STORM_CODES.includes(c))
-  const hasFog      = codes.some(c => c === 45 || c === 48)
-  const isHigh      = altitudeMax > 2000
-
-  // Il rischio temporalesco pomeridiano riguarda soprattutto la seconda metà della giornata —
-  // se le ore con codice temporale sono tutte dopo mezzogiorno, il consiglio "parti presto" ha
-  // senso pratico, non solo un avviso generico.
-  const afternoonStorm = hasStorm && daytimeHours
-    .filter(h => STORM_CODES.includes(h.weathercode))
-    .every(h => parseInt(h.time.slice(11, 13)) >= 12)
-
+/** Motore di regole condiviso tra weatherAdvice (dettaglio orario, mode 'planned') e
+ *  weatherAdviceFromDaily (solo aggregati giornalieri, mode 'forecast' — niente UV/nebbia/orario
+ *  del temporale in quel caso, i dati non ci sono a quella granularità). */
+function buildWeatherAdvice(stats: WeatherAdviceStats): WeatherAdviceItem[] {
+  const { tempMax, summitTemp, maxWind, totalRain, maxHourRain, totalSnow, maxUV, hasStorm, afternoonStorm, hasFog, isHigh } = stats
   const advice: WeatherAdviceItem[] = []
 
   // ── Temporali / grandine ──────────────────────────────────────────────────
@@ -500,4 +490,66 @@ export function weatherAdvice(
   return advice
     .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
     .slice(0, MAX_ADVICE_ITEMS)
+}
+
+export function weatherAdvice(
+  daytimeHours: HourlyWeatherFull[],
+  altitudeMax = 0,
+  elevationGain = 0,
+): WeatherAdviceItem[] {
+  if (!daytimeHours.length) return []
+
+  const temps      = daytimeHours.map(h => h.temperature)
+  const tempMin     = Math.min(...temps)
+  const tempMax     = Math.max(...temps)
+  const tempMid     = (tempMin + tempMax) / 2
+  const summitTemp  = tempMid - elevationGain * 0.0065
+  const maxWind     = Math.max(...daytimeHours.map(h => h.windspeed))
+  const totalRain   = daytimeHours.reduce((s, h) => s + h.precipitation, 0)
+  const maxHourRain = Math.max(...daytimeHours.map(h => h.precipitation))
+  const totalSnow   = daytimeHours.reduce((s, h) => s + (h.snowfall ?? 0), 0)
+  const maxUV       = Math.max(...daytimeHours.map(h => h.uvIndex ?? 0))
+  const codes       = daytimeHours.map(h => h.weathercode)
+  const hasStorm    = codes.some(c => STORM_CODES.includes(c))
+  const hasFog      = codes.some(c => c === 45 || c === 48)
+  const isHigh      = altitudeMax > 2000
+
+  // Il rischio temporalesco pomeridiano riguarda soprattutto la seconda metà della giornata —
+  // se le ore con codice temporale sono tutte dopo mezzogiorno, il consiglio "parti presto" ha
+  // senso pratico, non solo un avviso generico.
+  const afternoonStorm = hasStorm && daytimeHours
+    .filter(h => STORM_CODES.includes(h.weathercode))
+    .every(h => parseInt(h.time.slice(11, 13)) >= 12)
+
+  return buildWeatherAdvice({ tempMax, summitTemp, maxWind, totalRain, maxHourRain, totalSnow, maxUV, hasStorm, afternoonStorm, hasFog, isHigh })
+}
+
+const SNOW_WEATHER_CODES = [71, 73, 75, 77, 85, 86]
+
+/**
+ * Stessa idea di weatherAdvice ma per un giorno del forecast a 7 giorni (DailyWeather), quando non
+ * c'è alcuna data pianificata per l'escursione e quindi nessun dettaglio orario da Open-Meteo —
+ * caso comune per le guide importate senza data (mode 'forecast' di WeatherWidget). Meno preciso
+ * (niente UV, niente nebbia, niente distinzione mattina/pomeriggio per i temporali — dati non
+ * disponibili a questa granularità), ma copre comunque temporali/pioggia/vento/caldo/freddo/neve
+ * usando il primo giorno del forecast (oggi) come riferimento.
+ */
+export function weatherAdviceFromDaily(day: DailyWeather, altitudeMax = 0, elevationGain = 0): WeatherAdviceItem[] {
+  const summitTemp = (day.tempMin + day.tempMax) / 2 - elevationGain * 0.0065
+  const hasStorm = STORM_CODES.includes(day.weathercode)
+  const hasSnowCode = SNOW_WEATHER_CODES.includes(day.weathercode)
+
+  return buildWeatherAdvice({
+    tempMax: day.tempMax,
+    summitTemp,
+    maxWind: day.windspeedMax,
+    totalRain: day.precipitation,
+    maxHourRain: day.precipitation,
+    totalSnow: hasSnowCode ? Math.max(day.precipitation, 3) : 0,
+    maxUV: 0,
+    hasStorm,
+    afternoonStorm: false,
+    hasFog: false,
+    isHigh: altitudeMax > 2000,
+  })
 }

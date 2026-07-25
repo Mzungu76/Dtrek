@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   fetchHistoricalWeather, fetchForecastWeather, fetchDayHourly,
-  clothingSuggestions, weatherAdvice, wmoInfo, windDirLabel, findGoodWeatherWindows,
+  clothingSuggestions, weatherAdvice, weatherAdviceFromDaily, wmoInfo, windDirLabel, findGoodWeatherWindows,
 } from '@/lib/openmeteo'
 import type { HourlyWeather, HourlyWeatherFull, DailyWeather, ClothingItem, WeatherAdviceItem } from '@/lib/openmeteo'
 
@@ -141,17 +141,28 @@ export default function WeatherWidget(props: Props) {
     )
   }, [hourlyFull, props.mode, altitudeMax, elevationGain])
 
+  // 'planned' (data impostata): dettaglio orario del giorno stesso — stessa fonte usata per
+  // l'abbigliamento sopra. 'forecast' (nessuna data impostata sul percorso, caso comune per le
+  // guide importate): niente dettaglio orario disponibile, si usa il primo giorno del forecast a
+  // 7 giorni come riferimento (weatherAdviceFromDaily, meno preciso ma sempre presente) — prima
+  // qui non compariva alcun consiglio in questo caso. 'historical' resta senza consigli: guarda
+  // indietro a un'escursione già fatta, un "parti presto"/"porta la giacca" non avrebbe senso.
   const advice = useMemo((): WeatherAdviceItem[] => {
-    if (props.mode !== 'planned' || !hourlyFull.length) return []
-    return weatherAdvice(
-      hourlyFull.filter(h => {
-        const hh = parseInt(h.time.slice(11, 13))
-        return hh >= 6 && hh <= 20
-      }),
-      altitudeMax,
-      elevationGain,
-    )
-  }, [hourlyFull, props.mode, altitudeMax, elevationGain])
+    if (props.mode === 'planned' && hourlyFull.length > 0) {
+      return weatherAdvice(
+        hourlyFull.filter(h => {
+          const hh = parseInt(h.time.slice(11, 13))
+          return hh >= 6 && hh <= 20
+        }),
+        altitudeMax,
+        elevationGain,
+      )
+    }
+    if (props.mode === 'forecast' && daily.length > 0) {
+      return weatherAdviceFromDaily(daily[0], altitudeMax, elevationGain)
+    }
+    return []
+  }, [hourlyFull, daily, props.mode, altitudeMax, elevationGain])
 
   if (loading) return (
     <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 animate-pulse h-24" />
@@ -199,9 +210,21 @@ export default function WeatherWidget(props: Props) {
   // ── Forecast mode ────────────────────────────────────────────────────────────
   if (props.mode === 'forecast') {
     return (
-      <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
-        <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">Previsioni meteo</p>
-        <DayStrip daily={daily} />
+      <div className="space-y-3">
+        <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">Previsioni meteo</p>
+          <DayStrip daily={daily} />
+        </div>
+        {advice.length > 0 && (
+          <div className="space-y-2">
+            {advice.map((a, i) => (
+              <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm ${adviceStyle(a.severity)}`}>
+                <span className="text-base leading-none shrink-0">{a.icon}</span>
+                <span className="flex-1">{a.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }

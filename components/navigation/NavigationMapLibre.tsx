@@ -48,7 +48,8 @@ const ROUTE_ARROW_LAYER_ID = 'nav-route-arrows'
 const ARROW_ICON_ID = 'nav-direction-arrow'
 // Pixel, non metri — MapLibre spazia i simboli lungo la linea in coordinate schermo, quindi la
 // densità delle frecce scala naturalmente con lo zoom (più frecce visibili quando si zooma).
-const ARROW_SYMBOL_SPACING_PX = 110
+// Alzata da 110 a 220 dopo il primo giro di feedback ("troppo numerose").
+const ARROW_SYMBOL_SPACING_PX = 220
 
 /** Triangolo pieno bianco-bordato che punta "in su" — con symbol-placement:'line' e icon-rotate:90
  *  (compensa la convenzione di MapLibre, che assume l'icona rivolta a destra) segue in automatico
@@ -215,7 +216,7 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'icon-size': 0.65,
+          'icon-size': 0.42,
         },
       })
     }

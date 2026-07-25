@@ -689,7 +689,7 @@ export default function ReportReader({
             centerLon={gpsPoints[Math.floor(gpsPoints.length / 2)]?.lon}
             onWikiLoaded={() => {}}
             highlightedPoiId={highlightedPoiId}
-            onItemTap={poi => setHighlightedPoiId(poi.id)}
+            onItemTap={poi => setHighlightedPoiId(prev => prev === poi.id ? null : poi.id)}
             trackPoints={activity.trackPoints}
             onOpenMap3D={onOpenMap3D}
           />
