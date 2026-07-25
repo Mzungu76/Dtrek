@@ -38,6 +38,8 @@ import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 import { findCachedTrailsNearPoint, upsertTrailCache, type TrailCacheRow } from '@/lib/trailsCache'
 import { queryHikingRelationsInBbox, padBbox, type HikingRouteCandidate } from '@/lib/overpassTrails'
 import { resolveTrackForCandidate } from '@/lib/routeBuilder/resolveTrack'
+import { fetchPoisNearPolyline } from '@/lib/routeBuilder/nearbyPois'
+import { computeProvisionalScore } from '@/lib/routeBuilder/provisionalScore'
 import { classifyTrackShape, haversineM } from '@/lib/geoUtils'
 import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem, ResolvedTrack } from '@/lib/routeBuilder/foundRoute'
@@ -200,6 +202,14 @@ async function gatherFoundCandidates(
         sourceUrl: `https://www.openstreetmap.org/relation/${row.osmRelationId}`,
         osmId: row.osmRelationId,
         track,
+        // Nessun POI reale qui (costerebbe una chiamata di rete per card, in contrasto con "cache
+        // = zero rete" sopra) — provisionalScore resta comunque un calcolo puro, senza I/O, quindi
+        // il segnale di densità POI sarà solo 0 (nessun bonus), ma TS/Sicurezza restano stimabili.
+        provisionalScore: computeProvisionalScore({
+          routePolyline: track.routePolyline, trackPoints: track.trackPoints, distanceMeters: track.distanceMeters,
+          elevationGain: track.elevationGain, elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax,
+          altitudeMin: track.altitudeMin, estimatedTimeSeconds: track.estimatedTimeSeconds, pois: [],
+        }),
       })
     }
   } catch (e) {
@@ -226,12 +236,23 @@ async function gatherFoundCandidates(
           elevationGain: resolved.elevationGain, elevationLoss: resolved.elevationLoss, altitudeMax: resolved.altitudeMax,
           altitudeMin: resolved.altitudeMin, estimatedTimeSeconds: resolved.estimatedTimeSeconds, hasElevation: resolved.hasElevation,
         }
+        // Già una risoluzione di rete per questo candidato (resolveTrackForCandidate sopra) — un
+        // fetch POI in più resta comunque bounded da `wanted` (mai più di TOTAL_CARDS per l'intera
+        // raggiera), coerente col tetto morbido per raggio (PER_RADIUS_SOFT_DEADLINE_MS sotto).
+        const pois = await fetchPoisNearPolyline(track.routePolyline).catch(() => [])
+        const provisionalScore = computeProvisionalScore({
+          routePolyline: track.routePolyline, trackPoints: track.trackPoints, distanceMeters: track.distanceMeters,
+          elevationGain: track.elevationGain, elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax,
+          altitudeMin: track.altitudeMin, estimatedTimeSeconds: track.estimatedTimeSeconds, pois,
+        })
         items.push({
           name: candidate.name,
           description: foundReason(track.distanceMeters / 1000, targetDistanceKm),
           sourceUrl: `https://www.openstreetmap.org/relation/${candidate.id}`,
           osmId: candidate.id,
           track,
+          pois,
+          provisionalScore,
         })
         cacheResolvedTrail(candidate, track).catch(() => {})
       }

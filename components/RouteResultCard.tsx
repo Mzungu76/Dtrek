@@ -14,6 +14,7 @@ import { classifyTrackShape } from '@/lib/geoUtils'
 import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
 import type { ScoredCandidate as BuiltCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
+import type { ProvisionalScore } from '@/lib/routeBuilder/provisionalScore'
 import type { PoiItem, PoiType } from '@/lib/overpass'
 
 export interface FeedbackControls {
@@ -77,12 +78,9 @@ export function PoiPreviewRow({ pois }: { pois: PoiItem[] }) {
   )
 }
 
-// Al posto del pallino Trail Score/Sicurezza (che richiedeva una seconda chiamata DTM per-candidato,
-// vedi lib/routeBuilder/useCandidateScores.ts, rimosso): calcolare quel punteggio per OGNI
-// candidato mostrato — anche quelli che l'utente non sceglierà mai — raddoppiava di fatto le
-// chiamate DTM già fatte per l'arricchimento dei candidati "Su misura". Il punteggio si vede solo
-// dopo l'importazione (pagina guida), quando la quota è reale e il calcolo vale la pena di essere
-// fatto una volta sola, per il solo percorso scelto.
+// Usata solo dai risultati "trovati" (Esistenti) senza ancora un punteggio provvisorio calcolato —
+// per i candidati "costruiti" ("Su misura") vedi ProvisionalScoreBadge sotto, che mostra una stima
+// vera invece di un semplice "in attesa".
 export function ScorePendingBadge({ size = 52 }: { size?: number }) {
   return (
     <div
@@ -91,6 +89,22 @@ export function ScorePendingBadge({ size = 52 }: { size?: number }) {
     >
       <Clock className="w-3.5 h-3.5 text-white/60" />
       <span className="text-white/60 text-[8px] leading-tight font-medium">dopo l&apos;import</span>
+    </div>
+  )
+}
+
+// Stima leggera (lib/routeBuilder/provisionalScore.ts) mostrata su ogni card dei risultati di
+// ricerca — MAI il punteggio definitivo (quello arriva solo dopo l'importazione, calcolato con dati
+// reali): l'etichetta "Provvisorio" resta sempre visibile per non farla scambiare per quello finale.
+export function ProvisionalScoreBadge({ score, size = 52 }: { score: ProvisionalScore; size?: number }) {
+  return (
+    <div
+      className="shrink-0 rounded-xl bg-stone-800 flex flex-col items-center justify-center text-center gap-0.5 px-1"
+      style={{ width: size, height: size }}
+    >
+      <span className="text-white text-sm font-bold leading-none">{score.ts}</span>
+      <span className="text-[9px] font-semibold leading-none" style={{ color: score.safety.color }}>{score.safety.label}</span>
+      <span className="text-white/50 text-[7px] leading-tight font-medium uppercase tracking-wide">Provvisorio</span>
     </div>
   )
 }
@@ -140,8 +154,10 @@ export function FoundRouteCard({ data, onChoose, feedback }: {
               </div>
             )}
           </div>
-          <ScorePendingBadge />
+          {data.provisionalScore ? <ProvisionalScoreBadge score={data.provisionalScore} /> : <ScorePendingBadge />}
         </div>
+
+        {data.pois && data.pois.length > 0 && <PoiPreviewRow pois={data.pois} />}
 
         {vs && (
           <div className={`flex items-start gap-2 px-3 py-2 rounded-xl border text-xs ${vs.badge}`}>
@@ -206,7 +222,7 @@ export function BuiltRouteCard({ data, onChoose, feedback }: {
               <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
             </div>
           </div>
-          <ScorePendingBadge />
+          {data.provisionalScore ? <ProvisionalScoreBadge score={data.provisionalScore} /> : <ScorePendingBadge />}
         </div>
 
         <PoiPreviewRow pois={data.pois ?? []} />

@@ -9,7 +9,7 @@ import {
   MIN_BUILT_RESULTS, RETRY_DISTANCE_FACTORS, MAX_BUILT_RESULTS, candidateSignature,
 } from '@/lib/routeBuilder/buildConstants'
 import {
-  prepareNetworkStep, generateRawCandidatesForLength, parseBuildRequestBody,
+  prepareNetworkStep, generateRawCandidatesForAnchors, parseBuildRequestBody,
   type BuildRequestBody,
 } from '@/lib/routeBuilder/buildSteps'
 
@@ -196,11 +196,11 @@ async function executeBuild(
     )
     return NextResponse.json({ error: prepOutcome.error, message: prepOutcome.message }, { status: prepOutcome.status })
   }
-  const { bbox, network, startNodeId, targetDistanceM, hasDestination, concerns, environmentPrefs } = prepOutcome.prep
+  const { bbox, network, startNodeIds, targetDistanceM, hasDestination, concerns, environmentPrefs } = prepOutcome.prep
   let rawCandidates = prepOutcome.prep.rawCandidates
 
   if (!hasDestination) {
-    rawCandidates = generateRawCandidatesForLength(network, startNodeId, params.routeType, targetDistanceM)
+    rawCandidates = generateRawCandidatesForAnchors(network, startNodeIds, params.routeType, targetDistanceM)
   }
 
   console.log(`[route-build] candidati grezzi entro tolleranza: ${rawCandidates.length}`)
@@ -247,7 +247,7 @@ async function executeBuild(
       const seen = new Set(candidates.map(candidateSignature))
       const altBatches = await Promise.all(RETRY_DISTANCE_FACTORS.map(async factor => {
         const altDistanceM = Math.min(Math.max(targetDistanceM * factor, MIN_TARGET_DISTANCE_KM * 1000), MAX_TARGET_DISTANCE_KM * 1000)
-        const altRaw = generateRawCandidatesForLength(network, startNodeId, params.routeType, altDistanceM)
+        const altRaw = generateRawCandidatesForAnchors(network, startNodeIds, params.routeType, altDistanceM)
         if (altRaw.length === 0) return [] as ScoredCandidate[]
         try {
           // Il punteggio resta ancorato all'obiettivo originale, non alla lunghezza del

@@ -66,6 +66,15 @@ const MAX_GIULIA_RESOLVE = 3
 // per essere un criterio utile).
 const DESIRABLE_POI_TYPES: PoiType[] = ['waterfall', 'viewpoint', 'spring', 'cave', 'peak', 'pass', 'ruins', 'castle']
 
+// Sottoinsieme di HIKER_ENVIRONMENT_PREFS mostrato QUI (nel wizard "Su misura"): solo 'acqua' ha
+// un effetto reale sul punteggio dei percorsi generati (vedi lib/routeBuilder/scoreCandidates.ts's
+// environmentScore) — 'ombra'/'poca_folla' non hanno nessuna fonte dati affidabile per stimarle
+// (vedi commento in scoreCandidates.ts), 'cani'/'bambini' non sono ancora usate da nessun segnale
+// di punteggio. Mostrarle qui suggerirebbe un effetto che non c'è — restano invece selezionabili
+// nel profilo (Profilo → Escursionista) come preferenze generali dell'account, solo non azionabili
+// da questo algoritmo per ora.
+const WIZARD_ENVIRONMENT_PREFS = HIKER_ENVIRONMENT_PREFS.filter(p => p.key === 'acqua')
+
 // Un percorso "costruito" (algoritmo, cammina la rete OSM reale) o "trovato" (ricerca non-AI o AI
 // di un percorso già documentato altrove) — fusi nella stessa lista risultati, distinti da un tag,
 // invece di un bivio esclusivo (vedi commento sopra il componente). Entrambi hanno sempre una
@@ -145,6 +154,19 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [routeTypes, setRouteTypes] = useState<RouteType[]>(['anello'])
   const [targetDistanceKm, setTargetDistanceKm] = useState(8)
   const [targetElevationM, setTargetElevationM] = useState('')
+  // Percorso tra 2 punti specifici (partenza + destinazione esatta) — si applica solo ad Andata e
+  // ritorno/Solo andata (un anello torna comunque al punto di partenza, una destinazione non ha
+  // senso): quando impostata, targetDistanceKm smette di essere un vincolo e diventa un risultato
+  // (la lunghezza reale del percorso trovato verso quel punto) — vedi hasDestination lato server
+  // (lib/routeBuilder/buildSteps.ts's prepareNetworkStep).
+  const [destQuery, setDestQuery] = useState('')
+  const [destLat, setDestLat] = useState<number | null>(null)
+  const [destLon, setDestLon] = useState<number | null>(null)
+  // Quale punto riceve il prossimo tocco sulla mappa — 'partenza' di default, passa a
+  // 'destinazione' solo quando l'utente lo sceglie esplicitamente (vedi il pulsante dedicato
+  // accanto al campo "Destinazione"), altrimenti un tocco impostato per sbaglio sulla destinazione
+  // sposterebbe il punto di partenza senza che l'utente l'abbia scelto.
+  const [mapTapTarget, setMapTapTarget] = useState<'partenza' | 'destinazione'>('partenza')
   const [environmentPrefs, setEnvironmentPrefs] = useState<HikerEnvironmentPrefKey[]>([])
   const [desiredPoiTypes, setDesiredPoiTypes] = useState<PoiType[]>([])
   const [defaultsLoaded, setDefaultsLoaded] = useState(false)
@@ -222,6 +244,27 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     return () => clearTimeout(handle)
   }, [query, searchMode])
 
+  // Stessa anteprima immediata, per il campo destinazione (percorso tra 2 punti) — vuoto ⇒
+  // nessuna destinazione impostata (destLat/destLon restano null, il percorso resta senza vincolo
+  // di punto d'arrivo).
+  useEffect(() => {
+    if (searchMode !== 'su_misura' || !destQuery.trim()) { setDestLat(null); setDestLon(null); return }
+    const handle = setTimeout(async () => {
+      const place = await resolvePlaceClientFirst(destQuery.trim(), false)
+      if (place) { setDestLat(place.lat); setDestLon(place.lon) }
+    }, 600)
+    return () => clearTimeout(handle)
+  }, [destQuery, searchMode])
+
+  // Il pulsante "tocca la mappa per la destinazione" resta attivo solo finché il campo destinazione
+  // ha senso — altrimenti un tocco continuerebbe a muovere il punto sbagliato in una schermata dove
+  // il controllo non è nemmeno più visibile.
+  useEffect(() => {
+    if (searchMode !== 'su_misura' || !(routeTypes.includes('andata_ritorno') || routeTypes.includes('solo_andata'))) {
+      setMapTapTarget('partenza')
+    }
+  }, [searchMode, routeTypes])
+
   // Selezione multipla dei tipi di percorso — sempre almeno un tipo attivo, non si può deselezionare
   // l'ultimo rimasto.
   function toggleRouteType(t: RouteType) {
@@ -240,24 +283,41 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   }
 
   // Ricerca unica per lo step "Partenza": Livello 0 (sempre, gratuito) → Livello 1 (economico, solo
-  // se necessario e con AI attiva) lato server (app/api/route-build/search/route.ts). Se nessuno
-  // dei due trova nulla, rivela la chat di Giulia (Livello 2) pre-innescata con la stessa query.
+  // se necessario e con AI attiva) lato server, in due chiamate HTTP brevi invece di una sola
+  // lunga — step/search-find (luogo + elenco candidati, leggero) poi step/search-resolve (tracce
+  // reali + POI + stima provvisoria, la parte più pesante) — stesso principio già applicato a "Su
+  // misura" (vedi runStepBuild): nessuna singola richiesta somma più operazioni costose sotto lo
+  // stesso tetto di 60s. Se nessuno dei due livelli trova nulla, rivela la chat di Giulia (Livello 2)
+  // pre-innescata con la stessa query.
   async function runSearch() {
     if (!query.trim() || searching) return
     setSearching(true)
     setErrorMsg('')
     setShowGiulia(false)
+    const startedAt = Date.now()
     try {
-      const res = await fetch('/api/route-build/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query.trim(), useAi, radiusKm: searchRadiusKm }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setErrorMsg(data.message || data.error || 'Ricerca non riuscita, riprova.')
+      const findRes = await postJSON('/api/route-build/step/search-find', { query: query.trim(), useAi, radiusKm: searchRadiusKm })
+      if (!findRes.ok) {
+        setErrorMsg(findRes.data.message || findRes.data.error || 'Ricerca non riuscita, riprova.')
         return
       }
+      const find = findRes.data as {
+        place: { lat: number; lon: number; displayName: string } | null
+        candidates: unknown[]
+        prefill: { routeType?: RouteType; targetDistanceKm?: number; targetElevationM?: number; desiredPoiTypes?: PoiType[]; environmentPrefs?: HikerEnvironmentPrefKey[] } | null
+        tierReached: string
+        escalateToAi: boolean
+      }
+      const resolveRes = find.candidates.length > 0
+        ? await postJSON('/api/route-build/step/search-resolve', { candidates: find.candidates })
+        : { ok: true, data: { foundRoutes: [] } }
+      const data = { place: find.place, prefill: find.prefill, foundRoutes: resolveRes.data.foundRoutes ?? [], escalateToAi: find.escalateToAi }
+
+      postJSON('/api/route-build/step/search-log', {
+        query: query.trim(), useAi, tierReached: find.escalateToAi ? `${find.tierReached}_escalated` : find.tierReached,
+        placeName: find.place?.displayName ?? null, foundCount: data.foundRoutes.length, escalatedToAi: find.escalateToAi,
+        durationMs: Date.now() - startedAt,
+      })
 
       if (data.place) {
         setLat(data.place.lat)
@@ -293,6 +353,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               elevationGain: r.elevationGain, elevationLoss: r.elevationLoss, altitudeMax: r.altitudeMax,
               altitudeMin: r.altitudeMin, estimatedTimeSeconds: r.estimatedTimeSeconds, hasElevation: r.hasElevation,
             },
+            pois: r.pois,
+            provisionalScore: r.provisionalScore,
           },
         }))
         setResults(prev => [...prev.filter(x => x.kind !== 'found'), ...items])
@@ -428,6 +490,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     environmentPrefs: HikerEnvironmentPrefKey[]
     desiredPoiTypes: PoiType[]
     startMode: 'esatto' | 'dintorni'
+    destinationLat: number | null
+    destinationLon: number | null
   }
 
   async function postJSON(url: string, body: unknown): Promise<{ ok: boolean; data: any }> {
@@ -467,7 +531,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const net = await postJSON('/api/route-build/step/network', {
       lat: common.lat, lon: common.lon, routeType,
       targetDistanceKm: common.targetDistanceKm, targetElevationM: common.targetElevationM,
-      destinationLat: null, destinationLon: null,
+      destinationLat: common.destinationLat, destinationLon: common.destinationLon,
       environmentPrefs: common.environmentPrefs, desiredPoiTypes: common.desiredPoiTypes,
       radiusKm: searchRadiusKm, startMode: common.startMode,
     })
@@ -477,7 +541,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       return { candidates: [], message }
     }
 
-    const { bbox, startNodeId, targetDistanceM, hasDestination, rawCandidates: destRawCandidates, concerns, environmentPrefs: resolvedEnvPrefs } = net.data
+    const { bbox, startNodeIds, targetDistanceM, hasDestination, rawCandidates: destRawCandidates, concerns, environmentPrefs: resolvedEnvPrefs } = net.data
 
     // `silent`: true per i ritentativi con lunghezza alternativa (un fallimento lì è un ripiego che
     // non deve interrompere gli altri, esattamente come nella pipeline monolitica originale, che li
@@ -489,7 +553,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       if (hasDestination) {
         raw = destRawCandidates ?? []
       } else {
-        const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeId, routeType, targetDistanceM: distanceM })
+        const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeIds, routeType, targetDistanceM: distanceM })
         if (!cRes.ok) return { candidates: [], errorMessage: silent ? null : (cRes.data.message || cRes.data.error) }
         raw = cRes.data.rawCandidates ?? []
       }
@@ -579,6 +643,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       environmentPrefs,
       desiredPoiTypes,
       startMode,
+      destinationLat: destLat,
+      destinationLon: destLon,
     })
     if (count > 0) setStep('results')
     else if (message) setErrorMsg(message)
@@ -689,6 +755,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             onPick={(pLat, pLon) => { setLat(pLat); setLon(pLon) }}
             height="100%" rounded={false}
             radiusKm={lat != null && lon != null ? searchRadiusKm : undefined}
+            secondaryLat={destLat ?? undefined}
+            secondaryLon={destLon ?? undefined}
+            onPickSecondary={searchMode === 'su_misura' ? (pLat, pLon) => { setDestLat(pLat); setDestLon(pLon) } : undefined}
+            activeTarget={mapTapTarget === 'destinazione' ? 'secondary' : 'primary'}
           />
         </div>
 
@@ -702,9 +772,16 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             {/* Il tocco sulla mappa imposta un punto di partenza, usato solo da "Su misura" —
                 "Esistenti" cerca esclusivamente per testo (nessun endpoint di ricerca "vicino a un
                 punto" per i percorsi già documentati): un unico messaggio per entrambe le modalità
-                prometteva un tocco che in "Esistenti" non aveva alcun effetto sulla ricerca. */}
+                prometteva un tocco che in "Esistenti" non aveva alcun effetto sulla ricerca.
+                Quando il pulsante destinazione è attivo (mapTapTarget), il tocco sposta invece
+                quel punto — stesso principio, messaggio diverso per non promettere l'effetto
+                sbagliato. */}
             <p className="text-[11px] text-stone-400">
-              {searchMode === 'esistenti' ? 'Scrivi cosa cerchi' : 'Tocca la mappa o scrivi il luogo di partenza'}
+              {searchMode === 'esistenti'
+                ? 'Scrivi cosa cerchi'
+                : mapTapTarget === 'destinazione'
+                ? 'Tocca la mappa per la destinazione'
+                : 'Tocca la mappa o scrivi il luogo di partenza'}
             </p>
           </div>
         </div>
@@ -771,7 +848,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               </div>
               {startMode === 'dintorni' && (
                 <p className="text-xs text-stone-400 mt-1.5">
-                  Utile per un luogo generico (es. una città) o un punto d&apos;interesse senza sentieri esattamente addosso (es. una cascata) — cerca il miglior punto di partenza entro il raggio scelto qui sotto, invece di richiedere che sia già lì.
+                  Percorsi liberi nella zona: non partono necessariamente da questo punto esatto, ma esplorano l&apos;area entro il raggio scelto qui sotto — utile per un luogo generico (es. una città) o un punto d&apos;interesse senza sentieri esattamente addosso (es. una cascata).
                 </p>
               )}
             </div>
@@ -826,14 +903,52 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
 
+              {(routeTypes.includes('andata_ritorno') || routeTypes.includes('solo_andata')) && (
+                <div>
+                  <label className="block text-sm font-medium text-stone-600 mb-1">
+                    Destinazione <span className="font-normal text-stone-400">(opzionale — percorso tra 2 punti)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input value={destQuery} onChange={e => setDestQuery(e.target.value)}
+                      placeholder="Es. Rifugio Città di Fano"
+                      className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
+                    <button type="button" onClick={() => setMapTapTarget(t => t === 'destinazione' ? 'partenza' : 'destinazione')}
+                      title="Tocca la mappa per impostare la destinazione"
+                      className={`shrink-0 w-10 h-10 rounded-xl border flex items-center justify-center transition-colors ${
+                        mapTapTarget === 'destinazione' ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white border-stone-300 text-stone-500'
+                      }`}>
+                      <MapPin className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {mapTapTarget === 'destinazione' && (
+                    <p className="text-xs text-orange-700 mt-1.5">Tocca la mappa per impostare la destinazione — il prossimo tocco sposta il punto arancione, non più quello di partenza.</p>
+                  )}
+                  {(destLat != null) && (
+                    <div className="flex items-center justify-between mt-1.5">
+                      <p className="text-xs text-stone-400">
+                        Con una destinazione impostata, la lunghezza qui sotto non è più un vincolo: il percorso segue la via reale verso quel punto (vale solo per Andata e ritorno/Solo andata, non per Anello).
+                      </p>
+                      <button type="button" onClick={() => { setDestQuery(''); setDestLat(null); setDestLon(null); setMapTapTarget('partenza') }}
+                        className="shrink-0 ml-2 text-xs text-stone-400 hover:text-stone-600 underline">
+                        Rimuovi
+                      </button>
+                    </div>
+                  )}
+                  {destLat == null && destQuery.trim() && (
+                    <p className="text-xs text-stone-400 mt-1.5">Risoluzione del luogo in corso…</p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-sm font-medium text-stone-600">Lunghezza target</label>
                   <span className="text-sm font-semibold text-stone-800">{targetDistanceKm.toFixed(1)} km</span>
                 </div>
                 <input type="range" min={MIN_KM} max={MAX_KM} step={0.5} value={targetDistanceKm}
+                  disabled={destLat != null}
                   onChange={e => setTargetDistanceKm(Number(e.target.value))}
-                  className="w-full accent-terra-500" />
+                  className="w-full accent-terra-500 disabled:opacity-40" />
               </div>
 
               <div>
@@ -848,7 +963,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               <div>
                 <label className="block text-sm font-medium text-stone-600 mb-2">Preferenze ambientali</label>
                 <div className="flex flex-wrap gap-2">
-                  {HIKER_ENVIRONMENT_PREFS.map(p => (
+                  {WIZARD_ENVIRONMENT_PREFS.map(p => (
                     <button key={p.key} onClick={() => toggleEnvironmentPref(p.key)}
                       className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                         environmentPrefs.includes(p.key) ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'

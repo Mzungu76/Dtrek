@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
-import { generateRawCandidatesForLength } from '@/lib/routeBuilder/buildSteps'
+import { generateRawCandidatesForAnchors } from '@/lib/routeBuilder/buildSteps'
 import type { RouteType } from '@/lib/routeBuilder/loopBuilder'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +20,10 @@ export const maxDuration = 60
 
 interface CandidatesRequestBody {
   bbox: [number, number, number, number]
-  startNodeId: number
+  // Uno o più (fino a 4: il punto esatto + fino a 3 ancore "libere" — vedi
+  // lib/routeBuilder/buildSteps.ts's collectFreeAnchors) nodi da cui esplorare — sempre un array,
+  // anche quando è uno solo, per un unico contratto client/server invece di due forme diverse.
+  startNodeIds: number[]
   routeType: RouteType
   targetDistanceM: number
 }
@@ -32,15 +35,15 @@ function parseBody(raw: unknown): CandidatesRequestBody {
   if (!Array.isArray(bbox) || bbox.length !== 4 || bbox.some(v => typeof v !== 'number' || !Number.isFinite(v))) {
     throw new Error('Bbox non valido')
   }
-  const startNodeId = Number(body.startNodeId)
-  if (!Number.isFinite(startNodeId)) throw new Error('startNodeId non valido')
+  const startNodeIds = Array.isArray(body.startNodeIds) ? body.startNodeIds.map(Number).filter(Number.isFinite) : []
+  if (startNodeIds.length === 0) throw new Error('startNodeIds non valido')
   if (body.routeType !== 'anello' && body.routeType !== 'andata_ritorno' && body.routeType !== 'solo_andata') {
     throw new Error('Tipo di percorso non valido')
   }
   const targetDistanceM = Number(body.targetDistanceM)
   if (!Number.isFinite(targetDistanceM) || targetDistanceM <= 0) throw new Error('targetDistanceM non valido')
 
-  return { bbox: bbox as [number, number, number, number], startNodeId, routeType: body.routeType, targetDistanceM }
+  return { bbox: bbox as [number, number, number, number], startNodeIds, routeType: body.routeType, targetDistanceM }
 }
 
 export async function POST(req: NextRequest) {
@@ -84,6 +87,6 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'network_unavailable', message: 'Rete sentieri non disponibile in questo momento, riprova.' }, { status: 502 })
   }
 
-  const rawCandidates = generateRawCandidatesForLength(network, params.startNodeId, params.routeType, params.targetDistanceM)
+  const rawCandidates = generateRawCandidatesForAnchors(network, params.startNodeIds, params.routeType, params.targetDistanceM)
   return NextResponse.json({ rawCandidates })
 }
