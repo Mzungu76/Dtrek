@@ -30,10 +30,11 @@ import type { GuideSectionKey } from '@/lib/guideSections'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2,
   Car, Trash2, Pencil, Check, Images,
-  Navigation,
+  Navigation, Download,
   Calendar as CalendarIcon,
 } from 'lucide-react'
 import PdfExportButton from '@/components/PdfExportButton'
+import { exportPlannedHikeToGpx } from '@/utils/exportGpx'
 import { useUserPrefs } from '@/lib/useUserPrefs'
 import { useHasAiAccess } from './useHasAiAccess'
 import { useEnrichmentTimeout } from './useEnrichmentTimeout'
@@ -104,6 +105,8 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [saving,  setSaving]  = useState(false)
   const [notesVal, setNotesVal] = useState('')
   const [editNotes, setEditNotes] = useState(false)
+  const [titleVal, setTitleVal] = useState('')
+  const [editTitle, setEditTitle] = useState(false)
   const [showGradient, setShowGradient] = useState(false)
   const [showAspect,   setShowAspect]   = useState(false)
   const [showStreetView, setShowStreetView] = useState(false)
@@ -512,6 +515,13 @@ export default function GuidaHub({ id }: { id?: string }) {
     updatePlannedMeta(routeItem.id, { favorite: next })
   }
   const saveNotes = async () => { await patch({ userNotes: notesVal }); setEditNotes(false) }
+  const saveTitle = async () => {
+    const trimmed = titleVal.trim()
+    if (!trimmed) return
+    await patch({ title: trimmed })
+    setItems(prev => prev.map(it => it.id === hike?.id ? { ...it, title: trimmed } : it))
+    setEditTitle(false)
+  }
 
   const handleDelete = async () => {
     if (!hike || !confirm('Eliminare questa escursione pianificata?')) return
@@ -694,7 +704,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           scrollToSectionKey={pendingScrollSection}
           onScrollToSectionConsumed={() => setPendingScrollSection(null)}
           highlightedPoiId={highlightedPoiId}
-          onPoiTap={setHighlightedPoiId}
+          onPoiTap={id => setHighlightedPoiId(prev => prev === id ? null : id)}
           weather={hasGps ? { lat: centerPt.lat!, lon: centerPt.lon!, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const } : undefined}
           onOpenMap3D={hasGps ? () => setShow3D(true) : undefined}
           showGradient={showGradient}
@@ -721,9 +731,35 @@ export default function GuidaHub({ id }: { id?: string }) {
     return (
       <div className="px-4 py-4 space-y-1">
         <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className={`w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left text-sm font-medium ${textPrimary}`} />
+        <button
+          onClick={() => exportPlannedHikeToGpx(hike)}
+          disabled={!hike.trackPoints?.length && !hike.routePolyline?.length}
+          className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left disabled:opacity-40 disabled:hover:bg-transparent"
+        >
+          <Download className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta GPX</span>
+        </button>
         <button onClick={() => { onClose(); setShowStreetView(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
           <Images className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Foto zona (street view)</span>
         </button>
+        <div>
+          {editTitle ? (
+            <div className="px-2 py-2 space-y-2">
+              <input autoFocus value={titleVal} onChange={e => setTitleVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleVal(hike.title); setEditTitle(false) } }}
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-white outline-none focus:border-sky-500" />
+              <div className="flex gap-2">
+                <button onClick={saveTitle} disabled={saving || !titleVal.trim()} className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 text-white text-sm rounded-lg hover:bg-sky-400 transition-colors disabled:opacity-50">
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salva
+                </button>
+                <button onClick={() => { setTitleVal(hike.title); setEditTitle(false) }} className={`px-3 py-1.5 text-sm transition-colors ${textMuted}`}>Annulla</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setTitleVal(hike.title); setEditTitle(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
+              <Pencil className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Rinomina percorso</span>
+            </button>
+          )}
+        </div>
         <div>
           {editNotes ? (
             <div className="px-2 py-2 space-y-2">

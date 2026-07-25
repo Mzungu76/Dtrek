@@ -23,6 +23,13 @@ export interface ProvisionalScoreInput {
   altitudeMin: number
   estimatedTimeSeconds: number
   pois: PoiItem[]
+  // Durata preferita (minuti) contro cui confrontare la stima Naismith di QUESTO candidato — se
+  // il chiamante ha già un target esplicito per la ricerca in corso (es. la lunghezza richiesta in
+  // "Su misura", vedi lib/routeBuilder/scoreCandidates.ts), va preferito al default neutro di
+  // computeTrailScore: altrimenti ogni candidato verrebbe giudicato "troppo lungo/corto" contro
+  // una preferenza generica (270 min) invece che contro quello che l'utente ha davvero chiesto in
+  // questa ricerca. Omesso ⇒ fallback al default neutro di computeTrailScore.
+  prefDurata?: number
 }
 
 export interface ProvisionalScore {
@@ -50,10 +57,12 @@ export function computeProvisionalScore(input: ProvisionalScoreInput): Provision
     elevationGain: input.elevationGain,
     elevationLoss: input.elevationLoss,
     altitudeMax: input.altitudeMax,
-    // avgHeartRate/prefSforzo/prefDurata/hrRest/hrMax/avgSlopeDeg assenti: leggere il profilo
-    // dell'utente qui costerebbe un'altra chiamata Supabase per candidato, in contrasto con
-    // l'obiettivo "nessuna chiamata aggiuntiva" di questa stima — i default neutri di
-    // computeTrailScore bastano per un ordine di grandezza provvisorio.
+    // avgHeartRate/prefSforzo/hrRest/hrMax/avgSlopeDeg assenti: leggere il profilo dell'utente qui
+    // costerebbe un'altra chiamata Supabase per candidato, in contrasto con l'obiettivo "nessuna
+    // chiamata aggiuntiva" di questa stima — i default neutri di computeTrailScore bastano per un
+    // ordine di grandezza provvisorio. prefDurata invece arriva dal chiamante quando disponibile
+    // (vedi il commento su ProvisionalScoreInput.prefDurata sopra), zero costo aggiuntivo.
+    prefDurata: input.prefDurata,
   })
   // Stessa cautela già applicata da lib/computeCtsForHike.ts quando la confidenza è bassa.
   if (tei.confidence === 'estimated') ts = Math.round(ts * 0.95)

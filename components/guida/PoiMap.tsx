@@ -69,6 +69,7 @@ export default function PoiMap({
         fitSignal={fitTick}
         focusPoints={focusPoints}
         focusSignal={focusSignal}
+        showDirectionArrows
       />
       <div
         className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"

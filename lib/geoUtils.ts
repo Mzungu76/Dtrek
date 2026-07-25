@@ -22,6 +22,44 @@ export function haversineM(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+/** Rotta iniziale (gradi, 0=nord, in senso orario) dal punto 1 al punto 2 — "forward azimuth". */
+export function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const f1 = lat1 * Math.PI / 180, f2 = lat2 * Math.PI / 180
+  const dl = (lon2 - lon1) * Math.PI / 180
+  const y = Math.sin(dl) * Math.cos(f2)
+  const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)
+  const theta = Math.atan2(y, x)
+  return (theta * 180 / Math.PI + 360) % 360
+}
+
+export interface DirectionArrow { lat: number; lon: number; bearing: number }
+
+/**
+ * Punti equidistanti lungo un tracciato (ogni `spacingM` metri), ciascuno con la direzione di
+ * marcia locale — usati per disegnare le frecce di direzione stile Komoot sulla mappa (vedi
+ * MapView.tsx e components/navigation/NavigationMap.tsx), così anche senza navigazione attiva si
+ * capisce a colpo d'occhio in che verso procede il percorso, non solo dove passa.
+ */
+export function computeDirectionArrows(points: [number, number][], spacingM: number): DirectionArrow[] {
+  const arrows: DirectionArrow[] = []
+  let dist = 0
+  let next = spacingM
+  for (let i = 0; i < points.length - 1; i++) {
+    const [aLat, aLon] = points[i]
+    const [bLat, bLon] = points[i + 1]
+    const segDist = haversineM(aLat, aLon, bLat, bLon)
+    if (segDist === 0) continue
+    const bearing = bearingDeg(aLat, aLon, bLat, bLon)
+    while (dist + segDist >= next) {
+      const t = (next - dist) / segDist
+      arrows.push({ lat: aLat + (bLat - aLat) * t, lon: aLon + (bLon - aLon) * t, bearing })
+      next += spacingM
+    }
+    dist += segDist
+  }
+  return arrows
+}
+
 // Soglia entro cui inizio e fine di una traccia sono considerati "lo stesso punto" — un anello o
 // un andata-ritorno pubblicato raramente chiude esattamente sull'ultimo metro (es. un breve tratto
 // di accesso al trailhead), mentre un percorso lineare punto-punto ha capi ben distanti.

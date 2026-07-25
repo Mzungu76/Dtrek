@@ -11,6 +11,7 @@ import type { PoiItem, PoiType } from '@/lib/overpass'
 import type { HikerConcernKey, HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
 import { DtmUnavailableError } from '@/lib/dtm/dtmClient'
 import { computeProvisionalScore, type ProvisionalScore } from './provisionalScore'
+import { naismithHours } from '@/lib/trailScore'
 import type { RouteCandidate } from './loopBuilder'
 
 // Quanti POI (i più vicini al tracciato) portare con sé nel risultato — per l'anteprima grafica
@@ -205,6 +206,13 @@ export async function scoreAndEnrichCandidates(
 
     const topPois = pois.slice().sort((a, b) => a.distFromTrack - b.distFromTrack).slice(0, MAX_POIS_IN_RESULT)
 
+    // Durata stimata per il target di QUESTA ricerca (lunghezza/dislivello richiesti dall'utente),
+    // non il default neutro di computeTrailScore — così il punteggio "Provvisorio" mostrato sulle
+    // card confronta ogni candidato con quello che l'utente ha davvero chiesto in questa ricerca.
+    const targetDurataMin = Math.round(
+      naismithHours(opts.targetDistanceM / 1000, opts.targetElevationM ?? 0, 0).total * 60,
+    )
+
     const scored: ScoredCandidate = {
       type: candidate.type,
       routePolyline: candidate.polyline,
@@ -229,6 +237,7 @@ export async function scoreAndEnrichCandidates(
         altitudeMin: enrichedTrack.altitudeMin,
         estimatedTimeSeconds: enrichedTrack.estimatedTimeSeconds,
         pois: topPois,
+        prefDurata: targetDurataMin,
       }),
     }
     return { scored, score }

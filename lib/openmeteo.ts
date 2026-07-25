@@ -376,3 +376,128 @@ export function clothingSuggestions(
 
   return items
 }
+
+export interface WeatherAdviceItem {
+  icon: string
+  text: string
+  severity: 'danger' | 'caution' | 'info' | 'positive'
+}
+
+const SEVERITY_RANK: Record<WeatherAdviceItem['severity'], number> = { danger: 0, caution: 1, info: 2, positive: 3 }
+
+/**
+ * Consigli testuali sulla situazione meteo del giorno — un secondo layer rispetto a
+ * clothingSuggestions(): quella dice COSA portare, questa dice COME comportarsi (partire presto,
+ * rimandare, evitare tratti esposti…). Regole indipendenti così più casistiche possono coesistere
+ * nello stesso giorno (es. caldo intenso + UV alto); ordinate per gravità e limitate a
+ * MAX_ADVICE_ITEMS così il widget non trabocca di frasi quando il meteo è instabile su più fronti.
+ */
+const MAX_ADVICE_ITEMS = 4
+
+export function weatherAdvice(
+  daytimeHours: HourlyWeatherFull[],
+  altitudeMax = 0,
+  elevationGain = 0,
+): WeatherAdviceItem[] {
+  if (!daytimeHours.length) return []
+
+  const temps      = daytimeHours.map(h => h.temperature)
+  const tempMin     = Math.min(...temps)
+  const tempMax     = Math.max(...temps)
+  const tempMid     = (tempMin + tempMax) / 2
+  const summitTemp  = tempMid - elevationGain * 0.0065
+  const maxWind     = Math.max(...daytimeHours.map(h => h.windspeed))
+  const totalRain   = daytimeHours.reduce((s, h) => s + h.precipitation, 0)
+  const maxHourRain = Math.max(...daytimeHours.map(h => h.precipitation))
+  const totalSnow   = daytimeHours.reduce((s, h) => s + (h.snowfall ?? 0), 0)
+  const maxUV       = Math.max(...daytimeHours.map(h => h.uvIndex ?? 0))
+  const codes       = daytimeHours.map(h => h.weathercode)
+  const hasStorm    = codes.some(c => STORM_CODES.includes(c))
+  const hasFog      = codes.some(c => c === 45 || c === 48)
+  const isHigh      = altitudeMax > 2000
+
+  // Il rischio temporalesco pomeridiano riguarda soprattutto la seconda metà della giornata —
+  // se le ore con codice temporale sono tutte dopo mezzogiorno, il consiglio "parti presto" ha
+  // senso pratico, non solo un avviso generico.
+  const afternoonStorm = hasStorm && daytimeHours
+    .filter(h => STORM_CODES.includes(h.weathercode))
+    .every(h => parseInt(h.time.slice(11, 13)) >= 12)
+
+  const advice: WeatherAdviceItem[] = []
+
+  // ── Temporali / grandine ──────────────────────────────────────────────────
+  if (hasStorm && afternoonStorm) {
+    advice.push({ icon: '⛈️', severity: 'danger',
+      text: 'Temporali attesi nel pomeriggio: parti presto e pianifica il rientro entro mezzogiorno, quando il rischio è più basso.' })
+  } else if (hasStorm) {
+    advice.push({ icon: '⛈️', severity: 'danger',
+      text: 'Temporali previsti durante la giornata: valuta di rimandare l\'uscita o tieni pronta una via di fuga rapida.' })
+  }
+
+  // ── Pioggia (solo se non già coperta da un avviso di temporale) ──────────
+  if (!hasStorm && (totalRain > 15 || maxHourRain > 6)) {
+    advice.push({ icon: '🌧️', severity: 'caution',
+      text: 'Pioggia abbondante prevista: fondo scivoloso e possibili guadi in piena, valuta un percorso alternativo o un altro giorno.' })
+  } else if (!hasStorm && totalRain > 3) {
+    advice.push({ icon: '🌦️', severity: 'info',
+      text: 'Pioggia prevista durante il giorno: porta una giacca impermeabile e copri lo zaino.' })
+  }
+
+  // ── Neve ───────────────────────────────────────────────────────────────
+  if (totalSnow > 2) {
+    advice.push({ icon: '❄️', severity: isHigh ? 'danger' : 'caution',
+      text: 'Nevicate previste: sentiero e segnaletica possono risultare coperti, valuta ramponcini e occhio all\'orientamento.' })
+  }
+
+  // ── Nebbia ─────────────────────────────────────────────────────────────
+  if (hasFog) {
+    advice.push({ icon: '🌫️', severity: 'caution',
+      text: 'Nebbia prevista: visibilità ridotta, presta attenzione alla segnaletica e ai bordi del sentiero.' })
+  }
+
+  // ── Vento ──────────────────────────────────────────────────────────────
+  if (maxWind > 50) {
+    advice.push({ icon: '💨', severity: 'danger',
+      text: 'Vento molto forte in quota: evita creste e tratti esposti, il rischio di raffiche destabilizzanti è concreto.' })
+  } else if (maxWind > 35) {
+    advice.push({ icon: '💨', severity: 'caution',
+      text: 'Vento sostenuto, soprattutto nei tratti più esposti: porta un guscio antivento e valuta le zone allo scoperto.' })
+  }
+
+  // ── Caldo ──────────────────────────────────────────────────────────────
+  if (tempMax > 32) {
+    advice.push({ icon: '🥵', severity: 'caution',
+      text: 'Caldo intenso: parti presto per evitare le ore più calde e porta più acqua del solito.' })
+  } else if (tempMax > 27) {
+    advice.push({ icon: '🌡️', severity: 'info',
+      text: 'Giornata calda: idratati spesso e cerca i tratti ombreggiati nelle ore centrali.' })
+  }
+
+  // ── Freddo (temperatura corretta in quota) ───────────────────────────────
+  if (summitTemp < -8) {
+    advice.push({ icon: '🥶', severity: 'danger',
+      text: 'Freddo estremo in quota: rischio concreto di congelamento, valuta un equipaggiamento invernale completo o rimanda l\'uscita.' })
+  } else if (summitTemp < 0) {
+    advice.push({ icon: '🧊', severity: 'caution',
+      text: 'Temperature sotto zero in quota: possibile ghiaccio sul sentiero nei tratti in ombra, valuta ramponcini.' })
+  }
+
+  // ── UV ─────────────────────────────────────────────────────────────────
+  if (maxUV >= 8) {
+    advice.push({ icon: '☀️', severity: 'caution',
+      text: 'UV molto alto: crema solare ad alta protezione, cappello e occhiali da sole, soprattutto su neve o oltre i 2000 m.' })
+  } else if (maxUV >= 6) {
+    advice.push({ icon: '☀️', severity: 'info',
+      text: 'UV elevato: proteggi pelle e occhi nelle ore centrali della giornata.' })
+  }
+
+  // ── Bel tempo stabile ──────────────────────────────────────────────────
+  if (advice.length === 0 && !hasStorm && totalRain < 1 && maxWind < 25 && tempMax <= 27 && summitTemp >= 0) {
+    advice.push({ icon: '🙂', severity: 'positive',
+      text: 'Condizioni stabili e miti per tutta la giornata: buona occasione per questa escursione.' })
+  }
+
+  return advice
+    .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
+    .slice(0, MAX_ADVICE_ITEMS)
+}
