@@ -37,6 +37,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   let useAi: boolean
   let radiusKm: number
   let destination: { lat: number; lon: number } | null
+  let fallbackPoint: { lat: number; lon: number } | null
   try {
     const body = await req.json()
     if (typeof body.query !== 'string' || !body.query.trim()) throw new Error('query mancante')
@@ -45,10 +46,17 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     radiusKm = sanitizeSearchRadiusKm(body.radiusKm)
     destination = typeof body.destLat === 'number' && typeof body.destLon === 'number'
       ? { lat: body.destLat, lon: body.destLon } : null
+    // Punto già noto lato client (mappa già centrata lì — da una risoluzione client-side riuscita o
+    // da un tocco diretto) — usato come fallback se la risoluzione server-side del testo fallisce
+    // (Nominatim spesso limita/blocca le chiamate da IP server/cloud, vedi
+    // lib/routeBuilder/resolvePlaceClient.ts), invece di far fallire l'intera ricerca quando le
+    // coordinate giuste sono in realtà già note.
+    fallbackPoint = typeof body.fallbackLat === 'number' && typeof body.fallbackLon === 'number'
+      ? { lat: body.fallbackLat, lon: body.fallbackLon } : null
   } catch {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
-  const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi, destination)
+  const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi, destination, fallbackPoint)
   return NextResponse.json(find)
 }

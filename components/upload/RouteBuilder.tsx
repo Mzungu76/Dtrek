@@ -362,6 +362,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const findRes = await postJSON('/api/route-build/step/search-find', {
         query: query.trim(), useAi, radiusKm: searchRadiusKm,
         destLat: destLat ?? undefined, destLon: destLon ?? undefined,
+        // Punto già mostrato sulla mappa (risolto client-side, o toccato direttamente) — fallback
+        // se la risoluzione server-side del testo fallisce (vedi commento nell'endpoint).
+        fallbackLat: lat ?? undefined, fallbackLon: lon ?? undefined,
       })
       if (!findRes.ok) {
         const msg = findRes.data.message || findRes.data.error || 'Ricerca non riuscita, riprova.'

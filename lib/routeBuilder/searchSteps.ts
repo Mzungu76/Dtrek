@@ -87,12 +87,25 @@ async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | nul
 // Livello 0: sempre, gratuito — risoluzione del luogo (non-AI, solo Nominatim/Overpass) in
 // parallelo con la ricerca di percorsi esistenti (non-AI, Overpass) — SENZA risolvere le tracce
 // (quello è il passo successivo, resolveFoundRoutesWithPoi, deliberatamente separato).
-async function findTier0(query: string, radiusKm: number, destination: DestinationPoint | null): Promise<{ place: ResolvedPlace | null; candidates: HikingRouteCandidate[] }> {
+async function findTier0(
+  query: string, radiusKm: number, destination: DestinationPoint | null, fallbackPoint: DestinationPoint | null,
+): Promise<{ place: ResolvedPlace | null; candidates: HikingRouteCandidate[] }> {
   const { nameQuery, areaHint } = splitQuery(query)
-  const [place, rawCandidatesInitial] = await Promise.all([
+  const [placeResolved, rawCandidatesInitial] = await Promise.all([
     resolvePlaceName(query),
     findExistingRoutesNonAi(nameQuery, areaHint, radiusKm),
   ])
+  // Se il testo non si risolve lato server (resolvePlaceName tocca Nominatim con l'IP del server —
+  // spesso limitato/bloccato dalla loro policy anti-abuso per IP cloud, vedi il commento in
+  // lib/routeBuilder/resolvePlaceClient.ts — o è comunque un testo troppo "sporco" per una ricerca
+  // per nome, es. più luoghi incollati insieme con la virgola) MA il client ha già un punto valido
+  // in mano (lat/lon già mostrati sulla mappa, da una risoluzione client-side riuscita in un passo
+  // precedente, o da un tocco diretto sulla mappa), usarlo qui invece di arrendersi — evita di far
+  // fallire l'intera ricerca "Esistenti" per un problema di risoluzione testuale server-side quando
+  // le coordinate giuste sono già note. displayName resta il testo digitato: è già quello mostrato
+  // in barra, non c'è un nome più "vero" da sostituirci.
+  const place: ResolvedPlace | null = placeResolved
+    ?? (fallbackPoint ? { lat: fallbackPoint.lat, lon: fallbackPoint.lon, displayName: query.trim(), source: 'nominatim' } : null)
   let rawCandidates = rawCandidatesInitial
   // Il testo digitato può risolversi in un luogo valido (place, via Nominatim in forma libera —
   // vedi resolvePlaceName) pur non "sembrando" un nome di luogo cercabile per esteso (es. più nomi
@@ -143,7 +156,7 @@ export interface FindResult {
  */
 export async function findExistingRoutesForQuery(
   user: { id: string } | null, query: string, radiusKm: number, useAi: boolean,
-  destination: DestinationPoint | null = null,
+  destination: DestinationPoint | null = null, fallbackPoint: DestinationPoint | null = null,
 ): Promise<FindResult> {
   let place: ResolvedPlace | null = null
   let candidates: HikingRouteCandidate[] = []
@@ -152,7 +165,7 @@ export async function findExistingRoutesForQuery(
   let interpretedPlacesCount = 0
 
   try {
-    const level0 = await findTier0(query, radiusKm, destination)
+    const level0 = await findTier0(query, radiusKm, destination, fallbackPoint)
     place = level0.place
     candidates = level0.candidates
   } catch (e) {
@@ -169,7 +182,10 @@ export async function findExistingRoutesForQuery(
           prefill = interpreted.prefs
           interpretedPlacesCount = interpreted.places.length
           for (const p of interpreted.places.slice(0, MAX_INTERPRETED_PLACES)) {
-            const rerun = await findTier0(p.query, radiusKm, destination)
+            // Nessun fallbackPoint qui: ciascun `p.query` è un luogo/zona candidato DIVERSO
+            // suggerito dall'interpretazione AI, non lo stesso testo originale — il punto già noto
+            // lato client non ha alcun rapporto con QUESTO candidato specifico.
+            const rerun = await findTier0(p.query, radiusKm, destination, null)
             if (!place && rerun.place) place = rerun.place
             if (rerun.candidates.length > 0) candidates = [...candidates, ...rerun.candidates]
           }
