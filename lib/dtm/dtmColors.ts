@@ -20,11 +20,21 @@ export function slopeDegToColor(slopeDeg: number): string {
   return '#7f1d1d'
 }
 
-// Hue = compass bearing directly: 0°/N=red, 90°/E=yellow-green, 180°/S=cyan, 270°/W=blue-violet.
+// Scala caldo/freddo invece della ruota cromatica diretta (hue = bearing) usata prima — quella
+// mappava il Sud (versante più soleggiato/caldo alle nostre latitudini) su un ciano che si legge
+// visivamente "freddo", e il Nord (più in ombra/freddo) su un rosso che si legge "caldo": l'esatto
+// contrario dell'intuizione dell'utente. Qui il colore segue quanto un versante è esposto a sud
+// (soleggiato/caldo, tendente al rosso-arancio) o a nord (in ombra/freddo, tendente al blu), con
+// est/ovest in una fascia neutra giallo-verde a metà strada — coerente con la legenda in
+// MapView.tsx, che usa questa stessa funzione per i quattro colori mostrati.
 export function aspectDegToColor(aspectDeg: number): string {
   if (Number.isNaN(aspectDeg)) return FLAT_COLOR
-  const hue = ((aspectDeg % 360) + 360) % 360
-  return `hsl(${hue}, 70%, 50%)`
+  // +1 a Sud (180°, il più caldo), -1 a Nord (0°/360°, il più freddo), 0 a Est/Ovest (neutro).
+  const warmth = Math.cos((aspectDeg - 180) * Math.PI / 180)
+  const hue = warmth >= 0
+    ? 70 - warmth * 55   // 70 (neutro, E/O) → 15 (rosso-arancio, S)
+    : 70 - warmth * 140  // 70 (neutro, E/O) → 210 (blu, N)
+  return `hsl(${hue}, 72%, 48%)`
 }
 
 /**
