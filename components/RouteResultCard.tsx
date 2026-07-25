@@ -6,7 +6,7 @@
 // Percorsi per te, che ha "Apri" al posto di "Scegli questo percorso" — passato comunque come
 // `onChoose`, l'etichetta resta la stessa: la differenza reale è title/date, non l'azione in sé);
 // `feedback` presente ⇒ mostra i bottoni ♥/✕ (solo in Percorsi per te, mai nel wizard).
-import { Sparkles, TrendingUp, Route, ExternalLink, AlertTriangle, Check, X, Heart, Clock } from 'lucide-react'
+import { Sparkles, TrendingUp, Route, ExternalLink, AlertTriangle, Check, X, Heart, Clock, Box } from 'lucide-react'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import { isSpecificName } from '@/lib/wikipedia'
@@ -118,6 +118,22 @@ export function ProvisionalScoreBadge({ score, size = 48 }: { score: Provisional
   )
 }
 
+// Chip "Vista 3D" in overlay sull'anteprima — stesso stile/icona del chip equivalente in
+// RouteMapSection.tsx (mappa di un percorso già salvato), qui su TrailPreviewMap (anteprima 2D di
+// un risultato di ricerca, non ancora salvato). `onOpen3D` assente ⇒ nessun chip (uso invariato per
+// chi non lo passa, es. app/percorsi-per-te/page.tsx che non ha ancora integrato la vista 3D).
+// Esportata: riusata anche dallo step "Conferma" di RouteBuilder.tsx, che mostra la stessa
+// TrailPreviewMap del percorso scelto fuori da queste card (una singola anteprima grande, non una
+// card intera) ma vuole lo stesso chip.
+export function Map3DChip({ onOpen3D }: { onOpen3D: () => void }) {
+  return (
+    <button onClick={onOpen3D} title="Vista 3D"
+      className="absolute top-3 right-3 z-10 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold bg-black/50 backdrop-blur-md border border-white/15 text-white/90 hover:bg-black/65 transition-colors">
+      <Box className="w-3.5 h-3.5" /> 3D
+    </button>
+  )
+}
+
 function SelectButton({ selectable }: { selectable: SelectableControls }) {
   return (
     <button onClick={selectable.onToggle}
@@ -130,17 +146,21 @@ function SelectButton({ selectable }: { selectable: SelectableControls }) {
   )
 }
 
-export function FoundRouteCard({ data, onChoose, feedback, selectable }: {
+export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D }: {
   data: FoundRouteItem
   onChoose?: () => void
   feedback?: FeedbackControls
   selectable?: SelectableControls
+  onOpen3D?: () => void
 }) {
   const vs = data.comfortVerdict ? verdictStyle(data.comfortVerdict) : null
   const track = data.track
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
-      <TrailPreviewMap polyline={track.routePolyline} height="180px" />
+      <div className="relative isolate">
+        <TrailPreviewMap polyline={track.routePolyline} height="180px" />
+        {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
+      </div>
       <div className="p-4 space-y-2.5">
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
           <Sparkles className="w-3 h-3" /> Percorso trovato
@@ -214,15 +234,19 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable }: {
   )
 }
 
-export function BuiltRouteCard({ data, onChoose, feedback, selectable }: {
+export function BuiltRouteCard({ data, onChoose, feedback, selectable, onOpen3D }: {
   data: BuiltCandidate
   onChoose?: () => void
   feedback?: FeedbackControls
   selectable?: SelectableControls
+  onOpen3D?: () => void
 }) {
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
-      <TrailPreviewMap polyline={data.routePolyline} height="180px" />
+      <div className="relative isolate">
+        <TrailPreviewMap polyline={data.routePolyline} height="180px" />
+        {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
+      </div>
       <div className="p-4 space-y-2.5">
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
           <Route className="w-3 h-3" /> Su misura per te

@@ -16,10 +16,13 @@ export interface SearchHistoryEntry {
   results: unknown[]
 }
 
-export async function saveSearchHistoryEntry(entry: SearchHistoryEntry): Promise<void> {
-  if (entry.results.length === 0) return
+// Ritorna l'id della riga creata (null se il salvataggio fallisce o non c'è nulla da salvare) — usato
+// dal client per collegare l'indicatore globale di ricerca in background (vedi
+// lib/routeBuilder/backgroundSearchStore.ts) direttamente al dettaglio appena creato.
+export async function saveSearchHistoryEntry(entry: SearchHistoryEntry): Promise<string | null> {
+  if (entry.results.length === 0) return null
   try {
-    const { error } = await supabase.from('route_search_history').insert({
+    const { data, error } = await supabase.from('route_search_history').insert({
       user_id: entry.userId,
       mode: entry.mode,
       query: entry.query ?? null,
@@ -27,9 +30,14 @@ export async function saveSearchHistoryEntry(entry: SearchHistoryEntry): Promise
       result_count: entry.results.length,
       params: entry.params,
       results: entry.results,
-    })
-    if (error) console.error('[searchHistory] insert fallito:', error.message)
+    }).select('id').single()
+    if (error) {
+      console.error('[searchHistory] insert fallito:', error.message)
+      return null
+    }
+    return data?.id ?? null
   } catch (e) {
     console.error('[searchHistory] scrittura fallita (non bloccante):', e)
+    return null
   }
 }
