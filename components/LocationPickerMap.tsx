@@ -24,6 +24,11 @@ interface Props {
   onPickSecondary?: (lat: number, lon: number) => void
   // Quale marker riceve il prossimo tocco sulla mappa — ignorato se onPickSecondary è assente.
   activeTarget?: 'primary' | 'secondary'
+  // Incrementato dal chiamante (es. un pulsante "Inquadra tutto") per forzare esplicitamente un
+  // fitBounds/setView — l'UNICO modo per farlo oltre alla vista iniziale: un tocco/trascinamento
+  // dell'utente sulla mappa NON sposta più la vista da solo (vedi suppressNextAutoFitRef sotto),
+  // solo una richiesta di risoluzione esterna (nome digitato) o questo segnale lo fanno.
+  fitSignal?: number
 }
 
 const DEFAULT_CENTER: [number, number] = [42.5, 12.5] // centro Italia
@@ -44,7 +49,7 @@ function pinIcon(Lmod: typeof L, color: string) {
  *  onPickSecondary è passato, gestisce anche un secondo marker (vedi Props sopra). */
 export default function LocationPickerMap({
   lat, lon, onPick, height = '260px', rounded = true, radiusKm,
-  secondaryLat, secondaryLon, onPickSecondary, activeTarget = 'primary',
+  secondaryLat, secondaryLon, onPickSecondary, activeTarget = 'primary', fitSignal,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef     = useRef<L.Map | null>(null)
@@ -58,6 +63,12 @@ export default function LocationPickerMap({
   onPickSecondaryRef.current = onPickSecondary
   const activeTargetRef = useRef(activeTarget)
   activeTargetRef.current = activeTarget
+  // Un tocco/trascinamento dell'utente sulla mappa aggiorna già lui stesso la vista (l'utente sta
+  // già guardando quel punto) — il prossimo giro degli effetti di sincronizzazione qui sotto non
+  // deve quindi rifare un fitBounds/setView che sposterebbe la vista sotto le sue dita. Settato dal
+  // click/dragend handler subito prima di notificare il genitore, consumato (e resettato) dal primo
+  // effetto di sincronizzazione che gira dopo.
+  const suppressNextAutoFitRef = useRef(false)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -89,6 +100,7 @@ export default function LocationPickerMap({
 
       marker.on('dragend', () => {
         const p = marker.getLatLng()
+        suppressNextAutoFitRef.current = true
         onPickRef.current(p.lat, p.lng)
       })
 
@@ -100,6 +112,7 @@ export default function LocationPickerMap({
         const m = Lmod.marker(at, { icon: pinIcon(Lmod, '#c2410c'), draggable: true }).addTo(mapRef.current)
         m.on('dragend', () => {
           const p = m.getLatLng()
+          suppressNextAutoFitRef.current = true
           onPickSecondaryRef.current?.(p.lat, p.lng)
         })
         secondaryMarkerRef.current = m
@@ -111,6 +124,7 @@ export default function LocationPickerMap({
       }
 
       map.on('click', (e: L.LeafletMouseEvent) => {
+        suppressNextAutoFitRef.current = true
         if (activeTargetRef.current === 'secondary' && onPickSecondaryRef.current) {
           const m = ensureSecondaryMarker([e.latlng.lat, e.latlng.lng])
           m?.setLatLng(e.latlng)
@@ -143,11 +157,19 @@ export default function LocationPickerMap({
   // dell'utente sulla mappa) o quando cambia il raggio — senza questo effetto la mappa restava
   // ferma sul centro iniziale anche dopo che una ricerca risolveva un nuovo luogo (bug
   // preesistente, indipendente dal raggio: si applica anche a chi non lo usa, es. SectionIndirizzo.tsx).
+  // Il fitBounds/setView però scatta SOLO quando il nuovo lat/lon arriva da fuori (risoluzione di un
+  // nome digitato) — se invece arriva da un tocco/trascinamento dell'utente sulla mappa stessa
+  // (suppressNextAutoFitRef, settato dagli handler sopra), la vista resta ferma: l'utente sta già
+  // guardando quel punto, spostargliela sotto le dita era il comportamento scomodo segnalato. Il
+  // marker/cerchio restano comunque sincronizzati, solo senza muovere la vista.
   useEffect(() => {
     const map = mapRef.current
     const marker = markerRef.current
     const Lmod = leafletRef.current
     if (!map || !marker || !Lmod || lat == null || lon == null) return
+
+    const suppressFit = suppressNextAutoFitRef.current
+    suppressNextAutoFitRef.current = false
 
     const current = marker.getLatLng()
     const moved = Math.abs(current.lat - lat) > 1e-9 || Math.abs(current.lng - lon) > 1e-9
@@ -156,11 +178,33 @@ export default function LocationPickerMap({
     if (radiusKm != null) {
       if (circleRef.current) circleRef.current.remove()
       circleRef.current = Lmod.circle([lat, lon], { ...CIRCLE_STYLE, radius: radiusKm * 1000 }).addTo(map)
-      map.fitBounds(circleRef.current.getBounds(), { maxZoom: 15 })
-    } else if (moved) {
+      if (!suppressFit) map.fitBounds(circleRef.current.getBounds(), { maxZoom: 15 })
+    } else if (moved && !suppressFit) {
       map.setView([lat, lon], 14)
     }
   }, [lat, lon, radiusKm])
+
+  // Inquadra esplicitamente tutto (cerchio del raggio, o entrambi i punti se non c'è un raggio) —
+  // l'UNICO modo di spostare la vista dopo il primo caricamento oltre a una risoluzione esterna,
+  // dato che i tocchi dell'utente non la spostano più da soli (vedi sopra). Stesso pattern del
+  // pulsante "Inquadra tutto il percorso" di RouteMapSection.tsx.
+  useEffect(() => {
+    if (fitSignal == null || fitSignal === 0) return
+    const map = mapRef.current
+    const Lmod = leafletRef.current
+    if (!map || !Lmod) return
+
+    if (circleRef.current) {
+      map.fitBounds(circleRef.current.getBounds(), { maxZoom: 15 })
+      return
+    }
+    const points: [number, number][] = []
+    if (markerRef.current) points.push([markerRef.current.getLatLng().lat, markerRef.current.getLatLng().lng])
+    if (secondaryMarkerRef.current) points.push([secondaryMarkerRef.current.getLatLng().lat, secondaryMarkerRef.current.getLatLng().lng])
+    if (points.length > 1) map.fitBounds(Lmod.latLngBounds(points), { padding: [48, 48], maxZoom: 15 })
+    else if (points.length === 1) map.setView(points[0], 14)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitSignal])
 
   // Stessa sincronizzazione del marker primario, per il secondo punto (destinazione) — in più, lo
   // rimuove dalla mappa quando torna assente (es. l'utente svuota il campo destinazione): un
@@ -182,6 +226,7 @@ export default function LocationPickerMap({
       const m = Lmod.marker([secondaryLat, secondaryLon], { icon: pinIcon(Lmod, '#c2410c'), draggable: true }).addTo(map)
       m.on('dragend', () => {
         const p = m.getLatLng()
+        suppressNextAutoFitRef.current = true
         onPickSecondaryRef.current?.(p.lat, p.lng)
       })
       secondaryMarkerRef.current = m

@@ -2,15 +2,17 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import {
   ArrowLeft, Loader2, CheckCircle, Search as SearchIcon, RefreshCw, X as XIcon,
-  Sparkles, MapPin, Locate, CircleDot, Ruler, Flag, ListFilter,
+  Sparkles, MapPin, Locate, CircleDot, Ruler, Flag, ListFilter, LocateFixed, Map as MapIcon,
 } from 'lucide-react'
 import LocationPickerMap from '@/components/LocationPickerMap'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
-import { FoundRouteCard, BuiltRouteCard, verdictStyle, PoiPreviewRow, ScorePendingBadge } from '@/components/RouteResultCard'
+import { FoundRouteCard, BuiltRouteCard, verdictStyle, PoiPreviewRow, ScorePendingBadge, Map3DChip } from '@/components/RouteResultCard'
 import GiuliaSearchPanel from './GiuliaSearchPanel'
 import SearchWaitingCard from './SearchWaitingCard'
+import * as bgSearch from '@/lib/routeBuilder/backgroundSearchStore'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
@@ -30,6 +32,11 @@ import {
   MAX_BUILT_RESULTS, candidateSignature,
 } from '@/lib/routeBuilder/buildConstants'
 import type { RouteCandidate } from '@/lib/routeBuilder/loopBuilder'
+
+// Vista 3D dei risultati di ricerca (chip "3D" su FoundRouteCard/BuiltRouteCard, vedi show3D più
+// sotto) — dynamic/ssr:false come ogni altro chiamante di RouteMap3D (usa MapLibre GL, client-only),
+// stesso pattern di app/guida/GuidaHub.tsx.
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 type Step = 'start' | 'results' | 'confirm'
 
@@ -115,6 +122,12 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [lat, setLat] = useState<number | null>(null)
   const [lon, setLon] = useState<number | null>(null)
   const [query, setQuery] = useState('')
+  // Un invio (tastiera o pulsante) sul testo appena digitato/modificato centra SOLO la mappa sul
+  // luogo risolto, senza avviare la ricerca vera — questo stato distingue i due casi: false finché
+  // il testo corrente non è stato ancora "confermato" sulla mappa (ogni modifica del testo lo
+  // resetta), true una volta risolto e la mappa centrata, così il prossimo invio avvia la ricerca
+  // vera invece di ripetere solo il centraggio. Vedi confirmQueryOnMap/handlePrimaryAction.
+  const [queryMapConfirmed, setQueryMapConfirmed] = useState(false)
   const [searching, setSearching] = useState(false)
   // Due modalità di ricerca distinte, scelte esplicitamente dall'utente PRIMA di cercare — non più
   // un'unica ricerca che le combina entrambe. Stesso motore di prima (Livello 0/1/2 per "Esistenti",
@@ -151,6 +164,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // "costruiti" (come tetto aggiuntivo, mai per allargare oltre il limite di sicurezza esistente
   // — vedi app/api/route-build/route.ts). Mostrato anche come cerchio sulla mappa.
   const [searchRadiusKm, setSearchRadiusKm] = useState<number>(20)
+  // Incrementato dal chip "Inquadra tutto" — l'unico modo di inquadrare esplicitamente la mappa
+  // (cerchio del raggio o entrambi i punti) oltre a quando arriva un luogo da una ricerca: un
+  // tocco/trascinamento diretto dell'utente sulla mappa non sposta più la vista da solo (vedi
+  // LocationPickerMap.tsx's suppressNextAutoFitRef), era il comportamento scomodo segnalato.
+  const [fitTick, setFitTick] = useState(0)
 
   // Selezione multipla, non esclusiva: l'utente può cercare/costruire più tipi di percorso insieme
   // (es. sia Anello che Andata e ritorno), risultati mescolati nella stessa lista — vedi
@@ -215,6 +233,19 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // nessun percorso documentato che ci passi vicino: il punto esiste ed è già sulla mappa, offrire
   // "genera da qui con Su misura" invece di lasciare l'utente con un solo messaggio di rinuncia.
   const [poiBridge, setPoiBridge] = useState<{ lat: number; lon: number; displayName: string } | null>(null)
+  // Percorso aperto nella vista 3D (chip "3D" sulle card risultati/conferma) — funziona con la sola
+  // traccia GPS, senza richiedere un hike già salvato (vedi resultMap3DProps sotto).
+  const [show3D, setShow3D] = useState<ResultItem | null>(null)
+
+  // Silenzia la pillola globale (GlobalSearchStatusPill) mentre questo wizard è montato E mostra già
+  // il proprio indicatore locale (SearchWaitingCard) per la stessa ricerca — senza questo, l'utente
+  // vedrebbe due indicatori ridondanti dello stesso stato. Appena il wizard si smonta (l'utente
+  // naviga altrove mentre la ricerca prosegue in background) o la ricerca finisce, il cleanup toglie
+  // il silenziamento e la pillola torna a poter comparire.
+  useEffect(() => {
+    bgSearch.setSuppressed(searching || generating)
+    return () => bgSearch.setSuppressed(false)
+  }, [searching, generating])
 
   // Precompila lunghezza/dislivello/preferenze/interruttore AI dallo storico e dal profilo
   // dell'utente (stesso segnale usato da Giulia in route-search) — solo un suggerimento, l'utente
@@ -325,6 +356,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setSearching(true)
     setErrorMsg('')
     setShowGiulia(false)
+    bgSearch.start('esistenti')
     const startedAt = Date.now()
     try {
       const findRes = await postJSON('/api/route-build/step/search-find', {
@@ -332,7 +364,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         destLat: destLat ?? undefined, destLon: destLon ?? undefined,
       })
       if (!findRes.ok) {
-        setErrorMsg(findRes.data.message || findRes.data.error || 'Ricerca non riuscita, riprova.')
+        const msg = findRes.data.message || findRes.data.error || 'Ricerca non riuscita, riprova.'
+        setErrorMsg(msg)
+        bgSearch.fail(msg)
         return
       }
       const find = findRes.data as {
@@ -379,6 +413,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       // percorsi trovati, che passavano tutti indipendentemente dal tipo.
       const found = ((data.foundRoutes ?? []) as FoundRouteResult[])
         .filter(r => foundRouteMatchesTypes(r.routePolyline, effectiveRouteTypes))
+      let savedSearchId: string | null = null
       if (found.length > 0) {
         const items: ResultItem[] = found.map(r => ({
           kind: 'found',
@@ -394,27 +429,33 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           },
         }))
         setResults(prev => [...prev.filter(x => x.kind !== 'found'), ...items])
-        // Salvataggio della ricerca completa (vedi lib/routeBuilder/searchHistory.ts) — best-effort,
-        // non atteso: non deve mai rallentare né poter far fallire la ricerca stessa. `items` porta
-        // già tracce reali/POI/punteggio provvisorio: /profilo/ricerche-salvate la ri-mostra
-        // dall'archivio senza ricalcolare nulla.
-        postJSON('/api/route-build/search-history', {
+        // Salvataggio della ricerca completa (vedi lib/routeBuilder/searchHistory.ts) — non blocca
+        // la ricerca in caso di fallimento (savedSearchId resta null, gestito più sotto), ma va
+        // atteso per collegare l'id appena creato alla pillola globale (vedi bgSearch.finish).
+        // `items` porta già tracce reali/POI/punteggio provvisorio: /profilo/ricerche-salvate la
+        // ri-mostra dall'archivio senza ricalcolare nulla.
+        const saveRes = await postJSON('/api/route-build/search-history', {
           mode: 'esistenti', query: query.trim(), placeName: data.place?.displayName ?? null,
           params: { radiusKm: searchRadiusKm, routeTypes: effectiveRouteTypes, destQuery, destLat, destLon, useAi },
           results: items,
         })
+        savedSearchId = saveRes.ok ? (saveRes.data.id ?? null) : null
       }
 
       setPoiBridge(null)
       if (data.escalateToAi && useAi) {
         // La chat di Giulia (Livello 2) resta da mostrare — non si naviga via dallo step "Partenza"
-        // finché è ancora in attesa, altrimenti sparirebbe.
+        // finché è ancora in attesa, altrimenti sparirebbe. Richiede comunque l'utente attivo (è una
+        // conversazione), quindi non ha senso trattarla come "in background": si esce dal
+        // tracciamento della pillola globale, che tornerebbe a mostrarsi solo per una ricerca
+        // successiva vera e propria.
         setErrorMsg('')
         setGiuliaOrigin('esistenti')
         setGiuliaSeed(query.trim())
         setGiuliaSessionId(id => id + 1)
         setShowGiulia(true)
         setOpenSheet(null)
+        bgSearch.dismiss()
       } else if (found.length === 0) {
         // Ricerca "Esistenti" pura: nessuna costruzione automatica di riserva (quella è l'azione
         // "Su misura", un motore distinto scelto esplicitamente dall'utente, non un ripiego
@@ -438,12 +479,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         } else {
           setErrorMsg('Nessun percorso esistente trovato — prova a scrivere diversamente, tocca la mappa, o prova "Su misura" per generarne uno.')
         }
+        bgSearch.finishEmpty()
       } else {
         setErrorMsg('')
         setStep('results')
+        bgSearch.finish(found.length, savedSearchId)
       }
     } catch {
       setErrorMsg('Errore di rete, riprova.')
+      bgSearch.fail('Errore di rete, riprova.')
     } finally {
       setSearching(false)
     }
@@ -671,24 +715,34 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setGenerating(true)
     setResultsMessage('')
     setBuildStage('')
+    bgSearch.start('su_misura')
+    // Riporta l'avanzamento sia allo stato locale (SearchWaitingCard, mentre il wizard è montato)
+    // sia alla pillola globale (visibile anche se l'utente naviga altrove nel frattempo).
+    const reportStage = (s: string) => { setBuildStage(s); bgSearch.setStage(s) }
     try {
-      const outcomes = await Promise.all(types.map(routeType => runStepBuild(routeType, common, setBuildStage)))
+      const outcomes = await Promise.all(types.map(routeType => runStepBuild(routeType, common, reportStage)))
       const allBuilt = outcomes.flatMap(o => o.candidates)
       const builtItems: ResultItem[] = allBuilt.map(d => ({ kind: 'built' as const, data: d }))
       setResults(prev => [...prev.filter(r => r.kind !== 'built'), ...builtItems])
       const firstEmptyMessage = outcomes.find(o => o.candidates.length === 0)?.message ?? null
       setResultsMessage(allBuilt.length === 0 ? (firstEmptyMessage ?? '') : '')
       if (builtItems.length > 0) {
-        // Stesso salvataggio best-effort del ramo "Esistenti" (vedi runSearch) — qui copre tutti i
-        // punti d'ingresso di "Su misura" (generate/runSuMisura/useSuMisuraFromBridge), che passano
-        // tutti da qui.
-        postJSON('/api/route-build/search-history', {
+        // Stesso salvataggio del ramo "Esistenti" (vedi runSearch) — qui copre tutti i punti
+        // d'ingresso di "Su misura" (generate/runSuMisura/useSuMisuraFromBridge), che passano tutti
+        // da qui. Atteso (non più fire-and-forget) per collegare l'id appena creato alla pillola.
+        const saveRes = await postJSON('/api/route-build/search-history', {
           mode: 'su_misura', query: query.trim() || null, placeName: query.trim() || null,
           params: { ...common, routeTypes: types },
           results: builtItems,
         })
+        bgSearch.finish(allBuilt.length, saveRes.ok ? (saveRes.data.id ?? null) : null)
+      } else {
+        bgSearch.finishEmpty()
       }
       return { count: allBuilt.length, message: allBuilt.length === 0 ? firstEmptyMessage : null }
+    } catch (e) {
+      bgSearch.fail('Errore di rete, riprova.')
+      throw e
     } finally {
       setGenerating(false)
       setBuildStage('')
@@ -716,16 +770,56 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     else if (message) setErrorMsg(message)
   }
 
+  // Primo "invio" (tastiera o pulsante) su un testo non ancora confermato — SOLO risolve il luogo e
+  // centra la mappa, senza cercare/generare nulla: dà all'utente il tempo di verificare di aver
+  // trovato il punto giusto prima di avviare la ricerca vera (vedi handlePrimaryAction, che
+  // intercetta questo caso PRIMA di runSearch/runSuMisura, in entrambe le modalità). Stessa
+  // risoluzione economica già usata altrove (resolvePlaceClientFirst).
+  async function confirmQueryOnMap() {
+    if (searching || generating || !query.trim()) return
+    setErrorMsg('')
+    setSearching(true)
+    try {
+      const place = await resolvePlaceClientFirst(query.trim(), useAi)
+      if (place) {
+        setLat(place.lat)
+        setLon(place.lon)
+        setQuery(place.displayName)
+        setQueryMapConfirmed(true)
+        return
+      }
+      if (useAi) {
+        setGiuliaOrigin(searchMode)
+        setGiuliaSeed(query.trim())
+        setGiuliaSessionId(id => id + 1)
+        setShowGiulia(true)
+        setOpenSheet(null)
+      } else {
+        setErrorMsg('Luogo non trovato — prova a scrivere diversamente, tocca la mappa, o attiva l\'AI (chip in basso).')
+      }
+    } catch {
+      setErrorMsg('Errore di rete, riprova.')
+    } finally {
+      setSearching(false)
+    }
+  }
+
   // Azione della modalità "Su misura": se c'è un testo, lo risolve come luogo di partenza (stesso
   // motore di risoluzione nome→coordinata già usato altrove, NON la ricerca di percorsi esistenti
   // — qui non si cerca mai un percorso già documentato), poi genera sempre con l'algoritmo.
   async function runSuMisura() {
     if (searching || generating) return
     setErrorMsg('')
-    if (!query.trim()) {
+    if (!query.trim() || queryMapConfirmed) {
+      // Testo assente, o già risolto e la mappa già centrata da confirmQueryOnMap (chiamata prima
+      // da handlePrimaryAction quando c'è testo non confermato) — lat/lon sono già quelli giusti,
+      // non serve ri-risolvere lo stesso testo una seconda volta.
       await generate()
       return
     }
+    // Ramo di sicurezza — con handlePrimaryAction che intercetta sempre il primo invio su un testo
+    // non confermato, questo non dovrebbe più accadere, ma resta come fallback robusto (es. una
+    // chiamata diretta a runSuMisura da un punto che non passa da handlePrimaryAction).
     setSearching(true)
     try {
       const place = await resolvePlaceClientFirst(query.trim(), useAi)
@@ -770,6 +864,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // dall'utente (searchMode): "Esistenti" cerca solo percorsi già documentati altrove, "Su misura"
   // genera sempre con l'algoritmo. Stesso motore di prima, solo diviso in due invece che combinato.
   async function handlePrimaryAction() {
+    // Primo invio su un testo appena digitato/modificato — solo centra la mappa (vedi
+    // confirmQueryOnMap), in entrambe le modalità. Un secondo invio, col testo ormai confermato
+    // (o campo vuoto: nessun testo da confermare), avvia la ricerca vera.
+    if (query.trim() && !queryMapConfirmed) {
+      await confirmQueryOnMap()
+      return
+    }
     if (searchMode === 'esistenti') {
       if (query.trim()) await runSearch()
     } else {
@@ -785,6 +886,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const { lat: bLat, lon: bLon, displayName } = poiBridge
     setSearchMode('su_misura')
     setQuery(displayName)
+    setQueryMapConfirmed(true)
     setLat(bLat)
     setLon(bLon)
     setPoiBridge(null)
@@ -798,6 +900,16 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
   function resultKey(item: ResultItem, i: number): string {
     return `${item.kind}-${i}`
+  }
+
+  // Estrae dal ResultItem i soli campi richiesti da RouteMap3D — stessa forma sia per un candidato
+  // "costruito" (trackPoints/pois in cima) sia per uno "trovato" (annidati in `track`), senza dover
+  // salvare nulla prima: RouteMap3D lavora già con la sola traccia GPS (activityId/dtmProfile
+  // restano assenti, opzionali, va bene per un'anteprima non ancora salvata).
+  function resultMap3DProps(item: ResultItem) {
+    return item.kind === 'built'
+      ? { trackPoints: item.data.trackPoints, title: routeTypeLabel(item.data.type), distanceMeters: item.data.distanceMeters, elevationGain: item.data.elevationGain, pois: item.data.pois }
+      : { trackPoints: item.data.track.trackPoints, title: item.data.name, distanceMeters: item.data.track.distanceMeters, elevationGain: item.data.track.elevationGain, pois: item.data.pois }
   }
 
   function chooseCandidate(item: ResultItem, i: number) {
@@ -883,6 +995,12 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }
   }
 
+  // Vista 3D di un risultato (results) o del percorso scelto (confirm) — aggiunta alla fine dei
+  // rispettivi return sotto, un unico nodo condiviso invece di duplicarne la logica in entrambi.
+  const map3DOverlay = show3D && (
+    <RouteMap3D {...resultMap3DProps(show3D)} onClose={() => setShow3D(null)} />
+  )
+
   // ── Punto di partenza — la mappa è il fulcro, sempre a pieno schermo e sempre visibile ─────────
   // Layout "a chip" (Concept A del mockup approvato): barra di ricerca + tab modalità flottanti in
   // alto, una fila di chip in basso (uno per parametro, valore sempre leggibile senza aprire nulla),
@@ -895,6 +1013,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const canGo = searchMode === 'esistenti'
       ? !searching && query.trim() !== ''
       : !searching && !generating && (query.trim() !== '' || (lat != null && lon != null))
+    // Il prossimo invio/tap sul pulsante centrerà solo la mappa (vedi confirmQueryOnMap) invece di
+    // avviare la ricerca vera — riflesso nell'icona del pulsante stesso, così l'utente capisce cosa
+    // sta per succedere senza doverlo scoprire dopo averlo premuto.
+    const pendingMapConfirm = query.trim() !== '' && !queryMapConfirmed
 
     // Solo per il badge sul pulsante Cerca — quanti parametri sono stati toccati rispetto al
     // default, cioè quanto c'è "dentro" alla ricerca senza dover aprire nessun foglio per saperlo.
@@ -918,7 +1040,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
     return createPortal(
       <div className="fixed inset-0 z-[60] bg-stone-100">
-        <div className="absolute inset-0">
+        {/* isolate: contiene lo stacking context interno di Leaflet (zoom/attribuzione arrivano a
+            z-index 1000 nel proprio CSS) dentro questo div, invece di farlo competere con i
+            fratelli sottostanti (barra di ricerca, chip, FAB — tutti a z-10/20/30/40): senza
+            questo, in certe condizioni i controlli di Leaflet finivano sopra tutto il resto,
+            facendoli sembrare spariti (bug segnalato posizionando il secondo pin). Stesso fix già
+            usato in RouteMapSection.tsx per lo stesso problema con MapLibre. */}
+        <div className="absolute inset-0 isolate">
           <LocationPickerMap
             lat={lat ?? undefined} lon={lon ?? undefined}
             onPick={(pLat, pLon) => { setLat(pLat); setLon(pLon) }}
@@ -928,8 +1056,20 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             secondaryLon={destLon ?? undefined}
             onPickSecondary={(pLat, pLon) => { setDestLat(pLat); setDestLon(pLon) }}
             activeTarget={mapTapTarget === 'destinazione' ? 'secondary' : 'primary'}
+            fitSignal={fitTick}
           />
         </div>
+
+        {/* ── Inquadra tutto — sostituisce lo zoom-fit automatico ad ogni tocco (scomodo, segnalato
+            dall'utente): ora la vista si sposta solo su richiesta esplicita, stesso pattern del
+            chip "Inquadra tutto il percorso" di RouteMapSection.tsx. */}
+        {lat != null && lon != null && (
+          <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutto"
+            className="absolute right-4 z-10 w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors"
+            style={{ bottom: '172px' }}>
+            <LocateFixed className="w-4 h-4" />
+          </button>
+        )}
 
         {/* ── Chrome superiore: indietro + barra di ricerca + tab modalità — tutto flottante, la
             mappa resta sempre visibile sotto. */}
@@ -943,7 +1083,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               <SearchIcon className="w-4 h-4 text-stone-400 shrink-0" />
               <input
                 value={query}
-                onChange={e => setQuery(e.target.value)}
+                onChange={e => { setQuery(e.target.value); setQueryMapConfirmed(false) }}
                 onKeyDown={e => { if (e.key === 'Enter') handlePrimaryAction() }}
                 placeholder={searchMode === 'esistenti'
                   ? 'Es. Gole del Biedano, Blera…'
@@ -1043,11 +1183,17 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           )}
           {(searching || generating)
             ? <Loader2 className="w-5 h-5 animate-spin" />
+            : pendingMapConfirm ? <MapIcon className="w-5 h-5" />
             : searchMode === 'esistenti' ? <SearchIcon className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
         </button>
+        {!searching && !generating && pendingMapConfirm && (
+          <p className="absolute right-4 bottom-[92px] z-20 text-[11px] font-medium text-forest-700 bg-white/95 backdrop-blur rounded-full px-3 py-1.5 shadow-md whitespace-nowrap">
+            Tocca per centrare la mappa qui
+          </p>
+        )}
         {(searching || generating) && (
           <SearchWaitingCard stageLabel={searching
-            ? (searchMode === 'esistenti' ? 'Cerco…' : 'Risolvo il luogo…')
+            ? (pendingMapConfirm ? 'Centro la mappa…' : searchMode === 'esistenti' ? 'Cerco…' : 'Risolvo il luogo…')
             : (buildStage || 'Genero il percorso…')} />
         )}
 
@@ -1259,6 +1405,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const activeEntries = resultsTab === 'esistenti' ? esistentiEntries : suMisuraEntries
 
     return (
+      <>
       <div className={`space-y-3 ${selectMode ? 'pb-20' : ''}`}>
         <div className="flex items-center justify-between gap-2">
           <button onClick={() => { setStep('start'); setSelectMode(false); setSelectedIds(new Set()) }}
@@ -1296,8 +1443,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           const key = resultKey(item, i)
           const selectable = selectMode ? { selected: selectedIds.has(key), onToggle: () => toggleResultSelect(key) } : undefined
           return item.kind === 'found'
-            ? <FoundRouteCard key={key} data={item.data} onChoose={() => chooseCandidate({ kind: 'found', data: item.data }, i)} selectable={selectable} />
-            : <BuiltRouteCard key={key} data={item.data} onChoose={() => chooseCandidate({ kind: 'built', data: item.data }, i)} selectable={selectable} />
+            ? <FoundRouteCard key={key} data={item.data} onChoose={() => chooseCandidate({ kind: 'found', data: item.data }, i)} selectable={selectable} onOpen3D={() => setShow3D(item)} />
+            : <BuiltRouteCard key={key} data={item.data} onChoose={() => chooseCandidate({ kind: 'built', data: item.data }, i)} selectable={selectable} onOpen3D={() => setShow3D(item)} />
         })}
 
         {selectMode && (
@@ -1316,6 +1463,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
         {errorMsg && selectMode && <p className="text-red-500 text-sm">{errorMsg}</p>}
       </div>
+      {map3DOverlay}
+      </>
     )
   }
 
@@ -1327,6 +1476,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const vs = foundData?.comfortVerdict ? verdictStyle(foundData.comfortVerdict) : null
 
     return (
+      <>
       <div className="space-y-4">
         <button onClick={() => setStep('results')} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Torna ai risultati
@@ -1346,7 +1496,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
           {builtData && (
             <>
-              <TrailPreviewMap polyline={builtData.routePolyline} />
+              <div className="relative isolate">
+                <TrailPreviewMap polyline={builtData.routePolyline} />
+                <Map3DChip onOpen3D={() => setShow3D(selected)} />
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
                   {[
@@ -1379,7 +1532,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
 
           {foundData && (
             <>
-              <TrailPreviewMap polyline={foundData.track.routePolyline} />
+              <div className="relative isolate">
+                <TrailPreviewMap polyline={foundData.track.routePolyline} />
+                <Map3DChip onOpen3D={() => setShow3D(selected)} />
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
                   {[
@@ -1425,6 +1581,8 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
           Salva e apri la guida
         </button>
       </div>
+      {map3DOverlay}
+      </>
     )
   }
 

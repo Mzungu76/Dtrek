@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const results = Array.isArray(body?.results) ? body.results : []
     if (!mode || results.length === 0) return NextResponse.json({ ok: true })
 
-    await saveSearchHistoryEntry({
+    const id = await saveSearchHistoryEntry({
       userId: user.id,
       mode,
       query: typeof body.query === 'string' ? body.query : null,
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       params: body.params && typeof body.params === 'object' ? body.params : {},
       results,
     })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, id })
   } catch (e) {
     console.error('[route-build/search-history] Errore imprevisto (POST):', e)
     return NextResponse.json({ ok: false })
