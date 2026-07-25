@@ -162,6 +162,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const [destQuery, setDestQuery] = useState('')
   const [destLat, setDestLat] = useState<number | null>(null)
   const [destLon, setDestLon] = useState<number | null>(null)
+  // Quale punto riceve il prossimo tocco sulla mappa — 'partenza' di default, passa a
+  // 'destinazione' solo quando l'utente lo sceglie esplicitamente (vedi il pulsante dedicato
+  // accanto al campo "Destinazione"), altrimenti un tocco impostato per sbaglio sulla destinazione
+  // sposterebbe il punto di partenza senza che l'utente l'abbia scelto.
+  const [mapTapTarget, setMapTapTarget] = useState<'partenza' | 'destinazione'>('partenza')
   const [environmentPrefs, setEnvironmentPrefs] = useState<HikerEnvironmentPrefKey[]>([])
   const [desiredPoiTypes, setDesiredPoiTypes] = useState<PoiType[]>([])
   const [defaultsLoaded, setDefaultsLoaded] = useState(false)
@@ -250,6 +255,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     }, 600)
     return () => clearTimeout(handle)
   }, [destQuery, searchMode])
+
+  // Il pulsante "tocca la mappa per la destinazione" resta attivo solo finché il campo destinazione
+  // ha senso — altrimenti un tocco continuerebbe a muovere il punto sbagliato in una schermata dove
+  // il controllo non è nemmeno più visibile.
+  useEffect(() => {
+    if (searchMode !== 'su_misura' || !(routeTypes.includes('andata_ritorno') || routeTypes.includes('solo_andata'))) {
+      setMapTapTarget('partenza')
+    }
+  }, [searchMode, routeTypes])
 
   // Selezione multipla dei tipi di percorso — sempre almeno un tipo attivo, non si può deselezionare
   // l'ultimo rimasto.
@@ -741,6 +755,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             onPick={(pLat, pLon) => { setLat(pLat); setLon(pLon) }}
             height="100%" rounded={false}
             radiusKm={lat != null && lon != null ? searchRadiusKm : undefined}
+            secondaryLat={destLat ?? undefined}
+            secondaryLon={destLon ?? undefined}
+            onPickSecondary={searchMode === 'su_misura' ? (pLat, pLon) => { setDestLat(pLat); setDestLon(pLon) } : undefined}
+            activeTarget={mapTapTarget === 'destinazione' ? 'secondary' : 'primary'}
           />
         </div>
 
@@ -754,9 +772,16 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             {/* Il tocco sulla mappa imposta un punto di partenza, usato solo da "Su misura" —
                 "Esistenti" cerca esclusivamente per testo (nessun endpoint di ricerca "vicino a un
                 punto" per i percorsi già documentati): un unico messaggio per entrambe le modalità
-                prometteva un tocco che in "Esistenti" non aveva alcun effetto sulla ricerca. */}
+                prometteva un tocco che in "Esistenti" non aveva alcun effetto sulla ricerca.
+                Quando il pulsante destinazione è attivo (mapTapTarget), il tocco sposta invece
+                quel punto — stesso principio, messaggio diverso per non promettere l'effetto
+                sbagliato. */}
             <p className="text-[11px] text-stone-400">
-              {searchMode === 'esistenti' ? 'Scrivi cosa cerchi' : 'Tocca la mappa o scrivi il luogo di partenza'}
+              {searchMode === 'esistenti'
+                ? 'Scrivi cosa cerchi'
+                : mapTapTarget === 'destinazione'
+                ? 'Tocca la mappa per la destinazione'
+                : 'Tocca la mappa o scrivi il luogo di partenza'}
             </p>
           </div>
         </div>
@@ -883,14 +908,33 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                   <label className="block text-sm font-medium text-stone-600 mb-1">
                     Destinazione <span className="font-normal text-stone-400">(opzionale — percorso tra 2 punti)</span>
                   </label>
-                  <input value={destQuery} onChange={e => setDestQuery(e.target.value)}
-                    placeholder="Es. Rifugio Città di Fano"
-                    className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
-                  {destLat != null ? (
-                    <p className="text-xs text-stone-400 mt-1.5">
-                      Con una destinazione impostata, la lunghezza qui sotto non è più un vincolo: il percorso segue la via reale verso quel punto (vale solo per Andata e ritorno/Solo andata, non per Anello).
-                    </p>
-                  ) : destQuery.trim() && (
+                  <div className="flex gap-2">
+                    <input value={destQuery} onChange={e => setDestQuery(e.target.value)}
+                      placeholder="Es. Rifugio Città di Fano"
+                      className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-terra-400 focus:bg-white" />
+                    <button type="button" onClick={() => setMapTapTarget(t => t === 'destinazione' ? 'partenza' : 'destinazione')}
+                      title="Tocca la mappa per impostare la destinazione"
+                      className={`shrink-0 w-10 h-10 rounded-xl border flex items-center justify-center transition-colors ${
+                        mapTapTarget === 'destinazione' ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white border-stone-300 text-stone-500'
+                      }`}>
+                      <MapPin className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {mapTapTarget === 'destinazione' && (
+                    <p className="text-xs text-orange-700 mt-1.5">Tocca la mappa per impostare la destinazione — il prossimo tocco sposta il punto arancione, non più quello di partenza.</p>
+                  )}
+                  {(destLat != null) && (
+                    <div className="flex items-center justify-between mt-1.5">
+                      <p className="text-xs text-stone-400">
+                        Con una destinazione impostata, la lunghezza qui sotto non è più un vincolo: il percorso segue la via reale verso quel punto (vale solo per Andata e ritorno/Solo andata, non per Anello).
+                      </p>
+                      <button type="button" onClick={() => { setDestQuery(''); setDestLat(null); setDestLon(null); setMapTapTarget('partenza') }}
+                        className="shrink-0 ml-2 text-xs text-stone-400 hover:text-stone-600 underline">
+                        Rimuovi
+                      </button>
+                    </div>
+                  )}
+                  {destLat == null && destQuery.trim() && (
                     <p className="text-xs text-stone-400 mt-1.5">Risoluzione del luogo in corso…</p>
                   )}
                 </div>
