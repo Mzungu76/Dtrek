@@ -32,8 +32,8 @@ export function NamedPoiIcon({ poi, highlighted, dimmed, onTap }: { poi: PoiItem
 }
 
 export function GroupPoiBadge({
-  type, pois, dimmed, onTap,
-}: { type: PoiType; pois: PoiItem[]; dimmed?: boolean; onTap?: () => void }) {
+  type, pois, highlighted, dimmed, onTap,
+}: { type: PoiType; pois: PoiItem[]; highlighted?: boolean; dimmed?: boolean; onTap?: () => void }) {
   const Icon = POI_ICON[type]
   const meta = POI_META[type]
   return (
@@ -45,7 +45,7 @@ export function GroupPoiBadge({
       <span className="relative w-[38px] h-[38px]">
         <span
           className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm"
-          style={{ backgroundColor: meta.color }}
+          style={{ backgroundColor: meta.color, boxShadow: highlighted ? '0 0 0 3px #7dd3fc' : undefined }}
         >
           <Icon width={16} height={16} color="#fff" strokeWidth={2.25} />
         </span>

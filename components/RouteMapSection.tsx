@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Compass } from 'lucide-react'
+import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Compass, Navigation } from 'lucide-react'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
@@ -12,7 +12,7 @@ const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 interface Props {
   trackPoints?: TrackPoint[]
   pois?: PoiItem[]
-  highlightedPoiIndex?: number | null
+  highlightedPoiIndices?: number[] | null
   onPoiTap?: (poi: PoiItem) => void
   /** Opens the fullscreen 3D map view for the route — omit to hide the chip entirely. */
   onOpenMap3D?: () => void
@@ -42,13 +42,16 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  * solo le classi del contenitore (MapView.tsx ha un ResizeObserver che chiama invalidateSize()).
  */
 export default function RouteMapSection({
-  trackPoints, pois = [], highlightedPoiIndex = null, onPoiTap, onOpenMap3D,
+  trackPoints, pois = [], highlightedPoiIndices = null, onPoiTap, onOpenMap3D,
   showGradient, showAspect, showAspectToggle, onToggleAspect, dtmProfile, planned, showPois = true,
 }: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const [fitTick, setFitTick] = useState(0)
+  // Layer opzionale, spento di default — non tutti vogliono le frecce di direzione sempre visibili
+  // sulla mappa del percorso, a differenza della navigazione live dove restano sempre attive.
+  const [showArrows, setShowArrows] = useState(false)
 
   const hasGps = !!trackPoints?.some(p => p.lat && p.lon)
   if (!hasGps) return null
@@ -74,13 +77,13 @@ export default function RouteMapSection({
         <MapView
           trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
           pois={pois} planned={planned} showPoiLayer={showPois}
-          highlightedPoiIndex={highlightedPoiIndex}
+          highlightedPoiIndices={highlightedPoiIndices}
           onPoiTap={poi => onPoiTap?.(poi)}
           activeIndex={activeIndex}
           showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
           transientGradient={transientGradient}
           fitSignal={fitTick}
-          showDirectionArrows
+          showDirectionArrows={showArrows}
         />
         <div
           className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
@@ -95,6 +98,13 @@ export default function RouteMapSection({
               <Compass className="w-4 h-4" />
             </button>
           )}
+          <button
+            onClick={() => setShowArrows(v => !v)}
+            title={showArrows ? 'Nascondi le frecce di direzione' : 'Mostra le frecce di direzione'}
+            className={showArrows ? chipActive : chipIdle}
+          >
+            <Navigation className="w-4 h-4" />
+          </button>
           {onOpenMap3D && (
             <button onClick={onOpenMap3D} title="Vista 3D" className={chipIdle}>
               <Box className="w-4 h-4" />

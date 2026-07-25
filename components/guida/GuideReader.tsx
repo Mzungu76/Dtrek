@@ -796,8 +796,12 @@ export default function GuideReader({
   const hikeTitle = hike.title
   const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
   // Qualunque sezione ancora senza testo AI può mostrare l'invito ad "Approfondisci con Giulia" —
-  // SectionCard mostra comunque il bottone solo se !hasBody.
-  const showApprofondisciHint = hasGuide && !generating
+  // SectionCard mostra comunque il bottone solo se !hasBody. Non dipende da hasGuide: deve
+  // funzionare anche alla primissima generazione (nessuna sezione ha ancora testo, es. utente con
+  // autogenerazione disattivata in Impostazioni) — i bottoni per-sezione sono l'unico modo di
+  // generare la guida in quel caso, quindi devono esserci fin da subito, non solo dopo che
+  // qualcos'altro ha già scritto la prima sezione.
+  const showApprofondisciHint = !generating && enrichmentReady && hasAiAccess === true
   // Sezioni fisse ancora senza testo — pilota sia il bottone "Genera il resto della guida" (mostrato
   // solo se ce n'è almeno una) sia il calcolo di cosa chiedere quando viene premuto.
   const missingSectionKeys = useMemo(
@@ -953,31 +957,6 @@ export default function GuideReader({
               <div className="flex items-center gap-3 py-8 justify-center text-center">
                 <Loader2 className="w-5 h-5 animate-spin text-terra-500" />
                 <p className="text-stone-500 text-sm">Sto raccogliendo i dati del percorso… la guida di Giulia arriverà tra poco.</p>
-              </div>
-            )}
-
-            {/* ── Nessuna sezione automatica in Impostazioni: l'autogenerazione non parte da
-                 sola (vedi effetto sopra), ma il bottone manuale deve comunque esserci sempre —
-                 la scelta dell'utente riguarda solo l'automatismo, non la disponibilità di Giulia. */}
-            {!hasGuide && hasAiAccess === true && !generating && enrichmentReady && (!autoGenSections || autoGenSections.length === 0) && (
-              <div className="flex flex-col items-center py-10 gap-4 text-center">
-                <div className="w-14 h-14 rounded-full bg-terra-100 flex items-center justify-center shadow-inner">
-                  <Sparkles className="w-6 h-6 text-terra-500" />
-                </div>
-                <div className="max-w-sm">
-                  <h2 className="font-display text-lg font-bold text-stone-800 mb-2">
-                    Genera la guida con Giulia
-                  </h2>
-                  <p className="text-stone-500 text-sm leading-relaxed mb-4">
-                    Hai disattivato la generazione automatica nelle impostazioni del profilo — puoi comunque generarla manualmente quando vuoi.
-                  </p>
-                  <button
-                    onClick={() => generateSections(DEFAULT_BREVE_SECTIONS)}
-                    className="px-5 py-2.5 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-[13px] font-semibold transition-colors"
-                  >
-                    Genera la guida con Giulia (AI)
-                  </button>
-                </div>
               </div>
             )}
 

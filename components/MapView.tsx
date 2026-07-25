@@ -29,8 +29,10 @@ interface Props {
   activeIndex?: number | null
   /** When false, disables all native pan/zoom gestures (used by the fullscreen route hub's "locked" mode). Default true. */
   interactive?: boolean
-  /** Index into `pois` to draw larger/highlighted and pan the map to (used by the route hub's POI section, synced to scroll position). */
-  highlightedPoiIndex?: number | null
+  /** Indices into `pois` to draw larger/highlighted (and pan the map to, only when exactly one) —
+   *  used by the route hub's POI section, synced to scroll position/gallery selection. More than
+   *  one index highlights a whole group (e.g. a "Rifugio ×3" badge) at once. */
+  highlightedPoiIndices?: number[] | null
   /** Fired when a POI marker is tapped — lets the caller scroll/highlight the matching paragraph
    *  in the tourist guide (e.g. "I luoghi da non perdere"). Doesn't replace the existing
    *  zoom-in-on-click behavior, just runs alongside it. */
@@ -80,9 +82,14 @@ interface Props {
   showDirectionArrows?: boolean
 }
 
-// Distanza (metri) tra una freccia di direzione e la successiva — abbastanza fitta da restare
-// utile su un tornante, senza affollare la mappa su un rettilineo lungo.
-const DIRECTION_ARROW_SPACING_M = 200
+// Distanza (metri) tra una freccia di direzione e la successiva — discreta: un tocco che indica
+// il verso, non una sequenza fitta che compete visivamente col tracciato. Alzata da 200 a 400m
+// dopo il primo giro di feedback ("troppo numerose").
+const DIRECTION_ARROW_SPACING_M = 400
+// Dimensioni ridotte (~30% in meno rispetto al primo giro) per restare un dettaglio discreto
+// invece di dominare la mappa — icona/contenitore misurati sull'icona finita (freccia + margine).
+const DIRECTION_ARROW_ICON_PX = 11
+const DIRECTION_ARROW_SVG_PX = 9
 
 const DTM_MATCH_RADIUS_M = 25
 
@@ -120,7 +127,7 @@ export default function MapView({
   planned = false,
   activeIndex = null,
   interactive = true,
-  highlightedPoiIndex = null,
+  highlightedPoiIndices = null,
   onPoiTap,
   highlightedDifficultyIndex = null,
   showPoiLayer = false,
@@ -299,12 +306,13 @@ export default function MapView({
       // branch sopra ha disegnato la linea, sempre sopra di essa.
       if (showDirectionArrows) {
         const arrowColor = routeColor ?? baseColor
+        const px = DIRECTION_ARROW_ICON_PX
         for (const arrow of computeDirectionArrows(coords, DIRECTION_ARROW_SPACING_M)) {
           const icon = L.divIcon({
-            html: `<div style="transform:rotate(${arrow.bearing}deg);width:16px;height:16px;display:flex;align-items:center;justify-content:center">
-                     <svg width="13" height="13" viewBox="0 0 24 24" fill="${arrowColor}" stroke="white" stroke-width="2.5"><path d="M12 2 L20 20 L12 15 L4 20 Z"/></svg>
+            html: `<div class="dtrek-arrow-pulse" style="transform:rotate(${arrow.bearing}deg);width:${px}px;height:${px}px;display:flex;align-items:center;justify-content:center">
+                     <svg width="${DIRECTION_ARROW_SVG_PX}" height="${DIRECTION_ARROW_SVG_PX}" viewBox="0 0 24 24" fill="${arrowColor}" stroke="white" stroke-width="2.5"><path d="M12 2 L20 20 L12 15 L4 20 Z"/></svg>
                    </div>`,
-            iconSize: [16, 16], iconAnchor: [8, 8], className: '',
+            iconSize: [px, px], iconAnchor: [px / 2, px / 2], className: '',
           })
           L.marker([arrow.lat, arrow.lon], { icon, interactive: false, keyboard: false }).addTo(map)
         }
@@ -461,13 +469,14 @@ export default function MapView({
 
       if (!showPoiLayer) return
 
-      // Un POI evidenziato attenua tutti gli altri pin (colpo d'occhio su un solo POI alla volta),
-      // in sincronia con lo stesso trattamento nella galleria sotto — vedi PoiIconChip.tsx.
-      const anyHighlighted = highlightedPoiIndex != null
+      // Uno o più POI evidenziati (un singolo POI, o un intero gruppo con lo stesso badge)
+      // attenuano tutti gli altri pin — stesso trattamento della galleria sotto (PoiIconChip.tsx).
+      const highlightedSet = highlightedPoiIndices && highlightedPoiIndices.length > 0 ? new Set(highlightedPoiIndices) : null
+      const anyHighlighted = highlightedSet != null
 
       pois.forEach((poi, i) => {
         const meta = POI_META[poi.type]
-        const isHighlighted = i === highlightedPoiIndex
+        const isHighlighted = highlightedSet?.has(i) ?? false
         const isDimmed = anyHighlighted && !isHighlighted
         const hasLink = poiHasLink(poi)
         const size = Math.round((isHighlighted ? 40 : 28) * poiMarkerScale)
@@ -497,11 +506,14 @@ export default function MapView({
         poiMarkersRef.current.set(poi.id, m)
       })
 
-      if (highlightedPoiIndex != null && pois[highlightedPoiIndex]) {
-        mapInstance.current!.panTo([pois[highlightedPoiIndex].lat, pois[highlightedPoiIndex].lon])
+      // Pan automatico solo per un singolo POI evidenziato — un gruppo (più indici insieme) usa
+      // invece focusPoints/focusSignal (fitBounds su tutti i suoi membri, vedi PoiListWidget.tsx),
+      // che qui rimarrebbe scavalcato da un panTo su un solo punto arbitrario del gruppo.
+      if (highlightedPoiIndices?.length === 1 && pois[highlightedPoiIndices[0]]) {
+        mapInstance.current!.panTo([pois[highlightedPoiIndices[0]].lat, pois[highlightedPoiIndices[0]].lon])
       }
     })
-  }, [pois, mapReady, highlightedPoiIndex, showPoiLayer, poiMarkerScale]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pois, mapReady, highlightedPoiIndices, showPoiLayer, poiMarkerScale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {

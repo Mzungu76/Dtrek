@@ -29,6 +29,7 @@ export default function RouteHub({
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
+  const [searchQuery, setSearchQuery] = useState('')
   const isOpen = state.openSection != null
 
   const defaultSection: SectionKind = bodyMode === 'continuous' ? 'featured' : (tabs[0]?.key ?? 'dati')
@@ -133,10 +134,15 @@ export default function RouteHub({
   // Preferiti — narrows the set (additive with sortBy, not a replacement for it), so it goes
   // through the very same "visibleItems feeds carousel+gallery+index math" pipeline as sortedItems
   // above, for the same reason: carousel and gallery must always agree on what "next"/"index N" means.
-  const visibleItems = useMemo(
-    () => favoritesFilter ? sortedItems.filter(i => i.favorite) : sortedItems,
-    [sortedItems, favoritesFilter],
-  )
+  // La ricerca per titolo si compone allo stesso modo, sopra il filtro preferiti — così swipe e
+  // galleria restano sempre sincronizzati anche mentre si cerca, invece di mostrare risultati
+  // diversi tra le due viste.
+  const searchQueryNorm = searchQuery.trim().toLowerCase()
+  const visibleItems = useMemo(() => {
+    let out = favoritesFilter ? sortedItems.filter(i => i.favorite) : sortedItems
+    if (searchQueryNorm) out = out.filter(i => i.title.toLowerCase().includes(searchQueryNorm))
+    return out
+  }, [sortedItems, favoritesFilter, searchQueryNorm])
 
   // `visibleItems` can reorder/shrink for several reasons (sort change, a route's score/date
   // quietly updating live, the favorites filter toggling). Either way, `state.index` must keep
@@ -175,8 +181,12 @@ export default function RouteHub({
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
         <Star className="w-8 h-8 text-stone-600" />
-        <p>Nessun percorso preferito.</p>
-        {onToggleFavoritesFilter && (
+        <p>{searchQueryNorm ? `Nessun percorso trovato per «${searchQuery.trim()}».` : 'Nessun percorso preferito.'}</p>
+        {searchQueryNorm ? (
+          <button onClick={() => setSearchQuery('')} className="text-sky-400 font-semibold">
+            Cancella la ricerca
+          </button>
+        ) : onToggleFavoritesFilter && (
           <button onClick={onToggleFavoritesFilter} className="text-sky-400 font-semibold">
             Mostra tutti i percorsi
           </button>
@@ -317,6 +327,7 @@ export default function RouteHub({
           sortBy={sortBy} onSortChange={handleSortChange}
           importLabel={importLabel} onImport={onImport}
           favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}
+          searchQuery={searchQuery} onSearchQueryChange={setSearchQuery}
         />
         {/* Trascina la scheda chiusa verso l'alto per aprirla — l'icona stessa è anche un
             pulsante equivalente per chi preferisce toccare piuttosto che trascinare. */}

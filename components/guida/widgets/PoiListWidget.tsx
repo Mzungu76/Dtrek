@@ -87,6 +87,12 @@ export default function PoiListWidget({
   const [nearbyPages, setNearbyPages] = useState<WikiPage[]>([])
   const [focusPoints, setFocusPoints] = useState<{ lat: number; lon: number }[] | null>(null)
   const [focusSignal, setFocusSignal] = useState(0)
+  // Selezione di un gruppo (badge con contatore, es. "Rifugio ×3") — locale, a differenza di
+  // highlightedPoiId (proprietà del genitore, serve anche per scrollare al paragrafo giusto in
+  // GuideReader): un gruppo non ha un singolo POI a cui scrollare, quindi non serve farlo salire.
+  // Ha priorità sul singolo POI evidenziato dal genitore mentre è attivo, così un click su un
+  // badge sostituisce visivamente qualunque evidenziazione precedente.
+  const [selectedGroupType, setSelectedGroupType] = useState<PoiType | null>(null)
 
   useEffect(() => {
     if (!hasGps || centerLat == null || centerLon == null) return
@@ -144,13 +150,37 @@ export default function PoiListWidget({
     setFocusSignal(s => s + 1)
   }
 
+  // Un tap su un POI singolo (icona con nome, card galleria o pin mappa) annulla sempre la
+  // selezione di gruppo corrente, così le due selezioni non restano attive insieme.
+  const handleSingleTap = (poi: PoiItem) => {
+    setSelectedGroupType(null)
+    onItemTap?.(poi)
+  }
+
+  const handleGroupTap = (type: PoiType, groupPois: PoiItem[]) => {
+    focusOnGroup(groupPois)
+    setSelectedGroupType(prev => prev === type ? null : type)
+  }
+
+  const selectedGroup = selectedGroupType != null
+    ? otherEntries.find((e): e is Extract<OtherEntry, { kind: 'group' }> => e.kind === 'group' && e.type === selectedGroupType)
+    : undefined
+  // Il gruppo selezionato ha priorità sul singolo POI evidenziato dal genitore — appena si
+  // sceglie un gruppo, activeIds riflette SOLO i suoi membri finché non lo si deseleziona o non
+  // si tocca un altro POI singolo (che a sua volta azzera selectedGroupType, vedi handleSingleTap).
+  const activeIds = useMemo<Set<number> | null>(() => {
+    if (selectedGroup) return new Set(selectedGroup.pois.map(p => p.id))
+    if (highlightedPoiId != null) return new Set([highlightedPoiId])
+    return null
+  }, [selectedGroup, highlightedPoiId])
+
   return (
     <div className="space-y-3">
       <PoiMap
         trackPoints={trackPoints}
         pois={pois}
-        highlightedPoiId={highlightedPoiId}
-        onPoiTap={onItemTap}
+        highlightedPoiIds={activeIds}
+        onPoiTap={handleSingleTap}
         onOpenMap3D={onOpenMap3D}
         focusPoints={focusPoints}
         focusSignal={focusSignal}
@@ -164,17 +194,18 @@ export default function PoiListWidget({
             <NamedPoiIcon
               key={`named-${entry.poi.id}`}
               poi={entry.poi}
-              highlighted={entry.poi.id === highlightedPoiId}
-              dimmed={highlightedPoiId != null && entry.poi.id !== highlightedPoiId}
-              onTap={() => onItemTap?.(entry.poi)}
+              highlighted={!!activeIds?.has(entry.poi.id)}
+              dimmed={activeIds != null && !activeIds.has(entry.poi.id)}
+              onTap={() => handleSingleTap(entry.poi)}
             />
           ) : (
             <GroupPoiBadge
               key={`group-${entry.type}`}
               type={entry.type}
               pois={entry.pois}
-              dimmed={highlightedPoiId != null && !entry.pois.some(p => p.id === highlightedPoiId)}
-              onTap={() => focusOnGroup(entry.pois)}
+              highlighted={selectedGroupType === entry.type}
+              dimmed={activeIds != null && !entry.pois.some(p => activeIds!.has(p.id))}
+              onTap={() => handleGroupTap(entry.type, entry.pois)}
             />
           ))}
         </div>
@@ -190,11 +221,11 @@ export default function PoiListWidget({
             <PoiCard
               key={entry.key}
               entry={entry}
-              highlighted={entry.poiId != null && entry.poiId === highlightedPoiId}
-              dimmed={highlightedPoiId != null && entry.poiId !== highlightedPoiId}
+              highlighted={entry.poiId != null && !!activeIds?.has(entry.poiId)}
+              dimmed={activeIds != null && (entry.poiId == null || !activeIds.has(entry.poiId))}
               onTap={entry.poiId != null ? () => {
                 const poi = pois.find(p => p.id === entry.poiId)
-                if (poi) onItemTap?.(poi)
+                if (poi) handleSingleTap(poi)
               } : undefined}
             />
           ))}
