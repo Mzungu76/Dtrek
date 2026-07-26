@@ -53,14 +53,15 @@ function mapCacheRow(data: any): TrailCacheRow {
 }
 
 // Tetto di sicurezza per il pre-riscaldamento in blocco (vedi app/api/admin/prewarm-trails/route.ts)
-// — non un limite tecnico del piano gratuito Supabase, ma un margine scelto a mano: ogni riga pesa
-// al più ~2-3 KB (geometria semplificata a 60 punti, vedi lib/downsamplePolyline.ts, più qualche
-// campo scalare), quindi 40.000 righe restano sotto ai ~120 MB — abbondantemente entro i 500 MB del
-// piano Hobby anche sommati agli ~141 MB già in uso da altre tabelle, con margine per la crescita
-// futura di dtm_cache/walk_network_cache/attività reali. Il job di pre-riscaldamento controlla
-// questo conteggio PRIMA di scrivere altre righe e si ferma da solo se già raggiunto, invece di
-// fidarsi di una stima fatta a monte sul numero di relazioni OSM da coprire (mai verificato).
-export const MAX_TRAILS_CACHE_ROWS = 40_000
+// — non un limite tecnico del piano gratuito Supabase, ma un margine scelto a mano, rivisto in alto
+// per coprire l'Italia intera (non solo il Nord-Est) dopo aver misurato il costo reale: le 11.583
+// righe del solo Nord-Est pesano 15 MB (~1,3 KB/riga, meno della stima iniziale di 2-3 KB), su un DB
+// da 157 MB totali contro i 500 MB del piano Hobby. 150.000 righe restano stimate sotto i ~200 MB,
+// lasciando comunque margine per la crescita di dtm_cache/walk_network_cache/attività reali. Il job
+// di pre-riscaldamento controlla questo conteggio PRIMA di scrivere altre righe e si ferma da solo
+// se già raggiunto, invece di fidarsi di una stima fatta a monte sul numero di relazioni OSM da
+// coprire (mai verificato con certezza per l'intero paese).
+export const MAX_TRAILS_CACHE_ROWS = 150_000
 
 /** Conteggio economico (COUNT senza scaricare righe) — usato solo dal tetto di sicurezza sopra. */
 export async function getTrailsCacheRowCount(): Promise<number> {

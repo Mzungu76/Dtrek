@@ -25,6 +25,9 @@ next-env.d.ts
 .DS_Store
 Thumbs.db
 
+# Progresso locale degli script one-off (vedi scripts/prewarm-italy.ts)
+scripts/.prewarm-italy-progress.json
+
 # Misc
 npm-debug.log*
 yarn-debug.log*
