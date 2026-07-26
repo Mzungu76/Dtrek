@@ -352,7 +352,12 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // stesso tetto di 60s. Se nessuno dei due livelli trova nulla, rivela la chat di Giulia (Livello 2)
   // pre-innescata con la stessa query.
   async function runSearch() {
-    if (!query.trim() || searching) return
+    // Testo assente ma un punto già scelto sulla mappa (tocco diretto, nessuna ricerca testuale
+    // mai passata) è comunque un punto di partenza valido — prima d'ora questa guardia richiedeva
+    // sempre del testo, quindi toccare la mappa da solo non avviava mai nulla ("bisogna
+    // necessariamente digitarlo", segnalato dall'utente): bisognava sempre scrivere qualcosa anche
+    // quando il punto giusto era già quello indicato col dito.
+    if ((!query.trim() && (lat == null || lon == null)) || searching) return
     setSearching(true)
     setErrorMsg('')
     setShowGiulia(false)
@@ -362,9 +367,16 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const findRes = await postJSON('/api/route-build/step/search-find', {
         query: query.trim(), useAi, radiusKm: searchRadiusKm,
         destLat: destLat ?? undefined, destLon: destLon ?? undefined,
-        // Punto già mostrato sulla mappa (risolto client-side, o toccato direttamente) — fallback
-        // se la risoluzione server-side del testo fallisce (vedi commento nell'endpoint).
+        // Punto già mostrato sulla mappa (risolto client-side, o toccato direttamente) — usato come
+        // fallback se la risoluzione server-side del testo fallisce, o come UNICA fonte quando non
+        // c'è alcun testo (tocco diretto sulla mappa, vedi commento sopra).
         fallbackLat: lat ?? undefined, fallbackLon: lon ?? undefined,
+        // Testo già risolto/confermato in un passo precedente (confirmQueryOnMap, primo invio) —
+        // il punto è già affidabile, il server può saltare la sua stessa cascata di risoluzione
+        // testuale invece di ripeterla da capo su un testo che ha già dato lo stesso risultato
+        // (causa concreta della lentezza osservata: fino a 4 chiamate HTTP sequenziali sprecate a
+        // ri-risolvere un punto già noto).
+        placeConfirmed: queryMapConfirmed,
       })
       if (!findRes.ok) {
         const msg = findRes.data.message || findRes.data.error || 'Ricerca non riuscita, riprova.'
@@ -891,7 +903,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       return
     }
     if (searchMode === 'esistenti') {
-      if (query.trim()) await runSearch()
+      // Testo presente (già confermato, il ramo sopra intercetta il primo invio) OPPURE nessun
+      // testo ma un punto già scelto sulla mappa — stesso criterio di runSearch, vedi il commento
+      // lì per il perché il solo tocco sulla mappa deve bastare, come già avviene per "Su misura".
+      if (query.trim() || (lat != null && lon != null)) await runSearch()
     } else {
       await runSuMisura()
     }
@@ -1031,7 +1046,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // vanificando l'effetto a pieno schermo.
   if (step === 'start') {
     const canGo = searchMode === 'esistenti'
-      ? !searching && query.trim() !== ''
+      ? !searching && (query.trim() !== '' || (lat != null && lon != null))
       : !searching && !generating && (query.trim() !== '' || (lat != null && lon != null))
     // Il prossimo invio/tap sul pulsante centrerà solo la mappa (vedi confirmQueryOnMap) invece di
     // avviare la ricerca vera — riflesso nell'icona del pulsante stesso, così l'utente capisce cosa

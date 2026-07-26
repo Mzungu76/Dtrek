@@ -104,12 +104,52 @@ async function findExistingRoutesNonAi(nameQuery: string, areaHint: string | nul
   return candidates
 }
 
+// Riordina per rilevanza rispetto a un percorso "tra 2 punti" (vedi FoundRouteResult più sotto):
+// senza la geometria completa (solo il centroide della relazione è noto a questo livello) non si
+// può ancora sapere se un candidato passa davvero vicino alla destinazione richiesta — ma un
+// candidato il cui centroide è già lontano da ENTRAMBI i punti è comunque improbabile che ci
+// arrivi, quindi qui si riordina solo per portare in cima ai MAX_EAGER_RESOLVE risolti davvero (il
+// passo successivo, più costoso) i candidati più plausibili, invece di sprecarli su relazioni che
+// poi il filtro finale scarterà comunque. Condiviso dal percorso rapido e da quello per nome sotto.
+function sortForDestination(
+  candidates: HikingRouteCandidate[], place: ResolvedPlace, destination: DestinationPoint | null,
+): HikingRouteCandidate[] {
+  if (!destination) return candidates
+  const worstCaseScore = (c: HikingRouteCandidate): number => {
+    if (c.lat == null || c.lon == null) return Infinity
+    return Math.max(haversineM(c.lat, c.lon, place.lat, place.lon), haversineM(c.lat, c.lon, destination.lat, destination.lon))
+  }
+  return [...candidates].sort((a, b) => worstCaseScore(a) - worstCaseScore(b))
+}
+
 // Livello 0: sempre, gratuito — risoluzione del luogo (non-AI, solo Nominatim/Overpass) in
 // parallelo con la ricerca di percorsi esistenti (non-AI, Overpass) — SENZA risolvere le tracce
 // (quello è il passo successivo, resolveFoundRoutesWithPoi, deliberatamente separato).
+//
+// `skipNameResolution`: il punto è GIÀ noto e affidabile — un tocco diretto sulla mappa (nessun
+// testo digitato), o un testo già risolto e confermato in un passo precedente lato client (vedi
+// RouteBuilder.tsx's confirmQueryOnMap/queryMapConfirmed) — non c'è nulla da indovinare da un nome.
+// Salta l'intera cascata di risoluzione testuale (resolvePlaceName: Nominatim → Overpass per nome →
+// Wikipedia, fino a 4 chiamate HTTP in sequenza, ciascuna con un proprio timeout di diversi
+// secondi) invece di ripeterla inutilmente su un punto già confermato — causa concreta osservata
+// della lentezza complessiva della ricerca (fino a 60-90s solo per questa fase, PRIMA di arrivare
+// alla risoluzione delle tracce), specialmente quando Nominatim rallenta/blocca l'IP server (vedi
+// il commento esteso più sotto, per il caso in cui la risoluzione testuale invece serve davvero).
 async function findTier0(
   query: string, radiusKm: number, destination: DestinationPoint | null, fallbackPoint: DestinationPoint | null,
+  skipNameResolution: boolean,
 ): Promise<{ place: ResolvedPlace | null; candidates: HikingRouteCandidate[] }> {
+  if (skipNameResolution && fallbackPoint) {
+    const [minLat, minLon, maxLat, maxLon] = padBbox([fallbackPoint.lat, fallbackPoint.lon, fallbackPoint.lat, fallbackPoint.lon], radiusKm)
+    const place: ResolvedPlace = {
+      lat: fallbackPoint.lat, lon: fallbackPoint.lon,
+      displayName: query.trim() || 'Punto selezionato sulla mappa', source: 'nominatim',
+    }
+    const rawCandidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
+    const candidates = sortForDestination(sortByDistanceFrom(rawCandidates, place.lat, place.lon), place, destination)
+    return { place, candidates }
+  }
+
   const { nameQuery, areaHint } = splitQuery(query)
   const [placeResolved, rawCandidatesInitial] = await Promise.all([
     resolvePlaceName(query),
@@ -140,22 +180,9 @@ async function findTier0(
     const [minLat, minLon, maxLat, maxLon] = padBbox([place.lat, place.lon, place.lat, place.lon], radiusKm)
     rawCandidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
   }
-  let candidates = place ? sortByDistanceFrom(rawCandidates, place.lat, place.lon) : rawCandidates
-  // Percorso "tra 2 punti" (vedi FoundRouteResult più sotto): senza la geometria completa (solo il
-  // centroide della relazione è noto a questo livello) non si può ancora sapere se un candidato
-  // passa davvero vicino alla destinazione — ma un candidato il cui centroide è già lontano da
-  // ENTRAMBI i punti è comunque improbabile che ci arrivi, quindi qui si riordina solo per portare
-  // in cima ai MAX_EAGER_RESOLVE risolti davvero (il passo successivo, più costoso) i candidati più
-  // plausibili, invece di sprecarli su relazioni che poi il filtro finale scarterà comunque.
-  if (destination) {
-    const worstCaseScore = (c: HikingRouteCandidate): number => {
-      if (c.lat == null || c.lon == null) return Infinity
-      const dOrigin = place ? haversineM(c.lat, c.lon, place.lat, place.lon) : 0
-      const dDest = haversineM(c.lat, c.lon, destination.lat, destination.lon)
-      return Math.max(dOrigin, dDest)
-    }
-    candidates = [...candidates].sort((a, b) => worstCaseScore(a) - worstCaseScore(b))
-  }
+  const candidates = place
+    ? sortForDestination(sortByDistanceFrom(rawCandidates, place.lat, place.lon), place, destination)
+    : rawCandidates
   return { place, candidates }
 }
 
@@ -180,6 +207,10 @@ export interface FindResult {
 export async function findExistingRoutesForQuery(
   user: { id: string } | null, query: string, radiusKm: number, useAi: boolean,
   destination: DestinationPoint | null = null, fallbackPoint: DestinationPoint | null = null,
+  // true quando il chiamante ha già un punto affidabile in mano (tap sulla mappa, o testo già
+  // risolto/confermato in un passo precedente lato client) — vedi findTier0 per il perché salta
+  // l'intera cascata di risoluzione testuale invece di ripeterla.
+  skipNameResolution = false,
 ): Promise<FindResult> {
   let place: ResolvedPlace | null = null
   let candidates: HikingRouteCandidate[] = []
@@ -188,7 +219,7 @@ export async function findExistingRoutesForQuery(
   let interpretedPlacesCount = 0
 
   try {
-    const level0 = await findTier0(query, radiusKm, destination, fallbackPoint)
+    const level0 = await findTier0(query, radiusKm, destination, fallbackPoint, skipNameResolution)
     place = level0.place
     candidates = level0.candidates
   } catch (e) {
@@ -208,7 +239,7 @@ export async function findExistingRoutesForQuery(
             // Nessun fallbackPoint qui: ciascun `p.query` è un luogo/zona candidato DIVERSO
             // suggerito dall'interpretazione AI, non lo stesso testo originale — il punto già noto
             // lato client non ha alcun rapporto con QUESTO candidato specifico.
-            const rerun = await findTier0(p.query, radiusKm, destination, null)
+            const rerun = await findTier0(p.query, radiusKm, destination, null, false)
             if (!place && rerun.place) place = rerun.place
             if (rerun.candidates.length > 0) candidates = [...candidates, ...rerun.candidates]
           }

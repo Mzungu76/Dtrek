@@ -38,9 +38,10 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   let radiusKm: number
   let destination: { lat: number; lon: number } | null
   let fallbackPoint: { lat: number; lon: number } | null
+  let skipNameResolution: boolean
   try {
     const body = await req.json()
-    if (typeof body.query !== 'string' || !body.query.trim()) throw new Error('query mancante')
+    if (typeof body.query !== 'string') throw new Error('query mancante')
     query = body.query.trim().slice(0, 300)
     useAi = body.useAi === true
     radiusKm = sanitizeSearchRadiusKm(body.radiusKm)
@@ -53,10 +54,18 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     // coordinate giuste sono in realtà già note.
     fallbackPoint = typeof body.fallbackLat === 'number' && typeof body.fallbackLon === 'number'
       ? { lat: body.fallbackLat, lon: body.fallbackLon } : null
+    // Un testo vuoto è valido SOLO se il client ha già un punto (tocco diretto sulla mappa, vedi
+    // RouteBuilder.tsx's runSearch) — senza query e senza punto non c'è nulla da cercare.
+    if (!query && !fallbackPoint) throw new Error('query o punto mancante')
+    // true quando il client passa `placeConfirmed` (testo già risolto/confermato in un passo
+    // precedente, vedi RouteBuilder.tsx's queryMapConfirmed) o quando non c'è testo (tocco diretto,
+    // sempre "confermato" per definizione) — in entrambi i casi il punto è già affidabile, salta la
+    // cascata di risoluzione testuale server-side (vedi findTier0).
+    skipNameResolution = !query || body.placeConfirmed === true
   } catch {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
-  const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi, destination, fallbackPoint)
+  const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi, destination, fallbackPoint, skipNameResolution)
   return NextResponse.json(find)
 }
