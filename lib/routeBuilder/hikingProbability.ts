@@ -432,6 +432,10 @@ export interface HikingProbabilityContext {
 
 export interface HikingProbabilityResult {
   edges: ScoredEdge[]
+  // Coordinate dei nodi del grafo — esposte (oltre a midLat/midLon per arco) per chi deve
+  // ricostruire una polilinea continua attraverso più archi (vedi extractCandidateRoutes), non
+  // solo il punto medio di un singolo arco.
+  nodes: Map<number, { lat: number; lon: number }>
 }
 
 export async function computeHikingProbability(
@@ -523,7 +527,142 @@ export async function computeHikingProbability(
     e.finalScore = e.networkScore + e.trailScore
   }
 
-  return { edges }
+  return { edges, nodes: network.nodes }
+}
+
+// ── Estrazione di percorsi candidati dai frammenti scorati ─────────────────
+//
+// Fase 3 identifica QUALI archi appartengono a una rete densa; qui quella rete diventa UN
+// percorso concreto (partenza→arrivo) per componente connesso ad alta confidenza, invece di
+// restare frammenti sparsi. Tecnica: il "diametro" del componente — i due nodi più lontani per
+// distanza reale (via Dijkstra da un nodo arbitrario, poi di nuovo dal nodo più lontano trovato) —
+// il percorso tra questi due punti attraversa la parte più estesa della rete, un proxy
+// ragionevole del "giro principale" senza dover risolvere il problema, più difficile, di trovare
+// il miglior anello. Genera solo percorsi lineari (andata, non anelli) per questo motivo.
+
+const CANDIDATE_TRAIL_SCORE_MIN = 50 // molto_probabile o oltre — solo dorsale ad alta confidenza
+const CANDIDATE_MIN_LENGTH_M = 600
+const CANDIDATE_MAX_LENGTH_M = 15_000
+const MAX_CANDIDATE_ROUTES = 6
+
+export interface CandidateRoute {
+  polyline: [number, number][]
+  distanceMeters: number
+  avgTrailScore: number
+  wayIds: number[]
+}
+
+interface DijkstraStep { parent: number; edge: ScoredEdge }
+
+function dijkstraFarthest(
+  startId: number,
+  adj: Map<number, Array<{ to: number; distM: number; edge: ScoredEdge }>>,
+): { farNode: number; dist: Map<number, number>; prev: Map<number, DijkstraStep> } {
+  const dist = new Map<number, number>([[startId, 0]])
+  const prev = new Map<number, DijkstraStep>()
+  const visited = new Set<number>()
+  let farNode = startId
+
+  // Nessuna coda a priorità: i componenti coinvolti restano piccoli (decine-centinaia di nodi),
+  // una scansione lineare per estrarre il minimo a ogni passo resta ampiamente entro budget.
+  for (;;) {
+    let u: number | null = null
+    let uDist = Infinity
+    for (const [node, d] of Array.from(dist)) {
+      if (!visited.has(node) && d < uDist) { u = node; uDist = d }
+    }
+    if (u == null) break
+    visited.add(u)
+    if (uDist > (dist.get(farNode) ?? 0)) farNode = u
+    for (const step of adj.get(u) ?? []) {
+      const nd = uDist + step.distM
+      if (nd < (dist.get(step.to) ?? Infinity)) {
+        dist.set(step.to, nd)
+        prev.set(step.to, { parent: u, edge: step.edge })
+      }
+    }
+  }
+  return { farNode, dist, prev }
+}
+
+function tracePath(prev: Map<number, DijkstraStep>, from: number, to: number): { nodeIds: number[]; edges: ScoredEdge[] } {
+  const nodeIds: number[] = []
+  const edges: ScoredEdge[] = []
+  let cur = to
+  for (;;) {
+    nodeIds.push(cur)
+    if (cur === from) break
+    const step = prev.get(cur)
+    if (!step) break
+    edges.push(step.edge)
+    cur = step.parent
+  }
+  nodeIds.reverse()
+  edges.reverse()
+  return { nodeIds, edges }
+}
+
+/**
+ * Estrae fino a MAX_CANDIDATE_ROUTES percorsi concreti da altrettanti componenti connessi ad alta
+ * confidenza (trailScore >= CANDIDATE_TRAIL_SCORE_MIN, escludendo attraversamenti urbani) — usata
+ * da lib/routeBuilder/probabilityRoutes.ts per generare candidati "Esistenti" nelle zone dove le
+ * relation route= curate non bastano.
+ */
+export function extractCandidateRoutes(
+  edges: ScoredEdge[],
+  nodes: Map<number, { lat: number; lon: number }>,
+): CandidateRoute[] {
+  const confident = edges.filter(e =>
+    !e.excluded && !e.isUrbanTransfer && HIKING_HIGHWAY.has(e.highway) && e.trailScore >= CANDIDATE_TRAIL_SCORE_MIN,
+  )
+  if (confident.length === 0) return []
+
+  const adj = new Map<number, Array<{ to: number; distM: number; edge: ScoredEdge }>>()
+  const addAdj = (a: number, b: number, e: ScoredEdge) => {
+    const list = adj.get(a)
+    const step = { to: b, distM: e.distM, edge: e }
+    if (list) list.push(step); else adj.set(a, [step])
+  }
+  for (const e of confident) {
+    addAdj(e.fromNodeId, e.toNodeId, e)
+    addAdj(e.toNodeId, e.fromNodeId, e)
+  }
+
+  const uf = new UnionFind()
+  for (const e of confident) uf.union(e.fromNodeId, e.toNodeId)
+
+  const componentSeen = new Set<number>()
+  const routes: CandidateRoute[] = []
+
+  for (const nodeId of Array.from(adj.keys())) {
+    const root = uf.find(nodeId)
+    if (componentSeen.has(root)) continue
+    componentSeen.add(root)
+
+    const first = dijkstraFarthest(nodeId, adj)
+    const second = dijkstraFarthest(first.farNode, adj)
+    const totalM = second.dist.get(second.farNode) ?? 0
+    if (totalM < CANDIDATE_MIN_LENGTH_M || totalM > CANDIDATE_MAX_LENGTH_M) continue
+
+    const { nodeIds, edges: pathEdges } = tracePath(second.prev, first.farNode, second.farNode)
+    if (nodeIds.length < 2) continue
+
+    const polyline: [number, number][] = nodeIds
+      .map(id => nodes.get(id))
+      .filter((n): n is { lat: number; lon: number } => !!n)
+      .map(n => [n.lat, n.lon])
+    if (polyline.length < 2) continue
+
+    const weightedScore = pathEdges.reduce((sum, e) => sum + e.trailScore * e.distM, 0)
+    const avgTrailScore = totalM > 0 ? Math.round(weightedScore / totalM) : 0
+    const wayIds = Array.from(new Set(pathEdges.map(e => e.wayId)))
+
+    routes.push({ polyline, distanceMeters: Math.round(totalM), avgTrailScore, wayIds })
+  }
+
+  return routes
+    .sort((a, b) => b.distanceMeters * b.avgTrailScore - a.distanceMeters * a.avgTrailScore)
+    .slice(0, MAX_CANDIDATE_ROUTES)
 }
 
 // ── Classificazione ──────────────────────────────────────────────────────────

@@ -64,7 +64,10 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
 
   const startedAt = Date.now()
   const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi)
-  const foundRoutes = await resolveFoundRoutesWithPoi(find.candidates, MAX_EAGER_RESOLVE)
+  // find.probabilityRoutes è già completamente risolto (ripiego "probabilità" di searchSteps.ts,
+  // usato solo quando find.candidates è vuoto) — va unito qui, non passato a
+  // resolveFoundRoutesWithPoi (che risolve tracce da una relation OSM, questi non ne hanno una).
+  const foundRoutes = [...(await resolveFoundRoutesWithPoi(find.candidates, MAX_EAGER_RESOLVE)), ...find.probabilityRoutes]
 
   await logRouteBuildEvent({
     userId: user?.id ?? null,
