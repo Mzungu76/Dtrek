@@ -401,7 +401,11 @@ async function resolveFromCache(c: HikingRouteCandidate, row: TrailCacheRow, des
 async function resolveOneCandidate(
   c: HikingRouteCandidate, destination: DestinationPoint | null, cached: TrailCacheRow | undefined,
 ): Promise<FoundRouteResult | null> {
-  if (cached && cached.distanceKm != null) return resolveFromCache(c, cached, destination)
+  if (cached && cached.distanceKm != null) {
+    console.log(`[searchSteps] Candidato ${c.id} risolto da cache`)
+    return resolveFromCache(c, cached, destination)
+  }
+  console.log(`[searchSteps] Candidato ${c.id} NON in cache (cached=${cached ? 'row senza distanceKm' : 'assente'}), risoluzione live`)
 
   // estimateOnly: mai il DTM reale (rate-limited, fino a 20s per chiamata) durante la ricerca —
   // stesso principio già applicato a "Su misura" (scoreCandidates.ts) e "Percorsi per te"
