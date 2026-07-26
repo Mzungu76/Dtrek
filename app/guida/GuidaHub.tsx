@@ -191,7 +191,22 @@ export default function GuidaHub({ id }: { id?: string }) {
   const applyList = useCallback((list: PlannedHikeMeta[]) => {
     const active = list.filter(h => !h.archivedAt)
     const sorted = active.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    setItems(sorted.map(metaToItem))
+    setItems(prev => {
+      const prevById = new Map(prev.map(it => [it.id, it]))
+      return sorted.map(h => {
+        const fresh = metaToItem(h)
+        // La polyline di un percorso salvato non cambia mai dopo la creazione — riusare il
+        // riferimento precedente invece di uno nuovo (ma identico) evita di far ripartire da
+        // zero CoverMap (il suo effect dipende da [polyline], vedi components/routehub/
+        // CoverMap.tsx): senza questo, ogni volta che questa rivalidazione in background
+        // (cache-first poi rete, o un pull di useCtsUpdated) applica dati più freschi — punteggi,
+        // pillole — TUTTE le card ricevevano anche un nuovo array polyline pur identico,
+        // facendo sfarfallare la mappa di copertina di qualunque scheda si stesse guardando in
+        // quel momento, tipicamente proprio quella su cui si era appena atterrati sfogliando.
+        const existing = prevById.get(h.id)
+        return existing?.polyline?.length ? { ...fresh, polyline: existing.polyline } : fresh
+      })
+    })
     setDriveCache(prev => {
       const next = new Map(prev)
       for (const h of sorted) {
