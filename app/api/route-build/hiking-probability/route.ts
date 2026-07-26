@@ -17,17 +17,83 @@ export const maxDuration = 60
 const DEFAULT_RADIUS_KM = 3
 const MAX_RADIUS_KM = 8
 
-function summarize(edges: ScoredEdge[]) {
-  const tiers = { quasi_certo: 0, molto_probabile: 0, possibile: 0, improbabile: 0 }
-  let excludedEdges = 0
-  let scoredLengthM = 0
+interface WaySummary {
+  wayId: number
+  highway: string
+  tags: Record<string, string>
+  lengthKm: number
+  segmentCount: number
+  avgScore: number
+  minScore: number
+  maxScore: number
+  tier: ReturnType<typeof classifyFinalScore>
+  midLat: number
+  midLon: number
+}
+
+// Un way lungo e ben digitalizzato su OSM (molti nodi) produce decine di archi nodo-nodo con lo
+// STESSO punteggio (i tag sono gli stessi per tutta la way) — senza raggruppare, un singolo
+// sentiero molto ben taggato monopolizza l'intera classifica "top" e nasconde tutti gli altri.
+// Qui si aggrega per wayId: punteggio medio pesato per lunghezza (una way parzialmente dentro
+// un'area protetta o vicino a un POI non ha lo stesso contextScore per tutta la sua lunghezza),
+// più min/max per far vedere quanto varia lungo il tracciato.
+function summarizeByWay(edges: ScoredEdge[]): WaySummary[] {
+  const groups = new Map<number, ScoredEdge[]>()
   for (const e of edges) {
-    if (e.excluded) { excludedEdges++; continue }
-    const tier = classifyFinalScore(e.finalScore)
-    tiers[tier]++
-    if (tier !== 'improbabile') scoredLengthM += e.distM
+    if (e.excluded) continue
+    const group = groups.get(e.wayId)
+    if (group) group.push(e); else groups.set(e.wayId, [e])
   }
-  return { tiers, excludedEdges, scoredLengthKm: Math.round(scoredLengthM / 100) / 10 }
+
+  const summaries: WaySummary[] = []
+  for (const [wayId, group] of Array.from(groups)) {
+    let lengthM = 0
+    let weightedScore = 0
+    let minScore = Infinity
+    let maxScore = -Infinity
+    for (const e of group) {
+      lengthM += e.distM
+      weightedScore += e.finalScore * e.distM
+      if (e.finalScore < minScore) minScore = e.finalScore
+      if (e.finalScore > maxScore) maxScore = e.finalScore
+    }
+    const avgScore = lengthM > 0 ? weightedScore / lengthM : group[0].finalScore
+    // Punto rappresentativo: il segmento centrale del gruppo (non la media di lat/lon, che
+    // "taglierebbe" le curve di un tracciato non rettilineo).
+    const mid = group[Math.floor(group.length / 2)]
+
+    summaries.push({
+      wayId,
+      highway: group[0].highway,
+      tags: group[0].tags,
+      lengthKm: Math.round(lengthM / 10) / 100,
+      segmentCount: group.length,
+      avgScore: Math.round(avgScore),
+      minScore: Math.round(minScore),
+      maxScore: Math.round(maxScore),
+      tier: classifyFinalScore(avgScore),
+      midLat: mid.midLat,
+      midLon: mid.midLon,
+    })
+  }
+
+  return summaries.sort((a, b) => b.avgScore - a.avgScore)
+}
+
+function summarize(ways: WaySummary[], excludedWayCount: number) {
+  const tiers = {
+    quasi_certo: { ways: 0, km: 0 },
+    molto_probabile: { ways: 0, km: 0 },
+    possibile: { ways: 0, km: 0 },
+    improbabile: { ways: 0, km: 0 },
+  }
+  let scoredLengthKm = 0
+  for (const w of ways) {
+    tiers[w.tier].ways++
+    tiers[w.tier].km = Math.round((tiers[w.tier].km + w.lengthKm) * 100) / 100
+    if (w.tier !== 'improbabile') scoredLengthKm += w.lengthKm
+  }
+  return { tiers, excludedWayCount, totalWayCount: ways.length, scoredLengthKm: Math.round(scoredLengthKm * 10) / 10 }
 }
 
 export async function GET(req: NextRequest) {
@@ -60,24 +126,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const { edges } = await computeHikingProbability(bbox)
+    const excludedWayCount = new Set(edges.filter(e => e.excluded).map(e => e.wayId)).size
 
-    const topEdges = edges
-      .filter(e => !e.excluded)
-      .sort((a, b) => b.finalScore - a.finalScore)
-      .slice(0, 100)
-      .map(e => ({
-        wayId: e.wayId,
-        highway: e.highway,
-        tags: e.tags,
-        midLat: Math.round(e.midLat * 1e6) / 1e6,
-        midLon: Math.round(e.midLon * 1e6) / 1e6,
-        finalScore: e.finalScore,
-        tier: classifyFinalScore(e.finalScore),
-        relationScore: e.relationScore,
-        wayScore: e.wayScore,
-        contextScore: e.contextScore,
-        topologyScore: e.topologyScore,
-      }))
+    const ways = summarizeByWay(edges)
+    const topWays = ways.slice(0, 50).map(w => ({
+      ...w,
+      midLat: Math.round(w.midLat * 1e6) / 1e6,
+      midLon: Math.round(w.midLon * 1e6) / 1e6,
+    }))
 
     return NextResponse.json({
       place: place
@@ -86,8 +142,8 @@ export async function GET(req: NextRequest) {
       bbox,
       radiusKm,
       totalEdges: edges.length,
-      ...summarize(edges),
-      topEdges,
+      ...summarize(ways, excludedWayCount),
+      topWays,
     })
   } catch (e) {
     console.error('[route-build/hiking-probability] Errore:', e)
