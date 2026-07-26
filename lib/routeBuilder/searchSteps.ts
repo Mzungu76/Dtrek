@@ -352,7 +352,9 @@ function bboxFromPolyline(polyline: [number, number][]): { minLat: number; maxLa
 // Scrive nella cache `trails` un candidato appena risolto dal vivo — best-effort (un fallimento
 // qui non deve mai far fallire il risultato già pronto per l'utente corrente), stesso identico
 // pattern già collaudato da generateRecommendations.ts's cacheResolvedTrail per "Percorsi per te".
-async function cacheResolvedTrail(c: HikingRouteCandidate, track: Awaited<ReturnType<typeof resolveTrackForCandidate>> & { ok: true }): Promise<void> {
+// Esportata anche per app/api/admin/prewarm-trails/route.ts, che riusa la stessa identica scrittura
+// invece di duplicarla.
+export async function cacheResolvedTrail(c: HikingRouteCandidate, track: Awaited<ReturnType<typeof resolveTrackForCandidate>> & { ok: true }): Promise<void> {
   try {
     const shape = classifyTrackShape(track.routePolyline)
     await upsertTrailCache({
