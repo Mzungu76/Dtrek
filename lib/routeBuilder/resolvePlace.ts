@@ -1,20 +1,26 @@
 // Risolve un nome libero di luogo — un comune, ma anche una feature naturale specifica come
 // "Gole del Biedano, Blera" o "Cascata del Picchio" — a una coordinata, per usarlo come punto di
-// partenza o destinazione nel route builder (vedi components/upload/RouteBuilder.tsx). Tre livelli,
-// in ordine, il primo che trova qualcosa vince:
+// partenza o destinazione nel route builder (vedi components/upload/RouteBuilder.tsx). Quattro
+// livelli, in ordine, il primo che trova qualcosa vince — i primi tre sono SEMPRE gratuiti (nessuna
+// chiave, nessun costo, per scelta esplicita: l'AI resta un'aggiunta opzionale, mai la base):
 //  1. Nominatim (copre bene luoghi con una propria voce OSM, compresi molti nomi di comuni/frazioni)
 //  2. Ricerca Overpass per nome su feature puntuali naturali/turistiche/storiche (cascate, sorgenti,
 //     gole, boschi nominati...), sull'area indicata dopo la virgola se presente, altrimenti sull'intero
 //     bbox Italia — copre i casi che Nominatim da solo non trova ma che sono comunque ben mappati su OSM.
-//  3. Solo se i primi due non trovano nulla, e solo quando il chiamante passa una chiave Claude
+//  3. Ricerca su Wikipedia/Wikivoyage in italiano (coordinate dall'infobox, vedi lib/wikipedia.ts) —
+//     copre i luoghi noti localmente ma poco/male taggati su OSM: una comunità di contributori
+//     diversa da quella OSM, spesso con una copertura migliore per un posto turistico/geografico
+//     conosciuto (es. "Gole di San Martino") anche quando OSM non lo indicizza affatto.
+//  4. Solo se i primi tre non trovano nulla, e solo quando il chiamante passa una chiave Claude
 //     personale (mai la chiave condivisa di emergenza — scelta esplicita dell'utente, vedi
-//     resolveViaAI), un terzo livello AI con ricerca web: individua il comune/area contenente il
+//     resolveViaAI), un quarto livello AI con ricerca web: individua il comune/area contenente il
 //     luogo (che rientra poi nello stesso livello 2 sopra) oppure, se la trova da una fonte
 //     affidabile (es. un infobox Wikipedia), una coordinata diretta come scorciatoia.
 import Anthropic from '@anthropic-ai/sdk'
 import { fetchOverpass, resolveAreaBbox, padBbox, ITALY_BBOX, looksLikePlaceName } from '@/lib/overpassTrails'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { HIKER_ENVIRONMENT_PREFS, type HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
+import { searchAndFetch } from '@/lib/wikipedia'
 import type { RouteType } from './loopBuilder'
 
 const NOMINATIM_USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
@@ -23,7 +29,26 @@ export interface ResolvedPlace {
   lat: number
   lon: number
   displayName: string
-  source: 'nominatim' | 'overpass' | 'ai'
+  source: 'nominatim' | 'overpass' | 'wikipedia' | 'ai'
+}
+
+// Sanità minima sul risultato di una ricerca testuale libera (non vincolata a un bbox come i
+// livelli Overpass) — un titolo Wikipedia può condividere una parola col nome cercato pur essendo
+// un luogo omonimo altrove nel mondo; scartarlo se cade ben fuori dall'Italia evita match palesemente
+// sbagliati senza dover restringere la ricerca stessa (che perderebbe luoghi vicino al confine).
+function isWithinItaly(lat: number, lon: number): boolean {
+  const [minLat, minLon, maxLat, maxLon] = ITALY_BBOX
+  return lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon
+}
+
+async function resolveViaWikipedia(query: string): Promise<ResolvedPlace | null> {
+  for (const project of ['wikipedia', 'wikivoyage'] as const) {
+    const page = await searchAndFetch(query, 'it', project).catch(() => null)
+    if (page?.lat != null && page.lon != null && isWithinItaly(page.lat, page.lon)) {
+      return { lat: page.lat, lon: page.lon, displayName: page.title, source: 'wikipedia' }
+    }
+  }
+  return null
 }
 
 async function resolveViaNominatim(query: string): Promise<ResolvedPlace | null> {
@@ -292,9 +317,11 @@ export async function interpretSearchRequest(query: string, apiKey: string, mode
  * invece il testo è una frase libera troppo lunga per essere un nome (es. una descrizione di
  * percorso passata dal wizard di ricerca unificato), quel fallback nazionale viene saltato — non
  * ha senso far girare un regex su tutta Italia su una frase, e costerebbe una query Overpass
- * pesante per nulla (stessa categoria di 504 già vista in passato). Se anche questo fallisce e il
- * chiamante passa `ai` (chiave Claude personale dell'utente — mai la condivisa, vedi resolveViaAI),
- * tenta un terzo livello con ricerca web. Ritorna null se nessuna fonte trova un risultato.
+ * pesante per nulla (stessa categoria di 504 già vista in passato). Se anche Overpass non trova
+ * nulla, un livello Wikipedia/Wikivoyage (gratuito, sempre tentato) copre i luoghi noti localmente
+ * ma poco/male mappati su OSM. Solo se ANCHE questo fallisce e il chiamante passa `ai` (chiave
+ * Claude personale dell'utente — mai la condivisa, vedi resolveViaAI), tenta un ultimo livello a
+ * pagamento con ricerca web. Ritorna null se nessuna fonte trova un risultato.
  */
 export async function resolvePlaceName(
   query: string,
@@ -321,6 +348,13 @@ export async function resolvePlaceName(
 
   const viaOverpass = bbox ? await resolveViaOverpassByName(nameQuery, bbox) : null
   if (viaOverpass) return viaOverpass
+
+  // Gratuito, nessuna chiave — tentato SEMPRE prima del livello AI (a pagamento e opzionale), non
+  // solo come sua sottoclausola: una ricerca testuale su Wikipedia costa un'unica chiamata HTTP
+  // leggera, non un regex su tutta Italia via Overpass, quindi qui non serve lo stesso filtro
+  // looksLikePlaceName usato sopra per limitare il costo del fallback nazionale.
+  const viaWikipedia = await resolveViaWikipedia(nameQuery)
+  if (viaWikipedia) return viaWikipedia
 
   if (ai) return resolveViaAI(trimmed, ai.apiKey, ai.model)
   return null

@@ -130,8 +130,12 @@ async function fetchSummary(
   }
 }
 
-// Search a Wikimedia project by name, return summary for best match (if relevant)
-async function searchAndFetch(
+// Search a Wikimedia project by name, return summary for best match (if relevant) — esportata:
+// riusata anche da lib/routeBuilder/resolvePlace.ts come livello di risoluzione nome→coordinata
+// gratuito (nessuna chiave, nessun costo AI), per luoghi noti localmente ma poco indicizzati da
+// Nominatim/Overpass (es. una gola o una cascata con una propria voce Wikipedia ma non ben taggata
+// su OSM).
+export async function searchAndFetch(
   name: string,
   lang: string,
   project: 'wikipedia' | 'wikivoyage',
