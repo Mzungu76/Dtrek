@@ -69,8 +69,13 @@ function summarizeByWay(edges: ScoredEdge[]): WaySummary[] {
       if (e.trailScore > maxTrail) maxTrail = e.trailScore
       if (e.isUrbanTransfer) transferM += e.distM
     }
-    const avgNetworkScore = lengthM > 0 ? weightedNetwork / lengthM : group[0].networkScore
-    const avgTrailScore = lengthM > 0 ? weightedTrail / lengthM : group[0].trailScore
+    // Arrotondato QUI, prima di classificare — non dopo: la media pesata per lunghezza può
+    // accumulare un residuo in virgola mobile su way con molti segmenti (es. 39.99999999997
+    // invece di 40 esatto), che classifyTrailScore leggerebbe come sotto soglia mentre il numero
+    // mostrato all'utente (arrotondato) dice 40. Classificare sul valore già arrotondato — lo
+    // stesso che va in risposta — elimina la possibilità che tier e punteggio si contraddicano.
+    const avgNetworkScore = Math.round(lengthM > 0 ? weightedNetwork / lengthM : group[0].networkScore)
+    const avgTrailScore = Math.round(lengthM > 0 ? weightedTrail / lengthM : group[0].trailScore)
     // Punto rappresentativo: il segmento centrale del gruppo (non la media di lat/lon, che
     // "taglierebbe" le curve di un tracciato non rettilineo).
     const mid = group[Math.floor(group.length / 2)]
@@ -81,8 +86,8 @@ function summarizeByWay(edges: ScoredEdge[]): WaySummary[] {
       tags: group[0].tags,
       lengthKm: Math.round(lengthM / 10) / 100,
       segmentCount: group.length,
-      avgNetworkScore: Math.round(avgNetworkScore),
-      avgTrailScore: Math.round(avgTrailScore),
+      avgNetworkScore,
+      avgTrailScore,
       minTrailScore: Math.round(minTrail),
       maxTrailScore: Math.round(maxTrail),
       tier: classifyTrailScore(avgTrailScore),
