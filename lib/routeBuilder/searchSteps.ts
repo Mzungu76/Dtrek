@@ -21,7 +21,7 @@ import type { Bbox } from '@/lib/routeBuilder/hikingProbability'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { DEFAULT_RADIUS_KM, ALLOWED_RADIUS_KM, DESTINATION_PROXIMITY_KM } from '@/lib/routeBuilder/buildConstants'
 import { haversineM, minDistToTrack, classifyTrackShape } from '@/lib/geoUtils'
-import { getCachedTrailsInBbox, upsertTrailCache, type TrailCacheRow } from '@/lib/trailsCache'
+import { getCachedTrailsInBbox, upsertTrailCache, findCachedTrailsNearPoint, type TrailCacheRow } from '@/lib/trailsCache'
 
 export interface DestinationPoint {
   lat: number
@@ -136,17 +136,38 @@ function sortForDestination(
 // della lentezza complessiva della ricerca (fino a 60-90s solo per questa fase, PRIMA di arrivare
 // alla risoluzione delle tracce), specialmente quando Nominatim rallenta/blocca l'IP server (vedi
 // il commento esteso più sotto, per il caso in cui la risoluzione testuale invece serve davvero).
+// La scoperta candidati (a differenza della loro risoluzione in tracce, vedi resolveOneCandidate)
+// dipendeva SOLO da Overpass live: quando tutti e 3 i mirror sono irraggiungibili (osservato in
+// produzione, "Overpass non disponibile"), la ricerca tornava zero risultati anche per un'area già
+// pre-riscaldata in cache pochi minuti prima — i sentieri erano lì, solo mai interrogati. Un
+// ripiego sulla cache locale (stesso indice bbox già usato da generateRecommendations.ts) copre
+// esattamente questo caso, restando comunque MENO recente/completo di una vera interrogazione
+// Overpass quando quella funziona (per questo resta un ripiego, non la fonte primaria).
+async function queryCandidatesNearPointWithCacheFallback(lat: number, lon: number, radiusKm: number): Promise<HikingRouteCandidate[]> {
+  const [minLat, minLon, maxLat, maxLon] = padBbox([lat, lon, lat, lon], radiusKm)
+  try {
+    return await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
+  } catch (e) {
+    console.error('[searchSteps] Overpass non disponibile per la scoperta candidati, ripiego sulla cache:', e)
+    const cached = await findCachedTrailsNearPoint(lat, lon, radiusKm, 20).catch(() => [])
+    return cached.map(row => ({
+      id: row.osmRelationId, name: row.name, hasName: true,
+      ref: row.ref ?? undefined, network: row.network ?? undefined,
+      lat: (row.bbox.minLat + row.bbox.maxLat) / 2, lon: (row.bbox.minLon + row.bbox.maxLon) / 2,
+    }))
+  }
+}
+
 async function findTier0(
   query: string, radiusKm: number, destination: DestinationPoint | null, fallbackPoint: DestinationPoint | null,
   skipNameResolution: boolean,
 ): Promise<{ place: ResolvedPlace | null; candidates: HikingRouteCandidate[] }> {
   if (skipNameResolution && fallbackPoint) {
-    const [minLat, minLon, maxLat, maxLon] = padBbox([fallbackPoint.lat, fallbackPoint.lon, fallbackPoint.lat, fallbackPoint.lon], radiusKm)
     const place: ResolvedPlace = {
       lat: fallbackPoint.lat, lon: fallbackPoint.lon,
       displayName: query.trim() || 'Punto selezionato sulla mappa', source: 'nominatim',
     }
-    const rawCandidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
+    const rawCandidates = await queryCandidatesNearPointWithCacheFallback(fallbackPoint.lat, fallbackPoint.lon, radiusKm)
     const candidates = sortForDestination(sortByDistanceFrom(rawCandidates, place.lat, place.lon), place, destination)
     return { place, candidates }
   }
@@ -178,8 +199,7 @@ async function findTier0(
   // stesso identico fallback bbox già usato sopra, solo centrato sul punto anziché su un'area
   // risolta dal nome.
   if (rawCandidates.length === 0 && place) {
-    const [minLat, minLon, maxLat, maxLon] = padBbox([place.lat, place.lon, place.lat, place.lon], radiusKm)
-    rawCandidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
+    rawCandidates = await queryCandidatesNearPointWithCacheFallback(place.lat, place.lon, radiusKm)
   }
   const candidates = place
     ? sortForDestination(sortByDistanceFrom(rawCandidates, place.lat, place.lon), place, destination)
