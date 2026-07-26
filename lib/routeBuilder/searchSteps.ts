@@ -20,7 +20,8 @@ import { findProbabilityRoutes } from '@/lib/routeBuilder/probabilityRoutes'
 import type { Bbox } from '@/lib/routeBuilder/hikingProbability'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { DEFAULT_RADIUS_KM, ALLOWED_RADIUS_KM, DESTINATION_PROXIMITY_KM } from '@/lib/routeBuilder/buildConstants'
-import { haversineM, minDistToTrack } from '@/lib/geoUtils'
+import { haversineM, minDistToTrack, classifyTrackShape } from '@/lib/geoUtils'
+import { getCachedTrailsInBbox, upsertTrailCache, type TrailCacheRow } from '@/lib/trailsCache'
 
 export interface DestinationPoint {
   lat: number
@@ -337,9 +338,69 @@ export async function resolveFoundRoutesWithPoi(
 // risolti, restano nel risultato finale.
 const CANDIDATE_RESOLVE_TIMEOUT_MS = 25_000
 
+function bboxFromPolyline(polyline: [number, number][]): { minLat: number; maxLat: number; minLon: number; maxLon: number } {
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity
+  for (const [lat, lon] of polyline) {
+    if (lat < minLat) minLat = lat
+    if (lat > maxLat) maxLat = lat
+    if (lon < minLon) minLon = lon
+    if (lon > maxLon) maxLon = lon
+  }
+  return { minLat, maxLat, minLon, maxLon }
+}
+
+// Scrive nella cache `trails` un candidato appena risolto dal vivo — best-effort (un fallimento
+// qui non deve mai far fallire il risultato già pronto per l'utente corrente), stesso identico
+// pattern già collaudato da generateRecommendations.ts's cacheResolvedTrail per "Percorsi per te".
+async function cacheResolvedTrail(c: HikingRouteCandidate, track: Awaited<ReturnType<typeof resolveTrackForCandidate>> & { ok: true }): Promise<void> {
+  try {
+    const shape = classifyTrackShape(track.routePolyline)
+    await upsertTrailCache({
+      osmRelationId: c.id, name: c.name,
+      distanceKm: track.distanceMeters / 1000, elevationGain: track.elevationGain, elevationLoss: track.elevationLoss,
+      estimatedTimeMin: Math.round(track.estimatedTimeSeconds / 60),
+      routeType: shape === 'linear' ? 'point_to_point' : shape,
+      network: c.network ?? null, bbox: bboxFromPolyline(track.routePolyline), geometrySimplified: track.routePolyline,
+      dataQuality: track.hasElevation ? 'calculated' : 'estimated', ref: c.ref ?? null,
+    })
+  } catch (e) {
+    console.error('[searchSteps] scrittura cache trails fallita (non bloccante):', e)
+  }
+}
+
+// Ricostruisce un FoundRouteResult da una riga già cachata (`trails`) — zero chiamate di rete per
+// la traccia, solo il fetch POI resta (il costo leggero, non quello che ha causato i timeout in
+// produzione: la geometria/quota da Overpass+DTM). Stesso principio di gatherFoundCandidates in
+// generateRecommendations.ts, che ha già dimostrato in produzione quanto questa cache renda la
+// ricerca "Esistenti" istantanea e affidabile per un'area già vista — qui applicato allo stesso
+// identico endpoint interattivo invece che solo alla generazione automatica in background.
+async function resolveFromCache(c: HikingRouteCandidate, row: TrailCacheRow, destination: DestinationPoint | null): Promise<FoundRouteResult | null> {
+  const routePolyline = row.geometrySimplified
+  if (destination && minDistToTrack(destination.lat, destination.lon, routePolyline) > DESTINATION_PROXIMITY_KM * 1000) {
+    return null
+  }
+  const distanceMeters = Math.round((row.distanceKm ?? 0) * 1000)
+  const elevationGain = row.elevationGain ?? 0
+  const elevationLoss = row.elevationLoss ?? 0
+  const estimatedTimeSeconds = (row.estimatedTimeMin ?? Math.round((distanceMeters / 1000 / 4) * 60)) * 60
+  const pois = await fetchPoisNearPolyline(routePolyline).catch(() => [])
+  const provisionalScore = computeProvisionalScore({
+    routePolyline, trackPoints: [], distanceMeters, elevationGain, elevationLoss,
+    altitudeMax: 0, altitudeMin: 0, estimatedTimeSeconds, pois,
+  })
+  return {
+    id: c.id, name: row.name, hasName: c.hasName, ref: c.ref, network: c.network,
+    routePolyline, trackPoints: [], distanceMeters, elevationGain, elevationLoss,
+    altitudeMax: 0, altitudeMin: 0, estimatedTimeSeconds, hasElevation: row.dataQuality === 'calculated',
+    pois, provisionalScore,
+  }
+}
+
 async function resolveOneCandidate(
-  c: HikingRouteCandidate, destination: DestinationPoint | null,
+  c: HikingRouteCandidate, destination: DestinationPoint | null, cached: TrailCacheRow | undefined,
 ): Promise<FoundRouteResult | null> {
+  if (cached && cached.distanceKm != null) return resolveFromCache(c, cached, destination)
+
   // estimateOnly: mai il DTM reale (rate-limited, fino a 20s per chiamata) durante la ricerca —
   // stesso principio già applicato a "Su misura" (scoreCandidates.ts) e "Percorsi per te"
   // (generateRecommendations.ts). La quota vera arriva una sola volta, per il solo percorso
@@ -356,6 +417,7 @@ async function resolveOneCandidate(
   if (destination && minDistToTrack(destination.lat, destination.lon, track.routePolyline) > DESTINATION_PROXIMITY_KM * 1000) {
     return null
   }
+  cacheResolvedTrail(c, track).catch(() => {})
   const pois = await fetchPoisNearPolyline(track.routePolyline).catch(() => [])
   const provisionalScore = computeProvisionalScore({
     routePolyline: track.routePolyline, trackPoints: track.trackPoints, distanceMeters: track.distanceMeters,
@@ -375,9 +437,15 @@ async function resolveOneCandidate(
 async function resolveRelationCandidates(
   candidates: HikingRouteCandidate[], cap: number, destination: DestinationPoint | null,
 ): Promise<FoundRouteResult[]> {
-  const resolved = await Promise.all(candidates.slice(0, cap).map(async c => {
+  const slice = candidates.slice(0, cap)
+  // Una sola query batch per tutti i candidati di questo giro, invece di una per candidato — sono
+  // già al più `cap` (8) id noti in anticipo, un `IN (...)` sull'indice unico di osm_relation_id
+  // costa una frazione di una singola risoluzione Overpass.
+  const cachedById = await getCachedTrailsInBbox(slice.map(c => c.id)).catch(() => new Map<number, TrailCacheRow>())
+
+  const resolved = await Promise.all(slice.map(async c => {
     const outcome = await Promise.race([
-      resolveOneCandidate(c, destination).then(r => ({ kind: 'done' as const, value: r })),
+      resolveOneCandidate(c, destination, cachedById.get(c.id)).then(r => ({ kind: 'done' as const, value: r })),
       new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), CANDIDATE_RESOLVE_TIMEOUT_MS)),
     ]).catch(() => ({ kind: 'timeout' as const }))
     if (outcome.kind === 'timeout') {
