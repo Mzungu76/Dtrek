@@ -6,11 +6,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 import {
-  findExistingRoutesForQuery, resolveFoundRoutesWithPoi, sanitizeSearchRadiusKm, MAX_EAGER_RESOLVE,
+  findExistingRoutesForQuery, resolveFoundRoutesWithPoi, sanitizeSearchRadiusKm, probabilityBboxFor, MAX_EAGER_RESOLVE,
   type FoundRouteResult,
 } from '@/lib/routeBuilder/searchSteps'
-import { padBbox } from '@/lib/overpassTrails'
-import type { Bbox } from '@/lib/routeBuilder/hikingProbability'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -71,9 +69,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // esistono, passiamo comunque un bbox a resolveFoundRoutesWithPoi: prova il ripiego IN PARALLELO
   // alla risoluzione delle relation, usato solo se quella risoluzione non produce nulla (vedi
   // searchSteps.ts) — trovare una relation non garantisce che la sua traccia si risolva davvero.
-  const probabilityBbox = find.place
-    ? (padBbox([find.place.lat, find.place.lon, find.place.lat, find.place.lon], radiusKm) as Bbox)
-    : null
+  const probabilityBbox = find.place ? probabilityBboxFor(find.place.lat, find.place.lon, radiusKm) : null
   const foundRoutes = [
     ...(await resolveFoundRoutesWithPoi(find.candidates, MAX_EAGER_RESOLVE, null, probabilityBbox)),
     ...find.probabilityRoutes,

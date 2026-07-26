@@ -23,7 +23,8 @@
 //                     vedi isUrbanTransferWay — così un paese resta un punto di attraversamento
 //                     invece di gonfiare il componente connesso).
 import { fetchOverpass, type OsmRelation } from '@/lib/overpassTrails'
-import { haversineM } from '@/lib/geoUtils'
+import { haversineM, normalizeBboxKey } from '@/lib/geoUtils'
+import { supabase } from '@/lib/supabase'
 
 export type Bbox = [minLat: number, minLon: number, maxLat: number, maxLon: number]
 
@@ -438,15 +439,86 @@ export interface HikingProbabilityResult {
   nodes: Map<number, { lat: number; lon: number }>
 }
 
-export async function computeHikingProbability(
-  bbox: Bbox,
-  ctx: HikingProbabilityContext = {},
-): Promise<HikingProbabilityResult> {
+// Cache Supabase sulle 3 chiamate Overpass di sopra — stesso identico pattern di
+// lib/routeBuilder/walkNetworkCache.ts (fetchWalkNetworkCached), che risolve la stessa categoria
+// di problema per "Su misura": senza cache, ogni ricerca "Esistenti" che finisce nel ripiego
+// "probabilità" riscaricava da zero l'intera rete anche per richieste ripetute nella stessa zona —
+// causa osservata in produzione (timeout riproducibili a 45s) esattamente come per "Su misura"
+// prima di questa stessa cache. TTL 45gg come walk_network_cache: la rete cambia poco, non quanto
+// basta per un TTL breve.
+const CACHE_TTL_MS = 45 * 24 * 60 * 60 * 1000
+const CACHE_LOOKUP_TIMEOUT_MS = 5000
+
+interface RawHikingData {
+  network: TaggedNetwork
+  relations: OsmRelation[]
+  context: { areas: ProtectedArea[]; placeNodes: PoiPoint[] }
+}
+
+// jsonb non può contenere una Map — i nodi vanno serializzati come lista di coppie [nodeId,
+// {lat,lon}], ricostruiti in Map alla lettura (stesso trattamento di walkNetworkCache.ts).
+interface StoredRawHikingData {
+  networkNodes: [number, { lat: number; lon: number }][]
+  networkWays: TaggedNetwork['ways']
+  relations: OsmRelation[]
+  context: { areas: ProtectedArea[]; placeNodes: PoiPoint[] }
+}
+
+function withTimeout<T>(p: PromiseLike<T>, ms: number): Promise<T> {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ])
+}
+
+async function fetchRawHikingDataCached(bbox: Bbox): Promise<RawHikingData> {
+  const bboxKey = normalizeBboxKey(bboxStr(bbox))
+
+  const { data: cached } = await withTimeout(
+    supabase
+      .from('hiking_probability_cache')
+      .select('data')
+      .eq('bbox_key', bboxKey)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle(),
+    CACHE_LOOKUP_TIMEOUT_MS,
+  ).catch(() => ({ data: null }))
+
+  if (cached?.data) {
+    const stored = cached.data as StoredRawHikingData
+    return {
+      network: { nodes: new Map(stored.networkNodes), ways: stored.networkWays },
+      relations: stored.relations,
+      context: stored.context,
+    }
+  }
+
+  // Nessun hit — fetch dal vivo. Un fallimento si propaga come eccezione, gestita dal chiamante
+  // (findProbabilityRoutes/il ripiego in searchSteps.ts, entrambi già tolleranti a un fallimento
+  // qui: il resto della ricerca prosegue comunque).
   const [network, relations, context] = await Promise.all([
     fetchTaggedNetwork(bbox),
     fetchHikingRelations(bbox),
     fetchContextFeatures(bbox),
   ])
+  const raw: RawHikingData = { network, relations, context }
+
+  const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString()
+  const stored: StoredRawHikingData = { networkNodes: Array.from(network.nodes.entries()), networkWays: network.ways, relations, context }
+  // Non bloccante: un fallimento in scrittura non deve mai far fallire la ricerca, solo lasciare
+  // quella zona senza cache per questo giro (stesso trattamento di walkNetworkCache.ts).
+  supabase.from('hiking_probability_cache')
+    .upsert({ bbox_key: bboxKey, data: stored, expires_at: expiresAt }, { onConflict: 'bbox_key' })
+    .then(({ error }) => { if (error) console.error('[hikingProbability] upsert cache error:', error.message) })
+
+  return raw
+}
+
+export async function computeHikingProbability(
+  bbox: Bbox,
+  ctx: HikingProbabilityContext = {},
+): Promise<HikingProbabilityResult> {
+  const { network, relations, context } = await fetchRawHikingDataCached(bbox)
 
   // way id -> punteggio della miglior relation di cui è membro (max, non somma: una way membro di
   // più relation non deve essere premiata più volte per lo stesso segnale).

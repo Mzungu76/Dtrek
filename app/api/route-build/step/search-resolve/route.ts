@@ -4,8 +4,8 @@
 // proprio tetto di 60s, invece di sommarsi alla ricerca dei candidati.
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
-import { resolveFoundRoutesWithPoi, MAX_EAGER_RESOLVE } from '@/lib/routeBuilder/searchSteps'
-import { padBbox, type HikingRouteCandidate } from '@/lib/overpassTrails'
+import { resolveFoundRoutesWithPoi, probabilityBboxFor, MAX_EAGER_RESOLVE } from '@/lib/routeBuilder/searchSteps'
+import type { HikingRouteCandidate } from '@/lib/overpassTrails'
 import type { Bbox } from '@/lib/routeBuilder/hikingProbability'
 
 export const dynamic = 'force-dynamic'
@@ -65,7 +65,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   // alla risoluzione delle relation invece che dopo un eventuale fallimento, entro lo stesso tetto.
   const radiusKm = typeof body?.radiusKm === 'number' ? body.radiusKm : null
   const probabilityBbox: Bbox | null = typeof body?.placeLat === 'number' && typeof body?.placeLon === 'number' && radiusKm
-    ? (padBbox([body.placeLat, body.placeLon, body.placeLat, body.placeLon], radiusKm) as Bbox)
+    ? probabilityBboxFor(body.placeLat, body.placeLon, radiusKm)
     : null
 
   const outcome = await Promise.race([
