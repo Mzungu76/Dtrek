@@ -35,6 +35,10 @@ export const MAX_EAGER_RESOLVE = 8
 // richiesta vaga può ammettere più interpretazioni valide, ma senza un tetto il costo Overpass per
 // una singola ricerca crescerebbe senza controllo.
 const MAX_INTERPRETED_PLACES = 3
+// Tetto morbido sul ripiego "probabilità" (vedi findExistingRoutesForQuery) — più stretto dei 45s
+// di search-resolve/route.ts perché qui arriva DOPO tier0/tier1, già in corso da un po' quando si
+// raggiunge questo punto, entro lo stesso tetto duro di 60s dell'intero step.
+const PROBABILITY_SOFT_DEADLINE_MS = 35_000
 
 export function sanitizeSearchRadiusKm(raw: unknown): number {
   const n = Number(raw)
@@ -212,7 +216,22 @@ export async function findExistingRoutesForQuery(
   if (place && candidates.length === 0) {
     try {
       const bbox = padBbox([place.lat, place.lon, place.lat, place.lon], radiusKm) as Bbox
-      probabilityRoutes = await findProbabilityRoutes(bbox)
+      // Tetto morbido, non solo un try/catch sugli errori: findProbabilityRoutes fa 3 chiamate
+      // Overpass che possono singolarmente arrivare vicino al proprio timeout interno (osservato
+      // in produzione anche su resolveFoundRoutesWithPoi, che per lo stesso motivo ha già questo
+      // stesso tetto in search-resolve/route.ts) — senza una scadenza propria qui, un rallentamento
+      // farebbe scadere l'intero step contro il tetto duro di 60s (ricerca interrotta con errore)
+      // invece di rispondere comunque con zero risultati da questo ripiego, lasciando comunque
+      // margine per il resto della funzione (già in corso da tier0/tier1 quando si arriva qui).
+      const outcome = await Promise.race([
+        findProbabilityRoutes(bbox).then(routes => ({ kind: 'done' as const, routes })),
+        new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), PROBABILITY_SOFT_DEADLINE_MS)),
+      ])
+      if (outcome.kind === 'timeout') {
+        console.error(`[searchSteps] Ripiego probabilità: tetto morbido di ${PROBABILITY_SOFT_DEADLINE_MS}ms superato`)
+      } else {
+        probabilityRoutes = outcome.routes
+      }
     } catch (e) {
       console.error('[searchSteps] Ripiego probabilità fallito:', e)
     }
@@ -228,9 +247,36 @@ export async function findExistingRoutesForQuery(
  * e una stima provvisoria di Sicurezza/Trail Score (lib/routeBuilder/provisionalScore.ts) — la
  * parte più pesante e variabile della ricerca "Esistenti" (fino a `cap` risoluzioni Overpass in
  * parallelo), isolata in un passo a parte per lo stesso motivo del pathfinding di "Su misura".
+ *
+ * `probabilityBbox`, se passato, avvia IN PARALLELO (non dopo) il ripiego "probabilità" — trovare
+ * qualche candidato relation non garantisce che la sua traccia si risolva davvero (osservato in
+ * produzione: relation lontane/incomplete possono far scadere questa stessa risoluzione contro il
+ * proprio tetto morbido), quindi il caso "candidati trovati ma nessuno risolto" resta comunque
+ * scoperto se il ripiego parte solo DOPO aver scoperto il fallimento — a quel punto non resterebbe
+ * budget di tempo per tentarlo entro lo stesso tetto. Se la risoluzione delle relation produce
+ * comunque qualcosa, quella resta la fonte preferita (dati reali, curati) e il ripiego viene
+ * scartato.
  */
 export async function resolveFoundRoutesWithPoi(
   candidates: HikingRouteCandidate[], cap: number, destination: DestinationPoint | null = null,
+  probabilityBbox: Bbox | null = null,
+): Promise<FoundRouteResult[]> {
+  const relationResolved = resolveRelationCandidates(candidates, cap, destination)
+  if (!probabilityBbox) return relationResolved
+
+  const [relationRoutes, probabilityRoutes] = await Promise.all([
+    relationResolved,
+    findProbabilityRoutes(probabilityBbox).catch(e => {
+      console.error('[searchSteps] Ripiego probabilità (in parallelo alla risoluzione relation) fallito:', e)
+      return [] as FoundRouteResult[]
+    }),
+  ])
+
+  return relationRoutes.length > 0 ? relationRoutes : probabilityRoutes
+}
+
+async function resolveRelationCandidates(
+  candidates: HikingRouteCandidate[], cap: number, destination: DestinationPoint | null,
 ): Promise<FoundRouteResult[]> {
   const resolved = await Promise.all(candidates.slice(0, cap).map(async c => {
     const track = await resolveTrackForCandidate({ osmId: c.id, gpxUrl: null })

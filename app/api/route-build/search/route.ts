@@ -9,6 +9,8 @@ import {
   findExistingRoutesForQuery, resolveFoundRoutesWithPoi, sanitizeSearchRadiusKm, MAX_EAGER_RESOLVE,
   type FoundRouteResult,
 } from '@/lib/routeBuilder/searchSteps'
+import { padBbox } from '@/lib/overpassTrails'
+import type { Bbox } from '@/lib/routeBuilder/hikingProbability'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -65,9 +67,17 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   const startedAt = Date.now()
   const find = await findExistingRoutesForQuery(user, query, radiusKm, useAi)
   // find.probabilityRoutes è già completamente risolto (ripiego "probabilità" di searchSteps.ts,
-  // usato solo quando find.candidates è vuoto) — va unito qui, non passato a
-  // resolveFoundRoutesWithPoi (che risolve tracce da una relation OSM, questi non ne hanno una).
-  const foundRoutes = [...(await resolveFoundRoutesWithPoi(find.candidates, MAX_EAGER_RESOLVE)), ...find.probabilityRoutes]
+  // usato solo quando find.candidates è vuoto) — va unito qui. Quando invece dei candidati relation
+  // esistono, passiamo comunque un bbox a resolveFoundRoutesWithPoi: prova il ripiego IN PARALLELO
+  // alla risoluzione delle relation, usato solo se quella risoluzione non produce nulla (vedi
+  // searchSteps.ts) — trovare una relation non garantisce che la sua traccia si risolva davvero.
+  const probabilityBbox = find.place
+    ? (padBbox([find.place.lat, find.place.lon, find.place.lat, find.place.lon], radiusKm) as Bbox)
+    : null
+  const foundRoutes = [
+    ...(await resolveFoundRoutesWithPoi(find.candidates, MAX_EAGER_RESOLVE, null, probabilityBbox)),
+    ...find.probabilityRoutes,
+  ]
 
   await logRouteBuildEvent({
     userId: user?.id ?? null,
