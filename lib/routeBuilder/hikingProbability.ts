@@ -87,7 +87,10 @@ const NATURAL_SURFACES = new Set([
 function scoreWayTags(tags: Record<string, string>, nearCoast: boolean): number {
   let s = 0
   if (tags.sac_scale) s += 60
-  if (tags.trail_visibility) s += 30
+  // "no" è un valore valido di trail_visibility — significa che il sentiero NON è visibile sul
+  // terreno, il caso peggiore possibile, non semplicemente "assente". Contarlo come le altre
+  // presenze premiava un tratto esplicitamente segnalato come invisibile tanto quanto uno excellent.
+  if (tags.trail_visibility && tags.trail_visibility !== 'no') s += 30
   if (tags.trailblazed === 'yes') s += 20
   if (tags.highway === 'path') s += 25
   if (tags.highway === 'track' && (tags.tracktype === 'grade4' || tags.tracktype === 'grade5')) s += 20
@@ -526,9 +529,17 @@ export async function computeHikingProbability(
 
 export type HikingProbabilityTier = 'quasi_certo' | 'molto_probabile' | 'possibile' | 'improbabile'
 
+// Soglie ricalibrate su trailScore (via lib/routeBuilder/hikingProbability.ts §fase 2), non più
+// sul vecchio finalScore: quest'ultimo includeva relation+topologia e arrivava facilmente a
+// 300+ per un buon sentiero, mentre trailScore da solo (tag della way + contesto + penalità
+// urbane) realisticamente non supera ~150-200 anche per la way meglio taggata possibile — le
+// soglie precedenti (150/80/40) collassavano quasi tutto il dataset a "improbabile". Tarate su
+// un test reale (Nera Montoro): 90 raggiunge un tag molto ricco (sac_scale+trail_visibility+
+// path+surface ≈ 130-150), 50 un buon tag singolo combinato con superficie (path+surface+
+// trail_visibility ≈ 70, o sac_scale+path ≈ 85), 15 un solo tag informativo (path da solo = 25).
 export function classifyTrailScore(trailScore: number): HikingProbabilityTier {
-  if (trailScore >= 150) return 'quasi_certo'
-  if (trailScore >= 80) return 'molto_probabile'
-  if (trailScore >= 40) return 'possibile'
+  if (trailScore >= 90) return 'quasi_certo'
+  if (trailScore >= 50) return 'molto_probabile'
+  if (trailScore >= 15) return 'possibile'
   return 'improbabile'
 }
