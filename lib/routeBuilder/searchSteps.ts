@@ -21,7 +21,7 @@ import type { Bbox } from '@/lib/routeBuilder/hikingProbability'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { DEFAULT_RADIUS_KM, ALLOWED_RADIUS_KM, DESTINATION_PROXIMITY_KM } from '@/lib/routeBuilder/buildConstants'
 import { haversineM, minDistToTrack, classifyTrackShape } from '@/lib/geoUtils'
-import { getCachedTrailsInBbox, upsertTrailCache, type TrailCacheRow } from '@/lib/trailsCache'
+import { getCachedTrailsInBbox, upsertTrailCache, findCachedTrailsNearPoint, type TrailCacheRow } from '@/lib/trailsCache'
 
 export interface DestinationPoint {
   lat: number
@@ -136,17 +136,40 @@ function sortForDestination(
 // della lentezza complessiva della ricerca (fino a 60-90s solo per questa fase, PRIMA di arrivare
 // alla risoluzione delle tracce), specialmente quando Nominatim rallenta/blocca l'IP server (vedi
 // il commento esteso più sotto, per il caso in cui la risoluzione testuale invece serve davvero).
+// Cache-first, non Overpass-first-con-ripiego: la scoperta candidati interrogava SEMPRE Overpass
+// live, e solo se quello falliva del tutto (osservato in produzione, "Overpass non disponibile" su
+// tutti e 3 i mirror) tentava la cache locale — quindi un'area già pre-riscaldata pochi minuti
+// prima pagava comunque il costo/rischio di una chiamata Overpass evitabile, invece di rispondere
+// subito con dati già noti. La cache si autoalimenta a ogni risoluzione live riuscita (vedi
+// cacheResolvedTrail sotto) e viene pre-riscaldata in blocco da app/api/admin/prewarm-trails, quindi
+// un esito vuoto qui vuol dire davvero "quest'area non è mai stata vista", non "dato mancante per
+// pigrizia" — solo in quel caso vale la pena aspettare Overpass.
+async function queryCandidatesNearPointCacheFirst(lat: number, lon: number, radiusKm: number): Promise<HikingRouteCandidate[]> {
+  const cached = await findCachedTrailsNearPoint(lat, lon, radiusKm, 20).catch(() => [])
+  if (cached.length > 0) {
+    return cached.map(row => ({
+      id: row.osmRelationId, name: row.name, hasName: true,
+      ref: row.ref ?? undefined, network: row.network ?? undefined,
+      lat: (row.bbox.minLat + row.bbox.maxLat) / 2, lon: (row.bbox.minLon + row.bbox.maxLon) / 2,
+    }))
+  }
+  const [minLat, minLon, maxLat, maxLon] = padBbox([lat, lon, lat, lon], radiusKm)
+  return queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20).catch(e => {
+    console.error('[searchSteps] Cache vuota e Overpass non disponibile per la scoperta candidati:', e)
+    return [] as HikingRouteCandidate[]
+  })
+}
+
 async function findTier0(
   query: string, radiusKm: number, destination: DestinationPoint | null, fallbackPoint: DestinationPoint | null,
   skipNameResolution: boolean,
 ): Promise<{ place: ResolvedPlace | null; candidates: HikingRouteCandidate[] }> {
   if (skipNameResolution && fallbackPoint) {
-    const [minLat, minLon, maxLat, maxLon] = padBbox([fallbackPoint.lat, fallbackPoint.lon, fallbackPoint.lat, fallbackPoint.lon], radiusKm)
     const place: ResolvedPlace = {
       lat: fallbackPoint.lat, lon: fallbackPoint.lon,
       displayName: query.trim() || 'Punto selezionato sulla mappa', source: 'nominatim',
     }
-    const rawCandidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
+    const rawCandidates = await queryCandidatesNearPointCacheFirst(fallbackPoint.lat, fallbackPoint.lon, radiusKm)
     const candidates = sortForDestination(sortByDistanceFrom(rawCandidates, place.lat, place.lon), place, destination)
     return { place, candidates }
   }
@@ -178,8 +201,7 @@ async function findTier0(
   // stesso identico fallback bbox già usato sopra, solo centrato sul punto anziché su un'area
   // risolta dal nome.
   if (rawCandidates.length === 0 && place) {
-    const [minLat, minLon, maxLat, maxLon] = padBbox([place.lat, place.lon, place.lat, place.lon], radiusKm)
-    rawCandidates = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
+    rawCandidates = await queryCandidatesNearPointCacheFirst(place.lat, place.lon, radiusKm)
   }
   const candidates = place
     ? sortForDestination(sortByDistanceFrom(rawCandidates, place.lat, place.lon), place, destination)
