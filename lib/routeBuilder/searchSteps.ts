@@ -385,7 +385,13 @@ async function resolveFromCache(c: HikingRouteCandidate, row: TrailCacheRow, des
   const elevationGain = row.elevationGain ?? 0
   const elevationLoss = row.elevationLoss ?? 0
   const estimatedTimeSeconds = (row.estimatedTimeMin ?? Math.round((distanceMeters / 1000 / 4) * 60)) * 60
-  const pois = await fetchPoisNearPolyline(routePolyline).catch(() => [])
+  // Niente fetchPoisNearPolyline qui: era una chiamata Overpass live PER CANDIDATO anche quando il
+  // tracciato veniva già dalla cache, lo stesso identico collo di bottiglia già risolto per il DTM
+  // (vedi resolveOneCandidate sopra) — con Overpass sotto carico bastava che alcune di queste
+  // chiamate superassero i 25s per perdere metà dei risultati di una ricerca già "istantanea" per
+  // il resto. L'arricchimento POI completo avviene comunque di nuovo al salvataggio
+  // (enrichWithPois in RouteBuilder.tsx), quindi il percorso salvato non perde nulla.
+  const pois: import('@/lib/overpass').PoiItem[] = []
   const provisionalScore = computeProvisionalScore({
     routePolyline, trackPoints: [], distanceMeters, elevationGain, elevationLoss,
     altitudeMax: 0, altitudeMin: 0, estimatedTimeSeconds, pois,
