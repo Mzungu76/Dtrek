@@ -136,26 +136,28 @@ function sortForDestination(
 // della lentezza complessiva della ricerca (fino a 60-90s solo per questa fase, PRIMA di arrivare
 // alla risoluzione delle tracce), specialmente quando Nominatim rallenta/blocca l'IP server (vedi
 // il commento esteso più sotto, per il caso in cui la risoluzione testuale invece serve davvero).
-// La scoperta candidati (a differenza della loro risoluzione in tracce, vedi resolveOneCandidate)
-// dipendeva SOLO da Overpass live: quando tutti e 3 i mirror sono irraggiungibili (osservato in
-// produzione, "Overpass non disponibile"), la ricerca tornava zero risultati anche per un'area già
-// pre-riscaldata in cache pochi minuti prima — i sentieri erano lì, solo mai interrogati. Un
-// ripiego sulla cache locale (stesso indice bbox già usato da generateRecommendations.ts) copre
-// esattamente questo caso, restando comunque MENO recente/completo di una vera interrogazione
-// Overpass quando quella funziona (per questo resta un ripiego, non la fonte primaria).
-async function queryCandidatesNearPointWithCacheFallback(lat: number, lon: number, radiusKm: number): Promise<HikingRouteCandidate[]> {
-  const [minLat, minLon, maxLat, maxLon] = padBbox([lat, lon, lat, lon], radiusKm)
-  try {
-    return await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
-  } catch (e) {
-    console.error('[searchSteps] Overpass non disponibile per la scoperta candidati, ripiego sulla cache:', e)
-    const cached = await findCachedTrailsNearPoint(lat, lon, radiusKm, 20).catch(() => [])
+// Cache-first, non Overpass-first-con-ripiego: la scoperta candidati interrogava SEMPRE Overpass
+// live, e solo se quello falliva del tutto (osservato in produzione, "Overpass non disponibile" su
+// tutti e 3 i mirror) tentava la cache locale — quindi un'area già pre-riscaldata pochi minuti
+// prima pagava comunque il costo/rischio di una chiamata Overpass evitabile, invece di rispondere
+// subito con dati già noti. La cache si autoalimenta a ogni risoluzione live riuscita (vedi
+// cacheResolvedTrail sotto) e viene pre-riscaldata in blocco da app/api/admin/prewarm-trails, quindi
+// un esito vuoto qui vuol dire davvero "quest'area non è mai stata vista", non "dato mancante per
+// pigrizia" — solo in quel caso vale la pena aspettare Overpass.
+async function queryCandidatesNearPointCacheFirst(lat: number, lon: number, radiusKm: number): Promise<HikingRouteCandidate[]> {
+  const cached = await findCachedTrailsNearPoint(lat, lon, radiusKm, 20).catch(() => [])
+  if (cached.length > 0) {
     return cached.map(row => ({
       id: row.osmRelationId, name: row.name, hasName: true,
       ref: row.ref ?? undefined, network: row.network ?? undefined,
       lat: (row.bbox.minLat + row.bbox.maxLat) / 2, lon: (row.bbox.minLon + row.bbox.maxLon) / 2,
     }))
   }
+  const [minLat, minLon, maxLat, maxLon] = padBbox([lat, lon, lat, lon], radiusKm)
+  return queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20).catch(e => {
+    console.error('[searchSteps] Cache vuota e Overpass non disponibile per la scoperta candidati:', e)
+    return [] as HikingRouteCandidate[]
+  })
 }
 
 async function findTier0(
@@ -167,7 +169,7 @@ async function findTier0(
       lat: fallbackPoint.lat, lon: fallbackPoint.lon,
       displayName: query.trim() || 'Punto selezionato sulla mappa', source: 'nominatim',
     }
-    const rawCandidates = await queryCandidatesNearPointWithCacheFallback(fallbackPoint.lat, fallbackPoint.lon, radiusKm)
+    const rawCandidates = await queryCandidatesNearPointCacheFirst(fallbackPoint.lat, fallbackPoint.lon, radiusKm)
     const candidates = sortForDestination(sortByDistanceFrom(rawCandidates, place.lat, place.lon), place, destination)
     return { place, candidates }
   }
@@ -199,7 +201,7 @@ async function findTier0(
   // stesso identico fallback bbox già usato sopra, solo centrato sul punto anziché su un'area
   // risolta dal nome.
   if (rawCandidates.length === 0 && place) {
-    rawCandidates = await queryCandidatesNearPointWithCacheFallback(place.lat, place.lon, radiusKm)
+    rawCandidates = await queryCandidatesNearPointCacheFirst(place.lat, place.lon, radiusKm)
   }
   const candidates = place
     ? sortForDestination(sortByDistanceFrom(rawCandidates, place.lat, place.lon), place, destination)
