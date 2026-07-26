@@ -278,44 +278,82 @@ export async function resolveFoundRoutesWithPoi(
   const relationResolved = resolveRelationCandidates(candidates, cap, destination)
   if (!probabilityBbox) return relationResolved
 
-  const [relationRoutes, probabilityRoutes] = await Promise.all([
-    relationResolved,
+  // Stesso tetto morbido usato per il ripiego in findExistingRoutesForQuery (vedi
+  // PROBABILITY_SOFT_DEADLINE_MS sopra) — senza un proprio limite qui, un ripiego lento
+  // diventerebbe il nuovo collo di bottiglia del gruppo ora che resolveRelationCandidates è
+  // limitato a CANDIDATE_RESOLVE_TIMEOUT_MS per candidato, rischiando comunque di far scadere il
+  // tetto morbido di 45s del chiamante (search-resolve/route.ts) e scartare anche i risultati
+  // delle relation, già pronti.
+  const probabilityWithDeadline = Promise.race([
     findProbabilityRoutes(probabilityBbox).catch(e => {
       console.error('[searchSteps] Ripiego probabilità (in parallelo alla risoluzione relation) fallito:', e)
       return [] as FoundRouteResult[]
     }),
+    new Promise<FoundRouteResult[]>(resolve => setTimeout(() => resolve([]), PROBABILITY_SOFT_DEADLINE_MS)),
   ])
 
+  const [relationRoutes, probabilityRoutes] = await Promise.all([relationResolved, probabilityWithDeadline])
+
   return relationRoutes.length > 0 ? relationRoutes : probabilityRoutes
+}
+
+// Tetto per candidato, non solo sul gruppo intero (vedi SOFT_DEADLINE_MS in
+// step/search-resolve/route.ts): senza questo, un Promise.all su `cap` candidati aspetta il più
+// lento di tutti prima di restituire QUALSIASI risultato — se anche un solo candidato si blocca
+// (mirror Overpass congestionato), il tetto morbido del chiamante scade sull'intero gruppo e
+// TUTTI i candidati già risolti con successo vengono scartati insieme a quello lento, non solo
+// lui. Con un tetto per-candidato, un singolo blocco costa solo se stesso: gli altri, già
+// risolti, restano nel risultato finale.
+const CANDIDATE_RESOLVE_TIMEOUT_MS = 25_000
+
+async function resolveOneCandidate(
+  c: HikingRouteCandidate, destination: DestinationPoint | null,
+): Promise<FoundRouteResult | null> {
+  // estimateOnly: mai il DTM reale (rate-limited, fino a 20s per chiamata) durante la ricerca —
+  // stesso principio già applicato a "Su misura" (scoreCandidates.ts) e "Percorsi per te"
+  // (generateRecommendations.ts). La quota vera arriva una sola volta, per il solo percorso
+  // scelto, al salvataggio (vedi enrichFoundCandidateForImport in RouteBuilder.tsx) — prima
+  // d'ora "Esistenti" era l'unico dei tre a saltare questo passo, risolvendo il DTM reale per
+  // fino a MAX_EAGER_RESOLVE candidati in parallelo ad ogni ricerca: la causa principale dei
+  // timeout osservati in produzione su questo stesso step.
+  const track = await resolveTrackForCandidate({ osmId: c.id, gpxUrl: null }, { estimateOnly: true })
+  if (!track.ok) return null
+  // Ora che si ha la geometria reale (non più solo il centroide usato per l'ordinamento in
+  // findTier0), si può verificare con precisione se il percorso passa davvero vicino alla
+  // destinazione richiesta — un centroide plausibile non garantisce che la traccia stessa ci
+  // arrivi (una relazione può estendersi molto oltre il suo centro).
+  if (destination && minDistToTrack(destination.lat, destination.lon, track.routePolyline) > DESTINATION_PROXIMITY_KM * 1000) {
+    return null
+  }
+  const pois = await fetchPoisNearPolyline(track.routePolyline).catch(() => [])
+  const provisionalScore = computeProvisionalScore({
+    routePolyline: track.routePolyline, trackPoints: track.trackPoints, distanceMeters: track.distanceMeters,
+    elevationGain: track.elevationGain, elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax,
+    altitudeMin: track.altitudeMin, estimatedTimeSeconds: track.estimatedTimeSeconds, pois,
+  })
+  return {
+    id: c.id, name: c.name, hasName: c.hasName, ref: c.ref, network: c.network,
+    routePolyline: track.routePolyline, trackPoints: track.trackPoints,
+    distanceMeters: track.distanceMeters, elevationGain: track.elevationGain,
+    elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax, altitudeMin: track.altitudeMin,
+    estimatedTimeSeconds: track.estimatedTimeSeconds, hasElevation: track.hasElevation,
+    pois, provisionalScore,
+  }
 }
 
 async function resolveRelationCandidates(
   candidates: HikingRouteCandidate[], cap: number, destination: DestinationPoint | null,
 ): Promise<FoundRouteResult[]> {
   const resolved = await Promise.all(candidates.slice(0, cap).map(async c => {
-    const track = await resolveTrackForCandidate({ osmId: c.id, gpxUrl: null })
-    if (!track.ok) return null
-    // Ora che si ha la geometria reale (non più solo il centroide usato per l'ordinamento in
-    // findTier0), si può verificare con precisione se il percorso passa davvero vicino alla
-    // destinazione richiesta — un centroide plausibile non garantisce che la traccia stessa ci
-    // arrivi (una relazione può estendersi molto oltre il suo centro).
-    if (destination && minDistToTrack(destination.lat, destination.lon, track.routePolyline) > DESTINATION_PROXIMITY_KM * 1000) {
+    const outcome = await Promise.race([
+      resolveOneCandidate(c, destination).then(r => ({ kind: 'done' as const, value: r })),
+      new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), CANDIDATE_RESOLVE_TIMEOUT_MS)),
+    ]).catch(() => ({ kind: 'timeout' as const }))
+    if (outcome.kind === 'timeout') {
+      console.error(`[searchSteps] Candidato ${c.id} oltre il tetto di ${CANDIDATE_RESOLVE_TIMEOUT_MS}ms, scartato singolarmente`)
       return null
     }
-    const pois = await fetchPoisNearPolyline(track.routePolyline).catch(() => [])
-    const provisionalScore = computeProvisionalScore({
-      routePolyline: track.routePolyline, trackPoints: track.trackPoints, distanceMeters: track.distanceMeters,
-      elevationGain: track.elevationGain, elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax,
-      altitudeMin: track.altitudeMin, estimatedTimeSeconds: track.estimatedTimeSeconds, pois,
-    })
-    return {
-      id: c.id, name: c.name, hasName: c.hasName, ref: c.ref, network: c.network,
-      routePolyline: track.routePolyline, trackPoints: track.trackPoints,
-      distanceMeters: track.distanceMeters, elevationGain: track.elevationGain,
-      elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax, altitudeMin: track.altitudeMin,
-      estimatedTimeSeconds: track.estimatedTimeSeconds, hasElevation: track.hasElevation,
-      pois, provisionalScore,
-    }
+    return outcome.value
   }))
   return resolved.filter((r): r is FoundRouteResult => r != null)
 }

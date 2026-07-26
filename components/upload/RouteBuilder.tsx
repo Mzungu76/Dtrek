@@ -16,7 +16,7 @@ import * as bgSearch from '@/lib/routeBuilder/backgroundSearchStore'
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
-import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
+import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport, enrichFoundCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
 import { HIKER_ENVIRONMENT_PREFS, type HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { defaultPendingExpiresAt } from './sharedHelpers'
@@ -944,13 +944,14 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // scegliere N percorsi implica rinunciare a personalizzare ciascuno). Ritorna l'hike salvato:
   // handleSave naviga subito alla sua guida, handleBulkImport si limita a contarli.
   async function saveResultItem(item: ResultItem, itemTitle: string, itemDate: string, pendingExpiresAt: string): Promise<PlannedHike> {
-    // Il candidato "Su misura" arriva dalla ricerca con quota stimata (nessuna chiamata DTM in
-    // quella fase) — qui, una sola volta per il solo percorso scelto, si arricchisce con la
-    // quota reale prima di costruire l'hike. Tollerante: se fallisce, si salva comunque con la
-    // stima (vedi enrichBuiltCandidateForImport).
+    // Entrambi i tipi di candidato arrivano dalla ricerca con quota stimata (nessuna chiamata DTM
+    // in quella fase, vedi searchSteps.ts's resolveOneCandidate) — qui, una sola volta per il solo
+    // percorso scelto, si arricchisce con la quota reale prima di costruire l'hike. Tollerante: se
+    // fallisce, si salva comunque con la stima (vedi enrichBuiltCandidateForImport/
+    // enrichFoundCandidateForImport).
     const hike: PlannedHike = item.kind === 'built'
       ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(item.data), itemTitle, itemDate, pendingExpiresAt)
-      : buildHikeFromFound(item.data, itemTitle, itemDate, pendingExpiresAt)
+      : buildHikeFromFound(await enrichFoundCandidateForImport(item.data), itemTitle, itemDate, pendingExpiresAt)
 
     await enrichWithPois(hike)
     await savePlanned(hike)
