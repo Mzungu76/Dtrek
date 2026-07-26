@@ -84,13 +84,19 @@ const NATURAL_SURFACES = new Set([
   'pebblestone', 'fine_gravel', 'woodchips',
 ])
 
+// trail_visibility è una scala ordinata (excellent > good > intermediate > bad > horrible > no),
+// non un semplice presente/assente — un valore "bad"/"horrible" significa che il sentiero è a
+// malapena visibile sul terreno, un segnale debole, ben diverso da "excellent"/"good" ma comunque
+// non zero come "no" (il mapper ha comunque fatto un rilievo deliberato). Valori non riconosciuti
+// prendono un bonus intermedio prudente invece di essere ignorati.
+const TRAIL_VISIBILITY_BONUS: Record<string, number> = {
+  excellent: 30, good: 30, intermediate: 20, bad: 5, horrible: 5, no: 0,
+}
+
 function scoreWayTags(tags: Record<string, string>, nearCoast: boolean): number {
   let s = 0
   if (tags.sac_scale) s += 60
-  // "no" è un valore valido di trail_visibility — significa che il sentiero NON è visibile sul
-  // terreno, il caso peggiore possibile, non semplicemente "assente". Contarlo come le altre
-  // presenze premiava un tratto esplicitamente segnalato come invisibile tanto quanto uno excellent.
-  if (tags.trail_visibility && tags.trail_visibility !== 'no') s += 30
+  if (tags.trail_visibility) s += TRAIL_VISIBILITY_BONUS[tags.trail_visibility] ?? 20
   if (tags.trailblazed === 'yes') s += 20
   if (tags.highway === 'path') s += 25
   if (tags.highway === 'track' && (tags.tracktype === 'grade4' || tags.tracktype === 'grade5')) s += 20
