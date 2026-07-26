@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolvePlaceName, type ResolvedPlace } from '@/lib/routeBuilder/resolvePlace'
 import { padBbox } from '@/lib/overpassTrails'
-import { computeHikingProbability, classifyFinalScore, type Bbox, type ScoredEdge } from '@/lib/routeBuilder/hikingProbability'
+import { computeHikingProbability, classifyTrailScore, type Bbox, type ScoredEdge } from '@/lib/routeBuilder/hikingProbability'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -23,10 +23,18 @@ interface WaySummary {
   tags: Record<string, string>
   lengthKm: number
   segmentCount: number
-  avgScore: number
-  minScore: number
-  maxScore: number
-  tier: ReturnType<typeof classifyFinalScore>
+  // networkScore: appartenenza alla rete (relation + topologia). trailScore: quanto l'arco è
+  // fisicamente un sentiero (tag + contesto + penalità urbane) — è quest'ultimo a determinare il
+  // tier, non il primo (vedi lib/routeBuilder/hikingProbability.ts).
+  avgNetworkScore: number
+  avgTrailScore: number
+  minTrailScore: number
+  maxTrailScore: number
+  tier: ReturnType<typeof classifyTrailScore>
+  // Quota della lunghezza della way marcata come attraversamento urbano (es. una via di paese che
+  // il percorso attraversa) — 0 se la way è interamente "sentiero", pari a lengthKm se è
+  // interamente un tratto di trasferimento.
+  urbanTransferKm: number
   midLat: number
   midLon: number
 }
@@ -48,16 +56,21 @@ function summarizeByWay(edges: ScoredEdge[]): WaySummary[] {
   const summaries: WaySummary[] = []
   for (const [wayId, group] of Array.from(groups)) {
     let lengthM = 0
-    let weightedScore = 0
-    let minScore = Infinity
-    let maxScore = -Infinity
+    let transferM = 0
+    let weightedNetwork = 0
+    let weightedTrail = 0
+    let minTrail = Infinity
+    let maxTrail = -Infinity
     for (const e of group) {
       lengthM += e.distM
-      weightedScore += e.finalScore * e.distM
-      if (e.finalScore < minScore) minScore = e.finalScore
-      if (e.finalScore > maxScore) maxScore = e.finalScore
+      weightedNetwork += e.networkScore * e.distM
+      weightedTrail += e.trailScore * e.distM
+      if (e.trailScore < minTrail) minTrail = e.trailScore
+      if (e.trailScore > maxTrail) maxTrail = e.trailScore
+      if (e.isUrbanTransfer) transferM += e.distM
     }
-    const avgScore = lengthM > 0 ? weightedScore / lengthM : group[0].finalScore
+    const avgNetworkScore = lengthM > 0 ? weightedNetwork / lengthM : group[0].networkScore
+    const avgTrailScore = lengthM > 0 ? weightedTrail / lengthM : group[0].trailScore
     // Punto rappresentativo: il segmento centrale del gruppo (non la media di lat/lon, che
     // "taglierebbe" le curve di un tracciato non rettilineo).
     const mid = group[Math.floor(group.length / 2)]
@@ -68,16 +81,18 @@ function summarizeByWay(edges: ScoredEdge[]): WaySummary[] {
       tags: group[0].tags,
       lengthKm: Math.round(lengthM / 10) / 100,
       segmentCount: group.length,
-      avgScore: Math.round(avgScore),
-      minScore: Math.round(minScore),
-      maxScore: Math.round(maxScore),
-      tier: classifyFinalScore(avgScore),
+      avgNetworkScore: Math.round(avgNetworkScore),
+      avgTrailScore: Math.round(avgTrailScore),
+      minTrailScore: Math.round(minTrail),
+      maxTrailScore: Math.round(maxTrail),
+      tier: classifyTrailScore(avgTrailScore),
+      urbanTransferKm: Math.round(transferM / 10) / 100,
       midLat: mid.midLat,
       midLon: mid.midLon,
     })
   }
 
-  return summaries.sort((a, b) => b.avgScore - a.avgScore)
+  return summaries.sort((a, b) => (b.avgNetworkScore + b.avgTrailScore) - (a.avgNetworkScore + a.avgTrailScore))
 }
 
 function summarize(ways: WaySummary[], excludedWayCount: number) {

@@ -1,17 +1,27 @@
 // Classificatore euristico "probabilità escursionistica" per singolo arco OSM — a differenza di
 // osmGraph.ts (rete grezza per il pathfinding di "Su misura") e overpassTrails.ts (solo relation
 // route= già curate, per "Esistenti"), qui si valuta OGNI arco percorribile del bbox con un
-// punteggio a sottocategorie (relation/way/context/topologia), per intercettare sentieri reali mai
-// assemblati in una relation — il caso che lascia "Esistenti" vuoto in zone poco mappate.
+// punteggio a sottocategorie, per intercettare sentieri reali mai assemblati in una relation — il
+// caso che lascia "Esistenti" vuoto in zone poco mappate.
+//
+// Distingue due domande diverse, tenute deliberatamente separate invece di un unico numero:
+//  - networkScore = quanto l'arco appartiene a una rete escursionistica riconosciuta (relation +
+//    topologia). Un arco può avere networkScore alto pur non essendo, di per sé, un sentiero — es.
+//    il tratto di via del paese che un percorso CAI reale attraversa per raggiungere il trailhead.
+//  - trailScore   = quanto l'arco è FISICAMENTE un sentiero (tag della way + contesto + penalità
+//    urbane). È questo il punteggio usato per il tier finale — "fa parte di un percorso" e "è un
+//    tratto naturalistico" sono informazioni diverse, e confonderle classificava vie di paese ben
+//    collegate alla rete come "quasi certo sentiero" solo per la loro appartenenza.
 //
 // Fasi:
-//  1. Filtro    — esclusioni (veto): un arco escluso ha punteggio 0 e non entra nel sottografo di
-//                 topologia, a prescindere dagli altri tag.
-//  2. Probabilità — relationScore + wayScore + contextScore, calcolati indipendentemente così da
-//                 poter tarare o debuggare una categoria alla volta senza toccare le altre.
+//  1. Filtro       — esclusioni (veto): un arco escluso ha punteggio 0 e non entra nel sottografo
+//                     di topologia, a prescindere dagli altri tag.
+//  2. Sottopunteggi — relationScore + wayScore + contextScore + urbanPenalty, calcolati
+//                     indipendentemente così da poter tarare o debuggare una categoria alla volta.
 //  3. Conferma topologica — topologyScore, calcolato sul sottografo "escursionistico" (niente
-//                 residential/unclassified: un paese resta solo un punto di attraversamento, non
-//                 gonfia il componente connesso).
+//                     residential/unclassified, né vie identificate come attraversamento urbano —
+//                     vedi isUrbanTransferWay — così un paese resta un punto di attraversamento
+//                     invece di gonfiare il componente connesso).
 import { fetchOverpass, type OsmRelation } from '@/lib/overpassTrails'
 import { haversineM } from '@/lib/geoUtils'
 
@@ -37,7 +47,12 @@ function isExcluded(tags: Record<string, string>): boolean {
   if (tags.access === 'private' || tags.access === 'no') return true
   if (tags.foot === 'no') return true
   if (tags.highway === 'footway' && (tags.footway === 'sidewalk' || tags.footway === 'crossing')) return true
-  if (tags.indoor === 'yes' || tags.area === 'yes') return true
+  if (tags.indoor === 'yes' || tags.area === 'yes' || tags.location === 'indoor') return true
+  // Un passaggio dentro un edificio può formalmente appartenere a una relation escursionistica
+  // (il percorso ufficiale attraversa un portico/androne) ma non è mai, di per sé, un segmento
+  // escursionistico — a differenza delle vie del paese (vedi isUrbanTransferWay), qui non c'è
+  // nessuna lettura in cui valga la pena mostrarlo come "tratto probabile".
+  if (tags.tunnel === 'building_passage') return true
   return false
 }
 
@@ -155,6 +170,46 @@ function nearestDistM(lat: number, lon: number, points: PoiPoint[]): number {
   return min
 }
 
+// ── Fase 2d — penalità di natura urbana ─────────────────────────────────────
+//
+// Appartenere a una relation escursionistica (relationScore) non significa che UN SINGOLO arco sia
+// fisicamente un sentiero: molti cammini/percorsi CAI reali attraversano il centro di un paese
+// (parcheggio → paese → piazza → sentiero), e quell'attraversamento resta correttamente parte del
+// percorso — ma non va confuso con un tratto naturalistico. Queste penalità riducono solo
+// wayScore/contextScore (trailScore), MAI relationScore/topologyScore (networkScore): l'arco resta
+// nel percorso, cambia solo come lo si descrive.
+
+const ASPHALT_SURFACES = new Set([
+  'asphalt', 'paved', 'concrete', 'paving_stones', 'sett', 'cobblestone', 'concrete:plates', 'concrete:lanes',
+])
+
+// "strada"/"vicinale"/"comunale" volutamente esclusi: nomi come "Strada di Sacco" sono frequenti su
+// tracciati rurali/tratturi reali, non solo su vie di paese — includerli avrebbe penalizzato
+// esattamente il genere di sentiero che questo classificatore vuole recuperare. Il pattern è quindi
+// tenuto stretto (vie urbane inequivocabili) e SEMPRE condizionato alla vicinanza a un centro
+// abitato (vedi isNearSettlement), non applicato da solo.
+const URBAN_STREET_NAME_RE = /\b(via|viale|piazza|corso|vicolo|largo)\b/i
+
+function isUrbanTransferWay(tags: Record<string, string>, isNearSettlement: boolean): boolean {
+  if (!isNearSettlement) return false
+  if (tags.highway === 'footway' || tags.highway === 'pedestrian') return true
+  if (tags.name && URBAN_STREET_NAME_RE.test(tags.name)) return true
+  return false
+}
+
+function computeUrbanPenalty(tags: Record<string, string>, isNearSettlement: boolean): number {
+  let penalty = 0
+  if (isNearSettlement) {
+    if (tags.highway === 'footway') penalty -= 20
+    if (tags.highway === 'pedestrian') penalty -= 20
+    if (tags.name && URBAN_STREET_NAME_RE.test(tags.name)) penalty -= 20
+  }
+  // L'asfalto abbassa la plausibilità "sentiero" ovunque, non solo in paese — anche una pista
+  // forestale asfaltata fuori centro è meno riconoscibile come sentiero.
+  if (ASPHALT_SURFACES.has(tags.surface ?? '')) penalty -= 15
+  return penalty
+}
+
 // ── Fase 3 — conferma topologica ────────────────────────────────────────────
 
 class UnionFind {
@@ -226,7 +281,12 @@ function computeDensityCounts(edges: ScoredEdge[]): number[] {
 }
 
 function applyTopologyScore(edges: ScoredEdge[]) {
-  const hikingEdges = edges.filter(e => !e.excluded && HIKING_HIGHWAY.has(e.highway))
+  // isUrbanTransfer fuori dal sottografo: senza, una via di paese senza il subtag
+  // footway=sidewalk (es. "Via delle Focaiole") resta comunque dentro HIKING_HIGHWAY per tag, e
+  // essendo fisicamente connessa alla stessa rete del sentiero vero propaga componente/densità a
+  // tutto il centro abitato che attraversa — lo stesso identico problema che questa fase dovrebbe
+  // risolvere per i sentieri poco taggati, ma applicato a un tratto urbano.
+  const hikingEdges = edges.filter(e => !e.excluded && !e.isUrbanTransfer && HIKING_HIGHWAY.has(e.highway))
   if (hikingEdges.length === 0) return
 
   const uf = new UnionFind()
@@ -340,7 +400,17 @@ export interface ScoredEdge {
   relationScore: number
   wayScore: number
   contextScore: number
+  urbanPenalty: number
+  // Attraversamento urbano di un percorso escursionistico (es. una via di paese): fa parte
+  // dell'itinerario (relationScore intatto) ma non conta come sentiero fisico né come nodo della
+  // rete escursionistica ai fini della topologia (vedi applyTopologyScore).
+  isUrbanTransfer: boolean
   topologyScore: number
+  // Quanto l'arco appartiene a una rete escursionistica riconosciuta (relation + topologia).
+  networkScore: number
+  // Quanto l'arco è FISICAMENTE un sentiero (tag della way + contesto + penalità urbane) —
+  // indipendente dall'appartenenza a una rete: è questo il punteggio usato per il tier finale.
+  trailScore: number
   finalScore: number
 }
 
@@ -396,14 +466,20 @@ export async function computeHikingProbability(
       let relationScore = 0
       let wayScore = 0
       let contextScore = 0
+      let urbanPenalty = 0
+      let isUrbanTransfer = false
 
       if (!excluded) {
+        const distToSettlement = nearestDistM(midLat, midLon, context.placeNodes)
+        const isNearSettlement = distToSettlement <= SETTLEMENT_PROXIMITY_M
+
         relationScore = relInfo?.score ?? 0
-        if (relInfo?.isRouteFoot && nearestDistM(midLat, midLon, context.placeNodes) > SETTLEMENT_PROXIMITY_M) {
-          relationScore += 25
-        }
+        if (relInfo?.isRouteFoot && !isNearSettlement) relationScore += 25
+
         wayScore = scoreWayTags(way.tags, !!ctx.nearCoast)
         contextScore = scoreProtectedAreas(midLat, midLon, context.areas) + scorePoiProximity(midLat, midLon, ctx.pois ?? [])
+        urbanPenalty = computeUrbanPenalty(way.tags, isNearSettlement)
+        isUrbanTransfer = isUrbanTransferWay(way.tags, isNearSettlement)
       }
 
       edges.push({
@@ -419,7 +495,11 @@ export async function computeHikingProbability(
         relationScore,
         wayScore,
         contextScore,
+        urbanPenalty,
+        isUrbanTransfer,
         topologyScore: 0,
+        networkScore: 0,
+        trailScore: 0,
         finalScore: 0,
       })
     }
@@ -428,19 +508,27 @@ export async function computeHikingProbability(
   applyTopologyScore(edges)
 
   for (const e of edges) {
-    e.finalScore = e.excluded ? 0 : e.relationScore + e.wayScore + e.contextScore + e.topologyScore
+    if (e.excluded) continue
+    e.networkScore = e.relationScore + e.topologyScore
+    e.trailScore = e.wayScore + e.contextScore + e.urbanPenalty
+    e.finalScore = e.networkScore + e.trailScore
   }
 
   return { edges }
 }
 
-// ── Classificazione finale ──────────────────────────────────────────────────
+// ── Classificazione ──────────────────────────────────────────────────────────
+//
+// Applicata a trailScore, non a finalScore: appartenere a una rete riconosciuta (networkScore) fa
+// includere un arco, ma il tier deve rispondere "è fisicamente un sentiero?", non "fa parte di un
+// percorso?" — altrimenti una via di paese ben collegata alla rete torna a sembrare "quasi certo"
+// solo per la sua appartenenza, esattamente il problema che questa fase corregge.
 
 export type HikingProbabilityTier = 'quasi_certo' | 'molto_probabile' | 'possibile' | 'improbabile'
 
-export function classifyFinalScore(score: number): HikingProbabilityTier {
-  if (score >= 150) return 'quasi_certo'
-  if (score >= 80) return 'molto_probabile'
-  if (score >= 40) return 'possibile'
+export function classifyTrailScore(trailScore: number): HikingProbabilityTier {
+  if (trailScore >= 150) return 'quasi_certo'
+  if (trailScore >= 80) return 'molto_probabile'
+  if (trailScore >= 40) return 'possibile'
   return 'improbabile'
 }
