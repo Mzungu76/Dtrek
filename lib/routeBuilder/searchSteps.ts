@@ -39,6 +39,20 @@ const MAX_INTERPRETED_PLACES = 3
 // di search-resolve/route.ts perché qui arriva DOPO tier0/tier1, già in corso da un po' quando si
 // raggiunge questo punto, entro lo stesso tetto duro di 60s dell'intero step.
 const PROBABILITY_SOFT_DEADLINE_MS = 35_000
+// Il raggio scelto dall'utente per "Esistenti" (fino a 10 km, vedi ALLOWED_RADIUS_KM) è pensato per
+// una ricerca di relation già curate — leggera, un solo elenco di nomi. Il ripiego "probabilità"
+// interroga invece TUTTA la rete camminabile con tag completi: alla stessa scala di raggio la
+// query Overpass diventa un ordine di grandezza più pesante, causa osservata in produzione di
+// timeout riproducibili a 45s. "Su misura" ha lo stesso problema e lo limita così (vedi
+// BUILD_DINTORNI_MAX_KM in buildSteps.ts): stesso tetto qui, indipendente dal raggio scelto
+// dall'utente per la ricerca vera e propria.
+const PROBABILITY_MAX_RADIUS_KM = 3
+
+/** Bbox per il ripiego "probabilità" — raggio sempre limitato a PROBABILITY_MAX_RADIUS_KM, a
+ * prescindere dal raggio scelto dall'utente per la ricerca relation (vedi commento sopra). */
+export function probabilityBboxFor(lat: number, lon: number, radiusKm: number): Bbox {
+  return padBbox([lat, lon, lat, lon], Math.min(radiusKm, PROBABILITY_MAX_RADIUS_KM)) as Bbox
+}
 
 export function sanitizeSearchRadiusKm(raw: unknown): number {
   const n = Number(raw)
@@ -215,7 +229,7 @@ export async function findExistingRoutesForQuery(
   let probabilityRoutes: FoundRouteResult[] = []
   if (place && candidates.length === 0) {
     try {
-      const bbox = padBbox([place.lat, place.lon, place.lat, place.lon], radiusKm) as Bbox
+      const bbox = probabilityBboxFor(place.lat, place.lon, radiusKm)
       // Tetto morbido, non solo un try/catch sugli errori: findProbabilityRoutes fa 3 chiamate
       // Overpass che possono singolarmente arrivare vicino al proprio timeout interno (osservato
       // in produzione anche su resolveFoundRoutesWithPoi, che per lo stesso motivo ha già questo
