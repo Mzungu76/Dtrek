@@ -247,9 +247,36 @@ export async function findExistingRoutesForQuery(
  * e una stima provvisoria di Sicurezza/Trail Score (lib/routeBuilder/provisionalScore.ts) — la
  * parte più pesante e variabile della ricerca "Esistenti" (fino a `cap` risoluzioni Overpass in
  * parallelo), isolata in un passo a parte per lo stesso motivo del pathfinding di "Su misura".
+ *
+ * `probabilityBbox`, se passato, avvia IN PARALLELO (non dopo) il ripiego "probabilità" — trovare
+ * qualche candidato relation non garantisce che la sua traccia si risolva davvero (osservato in
+ * produzione: relation lontane/incomplete possono far scadere questa stessa risoluzione contro il
+ * proprio tetto morbido), quindi il caso "candidati trovati ma nessuno risolto" resta comunque
+ * scoperto se il ripiego parte solo DOPO aver scoperto il fallimento — a quel punto non resterebbe
+ * budget di tempo per tentarlo entro lo stesso tetto. Se la risoluzione delle relation produce
+ * comunque qualcosa, quella resta la fonte preferita (dati reali, curati) e il ripiego viene
+ * scartato.
  */
 export async function resolveFoundRoutesWithPoi(
   candidates: HikingRouteCandidate[], cap: number, destination: DestinationPoint | null = null,
+  probabilityBbox: Bbox | null = null,
+): Promise<FoundRouteResult[]> {
+  const relationResolved = resolveRelationCandidates(candidates, cap, destination)
+  if (!probabilityBbox) return relationResolved
+
+  const [relationRoutes, probabilityRoutes] = await Promise.all([
+    relationResolved,
+    findProbabilityRoutes(probabilityBbox).catch(e => {
+      console.error('[searchSteps] Ripiego probabilità (in parallelo alla risoluzione relation) fallito:', e)
+      return [] as FoundRouteResult[]
+    }),
+  ])
+
+  return relationRoutes.length > 0 ? relationRoutes : probabilityRoutes
+}
+
+async function resolveRelationCandidates(
+  candidates: HikingRouteCandidate[], cap: number, destination: DestinationPoint | null,
 ): Promise<FoundRouteResult[]> {
   const resolved = await Promise.all(candidates.slice(0, cap).map(async c => {
     const track = await resolveTrackForCandidate({ osmId: c.id, gpxUrl: null })

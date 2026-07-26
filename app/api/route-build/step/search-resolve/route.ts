@@ -5,7 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { resolveFoundRoutesWithPoi, MAX_EAGER_RESOLVE } from '@/lib/routeBuilder/searchSteps'
-import type { HikingRouteCandidate } from '@/lib/overpassTrails'
+import { padBbox, type HikingRouteCandidate } from '@/lib/overpassTrails'
+import type { Bbox } from '@/lib/routeBuilder/hikingProbability'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -58,9 +59,17 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
   const candidates = rawCandidates.map(parseCandidate).filter((c: HikingRouteCandidate | null): c is HikingRouteCandidate => c != null)
   const destination = typeof body?.destLat === 'number' && typeof body?.destLon === 'number'
     ? { lat: body.destLat, lon: body.destLon } : null
+  // Trovare candidati relation non garantisce che la loro traccia si risolva davvero (relation
+  // lontane/incomplete possono fallire) — se il chiamante passa il luogo già risolto (vedi
+  // RouteBuilder.tsx, che lo ha da step/search-find), il ripiego "probabilità" gira IN PARALLELO
+  // alla risoluzione delle relation invece che dopo un eventuale fallimento, entro lo stesso tetto.
+  const radiusKm = typeof body?.radiusKm === 'number' ? body.radiusKm : null
+  const probabilityBbox: Bbox | null = typeof body?.placeLat === 'number' && typeof body?.placeLon === 'number' && radiusKm
+    ? (padBbox([body.placeLat, body.placeLon, body.placeLat, body.placeLon], radiusKm) as Bbox)
+    : null
 
   const outcome = await Promise.race([
-    resolveFoundRoutesWithPoi(candidates, MAX_EAGER_RESOLVE, destination).then(foundRoutes => ({ kind: 'done' as const, foundRoutes })),
+    resolveFoundRoutesWithPoi(candidates, MAX_EAGER_RESOLVE, destination, probabilityBbox).then(foundRoutes => ({ kind: 'done' as const, foundRoutes })),
     new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), SOFT_DEADLINE_MS)),
   ])
   if (outcome.kind === 'timeout') {

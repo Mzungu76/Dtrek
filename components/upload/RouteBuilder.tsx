@@ -386,6 +386,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const resolveRes = find.candidates.length > 0
         ? await postJSON('/api/route-build/step/search-resolve', {
             candidates: find.candidates, destLat: destLat ?? undefined, destLon: destLon ?? undefined,
+            // Luogo già risolto + raggio: permette al server di tentare il ripiego "probabilità" IN
+            // PARALLELO alla risoluzione delle relation (vedi searchSteps.ts), per il caso in cui
+            // dei candidati vengono trovati ma poi nessuno si risolve in una traccia reale.
+            placeLat: find.place?.lat, placeLon: find.place?.lon, radiusKm: searchRadiusKm,
           })
         : { ok: true, data: { foundRoutes: [] } }
       const data = {
