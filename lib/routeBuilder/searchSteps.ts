@@ -324,9 +324,14 @@ export async function resolveFoundRoutesWithPoi(
     new Promise<FoundRouteResult[]>(resolve => setTimeout(() => resolve([]), PROBABILITY_SOFT_DEADLINE_MS)),
   ])
 
-  const [relationRoutes, probabilityRoutes] = await Promise.all([relationResolved, probabilityWithDeadline])
-
-  return relationRoutes.length > 0 ? relationRoutes : probabilityRoutes
+  // Non un Promise.all: se le relation producono già qualcosa, quello resta comunque l'unico
+  // risultato usato (riga sotto) — aspettare anche probabilityWithDeadline (fino a 35s) solo per
+  // scartarne il risultato è il motivo concreto per cui una ricerca risolta da cache in pochi
+  // secondi restava comunque bloccata fino a ~46s in produzione. Il ripiego resta comunque avviato
+  // in parallelo fin da subito (sopra), pronto a essere atteso SOLO se davvero serve.
+  const relationRoutes = await relationResolved
+  if (relationRoutes.length > 0) return relationRoutes
+  return probabilityWithDeadline
 }
 
 // Tetto per candidato, non solo sul gruppo intero (vedi SOFT_DEADLINE_MS in
