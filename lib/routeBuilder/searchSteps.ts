@@ -16,6 +16,8 @@ import { resolveTrackForCandidate } from '@/lib/routeBuilder/resolveTrack'
 import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
 import { fetchPoisNearPolyline } from '@/lib/routeBuilder/nearbyPois'
 import { computeProvisionalScore } from '@/lib/routeBuilder/provisionalScore'
+import { findProbabilityRoutes } from '@/lib/routeBuilder/probabilityRoutes'
+import type { Bbox } from '@/lib/routeBuilder/hikingProbability'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { DEFAULT_RADIUS_KM, ALLOWED_RADIUS_KM, DESTINATION_PROXIMITY_KM } from '@/lib/routeBuilder/buildConstants'
 import { haversineM, minDistToTrack } from '@/lib/geoUtils'
@@ -142,6 +144,9 @@ async function findTier0(
 export interface FindResult {
   place: ResolvedPlace | null
   candidates: HikingRouteCandidate[]
+  // Percorsi già completamente risolti (traccia+POI+stima), non altri "candidati" da risolvere —
+  // vedi il commento sopra il loro popolamento in findExistingRoutesForQuery.
+  probabilityRoutes: FoundRouteResult[]
   prefill: InterpretedPreferences | null
   tierReached: 'tier0' | 'tier1'
   escalateToAi: boolean
@@ -196,9 +201,26 @@ export async function findExistingRoutesForQuery(
     }
   }
 
+  // Ripiego gratuito (nessuna chiave AI, nessun costo per-utente): se il luogo si è risolto ma
+  // nessuna relation route= curata è stata trovata, prova a costruire percorsi concreti dai
+  // frammenti OSM grezzi (lib/routeBuilder/hikingProbability.ts) — il caso motivante originale di
+  // questo intero classificatore: zone poco mappate risultavano "senza percorsi documentati" anche
+  // quando la rete camminabile esiste davvero, solo mai assemblata in una relation. Già risolti
+  // (traccia+POI+stima), non passano da resolveFoundRoutesWithPoi come i candidati normali — quel
+  // passo serve a recuperare la traccia di una relation OSM, questi non ne hanno una da recuperare.
+  let probabilityRoutes: FoundRouteResult[] = []
+  if (place && candidates.length === 0) {
+    try {
+      const bbox = padBbox([place.lat, place.lon, place.lat, place.lon], radiusKm) as Bbox
+      probabilityRoutes = await findProbabilityRoutes(bbox)
+    } catch (e) {
+      console.error('[searchSteps] Ripiego probabilità fallito:', e)
+    }
+  }
+
   const escalateToAi = useAi && !place && candidates.length === 0
 
-  return { place, candidates, prefill, tierReached, escalateToAi, interpretedPlacesCount }
+  return { place, candidates, probabilityRoutes, prefill, tierReached, escalateToAi, interpretedPlacesCount }
 }
 
 /**

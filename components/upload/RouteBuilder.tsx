@@ -375,6 +375,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const find = findRes.data as {
         place: { lat: number; lon: number; displayName: string } | null
         candidates: unknown[]
+        // Percorsi già completamente risolti dal ripiego "probabilità" (vedi searchSteps.ts) —
+        // presenti solo quando `candidates` è vuoto, mai da passare a search-resolve (nessuna
+        // relation OSM da recuperare, sono già pronti).
+        probabilityRoutes: FoundRouteResult[]
         prefill: { routeType?: RouteType; targetDistanceKm?: number; targetElevationM?: number; desiredPoiTypes?: PoiType[]; environmentPrefs?: HikerEnvironmentPrefKey[] } | null
         tierReached: string
         escalateToAi: boolean
@@ -384,7 +388,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             candidates: find.candidates, destLat: destLat ?? undefined, destLon: destLon ?? undefined,
           })
         : { ok: true, data: { foundRoutes: [] } }
-      const data = { place: find.place, prefill: find.prefill, foundRoutes: resolveRes.data.foundRoutes ?? [], escalateToAi: find.escalateToAi }
+      const data = {
+        place: find.place, prefill: find.prefill,
+        foundRoutes: [...(resolveRes.data.foundRoutes ?? []), ...(find.probabilityRoutes ?? [])],
+        escalateToAi: find.escalateToAi,
+      }
 
       postJSON('/api/route-build/step/search-log', {
         query: query.trim(), useAi, tierReached: find.escalateToAi ? `${find.tierReached}_escalated` : find.tierReached,
@@ -421,7 +429,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
         const items: ResultItem[] = found.map(r => ({
           kind: 'found',
           data: {
-            name: r.name, osmId: r.id,
+            // Un id sintetico (dal ripiego "probabilità", vedi probabilityRoutes.ts) è sempre
+            // negativo — un vero id di relation OSM è sempre positivo — proprio per poter fare
+            // questa distinzione qui: osmId resta assente per quei percorsi, non essendoci nessuna
+            // relation reale da poter ri-recuperare in futuro (si comportano come un import GPX).
+            name: r.name, osmId: r.id > 0 ? r.id : undefined,
             track: {
               trackPoints: r.trackPoints, routePolyline: r.routePolyline, distanceMeters: r.distanceMeters,
               elevationGain: r.elevationGain, elevationLoss: r.elevationLoss, altitudeMax: r.altitudeMax,
