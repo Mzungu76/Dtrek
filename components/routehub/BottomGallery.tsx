@@ -120,16 +120,18 @@ function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
       L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
       const line = L.polyline(polyline, { color: '#7dd3fc', weight: 4, opacity: 0.95 }).addTo(map)
       const fit = () => map.fitBounds(line.getBounds(), { padding: [4, 4] })
-      fit()
 
       // Stessa correzione di CoverMap.tsx: appena montata via IntersectionObserver (vedi sopra),
-      // il quadrato di galleria può non avere ancora la sua dimensione finale — senza questo la
-      // mappa carica le tile solo per il riquadro sbagliato misurato a quel momento.
+      // il quadrato di galleria può non avere ancora la sua dimensione finale — passando anche il
+      // primissimo fit dalla stessa coda rAF del ResizeObserver invece di chiamarlo subito, si
+      // evita il doppio fit (uno sbagliato seguito da una correzione visibile).
       let raf = 0
-      observer = new ResizeObserver(() => {
+      const scheduleFit = () => {
         cancelAnimationFrame(raf)
         raf = requestAnimationFrame(() => { if (!cancelled) { map.invalidateSize(); fit() } })
-      })
+      }
+      scheduleFit()
+      observer = new ResizeObserver(scheduleFit)
       observer.observe(mapRef.current)
     })
     return () => {

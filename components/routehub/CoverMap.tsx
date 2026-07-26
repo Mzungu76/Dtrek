@@ -33,19 +33,22 @@ export default function CoverMap({ polyline }: Props) {
       L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
       const line = L.polyline(polyline, { color: '#f2cd9d', weight: 5, opacity: 0.95 }).addTo(map)
       const fit = () => map.fitBounds(line.getBounds(), { padding: [28, 28] })
-      fit()
 
       // Il contenitore (una card dentro il carosello swipeable di RouteHub) può essere ancora a
       // dimensione zero/sbagliata nel momento esatto in cui L.map() misura se stesso — succede a
-      // intermittenza, non sempre (dipende dal timing dello swipe/layout), e senza correzione la
-      // mappa carica le tile solo per il riquadro sbagliato misurato all'inizio, lasciando il
-      // resto vuoto. Un ResizeObserver rifà sia invalidateSize (tile) sia fitBounds (inquadratura)
-      // ogni volta che il contenitore raggiunge la sua vera dimensione, non solo una tantum.
+      // intermittenza, non sempre (dipende dal timing dello swipe/layout). Prima chiamava fit()
+      // subito e lasciava al ResizeObserver il compito di correggerlo un istante dopo: quella
+      // correzione era visibile come un piccolo "sfarfallio/aggiornamento" della mappa proprio
+      // nel momento in cui l'utente atterra sulla card. Passando dalla stessa coda (rAF) sia per
+      // il primo fit sia per le correzioni successive, il primo fit arriva già alla dimensione
+      // giusta nella stragrande maggioranza dei casi, invece di uno sbagliato seguito da uno giusto.
       let raf = 0
-      observer = new ResizeObserver(() => {
+      const scheduleFit = () => {
         cancelAnimationFrame(raf)
         raf = requestAnimationFrame(() => { if (!cancelled) { map.invalidateSize(); fit() } })
-      })
+      }
+      scheduleFit()
+      observer = new ResizeObserver(scheduleFit)
       observer.observe(mapRef.current)
     })
     return () => {

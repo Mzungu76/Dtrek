@@ -163,14 +163,21 @@ export default function ResocontoHub({ id }: { id?: string }) {
   useCtsUpdated(() => { getAllActivities().then(applyList).catch(() => {}) })
 
   // Background best-effort cover-photo fetch for the gallery/carousel thumbnails (capped —
-  // this is a nice-to-have visual enhancement, not core functionality).
+  // this is a nice-to-have visual enhancement, not core functionality). Stessa selezione di
+  // `cover()` più sotto (salvata dall'utente, altrimenti pickBestCoverPhoto) invece della prima
+  // foto qualunque — altrimenti questa copertina "veloce" mostrata appena si atterra su
+  // un'escursione differiva quasi sempre da quella "vera" calcolata poco dopo (quando `photos`/
+  // `activity` si aggiornano per quell'id), con un fastidioso cambio foto visibile a schermo.
   useEffect(() => {
     if (rawActivities.length === 0) return
     let cancelled = false
     rawActivities.slice(0, COVER_FETCH_CAP).forEach(a => {
       fetchActivityPhotos(a.id).then(ph => {
-        if (cancelled || !ph[0]) return
-        setCovers(prev => prev[a.id] ? prev : { ...prev, [a.id]: ph[0].url })
+        if (cancelled || ph.length === 0) return
+        const savedId = localStorage.getItem(`dtrek_cover_${a.id}`)
+        const chosen = (savedId && ph.find(p => p.id === savedId)) || pickBestCoverPhoto(ph)
+        if (!chosen) return
+        setCovers(prev => prev[a.id] ? prev : { ...prev, [a.id]: chosen.url })
       }).catch(() => {})
     })
     return () => { cancelled = true }
