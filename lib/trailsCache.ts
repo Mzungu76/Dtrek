@@ -85,10 +85,16 @@ export async function getCachedTrail(osmRelationId: number): Promise<TrailCacheR
 // osm_relation_id already makes an `IN (...)` lookup on ~150 ids fast.
 export async function getCachedTrailsInBbox(osmRelationIds: number[]): Promise<Map<number, TrailCacheRow>> {
   if (osmRelationIds.length === 0) return new Map()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('trails')
     .select('*')
     .in('osm_relation_id', osmRelationIds)
+
+  if (error) {
+    console.error('[trailsCache] getCachedTrailsInBbox query failed', { ids: osmRelationIds, error })
+  } else {
+    console.log('[trailsCache] getCachedTrailsInBbox', { requested: osmRelationIds.length, found: (data ?? []).length, ids: osmRelationIds })
+  }
 
   return new Map((data ?? []).map(row => [row.osm_relation_id, mapCacheRow(row)]))
 }
