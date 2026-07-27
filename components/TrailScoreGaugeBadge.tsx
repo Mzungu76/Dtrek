@@ -152,7 +152,13 @@ export function TrailScoreGaugeBadge({
     scoreLines.push({ key: 'fit', label: 'Idoneità per te', value: personalSafety.personalFit.label })
     scoreLines.push({
       key: 'advice', label: 'Consiglio', value: personalSafety.advice.label, color: personalSafety.advice.color,
-      extra: disclaimer === 'popup' ? <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span> : null,
+      // "popup": asterisco cliccabile che apre il disclaimer (copertine, dove il testo non c'è).
+      // "inline": solo un richiamo statico — il disclaimer per esteso è già visibile sotto.
+      extra: disclaimer === 'popup'
+        ? <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span>
+        : disclaimer === 'inline'
+          ? <span className="ml-0.5 text-white/50">*</span>
+          : null,
     })
   }
 
@@ -169,122 +175,126 @@ export function TrailScoreGaugeBadge({
   const curveR = rOuter + swOuter / 2
 
   return (
-    <div
-      className={`flex gap-2.5 ${captionLayout === 'stacked' ? 'items-start' : 'items-center'}`}
-      style={{ opacity: mounted ? 1 : 0, transform: mounted ? 'scale(1)' : 'scale(0.9)', transition: 'opacity 400ms ease, transform 400ms cubic-bezier(.22,.8,.25,1)' }}
-    >
-      <div className="relative shrink-0" style={{ width: size, height: size }}>
-        <svg width={size} height={size} style={{ overflow: 'visible' }}>
-          <circle cx={cx} cy={cy} r={rOuter} fill="none" stroke={NEUTRAL_TRACK} strokeWidth={swOuter} />
+    <div style={{ opacity: mounted ? 1 : 0, transform: mounted ? 'scale(1)' : 'scale(0.9)', transition: 'opacity 400ms ease, transform 400ms cubic-bezier(.22,.8,.25,1)' }}>
+      <div className={`flex gap-2.5 ${captionLayout === 'stacked' ? 'items-start' : 'items-center'}`}>
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
+          <svg width={size} height={size} style={{ overflow: 'visible' }}>
+            <circle cx={cx} cy={cy} r={rOuter} fill="none" stroke={NEUTRAL_TRACK} strokeWidth={swOuter} />
 
-          {!personalSafety && safety != null && (
-            <circle
-              cx={cx} cy={cy} r={rOuter} fill="none" stroke={safety.color} strokeWidth={swOuter} strokeLinecap="round"
-              strokeDasharray={cOuter} strokeDashoffset={cOuter - outerLen} transform={`rotate(-90 ${cx} ${cy})`}
-              style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(.22,.8,.25,1)' }}
-            />
-          )}
-
-          {personalSafety && (
-            <>
+            {!personalSafety && safety != null && (
               <circle
-                cx={cx} cy={cy} r={rOuter} fill="none" stroke={personalSafety.objective.color} strokeWidth={swOuter} strokeLinecap="round"
-                strokeDasharray={`${objectiveArcLen} ${cOuter - objectiveArcLen}`} transform={`rotate(-90 ${cx} ${cy})`}
-                style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1)' }}
+                cx={cx} cy={cy} r={rOuter} fill="none" stroke={safety.color} strokeWidth={swOuter} strokeLinecap="round"
+                strokeDasharray={cOuter} strokeDashoffset={cOuter - outerLen} transform={`rotate(-90 ${cx} ${cy})`}
+                style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(.22,.8,.25,1)' }}
               />
-              {bonusPct > 0 && (
-                <circle
-                  cx={cx} cy={cy} r={rOuter} fill="none" stroke={personalSafety.personalFit.color} strokeWidth={swOuter} strokeLinecap="round"
-                  opacity={0.65}
-                  strokeDasharray={`${bonusArcLen} ${cOuter - bonusArcLen}`}
-                  transform={`rotate(${-90 + objectivePct * 360} ${cx} ${cy})`}
-                  style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1) 120ms' }}
-                />
-              )}
-              {penaltyPct > 0 && (
-                <circle
-                  cx={cx} cy={cy} r={rOuter} fill="none" stroke="#000" strokeWidth={swOuter * 1.15} strokeLinecap="round"
-                  opacity={0.5}
-                  strokeDasharray={`${penaltyArcLen} ${cOuter - penaltyArcLen}`}
-                  transform={`rotate(${-90 + finalPct * 360} ${cx} ${cy})`}
-                  style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1) 120ms' }}
-                />
-              )}
-            </>
-          )}
+            )}
 
-          <circle cx={cx} cy={cy} r={rInner} fill="none" stroke={NEUTRAL_TRACK} strokeWidth={swInner} />
-          {total != null && (
-            <circle
-              cx={cx} cy={cy} r={rInner} fill="none" stroke={totalColor} strokeWidth={swInner} strokeLinecap="round"
-              strokeDasharray={cInner} strokeDashoffset={cInner - innerLen} transform={`rotate(-90 ${cx} ${cy})`}
-              style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(.22,.8,.25,1) 120ms' }}
-            />
-          )}
-          {noticeDots.map((n, i) => {
-            const angle = (-90 + 40 + (360 / Math.max(noticeDots.length, 1)) * i) * (Math.PI / 180)
-            const dx = cx + rOuter * Math.cos(angle)
-            const dy = cy + rOuter * Math.sin(angle)
-            return (
+            {personalSafety && (
+              <>
+                <circle
+                  cx={cx} cy={cy} r={rOuter} fill="none" stroke={personalSafety.objective.color} strokeWidth={swOuter} strokeLinecap="round"
+                  strokeDasharray={`${objectiveArcLen} ${cOuter - objectiveArcLen}`} transform={`rotate(-90 ${cx} ${cy})`}
+                  style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1)' }}
+                />
+                {bonusPct > 0 && (
+                  <circle
+                    cx={cx} cy={cy} r={rOuter} fill="none" stroke={personalSafety.personalFit.color} strokeWidth={swOuter} strokeLinecap="round"
+                    opacity={0.65}
+                    strokeDasharray={`${bonusArcLen} ${cOuter - bonusArcLen}`}
+                    transform={`rotate(${-90 + objectivePct * 360} ${cx} ${cy})`}
+                    style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1) 120ms' }}
+                  />
+                )}
+                {penaltyPct > 0 && (
+                  <circle
+                    cx={cx} cy={cy} r={rOuter} fill="none" stroke="#000" strokeWidth={swOuter * 1.15} strokeLinecap="round"
+                    opacity={0.5}
+                    strokeDasharray={`${penaltyArcLen} ${cOuter - penaltyArcLen}`}
+                    transform={`rotate(${-90 + finalPct * 360} ${cx} ${cy})`}
+                    style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1) 120ms' }}
+                  />
+                )}
+              </>
+            )}
+
+            <circle cx={cx} cy={cy} r={rInner} fill="none" stroke={NEUTRAL_TRACK} strokeWidth={swInner} />
+            {total != null && (
               <circle
-                key={i} cx={dx} cy={dy} r={dotR} fill={NOTICE_DOT_COLOR[n.severity]} stroke="#fff" strokeWidth={1.25}
-                style={{ opacity: mounted ? 1 : 0, transition: `opacity 300ms ease ${260 + i * 80}ms` }}
+                cx={cx} cy={cy} r={rInner} fill="none" stroke={totalColor} strokeWidth={swInner} strokeLinecap="round"
+                strokeDasharray={cInner} strokeDashoffset={cInner - innerLen} transform={`rotate(-90 ${cx} ${cy})`}
+                style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(.22,.8,.25,1) 120ms' }}
               />
-            )
-          })}
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span className="font-display font-black leading-none text-white tabular-nums" style={{ fontSize: size * 0.32, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
-            {total != null ? Math.round(animatedTotal) : '—'}
-          </span>
-        </div>
-        {vetoed && (
-          <span
-            title="Sconsigliato, rischio elevato"
-            className="absolute -top-1 -right-1 flex items-center justify-center rounded-full bg-red-600 text-white leading-none"
-            style={{ width: size * 0.3, height: size * 0.3, fontSize: size * 0.2 }}
-          >
-            ⚠
-          </span>
-        )}
-      </div>
-      {showLabel && (scoreLines.length > 0 || disclaimer === 'inline') && (
-        <div className={`flex flex-col min-w-0 ${captionLayout === 'stacked' ? 'gap-2.5' : 'gap-1'}`}>
-          {captionLayout === 'curved' ? (
-            // Una riga per punteggio, col margine che segue la curva del cerchio (equazione della
-            // circonferenza) invece di un gap piatto uguale per tutte — pensato per le copertine
-            // compatte (schede chiuse), dove il testo sta sempre su una sola riga.
-            scoreLines.map((line, i) => {
-              const lineCenter = i * (LABEL_LINE_H + LABEL_LINE_GAP) + LABEL_LINE_H / 2
-              const dy = lineCenter - stackHeight / 2
-              const curveEdge = Math.sqrt(Math.max(0, curveR * curveR - dy * dy))
-              const marginLeft = Math.min(0, curveEdge - curveR)
+            )}
+            {noticeDots.map((n, i) => {
+              const angle = (-90 + 40 + (360 / Math.max(noticeDots.length, 1)) * i) * (Math.PI / 180)
+              const dx = cx + rOuter * Math.cos(angle)
+              const dy = cy + rOuter * Math.sin(angle)
               return (
-                <div key={line.key} style={{ marginLeft }}>
-                  <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ color: line.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-                    <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">{line.label}</span>
+                <circle
+                  key={i} cx={dx} cy={dy} r={dotR} fill={NOTICE_DOT_COLOR[n.severity]} stroke="#fff" strokeWidth={1.25}
+                  style={{ opacity: mounted ? 1 : 0, transition: `opacity 300ms ease ${260 + i * 80}ms` }}
+                />
+              )
+            })}
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="font-display font-black leading-none text-white tabular-nums" style={{ fontSize: size * 0.32, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
+              {total != null ? Math.round(animatedTotal) : '—'}
+            </span>
+          </div>
+          {vetoed && (
+            <span
+              title="Sconsigliato, rischio elevato"
+              className="absolute -top-1 -right-1 flex items-center justify-center rounded-full bg-red-600 text-white leading-none"
+              style={{ width: size * 0.3, height: size * 0.3, fontSize: size * 0.2 }}
+            >
+              ⚠
+            </span>
+          )}
+        </div>
+        {showLabel && scoreLines.length > 0 && (
+          <div className={`flex flex-col min-w-0 ${captionLayout === 'stacked' ? 'gap-2.5' : 'gap-1'}`}>
+            {captionLayout === 'curved' ? (
+              // Una riga per punteggio, col margine che segue la curva del cerchio (equazione
+              // della circonferenza) invece di un gap piatto uguale per tutte — pensato per le
+              // copertine compatte (schede chiuse), dove il testo sta sempre su una sola riga.
+              scoreLines.map((line, i) => {
+                const lineCenter = i * (LABEL_LINE_H + LABEL_LINE_GAP) + LABEL_LINE_H / 2
+                const dy = lineCenter - stackHeight / 2
+                const curveEdge = Math.sqrt(Math.max(0, curveR * curveR - dy * dy))
+                const marginLeft = Math.min(0, curveEdge - curveR)
+                return (
+                  <div key={line.key} style={{ marginLeft }}>
+                    <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ color: line.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                      <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">{line.label}</span>
+                      {line.value}
+                      {line.extra}
+                    </span>
+                  </div>
+                )
+              })
+            ) : (
+              // Etichetta e valore su righe separate — in mobile la colonna di testo è troppo
+              // stretta perché "ETICHETTA valore" stia su una riga sola: qui il valore va a capo
+              // sotto la propria etichetta invece di spezzarsi a metà parola accanto ad essa.
+              scoreLines.map(line => (
+                <div key={line.key} className="min-w-0">
+                  <p className="text-white/55 text-[10px] font-semibold uppercase tracking-wide leading-tight">{line.label}</p>
+                  <p className="text-sm font-bold leading-snug mt-0.5" style={{ color: line.color ?? '#fff', textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
                     {line.value}
                     {line.extra}
-                  </span>
+                  </p>
                 </div>
-              )
-            })
-          ) : (
-            // Etichetta e valore su righe separate — in mobile la colonna di testo è troppo
-            // stretta perché "ETICHETTA valore" stia su una riga sola: qui il valore va a capo
-            // sotto la propria etichetta invece di spezzarsi a metà parola accanto ad essa.
-            scoreLines.map(line => (
-              <div key={line.key} className="min-w-0">
-                <p className="text-white/55 text-[10px] font-semibold uppercase tracking-wide leading-tight">{line.label}</p>
-                <p className="text-sm font-bold leading-snug mt-0.5" style={{ color: line.color ?? '#fff', textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-                  {line.value}
-                  {line.extra}
-                </p>
-              </div>
-            ))
-          )}
-          {disclaimer === 'inline' && <SafetyDisclaimer variant="inline" dark />}
-        </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      {/* Disclaimer a piena larghezza sotto anello+didascalie, non stretto nella colonna di testo
+          accanto all'anello — nel pannello "Punteggio complessivo" quella colonna è troppo stretta
+          perché ci stia comodamente un intero paragrafo di testo. */}
+      {showLabel && disclaimer === 'inline' && (
+        <div className="mt-3"><SafetyDisclaimer variant="inline" dark /></div>
       )}
     </div>
   )

@@ -17,7 +17,7 @@ export default function SafetyDisclaimer({ variant, dark }: { variant: 'popup' |
 
   if (variant === 'inline') {
     return (
-      <p className={`text-[11px] leading-snug ${dark ? 'text-white/55' : 'text-stone-400'}`}>
+      <p className={`text-[10px] leading-snug ${dark ? 'text-white/45' : 'text-stone-400'}`}>
         {SAFETY_DISCLAIMER_TEXT}
       </p>
     )
