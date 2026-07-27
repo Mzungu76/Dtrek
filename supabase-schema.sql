@@ -329,6 +329,14 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_use_history_data BOOLEAN N
 -- web è il motore stesso della funzione, non un extra disattivabile.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ai_web_search BOOLEAN NOT NULL DEFAULT true;
 
+-- Consenso al terzo livello (AI + ricerca web) della risoluzione di un luogo noto nel route
+-- builder (lib/routeBuilder/resolvePlace.ts) — usato solo quando Nominatim e la ricerca Overpass
+-- per nome non trovano nulla. Default ON/opt-out come gli altri due sopra, ma logicamente separato
+-- (un luogo specifico digitato dall'utente, non l'intera generazione del percorso): disattivarlo
+-- lascia comunque disponibili i primi due livelli, gratuiti. Sovrascrivibile per singola ricerca
+-- nel wizard (vedi components/upload/RouteBuilder.tsx) — questa colonna è solo il default.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS route_build_ai_place_search BOOLEAN NOT NULL DEFAULT true;
+
 -- Lunghezza del testo AI scelta dall'utente per ciascuna sezione della guida (essenziale /
 -- approfondita / molto_approfondita — vedi lib/guideSections.ts's GuideTextLength). JSONB perché
 -- è una mappa sezione→valore, non un elenco come guide_breve_sections. NULL/chiave assente ⇒
@@ -474,7 +482,7 @@ CREATE TABLE IF NOT EXISTS trails (
 CREATE INDEX IF NOT EXISTS idx_trails_osm_relation_id ON trails (osm_relation_id);
 
 
--- ── Security Index (SI) + Sentinel-2 enrichment ───────────────────────────────
+-- ── Security Index (SI) ────────────────────────────────────────────────────────
 -- Stesso blocco di supabase/migrations/add_si_sentinel2_columns.sql, qui per
 -- coerenza con la convenzione di questo file (ALTER dopo il CREATE TABLE).
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_score int;
@@ -494,22 +502,6 @@ ALTER TABLE trails ADD COLUMN IF NOT EXISTS dominant_warning text;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_score_raw float;
 ALTER TABLE trails ADD COLUMN IF NOT EXISTS si_density_factor float;
 
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_ndvi_monthly jsonb;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_ndvi_delta float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_ndwi_current float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_nbr_current float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_evi_current float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_bsi_current float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_fire_detected boolean DEFAULT false;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_flood_detected boolean DEFAULT false;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_landslide_risk boolean DEFAULT false;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_shade_score float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_landscape_variety float;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_water_sources jsonb;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_phenology_peak_month int;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_computed_at timestamptz;
-ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_available boolean DEFAULT false;
-
 -- ── Indici per la ricerca "Cerca in quest'area" (sezione Esplora) ────────────
 -- Stesso blocco anche in supabase/migrations/add_trails_search_indexes.sql.
 -- Il percorso principale filtra per lista esatta di osm_relation_id (già
@@ -518,32 +510,55 @@ ALTER TABLE trails ADD COLUMN IF NOT EXISTS s2_available boolean DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_trails_route_type  ON trails (route_type);
 CREATE INDEX IF NOT EXISTS idx_trails_distance_km ON trails (distance_km);
 
+-- ── Colonne generate per interrogare `trails` per prossimità (Percorsi per te) ────────────────
+-- Stesso blocco anche in supabase/migrations/add_trails_bbox_indexed_columns.sql. bbox è JSONB
+-- senza indice geospaziale — 4 colonne generate STORED + 2 indici btree bastano per un test
+-- "punto dentro il bbox" indicizzato, senza bisogno di PostGIS. Le chiavi minLat/maxLat/minLon/
+-- maxLon corrispondono esattamente a come lib/trailsCache.ts scrive la colonna bbox.
+ALTER TABLE trails ADD COLUMN IF NOT EXISTS bbox_min_lat DOUBLE PRECISION GENERATED ALWAYS AS ((bbox->>'minLat')::double precision) STORED;
+ALTER TABLE trails ADD COLUMN IF NOT EXISTS bbox_max_lat DOUBLE PRECISION GENERATED ALWAYS AS ((bbox->>'maxLat')::double precision) STORED;
+ALTER TABLE trails ADD COLUMN IF NOT EXISTS bbox_min_lon DOUBLE PRECISION GENERATED ALWAYS AS ((bbox->>'minLon')::double precision) STORED;
+ALTER TABLE trails ADD COLUMN IF NOT EXISTS bbox_max_lon DOUBLE PRECISION GENERATED ALWAYS AS ((bbox->>'maxLon')::double precision) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_trails_bbox_lat ON trails (bbox_min_lat, bbox_max_lat);
+CREATE INDEX IF NOT EXISTS idx_trails_bbox_lon ON trails (bbox_min_lon, bbox_max_lon);
+
 
 -- ═══════════════════════════════════════════════════════════
--- Geoportale Nazionale MASE/ISPRA — Fase 1 (PAI)
--- Stesso blocco anche in supabase/migrations/add_pai_tables.sql
+-- "Percorsi per te" — feed settimanale personalizzato (Bacheca)
+-- Stesso blocco anche in supabase/migrations/add_route_recommendations_table.sql
 -- ═══════════════════════════════════════════════════════════
 
--- ── Cache poligoni PAI (rischio idrogeologico ufficiale) ──────────────────────
--- bbox-keyed, stesso pattern lazy-cleanup di poi_cache (app/api/pois/route.ts) —
--- TTL lungo (90gg, gestito lato applicativo) perché i piani di bacino cambiano
--- su scala di anni, non vale ri-interrogare il WFS ad ogni calcolo SI.
--- source_authority non è una colonna qui: ogni feature in `features` porta già
--- il proprio sourceAuthority (vedi PaiFeature in lib/pai/paiClient.ts), dato che
--- un singolo bbox può attraversare più Autorità di Bacino.
-CREATE TABLE IF NOT EXISTS pai_polygon_cache (
-  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  bbox_key      text NOT NULL UNIQUE,
-  features      jsonb NOT NULL,
-  fetched_at    timestamptz NOT NULL DEFAULT now(),
-  expires_at    timestamptz NOT NULL
+-- Batch corrente di 5 percorsi consigliati per utente, più il feedback (mi piace/non fa per me)
+-- per scheda e la bookkeeping per la cadenza ibrida (settimanale + dopo un'escursione completata),
+-- vedi lib/routeBuilder/generateRecommendations.ts. Una sola riga per utente (upsert su user_id).
+CREATE TABLE IF NOT EXISTS route_recommendations (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status        TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'ok' | 'empty_no_location' | 'error'
+  cards         JSONB NOT NULL DEFAULT '[]',     -- [{id, kind:'built'|'found', data}]
+  feedback      JSONB NOT NULL DEFAULT '{}',     -- { [cardId]: { value:'like'|'dislike', at } }
+  centroid_lat  DOUBLE PRECISION,
+  centroid_lon  DOUBLE PRECISION,
+  generated_at  TIMESTAMPTZ,
+  dirty         BOOLEAN NOT NULL DEFAULT true,   -- true ⇒ da rigenerare al prossimo giro del cron
+  dirty_reason  TEXT,                            -- 'never_generated' | 'new_activity' | 'weekly'
+  last_error    TEXT,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_pai_polygon_cache_expires_at ON pai_polygon_cache (expires_at);
+CREATE INDEX IF NOT EXISTS idx_route_recommendations_dirty        ON route_recommendations (dirty) WHERE dirty = true;
+CREATE INDEX IF NOT EXISTS idx_route_recommendations_generated_at ON route_recommendations (generated_at);
 
-ALTER TABLE pai_polygon_cache ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "pai_polygon_cache_public_read" ON pai_polygon_cache;
-CREATE POLICY "pai_polygon_cache_public_read" ON pai_polygon_cache FOR SELECT USING (true);
+ALTER TABLE route_recommendations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "route_recommendations_owner" ON route_recommendations;
+CREATE POLICY "route_recommendations_owner"
+  ON route_recommendations FOR ALL
+  USING     (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
 
 -- ── Backfill: ptpr_pois (drift preesistente, mai documentata in questo file) ──
 -- Usata da app/api/pois/route.ts (fetchPtprPois) e popolata da scripts/import-ptpr.ts;
@@ -648,6 +663,20 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS flora_computed_at timestamptz
 
 
 -- ═══════════════════════════════════════════════════════════
+-- Metadati di un percorso "trovato" da Giulia (ricerca AI di un percorso già documentato altrove,
+-- fusa nel wizard "Costruisci un percorso" — vedi components/upload/RouteBuilder.tsx e
+-- GiuliaSearchPanel.tsx) invece che costruito algoritmicamente. Assenti su un percorso costruito o
+-- importato in altro modo. Stesso blocco anche in
+-- supabase/migrations/add_found_route_metadata_columns.sql.
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS source_url      TEXT;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS comfort_verdict TEXT;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS comfort_note    TEXT;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS zone            TEXT;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS difficulty      TEXT;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- Meteo storico al momento dell'escursione (Blocco 1.2 piano DTrek)
 -- ═══════════════════════════════════════════════════════════
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS weather_at_hike jsonb;
@@ -674,26 +703,9 @@ ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS sections JSONB;
 
 
 -- ═══════════════════════════════════════════════════════════
--- Geoportale Nazionale MASE/ISPRA — Fase 4 (Geologia CARG + Uso del suolo)
+-- Geoportale Nazionale MASE/ISPRA — Fase 4 (Uso del suolo)
 -- Stesso blocco anche in supabase/migrations/add_geologia_usosuolo_tables.sql
 -- ═══════════════════════════════════════════════════════════
-
--- ── Cache geologia (litologia CARG, per-punto via WMS GetFeatureInfo) ─────────
--- point_key (non bbox_key): GetFeatureInfo risponde per un singolo punto, non
--- un'area — stesso rounding a 2 decimali (~1km) di normalizeBboxKey, riusato su
--- "lat,lon" invece che su un bbox a 4 valori. feature può essere JSON null
--- (nessun dato litologico in quel punto) — stesso stato cacheable di un array
--- vuoto in pai_polygon_cache. TTL lungo (180gg): la litologia non cambia nel
--- tempo a parità di punto.
-CREATE TABLE IF NOT EXISTS geologia_cache (
-  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  point_key     text NOT NULL UNIQUE,
-  feature       jsonb NOT NULL,
-  fetched_at    timestamptz NOT NULL DEFAULT now(),
-  expires_at    timestamptz NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_geologia_cache_expires_at ON geologia_cache (expires_at);
 
 -- ── Cache uso del suolo (land-cover, bbox-keyed via WCS GetCoverage) ──────────
 -- tile serializza UsoSuoloTile con classCodes come number[] (jsonb non supporta
@@ -728,6 +740,44 @@ CREATE INDEX IF NOT EXISTS idx_dtm_cache_expires_at ON dtm_cache (expires_at);
 ALTER TABLE dtm_cache ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "dtm_cache_public_read" ON dtm_cache;
 CREATE POLICY "dtm_cache_public_read" ON dtm_cache FOR SELECT USING (true);
+
+
+-- ── Cache rete cammini OSM (route builder "Su misura") ────────────────────────
+-- Stesso blocco anche in supabase/migrations/add_walk_network_cache_table.sql. Stesso pattern di
+-- dtm_cache sopra — vedi lib/routeBuilder/walkNetworkCache.ts. TTL più corto del DTM (45gg, non
+-- 180): la rete cammini cambia più della quota del terreno, ma non abbastanza da giustificare un
+-- TTL breve come uso_suolo_cache.
+CREATE TABLE IF NOT EXISTS walk_network_cache (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  bbox_key      text NOT NULL UNIQUE,
+  network       jsonb,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_walk_network_cache_expires_at ON walk_network_cache (expires_at);
+
+ALTER TABLE walk_network_cache ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "walk_network_cache_public_read" ON walk_network_cache;
+CREATE POLICY "walk_network_cache_public_read" ON walk_network_cache FOR SELECT USING (true);
+
+
+-- ── Cache classificatore "probabilità escursionistica" (route builder "Esistenti", ripiego) ──
+-- Stesso blocco anche in supabase/migrations/add_hiking_probability_cache_table.sql. Stesso
+-- pattern di walk_network_cache sopra — vedi lib/routeBuilder/hikingProbability.ts.
+CREATE TABLE IF NOT EXISTS hiking_probability_cache (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  bbox_key      text NOT NULL UNIQUE,
+  data          jsonb NOT NULL,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hiking_probability_cache_expires_at ON hiking_probability_cache (expires_at);
+
+ALTER TABLE hiking_probability_cache ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "hiking_probability_cache_public_read" ON hiking_probability_cache;
+CREATE POLICY "hiking_probability_cache_public_read" ON hiking_probability_cache FOR SELECT USING (true);
 
 
 -- ═══════════════════════════════════════════════════════════
@@ -861,7 +911,6 @@ CREATE POLICY "activity_photos_owner"
 -- ═══════════════════════════════════════════════════════════
 
 ALTER TABLE gallery_cascade_cache  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE geologia_cache         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE n2000_site_species     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE natura2000_cache       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE poi_cache              ENABLE ROW LEVEL SECURITY;
@@ -872,9 +921,6 @@ ALTER TABLE uso_suolo_cache        ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "gallery_cascade_cache_public_read" ON gallery_cascade_cache;
 CREATE POLICY "gallery_cascade_cache_public_read" ON gallery_cascade_cache FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "geologia_cache_public_read" ON geologia_cache;
-CREATE POLICY "geologia_cache_public_read" ON geologia_cache FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "n2000_site_species_public_read" ON n2000_site_species;
 CREATE POLICY "n2000_site_species_public_read" ON n2000_site_species FOR SELECT USING (true);

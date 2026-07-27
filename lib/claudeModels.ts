@@ -14,6 +14,8 @@ export type AiFeature =
   | 'resocontoAssist'    // app/api/resoconto-assist/route.ts
   | 'questionnaire'      // app/api/questionnaire/route.ts
   | 'caption'            // app/api/caption/route.ts
+  | 'routeBuildPlaceSearch' // app/api/route-build/resolve-place/route.ts (fallback AI, lib/routeBuilder/resolvePlace.ts)
+  | 'routeBuildInterpretRequest' // app/api/route-build/search/route.ts (interpretazione economica, senza ricerca web, lib/routeBuilder/resolvePlace.ts's interpretSearchRequest)
 
 /**
  * Default per funzionalità, usato SOLO quando l'utente non ha scelto un modello esplicito in
@@ -31,6 +33,8 @@ const FEATURE_DEFAULT_MODEL: Record<AiFeature, string> = {
   resocontoAssist: 'claude-haiku-4-5',
   questionnaire:   'claude-haiku-4-5',
   caption:         'claude-haiku-4-5',
+  routeBuildPlaceSearch: 'claude-haiku-4-5',
+  routeBuildInterpretRequest: 'claude-haiku-4-5',
 }
 
 export function resolveDefaultModel(feature: AiFeature): string {

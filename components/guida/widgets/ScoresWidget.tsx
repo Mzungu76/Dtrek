@@ -1,5 +1,5 @@
 'use client'
-import { Compass, Layers } from 'lucide-react'
+import { Layers } from 'lucide-react'
 import { ScoreRing, computeTrailScoreBreakdown, isTrailScoreVetoed, type CtsProps } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import type { SafetyScore } from '@/lib/safetyScore'
@@ -12,11 +12,8 @@ interface Props {
   safety: SafetyScore | null
   personalSafety?: PersonalSafety | null
   cts: CtsProps
-  showAspectToggle: boolean
   showGradientToggle: boolean
-  showAspect: boolean
   showGradient: boolean
-  onToggleAspect: () => void
   onToggleGradient: () => void
   /** Avvisi trovati da Giulia (vedi lib/guideNotices.ts) — puntini sull'anello Sicurezza del badge,
    *  puramente informativi. */
@@ -28,7 +25,7 @@ interface Props {
  *  la lista sotto apre il dettaglio di ciascun punteggio in un foglio a comparsa. */
 export default function ScoresWidget({
   safety, personalSafety, cts, guideNotices,
-  showAspectToggle, showGradientToggle, showAspect, showGradient, onToggleAspect, onToggleGradient,
+  showGradientToggle, showGradient, onToggleGradient,
 }: Props) {
   const breakdown = computeTrailScoreBreakdown(safety, cts)
 
@@ -51,20 +48,12 @@ export default function ScoresWidget({
 
       <ScoreRing safety={safety} cts={cts} />
 
-      {(showAspectToggle || showGradientToggle) && (
+      {showGradientToggle && (
         <div className="flex items-center gap-1.5 flex-wrap">
-          {showAspectToggle && (
-            <button onClick={onToggleAspect}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showAspect ? 'bg-sky-500 text-white border-sky-500' : `${glassTile} ${textMuted}`}`}>
-              <Compass className="w-3 h-3" /> Esposizione
-            </button>
-          )}
-          {showGradientToggle && (
-            <button onClick={onToggleGradient}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-500 text-white border-sky-500' : `${glassTile} ${textMuted}`}`}>
-              <Layers className="w-3 h-3" /> Pendenza
-            </button>
-          )}
+          <button onClick={onToggleGradient}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${showGradient ? 'bg-sky-500 text-white border-sky-500' : `${glassTile} ${textMuted}`}`}>
+            <Layers className="w-3 h-3" /> Pendenza
+          </button>
         </div>
       )}
     </div>

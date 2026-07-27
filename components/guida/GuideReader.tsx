@@ -672,6 +672,8 @@ export default function GuideReader({
             onOpenMap3D={onOpenMap3D}
             showGradient={showGradient}
             showAspect={showAspect}
+            showAspectToggle={scores?.showAspectToggle}
+            onToggleAspect={scores?.onToggleAspect}
             dtmProfile={dtmProfile}
             planned
           />
@@ -799,8 +801,12 @@ export default function GuideReader({
   const hikeTitle = hike.title
   const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
   // Qualunque sezione ancora senza testo AI può mostrare l'invito ad "Approfondisci con Giulia" —
-  // SectionCard mostra comunque il bottone solo se !hasBody.
-  const showApprofondisciHint = hasGuide && !generating
+  // SectionCard mostra comunque il bottone solo se !hasBody. Non dipende da hasGuide: deve
+  // funzionare anche alla primissima generazione (nessuna sezione ha ancora testo, es. utente con
+  // autogenerazione disattivata in Impostazioni) — i bottoni per-sezione sono l'unico modo di
+  // generare la guida in quel caso, quindi devono esserci fin da subito, non solo dopo che
+  // qualcos'altro ha già scritto la prima sezione.
+  const showApprofondisciHint = !generating && enrichmentReady && hasAiAccess === true
   // Sezioni fisse ancora senza testo — pilota sia il bottone "Genera il resto della guida" (mostrato
   // solo se ce n'è almeno una) sia il calcolo di cosa chiedere quando viene premuto.
   const missingSectionKeys = useMemo(

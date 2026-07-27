@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
 import { maptilerStyleUrl, MAPTILER_KEY, type MapTilerStyleId } from '@/lib/mapStyles'
 import { circlePolygonLonLat } from '@/lib/geoUtils'
-import { GEOLOGIA_DATASET } from '@/lib/geo/datasetConfig'
 import type { NavState } from '@/lib/navigation/types'
 import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
 
@@ -24,10 +23,6 @@ interface Props {
   /** Natura 2000 protected-area polygons for the route's bbox (fetched once by the caller), drawn as a translucent overlay when showNatura2000 is on. */
   natura2000Features?: Natura2000Feature[] | null
   showNatura2000?: boolean
-  /** CARG lithology WMS raster overlay (GEOLOGIA_DATASET), toggled independently of the base style. */
-  showGeologia?: boolean
-  /** Called (at most once per mount) if the geologia raster source repeatedly fails to load tiles — e.g. the upstream ISPRA service being down, not a bug in this app. The caller can surface a one-time "servizio non disponibile" notice instead of leaving the toggle looking silently broken. */
-  onGeologiaUnavailable?: () => void
 }
 
 // Not a fixed deadline from the start — reset on every 'data' event (tile/
@@ -49,6 +44,36 @@ const STATE_COLOR: Record<NavState, string> = {
 
 const ROUTE_SOURCE_ID = 'nav-route'
 const ROUTE_LAYER_ID = 'nav-route-line'
+const ROUTE_ARROW_LAYER_ID = 'nav-route-arrows'
+const ARROW_ICON_ID = 'nav-direction-arrow'
+// Pixel, non metri — MapLibre spazia i simboli lungo la linea in coordinate schermo, quindi la
+// densità delle frecce scala naturalmente con lo zoom (più frecce visibili quando si zooma).
+// Alzata da 110 a 220 dopo il primo giro di feedback ("troppo numerose").
+const ARROW_SYMBOL_SPACING_PX = 220
+
+/** Triangolo pieno bianco-bordato che punta "in su" — con symbol-placement:'line' e icon-rotate:90
+ *  (compensa la convenzione di MapLibre, che assume l'icona rivolta a destra) segue in automatico
+ *  la direzione del tracciato, stesso trattamento visivo delle frecce di MapView.tsx/NavigationMap.tsx. */
+function buildArrowIcon(size = 24, color = '#277134'): ImageData {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  ctx.translate(size / 2, size / 2)
+  ctx.beginPath()
+  ctx.moveTo(0, -size * 0.42)
+  ctx.lineTo(size * 0.36, size * 0.42)
+  ctx.lineTo(0, size * 0.24)
+  ctx.lineTo(-size * 0.36, size * 0.42)
+  ctx.closePath()
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = 'white'
+  ctx.lineWidth = size * 0.22
+  ctx.stroke()
+  ctx.fillStyle = color
+  ctx.fill()
+  return ctx.getImageData(0, 0, size, size)
+}
 const ACCURACY_SOURCE_ID = 'nav-accuracy'
 const ACCURACY_LAYER_ID = 'nav-accuracy-fill'
 const TERRAIN_SOURCE_ID = 'nav-terrain'
@@ -56,19 +81,6 @@ const TERRAIN_EXAGGERATION = 1.4 // matches RouteMap3D's flythrough for a consis
 const NATURA2000_SOURCE_ID = 'nav-natura2000'
 const NATURA2000_FILL_LAYER_ID = 'nav-natura2000-fill'
 const NATURA2000_LINE_LAYER_ID = 'nav-natura2000-line'
-const GEOLOGIA_SOURCE_ID = 'nav-geologia'
-const GEOLOGIA_LAYER_ID = 'nav-geologia-raster'
-
-// Proxied through /api/geologia-tile (server-side WMS 1.3.0 GetMap over the same ISPRA CARG
-// endpoint lib/geologia/geologiaClient.ts uses for point lookups) rather than pointed straight
-// at the external host: MapLibre loads raster tiles as cross-origin images to upload as WebGL
-// textures, and this ArcGIS Server doesn't send Access-Control-Allow-Origin — hit directly from
-// the browser, every tile silently fails to load (the layer toggles on but draws nothing). The
-// same-origin proxy sidesteps that, mirroring app/api/tile/route.ts's base-map tile proxy.
-function geologiaWmsTileUrl(): string | null {
-  if (!GEOLOGIA_DATASET.baseUrl || !GEOLOGIA_DATASET.layerName) return null
-  return '/api/geologia-tile?z={z}&x={x}&y={y}'
-}
 
 // At a steep pitch, the same zoom level shows much less ground in the
 // foreground than a flat view (perspective foreshortening), and combined
@@ -91,7 +103,7 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, showGeologia, onGeologiaUnavailable }: Props) {
+export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -116,11 +128,6 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   natura2000FeaturesRef.current = natura2000Features
   const showNatura2000Ref = useRef(showNatura2000)
   showNatura2000Ref.current = showNatura2000
-  const showGeologiaRef = useRef(showGeologia)
-  showGeologiaRef.current = showGeologia
-  const onGeologiaUnavailableRef = useRef(onGeologiaUnavailable)
-  onGeologiaUnavailableRef.current = onGeologiaUnavailable
-  const geologiaUnavailableReportedRef = useRef(false)
   const dataListener = useRef<(() => void) | null>(null)
   const [followMode, setFollowMode] = useState(true)
   const [styleLoading, setStyleLoading] = useState(true)
@@ -195,6 +202,24 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson })
       map.addLayer({ id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID, paint: { 'line-color': '#277134', 'line-width': 4, 'line-opacity': 0.85 } })
     }
+    // setStyle() svuota anche le immagini custom insieme a source/layer — hasImage torna false
+    // dopo un cambio stile, quindi questa guardia la ri-registra invece di saltarla per sempre.
+    if (!map.hasImage(ARROW_ICON_ID)) map.addImage(ARROW_ICON_ID, buildArrowIcon(), { pixelRatio: 2 })
+    if (!map.getLayer(ROUTE_ARROW_LAYER_ID)) {
+      map.addLayer({
+        id: ROUTE_ARROW_LAYER_ID, type: 'symbol', source: ROUTE_SOURCE_ID,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': ARROW_SYMBOL_SPACING_PX,
+          'icon-image': ARROW_ICON_ID,
+          'icon-rotate': 90,
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-size': 0.42,
+        },
+      })
+    }
   }
 
   /** Same trust-signal circle as NavigationMap.tsx's Leaflet L.circle, approximated as a filled polygon since MapLibre has no native meter-radius circle. Re-added after every style.load like the route/terrain layers. */
@@ -239,37 +264,6 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         id: NATURA2000_LINE_LAYER_ID, type: 'line', source: NATURA2000_SOURCE_ID,
         layout: { visibility }, paint: { 'line-color': '#16a34a', 'line-width': 1.5, 'line-dasharray': [2, 2] },
       })
-    }
-  }
-
-  /**
-   * CARG lithology raster overlay — a plain WMS tile source, independent of the base style
-   * (Outdoor/Satellite/Winter each keep their own sources). Only makes sense online, same as
-   * the base style itself.
-   *
-   * maxzoom caps how far in MapLibre requests distinct tiles for this source (it overzooms —
-   * upsamples — the z14 tile for closer views instead of fetching new ones). This isn't a
-   * quality tradeoff: the upstream ISPRA WMS (a 1:25.000-scale dataset, ~9m/pixel at z14 —
-   * already finer than the data's real precision) returned a genuine `503 Service Unavailable`
-   * ("no server available to handle this request", a classic ArcGIS Server instance-pool
-   * exhaustion) when the navigator's real close-in zoom (z15-17) asked it for the dozens of
-   * small, distinct tiles needed to cover one screen — confirmed via a direct request to the
-   * deployed /api/geologia-tile proxy. Capping the zoom this source ever requests tiles at
-   * caps how many concurrent requests we ever put on that external service, regardless of how
-   * far the hiker actually zooms in.
-   */
-  const GEOLOGIA_MAX_TILE_ZOOM = 14
-  const setupGeologiaLayer = (map: any) => {
-    const tileUrl = geologiaWmsTileUrl()
-    if (!tileUrl) return
-    const visibility = showGeologiaRef.current ? 'visible' : 'none'
-    if (!map.getSource(GEOLOGIA_SOURCE_ID)) {
-      map.addSource(GEOLOGIA_SOURCE_ID, { type: 'raster', tiles: [tileUrl], tileSize: 256, maxzoom: GEOLOGIA_MAX_TILE_ZOOM })
-    }
-    if (map.getLayer(GEOLOGIA_LAYER_ID)) {
-      map.setLayoutProperty(GEOLOGIA_LAYER_ID, 'visibility', visibility)
-    } else {
-      map.addLayer({ id: GEOLOGIA_LAYER_ID, type: 'raster', source: GEOLOGIA_SOURCE_ID, layout: { visibility }, paint: { 'raster-opacity': 0.55 } })
     }
   }
 
@@ -340,25 +334,13 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         setupTerrain(map)
         updateAccuracyCircle(map)
         setupNatura2000Layer(map)
-        setupGeologiaLayer(map)
         for (const poi of pois) {
           const marker = new maplibregl.Marker().setLngLat([poi.lon, poi.lat]).addTo(map)
           markersRef.current.push(marker)
         }
       })
       // setStyle() wipes custom sources/layers — re-add the route, terrain, accuracy circle and overlay layers after every style switch.
-      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map); setupNatura2000Layer(map); setupGeologiaLayer(map) })
-      // Permanent, independent of armStyleWatchdog's own temporary 'error' listener (which is
-      // added/removed around each style load, and treats a stall as "the whole online map
-      // failed" — a source-specific tile error here must never trigger that). Surfaces a
-      // one-time notice when the geologia raster source's tiles keep failing (e.g. the
-      // upstream ISPRA service being down), so the toggle doesn't just look silently broken.
-      map.on('error', (e: any) => {
-        if (e?.sourceId === GEOLOGIA_SOURCE_ID && !geologiaUnavailableReportedRef.current) {
-          geologiaUnavailableReportedRef.current = true
-          onGeologiaUnavailableRef.current?.()
-        }
-      })
+      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map); setupNatura2000Layer(map) })
       // MapLibre GL, unlike Leaflet, does NOT support space-separated event
       // names in on() — `map.on('dragstart zoomstart', ...)` silently
       // registers a listener for a nonexistent event and never fires, so
@@ -452,10 +434,10 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     // dropped for good. The layer only ever appeared after a style switch, because that's
     // the other place these setup functions run unconditionally (the style.load handler
     // above). Same "retry once idle" idiom as the is3D effect below, for the same reason.
-    if (map.isStyleLoaded()) { setupNatura2000Layer(map); setupGeologiaLayer(map) }
-    else map.once('idle', () => { setupNatura2000Layer(map); setupGeologiaLayer(map) })
+    if (map.isStyleLoaded()) setupNatura2000Layer(map)
+    else map.once('idle', () => setupNatura2000Layer(map))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [natura2000Features, showNatura2000, showGeologia])
+  }, [natura2000Features, showNatura2000])
 
   const handleRecenter = () => {
     setFollowMode(true)

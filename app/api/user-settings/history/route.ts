@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { incrementHistoryStatsForNewActivity, type RecentHikeEntry } from '@/lib/hikerHistory'
+import { supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,5 +29,23 @@ export async function POST(req: NextRequest) {
   }
 
   await incrementHistoryStatsForNewActivity(user.id, entry)
+
+  // "Percorsi per te" (vedi lib/routeBuilder/generateRecommendations.ts): marca il batch corrente
+  // come da rigenerare al prossimo giro del cron — scrittura sincrona ed economica, non la
+  // generazione vera e propria (che gira solo dentro il cron, con il proprio budget di tempo: un
+  // kill della piattaforma a metà di una generazione avviata da qui non lascerebbe scrivere né
+  // una risposta né un progresso, esattamente il problema già visto altrove in questo route
+  // builder). Fa anche da seed della prima riga (con i default della tabella) per il primo utente
+  // al primo hike completato mai — best-effort, un fallimento qui non deve mai far fallire il
+  // salvataggio dell'attività stessa.
+  try {
+    await supabase.from('route_recommendations').upsert(
+      { user_id: user.id, dirty: true, dirty_reason: 'new_activity', updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    )
+  } catch (e) {
+    console.error('[user-settings/history] flag dirty per route_recommendations fallito (non bloccante):', e)
+  }
+
   return NextResponse.json({ ok: true })
 }

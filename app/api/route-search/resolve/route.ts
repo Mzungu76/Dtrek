@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
-import { resolveGeometryFallback } from '@/lib/trailConditions/geometry'
-import { enrichGeometryWithElevation } from '@/lib/dtm/elevationEnrich'
-import { downloadAndParseGpx } from '@/lib/gpxSourceFetch'
-import { downsamplePolyline } from '@/lib/downsamplePolyline'
+import { resolveTrackForCandidate } from '@/lib/routeBuilder/resolveTrack'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -15,6 +12,9 @@ export const maxDuration = 60
 // pubblico e — se presente — la pagina fonte stessa) — a differenza degli altri endpoint quindi
 // basta un'identità "plausibile ma non verificabile" durante un blackout (stesso `degraded` di
 // lib/supabaseAuth.ts) per proseguire comunque, non serve nemmeno la chiave AI di emergenza.
+// Thin wrapper: la logica vera è in lib/routeBuilder/resolveTrack.ts, riusata anche dal nuovo
+// endpoint di ricerca a livelli (app/api/route-build/search/route.ts) per risolvere più candidati
+// lato server senza un self-call HTTP.
 export async function POST(req: NextRequest) {
   const { user, authUnavailable, degraded } = await getUserFromRequestDetailed(req)
   if (!user && !degraded) {
@@ -37,66 +37,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
-  // La traccia scaricata dalla fonte ha priorità: è quella esatta pubblicata dalla pagina che
-  // Giulia ha citato, non un'approssimazione per nome — vedi lib/gpxSourceFetch.ts.
-  if (gpxUrl) {
-    const gpx = await downloadAndParseGpx(gpxUrl)
-    if (gpx) {
-      return NextResponse.json({
-        ok: true,
-        osmId,
-        source: 'gpx',
-        routePolyline: downsamplePolyline(gpx.trackPoints),
-        trackPoints: gpx.trackPoints,
-        distanceMeters: gpx.distanceMeters,
-        elevationGain: gpx.elevationGain,
-        elevationLoss: gpx.elevationLoss,
-        altitudeMax: gpx.altitudeMax,
-        altitudeMin: gpx.altitudeMin,
-        estimatedTimeSeconds: gpx.estimatedTimeSeconds,
-        hasElevation: true,
-      })
-    }
-    // Il download/parsing del GPX è fallito (link non più valido, formato inatteso...) — se c'è
-    // comunque un match Overpass prosegue con quello sotto, altrimenti nessuna traccia disponibile.
-    if (osmId == null) return NextResponse.json({ ok: false, reason: 'gpx_download_failed' })
-  }
-
-  const fallback = await resolveGeometryFallback(osmId!)
-  if (!fallback) return NextResponse.json({ ok: false, reason: 'geometry_not_found' })
-
-  const enriched = await enrichGeometryWithElevation(fallback.geometry)
-  if (!enriched) {
-    // Traccia trovata ma senza copertura DTM per la quota — l'utente può comunque importare
-    // con la sola geometria (mappa disponibile, profilo altimetrico no), come un import manuale.
-    return NextResponse.json({
-      ok: true,
-      osmId,
-      source: 'osm',
-      routePolyline: downsamplePolyline(fallback.geometry.map(([lat, lon]) => ({ time: '', lat, lon }))),
-      trackPoints: [],
-      distanceMeters: 0,
-      elevationGain: 0,
-      elevationLoss: 0,
-      altitudeMax: 0,
-      altitudeMin: 0,
-      estimatedTimeSeconds: 0,
-      hasElevation: false,
-    })
-  }
-
-  return NextResponse.json({
-    ok: true,
-    osmId,
-    source: 'osm',
-    routePolyline: downsamplePolyline(enriched.trackPoints),
-    trackPoints: enriched.trackPoints,
-    distanceMeters: enriched.distanceMeters,
-    elevationGain: enriched.elevationGain,
-    elevationLoss: enriched.elevationLoss,
-    altitudeMax: enriched.altitudeMax,
-    altitudeMin: enriched.altitudeMin,
-    estimatedTimeSeconds: enriched.estimatedTimeSeconds,
-    hasElevation: true,
-  })
+  const result = await resolveTrackForCandidate({ osmId, gpxUrl })
+  return NextResponse.json(result)
 }

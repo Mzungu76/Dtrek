@@ -2,6 +2,7 @@
 // Always goes through the service-role client (lib/supabase.ts) — this table
 // has no per-user data and no RLS, it's a shared reference cache.
 import { supabase } from '@/lib/supabase'
+import { padBbox } from '@/lib/overpassTrails'
 
 export type DataQuality = 'osm_tags' | 'calculated' | 'estimated'
 export type RouteType = 'loop' | 'out_and_back' | 'point_to_point'
@@ -51,6 +52,23 @@ function mapCacheRow(data: any): TrailCacheRow {
   }
 }
 
+// Tetto di sicurezza per il pre-riscaldamento in blocco (vedi app/api/admin/prewarm-trails/route.ts)
+// — non un limite tecnico del piano gratuito Supabase, ma un margine scelto a mano, rivisto in alto
+// per coprire l'Italia intera (non solo il Nord-Est) dopo aver misurato il costo reale: le 11.583
+// righe del solo Nord-Est pesano 15 MB (~1,3 KB/riga, meno della stima iniziale di 2-3 KB), su un DB
+// da 157 MB totali contro i 500 MB del piano Hobby. 150.000 righe restano stimate sotto i ~200 MB,
+// lasciando comunque margine per la crescita di dtm_cache/walk_network_cache/attività reali. Il job
+// di pre-riscaldamento controlla questo conteggio PRIMA di scrivere altre righe e si ferma da solo
+// se già raggiunto, invece di fidarsi di una stima fatta a monte sul numero di relazioni OSM da
+// coprire (mai verificato con certezza per l'intero paese).
+export const MAX_TRAILS_CACHE_ROWS = 150_000
+
+/** Conteggio economico (COUNT senza scaricare righe) — usato solo dal tetto di sicurezza sopra. */
+export async function getTrailsCacheRowCount(): Promise<number> {
+  const { count } = await supabase.from('trails').select('*', { count: 'exact', head: true })
+  return count ?? 0
+}
+
 export async function getCachedTrail(osmRelationId: number): Promise<TrailCacheRow | null> {
   const { data } = await supabase
     .from('trails')
@@ -68,12 +86,39 @@ export async function getCachedTrail(osmRelationId: number): Promise<TrailCacheR
 // osm_relation_id already makes an `IN (...)` lookup on ~150 ids fast.
 export async function getCachedTrailsInBbox(osmRelationIds: number[]): Promise<Map<number, TrailCacheRow>> {
   if (osmRelationIds.length === 0) return new Map()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('trails')
     .select('*')
     .in('osm_relation_id', osmRelationIds)
 
+  if (error) {
+    console.error('[trailsCache] getCachedTrailsInBbox query failed', { ids: osmRelationIds, error })
+  } else {
+    console.log('[trailsCache] getCachedTrailsInBbox', { requested: osmRelationIds.length, found: (data ?? []).length, ids: osmRelationIds })
+  }
+
   return new Map((data ?? []).map(row => [row.osm_relation_id, mapCacheRow(row)]))
+}
+
+// Percorsi cachati la cui estensione (bbox) ricade almeno in parte entro radiusKm da (lat, lon) —
+// usata da lib/routeBuilder/generateRecommendations.ts per le card "Esistenti" senza dover
+// richiamare Overpass ad ogni generazione. Test di overlap tra due rettangoli (il bbox della query,
+// centrato sul punto e allargato di radiusKm, e il bbox salvato di ciascun sentiero) sulle colonne
+// generate bbox_min_lat/bbox_max_lat/bbox_min_lon/bbox_max_lon (vedi
+// supabase/migrations/add_trails_bbox_indexed_columns.sql) — non un test "punto dentro un solo
+// bbox", che mancherebbe sentieri vicini la cui estensione non include esattamente il centroide.
+export async function findCachedTrailsNearPoint(lat: number, lon: number, radiusKm: number, limit = 20): Promise<TrailCacheRow[]> {
+  const [minLat, minLon, maxLat, maxLon] = padBbox([lat, lon, lat, lon], radiusKm)
+  const { data } = await supabase
+    .from('trails')
+    .select('*')
+    .lte('bbox_min_lat', maxLat)
+    .gte('bbox_max_lat', minLat)
+    .lte('bbox_min_lon', maxLon)
+    .gte('bbox_max_lon', minLon)
+    .limit(limit)
+
+  return (data ?? []).map(mapCacheRow)
 }
 
 export async function upsertTrailCache(row: TrailCacheRow): Promise<void> {

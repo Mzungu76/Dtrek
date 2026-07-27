@@ -4,16 +4,25 @@ import { computeBbox } from './geoUtils'
 import { updatePlannedMeta, type PlannedHike } from './plannedStore'
 import { refreshTsForHike } from './computeTsForHike'
 
+export interface SafetyCoreInput {
+  routePolyline?: PlannedHike['routePolyline']
+  distanceMeters: number
+  elevationGain: number
+  elevationLoss: number
+  altitudeMax: number
+  altitudeMin: number
+  estimatedTimeSeconds: number
+  plannedDate?: string
+}
+
 /**
  * Runs the Safety Score pipeline (wildlife/guardian-dog risk lookup + computeSafetyScore) for a
- * planned hike and persists the result, then triggers a Trail Score v2 recompute (see
- * lib/computeTsForHike.ts) so the aggregate never lags behind its own Sicurezza input.
- * Self-contained like computeCtsForHike, so it can run fire-and-forget right after a hike is
- * added, not just when the hike happens to be open.
+ * hike and returns the result WITHOUT persisting it — shared by computeSafetyForHike (planned
+ * hikes, persists via updatePlannedMeta) and any caller that needs a preview before a hike exists
+ * (e.g. components/upload/RouteBuilder.tsx scoring not-yet-saved route candidates), mirroring the
+ * computeCtsCore/computeCtsForHike split in lib/computeCtsForHike.ts.
  */
-export async function computeSafetyForHike(hike: Pick<PlannedHike,
-  'id' | 'routePolyline' | 'distanceMeters' | 'elevationGain' | 'elevationLoss' | 'altitudeMax' | 'altitudeMin' | 'estimatedTimeSeconds' | 'plannedDate'
->): Promise<SafetyScore> {
+export async function computeSafetyCore(hike: SafetyCoreInput): Promise<SafetyScore> {
   const poly = hike.routePolyline
   let gbifWildlifeRisks: WildlifeRisk[] = []
   let guardianDogRisk: { present: boolean } | undefined
@@ -31,12 +40,24 @@ export async function computeSafetyForHike(hike: Pick<PlannedHike,
     if (guardianResult.status === 'fulfilled') guardianDogRisk = guardianResult.value
   }
 
-  const safety = computeSafetyScore({
+  return computeSafetyScore({
     distanceMeters: hike.distanceMeters, elevationGain: hike.elevationGain,
     elevationLoss: hike.elevationLoss, altitudeMax: hike.altitudeMax, altitudeMin: hike.altitudeMin,
     estimatedTimeSeconds: hike.estimatedTimeSeconds, routePolyline: hike.routePolyline,
     plannedDate: hike.plannedDate, gbifWildlifeRisks, guardianDogRisk,
   })
+}
+
+/**
+ * Runs computeSafetyCore for a planned hike and persists the result, then triggers a Trail Score
+ * v2 recompute (see lib/computeTsForHike.ts) so the aggregate never lags behind its own Sicurezza
+ * input. Self-contained like computeCtsForHike, so it can run fire-and-forget right after a hike
+ * is added, not just when the hike happens to be open.
+ */
+export async function computeSafetyForHike(hike: Pick<PlannedHike,
+  'id' | 'routePolyline' | 'distanceMeters' | 'elevationGain' | 'elevationLoss' | 'altitudeMax' | 'altitudeMin' | 'estimatedTimeSeconds' | 'plannedDate'
+>): Promise<SafetyScore> {
+  const safety = await computeSafetyCore(hike)
   await updatePlannedMeta(hike.id, { cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() })
   refreshTsForHike(hike.id).catch(() => {})
   return safety

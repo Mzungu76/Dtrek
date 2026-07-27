@@ -3,12 +3,11 @@ import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { fetchNearbyWiki, isSpecificName } from '@/lib/wikipedia'
 import type { PoiItem, PoiType } from '@/lib/overpass'
-import { POI_META } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { sectionHeading } from '@/components/routehub/overlayTheme'
 import { ExternalLink } from 'lucide-react'
-import { POI_ICON } from '@/components/poiIcons'
+import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import PoiMap from '../PoiMap'
 
 interface Props {
@@ -44,48 +43,7 @@ function otherEntryDist(entry: OtherEntry): number {
   return entry.kind === 'named' ? entry.poi.distFromTrack : Math.min(...entry.pois.map(p => p.distFromTrack))
 }
 
-function NamedPoiIcon({ poi, highlighted, onTap }: { poi: PoiItem; highlighted: boolean; onTap?: () => void }) {
-  const Icon = POI_ICON[poi.type]
-  const meta = POI_META[poi.type]
-  return (
-    <button
-      onClick={onTap}
-      className="flex flex-col shrink-0 self-start items-center w-16 gap-1.5 group"
-    >
-      <span
-        className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm shrink-0 transition-transform group-hover:scale-105"
-        style={{ backgroundColor: meta.color, boxShadow: highlighted ? '0 0 0 3px #7dd3fc' : undefined }}
-      >
-        <Icon width={16} height={16} color="#fff" strokeWidth={2.25} />
-      </span>
-      <span className="text-[10px] leading-tight text-center text-stone-700 font-semibold line-clamp-2">
-        {poi.name}
-      </span>
-    </button>
-  )
-}
-
-function GroupPoiBadge({
-  type, pois, onTap,
-}: { type: PoiType; pois: PoiItem[]; onTap: () => void }) {
-  const Icon = POI_ICON[type]
-  const meta = POI_META[type]
-  return (
-    <button onClick={onTap} title={`${meta.label} × ${pois.length}`} className="relative self-start shrink-0 w-[38px] h-[38px] transition-transform active:scale-95">
-      <span
-        className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm"
-        style={{ backgroundColor: meta.color }}
-      >
-        <Icon width={16} height={16} color="#fff" strokeWidth={2.25} />
-      </span>
-      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-forest-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-sm">
-        {pois.length}
-      </span>
-    </button>
-  )
-}
-
-function PoiCard({ entry, highlighted, onTap }: { entry: GalleryEntry; highlighted: boolean; onTap?: () => void }) {
+function PoiCard({ entry, highlighted, dimmed, onTap }: { entry: GalleryEntry; highlighted: boolean; dimmed?: boolean; onTap?: () => void }) {
   return (
     <a
       href={entry.url}
@@ -94,7 +52,7 @@ function PoiCard({ entry, highlighted, onTap }: { entry: GalleryEntry; highlight
       onClick={onTap}
       className={`group flex flex-col shrink-0 w-40 sm:w-44 rounded-xl overflow-hidden border shadow-sm hover:shadow-md transition-all bg-white ${
         highlighted ? 'border-sky-400 ring-2 ring-sky-200' : 'border-stone-100 hover:border-stone-200'
-      }`}
+      } ${dimmed ? 'opacity-35 grayscale' : ''}`}
     >
       <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
         <Image
@@ -129,6 +87,12 @@ export default function PoiListWidget({
   const [nearbyPages, setNearbyPages] = useState<WikiPage[]>([])
   const [focusPoints, setFocusPoints] = useState<{ lat: number; lon: number }[] | null>(null)
   const [focusSignal, setFocusSignal] = useState(0)
+  // Selezione di un gruppo (badge con contatore, es. "Rifugio ×3") — locale, a differenza di
+  // highlightedPoiId (proprietà del genitore, serve anche per scrollare al paragrafo giusto in
+  // GuideReader): un gruppo non ha un singolo POI a cui scrollare, quindi non serve farlo salire.
+  // Ha priorità sul singolo POI evidenziato dal genitore mentre è attivo, così un click su un
+  // badge sostituisce visivamente qualunque evidenziazione precedente.
+  const [selectedGroupType, setSelectedGroupType] = useState<PoiType | null>(null)
 
   useEffect(() => {
     if (!hasGps || centerLat == null || centerLon == null) return
@@ -186,13 +150,37 @@ export default function PoiListWidget({
     setFocusSignal(s => s + 1)
   }
 
+  // Un tap su un POI singolo (icona con nome, card galleria o pin mappa) annulla sempre la
+  // selezione di gruppo corrente, così le due selezioni non restano attive insieme.
+  const handleSingleTap = (poi: PoiItem) => {
+    setSelectedGroupType(null)
+    onItemTap?.(poi)
+  }
+
+  const handleGroupTap = (type: PoiType, groupPois: PoiItem[]) => {
+    focusOnGroup(groupPois)
+    setSelectedGroupType(prev => prev === type ? null : type)
+  }
+
+  const selectedGroup = selectedGroupType != null
+    ? otherEntries.find((e): e is Extract<OtherEntry, { kind: 'group' }> => e.kind === 'group' && e.type === selectedGroupType)
+    : undefined
+  // Il gruppo selezionato ha priorità sul singolo POI evidenziato dal genitore — appena si
+  // sceglie un gruppo, activeIds riflette SOLO i suoi membri finché non lo si deseleziona o non
+  // si tocca un altro POI singolo (che a sua volta azzera selectedGroupType, vedi handleSingleTap).
+  const activeIds = useMemo<Set<number> | null>(() => {
+    if (selectedGroup) return new Set(selectedGroup.pois.map(p => p.id))
+    if (highlightedPoiId != null) return new Set([highlightedPoiId])
+    return null
+  }, [selectedGroup, highlightedPoiId])
+
   return (
     <div className="space-y-3">
       <PoiMap
         trackPoints={trackPoints}
         pois={pois}
-        highlightedPoiId={highlightedPoiId}
-        onPoiTap={onItemTap}
+        highlightedPoiIds={activeIds}
+        onPoiTap={handleSingleTap}
         onOpenMap3D={onOpenMap3D}
         focusPoints={focusPoints}
         focusSignal={focusSignal}
@@ -206,15 +194,18 @@ export default function PoiListWidget({
             <NamedPoiIcon
               key={`named-${entry.poi.id}`}
               poi={entry.poi}
-              highlighted={entry.poi.id === highlightedPoiId}
-              onTap={() => onItemTap?.(entry.poi)}
+              highlighted={!!activeIds?.has(entry.poi.id)}
+              dimmed={activeIds != null && !activeIds.has(entry.poi.id)}
+              onTap={() => handleSingleTap(entry.poi)}
             />
           ) : (
             <GroupPoiBadge
               key={`group-${entry.type}`}
               type={entry.type}
               pois={entry.pois}
-              onTap={() => focusOnGroup(entry.pois)}
+              highlighted={selectedGroupType === entry.type}
+              dimmed={activeIds != null && !entry.pois.some(p => activeIds!.has(p.id))}
+              onTap={() => handleGroupTap(entry.type, entry.pois)}
             />
           ))}
         </div>
@@ -230,10 +221,11 @@ export default function PoiListWidget({
             <PoiCard
               key={entry.key}
               entry={entry}
-              highlighted={entry.poiId != null && entry.poiId === highlightedPoiId}
+              highlighted={entry.poiId != null && !!activeIds?.has(entry.poiId)}
+              dimmed={activeIds != null && (entry.poiId == null || !activeIds.has(entry.poiId))}
               onTap={entry.poiId != null ? () => {
                 const poi = pois.find(p => p.id === entry.poiId)
-                if (poi) onItemTap?.(poi)
+                if (poi) handleSingleTap(poi)
               } : undefined}
             />
           ))}

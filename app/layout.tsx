@@ -11,6 +11,7 @@ import SplashScreen from '@/components/SplashScreen'
 import SessionKeepAlive from '@/components/SessionKeepAlive'
 import OnboardingGate from '@/components/onboarding/OnboardingGate'
 import SyncDebugPanel from '@/components/SyncDebugPanel'
+import GlobalSearchStatusPill from '@/components/GlobalSearchStatusPill'
 
 // Self-hosted via next/font (build-time download + inline @font-face), replacing the old
 // render-blocking `@import url(fonts.googleapis.com/...)` in globals.css — that import forced
@@ -87,6 +88,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SyncEngineProvider />
         <OnboardingGate />
         <SyncDebugPanel />
+        <GlobalSearchStatusPill />
       </body>
     </html>
   )

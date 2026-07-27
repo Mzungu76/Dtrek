@@ -438,19 +438,15 @@ export async function POST(req: NextRequest) {
 
   let guideText: string | undefined
   let poiBlock: string | undefined
-  let s2: Record<string, unknown> | undefined
   if (activity.linked_planned_id) {
     const { data: hike } = await supabase
       .from('planned_hikes')
-      .select('cached_guide, cached_pois, cached_poi_wiki, s2_available, s2_phenology_peak_month, s2_ndvi_delta, s2_landscape_variety, s2_shade_score, s2_water_sources')
+      .select('cached_guide, cached_pois, cached_poi_wiki')
       .eq('id', activity.linked_planned_id)
       .eq('user_id', user.id)
       .maybeSingle()
     if (hike?.cached_guide) guideText = hike.cached_guide
-    if (hike) {
-      poiBlock = buildPoiBlock(hike.cached_pois, hike.cached_poi_wiki)
-      s2 = hike
-    }
+    if (hike) poiBlock = buildPoiBlock(hike.cached_pois, hike.cached_poi_wiki)
   }
 
   const track: TrackPoint[] = Array.isArray(activity.track_points) ? activity.track_points : []
@@ -458,14 +454,6 @@ export async function POST(req: NextRequest) {
     trackPoints: track,
     altitudeMax: activity.altitude_max as number | undefined,
     month: activity.start_time ? new Date(activity.start_time as string).getMonth() + 1 : new Date().getMonth() + 1,
-    s2: s2 ? {
-      available:          s2.s2_available as boolean | undefined,
-      phenologyPeakMonth:  s2.s2_phenology_peak_month as number | null,
-      ndviDelta:           s2.s2_ndvi_delta as number | null,
-      landscapeVariety:    s2.s2_landscape_variety as number | null,
-      shadeScore:          s2.s2_shade_score as number | null,
-      waterSources:        s2.s2_water_sources as unknown[] | null,
-    } : undefined,
   })
 
   let qa: QaItem[] | undefined

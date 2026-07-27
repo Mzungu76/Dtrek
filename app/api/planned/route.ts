@@ -74,6 +74,11 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     floraTrackHash:                row.flora_track_hash                as string | undefined,
     floraComputedAt:               row.flora_computed_at               as string | undefined,
     updatedAt:                     row.updated_at                      as string | undefined,
+    sourceUrl:                     row.source_url                      as string | undefined,
+    comfortVerdict:                row.comfort_verdict                 as PlannedHike['comfortVerdict'],
+    comfortNote:                   row.comfort_note                    as string | undefined,
+    zone:                          row.zone                            as string | undefined,
+    difficulty:                    row.difficulty                      as string | undefined,
   }
 }
 
@@ -120,6 +125,11 @@ function hikeToRow(h: PlannedHike) {
     pending_expires_at:               h.pendingExpiresAt ?? null,
     archived_at:                      h.archivedAt ?? null,
     favorite:                         h.favorite ?? false,
+    source_url:                       h.sourceUrl ?? null,
+    comfort_verdict:                  h.comfortVerdict ?? null,
+    comfort_note:                     h.comfortNote ?? null,
+    zone:                             h.zone ?? null,
+    difficulty:                       h.difficulty ?? null,
   }
 }
 
@@ -134,6 +144,7 @@ const META_COLS = [
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
   'pending_expires_at', 'archived_at', 'favorite', 'updated_at',
+  'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at

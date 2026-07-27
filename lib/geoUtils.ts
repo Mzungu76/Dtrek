@@ -22,6 +22,90 @@ export function haversineM(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+/** Rotta iniziale (gradi, 0=nord, in senso orario) dal punto 1 al punto 2 — "forward azimuth". */
+export function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const f1 = lat1 * Math.PI / 180, f2 = lat2 * Math.PI / 180
+  const dl = (lon2 - lon1) * Math.PI / 180
+  const y = Math.sin(dl) * Math.cos(f2)
+  const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)
+  const theta = Math.atan2(y, x)
+  return (theta * 180 / Math.PI + 360) % 360
+}
+
+export interface DirectionArrow { lat: number; lon: number; bearing: number }
+
+/**
+ * Punti equidistanti lungo un tracciato (ogni `spacingM` metri), ciascuno con la direzione di
+ * marcia locale — usati per disegnare le frecce di direzione stile Komoot sulla mappa (vedi
+ * MapView.tsx e components/navigation/NavigationMap.tsx), così anche senza navigazione attiva si
+ * capisce a colpo d'occhio in che verso procede il percorso, non solo dove passa.
+ */
+export function computeDirectionArrows(points: [number, number][], spacingM: number): DirectionArrow[] {
+  const arrows: DirectionArrow[] = []
+  let dist = 0
+  let next = spacingM
+  for (let i = 0; i < points.length - 1; i++) {
+    const [aLat, aLon] = points[i]
+    const [bLat, bLon] = points[i + 1]
+    const segDist = haversineM(aLat, aLon, bLat, bLon)
+    if (segDist === 0) continue
+    const bearing = bearingDeg(aLat, aLon, bLat, bLon)
+    while (dist + segDist >= next) {
+      const t = (next - dist) / segDist
+      arrows.push({ lat: aLat + (bLat - aLat) * t, lon: aLon + (bLon - aLon) * t, bearing })
+      next += spacingM
+    }
+    dist += segDist
+  }
+  return arrows
+}
+
+// Soglia entro cui inizio e fine di una traccia sono considerati "lo stesso punto" — un anello o
+// un andata-ritorno pubblicato raramente chiude esattamente sull'ultimo metro (es. un breve tratto
+// di accesso al trailhead), mentre un percorso lineare punto-punto ha capi ben distanti.
+const LOOP_CLOSURE_THRESHOLD_M = 500
+// Rapporto lunghezza-totale/massima-distanza-dal-partenza sotto il quale una traccia "chiusa" è
+// considerata un andata-ritorno (ripercorre lo stesso tratto) invece di un anello (percorso
+// diverso all'andata e al ritorno). Un vero andata-ritorno ha rapporto ~2 (si cammina lo stesso
+// tratto due volte); un anello ha un rapporto ben più alto — un cerchio, il caso più compatto
+// possibile, ha già circonferenza/diametro = π ≈ 3.14. La soglia sta a metà, con margine per un
+// tracciato reale (mai un cerchio perfetto né un andata-ritorno perfettamente rettilineo).
+const OUT_AND_BACK_RATIO_THRESHOLD = 2.5
+
+export type TrackShape = 'loop' | 'out_and_back' | 'linear'
+
+/**
+ * Classifica la forma di una traccia GPS in assenza di un tag esplicito (le relazioni OSM non
+ * portano un dato affidabile anello/andata-ritorno/solo-andata) — usata per i percorsi "trovati"
+ * in components/upload/RouteBuilder.tsx, dove serve capire quale tipo di percorso rappresentano.
+ *
+ * 1. Se inizio e fine sono lontani, il percorso è "lineare" — non può essere un anello, e non si
+ *    distingue andata-ritorno da solo andata dalla sola geometria (la differenza è se si torna sui
+ *    propri passi, non deducibile da una singola traccia).
+ * 2. Se inizio e fine coincidono, si torna comunque al punto di partenza sia per un anello sia per
+ *    un andata-ritorno — la differenza è se il ritorno RIPERCORRE lo stesso tratto (andata-ritorno)
+ *    o ne segue uno diverso (anello). Segnale usato: il rapporto tra lunghezza totale e la massima
+ *    distanza raggiunta dal punto di partenza (vedi OUT_AND_BACK_RATIO_THRESHOLD).
+ */
+export function classifyTrackShape(polyline: [number, number][]): TrackShape {
+  if (polyline.length < 3) return 'linear'
+  const [startLat, startLon] = polyline[0]
+  const [endLat, endLon] = polyline[polyline.length - 1]
+  if (haversineM(startLat, startLon, endLat, endLon) > LOOP_CLOSURE_THRESHOLD_M) return 'linear'
+
+  let totalDistance = 0
+  let maxDispFromStart = 0
+  for (let i = 1; i < polyline.length; i++) {
+    totalDistance += haversineM(polyline[i - 1][0], polyline[i - 1][1], polyline[i][0], polyline[i][1])
+  }
+  for (const [lat, lon] of polyline) {
+    const d = haversineM(startLat, startLon, lat, lon)
+    if (d > maxDispFromStart) maxDispFromStart = d
+  }
+  if (maxDispFromStart === 0) return 'loop'
+  return (totalDistance / maxDispFromStart) <= OUT_AND_BACK_RATIO_THRESHOLD ? 'out_and_back' : 'loop'
+}
+
 const EARTH_R_M = 6371000
 
 function toLocalXY(lat: number, lon: number, lat0: number): [number, number] {

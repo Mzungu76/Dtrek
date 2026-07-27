@@ -25,24 +25,41 @@ export interface DtmTile {
   bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number }
 }
 
-// Tighter than openTopographyClient.ts's own 30s default: this runs inside
-// app/api/tei-dtm/route.ts's request-scoped fetch, so failing fast matters more than
-// tolerating a slow upstream once one is actually configured.
-const DTM_TIMEOUT_MS = 8000
+// Alzato da 8s a 20s: gli 8s originali (motivati da "tei-dtm deve fallire in fretta") si sono
+// rivelati in produzione troppo stretti per una risposta REALE e riuscita di OpenTopography (log
+// confermato: "The operation was aborted due to timeout" su ogni tentativo, mai un vero errore
+// HTTP) — l'API genera/ritaglia il DEM al volo e può richiedere più di 8s anche quando funziona
+// correttamente. 20s resta ampiamente entro il budget di ogni chiamante attuale (tei-dtm:
+// maxDuration 30s: route-search/resolve, route-import, route-build: maxDuration 60s).
+const DTM_TIMEOUT_MS = 20000
 
 export async function fetchDtmTile(bbox: string): Promise<DtmTile | null> {
   if (!process.env.OPENTOPOGRAPHY_API_KEY) {
     throw new DtmUnavailableError('OPENTOPOGRAPHY_API_KEY not set (see .env.example)')
   }
 
-  if (isCircuitOpen(BREAKER_KEY)) return null
+  // Se il breaker è aperto (3+ fallimenti reali consecutivi entro l'ultimo minuto — vedi
+  // lib/geo/circuitBreaker.ts), questa chiamata torna null SENZA nemmeno provare a contattare
+  // OpenTopography — un punto cieco reale: senza questo log, un breaker aperto è indistinguibile
+  // da un fallimento appena avvenuto, e su un'istanza Vercel "calda" riusata tra richieste
+  // ravvicinate può far sembrare che ogni tentativo fallisca dal vivo quando in realtà i
+  // tentativi reali sono stati solo i primi 3.
+  if (isCircuitOpen(BREAKER_KEY)) {
+    console.warn(`[dtm] circuit breaker aperto per ${BREAKER_KEY} — richiesta per bbox ${bbox} saltata senza contattare OpenTopography`)
+    return null
+  }
 
   try {
     const buf = await fetchGlobalDem(bbox, { timeoutMs: DTM_TIMEOUT_MS })
     const tile = await parseDtmGeoTiff(buf)
     recordSuccess(BREAKER_KEY)
     return tile
-  } catch {
+  } catch (e) {
+    // Non cambia il contratto (resta "nessuna copertura", mai un errore per il chiamante) — solo
+    // visibilità sul motivo reale, altrimenti indistinguibile dall'esterno tra bbox genuinamente
+    // fuori copertura, rate limit (50 chiamate/24h per chiavi non accademiche, vedi
+    // scripts/probe-dtm.ts), chiave non valida o timeout.
+    console.warn(`[dtm] fetchDtmTile fallito per bbox ${bbox}:`, e instanceof Error ? e.message : e)
     recordFailure(BREAKER_KEY)
     return null
   }

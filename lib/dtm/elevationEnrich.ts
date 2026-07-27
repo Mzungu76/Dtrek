@@ -22,6 +22,48 @@ export interface EnrichedTrack {
 
 const TILE_BUFFER_M = 50
 
+// Guadagno stimato per km, per una stima SENZA DTM (nessuna chiamata a OpenTopography) — usata in
+// ricerca al posto della quota reale, per non consumare la quota rate-limited del servizio su
+// candidati che l'utente potrebbe scartare (vedi scoreAndEnrichCandidates). ~50m/km è una media
+// plausibile per un sentiero escursionistico italiano — non personalizzata sullo storico
+// dell'utente, solo sulla distanza geometrica del candidato. La quota reale arriva comunque, una
+// sola volta, quando l'utente sceglie/importa il percorso (vedi enrichBuiltCandidateWithRealElevation
+// in lib/routeBuilder/scoreCandidates.ts).
+const ESTIMATED_GAIN_PER_KM = 50
+// Nessun riferimento di quota assoluta è disponibile senza DTM — una base a media quota evita di
+// applicare per errore la fascia "alta quota" di trailScore.ts's altitudeTerrainMultiplier a un
+// sentiero qualunque a bassa quota; corretta dalla quota reale all'importazione.
+const ESTIMATED_BASE_ALTITUDE_M = 800
+
+/**
+ * Stima elevationGain/Loss/altitudeMax/Min/estimatedTimeSeconds da sola distanza geometrica,
+ * SENZA alcuna chiamata DTM — usata in ricerca (vedi scoreAndEnrichCandidates) per non spendere
+ * quota OpenTopography su candidati non ancora scelti dall'utente. `trackPoints` non porta
+ * `altitudeMeters` (nessun dato reale disponibile): i consumatori che dipendono da un profilo
+ * altimetrico per-punto (es. la rilevazione tratti ripidi in scoreCandidates.ts's maxGradePct)
+ * degradano già con garbo in sua assenza, esattamente come per un percorso "trovato" senza
+ * copertura DTM.
+ */
+export function estimateElevationForGeometry(geometry: [number, number][]): EnrichedTrack {
+  const now = new Date()
+  const trackPoints: TrackPoint[] = geometry.map(([lat, lon]) => ({ time: now.toISOString(), lat, lon }))
+  const distanceKm = totalDistanceKm(geometry)
+  const elevationGain = Math.round(distanceKm * ESTIMATED_GAIN_PER_KM)
+  // Un anello torna al punto di partenza, un andata/ritorno ripercorre lo stesso tratto al
+  // contrario: in entrambi i casi la perdita di quota stimata è simmetrica al guadagno.
+  const elevationLoss = elevationGain
+
+  return {
+    trackPoints,
+    distanceMeters: Math.round(distanceKm * 1000),
+    elevationGain,
+    elevationLoss,
+    altitudeMax: ESTIMATED_BASE_ALTITUDE_M + elevationGain,
+    altitudeMin: ESTIMATED_BASE_ALTITUDE_M,
+    estimatedTimeSeconds: estimateTimeMinutes(distanceKm, elevationGain) * 60,
+  }
+}
+
 /**
  * Prende una geometria [lat,lon][] (nessuna quota) e restituisce un set di statistiche/TrackPoint
  * completo di altitudeMeters, pronto per savePlanned — la stessa forma che produce un import GPX.

@@ -11,6 +11,7 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { colorSegmentsByDtm, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { slopeColorSigned, computeSignedSlopeSeries } from '@/lib/slopeColor'
+import { computeDirectionArrows } from '@/lib/geoUtils'
 import { useRouteTour, SPEEDS } from './mapview/useRouteTour'
 import TourControls from './mapview/TourControls'
 
@@ -28,8 +29,10 @@ interface Props {
   activeIndex?: number | null
   /** When false, disables all native pan/zoom gestures (used by the fullscreen route hub's "locked" mode). Default true. */
   interactive?: boolean
-  /** Index into `pois` to draw larger/highlighted and pan the map to (used by the route hub's POI section, synced to scroll position). */
-  highlightedPoiIndex?: number | null
+  /** Indices into `pois` to draw larger/highlighted (and pan the map to, only when exactly one) —
+   *  used by the route hub's POI section, synced to scroll position/gallery selection. More than
+   *  one index highlights a whole group (e.g. a "Rifugio ×3" badge) at once. */
+  highlightedPoiIndices?: number[] | null
   /** Fired when a POI marker is tapped — lets the caller scroll/highlight the matching paragraph
    *  in the tourist guide (e.g. "I luoghi da non perdere"). Doesn't replace the existing
    *  zoom-in-on-click behavior, just runs alongside it. */
@@ -74,7 +77,25 @@ interface Props {
   focusPoints?: { lat: number; lon: number }[] | null
   /** Increment to re-run the `focusPoints` fit/pan — mirrors the `fitSignal` pattern. */
   focusSignal?: number
+  /** Draws small chevron markers along the route (Komoot-style) showing which way it goes —
+   *  off by default so decorative/tiny renders (e.g. the guide hero thumbnail) stay uncluttered. */
+  showDirectionArrows?: boolean
+  /** Increment right when the container's CSS size is about to change for a reason the
+   *  ResizeObserver below might not catch in time (e.g. the "schermo intero" class swap in
+   *  RouteMapSection/PoiMap) — forces an immediate invalidateSize()+refit instead of waiting for
+   *  the observer, so the map never gets stuck rendering tiles for its pre-fullscreen size while
+   *  the container is already the new one (leaflet's classic "partial gray map" symptom). */
+  resizeSignal?: number
 }
+
+// Distanza (metri) tra una freccia di direzione e la successiva — discreta: un tocco che indica
+// il verso, non una sequenza fitta che compete visivamente col tracciato. Alzata da 200 a 400m
+// dopo il primo giro di feedback ("troppo numerose").
+const DIRECTION_ARROW_SPACING_M = 400
+// Dimensioni ridotte (~30% in meno rispetto al primo giro) per restare un dettaglio discreto
+// invece di dominare la mappa — icona/contenitore misurati sull'icona finita (freccia + margine).
+const DIRECTION_ARROW_ICON_PX = 11
+const DIRECTION_ARROW_SVG_PX = 9
 
 const DTM_MATCH_RADIUS_M = 25
 
@@ -112,7 +133,7 @@ export default function MapView({
   planned = false,
   activeIndex = null,
   interactive = true,
-  highlightedPoiIndex = null,
+  highlightedPoiIndices = null,
   onPoiTap,
   highlightedDifficultyIndex = null,
   showPoiLayer = false,
@@ -128,6 +149,8 @@ export default function MapView({
   poiMarkerScale = 1,
   focusPoints = null,
   focusSignal,
+  showDirectionArrows = false,
+  resizeSignal,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<L.Map | null>(null)
@@ -207,13 +230,14 @@ export default function MapView({
         const AspectLegend = L.Control.extend({
           onAdd(): HTMLElement {
             const d = L.DomUtil.create('div', '')
-            d.style.cssText = 'background:white;padding:6px 10px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,0.2)'
+            d.style.cssText = 'background:white;padding:6px 10px;border-radius:8px;font-size:11px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,0.2);max-width:190px'
             d.innerHTML = [
               '<b>Esposizione</b>',
-              `<span style="color:${aspectDegToColor(0)}">■</span> N`,
-              `<span style="color:${aspectDegToColor(90)}">■</span> E`,
-              `<span style="color:${aspectDegToColor(180)}">■</span> S`,
-              `<span style="color:${aspectDegToColor(270)}">■</span> O`,
+              `<span style="color:${aspectDegToColor(180)}">■</span> Sud — più caldo/soleggiato`,
+              `<span style="color:${aspectDegToColor(0)}">■</span> Nord — più freddo/in ombra`,
+              `<span style="color:${aspectDegToColor(90)}">■</span> Est — sole al mattino`,
+              `<span style="color:${aspectDegToColor(270)}">■</span> Ovest — sole al pomeriggio`,
+              '<span style="display:block;margin-top:3px;color:#9ca3af;font-size:10px;line-height:1.35">D\'estate i versanti sud scaldano di più, d\'inverno hanno meno neve/ghiaccio — dipende comunque da quota e stagione.</span>',
             ].join('<br>')
             return d
           },
@@ -286,6 +310,22 @@ export default function MapView({
         map.fitBounds(L.polyline(coords).getBounds(), { padding: [20, 20], animate: false })
       }
 
+      // Frecce di direzione lungo il tracciato (stile Komoot) — indipendenti da quale coloring
+      // branch sopra ha disegnato la linea, sempre sopra di essa.
+      if (showDirectionArrows) {
+        const arrowColor = routeColor ?? baseColor
+        const px = DIRECTION_ARROW_ICON_PX
+        for (const arrow of computeDirectionArrows(coords, DIRECTION_ARROW_SPACING_M)) {
+          const icon = L.divIcon({
+            html: `<div class="dtrek-arrow-pulse" style="transform:rotate(${arrow.bearing}deg);width:${px}px;height:${px}px;display:flex;align-items:center;justify-content:center">
+                     <svg width="${DIRECTION_ARROW_SVG_PX}" height="${DIRECTION_ARROW_SVG_PX}" viewBox="0 0 24 24" fill="${arrowColor}" stroke="white" stroke-width="2.5"><path d="M12 2 L20 20 L12 15 L4 20 Z"/></svg>
+                   </div>`,
+            iconSize: [px, px], iconAnchor: [px / 2, px / 2], className: '',
+          })
+          L.marker([arrow.lat, arrow.lon], { icon, interactive: false, keyboard: false }).addTo(map)
+        }
+      }
+
       // Start / end markers (always shown)
       const mkIcon = (label: string, color: string) => L.divIcon({
         html: `<div style="background:${color};color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${label}</div>`,
@@ -306,7 +346,7 @@ export default function MapView({
         setMapReady(false)
       }
     }
-  }, [trackPoints, showGradient, showAspect, planned, routeColor, routeWeight, routeOpacity, showEndpointMarkers]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
+  }, [trackPoints, showGradient, showAspect, planned, routeColor, routeWeight, routeOpacity, showEndpointMarkers, showDirectionArrows]) // eslint-disable-line react-hooks/exhaustive-deps -- dtmProfile read via ref to avoid full map reinit when it arrives async
 
   // "Torna alla vista d'insieme" — re-fits the route's original extent without touching pan/zoom
   // locks or remounting the map. Only reacts to fitSignal actually changing (not its initial
@@ -391,6 +431,28 @@ export default function MapView({
     return () => { cancelAnimationFrame(raf); observer.disconnect() }
   }, [mapReady])
 
+  // Correzione esplicita e immediata per lo stesso problema del ResizeObserver sopra — non lo
+  // sostituisce, lo affianca: la classe "schermo intero" può scambiare position:fixed/inset-0 nello
+  // stesso frame in cui l'utente preme il pulsante, e se invalidateSize() arriva anche solo un
+  // frame dopo che l'utente ha già iniziato a pizzicare/zoomare, Leaflet continua a renderizzare
+  // tile solo per l'area (più piccola) che conosceva PRIMA del cambio, lasciando grigio il resto
+  // del contenitore ormai più grande finché non arriva un altro resize — il sintomo "mappa parziale
+  // dopo ingrandimento/rimpicciolimento" segnalato dagli utenti. Il chiamante (RouteMapSection.tsx,
+  // PoiMap.tsx) incrementa `resizeSignal` nello stesso click handler che cambia la classe, quindi
+  // qui si corre PRIMA che l'utente possa interagire di nuovo con la mappa.
+  const resizeSignalRef = useRef(resizeSignal)
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current || !boundsRef.current) return
+    if (resizeSignal == null || resizeSignal === resizeSignalRef.current) return
+    resizeSignalRef.current = resizeSignal
+    const map = mapInstance.current
+    const bounds = boundsRef.current
+    requestAnimationFrame(() => {
+      map.invalidateSize()
+      map.fitBounds(bounds, { padding: [20, 20], animate: false })
+    })
+  }, [resizeSignal, mapReady])
+
   // Tracks whichever LatLng currently sits at the *visible* (unobscured) center — every user
   // pan/zoom (and our own corrective pans below) updates it, so "the point centered before the
   // change" always means the right thing, whether that's the route's initial center or somewhere
@@ -437,9 +499,15 @@ export default function MapView({
 
       if (!showPoiLayer) return
 
+      // Uno o più POI evidenziati (un singolo POI, o un intero gruppo con lo stesso badge)
+      // attenuano tutti gli altri pin — stesso trattamento della galleria sotto (PoiIconChip.tsx).
+      const highlightedSet = highlightedPoiIndices && highlightedPoiIndices.length > 0 ? new Set(highlightedPoiIndices) : null
+      const anyHighlighted = highlightedSet != null
+
       pois.forEach((poi, i) => {
         const meta = POI_META[poi.type]
-        const isHighlighted = i === highlightedPoiIndex
+        const isHighlighted = highlightedSet?.has(i) ?? false
+        const isDimmed = anyHighlighted && !isHighlighted
         const hasLink = poiHasLink(poi)
         const size = Math.round((isHighlighted ? 40 : 28) * poiMarkerScale)
         // POIs with a Wikipedia/website link get a blue ring + badge, so they stand out on the
@@ -449,7 +517,7 @@ export default function MapView({
              <div style="position:absolute;bottom:-1px;right:-1px;width:11px;height:11px;border-radius:50%;background:#2563eb;border:1.5px solid white"></div>`
           : ''
         const icon = L.divIcon({
-          html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;transition:width .2s,height .2s">
+          html: `<div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;transition:width .2s,height .2s,opacity .2s;opacity:${isDimmed ? 0.35 : 1};filter:${isDimmed ? 'grayscale(1)' : 'none'}">
                    ${ring}
                    ${poiBadgeMarkup(poi.type, meta.color, size, isHighlighted ? 4 : 2)}
                  </div>`,
@@ -468,11 +536,14 @@ export default function MapView({
         poiMarkersRef.current.set(poi.id, m)
       })
 
-      if (highlightedPoiIndex != null && pois[highlightedPoiIndex]) {
-        mapInstance.current!.panTo([pois[highlightedPoiIndex].lat, pois[highlightedPoiIndex].lon])
+      // Pan automatico solo per un singolo POI evidenziato — un gruppo (più indici insieme) usa
+      // invece focusPoints/focusSignal (fitBounds su tutti i suoi membri, vedi PoiListWidget.tsx),
+      // che qui rimarrebbe scavalcato da un panTo su un solo punto arbitrario del gruppo.
+      if (highlightedPoiIndices?.length === 1 && pois[highlightedPoiIndices[0]]) {
+        mapInstance.current!.panTo([pois[highlightedPoiIndices[0]].lat, pois[highlightedPoiIndices[0]].lon])
       }
     })
-  }, [pois, mapReady, highlightedPoiIndex, showPoiLayer, poiMarkerScale]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pois, mapReady, highlightedPoiIndices, showPoiLayer, poiMarkerScale]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {

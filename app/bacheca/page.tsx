@@ -118,8 +118,22 @@ export default function BachecaPage() {
   const [activeCategory, setActiveCategory] = useState<Category | 'all'>('all')
   const [gridOpen, setGridOpen] = useState(false)
   const [userSettings, setUserSettings] = useState<{ hrMax?: number | null; derivedFCmax?: number; hrRest?: number | null; userWeightKg?: number }>({})
+  // Solo per la tile teaser di "Percorsi per te" (vedi sotto) — un fetch leggero, nessun
+  // arricchimento per-card qui, solo lo stato e il conteggio per il badge.
+  const [recoStatus, setRecoStatus] = useState<'loading' | 'ok' | 'empty_no_location' | 'error'>('loading')
+  const [recoCount, setRecoCount] = useState(0)
 
   useEffect(() => { setInfoOpen(false) }, [selectedId])
+
+  useEffect(() => {
+    // ?peek=1: mai innescare il bootstrap di generazione da qui (vedi app/api/percorsi-per-te/route.ts)
+    // — questa tile deve restare un fetch leggero, non il punto che fa partire una generazione
+    // completa solo perché l'utente ha aperto la Bacheca.
+    fetch('/api/percorsi-per-te?peek=1')
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(data => { setRecoStatus(data.status); setRecoCount((data.cards ?? []).length) })
+      .catch(() => setRecoStatus('error'))
+  }, [])
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
@@ -663,6 +677,21 @@ export default function BachecaPage() {
         </div>
 
         <div className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
+          <Link
+            href="/percorsi-per-te"
+            className="shrink-0 w-40 h-20 rounded-2xl overflow-hidden relative flex flex-col justify-center gap-0.5 px-3"
+            style={{
+              scrollSnapAlign: 'start',
+              background: 'linear-gradient(150deg, rgba(217,114,32,0.9) 0%, rgba(129,54,25,0.9) 100%)',
+            }}
+          >
+            <span className="absolute top-1.5 right-1.5 text-[8px] font-extrabold tracking-wide bg-white text-terra-700 px-1.5 py-0.5 rounded-full">NUOVO</span>
+            <Sparkles className="w-4 h-4 text-white/90 mb-0.5" />
+            <span className="text-xs font-bold text-white leading-tight">Percorsi per te</span>
+            <span className="text-[10px] font-medium text-white/80 leading-tight">
+              {recoStatus === 'ok' && recoCount > 0 ? `${recoCount} scelti per te` : 'Scoprili ora'}
+            </span>
+          </Link>
           {displayedItems.map(item => (
             <FilmstripTile key={item.id} item={item} selected={item.id === selectedId} onSelect={() => setSelectedId(item.id)} />
           ))}

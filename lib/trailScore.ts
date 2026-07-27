@@ -240,10 +240,16 @@ export function computeTrailScore(
   const fNorm      = (fFinal - 5) / 5                // [−1, +1], pivot su difficoltà media 5
   const sfidaBonus = clamp(sforzaNorm * fNorm * 12, -12, 12)
 
+  // Simmetrica: uno scostamento del 20% dalla durata preferita dell'utente pesa uguale sia in
+  // eccesso che in difetto — prima σ era più stretto sopra la preferenza (0.5) che sotto (0.7),
+  // il che penalizzava i percorsi più lunghi più severamente di quelli più corti a parità di
+  // scostamento relativo, finendo per premiare sistematicamente la brevità invece della vicinanza
+  // reale alla preferenza dell'utente (vedi anche computeProvisionalScore, che riusa questa stessa
+  // formula per il punteggio provvisorio mostrato sui risultati di ricerca).
   const duraOre    = tNaismith + tDesa + tDescRaw    // stima Naismith (ore)
   const prefDuraOre = prefDurata / 60
   const relDiff    = (duraOre - prefDuraOre) / prefDuraOre
-  const σ          = relDiff >= 0 ? 0.5 : 0.7        // troppo lungo decade più in fretta
+  const σ          = 0.6
   const duraBonus  = -(1 - Math.exp(-0.5 * (relDiff / σ) ** 2)) * 12
 
   const ts = clamp(tsBase + sfidaBonus + duraBonus, 0, 100)

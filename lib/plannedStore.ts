@@ -112,6 +112,15 @@ export interface PlannedHike {
   floraResult?:                  FloraResult
   floraTrackHash?:                string
   floraComputedAt?:              string
+  // Metadati di un percorso "trovato" da Giulia (ricerca AI di un percorso già documentato, vedi
+  // components/upload/RouteBuilder.tsx / GiuliaSearchPanel.tsx) invece che costruito
+  // algoritmicamente — assenti su un percorso costruito o importato in altro modo. Valorizzati una
+  // sola volta al salvataggio, mai modificati dopo (stesso trattamento di osmId).
+  sourceUrl?:                    string
+  comfortVerdict?:               'adatto' | 'da_valutare' | 'sconsigliato'
+  comfortNote?:                  string
+  zone?:                         string
+  difficulty?:                   string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)

@@ -83,7 +83,19 @@ export async function parseDtmGeoTiff(buf: ArrayBuffer): Promise<DtmTile | null>
     }
 
     return { elevations, width, height, cellSizeXM, cellSizeYM, bbox: { minLat, maxLat, minLon, maxLon } }
-  } catch {
+  } catch (e) {
+    // Non cambia il contratto (fetchDtmTile tratta comunque questo come "nessuna copertura",
+    // vedi dtmClient.ts) — ma questo catch è un ramo diverso e finora silenzioso rispetto a
+    // quelli già strumentati in dtmClient.ts: qui la chiamata HTTP a OpenTopography è RIUSCITA
+    // (altrimenti l'errore sarebbe nel catch di fetchDtmTile, non qui), solo il corpo non era un
+    // GeoTIFF decodificabile — il caso più probabile per un endpoint mai verificato contro una
+    // risposta reale (vedi header di lib/dtm/openTopographyClient.ts).
+    // Le prime centinaia di byte come testo aiutano a distinguere un vero GeoTIFF troncato/corrotto
+    // da un corpo che è in realtà un messaggio d'errore testuale (XML/JSON) restituito con status
+    // 200 — capitato altrove in questo stesso progetto con le fonti GNA (vedi i log "[GNA] ... HTTP
+    // 400" nelle stesse richieste), quindi non è un caso implausibile anche qui.
+    const preview = new TextDecoder('utf-8', { fatal: false }).decode(buf.slice(0, 300))
+    console.warn(`[dtm] parseDtmGeoTiff fallito (risposta OpenTopography non decodificabile come GeoTIFF, ${buf.byteLength} byte):`, e instanceof Error ? e.message : e, '— anteprima corpo:', preview)
     return null
   }
 }

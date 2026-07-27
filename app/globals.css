@@ -90,6 +90,15 @@ body {
 }
 .progress-indeterminate { animation: indeterminateBar 1.4s ease-in-out infinite; }
 
+/* Frecce di direzione sul tracciato (MapView.tsx, NavigationMap.tsx) — pulsazione leggera e
+   discreta quando il layer è attivo, non un lampeggio vistoso: solo opacità, niente scala/blur
+   che sposterebbe il bordo bianco fuori dal marker leaflet a ogni frame. */
+@keyframes dtrekArrowPulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.dtrek-arrow-pulse { animation: dtrekArrowPulse 1.8s ease-in-out infinite; }
+
 /* Chart tooltip */
 .recharts-tooltip-wrapper { font-family: 'DM Sans', sans-serif !important; font-size: 13px !important; }
 

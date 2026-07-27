@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed } from 'lucide-react'
+import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Navigation } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 
@@ -12,7 +12,9 @@ interface Props {
   /** Tutti i POI del percorso — anche quelli senza voce Wikipedia restano visibili in mappa,
    *  solo la lista/card sotto mostra unicamente quelli con approfondimento. */
   pois: PoiItem[]
-  highlightedPoiId?: number | null
+  /** Id dei POI attualmente evidenziati — un solo id per un POI singolo, più id insieme per un
+   *  gruppo selezionato (badge con contatore) — vedi PoiListWidget.tsx. */
+  highlightedPoiIds?: Set<number> | null
   onPoiTap?: (poi: PoiItem) => void
   onOpenMap3D?: () => void
   /** Coordinate su cui inquadrare la mappa al prossimo `focusSignal` — usato dalle icone
@@ -30,18 +32,22 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  * (RouteMapSection: 3D/schermo intero/lucchetto/vista d'insieme). Il risalto ai POI viene dai
  * pin più grandi del normale (poiMarkerScale) e da un tracciato di base volutamente tenue, non
  * da cornici o etichette aggiuntive. Sincronizzata bidirezionalmente con le card della lista
- * tramite `highlightedPoiId`/`onPoiTap`.
+ * tramite `highlightedPoiIds`/`onPoiTap`.
  */
 export default function PoiMap({
-  trackPoints, pois, highlightedPoiId = null, onPoiTap, onOpenMap3D, focusPoints, focusSignal,
+  trackPoints, pois, highlightedPoiIds = null, onPoiTap, onOpenMap3D, focusPoints, focusSignal,
 }: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
   const [fitTick, setFitTick] = useState(0)
+  const [showArrows, setShowArrows] = useState(false)
+  const [resizeTick, setResizeTick] = useState(0)
 
-  const highlightedIndex = useMemo(
-    () => (highlightedPoiId == null ? null : pois.findIndex(p => p.id === highlightedPoiId)),
-    [highlightedPoiId, pois],
+  const highlightedIndices = useMemo(
+    () => (!highlightedPoiIds || highlightedPoiIds.size === 0
+      ? null
+      : pois.reduce<number[]>((acc, p, i) => { if (highlightedPoiIds.has(p.id)) acc.push(i); return acc }, [])),
+    [highlightedPoiIds, pois],
   )
 
   const hasGps = !!trackPoints?.some(p => p.lat && p.lon)
@@ -53,6 +59,7 @@ export default function PoiMap({
       if (next) setLocked(false)
       return next
     })
+    setResizeTick(t => t + 1)
   }
 
   return (
@@ -64,16 +71,25 @@ export default function PoiMap({
         trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
         pois={pois} showPoiLayer poiMarkerScale={1.25}
         routeColor="#8a6d3b" routeWeight={4} routeOpacity={0.85} showEndpointMarkers={false}
-        highlightedPoiIndex={highlightedIndex}
+        highlightedPoiIndices={highlightedIndices}
         onPoiTap={poi => onPoiTap?.(poi)}
         fitSignal={fitTick}
         focusPoints={focusPoints}
         focusSignal={focusSignal}
+        showDirectionArrows={showArrows}
+        resizeSignal={resizeTick}
       />
       <div
         className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
         style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}
       >
+        <button
+          onClick={() => setShowArrows(v => !v)}
+          title={showArrows ? 'Nascondi le frecce di direzione' : 'Mostra le frecce di direzione'}
+          className={showArrows ? chipActive : chipIdle}
+        >
+          <Navigation className="w-4 h-4" />
+        </button>
         {onOpenMap3D && (
           <button onClick={onOpenMap3D} title="Vista 3D" className={chipIdle}>
             <Box className="w-4 h-4" />

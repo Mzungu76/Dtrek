@@ -3,6 +3,7 @@
 // REST API (hiking.waymarkedtrails.org/api/v1) blocks datacenter-origin
 // requests with 403, so only its tile overlay is used directly client-side —
 // these routes fetch the underlying OSM hiking-route data from Overpass instead.
+import { haversineM } from './geoUtils'
 
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -58,6 +59,11 @@ export interface HikingRouteCandidate {
   hasName: boolean
   ref?: string
   network?: string
+  // Centro geometrico della relazione (da "out center", vedi mapAndSortCandidates) — assente solo
+  // se Overpass non lo calcola per qualche elemento incompleto. Usato per ordinare i risultati dal
+  // più vicino al più lontano rispetto al luogo/punto cercato (vedi sortByDistanceFrom).
+  lat?: number
+  lon?: number
 }
 
 const NETWORK_RANK: Record<string, number> = { iwn: 4, nwn: 3, rwn: 2, lwn: 1 }
@@ -81,7 +87,7 @@ function mapAndSortCandidates(elements: (OsmRelation | OsmWay)[]): HikingRouteCa
     .filter((e): e is OsmRelation => e.type === 'relation')
     .map(e => {
       const { name, hasName } = displayName(e.tags, e.id)
-      return { id: e.id, name, hasName, ref: e.tags?.ref, network: e.tags?.network }
+      return { id: e.id, name, hasName, ref: e.tags?.ref, network: e.tags?.network, lat: e.center?.lat, lon: e.center?.lon }
     })
 
   // Named trails first (more likely to be well-known, recognizable routes),
@@ -94,12 +100,20 @@ function mapAndSortCandidates(elements: (OsmRelation | OsmWay)[]): HikingRouteCa
   return candidates
 }
 
+// route=hiking è il tag "giusto" per un percorso escursionistico, ma molte relazioni reali —
+// specialmente quelle mappate da comuni/pro-loco locali invece che da una sezione CAI — usano
+// route=foot (percorso pedonale generico) anche quando si tratta a tutti gli effetti di un
+// sentiero escursionistico: la distinzione OSM tra le due è più una convenzione di chi mappa che
+// una differenza reale sul terreno. Escludere route=foot faceva sembrare "senza percorsi
+// documentati" zone che in realtà ne hanno, solo taggati diversamente.
+const HIKING_ROUTE_FILTER = '["route"~"^(hiking|foot)$"]'
+
 export async function queryHikingRelationsInBbox(
   minLat: number, minLon: number, maxLat: number, maxLon: number, limit: number,
 ): Promise<HikingRouteCandidate[]> {
   const query = `[out:json][timeout:25][maxsize:8388608];
-relation["type"="route"]["route"="hiking"](${minLat},${minLon},${maxLat},${maxLon});
-out tags ${limit};`
+relation["type"="route"]${HIKING_ROUTE_FILTER}(${minLat},${minLon},${maxLat},${maxLon});
+out center tags ${limit};`
 
   const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
   return mapAndSortCandidates(json.elements ?? [])
@@ -170,8 +184,22 @@ export async function resolveComuneFromLatLon(lat: number, lon: number): Promise
 }
 
 // Bbox approssimativo dell'Italia — usato come limite quando resolveAreaBbox non ha risolto
-// nulla, per tenere la query Overpass comunque limitata invece che davvero globale.
-const ITALY_BBOX: [number, number, number, number] = [35.2, 6.6, 47.1, 18.6]
+// nulla, per tenere la query Overpass comunque limitata invece che davvero globale. Esportato per
+// lib/routeBuilder/resolvePlace.ts, che lo riusa come stesso fallback quando l'utente cerca un POI
+// per nome senza indicare un'area.
+export const ITALY_BBOX: [number, number, number, number] = [35.2, 6.6, 47.1, 18.6]
+
+// Oltre questa lunghezza, un testo non è più un plausibile nome di luogo/percorso ma una frase
+// libera (es. "Percorsi tra borghi storici entro 50 km") — usarlo comunque come query di una
+// ricerca Overpass per nome estesa a tutta Italia (ITALY_BBOX) significherebbe far girare un
+// regex su migliaia di elementi a livello nazionale, la stessa categoria di query pesante che ha
+// già causato dei 504 in produzione (vedi lib/routeBuilder/osmGraph.ts). Usato da
+// lib/routeBuilder/resolvePlace.ts e app/api/route-build/search/route.ts per saltare quel
+// fallback nazionale quando non c'è un'area a restringere il bbox.
+const MAX_PLAUSIBLE_NAME_WORDS = 6
+export function looksLikePlaceName(text: string): boolean {
+  return text.trim().split(/\s+/).filter(Boolean).length <= MAX_PLAUSIBLE_NAME_WORDS
+}
 
 /**
  * Espande un bbox di radiusKm in ogni direzione — usata dal fallback "cerca sentieri nei
@@ -202,8 +230,8 @@ export async function searchHikingRoutesByName(
   // percorsi), ma i caratteri regex-speciali vengono comunque neutralizzati per sicurezza.
   const escaped = nameQuery.replace(/[[\]{}()*+?.,\\^$|#\s]/g, s => s === ' ' ? '.*' : `\\${s}`)
   const query = `[out:json][timeout:25][maxsize:8388608];
-relation["type"="route"]["route"="hiking"]["name"~"${escaped}",i](${minLat},${minLon},${maxLat},${maxLon});
-out tags ${limit};`
+relation["type"="route"]${HIKING_ROUTE_FILTER}["name"~"${escaped}",i](${minLat},${minLon},${maxLat},${maxLon});
+out center tags ${limit};`
 
   const json = await fetchOverpass<{ elements: OsmRelation[] }>(query)
   return mapAndSortCandidates(json.elements ?? [])
@@ -222,6 +250,23 @@ export interface OsmRelation {
   id: number
   members?: Array<{ type: string; ref: number; role: string }>
   tags?: Record<string, string>
+  // Presente solo quando la query Overpass chiede "out center" (vedi queryHikingRelationsInBbox e
+  // searchHikingRoutesByName) — centro geometrico approssimato della relazione.
+  center?: { lat: number; lon: number }
+}
+
+/**
+ * Ordina candidati con centro noto dal più vicino al più lontano rispetto a un punto di
+ * riferimento (tipicamente il luogo risolto dalla ricerca, vedi app/api/route-build/search/route.ts)
+ * — quelli senza centro (Overpass non l'ha calcolato) restano in fondo, non scartati.
+ */
+export function sortByDistanceFrom<T extends { lat?: number; lon?: number }>(
+  candidates: T[], lat: number, lon: number,
+): T[] {
+  return candidates
+    .map(c => ({ c, d: c.lat != null && c.lon != null ? haversineM(lat, lon, c.lat, c.lon) : Infinity }))
+    .sort((a, b) => a.d - b.d)
+    .map(({ c }) => c)
 }
 
 export interface OsmWay {

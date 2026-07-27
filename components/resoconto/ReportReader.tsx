@@ -52,7 +52,7 @@ import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import {
   Pencil, Loader2, BookOpen, Share2, Copy, Link2Off, ExternalLink,
-  Compass, Layers, RefreshCw, Heart, Zap, Flame,
+  Layers, RefreshCw, Heart, Zap, Flame,
 } from 'lucide-react'
 
 /** Distribuisce le foto tra i capitoli narrativi in base alla loro progressione lungo il
@@ -597,9 +597,6 @@ export default function ReportReader({
 
             {hasGps && data.dtmProfile?.source === 'dtm' && (
               <div className="flex items-center gap-1.5 flex-wrap">
-                <button onClick={data.onToggleAspect} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${data.showAspect ? 'bg-forest-500 text-white border-forest-500' : 'bg-stone-50 border-stone-200 text-stone-500'}`}>
-                  <Compass className="w-3 h-3" /> Esposizione
-                </button>
                 {activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
                   <button onClick={data.onToggleGradient} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${data.showGradient ? 'bg-forest-500 text-white border-forest-500' : 'bg-stone-50 border-stone-200 text-stone-500'}`}>
                     <Layers className="w-3 h-3" /> Pendenza
@@ -666,6 +663,8 @@ export default function ReportReader({
                 onOpenMap3D={onOpenMap3D}
                 showGradient={data.showGradient}
                 showAspect={data.showAspect}
+                showAspectToggle={data.dtmProfile?.source === 'dtm'}
+                onToggleAspect={data.onToggleAspect}
                 dtmProfile={data.dtmProfile}
               />
             ) : (
@@ -690,7 +689,7 @@ export default function ReportReader({
             centerLon={gpsPoints[Math.floor(gpsPoints.length / 2)]?.lon}
             onWikiLoaded={() => {}}
             highlightedPoiId={highlightedPoiId}
-            onItemTap={poi => setHighlightedPoiId(poi.id)}
+            onItemTap={poi => setHighlightedPoiId(prev => prev === poi.id ? null : poi.id)}
             trackPoints={activity.trackPoints}
             onOpenMap3D={onOpenMap3D}
           />

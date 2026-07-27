@@ -3,7 +3,7 @@ import type * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
-import { Mountain, ArrowUpDown, Upload, Star } from 'lucide-react'
+import { Mountain, ArrowUpDown, Upload, Star, Search, X } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
@@ -120,16 +120,18 @@ function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
       L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
       const line = L.polyline(polyline, { color: '#7dd3fc', weight: 4, opacity: 0.95 }).addTo(map)
       const fit = () => map.fitBounds(line.getBounds(), { padding: [4, 4] })
-      fit()
 
       // Stessa correzione di CoverMap.tsx: appena montata via IntersectionObserver (vedi sopra),
-      // il quadrato di galleria può non avere ancora la sua dimensione finale — senza questo la
-      // mappa carica le tile solo per il riquadro sbagliato misurato a quel momento.
+      // il quadrato di galleria può non avere ancora la sua dimensione finale — passando anche il
+      // primissimo fit dalla stessa coda rAF del ResizeObserver invece di chiamarlo subito, si
+      // evita il doppio fit (uno sbagliato seguito da una correzione visibile).
       let raf = 0
-      observer = new ResizeObserver(() => {
+      const scheduleFit = () => {
         cancelAnimationFrame(raf)
         raf = requestAnimationFrame(() => { if (!cancelled) { map.invalidateSize(); fit() } })
-      })
+      }
+      scheduleFit()
+      observer = new ResizeObserver(scheduleFit)
       observer.observe(mapRef.current)
     })
     return () => {
@@ -171,12 +173,17 @@ interface Props {
    *  group. Absent (both undefined) hides the star button entirely, e.g. in Resoconto. */
   favoritesFilter?: boolean
   onToggleFavoritesFilter?: () => void
+  /** Ricerca per titolo — filtra sia questa striscia sia il carosello sopra (vedi RouteHub.tsx,
+   *  che compone la ricerca nello stesso `visibleItems` passato a entrambi). */
+  searchQuery: string
+  onSearchQueryChange: (query: string) => void
 }
 
 export default function BottomGallery({
   mode, items, currentId, onSelect, sortBy, onSortChange, importLabel, onImport,
-  favoritesFilter, onToggleFavoritesFilter,
+  favoritesFilter, onToggleFavoritesFilter, searchQuery, onSearchQueryChange,
 }: Props) {
+  const [searchOpen, setSearchOpen] = useState(false)
   const hasSortData = items.some(i => i.sortValues)
   const hasDistance = items.some(i => i.sortValues?.distance != null)
   // "Distanza" stays hidden until the user's saved address has actually been geocoded for at
@@ -196,12 +203,41 @@ export default function BottomGallery({
     el?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
   }, [currentId])
 
-  if (items.length === 0 && !onImport) return null
+  if (items.length === 0 && !onImport && !searchQuery) return null
 
   return (
     <div>
-      {(hasSortData || onToggleFavoritesFilter) && (
+      {searchOpen && (
+        <div className="relative px-4 mb-2">
+          <Search className="w-3.5 h-3.5 text-white/50 absolute left-6 top-1/2 -translate-y-1/2" />
+          <input
+            autoFocus
+            value={searchQuery}
+            onChange={e => onSearchQueryChange(e.target.value)}
+            placeholder="Cerca per titolo…"
+            className="w-full pl-8 pr-8 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-[12px] text-white placeholder:text-white/40 outline-none focus:border-white/40"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => onSearchQueryChange('')}
+              className="absolute right-6 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+      {(hasSortData || onToggleFavoritesFilter || items.length > 1 || searchQuery) && (
         <div className="flex items-center justify-center gap-1.5 overflow-x-auto px-4 mb-2">
+          <button
+            onClick={() => setSearchOpen(v => { const next = !v; if (!next) onSearchQueryChange(''); return next })}
+            title="Cerca un percorso"
+            className={`shrink-0 flex items-center justify-center w-6 h-6 rounded-full border backdrop-blur-md transition-colors ${
+              searchOpen ? 'bg-white text-stone-800 border-white' : 'bg-black/40 text-stone-200 border-white/20'
+            }`}
+          >
+            <Search className="w-3 h-3" />
+          </button>
           {onToggleFavoritesFilter && (
             <button
               onClick={onToggleFavoritesFilter}

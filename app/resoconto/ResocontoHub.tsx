@@ -88,6 +88,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [saving,     setSaving]     = useState(false)
   const [notesVal,   setNotesVal]   = useState('')
   const [editNotes,  setEditNotes]  = useState(false)
+  const [titleVal,   setTitleVal]   = useState('')
+  const [editTitle,  setEditTitle]  = useState(false)
   const [showGradient, setShowGradient] = useState(false)
   const [showAspect,   setShowAspect]   = useState(false)
   const [pois,            setPois]           = useState<PoiItem[]>([])
@@ -161,14 +163,21 @@ export default function ResocontoHub({ id }: { id?: string }) {
   useCtsUpdated(() => { getAllActivities().then(applyList).catch(() => {}) })
 
   // Background best-effort cover-photo fetch for the gallery/carousel thumbnails (capped —
-  // this is a nice-to-have visual enhancement, not core functionality).
+  // this is a nice-to-have visual enhancement, not core functionality). Stessa selezione di
+  // `cover()` più sotto (salvata dall'utente, altrimenti pickBestCoverPhoto) invece della prima
+  // foto qualunque — altrimenti questa copertina "veloce" mostrata appena si atterra su
+  // un'escursione differiva quasi sempre da quella "vera" calcolata poco dopo (quando `photos`/
+  // `activity` si aggiornano per quell'id), con un fastidioso cambio foto visibile a schermo.
   useEffect(() => {
     if (rawActivities.length === 0) return
     let cancelled = false
     rawActivities.slice(0, COVER_FETCH_CAP).forEach(a => {
       fetchActivityPhotos(a.id).then(ph => {
-        if (cancelled || !ph[0]) return
-        setCovers(prev => prev[a.id] ? prev : { ...prev, [a.id]: ph[0].url })
+        if (cancelled || ph.length === 0) return
+        const savedId = localStorage.getItem(`dtrek_cover_${a.id}`)
+        const chosen = (savedId && ph.find(p => p.id === savedId)) || pickBestCoverPhoto(ph)
+        if (!chosen) return
+        setCovers(prev => prev[a.id] ? prev : { ...prev, [a.id]: chosen.url })
       }).catch(() => {})
     })
     return () => { cancelled = true }
@@ -336,6 +345,13 @@ export default function ResocontoHub({ id }: { id?: string }) {
     finally { setSaving(false) }
   }
   const saveNotes  = async () => { await patch({ userNotes: notesVal }); setEditNotes(false) }
+  const saveTitle = async () => {
+    const trimmed = titleVal.trim()
+    if (!trimmed) return
+    await patch({ title: trimmed })
+    setItems(prev => prev.map(it => it.id === activity?.id ? { ...it, title: trimmed } : it))
+    setEditTitle(false)
+  }
   const saveRating = async () => {
     if (!activity || !ratingVal) return
     setSavingRating(true)
@@ -496,6 +512,26 @@ export default function ResocontoHub({ id }: { id?: string }) {
           <button onClick={() => exportActivityPdf(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <FileDown className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta PDF</span>
           </button>
+        </div>
+
+        <div className="pt-1 mt-1 border-t border-stone-200">
+          {editTitle ? (
+            <div className="px-2 py-2 space-y-2">
+              <input autoFocus value={titleVal} onChange={e => setTitleVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleVal(activity.title ?? ''); setEditTitle(false) } }}
+                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-white outline-none focus:border-forest-500" />
+              <div className="flex gap-2">
+                <button onClick={saveTitle} disabled={saving || !titleVal.trim()} className="flex items-center gap-1.5 px-4 py-1.5 bg-forest-500 text-white rounded-lg text-sm hover:bg-forest-400 transition-colors disabled:opacity-60">
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salva
+                </button>
+                <button onClick={() => { setTitleVal(activity.title ?? ''); setEditTitle(false) }} className={`px-4 py-1.5 text-sm transition-colors ${textMuted}`}>Annulla</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setTitleVal(activity.title ?? ''); setEditTitle(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
+              <Pencil className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Rinomina resoconto</span>
+            </button>
+          )}
         </div>
 
         <div className="pt-1 mt-1 border-t border-stone-200">
