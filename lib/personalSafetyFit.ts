@@ -104,15 +104,17 @@ export function personalFitLabel(score: number): { label: string; color: string 
 
 export interface SafetyAdvice { label: string; color: string }
 
-/** Etichetta del punteggio finale: un consiglio operativo, non un aggettivo di giudizio — vedi il
- *  tetto assoluto quando l'oggettivo è sotto soglia veto, indipendente dal profilo. */
+/** Etichetta del punteggio finale: un consiglio operativo sul rischio, non un giudizio sul
+ *  percorso in generale — "ideale/adatto a te" sconfinerebbe nella bellezza/adeguatezza fisica,
+ *  già di competenza del Trail Score. Qui si resta sul solo perimetro della sicurezza (si può
+ *  andare, con quali cautele), vedi il tetto assoluto quando l'oggettivo è sotto soglia veto. */
 export function safetyAdviceLabel(finalScore: number, objectiveScore: number): SafetyAdvice {
   if (objectiveScore < OBJECTIVE_VETO_THRESHOLD) return { label: 'Sconsigliato', color: '#991b1b' }
-  if (finalScore < 20) return { label: 'Sconsigliato',           color: '#dc2626' }
-  if (finalScore < 40) return { label: 'Solo con guida esperta', color: '#f97316' }
-  if (finalScore < 60) return { label: 'Fattibile con cautela',  color: '#eab308' }
-  if (finalScore < 80) return { label: 'Adatto a te',            color: '#22c55e' }
-  return                     { label: 'Ideale per te',           color: '#059669' }
+  if (finalScore < 20) return { label: 'Sconsigliato',            color: '#dc2626' }
+  if (finalScore < 40) return { label: 'Solo con guida esperta',  color: '#f97316' }
+  if (finalScore < 60) return { label: 'Fattibile con cautela',   color: '#eab308' }
+  if (finalScore < 80) return { label: 'Via libera con attenzione', color: '#22c55e' }
+  return                     { label: 'Via libera in sicurezza',   color: '#059669' }
 }
 
 export interface PersonalSafety {
