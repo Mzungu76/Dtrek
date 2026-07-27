@@ -37,6 +37,13 @@ export interface TrailScoreGaugeBadgeProps {
    *  "none" (default): nessun disclaimer — badge usato senza personalSafety, o già coperto da un
    *  disclaimer esterno al componente. */
   disclaimer?: 'popup' | 'inline' | 'none'
+  /** "curved" (default): una riga per punteggio ("ETICHETTA valore"), col margine che segue la
+   *  curva dell'anello — pensato per le copertine dei percorsi (schede chiuse in Guida), dove lo
+   *  spazio è compatto e il testo sta sempre su una riga sola. "stacked": etichetta ed valore su
+   *  righe separate, senza curva — per il pannello "Punteggio complessivo" (scheda aperta), dove
+   *  in mobile la colonna di testo è troppo stretta perché "ETICHETTA valore" stia su una riga
+   *  sola e il valore andava a capo a metà parola. */
+  captionLayout?: 'curved' | 'stacked'
   /** Avvisi trovati dalla ricerca web di Giulia (vedi lib/guideNotices.ts) — disegnati come
    *  puntini colorati sull'anello Sicurezza, uno per avviso. Puramente informativo: non cambia il
    *  numero della Sicurezza né del TS, un percorso con un avviso "warning" e Sicurezza 90 mostra
@@ -76,7 +83,8 @@ const NEUTRAL_TRACK = 'rgba(255,255,255,0.18)'
  * problematico per il click della tile in galleria.
  */
 export function TrailScoreGaugeBadge({
-  total, safety, personalSafety, loading, vetoed, size = 80, showLabel = true, disclaimer = 'none', notices,
+  total, safety, personalSafety, loading, vetoed, size = 80, showLabel = true, disclaimer = 'none',
+  captionLayout = 'curved', notices,
 }: TrailScoreGaugeBadgeProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
@@ -131,47 +139,21 @@ export function TrailScoreGaugeBadge({
   const dotR = Math.max(2.5, size * 0.045)
 
   // Righe della didascalia (esclude il disclaimer inline, che ha altezza variabile e resta piatto
-  // sotto lo stack) — costruite come dati prima di disegnarle, così ciascuna può ricevere il
-  // margine calcolato dalla curva del cerchio (vedi sotto) invece di un gap fisso identico per
-  // tutte, che allontanava visibilmente il testo dal cerchio verso l'alto/il basso.
-  type ScoreLine = { key: string; node: ReactNode }
+  // sotto lo stack) — dati grezzi (non JSX già composto): in layout "curved" ciascuna riga
+  // ("ETICHETTA valore" su una sola riga) riceve il margine calcolato dalla curva del cerchio; in
+  // layout "stacked" etichetta e valore vanno su righe separate senza curva, così il valore va a
+  // capo in modo pulito sotto la propria etichetta invece di spezzarsi a metà accanto ad essa.
+  interface ScoreLine { key: string; label: string; value: string; color?: string; extra?: ReactNode }
   const scoreLines: ScoreLine[] = []
-  if (tsCaption) {
-    scoreLines.push({ key: 'ts', node: (
-      <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Trail Score</span>
-        {tsCaption}
-      </span>
-    ) })
-  }
-  if (!personalSafety && safety) {
-    scoreLines.push({ key: 'safety', node: (
-      <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza</span>
-        {safety.label}
-      </span>
-    ) })
-  }
-  if (personalSafety) {
-    scoreLines.push({ key: 'objective', node: (
-      <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza oggettiva</span>
-        {objectiveCaption}
-      </span>
-    ) })
-    scoreLines.push({ key: 'fit', node: (
-      <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Idoneità per te</span>
-        {personalSafety.personalFit.label}
-      </span>
-    ) })
-    scoreLines.push({ key: 'advice', node: (
-      <span className="text-[11px] sm:text-xs font-bold leading-tight" style={{ color: personalSafety.advice.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Consiglio</span>
-        {personalSafety.advice.label}
-        {disclaimer === 'popup' && <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span>}
-      </span>
-    ) })
+  if (tsCaption) scoreLines.push({ key: 'ts', label: 'Trail Score', value: tsCaption })
+  if (!personalSafety && safety) scoreLines.push({ key: 'safety', label: 'Sicurezza', value: safety.label })
+  if (personalSafety && objectiveCaption) {
+    scoreLines.push({ key: 'objective', label: 'Sicurezza oggettiva', value: objectiveCaption })
+    scoreLines.push({ key: 'fit', label: 'Idoneità per te', value: personalSafety.personalFit.label })
+    scoreLines.push({
+      key: 'advice', label: 'Consiglio', value: personalSafety.advice.label, color: personalSafety.advice.color,
+      extra: disclaimer === 'popup' ? <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span> : null,
+    })
   }
 
   // Stima di altezza riga/interlinea (font 11-12px, leading-tight) — approssimata perché non c'è
@@ -188,7 +170,7 @@ export function TrailScoreGaugeBadge({
 
   return (
     <div
-      className="flex items-center gap-2.5"
+      className={`flex gap-2.5 ${captionLayout === 'stacked' ? 'items-start' : 'items-center'}`}
       style={{ opacity: mounted ? 1 : 0, transform: mounted ? 'scale(1)' : 'scale(0.9)', transition: 'opacity 400ms ease, transform 400ms cubic-bezier(.22,.8,.25,1)' }}
     >
       <div className="relative shrink-0" style={{ width: size, height: size }}>
@@ -267,18 +249,40 @@ export function TrailScoreGaugeBadge({
         )}
       </div>
       {showLabel && (scoreLines.length > 0 || disclaimer === 'inline') && (
-        <div className="flex flex-col gap-1">
-          {/* Ogni riga si sposta a sinistra in proporzione a quanto il cerchio si restringe alla
-              sua altezza (equazione della circonferenza) — non un margine piatto uguale per tutte,
-              così lo spazio vuoto fino al bordo curvo del cerchio resta costante invece di
-              allargarsi verso l'alto/il basso dove il cerchio è più stretto. */}
-          {scoreLines.map((line, i) => {
-            const lineCenter = i * (LABEL_LINE_H + LABEL_LINE_GAP) + LABEL_LINE_H / 2
-            const dy = lineCenter - stackHeight / 2
-            const curveEdge = Math.sqrt(Math.max(0, curveR * curveR - dy * dy))
-            const marginLeft = Math.min(0, curveEdge - curveR)
-            return <div key={line.key} style={{ marginLeft }}>{line.node}</div>
-          })}
+        <div className={`flex flex-col min-w-0 ${captionLayout === 'stacked' ? 'gap-2.5' : 'gap-1'}`}>
+          {captionLayout === 'curved' ? (
+            // Una riga per punteggio, col margine che segue la curva del cerchio (equazione della
+            // circonferenza) invece di un gap piatto uguale per tutte — pensato per le copertine
+            // compatte (schede chiuse), dove il testo sta sempre su una sola riga.
+            scoreLines.map((line, i) => {
+              const lineCenter = i * (LABEL_LINE_H + LABEL_LINE_GAP) + LABEL_LINE_H / 2
+              const dy = lineCenter - stackHeight / 2
+              const curveEdge = Math.sqrt(Math.max(0, curveR * curveR - dy * dy))
+              const marginLeft = Math.min(0, curveEdge - curveR)
+              return (
+                <div key={line.key} style={{ marginLeft }}>
+                  <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ color: line.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                    <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">{line.label}</span>
+                    {line.value}
+                    {line.extra}
+                  </span>
+                </div>
+              )
+            })
+          ) : (
+            // Etichetta e valore su righe separate — in mobile la colonna di testo è troppo
+            // stretta perché "ETICHETTA valore" stia su una riga sola: qui il valore va a capo
+            // sotto la propria etichetta invece di spezzarsi a metà parola accanto ad essa.
+            scoreLines.map(line => (
+              <div key={line.key} className="min-w-0">
+                <p className="text-white/55 text-[10px] font-semibold uppercase tracking-wide leading-tight">{line.label}</p>
+                <p className="text-sm font-bold leading-snug mt-0.5" style={{ color: line.color ?? '#fff', textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                  {line.value}
+                  {line.extra}
+                </p>
+              </div>
+            ))
+          )}
           {disclaimer === 'inline' && <SafetyDisclaimer variant="inline" dark />}
         </div>
       )}
