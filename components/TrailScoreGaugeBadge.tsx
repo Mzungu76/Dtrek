@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { tsColor, useCountUp } from '@/components/ScoreRing'
 import { ctsLabel } from '@/lib/trailScore'
 import { objectiveSafetyLabel } from '@/lib/safetyScore'
@@ -130,6 +130,62 @@ export function TrailScoreGaugeBadge({
   const noticeDots = (notices ?? []).slice(0, MAX_NOTICE_DOTS)
   const dotR = Math.max(2.5, size * 0.045)
 
+  // Righe della didascalia (esclude il disclaimer inline, che ha altezza variabile e resta piatto
+  // sotto lo stack) — costruite come dati prima di disegnarle, così ciascuna può ricevere il
+  // margine calcolato dalla curva del cerchio (vedi sotto) invece di un gap fisso identico per
+  // tutte, che allontanava visibilmente il testo dal cerchio verso l'alto/il basso.
+  type ScoreLine = { key: string; node: ReactNode }
+  const scoreLines: ScoreLine[] = []
+  if (tsCaption) {
+    scoreLines.push({ key: 'ts', node: (
+      <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Trail Score</span>
+        {tsCaption}
+      </span>
+    ) })
+  }
+  if (!personalSafety && safety) {
+    scoreLines.push({ key: 'safety', node: (
+      <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza</span>
+        {safety.label}
+      </span>
+    ) })
+  }
+  if (personalSafety) {
+    scoreLines.push({ key: 'objective', node: (
+      <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza oggettiva</span>
+        {objectiveCaption}
+      </span>
+    ) })
+    scoreLines.push({ key: 'fit', node: (
+      <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Idoneità per te</span>
+        {personalSafety.personalFit.label}
+      </span>
+    ) })
+    scoreLines.push({ key: 'advice', node: (
+      <span className="text-[11px] sm:text-xs font-bold leading-tight" style={{ color: personalSafety.advice.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+        <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Consiglio</span>
+        {personalSafety.advice.label}
+        {disclaimer === 'popup' && <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span>}
+      </span>
+    ) })
+  }
+
+  // Stima di altezza riga/interlinea (font 11-12px, leading-tight) — approssimata perché non c'è
+  // una misura reale del DOM disponibile qui, ma l'effetto è comunque impercettibilmente diverso
+  // da quello esatto per uno spostamento di pochi pixel come questo.
+  const LABEL_LINE_H = 15
+  const LABEL_LINE_GAP = 4
+  const stackHeight = scoreLines.length > 0
+    ? scoreLines.length * LABEL_LINE_H + (scoreLines.length - 1) * LABEL_LINE_GAP
+    : 0
+  // Raggio vero del bordo esterno dell'anello (compreso lo spessore del tratto), non solo rOuter —
+  // è il confine reale che il testo deve costeggiare a distanza costante.
+  const curveR = rOuter + swOuter / 2
+
   return (
     <div
       className="flex items-center gap-2.5"
@@ -210,37 +266,19 @@ export function TrailScoreGaugeBadge({
           </span>
         )}
       </div>
-      {showLabel && (tsCaption || safety || personalSafety) && (
+      {showLabel && (scoreLines.length > 0 || disclaimer === 'inline') && (
         <div className="flex flex-col gap-1">
-          {tsCaption && (
-            <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-              <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Trail Score</span>
-              {tsCaption}
-            </span>
-          )}
-          {!personalSafety && safety && (
-            <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-              <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza</span>
-              {safety.label}
-            </span>
-          )}
-          {personalSafety && (
-            <>
-              <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-                <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza oggettiva</span>
-                {objectiveCaption}
-              </span>
-              <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-                <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Idoneità per te</span>
-                {personalSafety.personalFit.label}
-              </span>
-              <span className="text-[11px] sm:text-xs font-bold leading-tight" style={{ color: personalSafety.advice.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-                <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Consiglio</span>
-                {personalSafety.advice.label}
-                {disclaimer === 'popup' && <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span>}
-              </span>
-            </>
-          )}
+          {/* Ogni riga si sposta a sinistra in proporzione a quanto il cerchio si restringe alla
+              sua altezza (equazione della circonferenza) — non un margine piatto uguale per tutte,
+              così lo spazio vuoto fino al bordo curvo del cerchio resta costante invece di
+              allargarsi verso l'alto/il basso dove il cerchio è più stretto. */}
+          {scoreLines.map((line, i) => {
+            const lineCenter = i * (LABEL_LINE_H + LABEL_LINE_GAP) + LABEL_LINE_H / 2
+            const dy = lineCenter - stackHeight / 2
+            const curveEdge = Math.sqrt(Math.max(0, curveR * curveR - dy * dy))
+            const marginLeft = Math.min(0, curveEdge - curveR)
+            return <div key={line.key} style={{ marginLeft }}>{line.node}</div>
+          })}
           {disclaimer === 'inline' && <SafetyDisclaimer variant="inline" dark />}
         </div>
       )}
