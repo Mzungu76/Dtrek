@@ -154,13 +154,20 @@ function computeHII(avgHr: number, hrRest: number, hrMax: number): number {
 
 // ── ctsLabel ──────────────────────────────────────────────────────────────────
 
+// 10 fasce da 10 punti l'una invece delle 6 originarie — il Trail Score è già tarato sul singolo
+// utente (sforzo/durata preferiti, età, storico: vedi computeTrailScore più sotto), quindi
+// l'etichetta parla in seconda persona per tutta la scala, non solo agli estremi.
 export function ctsLabel(ts: number): { label: string; color: string } {
-  if (ts >= 85) return { label: 'Imperdibile',  color: '#7c3aed' }
-  if (ts >= 70) return { label: 'Eccellente',   color: '#059669' }
-  if (ts >= 55) return { label: 'Molto buono',  color: '#16a34a' }
-  if (ts >= 40) return { label: 'Buono',        color: '#ca8a04' }
-  if (ts >= 25) return { label: 'Nella media',  color: '#ea580c' }
-  return              { label: 'Impegnativo',  color: '#dc2626' }
+  if (ts >= 90) return { label: 'Perfetto per te',        color: '#7c3aed' }
+  if (ts >= 80) return { label: 'Eccellente per te',      color: '#059669' }
+  if (ts >= 70) return { label: 'Molto adatto',           color: '#16a34a' }
+  if (ts >= 60) return { label: 'Adatto',                 color: '#65a30d' }
+  if (ts >= 50) return { label: 'Discretamente adatto',   color: '#ca8a04' }
+  if (ts >= 40) return { label: 'Nella media',            color: '#ea580c' }
+  if (ts >= 30) return { label: 'Poco adatto',            color: '#f97316' }
+  if (ts >= 20) return { label: 'Inadatto',               color: '#ef4444' }
+  if (ts >= 10) return { label: 'Molto inadatto',         color: '#dc2626' }
+  return             { label: 'Assolutamente inadatto',   color: '#991b1b' }
 }
 
 /** Returns the user's average CTS from existing activities, or 50 if no history. */

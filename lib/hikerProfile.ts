@@ -32,6 +32,11 @@ export const HIKER_CONCERNS = [
   { key: 'terreno_instabile',label: 'Difficoltà su terreno instabile o molto pietroso' },
   { key: 'insetti',          label: 'Sensibilità a insetti o punture' },
   { key: 'gravidanza',       label: 'Gravidanza o condizione che richiede uno sforzo leggero' },
+  // Unico caso "positivo" dell'elenco (il contrario di vertigini) — serve al punteggio Sicurezza
+  // (lib/personalSafetyFit.ts) per alzare l'idoneità su percorsi tecnici/esposti invece di limitarsi
+  // a penalizzare: un'esperienza dichiarata "esperto" da sola non basta a dirlo, si può essere
+  // esperti di resistenza ma non di esposizione, o viceversa.
+  { key: 'esposizione_a_mio_agio', label: 'Sono a mio agio su creste esposte e tratti attrezzati (vie ferrate)' },
 ] as const
 
 export type HikerConcernKey = typeof HIKER_CONCERNS[number]['key']

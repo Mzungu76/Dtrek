@@ -187,6 +187,87 @@ function getWildlifeRisks(region: string, altitudeMax: number, month: number): W
   return risks
 }
 
+// Pesi delle 5 categorie nella media pesata di overall — esportati (non più una costante privata
+// dentro computeSafetyScore) così refineSafetyWithSlope può ricalcolare l'overall con lo stesso
+// identico criterio quando corregge solo il Terreno, invece di duplicare i numeri altrove.
+export const SAFETY_CATEGORY_WEIGHTS = {
+  altitude: 0.25,
+  terrain: 0.2,
+  exposure: 0.2,
+  wildlife: 0.15,
+  logistics: 0.2,
+}
+
+// 10 fasce da 10 punti l'una per la Sicurezza Oggettiva — a differenza del Trail Score, qui il
+// linguaggio resta impersonale/neutro (non "per te"): questo numero non sa nulla dell'utente,
+// vedi lib/personalSafetyFit.ts per la parte "Idoneità per te" che lo personalizza.
+export function objectiveSafetyLabel(score: number): { label: string; color: string } {
+  if (score >= 90) return { label: 'Pericolo pressoché nullo', color: '#059669' }
+  if (score >= 80) return { label: 'Rischio molto basso',      color: '#10b981' }
+  if (score >= 70) return { label: 'Rischio basso',             color: '#22c55e' }
+  if (score >= 60) return { label: 'Rischio contenuto',         color: '#84cc16' }
+  if (score >= 50) return { label: 'Rischio moderato',          color: '#eab308' }
+  if (score >= 40) return { label: 'Rischio considerevole',     color: '#f59e0b' }
+  if (score >= 30) return { label: 'Rischio elevato',           color: '#f97316' }
+  if (score >= 20) return { label: 'Rischio alto',              color: '#ef4444' }
+  if (score >= 10) return { label: 'Rischio molto alto',        color: '#dc2626' }
+  return               { label: 'Rischio estremo',              color: '#991b1b' }
+}
+
+// Severità stimata dalla sola pendenza media DTM (Horn), sulle stesse soglie fisiche di
+// lib/trailScore.ts's slopeTerrainMult ma lette come pericolo tecnico/esposizione invece che
+// come moltiplicatore di fatica — un tratto molto ripido è anche quello dove più probabilmente
+// serve mettere le mani, non solo il fiato.
+function slopeHazardScore(avgSlopeDeg: number): number {
+  if (avgSlopeDeg >= 40) return 20
+  if (avgSlopeDeg >= 30) return 40
+  if (avgSlopeDeg >= 20) return 60
+  if (avgSlopeDeg >= 10) return 80
+  return 90
+}
+
+/**
+ * Corregge (solo in visualizzazione, non tocca la cache persistita da computeSafetyForHike) il
+ * punteggio Terreno con un segnale di pendenza reale (DTM), preso nel peggiore dei due insieme al
+ * D-score già calcolato — mai compensabile, come il gate di trailScoreV2.
+ *
+ * Perché serve: oggi il D-score di Terreno (√(2×dislivello×km)) è in pratica una misura di fatica
+ * fisica, non di tecnicità — una ferrata corta ma esposta ha poco dislivello e poca distanza,
+ * quindi D-score basso ⇒ "Terreno sicuro al 90%" anche quando il pericolo reale è alto. Un vero
+ * segnale da scala SAC/attrezzatura OSM non è ancora raccolto da nessuna parte del codice (nessun
+ * chiamante valorizza mai `sacScale`/`surfaces` in lib/trailScore.ts): finché non c'è quella
+ * pipeline, la pendenza DTM (già disponibile lato client per il Comfort TrailScore) resta il
+ * miglior proxy oggettivo che abbiamo per "questo tratto è più verticale che semplicemente
+ * faticoso".
+ */
+export function refineSafetyWithSlope(safety: SafetyScore, avgSlopeDeg?: number): SafetyScore {
+  if (avgSlopeDeg == null) return safety
+  const hazard = slopeHazardScore(avgSlopeDeg)
+  const refinedTerrainScore = Math.min(safety.categories.terrain.score, hazard)
+  if (refinedTerrainScore === safety.categories.terrain.score) return safety
+
+  const w = SAFETY_CATEGORY_WEIGHTS
+  const overall = Math.round(
+    safety.categories.altitude.score * w.altitude +
+    refinedTerrainScore * w.terrain +
+    safety.categories.exposure.score * w.exposure +
+    safety.categories.wildlife.score * w.wildlife +
+    safety.categories.logistics.score * w.logistics
+  )
+  const { label, color } = objectiveSafetyLabel(overall)
+
+  return {
+    ...safety,
+    overall,
+    label,
+    color,
+    categories: {
+      ...safety.categories,
+      terrain: { ...safety.categories.terrain, score: refinedTerrainScore },
+    },
+  }
+}
+
 export function computeSafetyScore(params: {
   distanceMeters: number
   elevationGain: number
@@ -425,42 +506,15 @@ export function computeSafetyScore(params: {
   logisticsScore = Math.max(0, Math.min(100, logisticsScore))
 
   // ── Weighted average ──────────────────────────────────────────────────────
-  const weights = {
-    altitude: 0.25,
-    terrain: 0.2,
-    exposure: 0.2,
-    wildlife: 0.15,
-    logistics: 0.2,
-  }
-
   const overall = Math.round(
-    altScore * weights.altitude +
-    terrainScore * weights.terrain +
-    exposureScore * weights.exposure +
-    wildlifeScore * weights.wildlife +
-    logisticsScore * weights.logistics
+    altScore * SAFETY_CATEGORY_WEIGHTS.altitude +
+    terrainScore * SAFETY_CATEGORY_WEIGHTS.terrain +
+    exposureScore * SAFETY_CATEGORY_WEIGHTS.exposure +
+    wildlifeScore * SAFETY_CATEGORY_WEIGHTS.wildlife +
+    logisticsScore * SAFETY_CATEGORY_WEIGHTS.logistics
   )
 
-  // ── Label and color ───────────────────────────────────────────────────────
-  let label = 'Sconosciuto'
-  let color = '#666666'
-
-  if (overall >= 80) {
-    label = 'Sicuro'
-    color = '#10b981'
-  } else if (overall >= 60) {
-    label = 'Basso rischio'
-    color = '#22c55e'
-  } else if (overall >= 40) {
-    label = 'Moderato'
-    color = '#f59e0b'
-  } else if (overall >= 20) {
-    label = 'Elevato'
-    color = '#f97316'
-  } else {
-    label = 'Pericoloso'
-    color = '#ef4444'
-  }
+  const { label, color } = objectiveSafetyLabel(overall)
 
   // ── Compile all risks ─────────────────────────────────────────────────────
   const allRisks: SafetyRiskItem[] = [

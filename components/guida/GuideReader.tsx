@@ -40,6 +40,7 @@ import VoicePlayer from '@/components/editorial/VoicePlayer'
 import SectionCard from '@/components/editorial/SectionCard'
 import type { CtsProps } from '@/components/ScoreRing'
 import type { SafetyScore } from '@/lib/safetyScore'
+import type { PersonalSafety } from '@/lib/personalSafetyFit'
 import type { HikeAssessment } from '@/lib/hikeAssessment'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import type { FloraResult } from '@/lib/floraTypes'
@@ -67,6 +68,10 @@ interface DisplaySection {
 
 export interface ScoresBundle {
   safety: SafetyScore | null
+  /** Sicurezza scomposta in Oggettiva + Idoneità per Te (lib/personalSafetyFit.ts) — quando
+   *  presente, il badge disegna l'anello Sicurezza come due archi e mostra le tre etichette
+   *  distinte (Oggettiva, Idoneità, Consiglio) invece della sola Sicurezza generica. */
+  personalSafety?: PersonalSafety | null
   cts: CtsProps
   showAspectToggle: boolean
   showGradientToggle: boolean

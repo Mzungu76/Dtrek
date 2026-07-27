@@ -3,12 +3,14 @@ import { Compass, Layers } from 'lucide-react'
 import { ScoreRing, computeTrailScoreBreakdown, isTrailScoreVetoed, type CtsProps } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import type { SafetyScore } from '@/lib/safetyScore'
+import type { PersonalSafety } from '@/lib/personalSafetyFit'
 import type { GuideNotice } from '@/lib/guideNotices'
 import { glassTile, textMuted } from '@/components/routehub/overlayTheme'
 import Kicker from '@/components/ui/Kicker'
 
 interface Props {
   safety: SafetyScore | null
+  personalSafety?: PersonalSafety | null
   cts: CtsProps
   showAspectToggle: boolean
   showGradientToggle: boolean
@@ -25,7 +27,7 @@ interface Props {
  *  sezione "Dati e sicurezza" della guida magazine. Il badge a doppio anello dà il colpo d'occhio,
  *  la lista sotto apre il dettaglio di ciascun punteggio in un foglio a comparsa. */
 export default function ScoresWidget({
-  safety, cts, guideNotices,
+  safety, personalSafety, cts, guideNotices,
   showAspectToggle, showGradientToggle, showAspect, showGradient, onToggleAspect, onToggleGradient,
 }: Props) {
   const breakdown = computeTrailScoreBreakdown(safety, cts)
@@ -39,6 +41,8 @@ export default function ScoresWidget({
           total={breakdown.total > 0 ? breakdown.total : null}
           value={breakdown.value}
           safety={safety}
+          personalSafety={personalSafety}
+          disclaimer="inline"
           vetoed={isTrailScoreVetoed(safety)}
           notices={guideNotices}
           size={128}

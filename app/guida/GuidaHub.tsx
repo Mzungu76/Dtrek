@@ -21,6 +21,11 @@ import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
+import { getPersonalRecords, difficultyIndex } from '@/lib/stats'
+import { refineSafetyWithSlope } from '@/lib/safetyScore'
+import { computePersonalSafety, type PersonalFitProfile, type PersonalFitHistory, type PersonalFitRoute } from '@/lib/personalSafetyFit'
+import { isHikerExperienceLevel, sanitizeHikerConcerns, type HikerExperienceLevel, type HikerConcernKey } from '@/lib/hikerProfile'
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, originMatches } from '@/lib/drivingInfo'
@@ -170,6 +175,44 @@ export default function GuidaHub({ id }: { id?: string }) {
   }, [driving, userOrigin, hike?.routePolyline])
   const safetyScore = useSafetyScore(hike, setHike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
+
+  // Sicurezza "per te" (Oggettiva + Idoneità per Te, vedi lib/personalSafetyFit.ts) — la Sicurezza
+  // Oggettiva cachata (safetyScore) viene prima corretta con la pendenza DTM già disponibile qui
+  // (refineSafetyWithSlope, vedi il commento sul perché in lib/safetyScore.ts), poi combinata col
+  // profilo escursionista e lo storico personale. Solo presentazionale: non tocca la cache.
+  const [activities, setActivities] = useState<ActivityMeta[]>([])
+  useEffect(() => { getAllActivities().then(setActivities).catch(() => {}) }, [])
+
+  const [hikerFitProfile, setHikerFitProfile] = useState<{ experienceLevel: HikerExperienceLevel | null; concerns: HikerConcernKey[]; userAge?: number }>({ experienceLevel: null, concerns: [] })
+  useEffect(() => {
+    getUserSettingsCached().then(d => {
+      setHikerFitProfile({
+        experienceLevel: isHikerExperienceLevel(d.hikerExperienceLevel) ? d.hikerExperienceLevel : null,
+        concerns: sanitizeHikerConcerns(d.hikerConcerns),
+        userAge: d.userAge || undefined,
+      })
+    }).catch(() => {})
+  }, [])
+
+  const personalRecords = useMemo(() => getPersonalRecords(activities), [activities])
+  const fitHistory = useMemo<PersonalFitHistory>(() => ({
+    maxAltitudeM: personalRecords.highestAlt?.altitudeMax,
+    maxDifficultyIndex: personalRecords.highestDifficulty
+      ? difficultyIndex(personalRecords.highestDifficulty.elevationGain, personalRecords.highestDifficulty.distanceMeters)
+      : undefined,
+  }), [personalRecords])
+
+  const refinedSafety = useMemo(
+    () => safetyScore ? refineSafetyWithSlope(safetyScore, dtmProfile?.avgSlopeDeg ?? undefined) : null,
+    [safetyScore, dtmProfile?.avgSlopeDeg],
+  )
+
+  const personalSafety = useMemo(() => {
+    if (!refinedSafety || !hike) return null
+    const route: PersonalFitRoute = { altitudeMax: hike.altitudeMax, difficultyIndex: difficultyIndex(hike.elevationGain, hike.distanceMeters) }
+    const profile: PersonalFitProfile = hikerFitProfile
+    return computePersonalSafety(refinedSafety, profile, fitHistory, route)
+  }, [refinedSafety, hike, hikerFitProfile, fitHistory])
 
   // All the data the auto-generated Breve guide should be able to draw on: POIs/Wikipedia,
   // flora, Safety and CTS scores. True once every source has settled (resolved or deliberately
@@ -365,13 +408,13 @@ export default function GuidaHub({ id }: { id?: string }) {
   useEffect(() => {
     if (!hike) return
     const total = computeTrailScoreTotal(
-      safetyScore,
+      refinedSafety,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
     )
     if (total <= 0 || total === hike.cachedTsTotal) return
     updatePlannedMeta(hike.id, { cachedTsTotal: total }).catch(() => {})
     setHike(prev => prev ? { ...prev, cachedTsTotal: total } : prev)
-  }, [hike, safetyScore, ctsResult]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike, refinedSafety, ctsResult]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keeps the gallery thumbnail's TS ring — and the "TS" sort key that ranks by it — in sync with
   // whatever just got cached (Calcola CTS, the auto-cached safety score, or the full aggregate
@@ -651,7 +694,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     // va ricalcolato comunque, anche quando il totale può usare la cache: è una formula pura sui
     // dati già in memoria, nessuna chiamata di rete in più.
     const breakdown = computeTrailScoreBreakdown(
-      safetyScore,
+      refinedSafety,
       { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
     )
     const trailScoreTotal = cached ?? breakdown.total
@@ -661,9 +704,11 @@ export default function GuidaHub({ id }: { id?: string }) {
         <TrailScoreGaugeBadge
           total={scoreLoading ? null : trailScoreTotal}
           value={breakdown.value}
-          safety={safetyScore}
+          safety={refinedSafety}
+          personalSafety={personalSafety}
+          disclaimer="popup"
           loading={scoreLoading}
-          vetoed={isTrailScoreVetoed(safetyScore)}
+          vetoed={isTrailScoreVetoed(refinedSafety)}
           notices={normalizeGuideNotices(hike.cachedGuideNotices)}
         />
       </button>
@@ -702,7 +747,8 @@ export default function GuidaHub({ id }: { id?: string }) {
           dtmProfile={dtmProfile}
           driving={drivingWithMaps}
           scores={{
-            safety: safetyScore,
+            safety: refinedSafety,
+            personalSafety,
             cts: { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore, computing: ctsComputing, onCompute: handleComputeCts },
             showAspectToggle: hasGps && dtmProfile?.source === 'dtm',
             showGradientToggle: hasGps && dtmProfile?.source === 'dtm' && !!hike.trackPoints?.some(p => p.altitudeMeters !== undefined),
