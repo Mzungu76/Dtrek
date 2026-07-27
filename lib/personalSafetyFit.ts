@@ -59,13 +59,20 @@ export function computePersonalFitScore(
 
   if (profile.userAge != null && profile.userAge >= 65) score -= 6
 
-  if (history.maxAltitudeM != null && route.altitudeMax > 0) {
-    if (history.maxAltitudeM >= route.altitudeMax * 1.1) score += 8
-    else if (history.maxAltitudeM < route.altitudeMax * 0.5) score -= 10
+  // Scala continua sul rapporto percorso/storico, non a soglie — con le soglie precedenti
+  // (bonus solo se lo storico supera il percorso del 10%, penalità solo se lo storico è meno
+  // della metà) un percorso 1.05× il proprio storico e uno 1.6× il proprio storico finivano
+  // identici (zero effetto entrambi): un percorso genuinamente fuori portata (es. il doppio del
+  // dislivello mai affrontato) restava vicino alla media invece di andare verso l'estremo basso.
+  // Penalità più ampia della bonus (-25/+12): sottostimare un percorso davvero fuori portata è più
+  // pericoloso che sottostimare uno alla propria portata.
+  if (history.maxAltitudeM != null && history.maxAltitudeM > 0 && route.altitudeMax > 0) {
+    const ratio = route.altitudeMax / history.maxAltitudeM
+    score += clamp((1 - ratio) * 30, -25, 12)
   }
-  if (history.maxDifficultyIndex != null && route.difficultyIndex > 0) {
-    if (history.maxDifficultyIndex >= route.difficultyIndex * 1.1) score += 8
-    else if (history.maxDifficultyIndex < route.difficultyIndex * 0.5) score -= 10
+  if (history.maxDifficultyIndex != null && history.maxDifficultyIndex > 0 && route.difficultyIndex > 0) {
+    const ratio = route.difficultyIndex / history.maxDifficultyIndex
+    score += clamp((1 - ratio) * 30, -25, 12)
   }
 
   const terrainSeverity = 1 - clamp(objective.categories.terrain.score, 0, 100) / 100
@@ -95,8 +102,8 @@ export function personalFitLabel(score: number): { label: string; color: string 
   if (score >= 70) return { label: 'Comodo per te',                  color: '#22c55e' }
   if (score >= 60) return { label: 'Nelle tue corde',                color: '#84cc16' }
   if (score >= 50) return { label: 'In linea con te',                color: '#eab308' }
-  if (score >= 40) return { label: 'Leggermente sopra la tua media', color: '#f59e0b' }
-  if (score >= 30) return { label: 'Al limite delle tue capacità',   color: '#f97316' }
+  if (score >= 40) return { label: 'Poco sopra la tua media', color: '#f59e0b' }
+  if (score >= 30) return { label: 'Al limite per te',        color: '#f97316' }
   if (score >= 20) return { label: 'Impegnativo per te',             color: '#ef4444' }
   if (score >= 10) return { label: 'Molto impegnativo per te',       color: '#dc2626' }
   return               { label: 'Fuori portata per te',              color: '#991b1b' }
