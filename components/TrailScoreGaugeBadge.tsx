@@ -264,7 +264,7 @@ export function TrailScoreGaugeBadge({
                 const curveEdge = Math.sqrt(Math.max(0, curveR * curveR - dy * dy))
                 const marginLeft = Math.min(0, curveEdge - curveR)
                 return (
-                  <div key={line.key} style={{ marginLeft }}>
+                  <div key={line.key} className="whitespace-nowrap" style={{ marginLeft }}>
                     <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ color: line.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
                       <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">{line.label}</span>
                       {line.value}
