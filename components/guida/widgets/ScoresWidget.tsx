@@ -40,6 +40,7 @@ export default function ScoresWidget({
           safety={safety}
           personalSafety={personalSafety}
           disclaimer="inline"
+          captionLayout="stacked"
           vetoed={isTrailScoreVetoed(safety)}
           notices={guideNotices}
           size={128}
