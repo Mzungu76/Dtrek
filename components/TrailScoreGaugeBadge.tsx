@@ -2,6 +2,9 @@
 import { useEffect, useState } from 'react'
 import { tsColor, useCountUp } from '@/components/ScoreRing'
 import { ctsLabel } from '@/lib/trailScore'
+import { objectiveSafetyLabel } from '@/lib/safetyScore'
+import type { PersonalSafety } from '@/lib/personalSafetyFit'
+import SafetyDisclaimer from '@/components/SafetyDisclaimer'
 import type { SafetyScore } from '@/lib/safetyScore'
 
 export type SafetyPreview = Pick<SafetyScore, 'overall' | 'color' | 'label'>
@@ -12,19 +15,28 @@ export interface TrailScoreGaugeBadgeProps {
   /** Comfort TrailScore grezzo, pre-cancello (prima del taglio di Sicurezza), 0-100 — non più usato
    *  dalla didascalia (vedi sotto), mantenuto per compatibilità dei chiamanti esistenti. */
   value?: number | null
-  /** Sicurezza, 0-100 — anello esterno, sottile, sulla propria scala di colore (non su quella
-   *  del TS): due indicatori chiaramente separati invece di un'unica scala che li confonde. Vedi
-   *  la formula in lib/trailScoreV2.ts — la Sicurezza è un cancello moltiplicativo sul Comfort
-   *  TrailScore, quindi merita un anello a sé. */
+  /** Sicurezza Oggettiva, 0-100 — anello esterno, sottile, sulla propria scala di colore (non su
+   *  quella del TS). Ignorato quando `personalSafety` è presente (che porta la stessa Sicurezza
+   *  Oggettiva già dentro `.objective`, più il correttivo personale). */
   safety: SafetyPreview | null
+  /** Sicurezza scomposta in Oggettiva + Idoneità per Te (lib/personalSafetyFit.ts) — quando
+   *  presente, l'anello Sicurezza si disegna come due archi consecutivi (oggettivo pieno, poi il
+   *  correttivo personale appeso subito dopo se positivo, o intagliato in coda se negativo) invece
+   *  di un arco unico: la lunghezza totale è la somma dei due, ma resta sempre leggibile quanto
+   *  viene dal percorso in sé e quanto dal profilo di chi lo guarda. */
+  personalSafety?: PersonalSafety | null
   loading?: boolean
   vetoed?: boolean
   size?: number
-  /** Didascalia a fianco del badge: due righe etichettate esplicitamente ("Trail Score" ed
-   *  "Sicurezza" con la relativa fascia — es. "Molto buono"/"Sicuro") invece di una singola frase
-   *  ambigua ("Buon valore, sicuro") che non diceva a cosa si riferisse ciascun numero.
-   *  Disattivata negli usi molto compatti (es. la miniatura di galleria) dove non c'è spazio. */
+  /** Didascalia a fianco del badge — quando c'è `personalSafety` mostra tre righe distinte
+   *  (Sicurezza Oggettiva, Idoneità per Te, Consiglio finale); altrimenti la coppia Trail
+   *  Score/Sicurezza di sempre. Disattivata negli usi molto compatti (miniatura di galleria). */
   showLabel?: boolean
+  /** "popup": asterisco cliccabile che apre il disclaimer in una nuvoletta (copertine di galleria,
+   *  poco spazio). "inline": testo del disclaimer sempre visibile (scheda aperta, spazio libero).
+   *  "none" (default): nessun disclaimer — badge usato senza personalSafety, o già coperto da un
+   *  disclaimer esterno al componente. */
+  disclaimer?: 'popup' | 'inline' | 'none'
   /** Avvisi trovati dalla ricerca web di Giulia (vedi lib/guideNotices.ts) — disegnati come
    *  puntini colorati sull'anello Sicurezza, uno per avviso. Puramente informativo: non cambia il
    *  numero della Sicurezza né del TS, un percorso con un avviso "warning" e Sicurezza 90 mostra
@@ -63,7 +75,9 @@ const NEUTRAL_TRACK = 'rgba(255,255,255,0.18)'
  * `<button>` qui dentro anniderebbe due elementi interattivi, HTML non valido oltre che
  * problematico per il click della tile in galleria.
  */
-export function TrailScoreGaugeBadge({ total, safety, loading, vetoed, size = 80, showLabel = true, notices }: TrailScoreGaugeBadgeProps) {
+export function TrailScoreGaugeBadge({
+  total, safety, personalSafety, loading, vetoed, size = 80, showLabel = true, disclaimer = 'none', notices,
+}: TrailScoreGaugeBadgeProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     const raf = requestAnimationFrame(() => setMounted(true))
@@ -89,14 +103,27 @@ export function TrailScoreGaugeBadge({ total, safety, loading, vetoed, size = 80
 
   const totalColor = total != null ? tsColor(total) : '#a8a29e'
   const totalPct = total != null ? Math.max(0, Math.min(100, total)) / 100 : 0
-  const safetyPct = safety != null ? Math.max(0, Math.min(100, safety.overall)) / 100 : 0
-
   const cOuter = 2 * Math.PI * rOuter
   const cInner = 2 * Math.PI * rInner
-  const outerLen = mounted ? cOuter * safetyPct : 0
   const innerLen = mounted ? cInner * totalPct : 0
 
+  // Sicurezza semplice (un solo arco) — usata quando non c'è personalSafety, es. la miniatura di
+  // galleria che mostra solo la Sicurezza Oggettiva cachata.
+  const safetyPct = safety != null ? Math.max(0, Math.min(100, safety.overall)) / 100 : 0
+  const outerLen = mounted ? cOuter * safetyPct : 0
+
+  // Sicurezza scomposta — arco oggettivo pieno, poi il correttivo personale appeso in coda
+  // (bonus, se il profilo alza il finale) o intagliato nella coda dell'oggettivo (se lo abbassa).
+  const objectivePct = personalSafety ? Math.max(0, Math.min(100, personalSafety.objective.overall)) / 100 : 0
+  const finalPct = personalSafety ? Math.max(0, Math.min(100, personalSafety.finalScore)) / 100 : 0
+  const bonusPct = personalSafety ? Math.max(0, finalPct - objectivePct) : 0
+  const penaltyPct = personalSafety ? Math.max(0, objectivePct - finalPct) : 0
+  const objectiveArcLen = mounted ? cOuter * objectivePct : 0
+  const bonusArcLen = mounted ? cOuter * bonusPct : 0
+  const penaltyArcLen = mounted ? cOuter * penaltyPct : 0
+
   const tsCaption = total != null ? ctsLabel(total).label : null
+  const objectiveCaption = personalSafety ? objectiveSafetyLabel(personalSafety.objective.overall).label : null
 
   // Distribuiti sull'anello Sicurezza, non ammucchiati in un angolo — a partire da alto-destra
   // (non esattamente in cima, dove parte l'arco stesso) e girando in senso orario.
@@ -111,13 +138,43 @@ export function TrailScoreGaugeBadge({ total, safety, loading, vetoed, size = 80
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <svg width={size} height={size} style={{ overflow: 'visible' }}>
           <circle cx={cx} cy={cy} r={rOuter} fill="none" stroke={NEUTRAL_TRACK} strokeWidth={swOuter} />
-          {safety != null && (
+
+          {!personalSafety && safety != null && (
             <circle
               cx={cx} cy={cy} r={rOuter} fill="none" stroke={safety.color} strokeWidth={swOuter} strokeLinecap="round"
               strokeDasharray={cOuter} strokeDashoffset={cOuter - outerLen} transform={`rotate(-90 ${cx} ${cy})`}
               style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(.22,.8,.25,1)' }}
             />
           )}
+
+          {personalSafety && (
+            <>
+              <circle
+                cx={cx} cy={cy} r={rOuter} fill="none" stroke={personalSafety.objective.color} strokeWidth={swOuter} strokeLinecap="round"
+                strokeDasharray={`${objectiveArcLen} ${cOuter - objectiveArcLen}`} transform={`rotate(-90 ${cx} ${cy})`}
+                style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1)' }}
+              />
+              {bonusPct > 0 && (
+                <circle
+                  cx={cx} cy={cy} r={rOuter} fill="none" stroke={personalSafety.personalFit.color} strokeWidth={swOuter} strokeLinecap="round"
+                  opacity={0.65}
+                  strokeDasharray={`${bonusArcLen} ${cOuter - bonusArcLen}`}
+                  transform={`rotate(${-90 + objectivePct * 360} ${cx} ${cy})`}
+                  style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1) 120ms' }}
+                />
+              )}
+              {penaltyPct > 0 && (
+                <circle
+                  cx={cx} cy={cy} r={rOuter} fill="none" stroke="#000" strokeWidth={swOuter * 1.15} strokeLinecap="round"
+                  opacity={0.5}
+                  strokeDasharray={`${penaltyArcLen} ${cOuter - penaltyArcLen}`}
+                  transform={`rotate(${-90 + finalPct * 360} ${cx} ${cy})`}
+                  style={{ transition: 'stroke-dasharray 700ms cubic-bezier(.22,.8,.25,1) 120ms' }}
+                />
+              )}
+            </>
+          )}
+
           <circle cx={cx} cy={cy} r={rInner} fill="none" stroke={NEUTRAL_TRACK} strokeWidth={swInner} />
           {total != null && (
             <circle
@@ -145,7 +202,7 @@ export function TrailScoreGaugeBadge({ total, safety, loading, vetoed, size = 80
         </div>
         {vetoed && (
           <span
-            title="Sconsigliato — rischio elevato"
+            title="Sconsigliato, rischio elevato"
             className="absolute -top-1 -right-1 flex items-center justify-center rounded-full bg-red-600 text-white leading-none"
             style={{ width: size * 0.3, height: size * 0.3, fontSize: size * 0.2 }}
           >
@@ -153,7 +210,7 @@ export function TrailScoreGaugeBadge({ total, safety, loading, vetoed, size = 80
           </span>
         )}
       </div>
-      {showLabel && (tsCaption || safety) && (
+      {showLabel && (tsCaption || safety || personalSafety) && (
         <div className="flex flex-col gap-1">
           {tsCaption && (
             <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
@@ -161,12 +218,30 @@ export function TrailScoreGaugeBadge({ total, safety, loading, vetoed, size = 80
               {tsCaption}
             </span>
           )}
-          {safety && (
+          {!personalSafety && safety && (
             <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
               <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza</span>
               {safety.label}
             </span>
           )}
+          {personalSafety && (
+            <>
+              <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Sicurezza oggettiva</span>
+                {objectiveCaption}
+              </span>
+              <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Idoneità per te</span>
+                {personalSafety.personalFit.label}
+              </span>
+              <span className="text-[11px] sm:text-xs font-bold leading-tight" style={{ color: personalSafety.advice.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">Consiglio</span>
+                {personalSafety.advice.label}
+                {disclaimer === 'popup' && <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span>}
+              </span>
+            </>
+          )}
+          {disclaimer === 'inline' && <SafetyDisclaimer variant="inline" dark />}
         </div>
       )}
     </div>
