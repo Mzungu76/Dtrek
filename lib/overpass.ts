@@ -55,6 +55,13 @@ export function poiHasLink(poi: PoiItem): boolean {
   return !!(poi.tags?.['wikipedia'] || poi.tags?.['website'] || poi.tags?.['url'])
 }
 
+/** Link Street View di Google Maps sul punto dato — URL puro (nessuna chiave/API a pagamento,
+ *  apre semplicemente Google Maps sul panorama più vicino a queste coordinate), stesso schema
+ *  usato per i link "indicazioni" (vedi lib/routeBuilder/returnOptions.ts). */
+export function streetViewUrl(lat: number, lon: number): string {
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`
+}
+
 // Markup HTML del popup di un POI — condiviso tra mappa 2D (Leaflet) e 3D (MapLibre)
 export function buildPoiPopupHtml(poi: PoiItem): string {
   const meta     = POI_META[poi.type]
@@ -77,8 +84,11 @@ export function buildPoiPopupHtml(poi: PoiItem): string {
     ${poi.ele ? `<div style="color:#374151;margin-bottom:5px">🏔 <b>${poi.ele} m</b> s.l.m.</div>` : ''}
     ${desc ? `<div style="color:#4b5563;font-style:italic;margin-bottom:5px;font-size:11px">${desc}</div>` : ''}
     <div style="color:#9ca3af;font-size:11px">📍 ${poi.distFromTrack} m dal tracciato</div>
-    ${wikiUrl ? `<a href="${wikiUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;margin-top:7px;text-decoration:none">📖 Wikipedia →</a>` : ''}
-    ${website && !wikiUrl ? `<a href="${website}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;margin-top:7px;text-decoration:none">🌐 Sito web →</a>` : ''}
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:7px">
+      ${wikiUrl ? `<a href="${wikiUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;text-decoration:none">📖 Wikipedia →</a>` : ''}
+      ${website && !wikiUrl ? `<a href="${website}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;text-decoration:none">🌐 Sito web →</a>` : ''}
+      <a href="${streetViewUrl(poi.lat, poi.lon)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;color:#2563eb;font-size:11px;font-weight:600;text-decoration:none">🧭 Street View →</a>
+    </div>
   </div>`
 }
 

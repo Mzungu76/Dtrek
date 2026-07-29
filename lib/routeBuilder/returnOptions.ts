@@ -90,14 +90,19 @@ out center tags;
   return options.sort((a, b) => a.distanceMeters - b.distanceMeters).slice(0, MAX_OPTIONS)
 }
 
-/** Link "indicazioni a piedi" da Google Maps dal punto di arrivo del percorso (origin) al servizio
- *  trovato (destination) — così l'utente sa come arrivarci, non solo che esiste. */
+/** Link "indicazioni" da Google Maps dal punto di arrivo del percorso (origin) al servizio trovato
+ *  (destination) — bus/treno in modalità "mezzi pubblici" (Maps mostra già le corse/orari reali
+ *  della linea che serve quella fermata/stazione, non serve recuperarli noi), taxi a piedi (non è
+ *  una linea con orari). Nessuna chiave/API a pagamento: è un semplice URL che apre Google Maps.
+ *  Mostra sempre gli orari di "adesso" — l'URL semplice non supporta una data specifica (serve
+ *  l'API a pagamento), l'utente la cambia da solo una volta dentro Maps se il percorso ha una data
+ *  impostata (vedi la nota mostrata da ReturnOptionsSection.tsx in quel caso). */
 export function buildReturnOptionMapsUrl(origin: { lat: number; lon: number }, option: ReturnOption): string {
   const params = new URLSearchParams({
     api: '1',
     origin: `${origin.lat},${origin.lon}`,
     destination: `${option.lat},${option.lon}`,
-    travelmode: 'walking',
+    travelmode: option.kind === 'taxi' ? 'walking' : 'transit',
   })
   return `https://www.google.com/maps/dir/?${params.toString()}`
 }

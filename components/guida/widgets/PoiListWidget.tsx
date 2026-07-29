@@ -6,7 +6,8 @@ import type { PoiItem, PoiType } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { sectionHeading } from '@/components/routehub/overlayTheme'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Navigation } from 'lucide-react'
+import { streetViewUrl } from '@/lib/overpass'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import PoiMap from '../PoiMap'
 import ReturnOptionsSection from './ReturnOptionsSection'
@@ -33,6 +34,9 @@ interface Props {
   /** Punto di arrivo del percorso — origine dei link "indicazioni" verso ciascun servizio. Presente
    *  sempre insieme a `returnOptions` (entrambi da GuideReader.tsx). */
   returnOptionsOrigin?: { lat: number; lon: number }
+  /** Data impostata per il percorso (hike.plannedDate) — se presente, ReturnOptionsSection avvisa
+   *  che Maps mostra gli orari di "adesso" e va cambiata a mano per quel giorno. */
+  plannedDate?: string
 }
 
 interface GalleryEntry {
@@ -42,6 +46,10 @@ interface GalleryEntry {
   url: string
   description?: string
   poiId?: number
+  /** Assente per un articolo Wikipedia nei dintorni senza coordinate proprie — niente link Street
+   *  View in quel caso, non c'è un punto preciso a cui puntarlo. */
+  lat?: number
+  lon?: number
 }
 
 type OtherEntry =
@@ -54,36 +62,44 @@ function otherEntryDist(entry: OtherEntry): number {
 
 function PoiCard({ entry, highlighted, dimmed, onTap }: { entry: GalleryEntry; highlighted: boolean; dimmed?: boolean; onTap?: () => void }) {
   return (
-    <a
-      href={entry.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={onTap}
-      className={`group flex flex-col shrink-0 w-40 sm:w-44 rounded-xl overflow-hidden border shadow-sm hover:shadow-md transition-all bg-white ${
+    <div
+      className={`group relative flex flex-col shrink-0 w-40 sm:w-44 rounded-xl overflow-hidden border shadow-sm hover:shadow-md transition-all bg-white ${
         highlighted ? 'border-sky-400 ring-2 ring-sky-200' : 'border-stone-100 hover:border-stone-200'
       } ${dimmed ? 'opacity-35 grayscale' : ''}`}
     >
-      <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
-        <Image
-          src={entry.thumbnail}
-          alt={entry.title}
-          fill
-          sizes="176px"
-          className="object-cover group-hover:scale-105 transition-transform duration-500"
-        />
-      </div>
-      <div className="p-2.5">
-        <p className="font-display font-semibold text-stone-800 text-[14px] leading-tight line-clamp-1 tracking-wide">
-          {entry.title}
-        </p>
-        {entry.description && (
-          <p className="text-[10px] text-stone-400 mt-0.5 line-clamp-1">{entry.description}</p>
-        )}
-        <span className="flex items-center gap-0.5 text-[10px] mt-1 text-terra-800">
-          <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
-        </span>
-      </div>
-    </a>
+      <a href={entry.url} target="_blank" rel="noopener noreferrer" onClick={onTap}>
+        <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
+          <Image
+            src={entry.thumbnail}
+            alt={entry.title}
+            fill
+            sizes="176px"
+            className="object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        </div>
+        <div className="p-2.5 pb-1">
+          <p className="font-display font-semibold text-stone-800 text-[14px] leading-tight line-clamp-1 tracking-wide">
+            {entry.title}
+          </p>
+          {entry.description && (
+            <p className="text-[10px] text-stone-400 mt-0.5 line-clamp-1">{entry.description}</p>
+          )}
+          <span className="flex items-center gap-0.5 text-[10px] mt-1 text-terra-800">
+            <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
+          </span>
+        </div>
+      </a>
+      {entry.lat != null && entry.lon != null && (
+        <a
+          href={streetViewUrl(entry.lat, entry.lon)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 mx-2.5 mb-2 mt-0.5 text-[10px] text-sky-700 hover:text-sky-800 w-fit"
+        >
+          <Navigation className="w-2.5 h-2.5" /> Street View
+        </a>
+      )}
+    </div>
   )
 }
 
@@ -92,7 +108,7 @@ function PoiCard({ entry, highlighted, dimmed, onTap }: { entry: GalleryEntry; h
  *  separate (lista testuale, galleria foto, "Wikipedia nei dintorni") con dati in parte duplicati. */
 export default function PoiListWidget({
   pois, poiWikiEntries, hasGps, centerLat, centerLon, onWikiLoaded, highlightedPoiId, onItemTap, trackPoints, onOpenMap3D,
-  returnOptions, returnOptionsOrigin,
+  returnOptions, returnOptionsOrigin, plannedDate,
 }: Props) {
   const [nearbyPages, setNearbyPages] = useState<WikiPage[]>([])
   const [focusPoints, setFocusPoints] = useState<{ lat: number; lon: number }[] | null>(null)
@@ -122,12 +138,12 @@ export default function PoiListWidget({
     for (const { poi, wiki } of poiWikiEntries) {
       if (!wiki.thumbnail || seen.has(wiki.url)) continue
       seen.add(wiki.url)
-      out.push({ key: `poi-${poi.id}`, title: wiki.title, thumbnail: wiki.thumbnail, url: wiki.url, description: wiki.description, poiId: poi.id })
+      out.push({ key: `poi-${poi.id}`, title: wiki.title, thumbnail: wiki.thumbnail, url: wiki.url, description: wiki.description, poiId: poi.id, lat: poi.lat, lon: poi.lon })
     }
     for (const page of nearbyPages) {
       if (!page.thumbnail || seen.has(page.url)) continue
       seen.add(page.url)
-      out.push({ key: `wiki-${page.pageid}`, title: page.title, thumbnail: page.thumbnail, url: page.url, description: page.description })
+      out.push({ key: `wiki-${page.pageid}`, title: page.title, thumbnail: page.thumbnail, url: page.url, description: page.description, lat: page.lat, lon: page.lon })
     }
     return out
   }, [poiWikiEntries, nearbyPages])
@@ -257,7 +273,7 @@ export default function PoiListWidget({
       )}
 
       {returnOptions !== undefined && returnOptionsOrigin && (
-        <ReturnOptionsSection options={returnOptions} origin={returnOptionsOrigin} />
+        <ReturnOptionsSection options={returnOptions} origin={returnOptionsOrigin} plannedDate={plannedDate} />
       )}
     </div>
   )

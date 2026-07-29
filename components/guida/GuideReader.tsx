@@ -714,6 +714,7 @@ export default function GuideReader({
               onOpenMap3D={onOpenMap3D}
               returnOptions={isLinearRoute ? returnOptions : undefined}
               returnOptionsOrigin={endPoint ?? undefined}
+              plannedDate={hike.plannedDate}
             />
           )
           : null
