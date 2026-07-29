@@ -6,7 +6,7 @@ import type { PoiItem, PoiType } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { sectionHeading } from '@/components/routehub/overlayTheme'
-import { ExternalLink, Navigation } from 'lucide-react'
+import { ExternalLink, Eye } from 'lucide-react'
 import { streetViewUrl } from '@/lib/overpass'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import PoiMap from '../PoiMap'
@@ -34,9 +34,6 @@ interface Props {
   /** Punto di arrivo del percorso — origine dei link "indicazioni" verso ciascun servizio. Presente
    *  sempre insieme a `returnOptions` (entrambi da GuideReader.tsx). */
   returnOptionsOrigin?: { lat: number; lon: number }
-  /** Data impostata per il percorso (hike.plannedDate) — se presente, ReturnOptionsSection avvisa
-   *  che Maps mostra gli orari di "adesso" e va cambiata a mano per quel giorno. */
-  plannedDate?: string
 }
 
 interface GalleryEntry {
@@ -60,7 +57,9 @@ function otherEntryDist(entry: OtherEntry): number {
   return entry.kind === 'named' ? entry.poi.distFromTrack : Math.min(...entry.pois.map(p => p.distFromTrack))
 }
 
-function PoiCard({ entry, highlighted, dimmed, onTap }: { entry: GalleryEntry; highlighted: boolean; dimmed?: boolean; onTap?: () => void }) {
+function PoiCard({ entry, highlighted, dimmed, onTap, hasStreetView }: {
+  entry: GalleryEntry; highlighted: boolean; dimmed?: boolean; onTap?: () => void; hasStreetView?: boolean
+}) {
   return (
     <div
       className={`group relative flex flex-col shrink-0 w-40 sm:w-44 rounded-xl overflow-hidden border shadow-sm hover:shadow-md transition-all bg-white ${
@@ -89,14 +88,19 @@ function PoiCard({ entry, highlighted, dimmed, onTap }: { entry: GalleryEntry; h
           </span>
         </div>
       </a>
-      {entry.lat != null && entry.lon != null && (
+      {/* Icona separata, non annidata nel link Wikipedia sopra — visibile solo dove è nota una
+          copertura plausibile (vedi lib/routeBuilder/streetViewCoverage.ts): molti POI lungo i
+          sentieri non ne hanno, mostrarla ovunque porterebbe spesso a un punto scoperto/irrilevante. */}
+      {hasStreetView && entry.lat != null && entry.lon != null && (
         <a
           href={streetViewUrl(entry.lat, entry.lon)}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 mx-2.5 mb-2 mt-0.5 text-[10px] text-sky-700 hover:text-sky-800 w-fit"
+          title="Vedi"
+          aria-label="Vedi il luogo dalla strada"
+          className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70 transition-colors"
         >
-          <Navigation className="w-2.5 h-2.5" /> Street View
+          <Eye className="w-3 h-3" />
         </a>
       )}
     </div>
@@ -108,7 +112,7 @@ function PoiCard({ entry, highlighted, dimmed, onTap }: { entry: GalleryEntry; h
  *  separate (lista testuale, galleria foto, "Wikipedia nei dintorni") con dati in parte duplicati. */
 export default function PoiListWidget({
   pois, poiWikiEntries, hasGps, centerLat, centerLon, onWikiLoaded, highlightedPoiId, onItemTap, trackPoints, onOpenMap3D,
-  returnOptions, returnOptionsOrigin, plannedDate,
+  returnOptions, returnOptionsOrigin,
 }: Props) {
   const [nearbyPages, setNearbyPages] = useState<WikiPage[]>([])
   const [focusPoints, setFocusPoints] = useState<{ lat: number; lon: number }[] | null>(null)
@@ -147,6 +151,31 @@ export default function PoiListWidget({
     }
     return out
   }, [poiWikiEntries, nearbyPages])
+
+  // Copertura Street View plausibile per le card della Galleria (vedi
+  // lib/routeBuilder/streetViewCoverage.ts) — una sola chiamata per tutte le card, non una per
+  // card. Chiave per `entry.key`, non per poiId: alcune card (articoli Wikipedia nei dintorni
+  // senza un POI del percorso associato) non hanno un poiId.
+  const [streetViewCovered, setStreetViewCovered] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    const withCoords = galleryEntries.filter(e => e.lat != null && e.lon != null)
+    if (withCoords.length === 0) { setStreetViewCovered({}); return }
+    let cancelled = false
+    fetch('/api/route-build/street-view-coverage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: withCoords.map(e => ({ lat: e.lat, lon: e.lon })) }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled || !Array.isArray(data.covered)) return
+        const map: Record<string, boolean> = {}
+        withCoords.forEach((e, i) => { map[e.key] = !!data.covered[i] })
+        setStreetViewCovered(map)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [galleryEntries])
 
   // POI senza foto Wikipedia in Galleria (compresi quelli con voce Wikipedia ma senza thumbnail) —
   // mostrati comunque come icone: singole con nome se hanno un nome specifico, raggruppate per
@@ -267,13 +296,14 @@ export default function PoiListWidget({
                 const poi = pois.find(p => p.id === entry.poiId)
                 if (poi) handleSingleTap(poi)
               } : undefined}
+              hasStreetView={streetViewCovered[entry.key]}
             />
           ))}
         </div>
       )}
 
       {returnOptions !== undefined && returnOptionsOrigin && (
-        <ReturnOptionsSection options={returnOptions} origin={returnOptionsOrigin} plannedDate={plannedDate} />
+        <ReturnOptionsSection options={returnOptions} origin={returnOptionsOrigin} />
       )}
     </div>
   )

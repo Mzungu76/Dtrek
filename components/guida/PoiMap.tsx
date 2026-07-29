@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Navigation } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
@@ -53,6 +53,28 @@ export default function PoiMap({
     [highlightedPoiIds, pois],
   )
 
+  // Copertura Street View plausibile (vedi lib/routeBuilder/streetViewCoverage.ts) — una sola
+  // chiamata per tutti i POI di questa mappa, non una per popup aperto.
+  const [streetViewPoiIds, setStreetViewPoiIds] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    if (pois.length === 0) { setStreetViewPoiIds(new Set()); return }
+    let cancelled = false
+    fetch('/api/route-build/street-view-coverage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: pois.map(p => ({ lat: p.lat, lon: p.lon })) }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled || !Array.isArray(data.covered)) return
+        const ids = new Set<number>()
+        pois.forEach((p, i) => { if (data.covered[i]) ids.add(p.id) })
+        setStreetViewPoiIds(ids)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [pois])
+
   const hasGps = !!trackPoints?.some(p => p.lat && p.lon)
   if (!hasGps || (pois.length === 0 && !returnMarkers?.length)) return null
 
@@ -72,7 +94,7 @@ export default function PoiMap({
     >
       <MapView
         trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
-        pois={pois} showPoiLayer poiMarkerScale={1.25}
+        pois={pois} showPoiLayer poiMarkerScale={1.25} streetViewPoiIds={streetViewPoiIds}
         routeColor="#8a6d3b" routeWeight={4} routeOpacity={0.85} showEndpointMarkers={false}
         highlightedPoiIndices={highlightedIndices}
         onPoiTap={poi => onPoiTap?.(poi)}
