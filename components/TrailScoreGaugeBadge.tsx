@@ -265,19 +265,25 @@ export function TrailScoreGaugeBadge({
           )}
         </div>
         {showLabel && scoreLines.length > 0 && (
-          <div className={`flex flex-col min-w-0 ${captionLayout === 'stacked' ? 'gap-2.5' : 'gap-1'}`}>
+          <div className={`flex flex-col flex-1 min-w-0 ${captionLayout === 'stacked' ? 'gap-2.5' : 'gap-1'}`}>
             {captionLayout === 'curved' ? (
               // Una riga per punteggio, col margine che segue la curva del cerchio (equazione
               // della circonferenza) invece di un gap piatto uguale per tutte — pensato per le
-              // copertine compatte (schede chiuse), dove il testo sta sempre su una sola riga.
+              // copertine compatte (schede chiuse). "flex-1 min-w-0" sulla colonna + troncamento
+              // con ellissi qui sotto: una frase più lunga del previsto (es. con due fattori
+              // citati) si accorcia con "…" invece di uscire dallo schermo, che è quello che
+              // succedeva con solo whitespace-nowrap e nessun limite di larghezza.
               scoreLines.map((line, i) => {
                 const lineCenter = i * (LABEL_LINE_H + LABEL_LINE_GAP) + LABEL_LINE_H / 2
                 const dy = lineCenter - stackHeight / 2
                 const curveEdge = Math.sqrt(Math.max(0, curveR * curveR - dy * dy))
                 const marginLeft = Math.min(0, curveEdge - curveR)
                 return (
-                  <div key={line.key} className="whitespace-nowrap" style={{ marginLeft }}>
-                    <span className="text-white text-[11px] sm:text-xs font-bold leading-tight" style={{ color: line.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                  <div key={line.key} className="min-w-0" style={{ marginLeft }}>
+                    <span
+                      className="block whitespace-nowrap overflow-hidden text-ellipsis text-white text-[11px] sm:text-xs font-bold leading-tight"
+                      style={{ color: line.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}
+                    >
                       <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">{line.label}</span>
                       {line.value}
                       {line.extra}

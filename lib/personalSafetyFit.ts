@@ -234,7 +234,11 @@ export function computePersonalSafety(
     finalScore = Math.min(finalScore, FINAL_SCORE_HARD_CAP_IF_OBJECTIVE_VETOED)
   }
 
-  const dominantFactor = joinFactors(dominantFactors(adjustments, objective))
+  // Due varianti di lunghezza diversa: la copertina (combinedSafety) sta su una riga sola in
+  // spazio compatto, quindi cita al massimo un fattore; il Consiglio (verdictPhrase, sottotitolo a
+  // piena larghezza che va normalmente a capo) può permettersi la coppia completa.
+  const factors = dominantFactors(adjustments, objective)
+  const dominantFactor = joinFactors(factors)
 
   return {
     objective,
@@ -242,7 +246,7 @@ export function computePersonalSafety(
     personalFit: personalFitLabel(personalFitScore),
     personalDelta,
     finalScore,
-    combinedSafety: combinedSafetyPhrase(objective.overall, personalFitScore, dominantFactor),
+    combinedSafety: combinedSafetyPhrase(objective.overall, personalFitScore, factors[0] ?? null),
     dominantFactor,
   }
 }
