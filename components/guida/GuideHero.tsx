@@ -3,10 +3,17 @@ import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Car } from 'lucide-react'
+import { Car, SquareParking, Milestone, MapPinned } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
+import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
+
+const START_POINT_ICON = {
+  parcheggio: SquareParking,
+  poi_vicino_parcheggio: MapPinned,
+  strada: Milestone,
+} as const
 
 interface Props {
   trackPoints?: TrackPoint[]
@@ -17,6 +24,10 @@ interface Props {
   /** Distanza in auto dall'indirizzo salvato nelle impostazioni fino al trailhead — mostrata
    *  sotto la data, apre le indicazioni Google Maps al tap. */
   driving?: { distanceMeters: number; mapsUrl?: string } | null
+  /** Classificazione del punto di partenza (parcheggio/strada/POI nei pressi di un parcheggio) —
+   *  vedi lib/routeBuilder/startPointInfo.ts. Assente/null finché non arriva o se non determinabile
+   *  ⇒ nessun badge, invariato. */
+  startPoint?: StartPointInfo | null
 }
 
 /**
@@ -26,7 +37,7 @@ interface Props {
  * TUO percorso, non una foto generica trovata online, e non dipende dalla disponibilità di foto.
  * Le foto Wikimedia restano usate più sotto (mosaico e foto per-sezione), solo non più qui.
  */
-export default function GuideHero({ trackPoints, routePolyline, title, categoryBadge, plannedDate, driving }: Props) {
+export default function GuideHero({ trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint }: Props) {
   const points = useMemo(() => {
     const fromTrack = (trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
     if (fromTrack.length > 1) return fromTrack
@@ -100,6 +111,15 @@ export default function GuideHero({ trackPoints, routePolyline, title, categoryB
             </p>
           )
         )}
+        {startPoint && (() => {
+          const Icon = START_POINT_ICON[startPoint.kind]
+          return (
+            <p className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90">
+              <Icon className="w-3.5 h-3.5" />
+              {startPoint.label}{startPoint.name ? ` — ${startPoint.name}` : ''}
+            </p>
+          )
+        })()}
       </div>
     </div>
   )
