@@ -11,6 +11,7 @@ import {
   enrichBuiltCandidateForImport, enrichFoundCandidateForImport,
 } from '@/lib/routeBuilder/buildHikeFromCandidate'
 import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
+import type { TrackPoint } from '@/lib/tcxParser'
 import type { ResultItem } from '@/components/upload/RouteBuilder'
 
 /** Titolo di default per un ResultItem senza nome scelto dall'utente — un candidato "trovato" ha
@@ -38,6 +39,22 @@ export async function saveResultItemToGuide(
   return hike
 }
 
+// RouteMap3D costruisce la propria traccia GPS SOLO da `trackPoints` (components/RouteMap3D.tsx,
+// il ref `gps`, calcolato una sola volta al mount) — mai da `routePolyline`. Un candidato "trovato"
+// (mode 'esistenti') però ha quasi sempre `track.trackPoints` vuoto: la ricerca risolve una
+// `routePolyline` reale per l'anteprima 2D/il punteggio provvisorio, ma non arricchisce ogni
+// risultato con l'intera traccia altimetrica finché non viene scelto/importato (vedi
+// searchSteps.ts's resolveOneCandidate). Senza questo fallback la vista 3D non inizializza mai la
+// mappa — resta bloccata su "Caricamento mappa 3D…" — anche se il percorso ha benissimo una
+// geometria reale da disegnare. Il drappeggio 3D usa comunque il DEM del terreno per la quota
+// (RouteMap3D ignora la Z incorporata di proposito, vedi il commento su setupLayers), quindi
+// bastano lat/lon: altitudeMeters resta assente, i pannelli quota mostreranno una stima reale solo
+// dopo l'import.
+function trackPointsWithFallback(trackPoints: TrackPoint[], routePolyline: [number, number][]): TrackPoint[] {
+  if (trackPoints.length >= 2) return trackPoints
+  return routePolyline.map(([lat, lon], i) => ({ time: new Date(i * 1000).toISOString(), lat, lon }))
+}
+
 // Estrae dal ResultItem i soli campi richiesti da RouteMap3D — stessa forma sia per un candidato
 // "costruito" (trackPoints/pois in cima) sia per uno "trovato" (annidati in `track`), senza dover
 // salvare nulla prima: RouteMap3D lavora già con la sola traccia GPS (activityId/dtmProfile
@@ -47,6 +64,6 @@ export async function saveResultItemToGuide(
 // riletti dall'archivio.
 export function resultItemToMap3DProps(item: ResultItem) {
   return item.kind === 'built'
-    ? { trackPoints: item.data.trackPoints, title: routeTypeLabel(item.data.type), distanceMeters: item.data.distanceMeters, elevationGain: item.data.elevationGain, pois: item.data.pois }
-    : { trackPoints: item.data.track.trackPoints, title: item.data.name, distanceMeters: item.data.track.distanceMeters, elevationGain: item.data.track.elevationGain, pois: item.data.pois }
+    ? { trackPoints: trackPointsWithFallback(item.data.trackPoints, item.data.routePolyline), title: routeTypeLabel(item.data.type), distanceMeters: item.data.distanceMeters, elevationGain: item.data.elevationGain, pois: item.data.pois }
+    : { trackPoints: trackPointsWithFallback(item.data.track.trackPoints, item.data.track.routePolyline), title: item.data.name, distanceMeters: item.data.track.distanceMeters, elevationGain: item.data.track.elevationGain, pois: item.data.pois }
 }
