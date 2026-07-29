@@ -24,7 +24,7 @@ import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { getPersonalRecords, difficultyIndex } from '@/lib/stats'
 import { refineSafetyWithSlope } from '@/lib/safetyScore'
-import { computePersonalSafety, type PersonalFitProfile, type PersonalFitHistory, type PersonalFitRoute } from '@/lib/personalSafetyFit'
+import { computePersonalSafety, verdictPhrase, type PersonalFitProfile, type PersonalFitHistory, type PersonalFitRoute } from '@/lib/personalSafetyFit'
 import { isHikerExperienceLevel, sanitizeHikerConcerns, type HikerExperienceLevel, type HikerConcernKey } from '@/lib/hikerProfile'
 import { type BeautyScore } from '@/lib/beautyScore'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
@@ -884,7 +884,21 @@ export default function GuidaHub({ id }: { id?: string }) {
         scoreGaugeBadge={scoreGaugeBadge}
         scoreBadgesTargetSection="featured"
         summaryBanner={(routeItem) => hike && routeItem.id === hike.id ? hike.assessment?.summary : undefined}
-        subtitle={(routeItem) => hike && routeItem.id === hike.id ? hike.cachedGuideSubtitle : undefined}
+        // "Consiglio" (Trail Score + Sicurezza in un'unica frase) sostituisce il vecchio
+        // sottotitolo scritto una tantum dall'AI in generazione — quel testo non si aggiornava mai
+        // quando lo storico o i punteggi cambiavano, e poteva finire in contraddizione con i
+        // punteggi reali mostrati subito sopra. Nessun sottotitolo finché Sicurezza non è pronta,
+        // invece di mostrare un giudizio provvisorio che poi cambia sotto gli occhi dell'utente.
+        subtitle={(routeItem) => {
+          if (!hike || routeItem.id !== hike.id || !personalSafety) return undefined
+          const breakdown = computeTrailScoreBreakdown(
+            refinedSafety,
+            { result: ctsResult, cached: hike.cachedTrailScore, beautyScore: hike.cachedBeautyScore },
+          )
+          const trailScoreTotal = hike.cachedTsTotal ?? breakdown.total
+          if (trailScoreTotal <= 0) return undefined
+          return verdictPhrase(trailScoreTotal, personalSafety).label
+        }}
         topOverlayVariant="magazine"
         headerActions={<>{pendingChip}{dateChip}</>}
         importLabel="Importa"

@@ -3,8 +3,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { tsColor, useCountUp } from '@/components/ScoreRing'
 import { ctsLabel } from '@/lib/trailScore'
 import { objectiveSafetyLabel } from '@/lib/safetyScore'
-import type { PersonalSafety } from '@/lib/personalSafetyFit'
+import { verdictPhrase, type PersonalSafety } from '@/lib/personalSafetyFit'
 import SafetyDisclaimer from '@/components/SafetyDisclaimer'
+import InfoButton from '@/components/stats/InfoButton'
 import type { SafetyScore } from '@/lib/safetyScore'
 
 export type SafetyPreview = Pick<SafetyScore, 'overall' | 'color' | 'label'>
@@ -28,21 +29,20 @@ export interface TrailScoreGaugeBadgeProps {
   loading?: boolean
   vetoed?: boolean
   size?: number
-  /** Didascalia a fianco del badge — quando c'è `personalSafety` mostra tre righe distinte
-   *  (Sicurezza Oggettiva, Idoneità per Te, Consiglio finale); altrimenti la coppia Trail
-   *  Score/Sicurezza di sempre. Disattivata negli usi molto compatti (miniatura di galleria). */
+  /** Didascalia a fianco del badge — il numero di righe e cosa mostrano dipende da
+   *  `captionLayout` (vedi sotto). Disattivata negli usi molto compatti (miniatura di galleria). */
   showLabel?: boolean
   /** "popup": asterisco cliccabile che apre il disclaimer in una nuvoletta (copertine di galleria,
    *  poco spazio). "inline": testo del disclaimer sempre visibile (scheda aperta, spazio libero).
    *  "none" (default): nessun disclaimer — badge usato senza personalSafety, o già coperto da un
    *  disclaimer esterno al componente. */
   disclaimer?: 'popup' | 'inline' | 'none'
-  /** "curved" (default): una riga per punteggio ("ETICHETTA valore"), col margine che segue la
-   *  curva dell'anello — pensato per le copertine dei percorsi (schede chiuse in Guida), dove lo
-   *  spazio è compatto e il testo sta sempre su una riga sola. "stacked": etichetta ed valore su
-   *  righe separate, senza curva — per il pannello "Punteggio complessivo" (scheda aperta), dove
-   *  in mobile la colonna di testo è troppo stretta perché "ETICHETTA valore" stia su una riga
-   *  sola e il valore andava a capo a metà parola. */
+  /** "curved" (default): copertine dei percorsi (schede chiuse in Guida) — due righe sole, "Trail
+   *  Score" (ti può piacere?) e "Sicurezza" (è sicuro per te?, frase unica che combina Oggettiva +
+   *  Idoneità, lib/personalSafetyFit.ts's combinedSafetyPhrase), col margine che segue la curva
+   *  dell'anello. "stacked": il pannello "Punteggio complessivo" della scheda aperta — dettaglio
+   *  granulare su 4 righe (Trail Score, Sicurezza Oggettiva, Idoneità per te, Consiglio — quest'ultimo
+   *  la sintesi di Trail Score + Sicurezza, verdictPhrase), ciascuna con il proprio bottone "i". */
   captionLayout?: 'curved' | 'stacked'
   /** Avvisi trovati dalla ricerca web di Giulia (vedi lib/guideNotices.ts) — disegnati come
    *  puntini colorati sull'anello Sicurezza, uno per avviso. Puramente informativo: non cambia il
@@ -143,23 +143,35 @@ export function TrailScoreGaugeBadge({
   // ("ETICHETTA valore" su una sola riga) riceve il margine calcolato dalla curva del cerchio; in
   // layout "stacked" etichetta e valore vanno su righe separate senza curva, così il valore va a
   // capo in modo pulito sotto la propria etichetta invece di spezzarsi a metà accanto ad essa.
-  interface ScoreLine { key: string; label: string; value: string; color?: string; extra?: ReactNode }
+  interface ScoreLine { key: string; label: string; value: string; color?: string; extra?: ReactNode; infoSection?: string }
   const scoreLines: ScoreLine[] = []
-  if (tsCaption) scoreLines.push({ key: 'ts', label: 'Trail Score', value: tsCaption })
-  if (!personalSafety && safety) scoreLines.push({ key: 'safety', label: 'Sicurezza', value: safety.label })
-  if (personalSafety && objectiveCaption) {
-    scoreLines.push({ key: 'objective', label: 'Sicurezza oggettiva', value: objectiveCaption })
-    scoreLines.push({ key: 'fit', label: 'Idoneità per te', value: personalSafety.personalFit.label })
-    scoreLines.push({
-      key: 'advice', label: 'Consiglio', value: personalSafety.advice.label, color: personalSafety.advice.color,
-      // "popup": asterisco cliccabile che apre il disclaimer (copertine, dove il testo non c'è).
-      // "inline": solo un richiamo statico — il disclaimer per esteso è già visibile sotto.
-      extra: disclaimer === 'popup'
-        ? <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span>
-        : disclaimer === 'inline'
-          ? <span className="ml-0.5 text-white/50">*</span>
-          : null,
-    })
+
+  if (captionLayout === 'curved') {
+    // Sulla copertina (scheda chiusa) Sicurezza Oggettiva e Idoneità non si mostrano più separate
+    // — sembravano due indici che dicono la stessa cosa, a volte in apparente contraddizione. Qui
+    // rispondono a una sola domanda ciascuna: "Ti può piacere?" (Trail Score) e "È sicuro per te?"
+    // (Sicurezza, frase unica da combinedSafetyPhrase). Il dettaglio granulare resta in "stacked".
+    if (tsCaption) scoreLines.push({ key: 'ts', label: 'Trail Score', value: tsCaption })
+    if (personalSafety) {
+      scoreLines.push({
+        key: 'safety', label: 'Sicurezza', value: personalSafety.combinedSafety.label, color: personalSafety.combinedSafety.color,
+        extra: disclaimer === 'popup' ? <span className="ml-1"><SafetyDisclaimer variant="popup" dark /></span> : null,
+      })
+    } else if (safety) {
+      scoreLines.push({ key: 'safety', label: 'Sicurezza', value: safety.label })
+    }
+  } else {
+    if (tsCaption) scoreLines.push({ key: 'ts', label: 'Trail Score', value: tsCaption, infoSection: 'trail-score-overview' })
+    if (!personalSafety && safety) scoreLines.push({ key: 'safety', label: 'Sicurezza', value: safety.label })
+    if (personalSafety && objectiveCaption) {
+      scoreLines.push({ key: 'objective', label: 'Sicurezza oggettiva', value: objectiveCaption, infoSection: 'sicurezza-oggettiva' })
+      scoreLines.push({ key: 'fit', label: 'Idoneità per te', value: personalSafety.personalFit.label, infoSection: 'idoneita-per-te' })
+      const verdict = verdictPhrase(total, personalSafety)
+      scoreLines.push({
+        key: 'consiglio', label: 'Consiglio', value: verdict.label, color: verdict.color, infoSection: 'consiglio-percorso',
+        extra: disclaimer === 'inline' ? <span className="ml-1 text-white/50">*</span> : null,
+      })
+    }
   }
 
   // Stima di altezza riga/interlinea (font 11-12px, leading-tight) — approssimata perché non c'è
@@ -279,7 +291,10 @@ export function TrailScoreGaugeBadge({
               // sotto la propria etichetta invece di spezzarsi a metà parola accanto ad essa.
               scoreLines.map(line => (
                 <div key={line.key} className="min-w-0">
-                  <p className="text-white/55 text-[10px] font-semibold uppercase tracking-wide leading-tight">{line.label}</p>
+                  <p className="flex items-center gap-1 text-white/55 text-[10px] font-semibold uppercase tracking-wide leading-tight">
+                    {line.label}
+                    {line.infoSection && <InfoButton section={line.infoSection} onDark />}
+                  </p>
                   <p className="text-sm font-bold leading-snug mt-0.5" style={{ color: line.color ?? '#fff', textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
                     {line.value}
                     {line.extra}
