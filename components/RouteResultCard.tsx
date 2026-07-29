@@ -181,12 +181,12 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
               <span className="font-semibold text-stone-800">{(track.distanceMeters / 1000).toFixed(1)} km</span>
               <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
             </div>
-            <div>
-              <span className="font-semibold text-stone-800 flex items-center gap-0.5">
-                <TrendingUp className="w-3 h-3" />{track.hasElevation ? `${Math.round(track.elevationGain)} m` : '—'}
-              </span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello</p>
-            </div>
+            {/* Niente Dislivello qui: a differenza della distanza (dalla sola geometria OSM, immediata),
+                il dislivello richiede un profilo altimetrico reale (DTM) che a questo stadio della
+                ricerca non c'è quasi mai (vedi trackPointsWithFallback in
+                lib/routeBuilder/importResultItem.ts) — mostrarlo come stima/dash generava solo
+                confusione. Il valore reale arriva dopo l'importazione, quando si arricchisce con
+                enrichFoundCandidateForImport. */}
             <div>
               <span className="font-semibold text-stone-800">
                 {{ loop: 'Anello', out_and_back: 'Andata e ritorno', linear: 'Lineare' }[classifyTrackShape(track.routePolyline)]}
