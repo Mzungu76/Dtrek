@@ -12,8 +12,13 @@ import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import PoiMap from '../PoiMap'
 import ReturnOptionsSection from './ReturnOptionsSection'
 import { buildReturnOptionMapsUrl, type ReturnOption } from '@/lib/routeBuilder/returnOptions'
+import { getCachedGeoInfo, setCachedGeoInfo } from '@/lib/routeBuilder/geoInfoCache'
+import { LS_KEYS } from '@/lib/localStore'
 
 interface Props {
+  /** Id della guida — solo per la cache locale della copertura Street View (vedi
+   *  lib/routeBuilder/geoInfoCache.ts), nessun altro uso qui. */
+  hikeId: string
   pois: PoiItem[]
   poiWikiEntries: { poi: PoiItem; wiki: WikiPage }[]
   hasGps: boolean
@@ -111,7 +116,7 @@ function PoiCard({ entry, highlighted, dimmed, onTap, hasStreetView }: {
  *  Wikipedia + articoli Wikipedia nei dintorni), senza ripetizioni — prima erano tre presentazioni
  *  separate (lista testuale, galleria foto, "Wikipedia nei dintorni") con dati in parte duplicati. */
 export default function PoiListWidget({
-  pois, poiWikiEntries, hasGps, centerLat, centerLon, onWikiLoaded, highlightedPoiId, onItemTap, trackPoints, onOpenMap3D,
+  hikeId, pois, poiWikiEntries, hasGps, centerLat, centerLon, onWikiLoaded, highlightedPoiId, onItemTap, trackPoints, onOpenMap3D,
   returnOptions, returnOptionsOrigin,
 }: Props) {
   const [nearbyPages, setNearbyPages] = useState<WikiPage[]>([])
@@ -124,14 +129,19 @@ export default function PoiListWidget({
   // badge sostituisce visivamente qualunque evidenziazione precedente.
   const [selectedGroupType, setSelectedGroupType] = useState<PoiType | null>(null)
 
+  // Settled una volta sola (nessun articolo trovato è comunque un esito) — usato sotto per
+  // aspettare che `galleryEntries` sia nella sua forma definitiva prima di calcolare la copertura
+  // Street View, invece di farlo due volte (una coi soli POI del percorso, una di nuovo quando
+  // arrivano anche gli articoli Wikipedia nei dintorni).
+  const [nearbyPagesSettled, setNearbyPagesSettled] = useState(false)
   useEffect(() => {
-    if (!hasGps || centerLat == null || centerLon == null) return
+    if (!hasGps || centerLat == null || centerLon == null) { setNearbyPagesSettled(true); return }
     let cancelled = false
     fetchNearbyWiki(centerLat, centerLon, 8000).then(pages => {
       if (cancelled) return
       setNearbyPages(pages)
       onWikiLoaded(pages)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => { if (!cancelled) setNearbyPagesSettled(true) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasGps, centerLat, centerLon])
@@ -152,30 +162,47 @@ export default function PoiListWidget({
     return out
   }, [poiWikiEntries, nearbyPages])
 
-  // Copertura Street View plausibile per le card della Galleria (vedi
-  // lib/routeBuilder/streetViewCoverage.ts) — una sola chiamata per tutte le card, non una per
-  // card. Chiave per `entry.key`, non per poiId: alcune card (articoli Wikipedia nei dintorni
-  // senza un POI del percorso associato) non hanno un poiId.
-  const [streetViewCovered, setStreetViewCovered] = useState<Record<string, boolean>>({})
+  // Copertura Street View plausibile (vedi lib/routeBuilder/streetViewCoverage.ts) — UNA sola
+  // chiamata Overpass condivisa da mappa (pin, per poiId) e card della Galleria (per entry.key,
+  // incluse quelle senza poiId — articoli Wikipedia nei dintorni senza un POI del percorso
+  // associato). Prima ciascuno dei due la calcolava per conto proprio: stessa area, due chiamate.
+  // Aspetta `nearbyPagesSettled` (galleryEntries nella sua forma definitiva) prima di partire,
+  // così non ne parte una seconda quando gli articoli nei dintorni arrivano — e cache locale per
+  // hike (geoInfoCache.ts): niente ricalcolo a ogni visione della stessa guida.
+  const [streetViewPoiIds, setStreetViewPoiIds] = useState<Set<number>>(new Set())
+  const [streetViewEntryKeys, setStreetViewEntryKeys] = useState<Set<string>>(new Set())
   useEffect(() => {
-    const withCoords = galleryEntries.filter(e => e.lat != null && e.lon != null)
-    if (withCoords.length === 0) { setStreetViewCovered({}); return }
+    if (!nearbyPagesSettled) return
+    const galleryOnly = galleryEntries.filter(e => e.poiId == null && e.lat != null && e.lon != null)
+    if (pois.length === 0 && galleryOnly.length === 0) { setStreetViewPoiIds(new Set()); setStreetViewEntryKeys(new Set()); return }
+
     let cancelled = false
-    fetch('/api/route-build/street-view-coverage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ points: withCoords.map(e => ({ lat: e.lat, lon: e.lon })) }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (cancelled || !Array.isArray(data.covered)) return
-        const map: Record<string, boolean> = {}
-        withCoords.forEach((e, i) => { map[e.key] = !!data.covered[i] })
-        setStreetViewCovered(map)
+    const applyResult = (poiIds: number[], entryKeys: string[]) => {
+      if (cancelled) return
+      setStreetViewPoiIds(new Set(poiIds))
+      setStreetViewEntryKeys(new Set(entryKeys))
+    }
+    const cacheKey = LS_KEYS.streetViewCoverage(hikeId)
+    getCachedGeoInfo<{ poiIds: number[]; entryKeys: string[] }>(cacheKey).then(cached => {
+      if (cached.hit) { applyResult(cached.value.poiIds, cached.value.entryKeys); return }
+      const points = [...pois.map(p => ({ lat: p.lat, lon: p.lon })), ...galleryOnly.map(e => ({ lat: e.lat!, lon: e.lon! }))]
+      fetch('/api/route-build/street-view-coverage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ points }),
       })
-      .catch(() => {})
+        .then(res => res.json())
+        .then(data => {
+          const covered: boolean[] = Array.isArray(data.covered) ? data.covered : []
+          const poiIds = pois.filter((_, i) => covered[i]).map(p => p.id)
+          const entryKeys = galleryOnly.filter((_, i) => covered[pois.length + i]).map(e => e.key)
+          applyResult(poiIds, entryKeys)
+          setCachedGeoInfo(cacheKey, { poiIds, entryKeys })
+        })
+        .catch(() => {})
+    })
     return () => { cancelled = true }
-  }, [galleryEntries])
+  }, [hikeId, pois, galleryEntries, nearbyPagesSettled])
 
   // POI senza foto Wikipedia in Galleria (compresi quelli con voce Wikipedia ma senza thumbnail) —
   // mostrati comunque come icone: singole con nome se hanno un nome specifico, raggruppate per
@@ -253,6 +280,7 @@ export default function PoiListWidget({
         focusPoints={focusPoints}
         focusSignal={focusSignal}
         returnMarkers={returnMarkers}
+        streetViewPoiIds={streetViewPoiIds}
       />
 
       <p className={`${sectionHeading} pt-1`}>Galleria</p>
@@ -296,7 +324,7 @@ export default function PoiListWidget({
                 const poi = pois.find(p => p.id === entry.poiId)
                 if (poi) handleSingleTap(poi)
               } : undefined}
-              hasStreetView={streetViewCovered[entry.key]}
+              hasStreetView={streetViewEntryKeys.has(entry.key)}
             />
           ))}
         </div>

@@ -7,6 +7,7 @@ import RoutePage from './RoutePage'
 import CoverMap from './CoverMap'
 import TopOverlay from './TopOverlay'
 import BottomGallery, { SORT_CMP, type SortKey } from './BottomGallery'
+import ExpandedGalleryList from './ExpandedGalleryList'
 import type { RouteHubProps, SectionKind } from './types'
 
 // Shared duration for the Screen1 ⇄ Screen2 cross-dissolve, both directions, whenever the
@@ -30,6 +31,11 @@ export default function RouteHub({
   const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const [searchQuery, setSearchQuery] = useState('')
+  // Vista alternativa alla striscia orizzontale (ExpandedGalleryList.tsx, punto 2 Sezione 3) — un
+  // semplice booleano, non parte della macchina a stati open/close di Screen 2 sotto: le due cose
+  // sono mutuamente esclusive nell'uso (il pulsante che apre l'elenco vive nel chrome di Screen 1,
+  // nascosto/non interattivo quando isOpen), quindi non serve intrecciarle.
+  const [galleryExpanded, setGalleryExpanded] = useState(false)
   const isOpen = state.openSection != null
 
   const defaultSection: SectionKind = bodyMode === 'continuous' ? 'featured' : (tabs[0]?.key ?? 'dati')
@@ -188,6 +194,29 @@ export default function RouteHub({
   }, [visibleItems]) // eslint-disable-line react-hooks/exhaustive-deps
   const handleSortChange = (key: SortKey) => setSortBy(key)
 
+  // Condivisa da BottomGallery (striscia) ed ExpandedGalleryList (elenco verticale) — stessa
+  // identica logica di selezione per entrambe le viste, non due copie che potrebbero divergere.
+  const handleGallerySelect = (index: number) => {
+    dispatch({ type: 'JUMP_TO', index })
+    // Un risultato scelto dalla ricerca per titolo va aperto subito sulla sua scheda
+    // completa, non solo portato in copertina — altrimenti sembra che la ricerca l'abbia
+    // trovato ma non ne abbia caricato il contenuto (resta visibile solo il titolo finché
+    // non si trascina/tocca di nuovo per aprirlo). Il tap su una miniatura della galleria
+    // "normale" (nessuna ricerca attiva) continua invece a limitarsi a cambiare copertina.
+    if (searchQueryNorm) {
+      openWithAnimation(defaultSection)
+      // renderSection (il chiamante, es. app/guida/GuidaHub.tsx) carica i dati completi del
+      // percorso (traccia/POI/guida/3D) solo quando onIndexChange gli passa il nuovo id — di
+      // norma con un ritardo di 150ms per non rifare quel caricamento a ogni fotogramma di
+      // uno swipe veloce. Aprendo la scheda nello stesso istante di questo tap, quel ritardo
+      // diventa visibile come "Caricamento…" bloccato: qui la selezione è già un'azione
+      // singola e deliberata (non uno swipe in corsa), quindi notifica subito, senza aspettare
+      // il debounce — che nel frattempo resta comunque valido come rete di sicurezza.
+      const target = visibleItems[index]
+      if (onIndexChange && target) onIndexChange(target, index)
+    }
+  }
+
   if (items.length === 0) {
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex items-center justify-center text-stone-400 text-sm">
@@ -342,30 +371,12 @@ export default function RouteHub({
         )}
         <BottomGallery
           mode={mode} items={visibleItems} currentId={item.id}
-          onSelect={index => {
-            dispatch({ type: 'JUMP_TO', index })
-            // Un risultato scelto dalla ricerca per titolo va aperto subito sulla sua scheda
-            // completa, non solo portato in copertina — altrimenti sembra che la ricerca l'abbia
-            // trovato ma non ne abbia caricato il contenuto (resta visibile solo il titolo finché
-            // non si trascina/tocca di nuovo per aprirlo). Il tap su una miniatura della galleria
-            // "normale" (nessuna ricerca attiva) continua invece a limitarsi a cambiare copertina.
-            if (searchQueryNorm) {
-              openWithAnimation(defaultSection)
-              // renderSection (il chiamante, es. app/guida/GuidaHub.tsx) carica i dati completi del
-              // percorso (traccia/POI/guida/3D) solo quando onIndexChange gli passa il nuovo id — di
-              // norma con un ritardo di 150ms per non rifare quel caricamento a ogni fotogramma di
-              // uno swipe veloce. Aprendo la scheda nello stesso istante di questo tap, quel ritardo
-              // diventa visibile come "Caricamento…" bloccato: qui la selezione è già un'azione
-              // singola e deliberata (non uno swipe in corsa), quindi notifica subito, senza aspettare
-              // il debounce — che nel frattempo resta comunque valido come rete di sicurezza.
-              const target = visibleItems[index]
-              if (onIndexChange && target) onIndexChange(target, index)
-            }
-          }}
+          onSelect={handleGallerySelect}
           sortBy={sortBy} onSortChange={handleSortChange}
           importLabel={importLabel} onImport={onImport}
           favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}
           searchQuery={searchQuery} onSearchQueryChange={setSearchQuery}
+          onExpand={() => setGalleryExpanded(true)}
         />
         {/* Trascina la scheda chiusa verso l'alto per aprirla — l'icona stessa è anche un
             pulsante equivalente per chi preferisce toccare piuttosto che trascinare. */}
@@ -379,6 +390,17 @@ export default function RouteHub({
           </button>
         </div>
       </div>
+
+      {galleryExpanded && (
+        <ExpandedGalleryList
+          mode={mode} items={visibleItems} currentId={item.id}
+          onSelect={index => { handleGallerySelect(index); setGalleryExpanded(false) }}
+          onClose={() => setGalleryExpanded(false)}
+          sortBy={sortBy} onSortChange={handleSortChange}
+          favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}
+          searchQuery={searchQuery} onSearchQueryChange={setSearchQuery}
+        />
+      )}
 
       {pageMounted && (
         <div
