@@ -22,6 +22,7 @@ import CreditErrorModal from './CreditErrorModal'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { AlertTriangle, Link2, KeyRound, Info } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
+import ReturnOptionsCard from './widgets/ReturnOptionsCard'
 import {
   GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, GUIDE_TEXT_LENGTHS, DEFAULT_SECTION_LENGTHS,
   sanitizeSectionLengths, countMoltoApprofondita, MAX_MOLTO_APPROFONDITA_SECTIONS,
@@ -854,12 +855,24 @@ export default function GuideReader({
 
   // Un percorso a tratta unica (start/end lontani — non un anello, non un andata-ritorno già
   // rilevato come tale dalla geometria) può essere guardato "come se" fosse andata e ritorno: le
-  // cifre in GuideStatsStrip raddoppiano, MAI il percorso salvato. Andata+ritorno sullo stesso
-  // tracciato: il dislivello del giro completo è salita+discesa (elevationGain+elevationLoss), non
-  // un semplice raddoppio della sola salita.
+  // cifre in GuideStatsStrip raddoppiano, MAI il percorso salvato. Raddoppio semplice anche per il
+  // dislivello (non salita+discesa): elevationLoss non è mai mostrato altrove nell'app ed è più
+  // esposto al rumore GPS/DTM (piccoli saliscendi che si accumulano) di elevationGain, che invece è
+  // già la cifra "Dislivello" mostrata da sempre — usarlo da solo, raddoppiato, resta prevedibile e
+  // coerente con distanza/durata qui sopra, invece di introdurre un dato mai verificato in UI.
   const isLinearRoute = useMemo(() => classifyTrackShape(hike.routePolyline ?? []) === 'linear', [hike.routePolyline])
   const [roundTripView, setRoundTripView] = useState(false)
   const showAsRoundTrip = isLinearRoute && roundTripView
+
+  // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
+  // chi non vuole tornare a piedi sui propri passi (vedi ReturnOptionsCard sotto).
+  const endPoint = useMemo(() => {
+    const fromTrack = [...(hike.trackPoints ?? [])].reverse().find(p => p.lat != null && p.lon != null)
+    if (fromTrack) return { lat: fromTrack.lat!, lon: fromTrack.lon! }
+    const poly = hike.routePolyline
+    if (poly && poly.length > 0) return { lat: poly[poly.length - 1][0], lon: poly[poly.length - 1][1] }
+    return null
+  }, [hike.trackPoints, hike.routePolyline])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -878,7 +891,7 @@ export default function GuideReader({
 
       <GuideStatsStrip
         distanceKm={(hike.distanceMeters / 1000) * (showAsRoundTrip ? 2 : 1)}
-        elevationGain={showAsRoundTrip ? hike.elevationGain + hike.elevationLoss : hike.elevationGain}
+        elevationGain={hike.elevationGain * (showAsRoundTrip ? 2 : 1)}
         altitudeMax={hike.altitudeMax}
         durationLabel={formatDuration(hike.estimatedTimeSeconds * (showAsRoundTrip ? 2 : 1))}
         roundTrip={isLinearRoute ? { active: roundTripView, onToggle: () => setRoundTripView(v => !v) } : undefined}
@@ -1113,6 +1126,10 @@ export default function GuideReader({
               </div>
             )}
 
+            {isLinearRoute && endPoint && (
+              <ReturnOptionsCard endLat={endPoint.lat} endLon={endPoint.lon} />
+            )}
+
             {hasGuide && !generating && hasAiAccess === true && (
               <GuideQA
                 hikeId={hike.id}
@@ -1126,13 +1143,6 @@ export default function GuideReader({
                   cachedPoiWiki:        hike.cachedPoiWiki,
                   cachedGuide:          guideText,
                 }}
-                // Percorso a sola andata (start ed end lontani, non un anello né un andata-ritorno
-                // già rilevato dalla geometria, vedi isLinearRoute sopra) — riusa la ricerca web già
-                // pertinente-per-percorso di Giulia per verificare puntualmente bus/taxi/altro per
-                // tornare al punto di partenza, invece di costruire una nuova pipeline AI dedicata.
-                suggestedQuestion={isLinearRoute
-                  ? 'Questo percorso è a sola andata: come si torna al punto di partenza con mezzi alternativi (bus, taxi, altro)? Ci sono davvero questi servizi in zona?'
-                  : undefined}
               />
             )}
 

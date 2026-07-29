@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, type FormEvent } from 'react'
-import { MessageCircleQuestion, Send, Loader2, Link2, Sparkles } from 'lucide-react'
+import { MessageCircleQuestion, Send, Loader2, Link2 } from 'lucide-react'
 
 interface QASource { url: string; title: string }
 
@@ -35,16 +35,7 @@ export interface GuideQAHikeFallback {
  *  stato ("sto verificando online…") così l'attesa non è mai un semplice spinner muto.
  *  Ogni domanda/risposta è persistita lato server (tabella guide_questions) e ricaricata qui al
  *  primo render, così la cronologia sopravvive alla chiusura della guida. */
-interface Props {
-  hikeId: string
-  hikeFallback?: GuideQAHikeFallback
-  /** Domanda suggerita in evidenza sopra il campo — es. per un percorso a sola andata, le opzioni
-   *  di ritorno al punto di partenza (vedi GuideReader.tsx). Un tap la pone subito a Giulia, senza
-   *  doverla scrivere. Sparisce da sola una volta già chiesta (stessa domanda già in cronologia). */
-  suggestedQuestion?: string
-}
-
-export default function GuideQA({ hikeId, hikeFallback, suggestedQuestion }: Props) {
+export default function GuideQA({ hikeId, hikeFallback }: { hikeId: string; hikeFallback?: GuideQAHikeFallback }) {
   const [question, setQuestion] = useState('')
   const [entries,  setEntries]  = useState<QAEntry[]>([])
   const [asking,   setAsking]   = useState(false)
@@ -66,7 +57,9 @@ export default function GuideQA({ hikeId, hikeFallback, suggestedQuestion }: Pro
     setEntries(prev => prev.map((entry, i) => i === idx ? { ...entry, ...patch } : entry))
   }
 
-  async function ask(q: string) {
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    const q = question.trim()
     if (!q || asking) return
 
     setAsking(true)
@@ -115,13 +108,6 @@ export default function GuideQA({ hikeId, hikeFallback, suggestedQuestion }: Pro
       inputRef.current?.focus()
     }
   }
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    ask(question.trim())
-  }
-
-  const suggestedAlreadyAsked = !!suggestedQuestion && entries.some(entry => entry.question === suggestedQuestion)
 
   return (
     <div className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm">
@@ -187,17 +173,6 @@ export default function GuideQA({ hikeId, hikeFallback, suggestedQuestion }: Pro
               </div>
             ))}
           </div>
-        )}
-
-        {suggestedQuestion && !suggestedAlreadyAsked && (
-          <button
-            onClick={() => ask(suggestedQuestion)}
-            disabled={asking}
-            className="w-full flex items-start gap-2 text-left px-4 py-2.5 mb-4 rounded-xl border border-terra-200 bg-terra-50 hover:bg-terra-100 text-[13px] text-terra-800 font-medium transition-colors disabled:opacity-60"
-          >
-            <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
-            {suggestedQuestion}
-          </button>
         )}
 
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
