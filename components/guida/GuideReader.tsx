@@ -22,7 +22,7 @@ import CreditErrorModal from './CreditErrorModal'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { AlertTriangle, Link2, KeyRound, Info } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
-import ReturnOptionsCard from './widgets/ReturnOptionsCard'
+import type { ReturnOption } from '@/lib/routeBuilder/returnOptions'
 import {
   GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, GUIDE_TEXT_LENGTHS, DEFAULT_SECTION_LENGTHS,
   sanitizeSectionLengths, countMoltoApprofondita, MAX_MOLTO_APPROFONDITA_SECTIONS,
@@ -712,6 +712,8 @@ export default function GuideReader({
               onItemTap={poi => onPoiTap?.(poi.id)}
               trackPoints={hike.trackPoints}
               onOpenMap3D={onOpenMap3D}
+              returnOptions={isLinearRoute ? returnOptions : undefined}
+              returnOptionsOrigin={endPoint ?? undefined}
             />
           )
           : null
@@ -865,7 +867,8 @@ export default function GuideReader({
   const showAsRoundTrip = isLinearRoute && roundTripView
 
   // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
-  // chi non vuole tornare a piedi sui propri passi (vedi ReturnOptionsCard sotto).
+  // chi non vuole tornare a piedi sui propri passi (sottosezione "Tornare al punto di partenza" in
+  // "Luoghi da non perdere", vedi PoiListWidget.tsx/ReturnOptionsSection.tsx).
   const endPoint = useMemo(() => {
     const fromTrack = [...(hike.trackPoints ?? [])].reverse().find(p => p.lat != null && p.lon != null)
     if (fromTrack) return { lat: fromTrack.lat!, lon: fromTrack.lon! }
@@ -873,6 +876,18 @@ export default function GuideReader({
     if (poly && poly.length > 0) return { lat: poly[poly.length - 1][0], lon: poly[poly.length - 1][1] }
     return null
   }, [hike.trackPoints, hike.routePolyline])
+
+  const [returnOptions, setReturnOptions] = useState<ReturnOption[] | null>(null)
+  useEffect(() => {
+    setReturnOptions(null)
+    if (!isLinearRoute || !endPoint) return
+    let cancelled = false
+    fetch(`/api/route-build/return-options?lat=${endPoint.lat}&lon=${endPoint.lon}`)
+      .then(res => res.json())
+      .then(data => { if (!cancelled) setReturnOptions(Array.isArray(data.options) ? data.options : []) })
+      .catch(() => { if (!cancelled) setReturnOptions([]) })
+    return () => { cancelled = true }
+  }, [isLinearRoute, endPoint])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -1124,10 +1139,6 @@ export default function GuideReader({
                   ))}
                 </div>
               </div>
-            )}
-
-            {isLinearRoute && endPoint && (
-              <ReturnOptionsCard endLat={endPoint.lat} endLon={endPoint.lon} />
             )}
 
             {hasGuide && !generating && hasAiAccess === true && (

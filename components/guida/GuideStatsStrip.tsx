@@ -52,11 +52,11 @@ export default function GuideStatsStrip({ distanceKm, elevationGain, altitudeMax
       {roundTrip && (
         <button
           onClick={roundTrip.onToggle}
-          className={`w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold border-b border-stone-200 transition-colors ${
-            roundTrip.active ? 'bg-forest-50 text-forest-700' : 'bg-stone-50 text-stone-500 hover:text-stone-700'
+          className={`w-full flex items-center justify-start gap-1.5 px-4 py-2 text-xs font-semibold border-b border-stone-200 transition-colors text-left ${
+            roundTrip.active ? 'bg-forest-50 text-forest-700' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'
           }`}
         >
-          <Repeat className="w-3.5 h-3.5" />
+          <Repeat className="w-3.5 h-3.5 shrink-0" />
           {roundTrip.active ? 'Percorso Andata e Ritorno. Clicca per modificare in Sola Andata' : 'Percorso di Sola Andata. Clicca per modificare in Andata e Ritorno'}
         </button>
       )}

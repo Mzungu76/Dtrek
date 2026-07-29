@@ -9,6 +9,8 @@ import { sectionHeading } from '@/components/routehub/overlayTheme'
 import { ExternalLink } from 'lucide-react'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import PoiMap from '../PoiMap'
+import ReturnOptionsSection from './ReturnOptionsSection'
+import { buildReturnOptionMapsUrl, type ReturnOption } from '@/lib/routeBuilder/returnOptions'
 
 interface Props {
   pois: PoiItem[]
@@ -24,6 +26,13 @@ interface Props {
   onItemTap?: (poi: PoiItem) => void
   trackPoints?: TrackPoint[]
   onOpenMap3D?: () => void
+  /** Percorso a sola andata — servizi di trasporto trovati entro 1 km dal punto di arrivo (vedi
+   *  lib/routeBuilder/returnOptions.ts) — null mentre in caricamento, array vuoto se nessuno
+   *  trovato, undefined quando il percorso non è a sola andata (nessuna sottosezione). */
+  returnOptions?: ReturnOption[] | null
+  /** Punto di arrivo del percorso — origine dei link "indicazioni" verso ciascun servizio. Presente
+   *  sempre insieme a `returnOptions` (entrambi da GuideReader.tsx). */
+  returnOptionsOrigin?: { lat: number; lon: number }
 }
 
 interface GalleryEntry {
@@ -83,6 +92,7 @@ function PoiCard({ entry, highlighted, dimmed, onTap }: { entry: GalleryEntry; h
  *  separate (lista testuale, galleria foto, "Wikipedia nei dintorni") con dati in parte duplicati. */
 export default function PoiListWidget({
   pois, poiWikiEntries, hasGps, centerLat, centerLon, onWikiLoaded, highlightedPoiId, onItemTap, trackPoints, onOpenMap3D,
+  returnOptions, returnOptionsOrigin,
 }: Props) {
   const [nearbyPages, setNearbyPages] = useState<WikiPage[]>([])
   const [focusPoints, setFocusPoints] = useState<{ lat: number; lon: number }[] | null>(null)
@@ -174,6 +184,19 @@ export default function PoiListWidget({
     return null
   }, [selectedGroup, highlightedPoiId])
 
+  // Pin dei servizi di trasporto per il ritorno sulla stessa mappa dei POI — un layer a parte
+  // (returnMarkers, mai in `pois`) apposta per non influenzare il fit della mappa: questi punti
+  // possono cadere ben fuori dal percorso, vedi il commento in components/MapView.tsx.
+  const returnMarkers = useMemo(
+    () => returnOptionsOrigin
+      ? (returnOptions ?? []).map(opt => ({
+          lat: opt.lat, lon: opt.lon, kind: opt.kind, label: opt.name || opt.label,
+          mapsUrl: buildReturnOptionMapsUrl(returnOptionsOrigin, opt),
+        }))
+      : [],
+    [returnOptions, returnOptionsOrigin],
+  )
+
   return (
     <div className="space-y-3">
       <PoiMap
@@ -184,6 +207,7 @@ export default function PoiListWidget({
         onOpenMap3D={onOpenMap3D}
         focusPoints={focusPoints}
         focusSignal={focusSignal}
+        returnMarkers={returnMarkers}
       />
 
       <p className={`${sectionHeading} pt-1`}>Galleria</p>
@@ -230,6 +254,10 @@ export default function PoiListWidget({
             />
           ))}
         </div>
+      )}
+
+      {returnOptions !== undefined && returnOptionsOrigin && (
+        <ReturnOptionsSection options={returnOptions} origin={returnOptionsOrigin} />
       )}
     </div>
   )
