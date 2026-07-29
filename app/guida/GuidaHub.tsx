@@ -724,8 +724,16 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
     const trailScoreTotal = cached ?? breakdown.total
     if (!scoreLoading && trailScoreTotal <= 0) return null
+    // w-full min-w-0 text-left sul <button> sotto: senza una larghezza esplicita un <button> usa
+    // shrink-to-fit, che con testo whitespace-nowrap dentro (combinedSafety può essere lungo)
+    // considera come larghezza minima l'intera frase non spezzata — il bottone si allargava oltre
+    // lo schermo prima ancora che l'overflow-hidden interno al badge potesse entrare in gioco.
     return (
-      <button onClick={() => { setPendingScrollSection('dati_sicurezza'); onTap() }} title="Trail Score">
+      <button
+        onClick={() => { setPendingScrollSection('dati_sicurezza'); onTap() }}
+        title="Trail Score"
+        className="block w-full min-w-0 text-left"
+      >
         <TrailScoreGaugeBadge
           total={scoreLoading ? null : trailScoreTotal}
           value={breakdown.value}
