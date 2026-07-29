@@ -330,7 +330,18 @@ export default function RouteHub({
             // trovato ma non ne abbia caricato il contenuto (resta visibile solo il titolo finché
             // non si trascina/tocca di nuovo per aprirlo). Il tap su una miniatura della galleria
             // "normale" (nessuna ricerca attiva) continua invece a limitarsi a cambiare copertina.
-            if (searchQueryNorm) openWithAnimation(defaultSection)
+            if (searchQueryNorm) {
+              openWithAnimation(defaultSection)
+              // renderSection (il chiamante, es. app/guida/GuidaHub.tsx) carica i dati completi del
+              // percorso (traccia/POI/guida/3D) solo quando onIndexChange gli passa il nuovo id — di
+              // norma con un ritardo di 150ms per non rifare quel caricamento a ogni fotogramma di
+              // uno swipe veloce. Aprendo la scheda nello stesso istante di questo tap, quel ritardo
+              // diventa visibile come "Caricamento…" bloccato: qui la selezione è già un'azione
+              // singola e deliberata (non uno swipe in corsa), quindi notifica subito, senza aspettare
+              // il debounce — che nel frattempo resta comunque valido come rete di sicurezza.
+              const target = visibleItems[index]
+              if (onIndexChange && target) onIndexChange(target, index)
+            }
           }}
           sortBy={sortBy} onSortChange={handleSortChange}
           importLabel={importLabel} onImport={onImport}
