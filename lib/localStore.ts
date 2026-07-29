@@ -204,4 +204,11 @@ export const LS_KEYS = {
   questionnaire:   (activityId: string) => `questionnaire:${activityId}`,
   activityPhotos:  (activityId: string) => `activity-photos:${activityId}`,
   lastSync:        (entity: string) => `last-sync:${entity}`,
+  // Dati geografici (Overpass) di una guida — vedi lib/routeBuilder/geoInfoCache.ts. Cache locale al
+  // dispositivo, non sincronizzata: rifare la stessa chiamata Overpass a ogni visione della stessa
+  // guida (frequente, es. durante la pianificazione di un'uscita) è un carico evitabile su un
+  // servizio pubblico condiviso — vedi il commento in geoInfoCache.ts.
+  startPointInfo:      (hikeId: string) => `start-point-info:${hikeId}`,
+  returnOptions:       (hikeId: string) => `return-options:${hikeId}`,
+  streetViewCoverage:  (hikeId: string) => `street-view-coverage:${hikeId}`,
 } as const

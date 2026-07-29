@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Navigation } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
@@ -24,6 +24,10 @@ interface Props {
   /** Servizi di trasporto per il ritorno (bus/treno/taxi) — vedi il commento su `returnMarkers` in
    *  MapView.tsx: un layer a parte da `pois`, mai incluso nel fit della mappa. */
   returnMarkers?: { lat: number; lon: number; kind: 'bus' | 'treno' | 'taxi'; label: string; mapsUrl?: string }[]
+  /** Id dei `pois` con copertura Street View plausibile — calcolata una sola volta dal chiamante
+   *  (PoiListWidget.tsx, che la condivide con le card della Galleria) invece che qui: evita una
+   *  seconda chiamata Overpass ridondante sugli stessi punti. */
+  streetViewPoiIds?: Set<number>
 }
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
@@ -39,6 +43,7 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  */
 export default function PoiMap({
   trackPoints, pois, highlightedPoiIds = null, onPoiTap, onOpenMap3D, focusPoints, focusSignal, returnMarkers,
+  streetViewPoiIds,
 }: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
@@ -52,28 +57,6 @@ export default function PoiMap({
       : pois.reduce<number[]>((acc, p, i) => { if (highlightedPoiIds.has(p.id)) acc.push(i); return acc }, [])),
     [highlightedPoiIds, pois],
   )
-
-  // Copertura Street View plausibile (vedi lib/routeBuilder/streetViewCoverage.ts) — una sola
-  // chiamata per tutti i POI di questa mappa, non una per popup aperto.
-  const [streetViewPoiIds, setStreetViewPoiIds] = useState<Set<number>>(new Set())
-  useEffect(() => {
-    if (pois.length === 0) { setStreetViewPoiIds(new Set()); return }
-    let cancelled = false
-    fetch('/api/route-build/street-view-coverage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ points: pois.map(p => ({ lat: p.lat, lon: p.lon })) }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (cancelled || !Array.isArray(data.covered)) return
-        const ids = new Set<number>()
-        pois.forEach((p, i) => { if (data.covered[i]) ids.add(p.id) })
-        setStreetViewPoiIds(ids)
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [pois])
 
   const hasGps = !!trackPoints?.some(p => p.lat && p.lon)
   if (!hasGps || (pois.length === 0 && !returnMarkers?.length)) return null

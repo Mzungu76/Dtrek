@@ -5,6 +5,8 @@ import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { classifyTrackShape } from '@/lib/geoUtils'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
+import { getCachedGeoInfo, setCachedGeoInfo } from '@/lib/routeBuilder/geoInfoCache'
+import { LS_KEYS } from '@/lib/localStore'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
   VolumeX, Loader2,
@@ -274,9 +276,9 @@ export default function GuideReader({
   }, [hike.id, hike.cachedGuide, hike.cachedGuideNotices, hike.cachedGuideSources])
 
   // Classificazione del punto di partenza (parcheggio/strada/POI nei pressi di un parcheggio, vedi
-  // lib/routeBuilder/startPointInfo.ts) — non persistita (vedi commento lì), ricalcolata a ogni
-  // visione: è un'unica chiamata Overpass leggera su un raggio piccolo, molto più economica
-  // dell'arricchimento POI completo del percorso.
+  // lib/routeBuilder/startPointInfo.ts) — cache locale per hike (geoInfoCache.ts): senza, ogni
+  // visione della stessa guida rifarebbe la stessa chiamata Overpass, un carico che cresce con le
+  // pagine viste invece che con i percorsi creati.
   const [startPointInfo, setStartPointInfo] = useState<StartPointInfo | null>(null)
   useEffect(() => {
     setStartPointInfo(null)
@@ -286,10 +288,18 @@ export default function GuideReader({
       : hike.routePolyline?.[0] ? { lat: hike.routePolyline[0][0], lon: hike.routePolyline[0][1] } : null
     if (!start) return
     let cancelled = false
-    fetch(`/api/route-build/start-point?lat=${start.lat}&lon=${start.lon}`)
-      .then(res => res.json())
-      .then(data => { if (!cancelled) setStartPointInfo(data.info ?? null) })
-      .catch(() => {})
+    const cacheKey = LS_KEYS.startPointInfo(hike.id)
+    getCachedGeoInfo<StartPointInfo | null>(cacheKey).then(cached => {
+      if (cached.hit) { if (!cancelled) setStartPointInfo(cached.value); return }
+      fetch(`/api/route-build/start-point?lat=${start.lat}&lon=${start.lon}`)
+        .then(res => res.json())
+        .then(data => {
+          const info: StartPointInfo | null = data.info ?? null
+          if (!cancelled) setStartPointInfo(info)
+          setCachedGeoInfo(cacheKey, info)
+        })
+        .catch(() => {})
+    })
     return () => { cancelled = true }
   }, [hike.id, hike.trackPoints, hike.routePolyline])
 
@@ -708,6 +718,7 @@ export default function GuideReader({
           ? (
             <PoiListWidget
               {...poiList}
+              hikeId={hike.id}
               highlightedPoiId={highlightedPoiId}
               onItemTap={poi => onPoiTap?.(poi.id)}
               trackPoints={hike.trackPoints}
@@ -877,17 +888,27 @@ export default function GuideReader({
     return null
   }, [hike.trackPoints, hike.routePolyline])
 
+  // Cache locale per hike (geoInfoCache.ts) — stesso motivo del punto di partenza sopra: senza,
+  // ogni visione della stessa guida rifarebbe la stessa chiamata Overpass.
   const [returnOptions, setReturnOptions] = useState<ReturnOption[] | null>(null)
   useEffect(() => {
     setReturnOptions(null)
     if (!isLinearRoute || !endPoint) return
     let cancelled = false
-    fetch(`/api/route-build/return-options?lat=${endPoint.lat}&lon=${endPoint.lon}`)
-      .then(res => res.json())
-      .then(data => { if (!cancelled) setReturnOptions(Array.isArray(data.options) ? data.options : []) })
-      .catch(() => { if (!cancelled) setReturnOptions([]) })
+    const cacheKey = LS_KEYS.returnOptions(hike.id)
+    getCachedGeoInfo<ReturnOption[]>(cacheKey).then(cached => {
+      if (cached.hit) { if (!cancelled) setReturnOptions(cached.value); return }
+      fetch(`/api/route-build/return-options?lat=${endPoint.lat}&lon=${endPoint.lon}`)
+        .then(res => res.json())
+        .then(data => {
+          const options: ReturnOption[] = Array.isArray(data.options) ? data.options : []
+          if (!cancelled) setReturnOptions(options)
+          setCachedGeoInfo(cacheKey, options)
+        })
+        .catch(() => { if (!cancelled) setReturnOptions([]) })
+    })
     return () => { cancelled = true }
-  }, [isLinearRoute, endPoint])
+  }, [isLinearRoute, endPoint, hike.id])
 
   // ── Render ────────────────────────────────────────────────────────────────
 

@@ -682,6 +682,7 @@ export default function ReportReader({
       case 'poi':
         return (
           <PoiListWidget
+            hikeId={id}
             pois={pois}
             poiWikiEntries={poiWikiEntries}
             hasGps={hasGps}
