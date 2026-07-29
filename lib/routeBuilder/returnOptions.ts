@@ -12,6 +12,8 @@ export interface ReturnOption {
   label: string
   name?: string
   distanceMeters: number
+  lat: number
+  lon: number
 }
 
 interface OverpassEl {
@@ -80,8 +82,22 @@ out center tags;
       label: KIND_LABEL[kind],
       name: el.tags?.name,
       distanceMeters: Math.round(haversineM(lat, lon, pos.lat, pos.lon)),
+      lat: pos.lat,
+      lon: pos.lon,
     })
   }
 
   return options.sort((a, b) => a.distanceMeters - b.distanceMeters).slice(0, MAX_OPTIONS)
+}
+
+/** Link "indicazioni a piedi" da Google Maps dal punto di arrivo del percorso (origin) al servizio
+ *  trovato (destination) — così l'utente sa come arrivarci, non solo che esiste. */
+export function buildReturnOptionMapsUrl(origin: { lat: number; lon: number }, option: ReturnOption): string {
+  const params = new URLSearchParams({
+    api: '1',
+    origin: `${origin.lat},${origin.lon}`,
+    destination: `${option.lat},${option.lon}`,
+    travelmode: 'walking',
+  })
+  return `https://www.google.com/maps/dir/?${params.toString()}`
 }

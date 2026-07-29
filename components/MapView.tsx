@@ -25,6 +25,13 @@ interface Props {
   wikiPages?: WikiPage[]
   difficultyMarkers?: ClassifiedDifficultyMarker[]
   floraMarkers?: { lat: number; lon: number; label: string }[]
+  /** Servizi di trasporto per il ritorno (bus/treno/taxi entro un raggio dal punto di arrivo di un
+   *  percorso a sola andata, vedi lib/routeBuilder/returnOptions.ts) — un layer a parte, non
+   *  incluso in `pois`: NON deve mai influenzare il fitBounds iniziale/di "inquadra tutto il
+   *  percorso" (che legge solo la traccia, vedi boundsRef), perché questi punti possono cadere
+   *  ben fuori dal percorso stesso — è normale che restino fuori vista finché non si effettua
+   *  pan/zoom manualmente. */
+  returnMarkers?: { lat: number; lon: number; kind: 'bus' | 'treno' | 'taxi'; label: string; mapsUrl?: string }[]
   planned?: boolean
   activeIndex?: number | null
   /** When false, disables all native pan/zoom gestures (used by the fullscreen route hub's "locked" mode). Default true. */
@@ -111,6 +118,8 @@ const SEVERITY_EMOJI: Record<ClassifiedDifficultyMarker['severity'], string> = {
   info: 'ℹ️',
 }
 
+const RETURN_MARKER_EMOJI: Record<'bus' | 'treno' | 'taxi', string> = { bus: '🚌', treno: '🚆', taxi: '🚕' }
+
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
   const f1 = lat1 * Math.PI / 180, f2 = lat2 * Math.PI / 180
@@ -130,6 +139,7 @@ export default function MapView({
   wikiPages = [],
   difficultyMarkers = [],
   floraMarkers = [],
+  returnMarkers = [],
   planned = false,
   activeIndex = null,
   interactive = true,
@@ -164,6 +174,7 @@ export default function MapView({
   dtmProfileRef.current = dtmProfile
   const difficultyLayer = useRef<L.Marker[]>([])
   const floraLayer      = useRef<L.Marker[]>([])
+  const returnLayer     = useRef<L.Marker[]>([])
   const activeMarker    = useRef<L.Marker | null>(null)
   const boundsRef       = useRef<L.LatLngBounds | null>(null)
   const transientGradientLayer = useRef<L.Polyline[]>([])
@@ -666,6 +677,34 @@ export default function MapView({
       }
     })
   }, [floraMarkers, mapReady])
+
+  // Layer servizi di trasporto per il ritorno (vedi il commento su `returnMarkers` nei Props) —
+  // MAI incluso in boundsRef/fitBounds: questi pin possono cadere ben fuori dal percorso, il
+  // "inquadra tutto" deve continuare a inquadrare solo la traccia.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+
+    import('leaflet').then(L => {
+      returnLayer.current.forEach((m: any) => m.remove())
+      returnLayer.current = []
+
+      for (const marker of returnMarkers) {
+        const icon = L.divIcon({
+          html: `<div style="width:26px;height:26px;border-radius:50%;background:#0284c7;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1">${RETURN_MARKER_EMOJI[marker.kind]}</div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+          className: '',
+        })
+        const popup = `<div style="font-size:12px">${marker.label}${marker.mapsUrl
+          ? `<br/><a href="${marker.mapsUrl}" target="_blank" rel="noopener noreferrer" style="color:#0284c7;font-weight:600">Apri in Google Maps →</a>`
+          : ''}</div>`
+        const m = L.marker([marker.lat, marker.lon], { icon })
+          .addTo(mapInstance.current!)
+          .bindPopup(popup)
+        returnLayer.current.push(m)
+      }
+    })
+  }, [returnMarkers, mapReady])
 
   const hasGps = trackPoints.some(p => p.lat !== undefined)
 

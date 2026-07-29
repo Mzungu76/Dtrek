@@ -21,6 +21,9 @@ interface Props {
    *  raggruppate della griglia sotto la Galleria per zoomare sui pin di un singolo tipo. */
   focusPoints?: { lat: number; lon: number }[] | null
   focusSignal?: number
+  /** Servizi di trasporto per il ritorno (bus/treno/taxi) — vedi il commento su `returnMarkers` in
+   *  MapView.tsx: un layer a parte da `pois`, mai incluso nel fit della mappa. */
+  returnMarkers?: { lat: number; lon: number; kind: 'bus' | 'treno' | 'taxi'; label: string; mapsUrl?: string }[]
 }
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
@@ -35,7 +38,7 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  * tramite `highlightedPoiIds`/`onPoiTap`.
  */
 export default function PoiMap({
-  trackPoints, pois, highlightedPoiIds = null, onPoiTap, onOpenMap3D, focusPoints, focusSignal,
+  trackPoints, pois, highlightedPoiIds = null, onPoiTap, onOpenMap3D, focusPoints, focusSignal, returnMarkers,
 }: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
@@ -51,7 +54,7 @@ export default function PoiMap({
   )
 
   const hasGps = !!trackPoints?.some(p => p.lat && p.lon)
-  if (!hasGps || pois.length === 0) return null
+  if (!hasGps || (pois.length === 0 && !returnMarkers?.length)) return null
 
   const toggleFullscreen = () => {
     setFullscreen(v => {
@@ -76,6 +79,7 @@ export default function PoiMap({
         fitSignal={fitTick}
         focusPoints={focusPoints}
         focusSignal={focusSignal}
+        returnMarkers={returnMarkers}
         showDirectionArrows={showArrows}
         resizeSignal={resizeTick}
       />
