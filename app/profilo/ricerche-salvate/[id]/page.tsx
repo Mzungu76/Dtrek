@@ -1,13 +1,19 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { FoundRouteCard, BuiltRouteCard } from '@/components/RouteResultCard'
 import type { ResultItem } from '@/components/upload/RouteBuilder'
+import { saveResultItemToGuide, resultItemToMap3DProps, defaultTitleForResultItem } from '@/lib/routeBuilder/importResultItem'
+import { defaultPendingExpiresAt } from '@/components/upload/sharedHelpers'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Loader2 } from 'lucide-react'
+
+// Stesso pattern di components/upload/RouteBuilder.tsx: MapLibre GL è client-only.
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 interface SearchHistoryDetail {
   id: string
@@ -22,12 +28,18 @@ interface SearchHistoryDetail {
 /**
  * Dettaglio di una ricerca salvata — ri-mostra `results` (traccia reale/POI/punteggio già inclusi,
  * vedi lib/routeBuilder/searchHistory.ts) con le stesse FoundRouteCard/BuiltRouteCard del wizard
- * originale, SENZA nessuna nuova chiamata Overpass/DTM: è un archivio, non una nuova ricerca.
+ * originale, SENZA nessuna nuova chiamata Overpass/DTM: è un archivio, non una nuova ricerca. Da qui
+ * si può però creare una Guida vera da uno di questi risultati (vedi handleCreateGuide) — prima
+ * l'archivio era di sola lettura.
  */
 export default function RicercaSalvataDetailPage() {
   const params = useParams<{ id: string }>()
+  const router = useRouter()
   const [search, setSearch] = useState<SearchHistoryDetail | null>(null)
   const [error, setError] = useState('')
+  const [show3D, setShow3D] = useState<ResultItem | null>(null)
+  const [creatingKey, setCreatingKey] = useState<string | null>(null)
+  const [createError, setCreateError] = useState('')
 
   useEffect(() => {
     if (!params?.id) return
@@ -39,6 +51,21 @@ export default function RicercaSalvataDetailPage() {
       })
       .catch(() => setError('Errore di rete.'))
   }, [params?.id])
+
+  async function handleCreateGuide(item: ResultItem, i: number) {
+    if (creatingKey) return
+    const key = `${item.kind}-${i}`
+    setCreatingKey(key)
+    setCreateError('')
+    try {
+      const pendingExpiresAt = await defaultPendingExpiresAt()
+      const hike = await saveResultItemToGuide(item, defaultTitleForResultItem(item, i), '', pendingExpiresAt)
+      router.push(`/guida/${encodeURIComponent(hike.id)}`)
+    } catch (e) {
+      setCreateError(`Creazione della guida non riuscita: ${e instanceof Error ? e.message : String(e)}`)
+      setCreatingKey(null)
+    }
+  }
 
   return (
     <div className={`min-h-screen bg-stone-50 md:pb-8 ${MOBILE_TOPBAR_SPACER}`}>
@@ -63,14 +90,33 @@ export default function RicercaSalvataDetailPage() {
               </p>
             </div>
 
+            {createError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{createError}</div>}
+
             <div className="space-y-3">
-              {search.results.map((item, i) => item.kind === 'found'
-                ? <FoundRouteCard key={`found-${i}`} data={item.data} />
-                : <BuiltRouteCard key={`built-${i}`} data={item.data} />)}
+              {search.results.map((item, i) => {
+                const key = `${item.kind}-${i}`
+                const onChoose = () => handleCreateGuide(item, i)
+                const onOpen3D = () => setShow3D(item)
+                return item.kind === 'found'
+                  ? <FoundRouteCard key={key} data={item.data} onChoose={onChoose} onOpen3D={onOpen3D} />
+                  : <BuiltRouteCard key={key} data={item.data} onChoose={onChoose} onOpen3D={onOpen3D} />
+              })}
             </div>
+            {creatingKey && (
+              <div className="fixed inset-0 z-[250] bg-black/40 flex items-center justify-center">
+                <div className="bg-white rounded-2xl px-6 py-5 flex items-center gap-3 shadow-lg">
+                  <Loader2 className="w-5 h-5 animate-spin text-forest-600" />
+                  <span className="text-sm font-medium text-stone-700">Creo la guida…</span>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {show3D && (
+        <RouteMap3D {...resultItemToMap3DProps(show3D)} onClose={() => setShow3D(null)} />
+      )}
     </div>
   )
 }

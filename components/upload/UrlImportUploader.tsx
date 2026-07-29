@@ -32,7 +32,7 @@ interface ResolvedTrack {
 const REASON_MESSAGES: Record<string, string> = {
   blocked_host: 'Questo sito non offre link diretti alla traccia (mappa solo interattiva). Prova con "Cerca con l\'AI", oppure scarica tu il file GPX da quel sito e caricalo dalla scheda "File GPX".',
   gpx_download_failed: 'Ho trovato un link alla traccia ma non sono riuscito a scaricarla — potrebbe non essere più valido. Prova con "Cerca con l\'AI".',
-  not_found: 'Non ho trovato una traccia scaricabile per questo link, né un percorso corrispondente su OpenStreetMap. Prova con "Cerca con l\'AI" o "Cerca senza AI".',
+  not_found: 'Non ho trovato una traccia scaricabile per questo link, né un percorso corrispondente su OpenStreetMap. Prova con "Cerca con l\'AI".',
   invalid_url: 'Questo non sembra un indirizzo web valido.',
 }
 

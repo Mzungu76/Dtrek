@@ -323,7 +323,15 @@ export default function RouteHub({
         )}
         <BottomGallery
           mode={mode} items={visibleItems} currentId={item.id}
-          onSelect={index => dispatch({ type: 'JUMP_TO', index })}
+          onSelect={index => {
+            dispatch({ type: 'JUMP_TO', index })
+            // Un risultato scelto dalla ricerca per titolo va aperto subito sulla sua scheda
+            // completa, non solo portato in copertina — altrimenti sembra che la ricerca l'abbia
+            // trovato ma non ne abbia caricato il contenuto (resta visibile solo il titolo finché
+            // non si trascina/tocca di nuovo per aprirlo). Il tap su una miniatura della galleria
+            // "normale" (nessuna ricerca attiva) continua invece a limitarsi a cambiare copertina.
+            if (searchQueryNorm) openWithAnimation(defaultSection)
+          }}
           sortBy={sortBy} onSortChange={handleSortChange}
           importLabel={importLabel} onImport={onImport}
           favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}
