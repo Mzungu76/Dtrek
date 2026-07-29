@@ -288,10 +288,10 @@ export function BuiltRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
   const isOneWay = data.type === 'solo_andata'
   const showAsRoundTrip = isOneWay && roundTrip
   const displayKm = (data.distanceMeters / 1000) * (showAsRoundTrip ? 2 : 1)
-  // Andata e ritorno sullo stesso tracciato: quello che si scende all'andata si risale al ritorno,
-  // quindi il dislivello del giro completo è andata + ritorno (elevationGain + elevationLoss), non
-  // un semplice raddoppio del solo dislivello in salita.
-  const displayElevGain = showAsRoundTrip ? data.elevationGain + data.elevationLoss : data.elevationGain
+  // Raddoppio semplice, non salita+discesa: elevationLoss è più esposto al rumore GPS/DTM (piccoli
+  // saliscendi che si accumulano) della cifra "Dislivello" già mostrata da sempre — usarla da sola,
+  // raddoppiata, resta prevedibile e coerente con la distanza qui sopra.
+  const displayElevGain = data.elevationGain * (showAsRoundTrip ? 2 : 1)
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
       <div className="relative isolate">

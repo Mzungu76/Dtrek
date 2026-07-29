@@ -57,7 +57,7 @@ export default function GuideStatsStrip({ distanceKm, elevationGain, altitudeMax
           }`}
         >
           <Repeat className="w-3.5 h-3.5" />
-          {roundTrip.active ? 'Cifre come andata e ritorno — torna a sola andata' : 'Percorso a tratta unica — vedi come andata e ritorno'}
+          {roundTrip.active ? 'Percorso Andata e Ritorno. Clicca per modificare in Sola Andata' : 'Percorso di Sola Andata. Clicca per modificare in Andata e Ritorno'}
         </button>
       )}
     </div>
