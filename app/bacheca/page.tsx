@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -520,6 +520,25 @@ export default function BachecaPage() {
     }
   }, [displayedItems, selectedId])
 
+  // Scorrimento laterale (swipe) tra le statistiche — stesso pattern a soglia fissa (50px) di
+  // PhotoLightbox.tsx. Ignorato se il tocco parte da una riga a scorrimento orizzontale proprio
+  // (pillole, filtri, filmstrip — data-hscroll) per non entrare in conflitto col loro scroll nativo.
+  const touchStartX = useRef<number | null>(null)
+  const selectedIndex = displayedItems.findIndex(i => i.id === selectedId)
+  const goPrevStat = () => { if (selectedIndex > 0) setSelectedId(displayedItems[selectedIndex - 1].id) }
+  const goNextStat = () => { if (selectedIndex >= 0 && selectedIndex < displayedItems.length - 1) setSelectedId(displayedItems[selectedIndex + 1].id) }
+  const handleSwipeStart = (e: React.TouchEvent) => {
+    if (gridOpen || (e.target as HTMLElement).closest('[data-hscroll]')) return
+    touchStartX.current = e.touches[0].clientX
+  }
+  const handleSwipeEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current == null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
+    if (dx > 50) goPrevStat()
+    else if (dx < -50) goNextStat()
+  }
+
   if (loading) {
     return (
       <div className="fixed inset-0 bg-[#0b1a24] overflow-hidden">
@@ -563,7 +582,11 @@ export default function BachecaPage() {
   }
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-forest-900 select-none">
+    <div
+      className="fixed inset-0 overflow-hidden bg-forest-900 select-none"
+      onTouchStart={handleSwipeStart}
+      onTouchEnd={handleSwipeEnd}
+    >
       <img
         key={heroPhoto} src={heroPhoto} alt=""
         className="absolute inset-0 w-full h-full object-cover" draggable={false}
@@ -578,7 +601,7 @@ export default function BachecaPage() {
       <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
         <HubNavBar />
         <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
+          <div data-hscroll className="flex items-center gap-1.5 overflow-x-auto">
             {statPills.map(({ icon: Icon, label }) => (
               <span key={label} className="shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm">
                 <Icon className="w-3 h-3" /> {label}
@@ -646,7 +669,7 @@ export default function BachecaPage() {
         </div>
 
         {/* Filtri per tipologia + toggle vista a griglia — sopra alla galleria (punti 2-3) */}
-        <div className="flex items-center gap-1.5 px-4 sm:px-10 overflow-x-auto pb-0.5">
+        <div data-hscroll className="flex items-center gap-1.5 px-4 sm:px-10 overflow-x-auto pb-0.5">
           <button
             onClick={() => setActiveCategory('all')}
             className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors ${
@@ -676,7 +699,7 @@ export default function BachecaPage() {
           </button>
         </div>
 
-        <div className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
+        <div data-hscroll className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
           <Link
             href="/percorsi-per-te"
             className="shrink-0 w-40 h-20 rounded-2xl overflow-hidden relative flex flex-col justify-center gap-0.5 px-3"

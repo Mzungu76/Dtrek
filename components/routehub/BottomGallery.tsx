@@ -3,7 +3,7 @@ import type * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
-import { Mountain, ArrowUpDown, Upload, Star, Search, X } from 'lucide-react'
+import { Mountain, ArrowUpDown, Upload, Star, Search, X, Rows3 } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
@@ -89,7 +89,9 @@ function ThumbBadge({ sortBy, item }: { sortBy: SortKey; item: RouteHubItem }) {
 // Mappa 2D statica (no drag/zoom) per il quadrato di galleria — mostra le tile
 // reali invece dello schema stilizzato, montata solo quando il quadrato entra
 // (quasi) in vista per non creare troppe istanze Leaflet in una lista lunga.
-function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
+// Esportata: riusata identica dalle righe di ExpandedGalleryList.tsx, stessa miniatura-mappa
+// invece di duplicarne la logica IntersectionObserver/Leaflet.
+export function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,11 +179,16 @@ interface Props {
    *  che compone la ricerca nello stesso `visibleItems` passato a entrambi). */
   searchQuery: string
   onSearchQueryChange: (query: string) => void
+  /** Apre la vista espansa in stile Google Maps (ExpandedGalleryList.tsx): stesso elenco, ma
+   *  verticale a schermo intero con mappa + dati essenziali per riga, invece della striscia
+   *  orizzontale di miniature 80×80 — utile quando i nomi sono lunghi o l'elenco è ampio. Assente
+   *  ⇒ nessun pulsante (nessun chiamante è ancora obbligato ad averla). */
+  onExpand?: () => void
 }
 
 export default function BottomGallery({
   mode, items, currentId, onSelect, sortBy, onSortChange, importLabel, onImport,
-  favoritesFilter, onToggleFavoritesFilter, searchQuery, onSearchQueryChange,
+  favoritesFilter, onToggleFavoritesFilter, searchQuery, onSearchQueryChange, onExpand,
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const hasSortData = items.some(i => i.sortValues)
@@ -227,7 +234,7 @@ export default function BottomGallery({
           )}
         </div>
       )}
-      {(hasSortData || onToggleFavoritesFilter || items.length > 1 || searchQuery) && (
+      {(hasSortData || onToggleFavoritesFilter || items.length > 1 || searchQuery || onExpand) && (
         <div className="flex items-center justify-center gap-1.5 overflow-x-auto px-4 mb-2">
           <button
             onClick={() => setSearchOpen(v => { const next = !v; if (!next) onSearchQueryChange(''); return next })}
@@ -261,6 +268,15 @@ export default function BottomGallery({
               {s.label}
             </button>
           ))}
+          {onExpand && (
+            <button
+              onClick={onExpand}
+              title="Vedi tutti in elenco"
+              className="shrink-0 ml-auto flex items-center justify-center w-6 h-6 rounded-full border backdrop-blur-md bg-black/40 text-stone-200 border-white/20 transition-colors"
+            >
+              <Rows3 className="w-3 h-3" />
+            </button>
+          )}
         </div>
       )}
       <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4" style={{ scrollSnapType: 'x proximity' }}>
@@ -303,7 +319,7 @@ export default function BottomGallery({
                 <ThumbBadge sortBy={sortBy} item={item} />
               </div>
             )}
-            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">
+            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-6 bg-gradient-to-t from-black/80 to-transparent">
               {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
                   alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
                   qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
@@ -313,7 +329,10 @@ export default function BottomGallery({
                   {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
                 </span>
               )}
-              <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
+              {/* line-clamp-2 invece di troncare a una riga sola — nella miniatura 80px molti titoli
+                  finivano tagliati dopo poche lettere ("Anello del Monte…"), illeggibili anche col
+                  tap; due righe bastano per la maggior parte dei titoli reali dell'app. */}
+              <span className="block text-[10px] font-bold text-white line-clamp-2 leading-tight" title={item.title}>{item.title}</span>
             </div>
           </button>
           )
