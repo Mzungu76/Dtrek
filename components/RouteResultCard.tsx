@@ -6,7 +6,8 @@
 // Percorsi per te, che ha "Apri" al posto di "Scegli questo percorso" — passato comunque come
 // `onChoose`, l'etichetta resta la stessa: la differenza reale è title/date, non l'azione in sé);
 // `feedback` presente ⇒ mostra i bottoni ♥/✕ (solo in Percorsi per te, mai nel wizard).
-import { Sparkles, TrendingUp, Route, ExternalLink, AlertTriangle, Check, X, Heart, Clock, Box } from 'lucide-react'
+import { useState } from 'react'
+import { Sparkles, TrendingUp, Route, ExternalLink, AlertTriangle, Check, X, Heart, Clock, Box, Repeat } from 'lucide-react'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import { isSpecificName } from '@/lib/wikipedia'
@@ -138,6 +139,35 @@ export function Map3DChip({ onOpen3D }: { onOpen3D: () => void }) {
   )
 }
 
+// Stat "Tipo" delle card risultato — un percorso lineare/solo andata (mai un anello o un
+// andata-ritorno già costruito come tale, la cui distanza è già quella completa) può essere
+// guardato "come se" fosse andata e ritorno: raddoppia SOLO la cifra mostrata qui sulla card (mai
+// il percorso salvato — è un modo di guardare il risultato prima di scegliere, non un dato nuovo),
+// per chi ha intenzione di tornare sui propri passi. `onToggle` assente ⇒ etichetta statica, come
+// prima (anello, andata-ritorno già completo).
+function TipoStat({ label, active, onToggle }: { label: string; active?: boolean; onToggle?: () => void }) {
+  if (!onToggle) {
+    return (
+      <div>
+        <span className="font-semibold text-stone-800">{label}</span>
+        <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
+      </div>
+    )
+  }
+  return (
+    <button
+      onClick={onToggle}
+      title="Vedi come andata e ritorno (raddoppia solo la cifra qui sopra, non modifica il percorso)"
+      className="text-left"
+    >
+      <span className={`font-semibold flex items-center gap-1 ${active ? 'text-forest-600' : 'text-stone-800'}`}>
+        <Repeat className="w-3 h-3" />{label}
+      </span>
+      <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
+    </button>
+  )
+}
+
 function SelectButton({ selectable }: { selectable: SelectableControls }) {
   return (
     <button onClick={selectable.onToggle}
@@ -157,8 +187,19 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
   selectable?: SelectableControls
   onOpen3D?: () => void
 }) {
+  const [roundTrip, setRoundTrip] = useState(false)
   const vs = data.comfortVerdict ? verdictStyle(data.comfortVerdict) : null
   const track = data.track
+  // 'linear' (geometria a tratta unica, vedi lib/geoUtils.ts) è l'unico caso ambiguo: un anello o
+  // un "andata e ritorno" già rilevato come tale dalla geometria ha senso solo con la propria
+  // etichetta, mai un raddoppio (la distanza percorsa è già quella reale).
+  const shape = classifyTrackShape(track.routePolyline)
+  const isLinear = shape === 'linear'
+  const showAsRoundTrip = isLinear && roundTrip
+  const displayKm = (track.distanceMeters / 1000) * (showAsRoundTrip ? 2 : 1)
+  const tipoLabel = showAsRoundTrip
+    ? 'Andata e ritorno'
+    : { loop: 'Anello', out_and_back: 'Andata e ritorno', linear: 'Lineare' }[shape]
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
       <div className="relative isolate">
@@ -178,7 +219,7 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
         <div className="flex items-center justify-between gap-3">
           <div className="flex gap-4 text-sm">
             <div>
-              <span className="font-semibold text-stone-800">{(track.distanceMeters / 1000).toFixed(1)} km</span>
+              <span className="font-semibold text-stone-800">{displayKm.toFixed(1)} km</span>
               <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
             </div>
             {/* Niente Dislivello qui: a differenza della distanza (dalla sola geometria OSM, immediata),
@@ -187,12 +228,7 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
                 lib/routeBuilder/importResultItem.ts) — mostrarlo come stima/dash generava solo
                 confusione. Il valore reale arriva dopo l'importazione, quando si arricchisce con
                 enrichFoundCandidateForImport. */}
-            <div>
-              <span className="font-semibold text-stone-800">
-                {{ loop: 'Anello', out_and_back: 'Andata e ritorno', linear: 'Lineare' }[classifyTrackShape(track.routePolyline)]}
-              </span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
-            </div>
+            <TipoStat label={tipoLabel} active={showAsRoundTrip} onToggle={isLinear ? () => setRoundTrip(v => !v) : undefined} />
             {data.difficulty && (
               <div>
                 <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
@@ -245,6 +281,17 @@ export function BuiltRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
   selectable?: SelectableControls
   onOpen3D?: () => void
 }) {
+  const [roundTrip, setRoundTrip] = useState(false)
+  // Solo 'solo_andata' ha senso da raddoppiare: 'andata_ritorno' è già costruito percorrendo andata
+  // e ritorno (distanceM = oneWayM*2, vedi lib/routeBuilder/loopBuilder.ts), 'anello' non torna mai
+  // sui propri passi — in entrambi i casi la distanza mostrata è già quella reale.
+  const isOneWay = data.type === 'solo_andata'
+  const showAsRoundTrip = isOneWay && roundTrip
+  const displayKm = (data.distanceMeters / 1000) * (showAsRoundTrip ? 2 : 1)
+  // Andata e ritorno sullo stesso tracciato: quello che si scende all'andata si risale al ritorno,
+  // quindi il dislivello del giro completo è andata + ritorno (elevationGain + elevationLoss), non
+  // un semplice raddoppio del solo dislivello in salita.
+  const displayElevGain = showAsRoundTrip ? data.elevationGain + data.elevationLoss : data.elevationGain
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
       <div className="relative isolate">
@@ -259,19 +306,20 @@ export function BuiltRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
         <div className="flex items-center justify-between gap-3">
           <div className="flex gap-4 text-sm">
             <div>
-              <span className="font-semibold text-stone-800">{(data.distanceMeters / 1000).toFixed(1)} km</span>
+              <span className="font-semibold text-stone-800">{displayKm.toFixed(1)} km</span>
               <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
             </div>
             <div>
               <span className="font-semibold text-stone-800 flex items-center gap-0.5">
-                <TrendingUp className="w-3 h-3" />{data.hasElevation ? '' : '~'}{Math.round(data.elevationGain)} m
+                <TrendingUp className="w-3 h-3" />{data.hasElevation ? '' : '~'}{Math.round(displayElevGain)} m
               </span>
               <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello{data.hasElevation ? '' : ' (stima)'}</p>
             </div>
-            <div>
-              <span className="font-semibold text-stone-800">{routeTypeLabel(data.type)}</span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
-            </div>
+            <TipoStat
+              label={showAsRoundTrip ? 'Andata e ritorno' : routeTypeLabel(data.type)}
+              active={showAsRoundTrip}
+              onToggle={isOneWay ? () => setRoundTrip(v => !v) : undefined}
+            />
           </div>
           {data.provisionalScore ? <ProvisionalScoreBadge score={data.provisionalScore} /> : <ScorePendingBadge />}
         </div>

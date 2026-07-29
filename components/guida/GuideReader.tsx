@@ -3,6 +3,8 @@ import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } fro
 import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
+import { classifyTrackShape } from '@/lib/geoUtils'
+import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
   VolumeX, Loader2,
@@ -269,6 +271,26 @@ export default function GuideReader({
     setGuideNotices(normalizeGuideNotices(hike.cachedGuideNotices))
     setGuideSources(hike.cachedGuideSources ?? [])
   }, [hike.id, hike.cachedGuide, hike.cachedGuideNotices, hike.cachedGuideSources])
+
+  // Classificazione del punto di partenza (parcheggio/strada/POI nei pressi di un parcheggio, vedi
+  // lib/routeBuilder/startPointInfo.ts) — non persistita (vedi commento lì), ricalcolata a ogni
+  // visione: è un'unica chiamata Overpass leggera su un raggio piccolo, molto più economica
+  // dell'arricchimento POI completo del percorso.
+  const [startPointInfo, setStartPointInfo] = useState<StartPointInfo | null>(null)
+  useEffect(() => {
+    setStartPointInfo(null)
+    const fromTrack = (hike.trackPoints ?? []).find(p => p.lat != null && p.lon != null)
+    const start = fromTrack
+      ? { lat: fromTrack.lat!, lon: fromTrack.lon! }
+      : hike.routePolyline?.[0] ? { lat: hike.routePolyline[0][0], lon: hike.routePolyline[0][1] } : null
+    if (!start) return
+    let cancelled = false
+    fetch(`/api/route-build/start-point?lat=${start.lat}&lon=${start.lon}`)
+      .then(res => res.json())
+      .then(data => { if (!cancelled) setStartPointInfo(data.info ?? null) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.id, hike.trackPoints, hike.routePolyline])
 
   // Load route photos from Wikimedia Commons for the mosaic + section illustrations (the hero
   // itself is now a recolored map, not a photo — see GuideHero — so every photo slot here goes
@@ -830,6 +852,15 @@ export default function GuideReader({
       .map(({ wiki: w }) => ({ url: w.url, imageUrl: w.thumbnail!, title: w.title }))
   }, [hike.cachedPoiWiki])
 
+  // Un percorso a tratta unica (start/end lontani — non un anello, non un andata-ritorno già
+  // rilevato come tale dalla geometria) può essere guardato "come se" fosse andata e ritorno: le
+  // cifre in GuideStatsStrip raddoppiano, MAI il percorso salvato. Andata+ritorno sullo stesso
+  // tracciato: il dislivello del giro completo è salita+discesa (elevationGain+elevationLoss), non
+  // un semplice raddoppio della sola salita.
+  const isLinearRoute = useMemo(() => classifyTrackShape(hike.routePolyline ?? []) === 'linear', [hike.routePolyline])
+  const [roundTripView, setRoundTripView] = useState(false)
+  const showAsRoundTrip = isLinearRoute && roundTripView
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -842,13 +873,15 @@ export default function GuideReader({
         categoryBadge={categoryBadge}
         plannedDate={hike.plannedDate}
         driving={driving}
+        startPoint={startPointInfo}
       />
 
       <GuideStatsStrip
-        distanceKm={hike.distanceMeters / 1000}
-        elevationGain={hike.elevationGain}
+        distanceKm={(hike.distanceMeters / 1000) * (showAsRoundTrip ? 2 : 1)}
+        elevationGain={showAsRoundTrip ? hike.elevationGain + hike.elevationLoss : hike.elevationGain}
         altitudeMax={hike.altitudeMax}
-        durationLabel={formatDuration(hike.estimatedTimeSeconds)}
+        durationLabel={formatDuration(hike.estimatedTimeSeconds * (showAsRoundTrip ? 2 : 1))}
+        roundTrip={isLinearRoute ? { active: roundTripView, onToggle: () => setRoundTripView(v => !v) } : undefined}
       />
 
       <PhotoMosaic
@@ -1093,6 +1126,13 @@ export default function GuideReader({
                   cachedPoiWiki:        hike.cachedPoiWiki,
                   cachedGuide:          guideText,
                 }}
+                // Percorso a sola andata (start ed end lontani, non un anello né un andata-ritorno
+                // già rilevato dalla geometria, vedi isLinearRoute sopra) — riusa la ricerca web già
+                // pertinente-per-percorso di Giulia per verificare puntualmente bus/taxi/altro per
+                // tornare al punto di partenza, invece di costruire una nuova pipeline AI dedicata.
+                suggestedQuestion={isLinearRoute
+                  ? 'Questo percorso è a sola andata: come si torna al punto di partenza con mezzi alternativi (bus, taxi, altro)? Ci sono davvero questi servizi in zona?'
+                  : undefined}
               />
             )}
 
