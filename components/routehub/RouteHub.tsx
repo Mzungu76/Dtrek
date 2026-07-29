@@ -164,8 +164,27 @@ export default function RouteHub({
     if (visibleItems.length === 0) return
     const id = currentRouteId.current
     const idx = id == null ? -1 : visibleItems.findIndex(it => it.id === id)
-    const nextIndex = idx >= 0 ? idx : 0
-    if (nextIndex !== state.index) dispatch({ type: 'RESYNC_INDEX', index: nextIndex })
+    if (idx >= 0) {
+      // Same route, just repositioned (sort change, live score update…) — stays silent, nothing
+      // the user is looking at actually changed.
+      if (idx !== state.index) dispatch({ type: 'RESYNC_INDEX', index: idx })
+      return
+    }
+    // The route we were on dropped out of the visible set entirely (typically: a search query
+    // that no longer matches it, e.g. typing narrows the gallery down to a single different
+    // result) — falling back to index 0 IS a real change of route, unlike the RESYNC_INDEX case
+    // above, so the caller must be notified (its data — hike/POI/3D…— needs to actually load).
+    // Notifying directly here, not by relying on state.index changing: when the fallback slot (0)
+    // numerically coincides with the previous index, dispatching JUMP_TO wouldn't change
+    // state.index's value at all, so nothing keyed on it (including the debounced onIndexChange
+    // effect below) would ever re-fire — the page would stay open on stale/no data forever, which
+    // is exactly what was happening when a search match silently became "current" this way and
+    // was then opened without an explicit tap on its gallery thumbnail.
+    const fallback = visibleItems[0]
+    if (!fallback || fallback.id === id) return
+    currentRouteId.current = fallback.id
+    if (state.index !== 0) dispatch({ type: 'JUMP_TO', index: 0 })
+    onIndexChange?.(fallback, 0)
   }, [visibleItems]) // eslint-disable-line react-hooks/exhaustive-deps
   const handleSortChange = (key: SortKey) => setSortBy(key)
 
