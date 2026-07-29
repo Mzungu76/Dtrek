@@ -22,6 +22,10 @@ interface Props {
   showAspect?: boolean
   dtmProfile?: TrailDtmProfile
   pois?: PoiItem[]
+  /** Id dei `pois` con copertura Street View plausibile (vedi
+   *  lib/routeBuilder/streetViewCoverage.ts) — assente ⇒ il popup di ogni POI mostra comunque il
+   *  link (comportamento invariato per i chiamanti che non hanno ancora questo dato). */
+  streetViewPoiIds?: Set<number>
   wikiPages?: WikiPage[]
   difficultyMarkers?: ClassifiedDifficultyMarker[]
   floraMarkers?: { lat: number; lon: number; label: string }[]
@@ -136,6 +140,7 @@ export default function MapView({
   showAspect = false,
   dtmProfile,
   pois = [],
+  streetViewPoiIds,
   wikiPages = [],
   difficultyMarkers = [],
   floraMarkers = [],
@@ -536,7 +541,7 @@ export default function MapView({
           iconAnchor: [size / 2, size / 2],
           className: '',
         })
-        const popup = buildPoiPopupHtml(poi)
+        const popup = buildPoiPopupHtml(poi, streetViewPoiIds ? streetViewPoiIds.has(poi.id) : true)
 
         const m = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: isHighlighted ? 1000 : 0 }).addTo(mapInstance.current!).bindPopup(popup, { maxWidth: 250 })
         m.on('click', () => {
@@ -554,7 +559,7 @@ export default function MapView({
         mapInstance.current!.panTo([pois[highlightedPoiIndices[0]].lat, pois[highlightedPoiIndices[0]].lon])
       }
     })
-  }, [pois, mapReady, highlightedPoiIndices, showPoiLayer, poiMarkerScale]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pois, mapReady, highlightedPoiIndices, showPoiLayer, poiMarkerScale, streetViewPoiIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {
