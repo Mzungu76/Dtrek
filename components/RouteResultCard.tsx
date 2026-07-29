@@ -16,7 +16,7 @@ import type { ScoredCandidate as BuiltCandidate } from '@/lib/routeBuilder/score
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
 import type { ProvisionalScore } from '@/lib/routeBuilder/provisionalScore'
 import type { PoiItem, PoiType } from '@/lib/overpass'
-import { MiniScoreRing } from '@/components/ScoreRing'
+import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 
 export interface FeedbackControls {
   value: 'like' | 'dislike' | null
@@ -106,12 +106,16 @@ export function ScorePendingBadge({ size = 52 }: { size?: number }) {
 // Stima leggera (lib/routeBuilder/provisionalScore.ts) mostrata su ogni card dei risultati di
 // ricerca — MAI il punteggio definitivo (quello arriva solo dopo l'importazione, calcolato con dati
 // reali): l'etichetta "Provvisorio" resta sempre visibile per non farla scambiare per quello finale.
-// Stesso badge circolare a due colori (traccia grigia + arco colorato per soglia, numero intero al
-// centro) della sezione Guide — vedi MiniScoreRing in components/ScoreRing.tsx.
-export function ProvisionalScoreBadge({ score, size = 48 }: { score: ProvisionalScore; size?: number }) {
+// Stesso badge a doppio anello (Sicurezza fuori, TS dentro, numero intero al centro) della copertina
+// di un percorso in Guide — vedi components/TrailScoreGaugeBadge.tsx — non più il vecchio anello
+// singolo: qui la Sicurezza provvisoria è già disponibile (computeProvisionalScore la calcola
+// sempre insieme al TS), quindi non c'è motivo di mostrarne una versione più povera.
+export function ProvisionalScoreBadge({ score, size = 52 }: { score: ProvisionalScore; size?: number }) {
   return (
     <div className="shrink-0 flex flex-col items-center gap-1">
-      <MiniScoreRing value={score.ts} size={size} />
+      <div className="rounded-2xl bg-stone-900 p-1.5">
+        <TrailScoreGaugeBadge total={score.ts} safety={score.safety} size={size} showLabel={false} />
+      </div>
       <span className="text-[8px] font-semibold leading-none text-center" style={{ color: score.safety.color }}>{score.safety.label}</span>
       <span className="text-stone-400 text-[7px] leading-none font-medium uppercase tracking-wide">Provvisorio</span>
     </div>
@@ -158,7 +162,7 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
       <div className="relative isolate">
-        <TrailPreviewMap polyline={track.routePolyline} height="180px" />
+        <TrailPreviewMap polyline={track.routePolyline} height="180px" expandable />
         {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
       </div>
       <div className="p-4 space-y-2.5">
@@ -244,7 +248,7 @@ export function BuiltRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
       <div className="relative isolate">
-        <TrailPreviewMap polyline={data.routePolyline} height="180px" />
+        <TrailPreviewMap polyline={data.routePolyline} height="180px" expandable />
         {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
       </div>
       <div className="p-4 space-y-2.5">

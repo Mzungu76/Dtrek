@@ -13,10 +13,8 @@ import { FoundRouteCard, BuiltRouteCard, verdictStyle, PoiPreviewRow, ScorePendi
 import GiuliaSearchPanel from './GiuliaSearchPanel'
 import SearchWaitingCard from './SearchWaitingCard'
 import * as bgSearch from '@/lib/routeBuilder/backgroundSearchStore'
-import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
-import { computeCtsForHike } from '@/lib/computeCtsForHike'
-import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
-import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport, enrichFoundCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
+import type { PlannedHike } from '@/lib/plannedStore'
+import { saveResultItemToGuide, resultItemToMap3DProps, defaultTitleForResultItem } from '@/lib/routeBuilder/importResultItem'
 import { HIKER_ENVIRONMENT_PREFS, type HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { defaultPendingExpiresAt } from './sharedHelpers'
@@ -928,23 +926,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     await generate({ lat: bLat, lon: bLon })
   }
 
-  function defaultTitleFor(item: ResultItem, i: number): string {
-    return item.kind === 'built' ? `${routeTypeLabel(item.data.type)} costruito ${i + 1}` : item.data.name
-  }
+  const defaultTitleFor = defaultTitleForResultItem
 
   function resultKey(item: ResultItem, i: number): string {
     return `${item.kind}-${i}`
   }
 
-  // Estrae dal ResultItem i soli campi richiesti da RouteMap3D — stessa forma sia per un candidato
-  // "costruito" (trackPoints/pois in cima) sia per uno "trovato" (annidati in `track`), senza dover
-  // salvare nulla prima: RouteMap3D lavora già con la sola traccia GPS (activityId/dtmProfile
-  // restano assenti, opzionali, va bene per un'anteprima non ancora salvata).
-  function resultMap3DProps(item: ResultItem) {
-    return item.kind === 'built'
-      ? { trackPoints: item.data.trackPoints, title: routeTypeLabel(item.data.type), distanceMeters: item.data.distanceMeters, elevationGain: item.data.elevationGain, pois: item.data.pois }
-      : { trackPoints: item.data.track.trackPoints, title: item.data.name, distanceMeters: item.data.track.distanceMeters, elevationGain: item.data.track.elevationGain, pois: item.data.pois }
-  }
+  const resultMap3DProps = resultItemToMap3DProps
 
   function chooseCandidate(item: ResultItem, i: number) {
     setSelected(item)
@@ -954,33 +942,12 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setStep('confirm')
   }
 
-  // Nucleo condiviso tra il salvataggio singolo (handleSave, dopo lo step "Conferma" con nome/data
-  // personalizzabili) e l'import in blocco (handleBulkImport, sempre con i valori di default —
-  // scegliere N percorsi implica rinunciare a personalizzare ciascuno). Ritorna l'hike salvato:
-  // handleSave naviga subito alla sua guida, handleBulkImport si limita a contarli.
-  async function saveResultItem(item: ResultItem, itemTitle: string, itemDate: string, pendingExpiresAt: string): Promise<PlannedHike> {
-    // Entrambi i tipi di candidato arrivano dalla ricerca con quota stimata (nessuna chiamata DTM
-    // in quella fase, vedi searchSteps.ts's resolveOneCandidate) — qui, una sola volta per il solo
-    // percorso scelto, si arricchisce con la quota reale prima di costruire l'hike. Tollerante: se
-    // fallisce, si salva comunque con la stima (vedi enrichBuiltCandidateForImport/
-    // enrichFoundCandidateForImport).
-    const hike: PlannedHike = item.kind === 'built'
-      ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(item.data), itemTitle, itemDate, pendingExpiresAt)
-      : buildHikeFromFound(await enrichFoundCandidateForImport(item.data), itemTitle, itemDate, pendingExpiresAt)
-
-    await enrichWithPois(hike)
-    await savePlanned(hike)
-    computeCtsForHike(hike).catch(() => {})
-    computeSafetyForHike(hike).catch(() => {})
-    return hike
-  }
-
   async function handleSave() {
     if (!selected) return
     setSaving(true)
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
-      const hike = await saveResultItem(selected, title, date, pendingExpiresAt)
+      const hike = await saveResultItemToGuide(selected, title, date, pendingExpiresAt)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
@@ -1000,7 +967,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // Import in blocco — a differenza di handleSave (uno alla volta, nome/data scelti dall'utente
   // nello step "Conferma"), qui si salvano più percorsi in sequenza con i valori di default:
   // sequenziale, non in parallelo, perché ciascun salvataggio arricchisce già con DTM/POI (vedi
-  // saveResultItem) — N richieste pesanti insieme sovraccaricherebbero inutilmente le stesse API
+  // saveResultItemToGuide) — N richieste pesanti insieme sovraccaricherebbero inutilmente le stesse API
   // esterne. Al termine porta all'elenco dei percorsi in attesa (non a una singola guida: con più
   // percorsi importati insieme non ce n'è uno "principale" verso cui navigare).
   async function handleBulkImport() {
@@ -1015,7 +982,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const pendingExpiresAt = await defaultPendingExpiresAt()
       let done = 0
       for (const { item, i } of items) {
-        await saveResultItem(item, defaultTitleFor(item, i), '', pendingExpiresAt)
+        await saveResultItemToGuide(item, defaultTitleFor(item, i), '', pendingExpiresAt)
         done += 1
         setBulkProgress({ done, total: items.length })
       }
