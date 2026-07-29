@@ -125,6 +125,14 @@ export default function BachecaPage() {
 
   useEffect(() => { setInfoOpen(false) }, [selectedId])
 
+  // Tiene la miniatura selezionata dentro la vista quando cambia (swipe, tap, filtro categoria) —
+  // stesso pattern già in uso in BottomGallery.tsx per la galleria di Guida/Resoconto, qui mancava.
+  const filmstripRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = filmstripRef.current?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(selectedId)}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+  }, [selectedId])
+
   useEffect(() => {
     // ?peek=1: mai innescare il bootstrap di generazione da qui (vedi app/api/percorsi-per-te/route.ts)
     // — questa tile deve restare un fetch leggero, non il punto che fa partire una generazione
@@ -699,7 +707,7 @@ export default function BachecaPage() {
           </button>
         </div>
 
-        <div data-hscroll className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
+        <div ref={filmstripRef} data-hscroll className="flex gap-2.5 overflow-x-auto px-4 sm:px-10 pb-1" style={{ scrollSnapType: 'x proximity' }}>
           <Link
             href="/percorsi-per-te"
             className="shrink-0 w-40 h-20 rounded-2xl overflow-hidden relative flex flex-col justify-center gap-0.5 px-3"
@@ -748,6 +756,7 @@ function FilmstripTile({ item, selected, onSelect }: { item: GalleryItem; select
     <button
       onClick={onSelect}
       aria-pressed={selected}
+      data-item-id={item.id}
       className={`shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative ${
         selected ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
       }`}

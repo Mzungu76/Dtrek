@@ -194,8 +194,21 @@ export default function RouteHub({
   }, [visibleItems]) // eslint-disable-line react-hooks/exhaustive-deps
   const handleSortChange = (key: SortKey) => setSortBy(key)
 
-  // Condivisa da BottomGallery (striscia) ed ExpandedGalleryList (elenco verticale) — stessa
-  // identica logica di selezione per entrambe le viste, non due copie che potrebbero divergere.
+  // Elenco espanso (ExpandedGalleryList) — a differenza del tap sulla striscia (handleGallerySelect
+  // sotto, che cambia solo la copertina), qui si tocca una riga già identificata per nome/mappa/dati
+  // per aprirla, quindi apre sempre direttamente la scheda del percorso, non solo la copertina.
+  // Stessa notifica immediata (non il debounce da 150ms) di handleGallerySelect per lo stesso
+  // motivo: un tap deliberato su una riga precisa, non un fotogramma di uno swipe in corsa.
+  const handleExpandedListSelect = (index: number) => {
+    dispatch({ type: 'JUMP_TO', index })
+    openWithAnimation(defaultSection)
+    const target = visibleItems[index]
+    if (onIndexChange && target) onIndexChange(target, index)
+    setGalleryExpanded(false)
+  }
+
+  // Striscia orizzontale — un tap qui cambia solo la copertina (l'utente sta scorrendo/sfogliando,
+  // non ha ancora scelto), tranne quando arriva da una ricerca per titolo già mirata (vedi sotto).
   const handleGallerySelect = (index: number) => {
     dispatch({ type: 'JUMP_TO', index })
     // Un risultato scelto dalla ricerca per titolo va aperto subito sulla sua scheda
@@ -394,7 +407,7 @@ export default function RouteHub({
       {galleryExpanded && (
         <ExpandedGalleryList
           mode={mode} items={visibleItems} currentId={item.id}
-          onSelect={index => { handleGallerySelect(index); setGalleryExpanded(false) }}
+          onSelect={handleExpandedListSelect}
           onClose={() => setGalleryExpanded(false)}
           sortBy={sortBy} onSortChange={handleSortChange}
           favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}

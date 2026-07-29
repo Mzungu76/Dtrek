@@ -319,7 +319,7 @@ export default function BottomGallery({
                 <ThumbBadge sortBy={sortBy} item={item} />
               </div>
             )}
-            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-6 bg-gradient-to-t from-black/80 to-transparent">
+            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">
               {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
                   alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
                   qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
@@ -329,10 +329,13 @@ export default function BottomGallery({
                   {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
                 </span>
               )}
-              {/* line-clamp-2 invece di troncare a una riga sola — nella miniatura 80px molti titoli
-                  finivano tagliati dopo poche lettere ("Anello del Monte…"), illeggibili anche col
-                  tap; due righe bastano per la maggior parte dei titoli reali dell'app. */}
-              <span className="block text-[10px] font-bold text-white line-clamp-2 leading-tight" title={item.title}>{item.title}</span>
+              {/* Una riga sola con ellissi — il tentativo precedente (line-clamp-2) restava senza
+                  effetto in produzione (line-clamp e `block` si contendono la proprietà `display`
+                  nel CSS generato da Tailwind: `block` può vincere e disattivare il clamp), col
+                  risultato di un titolo lungo che si avvolgeva su più righe fino a riempire l'intera
+                  miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
+                  tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
+              <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
             </div>
           </button>
           )
