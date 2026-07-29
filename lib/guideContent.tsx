@@ -314,4 +314,30 @@ export const GUIDE_CONTENT: Record<string, GuideEntry> = {
       <Tip>Aggiorna il peso corporeo nel profilo periodicamente per avere dati accurati nel tempo.</Tip>
     </>,
   },
+  'trail-score-overview': {
+    icon: '⭐', title: 'Trail Score — ti può piacere?',
+    body: <>
+      <p>Risponde a una sola domanda: <strong>quanto questo percorso è fatto per te</strong>, a prescindere dalla sicurezza (quella è un discorso a parte, vedi Sicurezza Oggettiva/Idoneità per te). Combina la bellezza del percorso (natura, paesaggio, interesse storico-culturale) con quanto lo sforzo richiesto è vicino a ciò che preferisci — sforzo e durata che imposti in Profilo, età ed eventuale storico di frequenza cardiaca.</p>
+      <Tip>Due persone diverse possono vedere un Trail Score diverso per lo stesso identico percorso: non è un voto assoluto al sentiero, è quanto è <em>vicino ai tuoi gusti</em>.</Tip>
+    </>,
+  },
+  'sicurezza-oggettiva': {
+    icon: '🛡️', title: 'Sicurezza Oggettiva',
+    body: <>
+      <p>Il pericolo del percorso in sé, calcolato da quota, terreno, durata, fauna e logistica — <strong>uguale per chiunque lo affronti</strong>, non tiene conto della tua esperienza o del tuo storico (quello è il compito di Idoneità per te, qui sotto).</p>
+      <p>Le 5 categorie che lo compongono si trovano nel dettaglio più sotto, ciascuna con la propria spiegazione.</p>
+    </>,
+  },
+  'idoneita-per-te': {
+    icon: '🎯', title: 'Idoneità per te — è sicuro per te?',
+    body: <>
+      <p>Quanto QUESTO percorso è nelle tue corde, calcolato da esperienza dichiarata, età, storico personale (la quota e il dislivello più impegnativi che hai già affrontato) e dalle attenzioni indicate nel tuo profilo (vertigini, problemi cardiaci, terreno instabile...) — pesate in base a quanto quella specifica categoria è già severa su questo percorso.</p>
+      <p>Corregge il punteggio di Sicurezza Oggettiva entro un margine limitato (mai oltre ±20 punti): la tua preparazione non può mai far apparire &quot;sicuro&quot; un pericolo oggettivo davvero estremo.</p>
+      <Note>Se non hai ancora escursioni registrate o non hai compilato il profilo, questo punteggio resta neutro (né bonus né penalità).</Note>
+    </>,
+  },
+  'consiglio-percorso': {
+    icon: '🧭', title: 'Consiglio',
+    body: <p>Una frase sola che mette insieme Trail Score e Sicurezza (Oggettiva + Idoneità per te): se il percorso ti piacerà E se è sicuro per te, indicando quando possibile il fattore che pesa di più sulla valutazione (una quota fuori dal tuo storico, l&apos;esposizione, la durata...).</p>,
+  },
 }
