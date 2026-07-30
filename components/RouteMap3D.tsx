@@ -20,7 +20,7 @@ import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY } from '@/lib/mapStyles'
 import {
   buildCumulativeDistances, progressToDistanceM, distanceMToProgress, buildJourneyTables,
-  stopPhotoZoomAt, polaroidRotationDeg, TOP_BAND_FRACTION, type CarouselPhotoTiming,
+  stopPhotoZoomAt, polaroidRotationDeg, hyperlapseIntensityAt, TOP_BAND_FRACTION, type CarouselPhotoTiming,
 } from '@/lib/videoPhotoCarousel'
 import { suggestStatHookText, suggestCuriosityHookText } from '@/lib/videoHook'
 
@@ -247,9 +247,11 @@ function drawStopPhotoZoom(
   const cx = outW / 2 + outW * breathe, cy = outH / 2
   const bx = cx - cardW / 2, by = cy - cardH / 2
   const r = Math.max(2 * sc, 8 * sc * zoomT)
-  // Piccola rotazione fissa (mai perfettamente ortogonale allo schermo), diversa per ogni foto ma
-  // sempre la stessa per la stessa foto — vedi polaroidRotationDeg.
-  const rotRad = polaroidRotationDeg(photoId) * Math.PI / 180
+  // Piccola rotazione finale (mai perfettamente ortogonale allo schermo), diversa per ogni foto ma
+  // sempre la stessa per la stessa foto — vedi polaroidRotationDeg. Non fissa dall'inizio: ruota
+  // MENTRE si apre (proporzionale a zoomT, che include già il leggero superamento elastico), come
+  // una polaroid "posata" che si assesta, invece di comparire già storta.
+  const rotRad = polaroidRotationDeg(photoId) * Math.PI / 180 * zoomT
 
   // La mappa si scurisce leggermente dietro la card mentre si apre (effetto "riflettore") — la
   // rende leggibile come una scelta deliberata, non un frame corrotto. Non ruotata: è a schermo intero.
@@ -687,8 +689,9 @@ function PhotoZoomOverlay({ photo, zoomT, stopT }: { photo: RoutePhoto | null; z
   const showCaption = !!photo.caption && zoomT > 0.55
   const capAlpha = showCaption ? Math.min(1, (zoomT - 0.55) / 0.25) : 0
   const scrimAlpha = Math.min(0.4, zoomT * 0.45)
-  // Stessa piccola rotazione fissa del canvas export (mai perfettamente ortogonale allo schermo).
-  const rotDeg = polaroidRotationDeg(photo.id)
+  // Stessa rotazione del canvas export: ruota MENTRE si apre (proporzionale a zoomT), non fissa
+  // dall'inizio — una polaroid che si assesta invece di comparire già storta.
+  const rotDeg = polaroidRotationDeg(photo.id) * zoomT
   return (
     <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
       {zoomT > 0.02 && <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${scrimAlpha})` }} />}
@@ -833,6 +836,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // lib/videoPhotoCarousel.ts. Default 'classic' per non cambiare il comportamento di chi non
   // tocca questa opzione.
   const [videoPhotoStyle,   setVideoPhotoStyle]  = useState<'classic'|'carousel'>('classic')
+  // Effetto "hyperlapse" opzionale sui tratti di viaggio più lunghi (stile Carosello) — un leggero
+  // sdoppiamento della mappa a scala crescente e opacità calante, per dare energia ai tratti dove
+  // il viaggio dura davvero — vedi lib/videoPhotoCarousel.ts hyperlapseIntensityAt. Default off:
+  // effetto stilistico, non tutti lo vogliono.
+  const [videoHyperlapseEnabled, setVideoHyperlapseEnabled] = useState(false)
   // Anteprima dal vivo del carosello (schermata Montaggio) — sostituisce temporaneamente il foglio
   // impostazioni con la mappa a schermo pieno, usando lo stesso tick() di anteprima già presente
   // per lo scrub del percorso fuori dal wizard video.
@@ -2078,10 +2086,26 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Prevents the render loop from stalling if MapLibre skips a render cycle
     // (e.g. when the camera has fully converged and the map considers the scene unchanged).
     // Callback is allowed to be async (capture callbacks await encoder backpressure).
+    // Candidato per gli sporadici fotogrammi neri/vuoti segnalati sui tratti di viaggio più lunghi
+    // (Sezione 4): la telecamera lì attraversa più terreno nuovo per frame che durante una sosta
+    // (ferma su un punto già "assestato"), quindi ha più probabilità di catturare un fotogramma
+    // mentre MapLibre ha appena ripitturato ma i tile della nuova porzione di mappa non sono ancora
+    // arrivati — 'render' si attiva ad ogni ridisegno, non solo quando tutto è caricato. Concede
+    // qualche ripittura extra (limitata) prima di catturare, invece di aspettare 'idle' (troppo
+    // lento da fare ad ogni fotogramma) o catturare subito (rischio di terreno non ancora pronto).
     const onNextRender = (cb: () => void | Promise<void>) => {
       let fired = false
       const fire = () => { if (!fired) { fired = true; cb() } }
-      try { map!.once('render' as any, fire) } catch {}
+      let attempts = 0
+      const MAX_TILE_WAIT_ATTEMPTS = 3
+      const tryFire = () => {
+        if (fired) return
+        const tilesReady = typeof (map as any).areTilesLoaded === 'function' ? (map as any).areTilesLoaded() : true
+        if (tilesReady || attempts >= MAX_TILE_WAIT_ATTEMPTS) { fire(); return }
+        attempts++
+        try { map!.once('render' as any, tryFire) } catch { fire() }
+      }
+      try { map!.once('render' as any, tryFire) } catch {}
       setTimeout(fire, 600)
     }
 
@@ -2447,6 +2471,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         ctx.drawImage(mapCanvas,crF.sx,crF.sy,crF.sw,crF.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
+        // Hyperlapse opzionale (Sezione 4): un leggero sdoppiamento della mappa a scala crescente e
+        // opacità calante, solo nei tratti di viaggio più lunghi — dà energia dove il viaggio dura
+        // davvero, invece che essere costante per tutto il video.
+        if (isCarousel && videoHyperlapseEnabled && journey && followFrame !== undefined) {
+          const hlT = hyperlapseIntensityAt(followFrame, journey.travelSegments)
+          if (hlT > 0.02) {
+            ctx.save(); ctx.globalAlpha = hlT * 0.30
+            ctx.translate(outW/2, outH/2); ctx.scale(1.05, 1.05); ctx.translate(-outW/2, -outH/2)
+            ctx.drawImage(mapCanvas, crF.sx, crF.sy, crF.sw, crF.sh, 0, 0, outW, outH)
+            ctx.restore()
+            ctx.save(); ctx.globalAlpha = hlT * 0.16
+            ctx.translate(outW/2, outH/2); ctx.scale(1.10, 1.10); ctx.translate(-outW/2, -outH/2)
+            ctx.drawImage(mapCanvas, crF.sx, crF.sy, crF.sw, crF.sh, 0, 0, outW, outH)
+            ctx.restore()
+          }
+        }
+
         const sc2=Math.min(outW,outH)/1080
         // Con lo stile "Carosello", durante la sosta su una foto è quest'ultima (drawStopPhotoZoom,
         // più sotto) a occupare il centro schermo: il pin dell'utente non si disegna in quel caso.
@@ -2558,7 +2599,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -3239,6 +3280,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <span className="text-white text-sm font-bold w-16 text-right">{photoDurationSec.toFixed(1)}s / foto</span>
               </div>
             </div>
+
+            {/* Hyperlapse opzionale sui tratti di viaggio più lunghi — solo stile Carosello */}
+            {videoPhotoStyle==='carousel'&&(
+              <div className="mb-5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={videoHyperlapseEnabled} onChange={e=>setVideoHyperlapseEnabled(e.target.checked)} className="w-4 h-4 accent-blue-500"/>
+                  <span className="text-white text-xs font-semibold">Energia sui tratti lunghi (hyperlapse)</span>
+                </label>
+                <p className="text-white/30 text-[10px] mt-1 pl-6">Un leggero effetto di velocità solo dove il tratto tra due foto è più lungo.</p>
+              </div>
+            )}
 
             {/* Photos */}
             <div className="mb-6">
