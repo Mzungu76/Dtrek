@@ -67,6 +67,10 @@ export function distanceMToProgress(distanceM: number, cumDist: Float64Array): n
 
 // ── Timeline "viaggio tra una foto e l'altra" ──────────────────────────────────
 
+/** Un tratto di viaggio (non di sosta) della timeline — usato per l'effetto "hyperlapse"
+ *  opzionale (vedi hyperlapseIntensityAt) sui tratti più lunghi. */
+export interface TravelSegmentMeta { startFrame: number; endFrame: number; distanceM: number }
+
 export interface JourneyTables {
   totalFrames: number
   /** progresso (0..1) per ogni frame del "seguimento" (dopo l'intro, prima del finale). */
@@ -75,6 +79,8 @@ export interface JourneyTables {
   stopIndexTable: Int32Array
   /** 0..1: avanzamento all'interno della sosta corrente (0 se in viaggio) — per l'effetto zoom. */
   stopTTable: Float64Array
+  /** Tratti di viaggio (non le soste), con la loro distanza reale — vedi TravelSegmentMeta. */
+  travelSegments: TravelSegmentMeta[]
 }
 
 /** Costruisce la timeline "sosta su ogni foto, poi viaggio a ritmo costante verso la successiva" —
@@ -87,25 +93,27 @@ export function buildJourneyTables(
   const stopFrames = Math.max(1, Math.round(fps * stopSeconds))
   const safeCruise = Math.max(0.2, cruiseMps)
 
-  interface Seg { kind: 'travel' | 'stop'; frames: number; fromP: number; toP: number; photoIdx: number }
+  interface Seg { kind: 'travel' | 'stop'; frames: number; fromP: number; toP: number; photoIdx: number; distanceM: number }
   const segs: Seg[] = []
   let prevP = 0, prevD = 0
   sortedPhotos.forEach((ph, i) => {
     const travelD = Math.max(0, ph.distanceM - prevD)
-    segs.push({ kind: 'travel', frames: Math.max(1, Math.round(fps * travelD / safeCruise)), fromP: prevP, toP: ph.progress, photoIdx: -1 })
-    segs.push({ kind: 'stop', frames: stopFrames, fromP: ph.progress, toP: ph.progress, photoIdx: i })
+    segs.push({ kind: 'travel', frames: Math.max(1, Math.round(fps * travelD / safeCruise)), fromP: prevP, toP: ph.progress, photoIdx: -1, distanceM: travelD })
+    segs.push({ kind: 'stop', frames: stopFrames, fromP: ph.progress, toP: ph.progress, photoIdx: i, distanceM: 0 })
     prevP = ph.progress; prevD = ph.distanceM
   })
   const finalD = Math.max(0, totalDistanceM - prevD)
-  segs.push({ kind: 'travel', frames: Math.max(1, Math.round(fps * finalD / safeCruise)), fromP: prevP, toP: 1, photoIdx: -1 })
+  segs.push({ kind: 'travel', frames: Math.max(1, Math.round(fps * finalD / safeCruise)), fromP: prevP, toP: 1, photoIdx: -1, distanceM: finalD })
 
   const totalFrames = segs.reduce((s, seg) => s + seg.frames, 0)
   const pTable = new Float64Array(totalFrames)
   const stopIndexTable = new Int32Array(totalFrames)
   const stopTTable = new Float64Array(totalFrames)
+  const travelSegments: TravelSegmentMeta[] = []
 
   let f = 0
   for (const seg of segs) {
+    if (seg.kind === 'travel') travelSegments.push({ startFrame: f, endFrame: f + seg.frames, distanceM: seg.distanceM })
     for (let i = 0; i < seg.frames; i++) {
       const t = seg.frames > 1 ? i / (seg.frames - 1) : 1
       pTable[f] = seg.fromP + (seg.toP - seg.fromP) * t
@@ -114,7 +122,36 @@ export function buildJourneyTables(
       f++
     }
   }
-  return { totalFrames, pTable, stopIndexTable, stopTTable }
+  return { totalFrames, pTable, stopIndexTable, stopTTable, travelSegments }
+}
+
+// ── Hyperlapse opzionale sui tratti di viaggio più lunghi ───────────────────────
+
+// Sotto questa distanza un tratto non è "lungo" abbastanza da giustificare l'effetto — tratti
+// brevi tra foto ravvicinate restano puliti, l'energia in più si nota solo dove il viaggio dura
+// davvero (Sezione 4, effetto opzionale attivabile dall'utente).
+const HYPERLAPSE_MIN_DISTANCE_M = 400
+
+function bumpEnvelope(localT: number): number {
+  const c = Math.min(1, Math.max(0, localT))
+  const half = c < 0.5 ? c * 2 : (1 - c) * 2
+  return half * half * (3 - 2 * half)  // smoothstep: deriva nulla ad entrambi gli estremi (0 e 1)
+}
+
+/** Intensità 0..1 dell'effetto hyperlapse nel frame `followFrame` — 0 fuori dai tratti di viaggio
+ *  "lunghi" (sotto HYPERLAPSE_MIN_DISTANCE_M) e durante le soste, un rigonfiamento morbido (0 ai
+ *  bordi del tratto, 1 al centro) altrove — così l'effetto sfuma dentro/fuori invece di comparire
+ *  di scatto all'inizio/fine del tratto. */
+export function hyperlapseIntensityAt(followFrame: number, travelSegments: TravelSegmentMeta[]): number {
+  for (const seg of travelSegments) {
+    if (followFrame >= seg.startFrame && followFrame < seg.endFrame) {
+      if (seg.distanceM < HYPERLAPSE_MIN_DISTANCE_M) return 0
+      const span = seg.endFrame - seg.startFrame
+      const localT = span > 1 ? (followFrame - seg.startFrame) / (span - 1) : 0
+      return bumpEnvelope(localT)
+    }
+  }
+  return 0
 }
 
 // ── Zoom sulla foto durante la sosta ────────────────────────────────────────────
