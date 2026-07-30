@@ -109,19 +109,47 @@ function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
 }
 
 // ── Map pin (replaces hiker avatar) ───────────────────────────────────────────
+// Stile "glossy 3D" (ispirato ai pin-mappa lucidi, Sezione 4: "belli e colorati, tipici dei
+// videogiochi") — gradiente più ricco, highlight speculare, ombra più profonda. Il colore vira tra
+// celeste e rosso in base a hrColorT (-1 = FC in calo, 0 = neutro, 1 = FC in salita) quando
+// l'effetto FC è attivo — vedi hrTrendAt.
+
+function lerpChannel(a: number, b: number, t: number): number { return Math.round(a + (b - a) * t) }
+function lerpHex(hexA: string, hexB: string, t: number): string {
+  const a = parseInt(hexA.slice(1), 16), b = parseInt(hexB.slice(1), 16)
+  const r = lerpChannel((a>>16)&255, (b>>16)&255, t), g = lerpChannel((a>>8)&255, (b>>8)&255, t), bl = lerpChannel(a&255, b&255, t)
+  return `rgb(${r},${g},${bl})`
+}
+
+/** Colore chiaro/scuro del pin per hrColorT (-1..1, 0 = blu neutro di default). */
+function pinColorsForTrend(hrColorT: number): { light: string; dark: string; tip: string } {
+  const t = Math.max(-1, Math.min(1, hrColorT))
+  if (t >= 0) {
+    return {
+      light: lerpHex('#93c5fd', '#fca5a5', t), dark: lerpHex('#1d4ed8', '#dc2626', t),
+      tip: lerpHex('#1e40af', '#b91c1c', t),
+    }
+  }
+  return {
+    light: lerpHex('#93c5fd', '#a5f3fc', -t), dark: lerpHex('#1d4ed8', '#0e7490', -t),
+    tip: lerpHex('#1e40af', '#155e75', -t),
+  }
+}
 
 function drawMapPin(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number,    // tip of pin = GPS position
   sc: number,                // scale (outW/1080)
   faceImg: HTMLImageElement | null,
+  hrColorT = 0,               // -1..1, vedi pinColorsForTrend — 0 = colore blu di sempre
 ) {
   const R    = 32 * sc
   const tipH = 16 * sc
   const ccY  = cy - R - tipH   // circle center (pin tip is at cy)
+  const { light, dark, tip } = pinColorsForTrend(hrColorT)
 
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 12*sc; ctx.shadowOffsetY = 4*sc
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 14*sc; ctx.shadowOffsetY = 6*sc
 
   // Teardrop tip
   ctx.beginPath()
@@ -129,13 +157,13 @@ function drawMapPin(
   ctx.lineTo(cx + R*0.42, ccY + R*0.68)
   ctx.lineTo(cx, cy)
   ctx.closePath()
-  ctx.fillStyle = '#1e40af'; ctx.fill()
+  ctx.fillStyle = tip; ctx.fill()
 
   ctx.shadowColor = 'transparent'
 
-  // Circle body
-  const g = ctx.createRadialGradient(cx-R*0.28, ccY-R*0.28, R*0.05, cx, ccY, R*1.45)
-  g.addColorStop(0, '#93c5fd'); g.addColorStop(1, '#1d4ed8')
+  // Circle body — gradiente più ampio e contrastato per un effetto lucido/plastico
+  const g = ctx.createRadialGradient(cx-R*0.32, ccY-R*0.34, R*0.02, cx, ccY, R*1.5)
+  g.addColorStop(0, light); g.addColorStop(0.55, dark); g.addColorStop(1, tip)
   ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2)
   ctx.fillStyle = g; ctx.fill()
 
@@ -150,7 +178,7 @@ function drawMapPin(
   if (faceImg) {
     ctx.drawImage(faceImg, cx-ir, ccY-ir, ir*2, ir*2)
   } else {
-    ctx.fillStyle = '#3b82f6'
+    ctx.fillStyle = dark
     ctx.fillRect(cx-ir, ccY-ir, ir*2, ir*2)
     // Person silhouette
     ctx.fillStyle = 'rgba(255,255,255,0.88)'
@@ -158,7 +186,128 @@ function drawMapPin(
     ctx.beginPath(); ctx.ellipse(cx, ccY+ir*0.32, ir*0.44, ir*0.26, 0, Math.PI, 0); ctx.fill()
   }
   ctx.restore()
+
+  // Highlight speculare (l'accenno "lucido/3D") — un'ellisse chiara in alto a sinistra, che non
+  // copre la foto (bassa opacità, blend additivo tramite alpha basso invece di un blend mode
+  // costoso su canvas 2D).
+  ctx.save()
+  ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.clip()
+  const hl = ctx.createRadialGradient(cx-R*0.38, ccY-R*0.42, 0, cx-R*0.38, ccY-R*0.42, R*0.6)
+  hl.addColorStop(0, 'rgba(255,255,255,0.55)'); hl.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = hl
+  ctx.beginPath(); ctx.ellipse(cx-R*0.32, ccY-R*0.38, R*0.55, R*0.38, -0.5, 0, Math.PI*2); ctx.fill()
   ctx.restore()
+
+  ctx.restore()
+}
+
+// ── Battito cardiaco sopra al pin (opzionale) ───────────────────────────────────
+// Un cuore che pulsa fluttuante sopra al pin (non attaccato — stile "status icon" da videogioco),
+// con il numero BPM corrente sopra di esso. Il periodo del battito è quello VERO (60/bpm secondi),
+// non una velocità arbitraria — vedi l'accumulatore di fase in goToRendering (hrPulsePhaseRef) per
+// il motivo per cui è un accumulatore incrementale e non un semplice "tempo % periodo".
+
+function heartPulseScale(phase: number): number {
+  // sin³: attacco rapido e rilascio morbido, zero (e derivata zero) sia a phase=0 sia a phase=1 —
+  // nessuno scatto quando il ciclo si ripete.
+  return 1 + 0.30 * Math.pow(Math.max(0, Math.sin(phase * Math.PI)), 3)
+}
+
+function drawHeartPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
+  ctx.beginPath()
+  ctx.moveTo(cx, cy + size*0.32)
+  ctx.bezierCurveTo(cx - size*0.55, cy - size*0.28, cx - size*0.22, cy - size*0.68, cx, cy - size*0.22)
+  ctx.bezierCurveTo(cx + size*0.22, cy - size*0.68, cx + size*0.55, cy - size*0.28, cx, cy + size*0.32)
+  ctx.closePath()
+}
+
+function drawHeartBadge(
+  ctx: CanvasRenderingContext2D,
+  pinCx: number, pinTipCy: number, sc: number,
+  bpm: number, pulsePhase: number,
+) {
+  if (bpm <= 0) return
+  const R = 32 * sc, tipH = 16 * sc
+  const ccY = pinTipCy - R - tipH
+  const hx = pinCx, hy = ccY - R * 2.35   // fluttua sopra al pin, staccato — non attaccato
+  const scale = heartPulseScale(pulsePhase)
+  const size = 15 * sc * scale
+
+  // Niente shadowBlur qui di proposito (uno dei costi per-frame più alti su canvas 2D): questo
+  // badge, a differenza degli altri usi occasionali di shadowBlur già rimossi in questo file,
+  // disegna per l'intera fase di seguimento quando l'effetto è attivo, non solo per una finestra
+  // breve — un alone morbido (gradiente radiale a bassa opacità, dietro al cuore) dà comunque
+  // profondità a costo trascurabile.
+  ctx.save()
+  const halo = ctx.createRadialGradient(hx, hy, 0, hx, hy, size*1.9)
+  halo.addColorStop(0, 'rgba(220,38,38,0.35)'); halo.addColorStop(1, 'rgba(220,38,38,0)')
+  ctx.fillStyle = halo
+  ctx.beginPath(); ctx.arc(hx, hy, size*1.9, 0, Math.PI*2); ctx.fill()
+  const hg = ctx.createRadialGradient(hx-size*0.2, hy-size*0.2, 0, hx, hy, size*1.1)
+  hg.addColorStop(0, '#fca5a5'); hg.addColorStop(1, '#dc2626')
+  ctx.fillStyle = hg
+  drawHeartPath(ctx, hx, hy, size)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.2*sc
+  drawHeartPath(ctx, hx, hy, size); ctx.stroke()
+  ctx.restore()
+
+  ctx.save()
+  const label = `${Math.round(bpm)}`
+  ctx.font = `800 ${Math.round(17*sc)}px -apple-system,sans-serif`
+  const lw = ctx.measureText(label).width + 12*sc, lh = 22*sc
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'
+  rrect(ctx, hx-lw/2, hy-size*0.85-lh, lw, lh, lh/2); ctx.fill()
+  ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(label, hx, hy-size*0.85-lh/2)
+  ctx.restore()
+}
+
+/** Tendenza -1..1 della FC nel punto `si` della serie appiattita — >0 in salita, <0 in calo,
+ *  confrontando con il valore di qualche campione prima (finestra fissa, non tempo reale: la
+ *  serie è già ricampionata su SAMPLES punti lungo il percorso). ±15 bpm di variazione = ±1. */
+function hrTrendAt(smoothHr: number[], si: number, samples: number): number {
+  const window = Math.max(1, Math.round(samples * 0.05))
+  const prev = smoothHr[Math.max(0, si - window)]
+  return Math.max(-1, Math.min(1, (smoothHr[si] - prev) / 15))
+}
+
+// ── Stelline all'arrivo finale (opzionale) ──────────────────────────────────────
+
+function drawStarPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
+  ctx.beginPath()
+  for (let i = 0; i < 10; i++) {
+    const ang = (Math.PI / 5) * i - Math.PI / 2
+    const r = i % 2 === 0 ? size : size * 0.42
+    const x = cx + Math.cos(ang) * r, y = cy + Math.sin(ang) * r
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+  }
+  ctx.closePath()
+}
+
+/** Scoppio di stelline dal punto (cx,cy) — un solo momento enfatizzato all'arrivo finale del
+ *  percorso, non ripetuto ad ogni foto. `burstT` 0..1 copre l'intero scoppio (partenza→dissolvenza). */
+function drawArrivalStars(ctx: CanvasRenderingContext2D, cx: number, cy: number, sc: number, burstT: number) {
+  const N = 14
+  for (let i = 0; i < N; i++) {
+    const angle = (i / N) * Math.PI * 2 + (i % 3) * 0.15
+    const speed = (70 + (i % 4) * 22) * sc
+    const delay = (i % 5) * 0.045
+    const t = Math.max(0, Math.min(1, (burstT - delay) / (1 - delay)))
+    if (t <= 0 || t >= 1) continue
+    const eased = 1 - Math.pow(1 - t, 3)  // ease-out: parte veloce, rallenta
+    const dist = speed * eased
+    const alpha = 1 - t
+    const x = cx + Math.cos(angle) * dist, y = cy + Math.sin(angle) * dist
+    const starSize = (7 + (i % 3) * 2.5) * sc * (1 - t * 0.35)
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = i % 2 === 0 ? '#fde047' : '#60a5fa'
+    ctx.shadowColor = ctx.fillStyle as string; ctx.shadowBlur = 6 * sc
+    drawStarPath(ctx, x, y, starSize)
+    ctx.fill()
+    ctx.restore()
+  }
 }
 
 // ── Photo pin ─────────────────────────────────────────────────────────────────
@@ -783,6 +932,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // il viaggio dura davvero — vedi lib/videoPhotoCarousel.ts hyperlapseIntensityAt. Default off:
   // effetto stilistico, non tutti lo vogliono.
   const [videoHyperlapseEnabled, setVideoHyperlapseEnabled] = useState(false)
+  // Cuore che pulsa + BPM sopra il pin, e pin colorato in base alla tendenza della FC (rosso in
+  // salita, celeste in calo) — entrambi gli stili video, richiede dati di frequenza cardiaca.
+  const [videoHeartEffectEnabled, setVideoHeartEffectEnabled] = useState(false)
+  // Scoppio di stelline al momento dell'arrivo finale del percorso (fase finale, non ad ogni foto).
+  const [videoArrivalStarsEnabled, setVideoArrivalStarsEnabled] = useState(false)
   // Anteprima dal vivo del carosello (schermata Montaggio) — sostituisce temporaneamente il foglio
   // impostazioni con la mappa a schermo pieno, usando lo stesso tick() di anteprima già presente
   // per lo scrub del percorso fuori dal wizard video.
@@ -1875,6 +2029,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     renderedFramesRef.current = 0
     encodedFramesRef.current  = 0
     const outroStartBearRef = { current: -1 as number }
+    // Fase (0..1) del battito cardiaco, accumulata frame per frame invece di derivata da
+    // "tempo % periodo": il BPM (quindi il periodo del battito) cambia nel corso del video, e un
+    // modulo su un periodo che cambia salterebbe di fase ad ogni variazione — accumulare l'avanzamento
+    // di fase frame per frame (bpm/60 battiti al secondo, integrato nel tempo) resta invece continuo.
+    const heartPhaseRef = { current: 0 }
 
     // Pre-compute peak position on route (for peak callout)
     const peakRouteP = (() => {
@@ -2190,9 +2349,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const sc2 = Math.min(outW, outH) / 1080
           // User pin visible at start of outro, fades out over first 20%
           if (outroP < 0.2) {
+            const siHrO = SAMPLES - 1  // p=1.0 in fase di finale: ultimo campione della serie
+            const bpmNowO = hasHr ? smoothHr[siHrO] : 0
+            const hrColorTO = (videoHeartEffectEnabled && hasHr) ? hrTrendAt(smoothHr, siHrO, SAMPLES) : 0
+            if (videoHeartEffectEnabled && bpmNowO > 0) heartPhaseRef.current = (heartPhaseRef.current + (bpmNowO/60)/TARGET_FPS) % 1
             ctx.globalAlpha = 1 - outroP / 0.2
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, hrColorTO)
+            if (videoHeartEffectEnabled && bpmNowO > 0) drawHeartBadge(ctx, outW/2, outH/2, outW/1080, bpmNowO, heartPhaseRef.current)
             ctx.globalAlpha = 1
+          }
+          // Scoppio di stelline all'arrivo finale (opzionale) — un solo momento, non ad ogni foto,
+          // agganciato all'inizio del finale mentre il pin sfuma via.
+          const STAR_BURST_WINDOW = 0.28
+          if (videoArrivalStarsEnabled && outroP < STAR_BURST_WINDOW) {
+            drawArrivalStars(ctx, outW/2, outH/2, outW/1080, outroP / STAR_BURST_WINDOW)
           }
           // End card fades in during outro
           const FADE_START = 0.35
@@ -2363,13 +2533,24 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // più sotto) a occupare il centro schermo: il pin dell'utente non si disegna in quel caso.
         const stopZoomTNow = (isCarousel && stopIndex !== undefined) ? stopPhotoZoomAt(stopT ?? 0) : 0
 
+        // Cuore/colore FC (opzionale, entrambi gli stili): tendenza della FC nel punto corrente del
+        // percorso e avanzamento della fase del battito — vedi hrTrendAt/heartPhaseRef sopra.
+        const siHr = Math.min(Math.round(p*(SAMPLES-1)), SAMPLES-1)
+        const bpmNow = hasHr ? smoothHr[siHr] : 0
+        const hrColorT = (videoHeartEffectEnabled && hasHr) ? hrTrendAt(smoothHr, siHr, SAMPLES) : 0
+        if (videoHeartEffectEnabled && bpmNow > 0) {
+          heartPhaseRef.current = (heartPhaseRef.current + (bpmNow / 60) / TARGET_FPS) % 1
+        }
+
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
         if (stopZoomTNow <= 0.001) {
           if (introP === undefined) {
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, hrColorT)
+            if (videoHeartEffectEnabled && bpmNow > 0) drawHeartBadge(ctx, outW/2, outH/2, outW/1080, bpmNow, heartPhaseRef.current)
           } else if (introP > 0.7) {
             ctx.globalAlpha = (introP - 0.7) / 0.3
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, hrColorT)
+            if (videoHeartEffectEnabled && bpmNow > 0) drawHeartBadge(ctx, outW/2, outH/2, outW/1080, bpmNow, heartPhaseRef.current)
             ctx.globalAlpha = 1
           }
         }
@@ -2469,7 +2650,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoHeartEffectEnabled,videoArrivalStarsEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2903,6 +3084,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 ))}
               </div>
               {videoShowPois&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">I punti di interesse non aggiungono tempo al video (a differenza delle foto) — vengono mostrati i {Math.min(MAX_VIDEO_POIS, pois?.length??0)} più rilevanti vicino al percorso.</p>}
+            </div>
+            <div>
+              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">PIN ED EFFETTI</p>
+              <label className={`flex items-center gap-2 mb-2 ${hasBodyData?'cursor-pointer':'opacity-40'}`}>
+                <input type="checkbox" checked={videoHeartEffectEnabled} disabled={!hasBodyData}
+                  onChange={e=>setVideoHeartEffectEnabled(e.target.checked)} className="w-4 h-4 accent-blue-500"/>
+                <span className="text-white text-xs font-semibold">Cuore che batte + pin colorato dalla FC</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={videoArrivalStarsEnabled}
+                  onChange={e=>setVideoArrivalStarsEnabled(e.target.checked)} className="w-4 h-4 accent-blue-500"/>
+                <span className="text-white text-xs font-semibold">Stelline all&apos;arrivo finale</span>
+              </label>
             </div>
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-3 tracking-wider">ZOOM CINEMATICO</p>
