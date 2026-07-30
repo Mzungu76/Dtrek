@@ -20,7 +20,7 @@ import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY } from '@/lib/mapStyles'
 import {
   buildCumulativeDistances, progressToDistanceM, distanceMToProgress, buildJourneyTables,
-  stopPhotoZoomAt, TOP_BAND_FRACTION, type CarouselPhotoTiming,
+  stopPhotoZoomAt, polaroidRotationDeg, TOP_BAND_FRACTION, type CarouselPhotoTiming,
 } from '@/lib/videoPhotoCarousel'
 import { suggestStatHookText, suggestCuriosityHookText } from '@/lib/videoHook'
 
@@ -231,7 +231,7 @@ const POLAROID_CAP_FRAC = 0.22   // striscia in basso per la didascalia, come fr
 function drawStopPhotoZoom(
   ctx: CanvasRenderingContext2D,
   outW: number, outH: number, sc: number,
-  img: HTMLImageElement, caption: string | undefined,
+  img: HTMLImageElement, caption: string | undefined, photoId: string,
   zoomT: number, stopT: number,
 ) {
   if (!(img.complete && img.naturalWidth > 0)) return
@@ -247,15 +247,20 @@ function drawStopPhotoZoom(
   const cx = outW / 2 + outW * breathe, cy = outH / 2
   const bx = cx - cardW / 2, by = cy - cardH / 2
   const r = Math.max(2 * sc, 8 * sc * zoomT)
+  // Piccola rotazione fissa (mai perfettamente ortogonale allo schermo), diversa per ogni foto ma
+  // sempre la stessa per la stessa foto — vedi polaroidRotationDeg.
+  const rotRad = polaroidRotationDeg(photoId) * Math.PI / 180
 
   // La mappa si scurisce leggermente dietro la card mentre si apre (effetto "riflettore") — la
-  // rende leggibile come una scelta deliberata, non un frame corrotto.
+  // rende leggibile come una scelta deliberata, non un frame corrotto. Non ruotata: è a schermo intero.
   if (zoomT > 0.02) {
     ctx.fillStyle = `rgba(0,0,0,${Math.min(0.4, zoomT * 0.45)})`
     ctx.fillRect(0, 0, outW, outH)
   }
 
   ctx.save()
+  ctx.translate(cx, cy); ctx.rotate(rotRad); ctx.translate(-cx, -cy)
+
   // Ombra finta (nessuna sfocatura): un rettangolo pieno arretrato, dello stesso raggio, dietro la card.
   const shOff = 6 * sc * zoomT
   ctx.fillStyle = `rgba(0,0,0,${0.35 * zoomT})`
@@ -265,7 +270,6 @@ function drawStopPhotoZoom(
   ctx.save(); rrect(ctx, bx + pad, by + pad, photoSide, photoSide, r * 0.4); ctx.clip()
   const crop = aspectFitCrop(img.width, img.height, 1)
   ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, bx + pad, by + pad, photoSide, photoSide)
-  ctx.restore()
   ctx.restore()
 
   // Didascalia, nella cornice sotto la foto — solo quando c'è abbastanza spazio per leggerla.
@@ -290,6 +294,7 @@ function drawStopPhotoZoom(
     visLines.forEach((l, i) => ctx.fillText(l, cx, capCenterY + (i - (visLines.length - 1) / 2) * lineH))
     ctx.restore()
   }
+  ctx.restore()
 }
 
 // ── Graph (unchanged) ──────────────────────────────────────────────────────────
@@ -682,6 +687,8 @@ function PhotoZoomOverlay({ photo, zoomT, stopT }: { photo: RoutePhoto | null; z
   const showCaption = !!photo.caption && zoomT > 0.55
   const capAlpha = showCaption ? Math.min(1, (zoomT - 0.55) / 0.25) : 0
   const scrimAlpha = Math.min(0.4, zoomT * 0.45)
+  // Stessa piccola rotazione fissa del canvas export (mai perfettamente ortogonale allo schermo).
+  const rotDeg = polaroidRotationDeg(photo.id)
   return (
     <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
       {zoomT > 0.02 && <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${scrimAlpha})` }} />}
@@ -689,7 +696,7 @@ function PhotoZoomOverlay({ photo, zoomT, stopT }: { photo: RoutePhoto | null; z
         className="absolute top-1/2 left-1/2"
         style={{
           width: cardW, height: cardH,
-          transform: `translate(calc(-50% + ${breathe}vw), -50%)`,
+          transform: `translate(calc(-50% + ${breathe}vw), -50%) rotate(${rotDeg}deg)`,
           background: '#fffdf4',
           borderRadius: `${radius}px`,
           boxShadow: `0 ${6 * zoomT}px ${14 * zoomT}px rgba(0,0,0,${0.35 * zoomT})`,
@@ -2186,12 +2193,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const t = reveal.revealFrame / PHOTO_REVEAL_FRAMES
           const alpha = t<0.08 ? t/0.08 : t>0.92 ? (1-t)/0.08 : 1
           const img = reveal.img
-          // Defensive guard against the same black-frame class of bug as the map canvas:
-          // skip drawing/encoding entirely (instead of compositing a blank/partial image)
-          // if this photo somehow isn't fully decoded yet.
+          // Se la foto non è ancora completamente decodificata (raro: sortedPhotos è già filtrato
+          // sulle immagini caricate, ma resta una guardia difensiva) salta SOLO il ridisegno — non
+          // il clearRect qui sotto, così il canvas composito mantiene l'ultimo contenuto buono
+          // invece di restare vuoto, e viene comunque codificato più sotto: un fotogramma duplicato
+          // è impercettibile, un buco nella timeline dei timestamp no (vedi mapAvailableF/O).
           const imgReady = img.complete && img.naturalWidth > 0
-          ctx.clearRect(0, 0, outW, outH)
           if (imgReady) {
+          ctx.clearRect(0, 0, outW, outH)
           // Ken Burns: slow zoom + gentle drift per photo
           const photoIdx = sortedPhotos.findIndex(s => s.photo.id === reveal.photo.id)
           const kbScale = 1 + 0.07 * t
@@ -2224,12 +2233,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           }
           // Fade overlay
           ctx.globalAlpha=1-alpha; ctx.fillStyle='black'; ctx.fillRect(0,0,outW,outH); ctx.globalAlpha=1
+          }
           if (videoEncoderRef.current) {
             await waitForEncoderQueue(videoEncoderRef.current)
             let _vf: InstanceType<typeof VideoFrame> | null = null
             try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
             finally { _vf?.close() }
-          }
           }
           } catch (err) { console.error('[dtrek] reveal frame error:', err) }
           frameCountRef.current++; renderedFramesRef.current++
@@ -2270,10 +2279,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         onNextRender(async () => {
           if (!mapRef.current) { frameCountRef.current++; renderedFramesRef.current++; renderNextFrame(); return }
           try {
-          // Skip the entire tick (draw + encode) if the map canvas is momentarily
-          // unavailable (mid-resize/context hiccup) instead of compositing a blank
-          // frame — the composite canvas simply holds its last good content, and no
-          // VideoFrame is sent for this tick, so no black frame reaches the output file.
+          // Se la mappa non è momentaneamente disponibile (resize/context hiccup) salta SOLO il
+          // ridisegno: il canvas composito mantiene l'ultimo contenuto buono, che viene comunque
+          // codificato più sotto — saltare anche la codifica lascerebbe un vuoto nella timeline dei
+          // timestamp del video (il contatore fotogramma avanza comunque), che alcuni player
+          // riempiono con un fotogramma nero invece di trattenere l'ultimo buono: un fotogramma
+          // duplicato è impercettibile, un buco nella timeline no.
           const mapAvailableO = mapCanvas.width > 0 && mapCanvas.height > 0
           if (mapAvailableO) {
           ctx.clearRect(0, 0, outW, outH)
@@ -2324,12 +2335,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               ctx.globalAlpha = 1
             }
           }
+          }
+
+          // Codifica SEMPRE, anche quando mapAvailableO era false (in quel caso composite trattiene
+          // l'ultimo fotogramma buono) — vedi il commento su mapAvailableO sopra.
           if (videoEncoderRef.current) {
             await waitForEncoderQueue(videoEncoderRef.current)
             let _vf: InstanceType<typeof VideoFrame> | null = null
             try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
             finally { _vf?.close() }
-          }
           }
           } catch (err) { console.error('[dtrek] outro frame error:', err) }
           frameCountRef.current++; renderedFramesRef.current++
@@ -2417,8 +2431,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if(!mapRef.current) { frameCountRef.current++; renderedFramesRef.current++; renderNextFrame(); return }
         try {
 
-        // Skip the entire tick (draw + encode) if the map canvas is momentarily
-        // unavailable — see the matching comment in the outro block above.
+        // Se la mappa non è momentaneamente disponibile (resize/context hiccup) salta SOLO il
+        // ridisegno: il canvas composito mantiene l'ultimo contenuto buono, che viene comunque
+        // codificato più sotto — saltare anche la codifica lascerebbe un vuoto nella timeline dei
+        // timestamp del video (il contatore fotogramma avanza comunque), che alcuni player
+        // riempiono con un fotogramma nero invece di trattenere l'ultimo buono: un fotogramma
+        // duplicato è impercettibile, un buco nella timeline no.
         const mapAvailableF = mapCanvas.width > 0 && mapCanvas.height > 0
         if (mapAvailableF) {
         ctx.clearRect(0, 0, outW, outH)
@@ -2466,7 +2484,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // La foto in sosta si apre da pin a quasi schermo intero, poi si richiude — vedi
           // drawStopPhotoZoom e lib/videoPhotoCarousel.ts stopPhotoZoomAt per la forma temporale.
           if (stopIndex !== undefined && sortedPhotos[stopIndex]) {
-            drawStopPhotoZoom(ctx, outW, outH, sc2, sortedPhotos[stopIndex].img, sortedPhotos[stopIndex].photo.caption?.trim(), stopZoomTNow, stopT ?? 0)
+            drawStopPhotoZoom(ctx, outW, outH, sc2, sortedPhotos[stopIndex].img, sortedPhotos[stopIndex].photo.caption?.trim(), sortedPhotos[stopIndex].photo.id, stopZoomTNow, stopT ?? 0)
           }
         } else {
         // Animated elevation profile (upper center, hidden during title card)
@@ -2517,13 +2535,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
         }
         }
+        }
 
+        // Codifica SEMPRE, anche quando mapAvailableF era false (in quel caso composite trattiene
+        // l'ultimo fotogramma buono) — vedi il commento su mapAvailableF sopra: un fotogramma
+        // duplicato è impercettibile, un buco nella timeline dei timestamp no.
         if (videoEncoderRef.current) {
           await waitForEncoderQueue(videoEncoderRef.current)
           let _vf: InstanceType<typeof VideoFrame> | null = null
           try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
           finally { _vf?.close() }
-        }
         }
         } catch (err) { console.error('[dtrek] frame error:', err) }
         frameCountRef.current++; renderedFramesRef.current++
