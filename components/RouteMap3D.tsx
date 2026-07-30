@@ -19,6 +19,7 @@ import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY } from '@/lib/mapStyles'
 import { speedFactorAt, zoomBoostAt, buildWarpedProgressTable, virtualPhotoIndexAt, CAROUSEL_BAND_FRACTION, type CarouselPhotoTiming } from '@/lib/videoPhotoCarousel'
+import { suggestHookText } from '@/lib/videoHook'
 
 const SPEEDS = [
   { label: '½×', v: 0.5 },
@@ -833,6 +834,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // impostazioni con la mappa a schermo pieno + la striscia foto, usando lo stesso tick() di
   // anteprima già presente per lo scrub del percorso fuori dal wizard video.
   const [previewingCarousel, setPreviewingCarousel] = useState(false)
+  // Testo del gancio iniziale — null = usa il suggerimento automatico (autoHookText, sotto);
+  // valorizzato appena l'utente lo modifica nel Montaggio.
+  const [hookTextOverride,  setHookTextOverride]  = useState<string | null>(null)
   const [zoomIntro,         setZoomIntro]        = useState(10.5)
   const [zoomFollow,        setZoomFollow]        = useState(13.8)
   const [zoomOutro,         setZoomOutro]         = useState(7.5)
@@ -920,6 +924,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     ]
     return [...facts, ...tips]
   }, [distanceProp, elevGainProp, pois, routePhotos, videoExcludedPhotoIds])
+
+  // Gancio iniziale (Sezione 4) — suggerito automaticamente da lib/videoHook.ts (POI notevole se
+  // c'è, altrimenti una cifra d'impatto), sovrascrivibile dall'utente nel Montaggio (hookTextOverride).
+  const autoHookText = useMemo(() => suggestHookText({
+    distanceKm: +((distanceProp ?? totalDistRef.current) / 1000).toFixed(1),
+    elevationGain: elevGainProp ?? elevStatsRef.current.gain,
+    altitudeMax: elevStatsRef.current.altMax,
+    pois,
+  }), [distanceProp, elevGainProp, pois])
+  const hookText = (hookTextOverride ?? autoHookText).trim()
 
   useEffect(() => {
     if (videoState !== 'rendering' && videoState !== 'finalizing') { setEntertainIdx(0); return }
@@ -1891,8 +1905,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
     }
 
-    // Intro: fixed duration where p=0 (route frozen, camera swoops in)
-    const INTRO_FRAMES = Math.round(TARGET_FPS * Math.max(2, videoDuration * 0.08))
+    // Gancio iniziale (Sezione 4): frazione di secondo prima ancora della mappa, pensata per
+    // fermare lo scroll sui social — foto migliore a schermo intero con zoom "a scatto" + testo
+    // d'impatto (hookText, sotto). Solo se c'è davvero qualcosa da mostrare.
+    const hookPhoto = sortedPhotos[0] ?? null
+    const HOOK_FRAMES = (hookText || hookPhoto) ? Math.round(TARGET_FPS * 1.1) : 0
+    // Intro: fixed duration where p=0 (route frozen, camera swoops in) — più breve di prima
+    // (Sezione 4: un'apertura lenta è il motivo #1 per cui si scrolla via sui social, specialmente
+    // subito dopo lo strappo del gancio sopra).
+    const INTRO_FRAMES = Math.round(TARGET_FPS * Math.max(1.1, videoDuration * 0.05))
     // Route frames: full traversal 0→1 starts AFTER intro
     const ROUTE_FRAMES = Math.round(TARGET_FPS * videoDuration)
     // Each photo inserts PHOTO_REVEAL_FRAMES of pause after reaching its position (after intro) —
@@ -1911,7 +1932,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const photoTriggerRouteFrames = sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
     // Outro: separate phase after route completes (~17% of route duration, min 3s)
     const OUTRO_FRAMES = Math.round(TARGET_FPS * Math.max(3, videoDuration * 0.17))
-    const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + OUTRO_FRAMES
+    const TOTAL_FRAMES = HOOK_FRAMES + INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + OUTRO_FRAMES
     renderedFramesRef.current = 0
     encodedFramesRef.current  = 0
     const outroStartBearRef = { current: -1 as number }
@@ -1933,12 +1954,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       ? buildWarpedProgressTable(ROUTE_FRAMES, photoTimings)
       : null
 
-    const frameToState = (frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number} => {
-      // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
-      if (frameIdx < INTRO_FRAMES) {
-        return {p: 0, introP: frameIdx / Math.max(1, INTRO_FRAMES - 1)}
+    const frameToState = (frameIdx: number): {p:number; hookT?:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number} => {
+      // Gancio: primissima fase, mappa non ancora coinvolta.
+      if (frameIdx < HOOK_FRAMES) {
+        return {p: 0, hookT: frameIdx / Math.max(1, HOOK_FRAMES - 1)}
       }
-      const afterIntro = frameIdx - INTRO_FRAMES
+      const afterHook = frameIdx - HOOK_FRAMES
+      // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
+      if (afterHook < INTRO_FRAMES) {
+        return {p: 0, introP: afterHook / Math.max(1, INTRO_FRAMES - 1)}
+      }
+      const afterIntro = afterHook - INTRO_FRAMES
       let pauseOffset = 0
       if (!isCarousel) {
         for (let i = 0; i < sortedPhotos.length; i++) {
@@ -1994,8 +2020,81 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         return
       }
 
-      const {p, introP, reveal, outroP, followFrame} = frameToState(frameIdx)
+      const {p, hookT, introP, reveal, outroP, followFrame} = frameToState(frameIdx)
       setRenderProgress(frameIdx/TOTAL_FRAMES); setRenderFrame(frameIdx)
+
+      // Gancio iniziale: foto migliore a schermo intero con zoom "a scatto" + testo d'impatto,
+      // prima ancora che la mappa entri in scena — vedi il commento su HOOK_FRAMES sopra.
+      if (hookT !== undefined) {
+        requestAnimationFrame(async () => {
+          if (renderAbortRef.current) return
+          try {
+          ctx.clearRect(0, 0, outW, outH)
+          const img = hookPhoto?.img
+          const imgReady = !!img && img.complete && img.naturalWidth > 0
+          if (imgReady) {
+            // Zoom "a scatto": la maggior parte avviene nei primissimi fotogrammi (ease-out molto
+            // aggressivo) invece del Ken Burns lento delle foto lungo il percorso — uno strappo
+            // visivo voluto, non un movimento elegante.
+            const snapT = 1 - Math.pow(1 - Math.min(1, hookT / 0.4), 3)
+            const scale = 1.18 - 0.18 * snapT
+            const srcA = img!.width / img!.height, dstA = outW / outH
+            let sx=0, sy=0, sw=img!.width, sh=img!.height
+            if (srcA > dstA) { sw = Math.round(sh * dstA); sx = (img!.width - sw) / 2 }
+            else { sh = Math.round(sw / dstA); sy = (img!.height - sh) / 2 }
+            ctx.save()
+            ctx.translate(outW/2, outH/2)
+            ctx.scale(scale, scale)
+            ctx.drawImage(img!, sx, sy, sw, sh, -outW/2, -outH/2, outW, outH)
+            ctx.restore()
+            const vig = ctx.createRadialGradient(outW/2, outH/2, outW*0.25, outW/2, outH/2, outW*0.8)
+            vig.addColorStop(0, 'rgba(0,0,0,0.15)'); vig.addColorStop(1, 'rgba(0,0,0,0.55)')
+            ctx.fillStyle = vig; ctx.fillRect(0, 0, outW, outH)
+          } else {
+            ctx.fillStyle = '#0b1a24'; ctx.fillRect(0, 0, outW, outH)
+          }
+          if (hookText) {
+            const sc3 = Math.min(outW, outH) / 1080
+            // Pop-in rapido (non una dissolvenza lenta come il titolo), con un piccolo overshoot —
+            // lo stesso strappo dello zoom sulla foto, applicato al testo.
+            const popT = Math.min(1, hookT / 0.35)
+            const overshoot = popT < 1 ? 1 + 0.08 * Math.sin(popT * Math.PI) : 1
+            const fadeOutStart = 0.82
+            const alpha = hookT > fadeOutStart ? Math.max(0, 1 - (hookT - fadeOutStart) / (1 - fadeOutStart)) : 1
+            ctx.save()
+            ctx.globalAlpha = alpha
+            ctx.translate(outW/2, outH*0.6)
+            ctx.scale(overshoot, overshoot)
+            ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+            ctx.font = `800 ${Math.round(46*sc3)}px -apple-system,sans-serif`
+            const maxW = outW - Math.round(90*sc3)
+            const words = hookText.toUpperCase().split(' ')
+            const lines: string[] = []
+            let cur = ''
+            for (const wd of words) {
+              const test = cur ? cur + ' ' + wd : wd
+              if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = wd } else { cur = test }
+            }
+            if (cur) lines.push(cur)
+            const visLines = lines.slice(0, 3)
+            const lineH = Math.round(56*sc3)
+            const blockH = visLines.length * lineH
+            ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=12*sc3; ctx.shadowOffsetY=2*sc3
+            visLines.forEach((l, i) => ctx.fillText(l, 0, -blockH/2 + lineH/2 + i*lineH))
+            ctx.restore()
+          }
+          if (videoEncoderRef.current) {
+            await waitForEncoderQueue(videoEncoderRef.current)
+            let _vf: InstanceType<typeof VideoFrame> | null = null
+            try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
+            finally { _vf?.close() }
+          }
+          } catch (err) { console.error('[dtrek] hook frame error:', err) }
+          frameCountRef.current++; renderedFramesRef.current++
+          renderNextFrame()
+        })
+        return
+      }
 
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
       if (reveal) {
@@ -2352,7 +2451,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,hookText])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2887,6 +2986,27 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <p className="text-white/45 text-xs mt-0.5">Riordina inquadrature, aggiungi e posiziona le foto</p>
               </div>
               <button onClick={()=>setVideoState('config')} className="text-white/50 hover:text-white"><X className="w-5 h-5"/></button>
+            </div>
+
+            {/* Gancio iniziale (Sezione 4): prima frazione di secondo, pensata per fermare lo
+                scroll sui social — testo suggerito automaticamente (autoHookText), modificabile qui. */}
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-white/45 text-[11px] font-semibold tracking-wider">GANCIO INIZIALE</p>
+                {hookTextOverride!==null&&hookTextOverride!==autoHookText&&(
+                  <button onClick={()=>setHookTextOverride(null)} className="text-[10px] font-semibold text-blue-400 hover:text-blue-300">
+                    Ripristina suggerito
+                  </button>
+                )}
+              </div>
+              <input
+                value={hookText}
+                onChange={e=>setHookTextOverride(e.target.value)}
+                placeholder="Testo che compare nel primo secondo…"
+                maxLength={80}
+                className="w-full bg-white/7 rounded-xl px-3 py-2.5 text-white text-sm font-medium placeholder:text-white/30 outline-none focus:bg-white/10 border border-transparent focus:border-white/20"
+              />
+              <p className="text-white/30 text-[10px] mt-1.5">Suggerito automaticamente dai dati del percorso — lo puoi riscrivere.</p>
             </div>
 
             {/* Shot list */}
