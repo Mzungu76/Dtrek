@@ -20,8 +20,7 @@ import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY } from '@/lib/mapStyles'
 import {
   buildCumulativeDistances, progressToDistanceM, distanceMToProgress, buildJourneyTables,
-  virtualPhotoIndexAt, buildStripOffsets, stripOffsetAt, stopZoomBoost,
-  CAROUSEL_BAND_FRACTION, TOP_BAND_FRACTION, type CarouselPhotoTiming,
+  stopPhotoZoomAt, TOP_BAND_FRACTION, type CarouselPhotoTiming,
 } from '@/lib/videoPhotoCarousel'
 import { suggestStatHookText, suggestCuriosityHookText } from '@/lib/videoHook'
 
@@ -205,87 +204,66 @@ function drawPoiPin(
   ctx.restore()
 }
 
-// ── Photo carousel strip (stile video "Carosello") ─────────────────────────────
-// A differenza della polaroid sotto (schermo intero, telecamera ferma), qui il percorso resta
-// sempre visibile: la mappa non viene ritagliata, questa striscia vi si sovrappone in basso con
-// uno sfondo sfumato (trasparente in alto, più scuro verso il fondo) invece di un riquadro pieno
-// che la coprirebbe — il percorso resta visibile in trasparenza sotto le foto. Vedi
-// lib/videoPhotoCarousel.ts per il timing condiviso con l'anteprima DOM (PhotoCarouselOverlay più
-// sotto). Niente shadowBlur qui di proposito: gli ombreggiamenti sfocati sono uno dei costi
-// per-frame più alti su canvas 2D, e a più miniature per frame per l'intera durata del video il
-// costo si accumula — un bordo netto (senza blur) dà comunque separazione a costo trascurabile.
-const CAROUSEL_BASE_FRAC = 0.50  // dimensione delle miniature non correnti, come frazione dell'altezza della fascia
-const CAROUSEL_PEAK_FRAC = 0.74  // dimensione della miniatura corrente (evidenziata) — chiaramente più grande delle altre
-const CAROUSEL_GAP_FRAC  = 0.06
+// ── Zoom sulla foto in sosta (stile video "Carosello") ──────────────────────────
+// Niente striscia separata: il pin della foto già presente sul percorso si apre — da piccolo come
+// appare in mappa fino a quasi coprire lo schermo — mentre la telecamera è ferma su di esso, poi si
+// richiude. La telecamera è centrata sulle coordinate della foto durante la sosta (vedi il chiamante
+// in goToRendering), quindi l'origine/destinazione dello zoom è semplicemente il centro schermo —
+// non serve calcolare la posizione proiettata del pin. Vedi lib/videoPhotoCarousel.ts
+// stopPhotoZoomAt per la forma temporale (apre/resta/richiude), condivisa con l'anteprima live.
+function aspectFitCrop(imgW: number, imgH: number, targetA: number): { sx: number; sy: number; sw: number; sh: number } {
+  const srcA = imgW / imgH
+  let sx = 0, sy = 0, sw = imgW, sh = imgH
+  if (srcA > targetA) { sw = Math.round(sh * targetA); sx = (imgW - sw) / 2 }
+  else { sh = Math.round(sw / targetA); sy = (imgH - sh) / 2 }
+  return { sx, sy, sw, sh }
+}
 
-function drawPhotoCarouselStrip(
+function drawStopPhotoZoom(
   ctx: CanvasRenderingContext2D,
-  w: number, bandY: number, bandH: number, sc: number,
-  sortedPhotos: { photo: RoutePhoto; img: HTMLImageElement }[],
-  photoTimings: CarouselPhotoTiming[],
-  virtualIndex: number,
+  outW: number, outH: number, sc: number,
+  img: HTMLImageElement, caption: string | undefined,
+  zoomT: number, stopT: number,
 ) {
-  if (sortedPhotos.length === 0) return
-
-  const baseSz = bandH * CAROUSEL_BASE_FRAC, peakSz = bandH * CAROUSEL_PEAK_FRAC, gap = bandH * CAROUSEL_GAP_FRAC
-  // Didascalia SOPRA le foto (non sotto): sui social la parte inferiore dello schermo è spesso
-  // coperta dall'interfaccia della piattaforma (didascalia propria, pulsanti…), quella appena sopra
-  // il centro resta più libera — vedi il disegno della didascalia più sotto.
-  const topMargin = bandH * 0.04, captionAreaH = bandH * 0.14
-  const cy = bandY + topMargin + captionAreaH + peakSz / 2
-
-  // Sfondo sfumato (non pieno): il percorso sotto resta visibile in trasparenza.
-  const scrimTop = Math.max(0, bandY + topMargin * 0.4)
-  const grad = ctx.createLinearGradient(0, scrimTop, 0, bandY + bandH)
-  grad.addColorStop(0, 'rgba(4,10,16,0)')
-  grad.addColorStop(0.3, 'rgba(4,10,16,0.55)')
-  grad.addColorStop(1, 'rgba(4,10,16,0.75)')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, scrimTop, w, bandY + bandH - scrimTop)
-
-  // Scorrimento continuo, spaziatura proporzionale alla distanza REALE tra foto consecutive (con
-  // un minimo garantito — vedi buildStripOffsets) invece che uniforme: due foto scattate a pochi
-  // metri restano vicine nella striscia, due foto lontane lungo il percorso restano distanziate.
-  const step = baseSz + gap
-  const offsets = buildStripOffsets(photoTimings)
-  const centerOffset = stripOffsetAt(virtualIndex, offsets)
-  const originX = w / 2 - centerOffset * step
-
-  sortedPhotos.forEach((s, i) => {
-    const dist = Math.abs(i - virtualIndex)
-    const emphasis = Math.max(0, 1 - Math.min(1, dist))  // 1 al centro, 0 da distanza 1 in su
-    const size = baseSz + (peakSz - baseSz) * emphasis
-    const cx = originX + offsets[i] * step
-    if (cx < -size || cx > w + size) return
-    const img = s.img
-    if (!(img.complete && img.naturalWidth > 0)) return
-    ctx.save()
-    ctx.globalAlpha = 0.6 + 0.4 * emphasis
-    const bx = cx - size / 2, by = cy - size / 2, r = 14 * sc
-    ctx.save(); rrect(ctx, bx, by, size, size, r); ctx.clip()
-    const srcA = img.width / img.height
-    let sx = 0, sy = 0, sw = img.width, sh = img.height
-    if (srcA > 1) { sw = sh; sx = (img.width - sw) / 2 } else { sh = sw; sy = (img.height - sh) / 2 }
-    ctx.drawImage(img, sx, sy, sw, sh, bx, by, size, size)
-    ctx.restore()
-    ctx.strokeStyle = emphasis > 0.05 ? `rgba(56,189,248,${emphasis})` : 'rgba(255,255,255,0.18)'
-    ctx.lineWidth = (emphasis > 0.05 ? 3.5 : 1.5) * sc
-    rrect(ctx, bx, by, size, size, r); ctx.stroke()
-    ctx.restore()
-  })
-
-  // Didascalia della foto corrente, in dissolvenza quando virtualIndex passa da un intero all'altro.
-  const nearestIdx = Math.max(0, Math.min(sortedPhotos.length - 1, Math.round(virtualIndex)))
-  const caption = sortedPhotos[nearestIdx].photo.caption?.trim()
-  if (caption) {
-    const capAlpha = Math.max(0, 1 - Math.min(1, Math.abs(virtualIndex - nearestIdx) / 0.5))
-    ctx.save()
-    ctx.globalAlpha = capAlpha
-    ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
-    ctx.font = `italic ${Math.round(26 * sc)}px Georgia,serif`
-    let cap = caption
-    while (ctx.measureText(cap).width > w - Math.round(60 * sc) && cap.length > 4) cap = cap.slice(0, -4) + '…'
-    ctx.fillText(cap, w / 2, bandY + topMargin)
+  if (!(img.complete && img.naturalWidth > 0)) return
+  const pinPx = Math.round(64 * sc)
+  const dstW = pinPx + (outW - pinPx) * zoomT
+  const dstH = pinPx + (outH - pinPx) * zoomT
+  // Leggero respiro quando è a schermo pieno (non un fermo immagine assoluto) — una lenta deriva,
+  // stessa idea del Ken Burns già usato per la rivelazione a schermo intero dello stile Classico.
+  const breathe = zoomT > 0.995 ? Math.sin(stopT * Math.PI * 2.4) * 0.01 : 0
+  const cx = outW / 2 + outW * breathe, cy = outH / 2
+  const crop = aspectFitCrop(img.width, img.height, dstW / dstH)
+  const r = 14 * sc * (1 - zoomT)
+  const bx = cx - dstW / 2, by = cy - dstH / 2
+  ctx.save()
+  if (zoomT < 0.995) {
+    ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = (1 - zoomT) * 16 * sc; ctx.shadowOffsetY = (1 - zoomT) * 5 * sc
+  }
+  rrect(ctx, bx, by, dstW, dstH, r)
+  ctx.save(); ctx.clip()
+  ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, bx, by, dstW, dstH)
+  ctx.restore()
+  if (zoomT < 0.995) {
+    ctx.strokeStyle = `rgba(255,255,255,${(1 - zoomT) * 0.85})`; ctx.lineWidth = 3 * sc
+    rrect(ctx, bx, by, dstW, dstH, r); ctx.stroke()
+  }
+  ctx.restore()
+  // Vignetta e didascalia solo quando la foto è quasi a schermo intero.
+  if (zoomT > 0.5) {
+    const revealAlpha = (zoomT - 0.5) / 0.5
+    ctx.save(); ctx.globalAlpha = revealAlpha
+    const vig = ctx.createRadialGradient(outW / 2, outH / 2, outW * 0.3, outW / 2, outH / 2, outW * 0.75)
+    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.35)')
+    ctx.fillStyle = vig; ctx.fillRect(0, 0, outW, outH)
+    if (caption) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, outH - Math.round(100 * sc), outW, Math.round(100 * sc))
+      ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.font = `italic ${Math.round(34 * sc)}px Georgia,serif`
+      let cap = caption
+      while (ctx.measureText(cap).width > outW - Math.round(80 * sc) && cap.length > 4) cap = cap.slice(0, -4) + '…'
+      ctx.fillText(cap, outW / 2, outH - Math.round(50 * sc))
+    }
     ctx.restore()
   }
 }
@@ -476,9 +454,9 @@ function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opts: HUDO
 // ── Fascia superiore (stile video "Carosello") ──────────────────────────────────
 // Sostituisce drawHUD/l'elevazione flottante/il callout di vetta/la scheda titolo per questo
 // stile: titolo, statistiche, barra di avanzamento, profilo altimetrico e grafici corpo, tutti
-// consolidati in un'unica fascia dedicata con sfondo pieno (non in overlay sulla mappa) — così tra
-// la mappa (sotto) e il carosello foto (più sotto ancora) non resta alcun testo o grafico. Lo
-// stile "Classico" non usa questa funzione: le sue schermate restano esattamente come prima.
+// consolidati in un'unica fascia in alto — sovrapposta alla mappa con una leggera trasparenza (non
+// una fascia dedicata separata: la mappa resta a schermo intero sotto). Lo stile "Classico" non usa
+// questa funzione: le sue schermate restano esattamente come prima.
 interface TopBandOpts {
   title?: string; showTitle: boolean; showStats: boolean; showProgress: boolean
   coveredKm: number; totalKm: number; alt: number; elevGain: number; progress: number
@@ -487,7 +465,13 @@ interface TopBandOpts {
 }
 
 function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: number, sc: number, opts: TopBandOpts) {
-  ctx.fillStyle = '#0b1a24'
+  // Sfumato (non pieno): la mappa sotto resta visibile in trasparenza, e la fascia sfuma nel nulla
+  // verso il basso invece di tagliare con un bordo netto.
+  const grad = ctx.createLinearGradient(0, 0, 0, bandH)
+  grad.addColorStop(0, 'rgba(6,14,20,0.62)')
+  grad.addColorStop(0.75, 'rgba(6,14,20,0.5)')
+  grad.addColorStop(1, 'rgba(6,14,20,0)')
+  ctx.fillStyle = grad
   ctx.fillRect(0, 0, w, bandH)
   const pad = Math.round(28 * sc)
   let y = pad
@@ -744,76 +728,49 @@ interface Props {
   dtmProfile?: TrailDtmProfile
 }
 
-// ── Photo carousel overlay (anteprima DOM) ──────────────────────────────────────
-// Controparte HTML/CSS di drawPhotoCarouselStrip (sopra) per l'anteprima interattiva — stessa
-// logica di timing e stessa fascia (CAROUSEL_BAND_FRACTION, lib/videoPhotoCarousel.ts), resa con
-// transform CSS invece che su canvas. La mappa MapLibre sotto non viene ridimensionata — questo
-// overlay le si sovrappone con uno sfondo sfumato (non pieno), così resta visibile in trasparenza
-// dietro le foto, esattamente come nel video esportato.
-function PhotoCarouselOverlay({ photos, timings, virtualIndex }: { photos: RoutePhoto[]; timings: CarouselPhotoTiming[]; virtualIndex: number }) {
-  if (photos.length === 0) return null
-  const nearestIdx = Math.max(0, Math.min(photos.length - 1, Math.round(virtualIndex)))
-  const caption = photos[nearestIdx].caption?.trim()
-  const capOpacity = Math.max(0, 1 - Math.min(1, Math.abs(virtualIndex - nearestIdx) / 0.5))
-  // Tutto in vh (non %): il contenitore di RouteMap3D è `fixed inset-0` (100vh), quindi vh qui
-  // corrisponde esattamente a "frazione dello schermo" — evita la trappola dell'altezza percentuale
-  // sui figli di un flex item, che in CSS non si risolve sempre come ci si aspetta.
-  const bandVh  = CAROUSEL_BAND_FRACTION * 100
-  const baseVh  = bandVh * CAROUSEL_BASE_FRAC
-  const peakVh  = bandVh * CAROUSEL_PEAK_FRAC
-  const gapVh   = bandVh * CAROUSEL_GAP_FRAC
-  const stepVh  = baseVh + gapVh
-  // Spaziatura proporzionale alla distanza reale tra foto consecutive (con un minimo garantito),
-  // stessa logica di drawPhotoCarouselStrip (canvas) qui sopra — non uniforme.
-  const offsets = buildStripOffsets(timings)
-  const centerOffset = stripOffsetAt(virtualIndex, offsets)
-  // Didascalia SOPRA le foto (non sotto): sui social la parte inferiore dello schermo è spesso
-  // coperta dall'interfaccia della piattaforma, quella appena sotto il bordo superiore della fascia
-  // resta più libera — stessa scelta di drawPhotoCarouselStrip (canvas) qui sopra.
-  const captionVh = bandVh * 0.14
+// ── Zoom sulla foto in sosta (anteprima DOM) ─────────────────────────────────────
+// Controparte HTML/CSS di drawStopPhotoZoom (sopra) per l'anteprima interattiva — stessa logica di
+// timing (stopPhotoZoomAt, lib/videoPhotoCarousel.ts), resa con dimensioni CSS invece che su
+// canvas. La mappa MapLibre sotto non viene ridimensionata: la telecamera è già centrata sulle
+// coordinate della foto durante la sosta, quindi questo overlay cresce/si richiude dal centro
+// schermo, esattamente come nel video esportato.
+function PhotoZoomOverlay({ photo, zoomT, stopT }: { photo: RoutePhoto | null; zoomT: number; stopT: number }) {
+  if (!photo || zoomT <= 0.001) return null
+  const pinPx = 64
+  const radius = 14 * (1 - zoomT)
+  const revealAlpha = Math.max(0, (zoomT - 0.5) / 0.5)
+  const breathe = zoomT > 0.995 ? Math.sin(stopT * Math.PI * 2.4) * 1 : 0
   return (
-    <div
-      className="absolute inset-x-0 bottom-0 z-30 pointer-events-none flex flex-col items-center"
-      style={{
-        height: `${bandVh}vh`, paddingTop: `${bandVh * 0.04}vh`,
-        background: 'linear-gradient(to bottom, rgba(4,10,16,0) 0%, rgba(4,10,16,0.55) 30%, rgba(4,10,16,0.75) 100%)',
-      }}
-    >
-      <div className="w-full flex items-start justify-center" style={{ height: `${captionVh}vh` }}>
-        {caption && (
-          <p
-            className="text-white text-base italic font-serif text-center px-8 truncate max-w-full"
-            style={{ opacity: capOpacity }}
-          >
-            {caption}
-          </p>
-        )}
+    <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
+      <div
+        className="absolute top-1/2 left-1/2 overflow-hidden"
+        style={{
+          width: `calc(${pinPx}px + (100vw - ${pinPx}px) * ${zoomT})`,
+          height: `calc(${pinPx}px + (100vh - ${pinPx}px) * ${zoomT})`,
+          transform: `translate(calc(-50% + ${breathe}vw), -50%)`,
+          borderRadius: `${radius}px`,
+          boxShadow: zoomT < 0.995
+            ? `0 0 0 3px rgba(255,255,255,${(1 - zoomT) * 0.85}), 0 8px ${Math.round((1 - zoomT) * 24)}px rgba(0,0,0,0.4)`
+            : 'none',
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo.url} alt="" className="w-full h-full object-cover" draggable={false} />
       </div>
-      <div className="relative w-full flex-1 overflow-hidden">
-        <div className="absolute top-0 left-1/2 h-full">
-          {photos.map((photo, i) => {
-            const dist = Math.abs(i - virtualIndex)
-            const emphasis = Math.max(0, 1 - Math.min(1, dist))
-            const sizeVh = baseVh + (peakVh - baseVh) * emphasis
-            const offsetVh = (offsets[i] - centerOffset) * stepVh - sizeVh / 2
-            return (
-              <div
-                key={photo.id}
-                className="absolute top-0 shrink-0 rounded-2xl overflow-hidden"
-                style={{
-                  width: `${sizeVh}vh`, height: `${sizeVh}vh`,
-                  transform: `translateX(${offsetVh}vh)`,
-                  boxShadow: emphasis > 0.05 ? `0 0 0 3px rgba(56,189,248,${emphasis})` : '0 0 0 1.5px rgba(255,255,255,0.18)',
-                  opacity: 0.6 + 0.4 * emphasis,
-                }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.url} alt="" className="w-full h-full object-cover" draggable={false} />
-              </div>
-            )
-          })}
+      {revealAlpha > 0 && (
+        <div
+          className="absolute inset-0"
+          style={{ background: `radial-gradient(circle at center, rgba(0,0,0,0) 30%, rgba(0,0,0,${0.35 * revealAlpha}) 100%)` }}
+        />
+      )}
+      {revealAlpha > 0 && photo.caption && (
+        <div
+          className="absolute inset-x-0 bottom-0 flex items-center justify-center px-8"
+          style={{ height: '100px', background: `rgba(0,0,0,${0.5 * revealAlpha})`, opacity: revealAlpha }}
+        >
+          <p className="text-white text-lg italic font-serif text-center truncate">{photo.caption}</p>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -922,14 +879,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
   const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
   const [photoDurationSec,  setPhotoDurationSec] = useState(3.0)
-  // Stile "Carosello" (Sezione 4): traccia sempre visibile e in movimento, foto in una striscia in
-  // basso invece che a schermo intero — vedi lib/videoPhotoCarousel.ts. Default 'classic' per non
-  // cambiare il comportamento di chi non tocca questa nuova opzione.
+  // Stile "Carosello" (Sezione 4): la telecamera si ferma davvero su ogni foto già presente sul
+  // percorso, che si apre da pin a quasi schermo intero e poi si richiude — vedi
+  // lib/videoPhotoCarousel.ts. Default 'classic' per non cambiare il comportamento di chi non
+  // tocca questa opzione.
   const [videoPhotoStyle,   setVideoPhotoStyle]  = useState<'classic'|'carousel'>('classic')
   // Anteprima dal vivo del carosello (schermata Montaggio) — sostituisce temporaneamente il foglio
-  // impostazioni con la mappa a schermo pieno + la striscia foto, usando lo stesso tick() di
-  // anteprima già presente per lo scrub del percorso fuori dal wizard video.
+  // impostazioni con la mappa a schermo pieno, usando lo stesso tick() di anteprima già presente
+  // per lo scrub del percorso fuori dal wizard video.
   const [previewingCarousel, setPreviewingCarousel] = useState(false)
+  // Foto attualmente in sosta (con il suo avanzamento di zoom 0..1) nell'anteprima carosello — vedi
+  // PhotoZoomOverlay più sotto e lib/videoPhotoCarousel.ts stopPhotoZoomAt.
+  const [previewPhotoZoom, setPreviewPhotoZoom] = useState<{ photo: RoutePhoto | null; zoomT: number; stopT: number }>({ photo: null, zoomT: 0, stopT: 0 })
   // Gancio iniziale — quattro elementi indipendenti, ognuno attivabile/disattivabile e (i due
   // testuali) modificabile: statistica d'impatto, foto migliore, frase su un punto di interesse
   // notevole, intro più rapida. null in *Override = usa il suggerimento automatico.
@@ -1399,7 +1360,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const tick=(ts:number)=>{
       if(!isPlayingRef.current) return
       const dt=lastTsRef.current?ts-lastTsRef.current:16; lastTsRef.current=ts
-      let stopZoom = 0
+      let stoppedPhotoIdx: number | null = null, stopTVal = 0
       if (previewingCarousel) {
         // "Viaggio tra una foto e l'altra" (Sezione 4): sosta vera su ogni foto, poi viaggio verso
         // la successiva a ritmo costante rispetto alla distanza REALE — stessa idea (in forma
@@ -1409,7 +1370,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const stopMs = photoDurationSec * 1000
           const remaining = carouselStopUntilRef.current - ts
           if (remaining <= 0) { carouselStopUntilRef.current = null }
-          else { stopZoom = stopZoomBoost(1 - remaining / stopMs) }
+          else { stopTVal = 1 - remaining / stopMs; stoppedPhotoIdx = carouselNextPhotoRef.current - 1 }
         } else {
           const cruiseMps = totalDistanceM > 0 ? totalDistanceM / Math.max(5, videoDuration) : 3.5
           carouselTraveledMRef.current += cruiseMps * dt / 1000
@@ -1434,7 +1395,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       setCurrentAlt(Math.round(alt)); setCoveredKm(+(progressRef.current*totalKm).toFixed(1))
       const li=Math.min(i0+Math.max(3,Math.round(N*0.015)),N-1)
       const bear=bearingDeg(lat,lon,pts[li].lat!,pts[li].lon!)
-      mapRef.current?.easeTo({center:[lon,lat],bearing:bear,pitch:68,zoom:14.5+stopZoom,duration:180})
+      // Niente più zoom telecamera sul percorso in prossimità di una foto (Sezione 4): è la foto
+      // stessa che ora si ingrandisce a coprire lo schermo, vedi PhotoZoomOverlay più sotto.
+      mapRef.current?.easeTo({center:[lon,lat],bearing:bear,pitch:68,zoom:14.5,duration:180})
+      if (previewingCarousel) {
+        const zoomT = stoppedPhotoIdx !== null ? stopPhotoZoomAt(stopTVal) : 0
+        const timing = stoppedPhotoIdx !== null ? carouselPhotoTimings[stoppedPhotoIdx] : null
+        const photo = timing ? (routePhotos.find(rp => rp.id === timing.id) ?? null) : null
+        setPreviewPhotoZoom({ photo, zoomT, stopT: stopTVal })
+        const markerEl = markerRef.current?.getElement()
+        if (markerEl) markerEl.style.opacity = String(1 - zoomT)
+      }
       // Proximity auto-popup: open the popup of a nearby POI for ~1.5s, only one at a time
       if(showPois&&pois?.length){
         const PROXIMITY_M=40
@@ -1468,7 +1439,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       cancelAnimationFrame(animRef.current)
       if(poiOpenTimeoutRef.current){clearTimeout(poiOpenTimeoutRef.current);poiOpenTimeoutRef.current=null}
     }
-  },[isPlaying,speedIdx,showPois,pois,previewingCarousel,carouselPhotoTimings,cumDist,totalDistanceM,videoDuration,photoDurationSec])
+  },[isPlaying,speedIdx,showPois,pois,previewingCarousel,carouselPhotoTimings,cumDist,totalDistanceM,videoDuration,photoDurationSec,routePhotos])
 
   const reset=useCallback(()=>{
     cancelAnimationFrame(animRef.current); isPlayingRef.current=false; progressRef.current=0
@@ -2062,14 +2033,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       ? Math.round(TARGET_FPS * Math.max(1.1, videoDuration * 0.05))
       : Math.round(TARGET_FPS * Math.max(2, videoDuration * 0.08))
     const isCarousel = videoPhotoStyle === 'carousel'
-    // La mappa resta sempre a schermo intero in basso (mai ritagliata lì) — il carosello vi si
-    // sovrappone con uno sfondo sfumato, non un riquadro pieno che la copre. In alto invece la
-    // mappa VIENE ritagliata: quella fascia ospita titolo/statistiche/grafici, così tra la mappa e
-    // il carosello non resta alcun testo o grafico sovrapposto.
+    // La mappa resta sempre a schermo intero (mai ritagliata) — titolo/statistiche/grafici in alto
+    // (drawTopBand) e la foto in sosta (drawStopPhotoZoom) le si sovrappongono, non la restringono.
     const topBandH = isCarousel ? Math.round(outH * TOP_BAND_FRACTION) : 0
     // Calcolato una sola volta (non ad ogni frame) — distanza reale (non la frazione di progresso,
-    // vedi lib/videoPhotoCarousel.ts) di ogni foto lungo il tracciato; base sia della timeline
-    // "viaggio tra una foto e l'altra" sia della spaziatura proporzionale del carosello.
+    // vedi lib/videoPhotoCarousel.ts) di ogni foto lungo il tracciato; base della timeline "viaggio
+    // tra una foto e l'altra" (buildJourneyTables).
     const photoTimings: CarouselPhotoTiming[] = sortedPhotos.map(s => ({
       id: s.photo.id, progress: s.photo.progress, distanceM: progressToDistanceM(s.photo.progress, cumDist),
     }))
@@ -2368,16 +2337,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           ctx.clearRect(0, 0, outW, outH)
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
-          const crO = coverRect(mapCanvas.width, mapCanvas.height, outW, outH - topBandH)
-          ctx.drawImage(mapCanvas, crO.sx, crO.sy, crO.sw, crO.sh, 0, topBandH, outW, outH - topBandH)
+          const crO = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
+          ctx.drawImage(mapCanvas, crO.sx, crO.sy, crO.sw, crO.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
-          if (isCarousel) { ctx.fillStyle = '#0b1a24'; ctx.fillRect(0, 0, outW, topBandH) }
           const sc2 = Math.min(outW, outH) / 1080
-          const mapMidY = topBandH + (outH - topBandH) / 2
           // User pin visible at start of outro, fades out over first 20%
           if (outroP < 0.2) {
             ctx.globalAlpha = 1 - outroP / 0.2
-            drawMapPin(ctx, outW/2, mapMidY, outW/1080, faceImgRef.current)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
             ctx.globalAlpha = 1
           }
           // End card fades in during outro
@@ -2467,12 +2434,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const routeBear=smoothRouteBears[lookIdx]
         const followShot = currentShots.find(s => s.id === 'follow') ?? currentShots[currentShots.length-1]
         const cam = shotCamera(followShot, routeBear, p, orbitBaseRef)
-        // Piccolo zoom in cinematografico durante la sosta su una foto — sale nella prima parte
-        // della sosta poi resta (vedi lib/videoPhotoCarousel.ts stopZoomBoost).
-        const camZoom = (isCarousel && stopIndex !== undefined) ? cam.zoom + stopZoomBoost(stopT ?? 0) : cam.zoom
+        // Niente più zoom telecamera sul percorso in prossimità di una foto (Sezione 4): è la foto
+        // stessa che ora si ingrandisce a coprire lo schermo durante la sosta, vedi drawStopPhotoZoom.
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
-        smoothZoomRef.current  = lerp(smoothZoomRef.current, camZoom, 0.06)
+        smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom, 0.06)
         // Stesso motivo del commento sopra (fase intro) — qui è il caso più visibile: center
         // cambia a ogni frame seguendo il GPS, quindi un ritardo di un frame nell'elevazione è
         // costante durante tutta la fase "follow", non solo un guizzo isolato.
@@ -2493,8 +2459,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // Skip the call when the cached value already matches — avoids a style recalc
       // every single frame for a value that's constant for the whole intro or follow phase.
       const followIconOpacity = introP !== undefined ? 0 : 1
-      if (lastIconOpacityRef.current.get(photoPinLayerId) !== followIconOpacity) {
-        try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', followIconOpacity); lastIconOpacityRef.current.set(photoPinLayerId, followIconOpacity) } catch {}
+      // Il pin della foto in sosta si "apre" sul canvas (drawStopPhotoZoom) — il suo pin sulla
+      // mappa sfuma via man mano che quello cresce, per non vederli sovrapposti.
+      const stopZoomT = (isCarousel && stopIndex !== undefined) ? stopPhotoZoomAt(stopT ?? 0) : 0
+      const photoIconOpacity = followIconOpacity * (1 - stopZoomT)
+      if (lastIconOpacityRef.current.get(photoPinLayerId) !== photoIconOpacity) {
+        try { map!.setPaintProperty(photoPinLayerId, 'icon-opacity', photoIconOpacity); lastIconOpacityRef.current.set(photoPinLayerId, photoIconOpacity) } catch {}
       }
       if (lastIconOpacityRef.current.get(poiPinLayerId) !== followIconOpacity) {
         try { map!.setPaintProperty(poiPinLayerId, 'icon-opacity', followIconOpacity); lastIconOpacityRef.current.set(poiPinLayerId, followIconOpacity) } catch {}
@@ -2513,46 +2483,48 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // Color grading: applica il grading del preset corrente
         const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
         try { ctx.filter=grading } catch {}
-        // Stile "Carosello": la mappa in basso è ritagliata sotto topBandH (mai a schermo intero
-        // lì) — quella fascia ospita titolo/statistiche/grafici (drawTopBand sotto), così tra la
-        // mappa e il carosello non resta alcun testo o grafico sovrapposto.
-        const crF = coverRect(mapCanvas.width, mapCanvas.height, outW, outH - topBandH)
-        ctx.drawImage(mapCanvas,crF.sx,crF.sy,crF.sw,crF.sh,0,topBandH,outW,outH-topBandH)
+        const crF = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
+        ctx.drawImage(mapCanvas,crF.sx,crF.sy,crF.sw,crF.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
 
         const sc2=Math.min(outW,outH)/1080
-        const mapMidY = topBandH + (outH - topBandH) / 2
+        // Con lo stile "Carosello", durante la sosta su una foto è quest'ultima (drawStopPhotoZoom,
+        // più sotto) a occupare il centro schermo: il pin dell'utente non si disegna in quel caso.
+        const stopZoomTNow = (isCarousel && stopIndex !== undefined) ? stopPhotoZoomAt(stopT ?? 0) : 0
 
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
-        if (introP === undefined) {
-          drawMapPin(ctx, outW/2, mapMidY, outW/1080, faceImgRef.current)
-        } else if (introP > 0.7) {
-          ctx.globalAlpha = (introP - 0.7) / 0.3
-          drawMapPin(ctx, outW/2, mapMidY, outW/1080, faceImgRef.current)
-          ctx.globalAlpha = 1
+        if (stopZoomTNow <= 0.001) {
+          if (introP === undefined) {
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+          } else if (introP > 0.7) {
+            ctx.globalAlpha = (introP - 0.7) / 0.3
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
+            ctx.globalAlpha = 1
+          }
         }
 
         if (isCarousel) {
-          // Tutto (titolo, statistiche, profilo altimetrico, grafici corpo) in un'unica fascia
-          // dedicata in alto — niente scheda titolo a schermo intero né elementi flottanti sulla
-          // mappa per questo stile, vedi drawTopBand.
+          // Titolo, statistiche, profilo altimetrico e grafici corpo in un'unica fascia in alto,
+          // sovrapposta alla mappa con una leggera trasparenza (drawTopBand) — sfuma via mentre la
+          // foto in sosta si ingrandisce (graphAlpha), per non restare addosso alla foto.
           const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
           const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
           const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
-          ctx.fillStyle = '#0b1a24'; ctx.fillRect(0, 0, outW, topBandH)
-          drawTopBand(ctx, outW, topBandH, sc2, {
-            title: displayTitle, showTitle: videoShowTitle, showStats: videoShowStats, showProgress: videoShowProgress,
-            coveredKm: +(p*totalKm).toFixed(1), totalKm: +totalKm.toFixed(1), alt: Math.round(alt), elevGain, progress: p,
-            altitudeSeries, peakRouteP, hrData, speedData,
-          })
+          const graphAlpha = 1 - stopZoomTNow
+          if (graphAlpha > 0.01) {
+            ctx.save(); ctx.globalAlpha = graphAlpha
+            drawTopBand(ctx, outW, topBandH, sc2, {
+              title: displayTitle, showTitle: videoShowTitle, showStats: videoShowStats, showProgress: videoShowProgress,
+              coveredKm: +(p*totalKm).toFixed(1), totalKm: +totalKm.toFixed(1), alt: Math.round(alt), elevGain, progress: p,
+              altitudeSeries, peakRouteP, hrData, speedData,
+            })
+            ctx.restore()
+          }
 
-          // Striscia foto sovrapposta in basso, sfondo sfumato — solo in fase di seguimento, mai
-          // durante l'intro (percorso ancora fermo a p=0, nessuna foto ha ancora senso di essere
-          // "corrente"). Spaziatura proporzionale alla distanza reale tra le foto, non uniforme.
-          if (introP === undefined && sortedPhotos.length > 0) {
-            const virtualIndex = virtualPhotoIndexAt(p, photoTimings)
-            const bandY = Math.round(outH * (1 - CAROUSEL_BAND_FRACTION))
-            drawPhotoCarouselStrip(ctx, outW, bandY, outH - bandY, sc2, sortedPhotos, photoTimings, virtualIndex)
+          // La foto in sosta si apre da pin a quasi schermo intero, poi si richiude — vedi
+          // drawStopPhotoZoom e lib/videoPhotoCarousel.ts stopPhotoZoomAt per la forma temporale.
+          if (stopIndex !== undefined && sortedPhotos[stopIndex]) {
+            drawStopPhotoZoom(ctx, outW, outH, sc2, sortedPhotos[stopIndex].img, sortedPhotos[stopIndex].photo.caption?.trim(), stopZoomTNow, stopT ?? 0)
           }
         } else {
         // Animated elevation profile (upper center, hidden during title card)
@@ -3129,19 +3101,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
 
       {/* Anteprima dal vivo del carosello: sostituisce temporaneamente il foglio Montaggio,
-          lasciando la mappa a schermo pieno visibile dietro la striscia foto — stesso tick() di
-          anteprima già usato per lo scrub del percorso, solo con la telecamera che rallenta
-          (mai ferma) vicino a ogni foto invece di procedere a velocità costante. */}
+          lasciando la mappa a schermo pieno visibile — stesso tick() di anteprima già usato per lo
+          scrub del percorso, con la telecamera che si ferma davvero su ogni foto e la foto stessa
+          che si ingrandisce a coprire lo schermo (PhotoZoomOverlay) invece del percorso che zooma. */}
       {videoState==='postprod'&&previewingCarousel&&(
         <>
-          <PhotoCarouselOverlay
-            photos={routePhotos.filter(p=>!videoExcludedPhotoIds.has(p.id)).sort((a,b)=>a.progress-b.progress)}
-            timings={carouselPhotoTimings}
-            virtualIndex={virtualPhotoIndexAt(progress, carouselPhotoTimings)}
-          />
+          <PhotoZoomOverlay photo={previewPhotoZoom.photo} zoomT={previewPhotoZoom.zoomT} stopT={previewPhotoZoom.stopT}/>
           <div className="absolute inset-x-0 top-0 z-30 flex justify-end px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pointer-events-auto">
             <button
-              onClick={()=>{ setIsPlaying(false); setPreviewingCarousel(false) }}
+              onClick={()=>{
+                setIsPlaying(false); setPreviewingCarousel(false)
+                setPreviewPhotoZoom({ photo: null, zoomT: 0, stopT: 0 })
+                const markerEl = markerRef.current?.getElement()
+                if (markerEl) markerEl.style.opacity = '1'
+              }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/55 backdrop-blur-md text-white text-xs font-semibold shadow-lg">
               <X className="w-3.5 h-3.5"/> Torna al montaggio
             </button>
@@ -3255,14 +3228,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               </div>
             </div>
 
-            {/* Stile foto: Classico (schermo intero, telecamera ferma) vs Carosello (striscia in
-                basso, percorso sempre visibile e in movimento — Sezione 4) */}
+            {/* Stile foto: Classico (schermo intero, telecamera ferma) vs Carosello (la telecamera
+                si ferma sul pin della foto, che si apre a schermo intero e poi si richiude —
+                Sezione 4) */}
             <div className="mb-5">
               <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">STILE FOTO</p>
               <div className="grid grid-cols-2 gap-2">
                 {([
                   {id:'classic' as const,  label:'Classico',  desc:'Schermo intero, telecamera ferma'},
-                  {id:'carousel' as const, label:'Carosello', desc:'Striscia in basso, percorso sempre in moto'},
+                  {id:'carousel' as const, label:'Carosello', desc:'Il pin della foto si apre in primo piano'},
                 ]).map(opt=>(
                   <button key={opt.id} onClick={()=>setVideoPhotoStyle(opt.id)}
                     className={`text-left rounded-xl px-3 py-2.5 border transition-colors ${

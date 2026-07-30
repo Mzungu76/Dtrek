@@ -3,36 +3,17 @@
 // così l'anteprima mostra esattamente quello che il video esportato otterrà.
 //
 // Modello "viaggio tra una foto e l'altra": la telecamera SI FERMA davvero su ogni foto (non un
-// semplice rallentamento) per il tempo di visione, poi viaggia verso la foto successiva a un ritmo
-// costante proporzionale alla distanza REALE (non alla frazione di progresso, che con punti GPS
-// diradati in alcuni tratti non è proporzionale alla distanza vera) — la durata del video è una
-// conseguenza di questo ritmo, non un traguardo fisso da riempire.
+// semplice rallentamento) per il tempo di visione — mentre è ferma, il pin della foto (già
+// presente sul percorso) si ingrandisce fino a quasi coprire lo schermo, poi torna piccolo — poi
+// viaggia verso la foto successiva a un ritmo costante proporzionale alla distanza REALE (non alla
+// frazione di progresso, che con punti GPS diradati in alcuni tratti non è proporzionale alla
+// distanza vera). La durata del video è una conseguenza di questo ritmo, non un traguardo fisso.
 
 export interface CarouselPhotoTiming { id: string; progress: number; distanceM: number }
 
-// Zoom in aggiuntivo (livelli MapLibre) durante la sosta su una foto — piccolo accenno
-// cinematografico, sale nella prima parte della sosta poi resta (non riscende: la sosta finisce e
-// si riparte in viaggio, non serve un rientro morbido). Stessa funzione per render offline e
-// anteprima, un'unica fonte per "quanto zoomare e quando".
-export const STOP_ZOOM_BOOST = 1.1
-export function stopZoomBoost(stopT: number): number {
-  // Smoothstep, non lineare-poi-piatto: la derivata di t²(3-2t) è zero sia a t=0 sia a t=1, quindi
-  // si annulla anche nell'espressione esterna esattamente dove il ramp si aggancia al plateau (a
-  // t/0.3=1) — stesso tipo di correzione già applicata al rallentamento della telecamera, per lo
-  // stesso motivo: un'accelerazione a scatti nello zoom, percepibile come uno sfarfallio.
-  const t = Math.min(1, Math.max(0, stopT) / 0.3)
-  return t * t * (3 - 2 * t) * STOP_ZOOM_BOOST
-}
-
-// Frazione dell'altezza dello schermo riservata in basso al carosello (sfondo sfumato + foto +
-// didascalia) — condivisa da render offline (canvas) e anteprima live (DOM). La mappa NON viene
-// ritagliata a questa zona: il carosello vi si sovrappone con uno sfondo sfumato invece che pieno,
-// così il percorso resta visibile in trasparenza sotto le foto.
-export const CAROUSEL_BAND_FRACTION = 0.34
-
 // Frazione dell'altezza riservata in alto a grafici/testo (titolo, statistiche, barra di
-// avanzamento, profilo altimetrico, grafici FC/velocità) — tra questa fascia e il carosello la
-// mappa resta completamente pulita, senza alcun testo o grafico sovrapposto.
+// avanzamento, profilo altimetrico, grafici FC/velocità) — sovrapposta alla mappa con una leggera
+// trasparenza, non una fascia dedicata separata: la mappa resta a schermo intero.
 export const TOP_BAND_FRACTION = 0.30
 
 // ── Distanza reale lungo il tracciato ──────────────────────────────────────────
@@ -98,7 +79,7 @@ export interface JourneyTables {
 
 /** Costruisce la timeline "sosta su ogni foto, poi viaggio a ritmo costante verso la successiva" —
  *  usata dal render offline (tabella pre-calcolata, budget di frame esatto) e, con lo stesso
- *  algoritmo applicato in modo incrementale, dall'anteprima live (vedi useCarouselJourneyStep). */
+ *  algoritmo applicato in modo incrementale, dall'anteprima live (vedi tick() in RouteMap3D). */
 export function buildJourneyTables(
   fps: number, cumDist: Float64Array, totalDistanceM: number,
   sortedPhotos: CarouselPhotoTiming[], stopSeconds: number, cruiseMps: number,
@@ -136,62 +117,26 @@ export function buildJourneyTables(
   return { totalFrames, pTable, stopIndexTable, stopTTable }
 }
 
-// ── Posizione nel carosello (indice frazionario + spaziatura proporzionale) ────
+// ── Zoom sulla foto durante la sosta ────────────────────────────────────────────
 
-/** Posizione continua (indice frazionario) tra le foto ordinate — es. 1.35 = "un terzo della
- *  strada tra la foto 1 e la foto 2", secondo il PROGRESSO corrente (che durante il viaggio si
- *  muove a ritmo costante rispetto alla distanza reale — vedi buildJourneyTables — quindi anche
- *  questo indice frazionario avanza a ritmo costante, non a scatti). */
-export function virtualPhotoIndexAt(progress: number, sortedPhotos: CarouselPhotoTiming[]): number {
-  const n = sortedPhotos.length
-  if (n === 0) return -1
-  if (n === 1) return 0
-  if (progress <= sortedPhotos[0].progress) return 0
-  if (progress >= sortedPhotos[n - 1].progress) return n - 1
-  for (let i = 0; i < n - 1; i++) {
-    const a = sortedPhotos[i], b = sortedPhotos[i + 1]
-    if (progress >= a.progress && progress <= b.progress) {
-      const span = b.progress - a.progress
-      const t = span > 0 ? (progress - a.progress) / span : 0
-      return i + t
-    }
-  }
-  return n - 1
+// Frazione della sosta dedicata rispettivamente ad aprire e chiudere la foto — nel mezzo resta a
+// schermo pieno (con un leggero respiro, non un fermo immagine assoluto — vedi RouteMap3D).
+const PHOTO_ZOOM_GROW_FRAC = 0.24
+const PHOTO_ZOOM_SHRINK_FRAC = 0.22
+
+function smoothstep(t: number): number {
+  const c = Math.min(1, Math.max(0, t))
+  return c * c * (3 - 2 * c)
 }
 
-const MIN_SLOT_UNITS = 1
-const MAX_SLOT_UNITS = 3.2  // tetto: una foto isolata molto lontana dalle altre non spinge le sue vicine fuori schermo
-
-function median(values: number[]): number {
-  const s = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(s.length / 2)
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
-}
-
-/** Posizione di ogni foto nel carosello, in "unità" (1 unità = spaziatura minima/di base) —
- *  proporzionale alla distanza reale tra foto consecutive, con un minimo garantito così due foto
- *  scattate a pochi metri di distanza restano comunque leggibili invece di sovrapporsi. */
-export function buildStripOffsets(sortedPhotos: CarouselPhotoTiming[]): number[] {
-  if (sortedPhotos.length === 0) return []
-  const offsets = [0]
-  const gaps: number[] = []
-  for (let i = 1; i < sortedPhotos.length; i++) gaps.push(sortedPhotos[i].distanceM - sortedPhotos[i - 1].distanceM)
-  const refGap = gaps.length ? median(gaps) : 1
-  for (let i = 1; i < sortedPhotos.length; i++) {
-    const d = sortedPhotos[i].distanceM - sortedPhotos[i - 1].distanceM
-    const units = refGap > 0 ? Math.min(MAX_SLOT_UNITS, Math.max(MIN_SLOT_UNITS, d / refGap)) : MIN_SLOT_UNITS
-    offsets.push(offsets[i - 1] + units)
-  }
-  return offsets
-}
-
-/** Posizione di scorrimento continua (in unità, vedi buildStripOffsets) per un `virtualIndex`
- *  frazionario — interpola tra le posizioni-unità delle due foto adiacenti. */
-export function stripOffsetAt(virtualIndex: number, offsets: number[]): number {
-  const n = offsets.length
-  if (n === 0) return 0
-  if (virtualIndex <= 0) return offsets[0]
-  if (virtualIndex >= n - 1) return offsets[n - 1]
-  const i0 = Math.floor(virtualIndex), i1 = Math.min(i0 + 1, n - 1), t = virtualIndex - i0
-  return offsets[i0] + (offsets[i1] - offsets[i0]) * t
+/** Quanto è "aperta" la foto (0 = piccola come il pin sul percorso, 1 = quasi a schermo intero) nel
+ *  punto `stopT` (0..1) della sosta corrente — apre, resta aperta, richiude. Smoothstep sui due
+ *  tratti (non lineare-poi-piatto): la derivata si annulla dove il ramp si aggancia al plateau, così
+ *  l'apertura e la chiusura sono sempre un movimento leggero e continuo, mai un salto. */
+export function stopPhotoZoomAt(stopT: number): number {
+  const t = Math.min(1, Math.max(0, stopT))
+  if (t < PHOTO_ZOOM_GROW_FRAC) return smoothstep(t / PHOTO_ZOOM_GROW_FRAC)
+  const shrinkStart = 1 - PHOTO_ZOOM_SHRINK_FRAC
+  if (t > shrinkStart) return smoothstep(1 - (t - shrinkStart) / PHOTO_ZOOM_SHRINK_FRAC)
+  return 1
 }
