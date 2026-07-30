@@ -556,61 +556,6 @@ function cleanupRouteReveal(map: MLMap) {
   try{map.setPaintProperty('route-casing','line-opacity',0.55)}catch{}
 }
 
-// ── Ambient audio generator ────────────────────────────────────────────────────
-
-function createAmbientAudio(
-  audioCtx: AudioContext,
-  dest: MediaStreamAudioDestinationNode,
-  style: 'epico' | 'snappy',
-): { start: () => void; stop: () => void } {
-  const master = audioCtx.createGain()
-  master.gain.setValueAtTime(0, audioCtx.currentTime)
-  master.connect(dest)
-
-  const freqs = style === 'epico'
-    ? [55, 82.4, 110, 164.8]
-    : [65.4, 98, 130.8, 196]
-
-  const allNodes: (OscillatorNode | AudioBufferSourceNode)[] = []
-  freqs.forEach((f, i) => {
-    const osc = audioCtx.createOscillator()
-    osc.type = 'sine'; osc.frequency.value = f
-    const lfo = audioCtx.createOscillator()
-    lfo.type = 'sine'; lfo.frequency.value = 0.04 + i * 0.015
-    const lfoG = audioCtx.createGain(); lfoG.gain.value = f * 0.007
-    lfo.connect(lfoG); lfoG.connect(osc.frequency)
-    const g = audioCtx.createGain(); g.gain.value = 0.22 / freqs.length
-    osc.connect(g); g.connect(master)
-    allNodes.push(osc, lfo)
-  })
-
-  const SR = audioCtx.sampleRate
-  const buf = audioCtx.createBuffer(1, SR * 4, SR)
-  const d = buf.getChannelData(0)
-  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.6
-  const noise = audioCtx.createBufferSource()
-  noise.buffer = buf; noise.loop = true
-  const lp = audioCtx.createBiquadFilter()
-  lp.type = 'lowpass'; lp.frequency.value = style === 'epico' ? 350 : 550; lp.Q.value = 1
-  const ng = audioCtx.createGain(); ng.gain.value = 0.05
-  noise.connect(lp); lp.connect(ng); ng.connect(master)
-  allNodes.push(noise)
-
-  return {
-    start() {
-      allNodes.forEach(n => { try { n.start() } catch {} })
-      master.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 2.5)
-    },
-    // Oscillators/noise loop forever once started — must be stopped explicitly,
-    // otherwise they keep feeding the AudioEncoder during finalize and the
-    // encoder queue never drains (flush() stalls indefinitely).
-    stop() {
-      allNodes.forEach(n => { try { n.stop() } catch {} })
-      try { master.disconnect() } catch {}
-    },
-  }
-}
-
 // ── Elevation profile in video HUD ────────────────────────────────────────────
 
 function drawVideoElevProfile(
@@ -762,12 +707,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const lastIconOpacityRef = useRef<Map<string, number>>(new Map())
   // WebCodecs path refs
   const videoEncoderRef  = useRef<any>(null)
-  const audioEncoderRef  = useRef<any>(null)
   const muxerRef         = useRef<any>(null)
   const muxerTargetRef   = useRef<any>(null)
   const photoPinCleanupRef = useRef<(() => void) | null>(null)
   const poiPinCleanupRef   = useRef<(() => void) | null>(null)
-  const stopAmbientAudioRef = useRef<(() => void) | null>(null)
   const finalizeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const webglLostCleanupRef = useRef<(() => void) | null>(null)
 
@@ -829,7 +772,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [finalizeElapsedSec,setFinalizeElapsedSec]= useState(0)
   const [entertainIdx,      setEntertainIdx]      = useState(0)
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
-  const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
   const [photoDurationSec,  setPhotoDurationSec] = useState(3.0)
   // Stile "Carosello" (Sezione 4): la telecamera si ferma davvero su ogni foto già presente sul
   // percorso, che si apre da pin a quasi schermo intero e poi si richiude — vedi
@@ -860,7 +802,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [zoomIntro,         setZoomIntro]        = useState(10.5)
   const [zoomFollow,        setZoomFollow]        = useState(13.8)
   const [zoomOutro,         setZoomOutro]         = useState(7.5)
-  const audioCtxRef = useRef<AudioContext | null>(null)
   const [captionData,    setCaptionData]    = useState<{caption:string;hashtags:string}|null>(null)
   const [captionLoading, setCaptionLoading] = useState(false)
   const [captionCopied,  setCaptionCopied]  = useState(false)
@@ -1216,9 +1157,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       isPlayingRef.current=false
       if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
       try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
-      try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
-      try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current=null } catch {}
-      try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
       if (finalizeIntervalRef.current) { clearInterval(finalizeIntervalRef.current); finalizeIntervalRef.current=null }
       try { webglLostCleanupRef.current?.() } catch {}
       muxerRef.current=null; muxerTargetRef.current=null
@@ -1565,10 +1503,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       cancelAnimationFrame(animRef.current)
       console.error('[dtrek] video rendering failed:', message)
       try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
-      try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
       muxerRef.current=null; muxerTargetRef.current=null
-      try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current=null } catch {}
-      try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
       if (finalizeIntervalRef.current) { clearInterval(finalizeIntervalRef.current); finalizeIntervalRef.current=null }
       try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current=null } catch {}
       try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current=null } catch {}
@@ -1678,7 +1613,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     const finishRecording = async () => {
       const ve = videoEncoderRef.current
-      const ae = audioEncoderRef.current
       const mx = muxerRef.current
       const tgt = muxerTargetRef.current
       if (!ve) return
@@ -1689,18 +1623,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       setFinalizeElapsedSec(0)
       finalizeIntervalRef.current = setInterval(() => setFinalizeElapsedSec(s => s + 1), 1000)
       try {
-      // Stop ambient audio FIRST: oscillators/noise loop forever once started, so if they
-      // keep feeding the AudioEncoder while we await flush(), the queue never drains and
-      // finalize stalls indefinitely (the original cause of "stuck during compression").
-      try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current = null } catch {}
-      // Flush encoders BEFORE nulling muxer: output callbacks use muxerRef.current.
-      // Guard with a timeout so a stuck encoder (e.g. lost GPU context) surfaces as a
-      // recoverable error instead of leaving the UI frozen on "finalizing" forever.
+      // Flush BEFORE nulling muxer: the output callback uses muxerRef.current. Guard with a
+      // timeout so a stuck encoder (e.g. lost GPU context) surfaces as a recoverable error
+      // instead of leaving the UI frozen on "finalizing" forever.
       try { await withTimeout(ve.flush(), 20000) } catch (err) {
         console.error('video flush:', err)
         try { ve.close() } catch {} // force-release a wedged encoder (e.g. lost GPU context)
       }
-      try { if (ae && ae.state !== 'closed') await withTimeout(ae.flush(), 10000) } catch { try { ae?.close() } catch {} }
       // Sort buffered video chunks by PTS (timestamp) so the muxer receives them in display order,
       // correcting any decode-order reordering from the hardware H.264 encoder.
       videoChunkBuffer.sort((a, b) => a.chunk.timestamp - b.chunk.timestamp)
@@ -1710,7 +1639,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // Finalize container, then null all refs
       try { mx?.finalize() } catch (err) { console.error('mux finalize:', err) }
       muxerRef.current=null; muxerTargetRef.current=null
-      videoEncoderRef.current=null; audioEncoderRef.current=null
+      videoEncoderRef.current=null
       const buf = tgt?.buffer
       if (buf instanceof ArrayBuffer && buf.byteLength > 0) {
         setVideoRecordedBlob(new Blob([buf], { type: 'video/mp4' }))
@@ -1725,7 +1654,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       try { cleanupRouteReveal(map) } catch {}
       try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
       try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current = null } catch {}
-      try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
       if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
       cont.style.width=''; cont.style.height=''; map.resize()
       } finally {
@@ -1735,45 +1663,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
 
     if (hasWebCodecs) {
-      // Each frame gets an explicit timestamp → correct duration regardless of render speed
-      if (videoEnableAudio) {
-        try {
-          const audioCtx = new AudioContext({ sampleRate: 44100 })
-          const audioDest = audioCtx.createMediaStreamDestination()
-          audioCtxRef.current = audioCtx
-          const ambientAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
-          ambientAudio.start()
-          stopAmbientAudioRef.current = ambientAudio.stop
-          if (typeof AudioEncoder !== 'undefined') {
-            const aeCheck = await (AudioEncoder as any).isConfigSupported?.({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100 }).catch(() => null)
-            if (aeCheck?.supported !== false) {
-              const ae = new (AudioEncoder as any)({
-                output: (chunk: any, meta: any) => { try { muxerRef.current?.addAudioChunk(chunk, meta) } catch {} },
-                error: () => {}
-              })
-              ae.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 192_000 })
-              audioEncoderRef.current = ae
-              let audioTimestampUs = 0
-              const proc = audioCtx.createScriptProcessor(4096, 2, 2)
-              proc.onaudioprocess = (e: AudioProcessingEvent) => {
-                if (renderAbortRef.current || ae.state === 'closed') return
-                const l = e.inputBuffer.getChannelData(0), r = e.inputBuffer.getChannelData(1)
-                const buf = new Float32Array(l.length * 2); buf.set(l, 0); buf.set(r, l.length)
-                try {
-                  const ad = new (AudioData as any)({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: l.length, numberOfChannels: 2, timestamp: audioTimestampUs, data: buf })
-                  ae.encode(ad); ad.close()
-                } catch {}
-                audioTimestampUs += l.length / 44100 * 1_000_000
-              }
-              audioCtx.createMediaStreamSource(audioDest.stream).connect(proc)
-              proc.connect(audioCtx.destination)
-              // onaudioprocess keeps firing for as long as proc stays connected, regardless
-              // of whether the oscillators are still producing sound — disconnect it too.
-              stopAmbientAudioRef.current = () => { ambientAudio.stop(); proc.disconnect() }
-            }
-          }
-        } catch {}
-      }
       const { Muxer, ArrayBufferTarget } = await import('mp4-muxer')
       const muxTarget = new ArrayBufferTarget()
       muxerTargetRef.current = muxTarget
@@ -1782,9 +1671,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         video: { codec: 'avc', width: outW, height: outH, frameRate: videoFps },
         fastStart: 'in-memory',
         firstTimestampBehavior: 'offset',
-      }
-      if (videoEnableAudio && audioEncoderRef.current) {
-        muxOpts.audio = { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 }
       }
       muxerRef.current = new Muxer(muxOpts)
       const ve = new VideoEncoder({
@@ -1808,23 +1694,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     } else {
       // MediaRecorder fallback (browsers without WebCodecs)
-      let audioStream: MediaStream | undefined
-      if (videoEnableAudio) {
-        try {
-          const audioCtx = new AudioContext({ sampleRate: 44100 })
-          const audioDest = audioCtx.createMediaStreamDestination()
-          audioCtxRef.current = audioCtx
-          const ambientAudio = createAmbientAudio(audioCtx, audioDest, (['reels','feed45','feed11','snappy'] as const).includes(videoPreset as any) ? 'snappy' : 'epico')
-          ambientAudio.start()
-          stopAmbientAudioRef.current = ambientAudio.stop
-          audioStream = audioDest.stream
-        } catch {}
-      }
       const videoStream=(composite as any).captureStream(videoFps) as MediaStream
-      const stream = audioStream
-        ? new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
-        : videoStream
-      const recorder=new MediaRecorder(stream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:videoFps===60?25_000_000:20_000_000,audioBitsPerSecond:192_000})
+      const recorder=new MediaRecorder(videoStream,{...(mimeType?{mimeType}:{}),videoBitsPerSecond:videoFps===60?25_000_000:20_000_000})
       videoChunksRef.current=[]
       recorder.ondataavailable=(e:BlobEvent)=>{if(e.data.size>0)videoChunksRef.current.push(e.data)}
       recorder.onstop=()=>{
@@ -1834,7 +1705,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         try { cleanupRouteReveal(map) } catch {}
         try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
         try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current = null } catch {}
-        try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
         if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
         cont.style.width=''; cont.style.height=''; map.resize()
         webglLostCleanupRef.current?.()
@@ -2599,7 +2469,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2607,10 +2477,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
     mediaRecorderRef.current=null; compositeCanvasRef.current=null
     try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
-    try { audioEncoderRef.current?.close(); audioEncoderRef.current=null } catch {}
     muxerRef.current=null; muxerTargetRef.current=null
-    try { stopAmbientAudioRef.current?.(); stopAmbientAudioRef.current=null } catch {}
-    try { audioCtxRef.current?.close(); audioCtxRef.current=null } catch {}
     if (finalizeIntervalRef.current) { clearInterval(finalizeIntervalRef.current); finalizeIntervalRef.current=null }
     try { webglLostCleanupRef.current?.() } catch {}
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
@@ -2918,7 +2785,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     switchStyle(VIDEO_PRESETS[pr].styleIdx)
                     setVideoOrientation(VIDEO_PRESETS[pr].orientation)
                     setVideoFps(30)
-                    setVideoEnableAudio(true)
                   }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-blue-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
                     <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
                     <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
@@ -3037,13 +2903,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 ))}
               </div>
               {videoShowPois&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">I punti di interesse non aggiungono tempo al video (a differenza delle foto) — vengono mostrati i {Math.min(MAX_VIDEO_POIS, pois?.length??0)} più rilevanti vicino al percorso.</p>}
-            </div>
-            <div>
-              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">AUDIO</p>
-              <button onClick={()=>setVideoEnableAudio(v=>!v)}
-                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${videoEnableAudio?'bg-white text-stone-900':'bg-white/10 text-white/60 hover:bg-white/20'}`}>
-                {videoEnableAudio?'Colonna sonora ambient — attiva':'Colonna sonora ambient (drone pad)'}
-              </button>
             </div>
             <div>
               <p className="text-white/45 text-[11px] font-semibold mb-3 tracking-wider">ZOOM CINEMATICO</p>
