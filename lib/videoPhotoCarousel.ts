@@ -121,23 +121,50 @@ export function buildJourneyTables(
 
 // Frazione della sosta dedicata rispettivamente ad aprire e chiudere la foto — nel mezzo resta a
 // schermo pieno (con un leggero respiro, non un fermo immagine assoluto — vedi RouteMap3D).
-const PHOTO_ZOOM_GROW_FRAC = 0.24
-const PHOTO_ZOOM_SHRINK_FRAC = 0.22
+// Apertura più lenta e chiusura più rapida (non simmetriche): un elemento che entra in scena con
+// più calma di quanto ne esca è un principio di motion design comune alle interfacce più curate
+// (es. le linee guida Material Design lo raccomandano esplicitamente).
+const PHOTO_ZOOM_GROW_FRAC = 0.27
+const PHOTO_ZOOM_SHRINK_FRAC = 0.17
 
-function smoothstep(t: number): number {
-  const c = Math.min(1, Math.max(0, t))
-  return c * c * (3 - 2 * c)
+/** Ease-out-"back": supera leggermente il traguardo (1) e torna indietro, invece di fermarsi di
+ *  scatto — lo stesso "rimbalzo" morbido usato dalle transizioni di apertura nelle app più curate
+ *  (fogli modali iOS, anteprime Google Foto). `overshoot` più basso del classico 1.70158 di
+ *  Penner: qui deve restare un accenno elegante, non un rimbalzo vistoso. Raggiunge esattamente 0
+ *  a t=0 e 1 a t=1, con derivata nulla a t=1 — si aggancia senza scatti al plateau successivo. */
+function easeOutBack(t: number): number {
+  const c1 = 1.15, c3 = c1 + 1
+  const p = t - 1
+  return 1 + c3 * p ** 3 + c1 * p ** 2
+}
+
+/** Ease-in parabolico: parte con derivata nulla (aggancio morbido dal plateau) e accelera verso la
+ *  chiusura — una richiusura che parte piano e si fa via via più rapida, non lineare. */
+function easeInQuad(u: number): number {
+  return 1 - u * u
 }
 
 /** Quanto è "aperta" la foto (0 = piccola come il pin sul percorso, 1 = polaroid ben visibile, con
  *  un bordo sempre presente attorno — mai a schermo intero, per non sembrare un errore di crop) nel
- *  punto `stopT` (0..1) della sosta corrente — apre, resta aperta, richiude. Smoothstep sui due
- *  tratti (non lineare-poi-piatto): la derivata si annulla dove il ramp si aggancia al plateau, così
- *  l'apertura e la chiusura sono sempre un movimento leggero e continuo, mai un salto. */
+ *  punto `stopT` (0..1) della sosta corrente — apre (con un leggero superamento elegante), resta
+ *  aperta, richiude (accelerando). Entrambi i tratti si agganciano al plateau con derivata nulla,
+ *  così l'apertura e la chiusura sono sempre un movimento continuo, mai un salto. */
 export function stopPhotoZoomAt(stopT: number): number {
   const t = Math.min(1, Math.max(0, stopT))
-  if (t < PHOTO_ZOOM_GROW_FRAC) return smoothstep(t / PHOTO_ZOOM_GROW_FRAC)
+  if (t < PHOTO_ZOOM_GROW_FRAC) return easeOutBack(t / PHOTO_ZOOM_GROW_FRAC)
   const shrinkStart = 1 - PHOTO_ZOOM_SHRINK_FRAC
-  if (t > shrinkStart) return smoothstep(1 - (t - shrinkStart) / PHOTO_ZOOM_SHRINK_FRAC)
+  if (t > shrinkStart) return easeInQuad((t - shrinkStart) / PHOTO_ZOOM_SHRINK_FRAC)
   return 1
+}
+
+// ── Rotazione polaroid ──────────────────────────────────────────────────────────
+
+/** Piccola rotazione fissa (gradi, positiva o negativa) per la foto `photoId` — diversa da foto a
+ *  foto ma sempre la stessa per la STESSA foto (hash deterministico dell'id, non Math.random():
+ *  altrimenti cambierebbe ad ogni chiamata/frame invece di restare fissa per tutta la sosta), per
+ *  dare varietà senza che nessuna polaroid sia mai perfettamente ortogonale allo schermo. */
+export function polaroidRotationDeg(photoId: string, maxDeg = 5): number {
+  let h = 0
+  for (let i = 0; i < photoId.length; i++) h = (h * 31 + photoId.charCodeAt(i)) | 0
+  return ((h % 1000) / 1000) * maxDeg
 }
