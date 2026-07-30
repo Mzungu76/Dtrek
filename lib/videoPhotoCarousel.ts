@@ -7,6 +7,10 @@
 
 export interface CarouselPhotoTiming { id: string; progress: number }
 
+// Frazione dell'altezza dello schermo riservata alla fascia foto in basso — condivisa da render
+// offline (canvas) e anteprima live (DOM) così le due viste occupano esattamente lo stesso layout.
+export const CAROUSEL_BAND_FRACTION = 0.46
+
 // Quanto (in frazione di progresso 0..1 del percorso) la telecamera rallenta avvicinandosi a una
 // foto, e per quanto resta "in primo piano" nel carosello — stessa manopola per entrambi gli
 // effetti: rallentare più a lungo vicino a una foto la mantiene anche più a lungo al centro della
@@ -19,9 +23,13 @@ const MIN_SPEED_FACTOR = 0.35
 function windowFactor(progress: number, photoProgress: number): number {
   const d = Math.abs(progress - photoProgress)
   if (d >= HIGHLIGHT_WINDOW) return 1
-  // Ease coseno: 1 lontano dalla foto, MIN_SPEED_FACTOR esattamente sopra di essa.
   const t = d / HIGHLIGHT_WINDOW
-  return MIN_SPEED_FACTOR + (1 - MIN_SPEED_FACTOR) * (1 - Math.cos(t * Math.PI / 2))
+  // Smoothstep (t²(3-2t)), non un ease coseno: la derivata è zero a ENTRAMBI gli estremi (t=0,
+  // il punto più lento, e t=1, dove si ricongiunge alla velocità di crociera). Con l'ease coseno
+  // usato prima, la derivata a t=1 non era zero — un salto di accelerazione della telecamera
+  // esattamente al bordo della finestra, ripetuto una volta per foto, visibile come sfarfallio nel
+  // video (la fluidità della camera dipende dalla derivata del progresso, non solo dal suo valore).
+  return MIN_SPEED_FACTOR + (1 - MIN_SPEED_FACTOR) * (t * t * (3 - 2 * t))
 }
 
 /** Fattore di velocità 0..1 della telecamera nel punto `progress` del percorso — 1 = velocità di
