@@ -18,7 +18,7 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY } from '@/lib/mapStyles'
-import { speedFactorAt, buildWarpedProgressTable, virtualPhotoIndexAt, CAROUSEL_BAND_FRACTION, type CarouselPhotoTiming } from '@/lib/videoPhotoCarousel'
+import { speedFactorAt, zoomBoostAt, buildWarpedProgressTable, virtualPhotoIndexAt, CAROUSEL_BAND_FRACTION, type CarouselPhotoTiming } from '@/lib/videoPhotoCarousel'
 
 const SPEEDS = [
   { label: '½×', v: 0.5 },
@@ -222,10 +222,14 @@ function drawPhotoCarouselStrip(
   if (sortedPhotos.length === 0) return
 
   const baseSz = bandH * CAROUSEL_BASE_FRAC, peakSz = bandH * CAROUSEL_PEAK_FRAC, gap = bandH * CAROUSEL_GAP_FRAC
-  const cy = bandY + bandH * 0.06 + peakSz / 2  // margine sopra, spazio sotto per la didascalia
+  // Didascalia SOPRA le foto (non sotto): sui social la parte inferiore dello schermo è spesso
+  // coperta dall'interfaccia della piattaforma (didascalia propria, pulsanti…), quella appena sopra
+  // il centro resta più libera — vedi il disegno della didascalia più sotto.
+  const topMargin = bandH * 0.05, captionAreaH = bandH * 0.16
+  const cy = bandY + topMargin + captionAreaH + peakSz / 2
 
   // Sfondo sfumato (non pieno): il percorso sotto resta visibile in trasparenza.
-  const scrimTop = Math.max(0, cy - peakSz / 2 - bandH * 0.05)
+  const scrimTop = Math.max(0, bandY + topMargin * 0.4)
   const grad = ctx.createLinearGradient(0, scrimTop, 0, bandY + bandH)
   grad.addColorStop(0, 'rgba(4,10,16,0)')
   grad.addColorStop(0.3, 'rgba(4,10,16,0.55)')
@@ -271,7 +275,7 @@ function drawPhotoCarouselStrip(
     ctx.font = `italic ${Math.round(26 * sc)}px Georgia,serif`
     let cap = caption
     while (ctx.measureText(cap).width > w - Math.round(60 * sc) && cap.length > 4) cap = cap.slice(0, -4) + '…'
-    ctx.fillText(cap, w / 2, cy + peakSz / 2 + Math.round(16 * sc))
+    ctx.fillText(cap, w / 2, bandY + topMargin)
     ctx.restore()
   }
 }
@@ -671,14 +675,28 @@ function PhotoCarouselOverlay({ photos, virtualIndex }: { photos: RoutePhoto[]; 
   const peakVh  = bandVh * 0.68
   const gapVh   = bandVh * 0.05
   const stepVh  = baseVh + gapVh
+  // Didascalia SOPRA le foto (non sotto): sui social la parte inferiore dello schermo è spesso
+  // coperta dall'interfaccia della piattaforma, quella appena sotto il bordo superiore della fascia
+  // resta più libera — stessa scelta di drawPhotoCarouselStrip (canvas) qui sopra.
+  const captionVh = bandVh * 0.16
   return (
     <div
       className="absolute inset-x-0 bottom-0 z-30 pointer-events-none flex flex-col items-center"
       style={{
-        height: `${bandVh}vh`, paddingTop: `${bandVh * 0.06}vh`,
+        height: `${bandVh}vh`, paddingTop: `${bandVh * 0.05}vh`,
         background: 'linear-gradient(to bottom, rgba(4,10,16,0) 0%, rgba(4,10,16,0.55) 30%, rgba(4,10,16,0.75) 100%)',
       }}
     >
+      <div className="w-full flex items-start justify-center" style={{ height: `${captionVh}vh` }}>
+        {caption && (
+          <p
+            className="text-white text-base italic font-serif text-center px-8 truncate max-w-full"
+            style={{ opacity: capOpacity }}
+          >
+            {caption}
+          </p>
+        )}
+      </div>
       <div className="relative w-full flex-1 overflow-hidden">
         <div className="absolute top-0 left-1/2 flex items-start h-full" style={{ gap: `${gapVh}vh` }}>
           {photos.map((photo, i) => {
@@ -704,14 +722,6 @@ function PhotoCarouselOverlay({ photos, virtualIndex }: { photos: RoutePhoto[]; 
           })}
         </div>
       </div>
-      {caption && (
-        <p
-          className="text-white text-base italic font-serif text-center px-8 truncate max-w-full pb-3"
-          style={{ opacity: capOpacity }}
-        >
-          {caption}
-        </p>
-      )}
     </div>
   )
 }
@@ -1264,7 +1274,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       setCurrentAlt(Math.round(alt)); setCoveredKm(+(progressRef.current*totalKm).toFixed(1))
       const li=Math.min(i0+Math.max(3,Math.round(N*0.015)),N-1)
       const bear=bearingDeg(lat,lon,pts[li].lat!,pts[li].lon!)
-      mapRef.current?.easeTo({center:[lon,lat],bearing:bear,pitch:68,zoom:14.5,duration:180})
+      // Stesso piccolo zoom in cinematografico dell'export, vicino a una foto — solo in anteprima
+      // carosello, così "Anteprima carosello" mostra davvero cosa si otterrà.
+      const previewZoom = previewingCarousel ? 14.5 + zoomBoostAt(progressRef.current, carouselPhotoTimings) : 14.5
+      mapRef.current?.easeTo({center:[lon,lat],bearing:bear,pitch:68,zoom:previewZoom,duration:180})
       // Proximity auto-popup: open the popup of a nearby POI for ~1.5s, only one at a time
       if(showPois&&pois?.length){
         const PROXIMITY_M=40
@@ -1892,6 +1905,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // hudAreaH riserva comunque spazio all'HUD (stat/barra progresso) SOPRA quella zona, così i due
     // non si accavallano, senza bisogno di rimpicciolire la mappa stessa per ottenerlo.
     const hudAreaH = isCarousel ? Math.round(outH * (1 - CAROUSEL_BAND_FRACTION)) : outH
+    // Calcolato una sola volta (non ad ogni frame) — riusato dalla tabella di deformazione, dal
+    // boost di zoom e dallo scorrimento del carosello, tutti guidati dallo stesso segnale.
+    const photoTimings: CarouselPhotoTiming[] = sortedPhotos.map(s => ({id: s.photo.id, progress: s.photo.progress}))
     const photoTriggerRouteFrames = sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
     // Outro: separate phase after route completes (~17% of route duration, min 3s)
     const OUTRO_FRAMES = Math.round(TARGET_FPS * Math.max(3, videoDuration * 0.17))
@@ -1914,7 +1930,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // frame lineari, ma la telecamera rallenta (mai fino a fermarsi) vicino a ogni foto — vedi
     // lib/videoPhotoCarousel.ts, stessa funzione usata dall'anteprima live in tick().
     const carouselWarpedProgress = isCarousel
-      ? buildWarpedProgressTable(ROUTE_FRAMES, sortedPhotos.map(s => ({id: s.photo.id, progress: s.photo.progress})))
+      ? buildWarpedProgressTable(ROUTE_FRAMES, photoTimings)
       : null
 
     const frameToState = (frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number} => {
@@ -2179,9 +2195,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const routeBear=smoothRouteBears[lookIdx]
         const followShot = currentShots.find(s => s.id === 'follow') ?? currentShots[currentShots.length-1]
         const cam = shotCamera(followShot, routeBear, p, orbitBaseRef)
+        // Piccolo zoom in cinematografico quando la telecamera è vicino a una foto — stesso segnale
+        // di prossimità che la rallenta (vedi lib/videoPhotoCarousel.ts), un accenno non un cambio
+        // di inquadratura.
+        const camZoom = isCarousel ? cam.zoom + zoomBoostAt(p, photoTimings) : cam.zoom
         smoothBearRef.current  = lerpAngle(smoothBearRef.current, cam.bearing, 0.022)
         smoothPitchRef.current = lerp(smoothPitchRef.current, cam.pitch, 0.06)
-        smoothZoomRef.current  = lerp(smoothZoomRef.current, cam.zoom, 0.06)
+        smoothZoomRef.current  = lerp(smoothZoomRef.current, camZoom, 0.06)
         // Stesso motivo del commento sopra (fase intro) — qui è il caso più visibile: center
         // cambia a ogni frame seguendo il GPS, quindi un ritardo di un frame nell'elevazione è
         // costante durante tutta la fase "follow", non solo un guizzo isolato.
@@ -2278,24 +2298,38 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
         // HUD (skip if title card is prominent)
         const showHUD = !(videoShowTitle&&displayTitle&&frameIdx<TITLE_DUR&&frameIdx<Math.round(TARGET_FPS*1.5))
-        // Stile "Carosello": i grafici FC/velocità competono con la striscia foto per lo stesso
-        // spazio in basso — la striscia diventa il contenuto principale di quella zona, i grafici
-        // corpo restano disattivati per questo stile indipendentemente dal toggle "Corpo".
-        const showBodyForHud = videoShowBody && !isCarousel
+        const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
+        const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
+        const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
+
+        // Stile "Carosello": i grafici FC/velocità vanno nella parte alta, sotto il profilo
+        // altimetrico — in basso c'è ormai il carosello foto, non c'è più spazio lì. Stile
+        // "Classico": restano dentro drawHUD in basso, come sempre (vedi showBody sotto).
+        if (isCarousel && (hrData||speedData) && !(videoShowTitle&&displayTitle&&frameIdx<Math.round(TARGET_FPS*1.8))) {
+          const topPad=Math.round(40*sc2), topGap=Math.round(14*sc2)
+          const topY=Math.round(18*sc2)+Math.round(34*sc2)+topGap, topH=Math.round(88*sc2)
+          if (hrData && speedData) {
+            const half=Math.floor((outW-2*topPad-topGap)/2)
+            drawGraph(ctx,topPad,topY,half,topH,sc2,p,hrData)
+            drawGraph(ctx,topPad+half+topGap,topY,half,topH,sc2,p,speedData)
+          } else {
+            drawGraph(ctx,topPad,topY,outW-2*topPad,topH,sc2,p,(hrData??speedData)!)
+          }
+        }
+
         if(showHUD){
-          const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
-          const hrData:GraphData|undefined=(hasHr&&showBodyForHud)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
-          const speedData:GraphData|undefined=(hasSpeed&&showBodyForHud)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
           // HUD ancorato a hudAreaH (non outH): con lo stile Carosello riserva la fascia in basso
-          // al carosello, così le due cose non si accavallano, senza ritagliare la mappa stessa.
-          drawHUD(ctx,outW,hudAreaH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:showBodyForHud,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
+          // al carosello, così le due cose non si accavallano, senza ritagliare la mappa stessa. I
+          // grafici corpo, per questo stile, li ha già disegnati il blocco sopra — showBody:false
+          // qui ne evita un secondo disegno in basso, addosso al carosello.
+          drawHUD(ctx,outW,hudAreaH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody&&!isCarousel,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
         }
 
         // Striscia foto sovrapposta in basso, sfondo sfumato (stile "Carosello") — solo in fase di
         // seguimento, mai durante l'intro (percorso ancora fermo a p=0, nessuna foto ha ancora
         // senso di essere "corrente").
         if (isCarousel && introP === undefined && sortedPhotos.length > 0) {
-          const virtualIndex = virtualPhotoIndexAt(p, sortedPhotos.map(s => ({id: s.photo.id, progress: s.photo.progress})))
+          const virtualIndex = virtualPhotoIndexAt(p, photoTimings)
           drawPhotoCarouselStrip(ctx, outW, hudAreaH, outH - hudAreaH, sc2, sortedPhotos, virtualIndex)
         }
 

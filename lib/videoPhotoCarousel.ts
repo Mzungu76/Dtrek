@@ -13,33 +13,47 @@ export interface CarouselPhotoTiming { id: string; progress: number }
 // sfumato invece che pieno, così il percorso resta visibile in trasparenza sotto le foto.
 export const CAROUSEL_BAND_FRACTION = 0.34
 
-// Quanto (in frazione di progresso 0..1 del percorso) la telecamera rallenta avvicinandosi a una
-// foto, e per quanto resta "in primo piano" nel carosello — stessa manopola per entrambi gli
-// effetti: rallentare più a lungo vicino a una foto la mantiene anche più a lungo al centro della
-// striscia, senza bisogno di due parametri separati da tenere sincronizzati.
-const HIGHLIGHT_WINDOW = 0.075
+// Quanto (in frazione di progresso 0..1 del percorso) si estende l'effetto "vicino a una foto" —
+// rallentamento della telecamera, zoom in leggero — deviazione standard di una gaussiana, non il
+// raggio di una finestra rigida: vedi photoProximityAt sul perché.
+const PROXIMITY_SIGMA = 0.032
 // La telecamera non deve mai fermarsi (richiesta esplicita) — ma vicino a una foto rallenta molto,
 // quasi a fermarsi (12% della velocità di crociera), per dare tempo di guardarla.
 const MIN_SPEED_FACTOR = 0.12
+// Zoom in aggiuntivo (livelli MapLibre) al centro dell'effetto — piccolo, un accenno cinematografico
+// non un cambio di inquadratura vero e proprio.
+const MAX_ZOOM_BOOST = 1.1
 
-function windowFactor(progress: number, photoProgress: number): number {
-  const d = Math.abs(progress - photoProgress)
-  if (d >= HIGHLIGHT_WINDOW) return 1
-  const t = d / HIGHLIGHT_WINDOW
-  // Smoothstep (t²(3-2t)), non un ease coseno: la derivata è zero a ENTRAMBI gli estremi (t=0,
-  // il punto più lento, e t=1, dove si ricongiunge alla velocità di crociera). Con l'ease coseno
-  // usato prima, la derivata a t=1 non era zero — un salto di accelerazione della telecamera
-  // esattamente al bordo della finestra, ripetuto una volta per foto, visibile come sfarfallio nel
-  // video (la fluidità della camera dipende dalla derivata del progresso, non solo dal suo valore).
-  return MIN_SPEED_FACTOR + (1 - MIN_SPEED_FACTOR) * (t * t * (3 - 2 * t))
+function bumpAt(progress: number, photoProgress: number): number {
+  const d = (progress - photoProgress) / PROXIMITY_SIGMA
+  return Math.exp(-0.5 * d * d)
+}
+
+/** Quanto "dentro" l'effetto foto ci troviamo in `progress` — 0 lontano da ogni foto, fino a 1
+ *  esattamente su una foto (o tra più foto vicine abbastanza da sovrapporsi). Somma di gaussiane,
+ *  non un minimo tra finestre rigide: con foto vicine tra loro, un minimo passa bruscamente il
+ *  controllo dall'una all'altra a metà strada — proprio lì la derivata non è più continua (stesso
+ *  problema, tra due foto invece che al bordo di una sola, del kink coseno già corretto altrove in
+ *  questo file), percepito come un'accelerazione a scatti. La somma invece si fonde in un unico
+ *  avvallamento liscio quando le foto sono vicine, e si comporta come prima quando sono lontane
+ *  (i contributi delle altre foto sono già trascurabili a quella distanza). */
+export function photoProximityAt(progress: number, photos: CarouselPhotoTiming[]): number {
+  let sum = 0
+  for (const ph of photos) sum += bumpAt(progress, ph.progress)
+  return Math.min(1, sum)
 }
 
 /** Fattore di velocità 0..1 della telecamera nel punto `progress` del percorso — 1 = velocità di
  *  crociera, scende (mai a zero) quando `progress` è vicino alla posizione di una foto. */
 export function speedFactorAt(progress: number, photos: CarouselPhotoTiming[]): number {
-  let factor = 1
-  for (const ph of photos) factor = Math.min(factor, windowFactor(progress, ph.progress))
-  return factor
+  return 1 - (1 - MIN_SPEED_FACTOR) * photoProximityAt(progress, photos)
+}
+
+/** Zoom in aggiuntivo (0..MAX_ZOOM_BOOST) da sommare allo zoom di crociera della telecamera —
+ *  stesso segnale di "vicinanza" di speedFactorAt, un piccolo accenno cinematografico quando la
+ *  telecamera rallenta vicino a una foto. */
+export function zoomBoostAt(progress: number, photos: CarouselPhotoTiming[]): number {
+  return photoProximityAt(progress, photos) * MAX_ZOOM_BOOST
 }
 
 /** Tabella pre-calcolata frame→progresso "deformato": stesso traguardo finale (progresso 1
