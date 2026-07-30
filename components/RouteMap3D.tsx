@@ -202,14 +202,16 @@ function drawPoiPin(
 
 // ── Photo carousel strip (stile video "Carosello") ─────────────────────────────
 // A differenza della polaroid sotto (schermo intero, telecamera ferma), qui il percorso resta
-// sempre visibile sopra la striscia, in una fascia dedicata — vedi lib/videoPhotoCarousel.ts per
-// il timing condiviso con l'anteprima DOM (PhotoCarouselOverlay più sotto). Niente shadowBlur qui
-// di proposito: gli ombreggiamenti sfocati sono uno dei costi per-frame più alti su canvas 2D, e a
-// più miniature per frame per l'intera durata del video il costo si accumula — un bordo netto
-// (senza blur) dà comunque separazione dallo sfondo scuro della fascia a costo trascurabile.
-const CAROUSEL_BASE_FRAC = 0.40  // dimensione delle miniature non correnti, come frazione dell'altezza della fascia
-const CAROUSEL_PEAK_FRAC = 0.66  // dimensione della miniatura corrente (evidenziata)
-const CAROUSEL_GAP_FRAC  = 0.045
+// sempre visibile: la mappa non viene ritagliata, questa striscia vi si sovrappone in basso con
+// uno sfondo sfumato (trasparente in alto, più scuro verso il fondo) invece di un riquadro pieno
+// che la coprirebbe — il percorso resta visibile in trasparenza sotto le foto. Vedi
+// lib/videoPhotoCarousel.ts per il timing condiviso con l'anteprima DOM (PhotoCarouselOverlay più
+// sotto). Niente shadowBlur qui di proposito: gli ombreggiamenti sfocati sono uno dei costi
+// per-frame più alti su canvas 2D, e a più miniature per frame per l'intera durata del video il
+// costo si accumula — un bordo netto (senza blur) dà comunque separazione a costo trascurabile.
+const CAROUSEL_BASE_FRAC = 0.42  // dimensione delle miniature non correnti, come frazione dell'altezza della fascia
+const CAROUSEL_PEAK_FRAC = 0.68  // dimensione della miniatura corrente (evidenziata)
+const CAROUSEL_GAP_FRAC  = 0.05
 
 function drawPhotoCarouselStrip(
   ctx: CanvasRenderingContext2D,
@@ -217,12 +219,19 @@ function drawPhotoCarouselStrip(
   sortedPhotos: { photo: RoutePhoto; img: HTMLImageElement }[],
   virtualIndex: number,
 ) {
-  // Lo sfondo pieno della fascia lo disegna già il chiamante (sempre, anche senza foto — vedi i
-  // commenti "Fascia carosello" nei blocchi intro/seguimento/finale) — qui solo le miniature.
   if (sortedPhotos.length === 0) return
 
   const baseSz = bandH * CAROUSEL_BASE_FRAC, peakSz = bandH * CAROUSEL_PEAK_FRAC, gap = bandH * CAROUSEL_GAP_FRAC
-  const cy = bandY + bandH * 0.08 + peakSz / 2  // margine sopra, spazio sotto per la didascalia
+  const cy = bandY + bandH * 0.06 + peakSz / 2  // margine sopra, spazio sotto per la didascalia
+
+  // Sfondo sfumato (non pieno): il percorso sotto resta visibile in trasparenza.
+  const scrimTop = Math.max(0, cy - peakSz / 2 - bandH * 0.05)
+  const grad = ctx.createLinearGradient(0, scrimTop, 0, bandY + bandH)
+  grad.addColorStop(0, 'rgba(4,10,16,0)')
+  grad.addColorStop(0.3, 'rgba(4,10,16,0.55)')
+  grad.addColorStop(1, 'rgba(4,10,16,0.75)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, scrimTop, w, bandY + bandH - scrimTop)
 
   // Scorrimento continuo: tiene centrata la miniatura a `virtualIndex`.
   const step = baseSz + gap
@@ -646,9 +655,9 @@ interface Props {
 // ── Photo carousel overlay (anteprima DOM) ──────────────────────────────────────
 // Controparte HTML/CSS di drawPhotoCarouselStrip (sopra) per l'anteprima interattiva — stessa
 // logica di timing e stessa fascia (CAROUSEL_BAND_FRACTION, lib/videoPhotoCarousel.ts), resa con
-// transform CSS invece che su canvas. La mappa MapLibre sotto non viene ridimensionata per davvero
-// (richiederebbe toccare il container/canvas interattivo) — la fascia con sfondo pieno la copre
-// visivamente allo stesso modo, sufficiente per un'anteprima.
+// transform CSS invece che su canvas. La mappa MapLibre sotto non viene ridimensionata — questo
+// overlay le si sovrappone con uno sfondo sfumato (non pieno), così resta visibile in trasparenza
+// dietro le foto, esattamente come nel video esportato.
 function PhotoCarouselOverlay({ photos, virtualIndex }: { photos: RoutePhoto[]; virtualIndex: number }) {
   if (photos.length === 0) return null
   const nearestIdx = Math.max(0, Math.min(photos.length - 1, Math.round(virtualIndex)))
@@ -658,14 +667,17 @@ function PhotoCarouselOverlay({ photos, virtualIndex }: { photos: RoutePhoto[]; 
   // corrisponde esattamente a "frazione dello schermo" — evita la trappola dell'altezza percentuale
   // sui figli di un flex item, che in CSS non si risolve sempre come ci si aspetta.
   const bandVh  = CAROUSEL_BAND_FRACTION * 100
-  const baseVh  = bandVh * 0.38
-  const peakVh  = bandVh * 0.62
-  const gapVh   = bandVh * 0.045
+  const baseVh  = bandVh * 0.42
+  const peakVh  = bandVh * 0.68
+  const gapVh   = bandVh * 0.05
   const stepVh  = baseVh + gapVh
   return (
     <div
-      className="absolute inset-x-0 bottom-0 z-30 pointer-events-none bg-[#0b1a24] flex flex-col items-center"
-      style={{ height: `${bandVh}vh`, paddingTop: `${bandVh * 0.08}vh` }}
+      className="absolute inset-x-0 bottom-0 z-30 pointer-events-none flex flex-col items-center"
+      style={{
+        height: `${bandVh}vh`, paddingTop: `${bandVh * 0.06}vh`,
+        background: 'linear-gradient(to bottom, rgba(4,10,16,0) 0%, rgba(4,10,16,0.55) 30%, rgba(4,10,16,0.75) 100%)',
+      }}
     >
       <div className="relative w-full flex-1 overflow-hidden">
         <div className="absolute top-0 left-1/2 flex items-start h-full" style={{ gap: `${gapVh}vh` }}>
@@ -1875,12 +1887,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // le foto scorrono nella striscia in basso senza aggiungere tempo al video, la telecamera
     // rallenta invece di fermarsi — vedi warpedProgress sotto.
     const isCarousel = videoPhotoStyle === 'carousel'
-    // Con lo stile Carosello la mappa occupa solo la parte superiore dello schermo, non l'intera
-    // altezza — la striscia foto in basso ha bisogno di spazio vero, non solo di essere in overlay
-    // sopra la mappa (troppo piccola per essere vista bene). Costante per l'intero video (intro,
-    // seguimento, finale) così l'inquadratura non cambia dimensione a metà video — vedi
-    // lib/videoPhotoCarousel.ts, stessa frazione usata dall'anteprima DOM.
-    const mapAreaH = isCarousel ? Math.round(outH * (1 - CAROUSEL_BAND_FRACTION)) : outH
+    // La mappa resta sempre a schermo intero (mai ritagliata) — il carosello vi si sovrappone in
+    // basso con uno sfondo sfumato (drawPhotoCarouselStrip), non un riquadro pieno che la copre.
+    // hudAreaH riserva comunque spazio all'HUD (stat/barra progresso) SOPRA quella zona, così i due
+    // non si accavallano, senza bisogno di rimpicciolire la mappa stessa per ottenerlo.
+    const hudAreaH = isCarousel ? Math.round(outH * (1 - CAROUSEL_BAND_FRACTION)) : outH
     const photoTriggerRouteFrames = sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
     // Outro: separate phase after route completes (~17% of route duration, min 3s)
     const OUTRO_FRAMES = Math.round(TARGET_FPS * Math.max(3, videoDuration * 0.17))
@@ -2071,20 +2082,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           ctx.clearRect(0, 0, outW, outH)
           const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
           try { ctx.filter=grading } catch {}
-          const crO = coverRect(mapCanvas.width, mapCanvas.height, outW, mapAreaH)
-          ctx.drawImage(mapCanvas, crO.sx, crO.sy, crO.sw, crO.sh, 0, 0, outW, mapAreaH)
+          const crO = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
+          ctx.drawImage(mapCanvas, crO.sx, crO.sy, crO.sw, crO.sh, 0, 0, outW, outH)
           try { ctx.filter='none' } catch {}
-          // Fascia carosello: sfondo pieno anche durante il finale (nessuna foto qui, ma
-          // l'inquadratura resta la stessa di intro/seguimento — vedi CAROUSEL_BAND_FRACTION sopra).
-          if (isCarousel && mapAreaH < outH) {
-            ctx.fillStyle = '#0b1a24'
-            ctx.fillRect(0, mapAreaH, outW, outH - mapAreaH)
-          }
           const sc2 = Math.min(outW, outH) / 1080
           // User pin visible at start of outro, fades out over first 20%
           if (outroP < 0.2) {
             ctx.globalAlpha = 1 - outroP / 0.2
-            drawMapPin(ctx, outW/2, mapAreaH/2, outW/1080, faceImgRef.current)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
             ctx.globalAlpha = 1
           }
           // End card fades in during outro
@@ -2217,22 +2222,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // Color grading: applica il grading del preset corrente
         const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
         try { ctx.filter=grading } catch {}
-        const crF = coverRect(mapCanvas.width, mapCanvas.height, outW, mapAreaH)
-        ctx.drawImage(mapCanvas,crF.sx,crF.sy,crF.sw,crF.sh,0,0,outW,mapAreaH)
+        const crF = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
+        ctx.drawImage(mapCanvas,crF.sx,crF.sy,crF.sw,crF.sh,0,0,outW,outH)
         try { ctx.filter='none' } catch {}
-        // Fascia carosello: sfondo pieno sotto la mappa (anche in intro, prima che le foto
-        // compaiano — vedi CAROUSEL_BAND_FRACTION sopra: l'inquadratura non cambia mai dimensione).
-        if (isCarousel && mapAreaH < outH) {
-          ctx.fillStyle = '#0b1a24'
-          ctx.fillRect(0, mapAreaH, outW, outH - mapAreaH)
-        }
 
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
         if (introP === undefined) {
-          drawMapPin(ctx, outW/2, mapAreaH/2, outW/1080, faceImgRef.current)
+          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
         } else if (introP > 0.7) {
           ctx.globalAlpha = (introP - 0.7) / 0.3
-          drawMapPin(ctx, outW/2, mapAreaH/2, outW/1080, faceImgRef.current)
+          drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current)
           ctx.globalAlpha = 1
         }
 
@@ -2287,17 +2286,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
           const hrData:GraphData|undefined=(hasHr&&showBodyForHud)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
           const speedData:GraphData|undefined=(hasSpeed&&showBodyForHud)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
-          // HUD ancorato al fondo della sola area mappa (mapAreaH), non dell'intero schermo — con
-          // lo stile Carosello la mappa non è più a schermo intero (vedi sopra).
-          drawHUD(ctx,outW,mapAreaH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:showBodyForHud,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
+          // HUD ancorato a hudAreaH (non outH): con lo stile Carosello riserva la fascia in basso
+          // al carosello, così le due cose non si accavallano, senza ritagliare la mappa stessa.
+          drawHUD(ctx,outW,hudAreaH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:showBodyForHud,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
         }
 
-        // Striscia foto nella fascia dedicata in basso (stile "Carosello") — solo in fase di
+        // Striscia foto sovrapposta in basso, sfondo sfumato (stile "Carosello") — solo in fase di
         // seguimento, mai durante l'intro (percorso ancora fermo a p=0, nessuna foto ha ancora
         // senso di essere "corrente").
         if (isCarousel && introP === undefined && sortedPhotos.length > 0) {
           const virtualIndex = virtualPhotoIndexAt(p, sortedPhotos.map(s => ({id: s.photo.id, progress: s.photo.progress})))
-          drawPhotoCarouselStrip(ctx, outW, mapAreaH, outH - mapAreaH, sc2, sortedPhotos, virtualIndex)
+          drawPhotoCarouselStrip(ctx, outW, hudAreaH, outH - hudAreaH, sc2, sortedPhotos, virtualIndex)
         }
 
         if (videoEncoderRef.current) {

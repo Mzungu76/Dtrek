@@ -7,18 +7,20 @@
 
 export interface CarouselPhotoTiming { id: string; progress: number }
 
-// Frazione dell'altezza dello schermo riservata alla fascia foto in basso — condivisa da render
-// offline (canvas) e anteprima live (DOM) così le due viste occupano esattamente lo stesso layout.
-export const CAROUSEL_BAND_FRACTION = 0.46
+// Frazione dell'altezza dello schermo riservata in basso al carosello (sfondo sfumato + foto +
+// didascalia) — condivisa da render offline (canvas) e anteprima live (DOM). La mappa NON viene
+// ritagliata a questa zona: resta a schermo intero, il carosello vi si sovrappone con uno sfondo
+// sfumato invece che pieno, così il percorso resta visibile in trasparenza sotto le foto.
+export const CAROUSEL_BAND_FRACTION = 0.34
 
 // Quanto (in frazione di progresso 0..1 del percorso) la telecamera rallenta avvicinandosi a una
 // foto, e per quanto resta "in primo piano" nel carosello — stessa manopola per entrambi gli
 // effetti: rallentare più a lungo vicino a una foto la mantiene anche più a lungo al centro della
 // striscia, senza bisogno di due parametri separati da tenere sincronizzati.
-const HIGHLIGHT_WINDOW = 0.05
-// La telecamera non deve mai fermarsi (richiesta esplicita) — rallenta fino al 35% della velocità
-// di crociera, mai a zero.
-const MIN_SPEED_FACTOR = 0.35
+const HIGHLIGHT_WINDOW = 0.075
+// La telecamera non deve mai fermarsi (richiesta esplicita) — ma vicino a una foto rallenta molto,
+// quasi a fermarsi (12% della velocità di crociera), per dare tempo di guardarla.
+const MIN_SPEED_FACTOR = 0.12
 
 function windowFactor(progress: number, photoProgress: number): number {
   const d = Math.abs(progress - photoProgress)
