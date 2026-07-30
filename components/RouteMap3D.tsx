@@ -18,6 +18,7 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY } from '@/lib/mapStyles'
+import { speedFactorAt, buildWarpedProgressTable, virtualPhotoIndexAt, type CarouselPhotoTiming } from '@/lib/videoPhotoCarousel'
 
 const SPEEDS = [
   { label: '½×', v: 0.5 },
@@ -197,6 +198,77 @@ function drawPoiPin(
   ctx.font=`${Math.round(18*sc)}px -apple-system,sans-serif`
   ctx.fillText(emoji, cx, cy+1*sc)
   ctx.restore()
+}
+
+// ── Photo carousel strip (stile video "Carosello") ─────────────────────────────
+// A differenza della polaroid sotto (schermo intero, telecamera ferma), qui il percorso resta
+// sempre visibile dietro la striscia — vedi lib/videoPhotoCarousel.ts per il timing condiviso con
+// l'anteprima DOM (PhotoCarouselOverlay più sotto).
+
+const CAROUSEL_BASE_SIZE = 64   // px @1080 lato corto — miniature non correnti
+const CAROUSEL_PEAK_SIZE = 108  // dimensione della miniatura corrente (evidenziata)
+const CAROUSEL_GAP = 16
+
+function drawPhotoCarouselStrip(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  sortedPhotos: { photo: RoutePhoto; img: HTMLImageElement }[],
+  virtualIndex: number,
+) {
+  if (sortedPhotos.length === 0) return
+  const baseSz = CAROUSEL_BASE_SIZE * sc, peakSz = CAROUSEL_PEAK_SIZE * sc, gap = CAROUSEL_GAP * sc
+  const cy = h - Math.round(200 * sc)
+  const barH = peakSz + Math.round(20 * sc)
+  ctx.fillStyle = 'rgba(0,0,0,0.32)'
+  ctx.fillRect(0, cy - barH / 2, w, barH)
+
+  // Scorrimento continuo: tiene centrata la miniatura a `virtualIndex`.
+  const step = baseSz + gap
+  const originX = w / 2 - virtualIndex * step
+
+  sortedPhotos.forEach((s, i) => {
+    const dist = Math.abs(i - virtualIndex)
+    const emphasis = Math.max(0, 1 - Math.min(1, dist))  // 1 al centro, 0 da distanza 1 in su
+    const size = baseSz + (peakSz - baseSz) * emphasis
+    const cx = originX + i * step
+    if (cx < -size || cx > w + size) return
+    const img = s.img
+    if (!(img.complete && img.naturalWidth > 0)) return
+    ctx.save()
+    ctx.globalAlpha = 0.55 + 0.45 * emphasis
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 10 * sc; ctx.shadowOffsetY = 3 * sc
+    const bx = cx - size / 2, by = cy - size / 2, r = 12 * sc
+    ctx.fillStyle = 'white'
+    rrect(ctx, bx, by, size, size, r); ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.save(); rrect(ctx, bx + 2 * sc, by + 2 * sc, size - 4 * sc, size - 4 * sc, r - 1 * sc); ctx.clip()
+    const srcA = img.width / img.height
+    let sx = 0, sy = 0, sw = img.width, sh = img.height
+    if (srcA > 1) { sw = sh; sx = (img.width - sw) / 2 } else { sh = sw; sy = (img.height - sh) / 2 }
+    ctx.drawImage(img, sx, sy, sw, sh, bx + 2 * sc, by + 2 * sc, size - 4 * sc, size - 4 * sc)
+    ctx.restore()
+    if (emphasis > 0.05) {
+      ctx.strokeStyle = `rgba(56,189,248,${emphasis})`
+      ctx.lineWidth = 3 * sc
+      rrect(ctx, bx, by, size, size, r); ctx.stroke()
+    }
+    ctx.restore()
+  })
+
+  // Didascalia della foto corrente, in dissolvenza quando virtualIndex passa da un intero all'altro.
+  const nearestIdx = Math.max(0, Math.min(sortedPhotos.length - 1, Math.round(virtualIndex)))
+  const caption = sortedPhotos[nearestIdx].photo.caption?.trim()
+  if (caption) {
+    const capAlpha = Math.max(0, 1 - Math.min(1, Math.abs(virtualIndex - nearestIdx) / 0.5))
+    ctx.save()
+    ctx.globalAlpha = capAlpha
+    ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+    ctx.font = `italic ${Math.round(20 * sc)}px Georgia,serif`
+    let cap = caption
+    while (ctx.measureText(cap).width > w - Math.round(60 * sc) && cap.length > 4) cap = cap.slice(0, -4) + '…'
+    ctx.fillText(cap, w / 2, cy + peakSz / 2 + Math.round(10 * sc))
+    ctx.restore()
+  }
 }
 
 // ── Polaroid overlay ───────────────────────────────────────────────────────────
@@ -575,6 +647,55 @@ interface Props {
   dtmProfile?: TrailDtmProfile
 }
 
+// ── Photo carousel overlay (anteprima DOM) ──────────────────────────────────────
+// Controparte HTML/CSS di drawPhotoCarouselStrip (sopra) per l'anteprima interattiva — stessa
+// logica di timing (lib/videoPhotoCarousel.ts), resa con transform CSS invece che su canvas.
+function PhotoCarouselOverlay({ photos, virtualIndex }: { photos: RoutePhoto[]; virtualIndex: number }) {
+  if (photos.length === 0) return null
+  const BASE = 56, PEAK = 92, GAP = 12
+  const nearestIdx = Math.max(0, Math.min(photos.length - 1, Math.round(virtualIndex)))
+  const caption = photos[nearestIdx].caption?.trim()
+  const capOpacity = Math.max(0, 1 - Math.min(1, Math.abs(virtualIndex - nearestIdx) / 0.5))
+  return (
+    <div className="absolute inset-x-0 z-30 pointer-events-none flex flex-col items-center gap-2" style={{ bottom: '22%' }}>
+      <div className="relative w-full h-24 overflow-hidden">
+        <div
+          className="absolute top-1/2 left-1/2 flex items-center"
+          style={{ gap: GAP, transform: `translate(calc(-50% - ${virtualIndex * (BASE + GAP)}px), -50%)` }}
+        >
+          {photos.map((photo, i) => {
+            const dist = Math.abs(i - virtualIndex)
+            const emphasis = Math.max(0, 1 - Math.min(1, dist))
+            const size = BASE + (PEAK - BASE) * emphasis
+            return (
+              <div
+                key={photo.id}
+                className="shrink-0 rounded-2xl overflow-hidden bg-white/10"
+                style={{
+                  width: size, height: size,
+                  boxShadow: emphasis > 0.05 ? `0 0 0 3px rgba(56,189,248,${emphasis})` : undefined,
+                  opacity: 0.55 + 0.45 * emphasis,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.url} alt="" className="w-full h-full object-cover" draggable={false} />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      {caption && (
+        <p
+          className="text-white text-sm italic font-serif text-center px-8 truncate max-w-full"
+          style={{ opacity: capOpacity, textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}
+        >
+          {caption}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState, dtmProfile }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
@@ -674,6 +795,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
   const [videoEnableAudio,  setVideoEnableAudio] = useState(false)
   const [photoDurationSec,  setPhotoDurationSec] = useState(3.0)
+  // Stile "Carosello" (Sezione 4): traccia sempre visibile e in movimento, foto in una striscia in
+  // basso invece che a schermo intero — vedi lib/videoPhotoCarousel.ts. Default 'classic' per non
+  // cambiare il comportamento di chi non tocca questa nuova opzione.
+  const [videoPhotoStyle,   setVideoPhotoStyle]  = useState<'classic'|'carousel'>('classic')
+  // Anteprima dal vivo del carosello (schermata Montaggio) — sostituisce temporaneamente il foglio
+  // impostazioni con la mappa a schermo pieno + la striscia foto, usando lo stesso tick() di
+  // anteprima già presente per lo scrub del percorso fuori dal wizard video.
+  const [previewingCarousel, setPreviewingCarousel] = useState(false)
   const [zoomIntro,         setZoomIntro]        = useState(10.5)
   const [zoomFollow,        setZoomFollow]        = useState(13.8)
   const [zoomOutro,         setZoomOutro]         = useState(7.5)
@@ -693,6 +822,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     if (next.has(id)) next.delete(id); else next.add(id)
     return next
   })
+  // Timing condiviso da tick() (rallentamento telecamera in anteprima) e da PhotoCarouselOverlay
+  // (posizione di scorrimento) — stessa forma leggera { id, progress } consumata dal render
+  // offline in goToRendering, non tre liste filtrate/ordinate indipendentemente.
+  const carouselPhotoTimings = useMemo<CarouselPhotoTiming[]>(
+    () => routePhotos
+      .filter(p => !videoExcludedPhotoIds.has(p.id))
+      .map(p => ({ id: p.id, progress: p.progress }))
+      .sort((a, b) => a.progress - b.progress),
+    [routePhotos, videoExcludedPhotoIds],
+  )
   const [placingPhoto,    setPlacingPhoto]   = useState<{id:string;step:PlacingStep}|null>(null)
   const placingPhotoRef = useRef<{id:string;step:PlacingStep}|null>(null)
   useEffect(()=>{ placingPhotoRef.current=placingPhoto },[placingPhoto])
@@ -1093,7 +1232,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const tick=(ts:number)=>{
       if(!isPlayingRef.current) return
       const dt=lastTsRef.current?ts-lastTsRef.current:16; lastTsRef.current=ts
-      progressRef.current=Math.min(1,progressRef.current+(dt*SPEEDS[speedIdx].v)/90000)
+      // Anteprima del carosello: stessa telecamera che rallenta (mai ferma) vicino a ogni foto
+      // usata dal render offline — vedi lib/videoPhotoCarousel.ts, l'unica fonte per entrambe.
+      const stepScale = previewingCarousel ? speedFactorAt(progressRef.current, carouselPhotoTimings) : 1
+      progressRef.current=Math.min(1,progressRef.current+(dt*SPEEDS[speedIdx].v)/90000*stepScale)
       setProgress(progressRef.current)
       const rawIdx=progressRef.current*(N-1),i0=Math.floor(rawIdx),i1=Math.min(i0+1,N-1),frac=rawIdx-i0
       const lon=pts[i0].lon!+(pts[i1].lon!-pts[i0].lon!)*frac, lat=pts[i0].lat!+(pts[i1].lat!-pts[i0].lat!)*frac
@@ -1136,7 +1278,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       cancelAnimationFrame(animRef.current)
       if(poiOpenTimeoutRef.current){clearTimeout(poiOpenTimeoutRef.current);poiOpenTimeoutRef.current=null}
     }
-  },[isPlaying,speedIdx,showPois,pois])
+  },[isPlaying,speedIdx,showPois,pois,previewingCarousel,carouselPhotoTimings])
 
   const reset=useCallback(()=>{
     cancelAnimationFrame(animRef.current); isPlayingRef.current=false; progressRef.current=0
@@ -1720,11 +1862,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const INTRO_FRAMES = Math.round(TARGET_FPS * Math.max(2, videoDuration * 0.08))
     // Route frames: full traversal 0→1 starts AFTER intro
     const ROUTE_FRAMES = Math.round(TARGET_FPS * videoDuration)
-    // Each photo inserts PHOTO_REVEAL_FRAMES of pause after reaching its position (after intro)
+    // Each photo inserts PHOTO_REVEAL_FRAMES of pause after reaching its position (after intro) —
+    // "Classico" only. "Carosello" never pauses (traccia sempre in movimento, richiesta esplicita):
+    // le foto scorrono nella striscia in basso senza aggiungere tempo al video, la telecamera
+    // rallenta invece di fermarsi — vedi warpedProgress sotto.
+    const isCarousel = videoPhotoStyle === 'carousel'
     const photoTriggerRouteFrames = sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
     // Outro: separate phase after route completes (~17% of route duration, min 3s)
     const OUTRO_FRAMES = Math.round(TARGET_FPS * Math.max(3, videoDuration * 0.17))
-    const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + sortedPhotos.length * PHOTO_REVEAL_FRAMES + OUTRO_FRAMES
+    const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + OUTRO_FRAMES
     renderedFramesRef.current = 0
     encodedFramesRef.current  = 0
     const outroStartBearRef = { current: -1 as number }
@@ -1739,6 +1885,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return peakIdx / Math.max(1, pts.length - 1)
     })()
 
+    // Tabella frame→progresso deformata (stile "Carosello"): stesso traguardo di ROUTE_FRAMES
+    // frame lineari, ma la telecamera rallenta (mai fino a fermarsi) vicino a ogni foto — vedi
+    // lib/videoPhotoCarousel.ts, stessa funzione usata dall'anteprima live in tick().
+    const carouselWarpedProgress = isCarousel
+      ? buildWarpedProgressTable(ROUTE_FRAMES, sortedPhotos.map(s => ({id: s.photo.id, progress: s.photo.progress})))
+      : null
+
     const frameToState = (frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number} => {
       // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
       if (frameIdx < INTRO_FRAMES) {
@@ -1746,18 +1899,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
       const afterIntro = frameIdx - INTRO_FRAMES
       let pauseOffset = 0
-      for (let i = 0; i < sortedPhotos.length; i++) {
-        const triggerF = photoTriggerRouteFrames[i] + pauseOffset
-        if (afterIntro < triggerF) break
-        if (afterIntro < triggerF + PHOTO_REVEAL_FRAMES) {
-          return {p: sortedPhotos[i].photo.progress, reveal: {...sortedPhotos[i], revealFrame: afterIntro - triggerF}}
+      if (!isCarousel) {
+        for (let i = 0; i < sortedPhotos.length; i++) {
+          const triggerF = photoTriggerRouteFrames[i] + pauseOffset
+          if (afterIntro < triggerF) break
+          if (afterIntro < triggerF + PHOTO_REVEAL_FRAMES) {
+            return {p: sortedPhotos[i].photo.progress, reveal: {...sortedPhotos[i], revealFrame: afterIntro - triggerF}}
+          }
+          pauseOffset += PHOTO_REVEAL_FRAMES
         }
-        pauseOffset += PHOTO_REVEAL_FRAMES
       }
       const routeFrame = afterIntro - pauseOffset
       if (routeFrame >= ROUTE_FRAMES) {
         const outroFrame = routeFrame - ROUTE_FRAMES
         return {p: 1.0, outroP: Math.min(1, outroFrame / Math.max(1, OUTRO_FRAMES - 1))}
+      }
+      if (carouselWarpedProgress) {
+        return {p: carouselWarpedProgress[Math.min(routeFrame, ROUTE_FRAMES - 1)], followFrame: routeFrame}
       }
       // Divide by ROUTE_FRAMES-1 so the last follow frame reaches p=1.0 (exactly pts[N-1]),
       // preventing a small center jump at the follow→outro transition
@@ -2095,11 +2253,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
         // HUD (skip if title card is prominent)
         const showHUD = !(videoShowTitle&&displayTitle&&frameIdx<TITLE_DUR&&frameIdx<Math.round(TARGET_FPS*1.5))
+        // Stile "Carosello": i grafici FC/velocità competono con la striscia foto per lo stesso
+        // spazio in basso — la striscia diventa il contenuto principale di quella zona, i grafici
+        // corpo restano disattivati per questo stile indipendentemente dal toggle "Corpo".
+        const showBodyForHud = videoShowBody && !isCarousel
         if(showHUD){
           const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
-          const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
-          const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
-          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
+          const hrData:GraphData|undefined=(hasHr&&showBodyForHud)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
+          const speedData:GraphData|undefined=(hasSpeed&&showBodyForHud)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
+          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:showBodyForHud,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
+        }
+
+        // Striscia foto in basso (stile "Carosello") — solo in fase di seguimento, mai durante
+        // l'intro (percorso ancora fermo a p=0, nessuna foto ha ancora senso di essere "corrente").
+        if (isCarousel && introP === undefined && sortedPhotos.length > 0) {
+          const virtualIndex = virtualPhotoIndexAt(p, sortedPhotos.map(s => ({id: s.photo.id, progress: s.photo.progress})))
+          drawPhotoCarouselStrip(ctx, outW, outH, sc2, sortedPhotos, virtualIndex)
         }
 
         if (videoEncoderRef.current) {
@@ -2121,7 +2290,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,videoEnableAudio,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2626,8 +2795,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       )}
 
 
+      {/* Anteprima dal vivo del carosello: sostituisce temporaneamente il foglio Montaggio,
+          lasciando la mappa a schermo pieno visibile dietro la striscia foto — stesso tick() di
+          anteprima già usato per lo scrub del percorso, solo con la telecamera che rallenta
+          (mai ferma) vicino a ogni foto invece di procedere a velocità costante. */}
+      {videoState==='postprod'&&previewingCarousel&&(
+        <>
+          <PhotoCarouselOverlay
+            photos={routePhotos.filter(p=>!videoExcludedPhotoIds.has(p.id)).sort((a,b)=>a.progress-b.progress)}
+            virtualIndex={virtualPhotoIndexAt(progress, carouselPhotoTimings)}
+          />
+          <div className="absolute inset-x-0 top-0 z-30 flex justify-end px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pointer-events-auto">
+            <button
+              onClick={()=>{ setIsPlaying(false); setPreviewingCarousel(false) }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/55 backdrop-blur-md text-white text-xs font-semibold shadow-lg">
+              <X className="w-3.5 h-3.5"/> Torna al montaggio
+            </button>
+          </div>
+        </>
+      )}
+
       {/* ══ POST-PRODUCTION ══════════════════════════════════════════════════════ */}
-      {videoState==='postprod'&&!placingPhoto&&(
+      {videoState==='postprod'&&!placingPhoto&&!previewingCarousel&&(
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-end z-20 pointer-events-auto">
           <div className="w-full bg-stone-900/97 rounded-t-3xl px-5 pt-5 pb-8 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
@@ -2667,14 +2856,43 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               </div>
             </div>
 
-            {/* Photo duration */}
+            {/* Stile foto: Classico (schermo intero, telecamera ferma) vs Carosello (striscia in
+                basso, percorso sempre visibile e in movimento — Sezione 4) */}
             <div className="mb-5">
-              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DURATA POLAROID</p>
-              <div className="flex items-center gap-3">
-                <input type="range" min={3} max={10} step={0.5} value={photoDurationSec} onChange={e=>setPhotoDurationSec(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
-                <span className="text-white text-sm font-bold w-16 text-right">{photoDurationSec.toFixed(1)}s / foto</span>
+              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">STILE FOTO</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  {id:'classic' as const,  label:'Classico',  desc:'Schermo intero, telecamera ferma'},
+                  {id:'carousel' as const, label:'Carosello', desc:'Striscia in basso, percorso sempre in moto'},
+                ]).map(opt=>(
+                  <button key={opt.id} onClick={()=>setVideoPhotoStyle(opt.id)}
+                    className={`text-left rounded-xl px-3 py-2.5 border transition-colors ${
+                      videoPhotoStyle===opt.id ? 'bg-blue-500/20 border-blue-400/50' : 'bg-white/7 border-transparent hover:bg-white/10'
+                    }`}>
+                    <p className={`text-sm font-semibold ${videoPhotoStyle===opt.id?'text-blue-300':'text-white'}`}>{opt.label}</p>
+                    <p className="text-white/40 text-[10px] mt-0.5 leading-snug">{opt.desc}</p>
+                  </button>
+                ))}
               </div>
+              {videoPhotoStyle==='carousel'&&routePhotos.length>0&&(
+                <button
+                  onClick={()=>{ reset(); setPreviewingCarousel(true); setIsPlaying(true) }}
+                  className="mt-2.5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors">
+                  <Play className="w-3.5 h-3.5"/> Anteprima carosello
+                </button>
+              )}
             </div>
+
+            {/* Photo duration — solo stile Classico, "Carosello" non mette mai in pausa il percorso */}
+            {videoPhotoStyle==='classic'&&(
+              <div className="mb-5">
+                <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DURATA POLAROID</p>
+                <div className="flex items-center gap-3">
+                  <input type="range" min={3} max={10} step={0.5} value={photoDurationSec} onChange={e=>setPhotoDurationSec(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-blue-400 cursor-pointer"/>
+                  <span className="text-white text-sm font-bold w-16 text-right">{photoDurationSec.toFixed(1)}s / foto</span>
+                </div>
+              </div>
+            )}
 
             {/* Photos */}
             <div className="mb-6">
