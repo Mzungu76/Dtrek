@@ -4,8 +4,8 @@
 //
 // Modello "viaggio tra una foto e l'altra": la telecamera SI FERMA davvero su ogni foto (non un
 // semplice rallentamento) per il tempo di visione — mentre è ferma, il pin della foto (già
-// presente sul percorso) si ingrandisce fino a quasi coprire lo schermo, poi torna piccolo — poi
-// viaggia verso la foto successiva a un ritmo costante proporzionale alla distanza REALE (non alla
+// presente sul percorso) si apre in una polaroid ben visibile, poi torna piccolo — poi viaggia
+// verso la foto successiva a un ritmo costante proporzionale alla distanza REALE (non alla
 // frazione di progresso, che con punti GPS diradati in alcuni tratti non è proporzionale alla
 // distanza vera). La durata del video è una conseguenza di questo ritmo, non un traguardo fisso.
 
@@ -129,7 +129,8 @@ function smoothstep(t: number): number {
   return c * c * (3 - 2 * c)
 }
 
-/** Quanto è "aperta" la foto (0 = piccola come il pin sul percorso, 1 = quasi a schermo intero) nel
+/** Quanto è "aperta" la foto (0 = piccola come il pin sul percorso, 1 = polaroid ben visibile, con
+ *  un bordo sempre presente attorno — mai a schermo intero, per non sembrare un errore di crop) nel
  *  punto `stopT` (0..1) della sosta corrente — apre, resta aperta, richiude. Smoothstep sui due
  *  tratti (non lineare-poi-piatto): la derivata si annulla dove il ramp si aggancia al plateau, così
  *  l'apertura e la chiusura sono sempre un movimento leggero e continuo, mai un salto. */

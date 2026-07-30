@@ -206,11 +206,17 @@ function drawPoiPin(
 
 // ── Zoom sulla foto in sosta (stile video "Carosello") ──────────────────────────
 // Niente striscia separata: il pin della foto già presente sul percorso si apre — da piccolo come
-// appare in mappa fino a quasi coprire lo schermo — mentre la telecamera è ferma su di esso, poi si
-// richiude. La telecamera è centrata sulle coordinate della foto durante la sosta (vedi il chiamante
-// in goToRendering), quindi l'origine/destinazione dello zoom è semplicemente il centro schermo —
-// non serve calcolare la posizione proiettata del pin. Vedi lib/videoPhotoCarousel.ts
-// stopPhotoZoomAt per la forma temporale (apre/resta/richiude), condivisa con l'anteprima live.
+// appare in mappa fino a una polaroid ben visibile (non a schermo intero: un bordo sempre visibile
+// intorno alla foto, così si legge chiaramente come una scelta di stile e non come un errore di
+// crop) — mentre la telecamera è ferma su di esso, poi si richiude. La telecamera è centrata sulle
+// coordinate della foto durante la sosta (vedi il chiamante in goToRendering), quindi
+// l'origine/destinazione dello zoom è semplicemente il centro schermo. Stile polaroid (cornice
+// color crema, didascalia in corsivo sotto la foto) coerente con drawPolaroid usato altrove
+// nell'app. Vedi lib/videoPhotoCarousel.ts stopPhotoZoomAt per la forma temporale (apre/resta/
+// richiude), condivisa con l'anteprima live. Niente shadowBlur: costa relativamente poco su un
+// singolo elemento per frame, ma le soste durano diversi secondi a piena frequenza fotogrammi, e
+// il costo si accumula per l'intera durata di ogni sosta — un'ombra "finta" (rettangolo pieno
+// arretrato, senza sfocatura) dà comunque profondità a costo trascurabile.
 function aspectFitCrop(imgW: number, imgH: number, targetA: number): { sx: number; sy: number; sw: number; sh: number } {
   const srcA = imgW / imgH
   let sx = 0, sy = 0, sw = imgW, sh = imgH
@@ -219,6 +225,9 @@ function aspectFitCrop(imgW: number, imgH: number, targetA: number): { sx: numbe
   return { sx, sy, sw, sh }
 }
 
+const POLAROID_PAD_FRAC = 0.05   // bordo crema su alto/lati, come frazione della larghezza della card
+const POLAROID_CAP_FRAC = 0.22   // striscia in basso per la didascalia, come frazione della larghezza
+
 function drawStopPhotoZoom(
   ctx: CanvasRenderingContext2D,
   outW: number, outH: number, sc: number,
@@ -226,135 +235,61 @@ function drawStopPhotoZoom(
   zoomT: number, stopT: number,
 ) {
   if (!(img.complete && img.naturalWidth > 0)) return
-  const pinPx = Math.round(64 * sc)
-  const dstW = pinPx + (outW - pinPx) * zoomT
-  const dstH = pinPx + (outH - pinPx) * zoomT
-  // Leggero respiro quando è a schermo pieno (non un fermo immagine assoluto) — una lenta deriva,
-  // stessa idea del Ken Burns già usato per la rivelazione a schermo intero dello stile Classico.
-  const breathe = zoomT > 0.995 ? Math.sin(stopT * Math.PI * 2.4) * 0.01 : 0
+  const peakW = Math.min(outW * 0.82, (outH * 0.72) / (1 + POLAROID_CAP_FRAC))
+  const pinPx = Math.round(70 * sc)
+  const cardW = pinPx + (peakW - pinPx) * zoomT
+  const cardH = cardW * (1 + POLAROID_CAP_FRAC)
+  const pad = cardW * POLAROID_PAD_FRAC
+  const photoSide = cardW - pad * 2
+  // Leggero respiro quando è aperta (non un fermo immagine assoluto) — una lenta deriva, stessa
+  // idea del Ken Burns già usato per la rivelazione a schermo intero dello stile Classico.
+  const breathe = zoomT > 0.995 ? Math.sin(stopT * Math.PI * 2.4) * 0.008 : 0
   const cx = outW / 2 + outW * breathe, cy = outH / 2
-  const crop = aspectFitCrop(img.width, img.height, dstW / dstH)
-  const r = 14 * sc * (1 - zoomT)
-  const bx = cx - dstW / 2, by = cy - dstH / 2
+  const bx = cx - cardW / 2, by = cy - cardH / 2
+  const r = Math.max(2 * sc, 8 * sc * zoomT)
+
+  // La mappa si scurisce leggermente dietro la card mentre si apre (effetto "riflettore") — la
+  // rende leggibile come una scelta deliberata, non un frame corrotto.
+  if (zoomT > 0.02) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.min(0.4, zoomT * 0.45)})`
+    ctx.fillRect(0, 0, outW, outH)
+  }
+
   ctx.save()
-  if (zoomT < 0.995) {
-    ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = (1 - zoomT) * 16 * sc; ctx.shadowOffsetY = (1 - zoomT) * 5 * sc
-  }
-  rrect(ctx, bx, by, dstW, dstH, r)
-  ctx.save(); ctx.clip()
-  ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, bx, by, dstW, dstH)
+  // Ombra finta (nessuna sfocatura): un rettangolo pieno arretrato, dello stesso raggio, dietro la card.
+  const shOff = 6 * sc * zoomT
+  ctx.fillStyle = `rgba(0,0,0,${0.35 * zoomT})`
+  rrect(ctx, bx, by + shOff, cardW, cardH, r); ctx.fill()
+  ctx.fillStyle = '#fffdf4'
+  rrect(ctx, bx, by, cardW, cardH, r); ctx.fill()
+  ctx.save(); rrect(ctx, bx + pad, by + pad, photoSide, photoSide, r * 0.4); ctx.clip()
+  const crop = aspectFitCrop(img.width, img.height, 1)
+  ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, bx + pad, by + pad, photoSide, photoSide)
   ctx.restore()
-  if (zoomT < 0.995) {
-    ctx.strokeStyle = `rgba(255,255,255,${(1 - zoomT) * 0.85})`; ctx.lineWidth = 3 * sc
-    rrect(ctx, bx, by, dstW, dstH, r); ctx.stroke()
-  }
   ctx.restore()
-  // Vignetta e didascalia solo quando la foto è quasi a schermo intero.
-  if (zoomT > 0.5) {
-    const revealAlpha = (zoomT - 0.5) / 0.5
-    ctx.save(); ctx.globalAlpha = revealAlpha
-    const vig = ctx.createRadialGradient(outW / 2, outH / 2, outW * 0.3, outW / 2, outH / 2, outW * 0.75)
-    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.35)')
-    ctx.fillStyle = vig; ctx.fillRect(0, 0, outW, outH)
-    if (caption) {
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, outH - Math.round(100 * sc), outW, Math.round(100 * sc))
-      ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.font = `italic ${Math.round(34 * sc)}px Georgia,serif`
-      let cap = caption
-      while (ctx.measureText(cap).width > outW - Math.round(80 * sc) && cap.length > 4) cap = cap.slice(0, -4) + '…'
-      ctx.fillText(cap, outW / 2, outH - Math.round(50 * sc))
+
+  // Didascalia, nella cornice sotto la foto — solo quando c'è abbastanza spazio per leggerla.
+  if (caption && zoomT > 0.55) {
+    const capAlpha = Math.min(1, (zoomT - 0.55) / 0.25)
+    ctx.save(); ctx.globalAlpha = capAlpha
+    ctx.fillStyle = '#2c1a0e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    const fontSz = Math.max(9, Math.round(cardW * 0.058))
+    ctx.font = `italic ${fontSz}px Georgia,serif`
+    const maxTW = cardW - pad * 2.5
+    const words = caption.split(' ')
+    const lines: string[] = []
+    let cur = ''
+    for (const wd of words) {
+      const test = cur ? cur + ' ' + wd : wd
+      if (ctx.measureText(test).width > maxTW && cur) { lines.push(cur); cur = wd } else { cur = test }
     }
+    if (cur) lines.push(cur)
+    const visLines = lines.slice(0, 2)
+    const lineH = fontSz * 1.35
+    const capCenterY = by + pad + photoSide + (cardH - pad - (pad + photoSide)) / 2
+    visLines.forEach((l, i) => ctx.fillText(l, cx, capCenterY + (i - (visLines.length - 1) / 2) * lineH))
     ctx.restore()
   }
-}
-
-// ── Polaroid overlay ───────────────────────────────────────────────────────────
-
-interface ActiveOverlay {
-  photo:       RoutePhoto
-  img:         HTMLImageElement
-  startFrame:  number
-  holdFrames:  number
-}
-
-function drawPolaroid(
-  ctx: CanvasRenderingContext2D,
-  w: number, h: number,
-  ov: ActiveOverlay,
-  currentFrame: number,
-) {
-  const { startFrame, holdFrames, photo, img } = ov
-  const t = (currentFrame - startFrame) / holdFrames
-  if (t < 0 || t > 1) return
-
-  const SLIDE = 0.13
-  let slideX = 0
-  if (t < SLIDE)            slideX = w * 0.36 * (1 - t / SLIDE)
-  else if (t > 1 - SLIDE)   slideX = w * 0.36 * ((t - (1-SLIDE)) / SLIDE)
-
-  const pW  = Math.round(w * 0.30)
-  const pad = Math.round(pW * 0.055)
-  const imgSz = pW - pad * 2
-  const capH  = Math.round(pW * 0.26)
-  const pH    = imgSz + pad * 2 + capH
-  const pX    = w - pW - Math.round(w * 0.035) + Math.round(slideX)
-  const pY    = Math.round(h * 0.14)
-
-  ctx.save()
-  ctx.translate(pX + pW*0.5, pY + pH*0.5)
-  ctx.rotate(-0.038)
-  ctx.translate(-pW*0.5, -pH*0.5)
-
-  // Drop shadow
-  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 22; ctx.shadowOffsetX = 5; ctx.shadowOffsetY = 12
-  ctx.fillStyle = '#fffdf4'; ctx.fillRect(0, 0, pW, pH)
-  ctx.shadowColor = 'transparent'
-
-  // Photo image
-  ctx.drawImage(img, pad, pad, imgSz, imgSz)
-
-  // Subtle vignette on photo
-  const vig = ctx.createLinearGradient(pad, pad, pad, pad+imgSz)
-  vig.addColorStop(0, 'rgba(0,0,0,0.07)'); vig.addColorStop(0.4, 'transparent')
-  vig.addColorStop(0.7, 'transparent'); vig.addColorStop(1, 'rgba(0,0,0,0.05)')
-  ctx.fillStyle = vig; ctx.fillRect(pad, pad, imgSz, imgSz)
-
-  // Thin separator
-  ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.7
-  ctx.beginPath(); ctx.moveTo(pad*2.2, imgSz+pad*1.7); ctx.lineTo(pW-pad*2.2, imgSz+pad*1.7); ctx.stroke()
-
-  // Caption (elegant multi-line italic)
-  const caption = photo.caption.trim()
-  const fontSz = Math.max(8, Math.round(pW * 0.072))
-  ctx.fillStyle = '#2c1a0e'
-  ctx.textAlign = 'center'
-  ctx.font = `italic ${fontSz}px Georgia,serif`
-
-  const maxTW = pW - pad * 3.5
-  const words = caption.split(' ')
-  const lines: string[] = []
-  let cur = ''
-  for (const wd of words) {
-    const test = cur ? cur + ' ' + wd : wd
-    if (ctx.measureText(test).width > maxTW && cur) { lines.push(cur); cur = wd } else { cur = test }
-  }
-  if (cur) lines.push(cur)
-  const visLines = lines.slice(0, 2)
-  const lineH = fontSz * 1.35
-  const textBlockH = visLines.length * lineH
-  const textY = imgSz + pad * 2.2 + (capH - pad - textBlockH) / 2
-
-  ctx.textBaseline = 'top'
-  visLines.forEach((l, i) => ctx.fillText(l, pW*0.5, textY + i*lineH))
-
-  // Small decorative dash below text
-  if (visLines.length > 0) {
-    ctx.strokeStyle = 'rgba(44,26,14,0.2)'; ctx.lineWidth = 0.6
-    const dashY = textY + textBlockH + fontSz*0.45
-    ctx.beginPath(); ctx.moveTo(pW*0.38, dashY); ctx.lineTo(pW*0.62, dashY); ctx.stroke()
-  }
-
-  ctx.restore()
 }
 
 // ── Graph (unchanged) ──────────────────────────────────────────────────────────
@@ -736,41 +671,48 @@ interface Props {
 // schermo, esattamente come nel video esportato.
 function PhotoZoomOverlay({ photo, zoomT, stopT }: { photo: RoutePhoto | null; zoomT: number; stopT: number }) {
   if (!photo || zoomT <= 0.001) return null
-  const pinPx = 64
-  const radius = 14 * (1 - zoomT)
-  const revealAlpha = Math.max(0, (zoomT - 0.5) / 0.5)
-  const breathe = zoomT > 0.995 ? Math.sin(stopT * Math.PI * 2.4) * 1 : 0
+  const PAD_FRAC = 0.05, CAP_FRAC = 0.22
+  const pinPx = 70
+  const peakW = `min(82vw, calc(72vh / ${1 + CAP_FRAC}))`
+  const cardW = `calc(${pinPx}px + (${peakW} - ${pinPx}px) * ${zoomT})`
+  const cardH = `calc(${cardW} * ${1 + CAP_FRAC})`
+  const pad = `calc(${cardW} * ${PAD_FRAC})`
+  const radius = Math.max(2, 8 * zoomT)
+  const breathe = zoomT > 0.995 ? Math.sin(stopT * Math.PI * 2.4) * 0.8 : 0
+  const showCaption = !!photo.caption && zoomT > 0.55
+  const capAlpha = showCaption ? Math.min(1, (zoomT - 0.55) / 0.25) : 0
+  const scrimAlpha = Math.min(0.4, zoomT * 0.45)
   return (
     <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
+      {zoomT > 0.02 && <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${scrimAlpha})` }} />}
       <div
-        className="absolute top-1/2 left-1/2 overflow-hidden"
+        className="absolute top-1/2 left-1/2"
         style={{
-          width: `calc(${pinPx}px + (100vw - ${pinPx}px) * ${zoomT})`,
-          height: `calc(${pinPx}px + (100vh - ${pinPx}px) * ${zoomT})`,
+          width: cardW, height: cardH,
           transform: `translate(calc(-50% + ${breathe}vw), -50%)`,
+          background: '#fffdf4',
           borderRadius: `${radius}px`,
-          boxShadow: zoomT < 0.995
-            ? `0 0 0 3px rgba(255,255,255,${(1 - zoomT) * 0.85}), 0 8px ${Math.round((1 - zoomT) * 24)}px rgba(0,0,0,0.4)`
-            : 'none',
+          boxShadow: `0 ${6 * zoomT}px ${14 * zoomT}px rgba(0,0,0,${0.35 * zoomT})`,
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photo.url} alt="" className="w-full h-full object-cover" draggable={false} />
-      </div>
-      {revealAlpha > 0 && (
         <div
-          className="absolute inset-0"
-          style={{ background: `radial-gradient(circle at center, rgba(0,0,0,0) 30%, rgba(0,0,0,${0.35 * revealAlpha}) 100%)` }}
-        />
-      )}
-      {revealAlpha > 0 && photo.caption && (
-        <div
-          className="absolute inset-x-0 bottom-0 flex items-center justify-center px-8"
-          style={{ height: '100px', background: `rgba(0,0,0,${0.5 * revealAlpha})`, opacity: revealAlpha }}
+          className="absolute overflow-hidden"
+          style={{ left: pad, top: pad, right: pad, height: `calc(${cardW} * ${1 - 2 * PAD_FRAC})`, borderRadius: `${radius * 0.4}px` }}
         >
-          <p className="text-white text-lg italic font-serif text-center truncate">{photo.caption}</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={photo.url} alt="" className="w-full h-full object-cover" draggable={false} />
         </div>
-      )}
+        {showCaption && (
+          <div
+            className="absolute inset-x-0 bottom-0 flex items-center justify-center px-2 overflow-hidden"
+            style={{ height: `calc(${cardW} * ${CAP_FRAC + PAD_FRAC})`, opacity: capAlpha }}
+          >
+            <p className="text-[#2c1a0e] italic text-center truncate" style={{ fontFamily: 'Georgia,serif', fontSize: `calc(${cardW} * 0.058)` }}>
+              {photo.caption}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
