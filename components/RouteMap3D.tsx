@@ -1814,8 +1814,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     ].find(t=>MediaRecorder.isTypeSupported(t))??''
     // ── Recording setup: WebCodecs (preferred) or MediaRecorder fallback ────────
     const hasWebCodecs = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined'
-    // Shared with VideoEncoder output callback and finishRecording (same closure)
-    const videoChunkBuffer: Array<{chunk: any, meta: any}> = []
+    // Shared con la callback output() del VideoEncoder e finishRecording (stessa closure).
+    // decodeTimestampUs viene assegnato in ORDINE DI ARRIVO alla callback output(), che secondo
+    // WebCodecs è l'ordine di DECODIFICA (non necessariamente lo stesso della presentazione: con
+    // latencyMode 'quality' l'encoder può usare B-frame, che referenziano fotogrammi futuri e
+    // quindi vengono consegnati fuori ordine rispetto al loro chunk.timestamp — vedi il commento
+    // più esteso su finishRecording per il perché questo è importante).
+    const videoChunkBuffer: Array<{chunk: any, meta: any, decodeTimestampUs: number}> = []
+    let videoDecodeIdx = 0
 
     const finishRecording = async () => {
       const ve = videoEncoderRef.current
@@ -1836,11 +1842,21 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         console.error('video flush:', err)
         try { ve.close() } catch {} // force-release a wedged encoder (e.g. lost GPU context)
       }
-      // Sort buffered video chunks by PTS (timestamp) so the muxer receives them in display order,
-      // correcting any decode-order reordering from the hardware H.264 encoder.
-      videoChunkBuffer.sort((a, b) => a.chunk.timestamp - b.chunk.timestamp)
-      for (const { chunk, meta } of videoChunkBuffer) {
-        try { mx?.addVideoChunk(chunk, meta) } catch {}
+      // NIENTE ordinamento per timestamp qui — è il bug che ha causato a lungo sfarfallii e
+      // fotogrammi corrotti (più visibili quanto più la scena è ricca, cioè esattamente da quando
+      // sono stati aggiunti gli effetti più recenti: una scena più complessa rende più probabile
+      // che l'encoder usi B-frame per comprimere meglio). mp4-muxer vuole i campioni nell'ordine di
+      // DECODIFICA — che, con latencyMode 'quality', può differire dall'ordine di presentazione
+      // quando l'encoder usa B-frame (referenziano fotogrammi futuri, quindi la callback output()
+      // li consegna fuori dall'ordine cronologico del loro chunk.timestamp). L'ordine di ARRIVO a
+      // output() però È l'ordine di decodifica per definizione — riordinare per timestamp
+      // (presentazione) lo distruggeva. addVideoChunk(chunk, meta) a due argomenti, inoltre, usa
+      // chunk.timestamp anche come timestamp di DECODIFICA: corretto solo senza B-frame. Passando
+      // esplicitamente timestamp di presentazione e decodeTimestampUs (quest'ultimo assegnato in
+      // ordine di arrivo, quindi già in ordine di decodifica) il muxer può ricostruire entrambi
+      // correttamente via compositionTimeOffset, anche quando differiscono.
+      for (const { chunk, meta, decodeTimestampUs } of videoChunkBuffer) {
+        try { mx?.addVideoChunk(chunk, meta, chunk.timestamp, chunk.timestamp - decodeTimestampUs) } catch {}
       }
       // Finalize container, then null all refs
       try { mx?.finalize() } catch (err) { console.error('mux finalize:', err) }
@@ -1880,7 +1896,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
       muxerRef.current = new Muxer(muxOpts)
       const ve = new VideoEncoder({
-        output: (chunk: any, meta: any) => { videoChunkBuffer.push({ chunk, meta }) },
+        // decodeTimestampUs = ordine di arrivo qui (= ordine di decodifica) tradotto in una
+        // timeline sintetica a passo costante — vedi il commento esteso in finishRecording.
+        output: (chunk: any, meta: any) => {
+          videoChunkBuffer.push({ chunk, meta, decodeTimestampUs: Math.round(videoDecodeIdx * 1_000_000 / TARGET_FPS) })
+          videoDecodeIdx++
+        },
         error: (e: any) => console.error('VideoEncoder error:', e)
       })
       // Pick highest-quality AVC profile the browser supports
