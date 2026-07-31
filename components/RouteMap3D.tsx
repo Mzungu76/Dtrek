@@ -108,32 +108,60 @@ function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
   ctx.closePath()
 }
 
-// ── Map pin (replaces hiker avatar) ───────────────────────────────────────────
-// Stile "glossy 3D" (ispirato ai pin-mappa lucidi, Sezione 4: "belli e colorati, tipici dei
-// videogiochi") — gradiente più ricco, highlight speculare, ombra più profonda. Il colore vira tra
-// celeste e rosso in base a hrColorT (-1 = FC in calo, 0 = neutro, 1 = FC in salita) quando
-// l'effetto FC è attivo — vedi hrTrendAt.
+// ── Pin utente: "gettone 3D" ──────────────────────────────────────────────────
+// Pin e cuore sono gettoni SPESSI: la profondità viene da una vera estrusione (la stessa sagoma
+// ridisegnata più volte, spostata e scurita) invece che da un'ombra sfocata. shadowBlur è tra le
+// operazioni più costose su canvas 2D ed entrambi si ridisegnano ad OGNI fotogramma del video; in
+// più un bordo netto sopravvive alla compressione H.264, una sfocatura larga no (banding/anelli).
 
+type RGB = [number, number, number]
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 function lerpChannel(a: number, b: number, t: number): number { return Math.round(a + (b - a) * t) }
-function lerpHex(hexA: string, hexB: string, t: number): string {
-  const a = parseInt(hexA.slice(1), 16), b = parseInt(hexB.slice(1), 16)
-  const r = lerpChannel((a>>16)&255, (b>>16)&255, t), g = lerpChannel((a>>8)&255, (b>>8)&255, t), bl = lerpChannel(a&255, b&255, t)
-  return `rgb(${r},${g},${bl})`
+function hexToRgb(hex: string): RGB {
+  const n = parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+function mixRgb(a: RGB, b: RGB, t: number): RGB {
+  const k = clamp01(t)
+  return [lerpChannel(a[0],b[0],k), lerpChannel(a[1],b[1],k), lerpChannel(a[2],b[2],k)]
+}
+function rgbCss(c: RGB, alpha = 1): string {
+  return alpha >= 1 ? `rgb(${c[0]},${c[1]},${c[2]})` : `rgba(${c[0]},${c[1]},${c[2]},${alpha})`
+}
+/** f<1 scurisce; f>1 schiarisce verso il bianco (non satura i canali come farebbe una moltiplica). */
+function shade(c: RGB, f: number): RGB {
+  if (f <= 1) return [Math.round(c[0]*f), Math.round(c[1]*f), Math.round(c[2]*f)]
+  const k = Math.min(1, f - 1)
+  return [lerpChannel(c[0],255,k), lerpChannel(c[1],255,k), lerpChannel(c[2],255,k)]
 }
 
-/** Colore chiaro/scuro del pin per hrColorT (-1..1, 0 = blu neutro di default). */
-function pinColorsForTrend(hrColorT: number): { light: string; dark: string; tip: string } {
-  const t = Math.max(-1, Math.min(1, hrColorT))
-  if (t >= 0) {
-    return {
-      light: lerpHex('#93c5fd', '#fca5a5', t), dark: lerpHex('#1d4ed8', '#dc2626', t),
-      tip: lerpHex('#1e40af', '#b91c1c', t),
-    }
+// Scala della fatica in stile "zone di frequenza cardiaca": celeste (riposo) → verde → ambra →
+// rosso (sforzo massimo). Colora TUTTO il pin, foto compresa — vedi drawMapPin.
+const EFFORT_STOPS: { at: number; c: RGB }[] = [
+  { at: 0.00, c: hexToRgb('#22d3ee') },
+  { at: 0.35, c: hexToRgb('#4ade80') },
+  { at: 0.68, c: hexToRgb('#fbbf24') },
+  { at: 1.00, c: hexToRgb('#ef4444') },
+]
+function effortRgb(effort: number): RGB {
+  const e = clamp01(effort)
+  for (let i = 1; i < EFFORT_STOPS.length; i++) {
+    const a = EFFORT_STOPS[i-1], b = EFFORT_STOPS[i]
+    if (e <= b.at) return mixRgb(a.c, b.c, (e - a.at) / (b.at - a.at))
   }
-  return {
-    light: lerpHex('#93c5fd', '#a5f3fc', -t), dark: lerpHex('#1d4ed8', '#0e7490', -t),
-    tip: lerpHex('#1e40af', '#155e75', -t),
-  }
+  return EFFORT_STOPS[EFFORT_STOPS.length - 1].c
+}
+const PIN_NEUTRAL: RGB = hexToRgb('#3b82f6')
+
+/** Sagoma del pin (cerchio + punta) come unico path chiuso: riusata identica per l'estrusione, la
+ *  faccia e il bordo, così i tre strati combaciano perfettamente a qualunque scala. */
+function pinSilhouette(ctx: CanvasRenderingContext2D, cx: number, tipY: number, R: number, tipH: number) {
+  const ccY = tipY - R - tipH
+  const ang = Math.asin(0.42)   // punto in cui la punta si stacca dal cerchio
+  ctx.beginPath()
+  ctx.arc(cx, ccY, R, Math.PI/2 - ang, Math.PI/2 + ang, true)   // il giro lungo, sopra
+  ctx.lineTo(cx, tipY)
+  ctx.closePath()
 }
 
 // Ogni ctx.save() qui sotto ha un ctx.restore() garantito da try/finally, non solo "in sequenza":
@@ -148,76 +176,85 @@ function drawMapPin(
   cx: number, cy: number,    // tip of pin = GPS position
   sc: number,                // scale (outW/1080)
   faceImg: HTMLImageElement | null,
-  hrColorT = 0,               // -1..1, vedi pinColorsForTrend — 0 = colore blu di sempre
+  effort: number | null = null,   // 0..1 fatica (vedi effortRgb); null = effetto spento, blu neutro
 ) {
   try {
-  const R    = 32 * sc
-  const tipH = 16 * sc
-  const ccY  = cy - R - tipH   // circle center (pin tip is at cy)
-  const { light, dark, tip } = pinColorsForTrend(hrColorT)
+  const R    = 34 * sc
+  const tipH = 18 * sc
+  const ccY  = cy - R - tipH   // centro del cerchio (la punta del pin è a cy)
+  const base = effort == null ? PIN_NEUTRAL : effortRgb(effort)
+  const light = shade(base, 1.5), dark = shade(base, 0.66), edgeDark = shade(base, 0.34)
+  const DEPTH = 10 * sc        // spessore del gettone
+  const DX    = DEPTH * 0.28   // luce da sinistra-alto: lo spessore si vede in basso a destra
 
   ctx.save()
   try {
-    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 14*sc; ctx.shadowOffsetY = 7*sc
+    // Ombra a terra: ellisse piena sotto la punta — niente shadowBlur (vedi nota in testa)
+    ctx.fillStyle = 'rgba(0,0,0,0.28)'
+    ctx.beginPath(); ctx.ellipse(cx + DX, cy + DEPTH*0.9, R*0.46, R*0.15, 0, 0, Math.PI*2); ctx.fill()
 
-    // Teardrop tip — proprio gradiente (non un piatto), coerente con il corpo
-    const tg = ctx.createLinearGradient(cx-R*0.42, ccY+R*0.5, cx, cy)
-    tg.addColorStop(0, dark); tg.addColorStop(1, tip)
-    ctx.beginPath()
-    ctx.moveTo(cx - R*0.42, ccY + R*0.68)
-    ctx.lineTo(cx + R*0.42, ccY + R*0.68)
-    ctx.lineTo(cx, cy)
-    ctx.closePath()
-    ctx.fillStyle = tg; ctx.fill()
+    // Spessore del gettone: la stessa sagoma ripetuta all'indietro, dal bordo più scuro alla faccia
+    const STEPS = 9
+    for (let i = STEPS; i >= 1; i--) {
+      const f = i / STEPS
+      ctx.fillStyle = rgbCss(mixRgb(dark, edgeDark, f))
+      pinSilhouette(ctx, cx + DX*f, cy + DEPTH*f, R, tipH)
+      ctx.fill()
+    }
 
-    ctx.shadowColor = 'transparent'
+    // Faccia frontale
+    const g = ctx.createRadialGradient(cx - R*0.36, ccY - R*0.40, R*0.04, cx, ccY, R*1.35)
+    g.addColorStop(0, rgbCss(light)); g.addColorStop(0.52, rgbCss(base)); g.addColorStop(1, rgbCss(dark))
+    pinSilhouette(ctx, cx, cy, R, tipH); ctx.fillStyle = g; ctx.fill()
 
-    // Corpo — gradiente ampio e contrastato per un effetto lucido/plastico
-    const g = ctx.createRadialGradient(cx-R*0.32, ccY-R*0.34, R*0.02, cx, ccY, R*1.5)
-    g.addColorStop(0, light); g.addColorStop(0.5, dark); g.addColorStop(1, tip)
-    ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2)
-    ctx.fillStyle = g; ctx.fill()
+    // Bordo bianco: stacca il gettone dalla mappa qualunque colore abbia preso la fatica
+    ctx.strokeStyle = 'white'; ctx.lineWidth = 3.4*sc; ctx.lineJoin = 'round'
+    pinSilhouette(ctx, cx, cy, R, tipH); ctx.stroke()
 
-    // Ombra interna sul bordo inferiore (dà volume, come un bordo in rilievo)
+    // Foto (o sagoma) ritagliata nel cerchio interno, tinta del colore della fatica
+    const ir = R - 7*sc
     ctx.save()
     try {
-      ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.clip()
-      const rim = ctx.createRadialGradient(cx, ccY, R*0.75, cx, ccY, R)
-      rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(1, 'rgba(0,0,0,0.35)')
-      ctx.fillStyle = rim
-      ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.fill()
-    } finally { ctx.restore() }
-
-    // Bordo bianco
-    ctx.strokeStyle = 'white'; ctx.lineWidth = 3*sc
-    ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.stroke()
-
-    // Foto (o sagoma) ritagliata nel cerchio interno
-    ctx.save()
-    try {
-      const ir = R - 2*sc
       ctx.beginPath(); ctx.arc(cx, ccY, ir, 0, Math.PI*2); ctx.clip()
       if (faceImg) {
         ctx.drawImage(faceImg, cx-ir, ccY-ir, ir*2, ir*2)
+        if (effort != null) {
+          // "tutto il pin, foto compresa, si colora in funzione della fatica": blend 'color' invece
+          // di una velatura piatta — sostituisce tinta e saturazione MANTENENDO la luminanza, quindi
+          // il viso resta leggibile invece di appiattirsi sotto un rettangolo semitrasparente.
+          ctx.globalCompositeOperation = 'color'
+          ctx.globalAlpha = 0.92
+          ctx.fillStyle = rgbCss(base)
+          ctx.fillRect(cx-ir, ccY-ir, ir*2, ir*2)
+          ctx.globalAlpha = 1
+          ctx.globalCompositeOperation = 'source-over'
+        }
       } else {
-        ctx.fillStyle = dark
+        ctx.fillStyle = rgbCss(dark)
         ctx.fillRect(cx-ir, ccY-ir, ir*2, ir*2)
-        ctx.fillStyle = 'rgba(255,255,255,0.88)'
+        ctx.fillStyle = 'rgba(255,255,255,0.9)'
         ctx.beginPath(); ctx.arc(cx, ccY-ir*0.2, ir*0.32, 0, Math.PI*2); ctx.fill()
-        ctx.beginPath(); ctx.ellipse(cx, ccY+ir*0.32, ir*0.44, ir*0.26, 0, Math.PI, 0); ctx.fill()
+        ctx.beginPath(); ctx.ellipse(cx, ccY+ir*0.34, ir*0.46, ir*0.27, 0, Math.PI, 0); ctx.fill()
       }
+      // Incavo: ombra interna sul bordo, fa sembrare la foto incassata nel gettone
+      const rim = ctx.createRadialGradient(cx, ccY, ir*0.72, cx, ccY, ir)
+      rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(1, 'rgba(0,0,0,0.42)')
+      ctx.fillStyle = rim; ctx.fillRect(cx-ir, ccY-ir, ir*2, ir*2)
     } finally { ctx.restore() }
 
-    // Highlight speculare, deciso (non un accenno) — il pezzo che fa leggere il pin come lucido/3D,
-    // non solo colorato piatto: bordo netto sull'interno, non un fade lungo (i fade molto larghi e
-    // sottili tendono a comprimere male in video, apparendo come anelli invece che come un bagliore).
+    // Anello del gettone attorno alla foto
+    ctx.strokeStyle = rgbCss(shade(base, 0.8)); ctx.lineWidth = 2.6*sc
+    ctx.beginPath(); ctx.arc(cx, ccY, ir + 1.3*sc, 0, Math.PI*2); ctx.stroke()
+
+    // Highlight speculare netto (non un fade largo: i fade sottili comprimono male in video,
+    // apparendo come anelli invece che come un bagliore) — è il vetro sopra al gettone.
     ctx.save()
     try {
-      ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.clip()
-      ctx.fillStyle = 'rgba(255,255,255,0.75)'
-      ctx.beginPath(); ctx.ellipse(cx-R*0.34, ccY-R*0.36, R*0.34, R*0.2, -0.55, 0, Math.PI*2); ctx.fill()
-      ctx.fillStyle = 'rgba(255,255,255,0.95)'
-      ctx.beginPath(); ctx.ellipse(cx-R*0.4, ccY-R*0.42, R*0.13, R*0.08, -0.55, 0, Math.PI*2); ctx.fill()
+      pinSilhouette(ctx, cx, cy, R, tipH); ctx.clip()
+      ctx.fillStyle = 'rgba(255,255,255,0.30)'
+      ctx.beginPath(); ctx.ellipse(cx-R*0.40, ccY-R*0.46, R*0.40, R*0.20, -0.6, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = 'rgba(255,255,255,0.88)'
+      ctx.beginPath(); ctx.ellipse(cx-R*0.46, ccY-R*0.52, R*0.14, R*0.07, -0.6, 0, Math.PI*2); ctx.fill()
     } finally { ctx.restore() }
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawMapPin error:', err) }
@@ -235,11 +272,13 @@ function heartPulseScale(phase: number): number {
   return 1 + 0.30 * Math.pow(Math.max(0, Math.sin(phase * Math.PI)), 3)
 }
 
+// Cuore pieno e largo quanto alto: la versione precedente era molto più alta che larga e, ingrandita
+// a gettone, si leggeva come una goccia invece che come un cuore.
 function drawHeartPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
   ctx.beginPath()
-  ctx.moveTo(cx, cy + size*0.32)
-  ctx.bezierCurveTo(cx - size*0.55, cy - size*0.28, cx - size*0.22, cy - size*0.68, cx, cy - size*0.22)
-  ctx.bezierCurveTo(cx + size*0.22, cy - size*0.68, cx + size*0.55, cy - size*0.28, cx, cy + size*0.32)
+  ctx.moveTo(cx, cy + size*0.40)
+  ctx.bezierCurveTo(cx - size*0.82, cy - size*0.12, cx - size*0.54, cy - size*0.80, cx, cy - size*0.30)
+  ctx.bezierCurveTo(cx + size*0.54, cy - size*0.80, cx + size*0.82, cy - size*0.12, cx, cy + size*0.40)
   ctx.closePath()
 }
 
@@ -250,55 +289,64 @@ function drawHeartBadge(
 ) {
   if (!(bpm > 0)) return
   try {
-  const R = 32 * sc, tipH = 16 * sc
+  const R = 34 * sc, tipH = 18 * sc
   const ccY = pinTipCy - R - tipH
-  const hx = pinCx, hy = ccY - R * 2.5   // fluttua sopra al pin, staccato — non attaccato
   const scale = heartPulseScale(pulsePhase)
-  const size = 20 * sc * scale   // più grande di prima: a taglia piccola un cuore si legge come una macchia
+  const size = 50 * sc * scale   // gettone vero e proprio, non più un'icona: si legge a colpo d'occhio
+  const hx = pinCx, hy = ccY - R * 2.35   // fluttua sopra al pin, staccato — non attaccato
+  const DEPTH = 12 * sc, DX = DEPTH * 0.28
+  const face = hexToRgb('#ef4444'), deep = hexToRgb('#7f1d1d')
 
-  // Niente gradiente-alone morbido (comprimeva in video come un anello netto invece che come un
-  // bagliore, e niente shadowBlur — uno dei costi per-frame più alti su canvas 2D, qui attivo per
-  // l'intera fase di seguimento quando il toggle è acceso, non una finestra breve). Al suo posto:
-  // un contorno pieno più spesso, in stile fumetto/videogioco — nessun fade sottile da comprimere male.
+  // Gettone a forma di cuore: stessa estrusione del pin (nessuno shadowBlur, nessun alone
+  // sfumato — comprimeva in video come un anello netto invece che come un bagliore).
   ctx.save()
   try {
-    ctx.fillStyle = '#7f1d1d'
-    drawHeartPath(ctx, hx, hy, size * 1.18)
-    ctx.fill()
-    const hg = ctx.createLinearGradient(hx-size*0.4, hy-size*0.6, hx+size*0.3, hy+size*0.4)
-    hg.addColorStop(0, '#fecaca'); hg.addColorStop(0.45, '#f87171'); hg.addColorStop(1, '#dc2626')
+    const STEPS = 8
+    for (let i = STEPS; i >= 1; i--) {
+      const f = i / STEPS
+      ctx.fillStyle = rgbCss(mixRgb(shade(face, 0.62), deep, f))
+      drawHeartPath(ctx, hx + DX*f, hy + DEPTH*f, size)
+      ctx.fill()
+    }
+    const hg = ctx.createLinearGradient(hx-size*0.5, hy-size*0.7, hx+size*0.35, hy+size*0.45)
+    hg.addColorStop(0, '#fecaca'); hg.addColorStop(0.42, '#f87171'); hg.addColorStop(1, '#dc2626')
     ctx.fillStyle = hg
     drawHeartPath(ctx, hx, hy, size)
     ctx.fill()
-    // Highlight netto in stile "sticker" — non un fade, un piccolo blob pieno
-    ctx.fillStyle = 'rgba(255,255,255,0.8)'
-    ctx.beginPath(); ctx.ellipse(hx-size*0.22, hy-size*0.28, size*0.15, size*0.09, -0.5, 0, Math.PI*2); ctx.fill()
-    ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5*sc
+    ctx.strokeStyle = 'white'; ctx.lineWidth = 2.2*sc; ctx.lineJoin = 'round'
     drawHeartPath(ctx, hx, hy, size); ctx.stroke()
+    // Vetro sopra al gettone: highlight netto in stile "sticker", non un fade
+    ctx.save()
+    try {
+      drawHeartPath(ctx, hx, hy, size); ctx.clip()
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'
+      ctx.beginPath(); ctx.ellipse(hx-size*0.24, hy-size*0.30, size*0.20, size*0.12, -0.5, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = 'rgba(255,255,255,0.95)'
+      ctx.beginPath(); ctx.ellipse(hx-size*0.27, hy-size*0.34, size*0.085, size*0.05, -0.5, 0, Math.PI*2); ctx.fill()
+    } finally { ctx.restore() }
   } finally { ctx.restore() }
 
   ctx.save()
   try {
     const label = `${Math.round(bpm)}`
-    ctx.font = `800 ${Math.round(18*sc)}px -apple-system,sans-serif`
-    const lw = ctx.measureText(label).width + 14*sc, lh = 24*sc
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'
-    rrect(ctx, hx-lw/2, hy-size*0.95-lh, lw, lh, lh/2); ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1*sc
-    rrect(ctx, hx-lw/2, hy-size*0.95-lh, lw, lh, lh/2); ctx.stroke()
+    ctx.font = `800 ${Math.round(26*sc)}px -apple-system,sans-serif`
+    const lw = ctx.measureText(label).width + 22*sc, lh = 34*sc
+    const ly = hy - size*0.92 - lh
+    ctx.fillStyle = 'rgba(0,0,0,0.62)'
+    rrect(ctx, hx-lw/2, ly, lw, lh, lh/2); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.4*sc
+    rrect(ctx, hx-lw/2, ly, lw, lh, lh/2); ctx.stroke()
     ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText(label, hx, hy-size*0.95-lh/2)
+    ctx.fillText(label, hx, ly + lh/2)
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawHeartBadge error:', err) }
 }
 
-/** Tendenza -1..1 della FC nel punto `si` della serie appiattita — >0 in salita, <0 in calo,
- *  confrontando con il valore di qualche campione prima (finestra fissa, non tempo reale: la
- *  serie è già ricampionata su SAMPLES punti lungo il percorso). ±15 bpm di variazione = ±1. */
-function hrTrendAt(smoothHr: number[], si: number, samples: number): number {
-  const window = Math.max(1, Math.round(samples * 0.05))
-  const prev = smoothHr[Math.max(0, si - window)]
-  return Math.max(-1, Math.min(1, (smoothHr[si] - prev) / 15))
+/** Fatica 0..1 dalla FC nel punto `si`, normalizzata sull'escursione STESSA (min..max di questa
+ *  uscita) invece che su soglie assolute arbitrarie: così la scala di colore viene usata tutta,
+ *  qualunque sia la forma fisica di chi cammina. 0 = passo di riposo, 1 = punto di massimo sforzo. */
+function hrEffortAt(smoothHr: number[], si: number, hrMin: number, hrMax: number): number {
+  return clamp01((smoothHr[si] - hrMin) / Math.max(1, hrMax - hrMin))
 }
 
 // ── Stelline all'arrivo finale (opzionale) ──────────────────────────────────────
@@ -344,6 +392,125 @@ function drawArrivalStars(ctx: CanvasRenderingContext2D, cx: number, cy: number,
     } finally { ctx.restore() }
   }
   } catch (err) { console.error('[dtrek] drawArrivalStars error:', err) }
+}
+
+// ── Traguardi di percorso 25/50/75% (opzionale) ────────────────────────────────
+/** Il numero nasce nel punto esatto del percorso toccato dal pin e sale sfumando, con un anello che
+ *  si espande dallo stesso punto: l'occhio parte dal terreno, non da un'etichetta piovuta dall'alto.
+ *  `t` copre 0..1 l'intera animazione. */
+function drawRouteMilestone(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, sc: number,
+  pct: number, t: number,
+) {
+  try {
+  const k = clamp01(t)
+  const fadeIn = Math.min(1, k / 0.12)
+  const fadeOut = k > 0.58 ? Math.max(0, 1 - (k - 0.58) / 0.42) : 1
+  const alpha = fadeIn * fadeOut
+  if (alpha <= 0.01) return
+
+  // Anello che si espande dal punto toccato — resta ancorato a cy, non sale col numero
+  if (k < 0.45) {
+    const rt = k / 0.45
+    ctx.save()
+    try {
+      ctx.globalAlpha = (1 - rt) * 0.85
+      ctx.strokeStyle = '#fde047'; ctx.lineWidth = 5*sc * (1 - rt*0.6)
+      ctx.beginPath(); ctx.arc(cx, cy, 30*sc + 130*sc * (1 - Math.pow(1-rt, 2)), 0, Math.PI*2); ctx.stroke()
+    } finally { ctx.restore() }
+  }
+
+  const up = 1 - Math.pow(1 - k, 2.4)      // sale svelto, poi rallenta
+  const y = cy - 260*sc * up
+  // easeOutBack: piccolo scavalco e assestamento, il "pop" da videogioco
+  const popT = Math.min(1, k / 0.26)
+  const c1 = 1.70158, c3 = c1 + 1
+  const back = 1 + c3*Math.pow(popT-1, 3) + c1*Math.pow(popT-1, 2)
+  const scale = 0.5 + 0.5 * back
+
+  ctx.save()
+  try {
+    ctx.globalAlpha = alpha
+    ctx.translate(cx, y)
+    ctx.scale(scale, scale)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
+    // Contorno pieno invece di shadowBlur/riquadro: leggibile su qualunque mappa sotto
+    const label = `${pct}%`
+    ctx.font = `900 ${Math.round(110*sc)}px -apple-system,sans-serif`
+    ctx.strokeStyle = 'rgba(6,20,32,0.92)'; ctx.lineWidth = 12*sc
+    ctx.strokeText(label, 0, 0)
+    const g = ctx.createLinearGradient(0, -60*sc, 0, 60*sc)
+    g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#fde047')
+    ctx.fillStyle = g
+    ctx.fillText(label, 0, 0)
+    const cap = 'DEL PERCORSO'
+    ctx.font = `800 ${Math.round(24*sc)}px -apple-system,sans-serif`
+    ctx.strokeStyle = 'rgba(6,20,32,0.92)'; ctx.lineWidth = 6*sc
+    ctx.strokeText(cap, 0, 78*sc)
+    ctx.fillStyle = 'white'; ctx.fillText(cap, 0, 78*sc)
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawRouteMilestone error:', err) }
+}
+
+// ── Testo del gancio iniziale ──────────────────────────────────────────────────
+/** Righe che salgono in sequenza con contorno pieno e una barra accento che si allarga sotto.
+ *  Niente riquadro semitrasparente dietro al testo: su una foto a schermo intero un rettangolo
+ *  grigio in mezzo all'inquadratura è la cosa che fa sembrare il gancio "fatto male", mentre un
+ *  contorno netto si legge su qualunque sfondo e non copre la foto. `localT` 0..1 sul singolo tempo. */
+function drawHookText(
+  ctx: CanvasRenderingContext2D,
+  outW: number, outH: number, sc: number,
+  text: string, localT: number,
+) {
+  try {
+  const k = clamp01(localT)
+  const inT = Math.min(1, k / 0.20)
+  const outT = k > 0.84 ? (k - 0.84) / 0.16 : 0
+  const blockAlpha = inT * (1 - outT)
+  if (blockAlpha <= 0.01) return
+
+  ctx.save()
+  try {
+    ctx.font = `900 ${Math.round(58*sc)}px -apple-system,sans-serif`
+    const maxW = outW - 110*sc
+    const words = text.toUpperCase().split(' ')
+    const lines: string[] = []
+    let cur = ''
+    for (const w of words) {
+      const test = cur ? cur + ' ' + w : w
+      if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w } else { cur = test }
+    }
+    if (cur) lines.push(cur)
+    const visLines = lines.slice(0, 3)
+    const lineH = 70*sc
+    // Terzo basso, come nei reel: lascia respirare la foto sopra invece di piazzarsi al centro
+    const blockTop = outH*0.72 - (visLines.length - 1) * lineH / 2
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
+    visLines.forEach((l, i) => {
+      const li = clamp01((k - i*0.07) / 0.20)   // ogni riga entra poco dopo la precedente
+      const ease = 1 - Math.pow(1 - li, 3)
+      const a = blockAlpha * ease
+      if (a <= 0.01) return
+      const y = blockTop + i*lineH + (1 - ease) * 46*sc - outT * 40*sc
+      ctx.globalAlpha = a
+      ctx.strokeStyle = 'rgba(4,14,22,0.9)'; ctx.lineWidth = 11*sc
+      ctx.strokeText(l, outW/2, y)
+      ctx.fillStyle = 'white'
+      ctx.fillText(l, outW/2, y)
+    })
+
+    const barT = clamp01((k - 0.10) / 0.28)
+    const barW = 150*sc * (1 - Math.pow(1 - barT, 3))
+    if (barW > 1) {
+      ctx.globalAlpha = blockAlpha
+      ctx.fillStyle = '#38bdf8'
+      const by = blockTop + (visLines.length - 1)*lineH + 52*sc - outT*40*sc
+      rrect(ctx, outW/2 - barW/2, by, barW, 7*sc, 3.5*sc); ctx.fill()
+    }
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawHookText error:', err) }
 }
 
 // ── Photo pin ─────────────────────────────────────────────────────────────────
@@ -984,11 +1151,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // il viaggio dura davvero — vedi lib/videoPhotoCarousel.ts hyperlapseIntensityAt. Default off:
   // effetto stilistico, non tutti lo vogliono.
   const [videoHyperlapseEnabled, setVideoHyperlapseEnabled] = useState(false)
-  // Cuore che pulsa + BPM sopra il pin, e pin colorato in base alla tendenza della FC (rosso in
-  // salita, celeste in calo) — entrambi gli stili video, richiede dati di frequenza cardiaca.
+  // Gettone 3D a forma di cuore che pulsa al ritmo vero della FC, con i BPM correnti sopra —
+  // entrambi gli stili video, richiede dati di frequenza cardiaca.
   const [videoHeartEffectEnabled, setVideoHeartEffectEnabled] = useState(false)
+  // Colorazione del pin (gettone e foto insieme) in base alla fatica: celeste a riposo → verde →
+  // ambra → rosso al massimo sforzo, sulla scala della FC di QUESTA uscita — vedi hrEffortAt.
+  // Indipendente dal cuore: si può volere il pin che reagisce senza il cuore a schermo, o viceversa.
+  const [videoPinEffortColorEnabled, setVideoPinEffortColorEnabled] = useState(false)
   // Scoppio di stelline al momento dell'arrivo finale del percorso (fase finale, non ad ogni foto).
   const [videoArrivalStarsEnabled, setVideoArrivalStarsEnabled] = useState(false)
+  // Traguardi 25/50/75%: il numero sale dal punto del percorso toccato dal pin — vedi
+  // drawRouteMilestone. Non si attiva durante una sosta su foto (verrebbe coperto dalla polaroid).
+  const [videoMilestonesEnabled, setVideoMilestonesEnabled] = useState(false)
   // Anteprima dal vivo del carosello (schermata Montaggio) — sostituisce temporaneamente il foglio
   // impostazioni con la mappa a schermo pieno, usando lo stesso tick() di anteprima già presente
   // per lo scrub del percorso fuori dal wizard video.
@@ -2150,6 +2324,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // modulo su un periodo che cambia salterebbe di fase ad ogni variazione — accumulare l'avanzamento
     // di fase frame per frame (bpm/60 battiti al secondo, integrato nel tempo) resta invece continuo.
     const heartPhaseRef = { current: 0 }
+    // Traguardi 25/50/75%: quota → fotogramma in cui il pin l'ha toccata (si scatta una volta sola).
+    // Registrato durante il rendering invece che pre-calcolato perché `p` dipende dalle tabelle del
+    // viaggio (soste comprese); in anteprima parziale un traguardo già superato semplicemente non
+    // compare, ed è corretto così.
+    const milestoneHitRef = [0.25, 0.5, 0.75].map(mark => ({ mark, hitFrame: -1 }))
+    const MILESTONE_FRAMES = Math.round(TARGET_FPS * 1.7)
 
     // Pre-compute peak position on route (for peak callout)
     const peakRouteP = (() => {
@@ -2336,72 +2516,59 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           ctx.clearRect(0, 0, outW, outH)
           const img = hookPhoto?.img
           const imgReady = !!img && img.complete && img.naturalWidth > 0
+          const sc3 = Math.min(outW, outH) / 1080
           if (imgReady) {
-            // Zoom "a scatto": la maggior parte avviene nei primissimi fotogrammi (ease-out molto
-            // aggressivo) invece del Ken Burns lento delle foto lungo il percorso — uno strappo
-            // visivo voluto, non un movimento elegante.
-            const snapT = 1 - Math.pow(1 - Math.min(1, hookT / 0.4), 3)
-            const scale = 1.18 - 0.18 * snapT
+            // Push-in CONTINUO: strappo iniziale (ease-out aggressivo nei primi fotogrammi) seguito
+            // da una deriva lenta che non si ferma mai fino alla fine del gancio. Prima lo zoom si
+            // esauriva al 40% e il resto del gancio era un fermo-immagine — è la cosa che lo faceva
+            // sembrare "morto" a metà, proprio dove invece deve trattenere chi guarda.
+            const snapT = 1 - Math.pow(1 - Math.min(1, hookT / 0.28), 3)
+            const scale = 1.24 - 0.16 * snapT - 0.08 * hookT
             const srcA = img!.width / img!.height, dstA = outW / outH
             let sx=0, sy=0, sw=img!.width, sh=img!.height
             if (srcA > dstA) { sw = Math.round(sh * dstA); sx = (img!.width - sw) / 2 }
             else { sh = Math.round(sw / dstA); sy = (img!.height - sh) / 2 }
             ctx.save()
-            ctx.translate(outW/2, outH/2)
-            ctx.scale(scale, scale)
-            ctx.drawImage(img!, sx, sy, sw, sh, -outW/2, -outH/2, outW, outH)
-            ctx.restore()
-            const vig = ctx.createRadialGradient(outW/2, outH/2, outW*0.25, outW/2, outH/2, outW*0.8)
-            vig.addColorStop(0, 'rgba(0,0,0,0.15)'); vig.addColorStop(1, 'rgba(0,0,0,0.55)')
-            ctx.fillStyle = vig; ctx.fillRect(0, 0, outW, outH)
+            try {
+              ctx.translate(outW/2, outH/2)
+              ctx.scale(scale, scale)
+              ctx.drawImage(img!, sx, sy, sw, sh, -outW/2, -outH/2, outW, outH)
+            } finally { ctx.restore() }
+            // Scrim direzionali invece della vignettatura radiale: la foto resta luminosa al centro
+            // (prima veniva incupita ovunque) e il buio si concentra dove va il testo, in basso.
+            const bottom = ctx.createLinearGradient(0, outH*0.42, 0, outH)
+            bottom.addColorStop(0, 'rgba(0,0,0,0)')
+            bottom.addColorStop(0.55, 'rgba(0,0,0,0.42)')
+            bottom.addColorStop(1, 'rgba(0,0,0,0.84)')
+            ctx.fillStyle = bottom; ctx.fillRect(0, outH*0.42, outW, outH*0.58)
+            const top = ctx.createLinearGradient(0, 0, 0, outH*0.20)
+            top.addColorStop(0, 'rgba(0,0,0,0.45)'); top.addColorStop(1, 'rgba(0,0,0,0)')
+            ctx.fillStyle = top; ctx.fillRect(0, 0, outW, outH*0.20)
           } else {
-            ctx.fillStyle = '#0b1a24'; ctx.fillRect(0, 0, outW, outH)
+            const bg = ctx.createLinearGradient(0, 0, 0, outH)
+            bg.addColorStop(0, '#123047'); bg.addColorStop(1, '#08131c')
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, outW, outH)
           }
           // Statistica e/o curiosità (ognuna opzionale, vedi i toggle in Montaggio) — se entrambe
           // attive si alternano in due tempi uguali all'interno del gancio, altrimenti quella
-          // attiva occupa tutta la durata.
+          // attiva occupa tutta la durata. drawHookText gestisce entrata, uscita e leggibilità.
           const hookBeats = [statHookText, curiosityHookText].filter((t): t is string => !!t)
           if (hookBeats.length > 0) {
-            const sc3 = Math.min(outW, outH) / 1080
             const beatDur = 1 / hookBeats.length
             const beatIdx = Math.min(hookBeats.length - 1, Math.floor(hookT / beatDur))
             const localT = (hookT - beatIdx * beatDur) / beatDur
-            const text = hookBeats[beatIdx]
-            // Pop-in rapido (non una dissolvenza lenta come il titolo), con un piccolo overshoot —
-            // lo stesso strappo dello zoom sulla foto, applicato al testo.
-            const popT = Math.min(1, localT / 0.35)
-            const overshoot = popT < 1 ? 1 + 0.08 * Math.sin(popT * Math.PI) : 1
-            const fadeOutStart = 0.8
-            const alpha = localT > fadeOutStart ? Math.max(0, 1 - (localT - fadeOutStart) / (1 - fadeOutStart)) : 1
-            ctx.save()
-            ctx.globalAlpha = alpha
-            ctx.translate(outW/2, outH*0.6)
-            ctx.scale(overshoot, overshoot)
-            ctx.font = `800 ${Math.round(46*sc3)}px -apple-system,sans-serif`
-            const maxW = outW - Math.round(90*sc3)
-            const words = text.toUpperCase().split(' ')
-            const lines: string[] = []
-            let cur = ''
-            for (const wd of words) {
-              const test = cur ? cur + ' ' + wd : wd
-              if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = wd } else { cur = test }
-            }
-            if (cur) lines.push(cur)
-            const visLines = lines.slice(0, 3)
-            const lineH = Math.round(56*sc3)
-            const blockH = visLines.length * lineH
-            // Riquadro pieno dietro al testo invece di shadowBlur (uno dei costi per-frame più alti
-            // su canvas 2D) per la leggibilità sulla foto — stesso trucco già usato per il callout
-            // di vetta più sotto in questo file.
-            const maxLineW = Math.max(...visLines.map(l => ctx.measureText(l).width))
-            const padX = 26*sc3, padY = 14*sc3
-            ctx.fillStyle = 'rgba(0,0,0,0.42)'
-            rrect(ctx, -maxLineW/2-padX, -blockH/2-padY, maxLineW+padX*2, blockH+padY*2, 18*sc3)
-            ctx.fill()
-            ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-            visLines.forEach((l, i) => ctx.fillText(l, 0, -blockH/2 + lineH/2 + i*lineH))
-            ctx.restore()
+            drawHookText(ctx, outW, outH, sc3, hookBeats[beatIdx], localT)
           }
+          // Barra di avanzamento del gancio: dice a colpo d'occhio che dura pochissimo, e dà un
+          // movimento costante anche nei fotogrammi in cui il testo è fermo.
+          ctx.save()
+          try {
+            const bw = outW * 0.42, bx = (outW - bw) / 2, by = outH * 0.94
+            ctx.fillStyle = 'rgba(255,255,255,0.22)'
+            rrect(ctx, bx, by, bw, 4*sc3, 2*sc3); ctx.fill()
+            ctx.fillStyle = 'rgba(255,255,255,0.92)'
+            rrect(ctx, bx, by, bw * clamp01(hookT), 4*sc3, 2*sc3); ctx.fill()
+          } finally { ctx.restore() }
           if (videoEncoderRef.current) {
             await waitForEncoderQueue(videoEncoderRef.current)
             let _vf: InstanceType<typeof VideoFrame> | null = null
@@ -2527,10 +2694,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (outroP < 0.2) {
             const siHrO = SAMPLES - 1  // p=1.0 in fase di finale: ultimo campione della serie
             const bpmNowO = hasHr ? smoothHr[siHrO] : 0
-            const hrColorTO = (videoHeartEffectEnabled && hasHr) ? hrTrendAt(smoothHr, siHrO, SAMPLES) : 0
+            const effortO = (videoPinEffortColorEnabled && hasHr) ? hrEffortAt(smoothHr, siHrO, hrMin, hrMax) : null
             if (videoHeartEffectEnabled && bpmNowO > 0) heartPhaseRef.current = (heartPhaseRef.current + (bpmNowO/60)/TARGET_FPS) % 1
             ctx.globalAlpha = 1 - outroP / 0.2
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, hrColorTO)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, effortO)
             if (videoHeartEffectEnabled && bpmNowO > 0) drawHeartBadge(ctx, outW/2, outH/2, outW/1080, bpmNowO, heartPhaseRef.current)
             ctx.globalAlpha = 1
           }
@@ -2713,11 +2880,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // più sotto) a occupare il centro schermo: il pin dell'utente non si disegna in quel caso.
         const stopZoomTNow = (isCarousel && stopIndex !== undefined) ? stopPhotoZoomAt(stopT ?? 0) : 0
 
-        // Cuore/colore FC (opzionale, entrambi gli stili): tendenza della FC nel punto corrente del
-        // percorso e avanzamento della fase del battito — vedi hrTrendAt/heartPhaseRef sopra.
+        // Cuore/colore FC (opzionali e indipendenti, entrambi gli stili): fatica nel punto corrente
+        // del percorso e avanzamento della fase del battito — vedi hrEffortAt/heartPhaseRef sopra.
         const siHr = Math.min(Math.round(p*(SAMPLES-1)), SAMPLES-1)
         const bpmNow = hasHr ? smoothHr[siHr] : 0
-        const hrColorT = (videoHeartEffectEnabled && hasHr) ? hrTrendAt(smoothHr, siHr, SAMPLES) : 0
+        const effortNow = (videoPinEffortColorEnabled && hasHr) ? hrEffortAt(smoothHr, siHr, hrMin, hrMax) : null
         if (videoHeartEffectEnabled && bpmNow > 0) {
           heartPhaseRef.current = (heartPhaseRef.current + (bpmNow / 60) / TARGET_FPS) % 1
         }
@@ -2725,13 +2892,26 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
         if (stopZoomTNow <= 0.001) {
           if (introP === undefined) {
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, hrColorT)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, effortNow)
             if (videoHeartEffectEnabled && bpmNow > 0) drawHeartBadge(ctx, outW/2, outH/2, outW/1080, bpmNow, heartPhaseRef.current)
           } else if (introP > 0.7) {
             ctx.globalAlpha = (introP - 0.7) / 0.3
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, hrColorT)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, effortNow)
             if (videoHeartEffectEnabled && bpmNow > 0) drawHeartBadge(ctx, outW/2, outH/2, outW/1080, bpmNow, heartPhaseRef.current)
             ctx.globalAlpha = 1
+          }
+        }
+
+        // Traguardi 25/50/75%: si scattano solo fuori dalle soste (durante una sosta la polaroid
+        // occupa lo schermo e li coprirebbe) — così un traguardo raggiunto in sosta parte appena
+        // la foto si richiude, invece di andare perso.
+        if (videoMilestonesEnabled && introP === undefined && stopZoomTNow <= 0.001) {
+          for (const mk of milestoneHitRef) {
+            if (mk.hitFrame < 0 && p >= mk.mark) mk.hitFrame = frameIdx
+            const el = mk.hitFrame < 0 ? -1 : frameIdx - mk.hitFrame
+            if (el >= 0 && el < MILESTONE_FRAMES) {
+              drawRouteMilestone(ctx, outW/2, outH/2, sc2, Math.round(mk.mark*100), el / MILESTONE_FRAMES)
+            }
           }
         }
 
@@ -2832,7 +3012,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoHeartEffectEnabled,videoArrivalStarsEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -3272,7 +3452,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <label className={`flex items-center gap-2 mb-2 ${hasBodyData?'cursor-pointer':'opacity-40'}`}>
                 <input type="checkbox" checked={videoHeartEffectEnabled} disabled={!hasBodyData}
                   onChange={e=>setVideoHeartEffectEnabled(e.target.checked)} className="w-4 h-4 accent-blue-500"/>
-                <span className="text-white text-xs font-semibold">Cuore che batte + pin colorato dalla FC</span>
+                <span className="text-white text-xs font-semibold">Cuore 3D che batte + BPM</span>
+              </label>
+              <label className={`flex items-center gap-2 mb-2 ${hasBodyData?'cursor-pointer':'opacity-40'}`}>
+                <input type="checkbox" checked={videoPinEffortColorEnabled} disabled={!hasBodyData}
+                  onChange={e=>setVideoPinEffortColorEnabled(e.target.checked)} className="w-4 h-4 accent-blue-500"/>
+                <span className="text-white text-xs font-semibold">Pin colorato dalla fatica</span>
+              </label>
+              {videoPinEffortColorEnabled&&hasBodyData&&(
+                <p className="text-white/30 text-[11px] mb-2 pl-6 leading-relaxed">Gettone e foto virano insieme: celeste a riposo → verde → ambra → rosso nel punto di massimo sforzo.</p>
+              )}
+              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                <input type="checkbox" checked={videoMilestonesEnabled}
+                  onChange={e=>setVideoMilestonesEnabled(e.target.checked)} className="w-4 h-4 accent-blue-500"/>
+                <span className="text-white text-xs font-semibold">Traguardi 25/50/75% del percorso</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={videoArrivalStarsEnabled}
