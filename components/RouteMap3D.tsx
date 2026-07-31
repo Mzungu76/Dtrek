@@ -2265,12 +2265,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // lento da fare ad ogni fotogramma) o catturare subito (rischio di terreno non ancora pronto).
     const onNextRender = (cb: () => void | Promise<void>) => {
       let fired = false
-      // Chiama cb() un fotogramma (rAF) DOPO la decisione di catturare, non nello stesso tick
-      // dell'evento 'render' — leggere subito mapCanvas nello stesso tick rischia di catturare il
-      // framebuffer GPU prima che il compositor l'abbia effettivamente reso disponibile in lettura
-      // (causa più probabile dei fotogrammi neri: vedi isCanvasBlank sopra). Un rAF di margine dà
-      // al browser il tempo di completare lo swap, a costo di un frame di latenza impercettibile.
-      const fire = () => { if (!fired) { fired = true; requestAnimationFrame(() => { cb() }) } }
+      // NB: un tentativo precedente ritardava cb() di un requestAnimationFrame extra dopo 'render',
+      // nell'ipotesi di dare tempo al compositor. In pratica ha peggiorato drasticamente il problema
+      // (quasi tutti i fotogrammi neri): il ritardo sposta sistematicamente la lettura dentro il
+      // PROSSIMO ciclo di ripittura interno di MapLibre (subito dopo il suo gl.clear(), prima del
+      // ridisegno vero) invece che fuori da esso. cb() resta quindi sincrono rispetto a 'render';
+      // il rilevatore isCanvasBlank sotto resta come rete di sicurezza per i casi (rari) in cui
+      // anche questa lettura sincrona cade nella finestra sbagliata.
+      const fire = () => { if (!fired) { fired = true; cb() } }
       let attempts = 0
       const MAX_TILE_WAIT_ATTEMPTS = 3
       const tryFire = () => {
