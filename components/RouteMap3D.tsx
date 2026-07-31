@@ -1802,6 +1802,25 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     ctx.imageSmoothingEnabled=true
     ctx.imageSmoothingQuality='high'
 
+    // Rilevatore di fotogrammi "vuoti" (Sezione 4, causa dei lampeggii/fotogrammi neri): a volte il
+    // canvas WebGL di MapLibre, letto subito dopo l'evento 'render', contiene ancora il framebuffer
+    // appena azzerato invece del disegno vero (race tra repaint e swap del compositor GPU — capita
+    // più spesso nei tratti "follow" dove la camera attraversa terreno nuovo ogni fotogramma). Un
+    // campione 8x8 rilevato come "quasi nero" indica proprio questo: si tratta il fotogramma come
+    // "mappa non disponibile" e si salta SOLO il ridisegno (il composito trattiene l'ultimo buono,
+    // vedi mapAvailableF/O più sotto), invece di incollare il nero nel video.
+    const blankSampleCanvas=document.createElement('canvas'); blankSampleCanvas.width=8; blankSampleCanvas.height=8
+    const blankSampleCtx=blankSampleCanvas.getContext('2d',{willReadFrequently:true})
+    const isCanvasBlank=(cv:HTMLCanvasElement):boolean=>{
+      if(!blankSampleCtx||cv.width<=0||cv.height<=0) return false
+      try{
+        blankSampleCtx.drawImage(cv,0,0,cv.width,cv.height,0,0,8,8)
+        const data=blankSampleCtx.getImageData(0,0,8,8).data
+        let sum=0; for(let i=0;i<data.length;i+=4) sum+=data[i]+data[i+1]+data[i+2]
+        return (sum/(64*3))<3
+      }catch{ return false }
+    }
+
     // Codec: H.264 dove supportato nativamente (Safari/iOS), VP9 su Chrome/Firefox.
     // NON specificare profili H.264 (avc1.640028 ecc.) — alcuni browser li dichiarano
     // supportati ma producono output scadente con l'encoder software di fallback.
@@ -1904,19 +1923,30 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         },
         error: (e: any) => console.error('VideoEncoder error:', e)
       })
-      // Pick highest-quality AVC profile the browser supports
-      const avcCandidates = ['avc1.640034','avc1.640028','avc1.4d4028','avc1.42003d','avc1.420028']
+      // Profilo AVC Baseline ('42' = profile_idc 66) invece di High/Main ('64'/'4d'): il profilo
+      // Baseline VIETA i B-frame per specifica H.264 (non è un'impostazione che l'encoder può
+      // scegliere di ignorare, è una restrizione del profilo stesso) — elimina strutturalmente la
+      // classe di bug legata all'ordine di decodifica dei B-frame nel muxing (vedi il commento in
+      // finishRecording), invece di limitarsi a gestirla correttamente. Costa una compressione
+      // leggermente meno efficiente (file un po' più grandi a parità di qualità) — un compromesso
+      // accettato qui perché la priorità è l'affidabilità, non la dimensione del file.
+      const avcCandidates = ['avc1.420034','avc1.42002a','avc1.420028','avc1.42001f']
       let chosenCodec = 'avc1.420028'
+      // Preferisce l'encoder SOFTWARE a quello hardware: gli encoder H.264 hardware su vari SoC
+      // Android hanno bug WebCodecs documentati (frame corrotti/riordinati) — 'prefer-software' è
+      // solo una preferenza (se non disponibile il browser ripiega comunque sull'hardware), non
+      // un requisito che possa far fallire isConfigSupported. Più lento, ma più prevedibile —
+      // la priorità qui è la correttezza del video, non la velocità di rendering.
       for (const c of avcCandidates) {
         try {
-          const sup = await VideoEncoder.isConfigSupported({ codec: c, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
+          const sup = await VideoEncoder.isConfigSupported({ codec: c, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality', hardwareAcceleration: 'prefer-software' })
           if (sup.supported) { chosenCodec = c; break }
         } catch {}
       }
       // 'quality' (not 'realtime'): this is a file export, not a live stream — the spec
       // explicitly allows 'realtime' encoders to drop/degrade frames under load to
       // minimize latency, which is the wrong tradeoff here and was producing flicker.
-      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
+      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality', hardwareAcceleration: 'prefer-software' })
       videoEncoderRef.current = ve
 
     } else {
@@ -2235,7 +2265,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // lento da fare ad ogni fotogramma) o catturare subito (rischio di terreno non ancora pronto).
     const onNextRender = (cb: () => void | Promise<void>) => {
       let fired = false
-      const fire = () => { if (!fired) { fired = true; cb() } }
+      // Chiama cb() un fotogramma (rAF) DOPO la decisione di catturare, non nello stesso tick
+      // dell'evento 'render' — leggere subito mapCanvas nello stesso tick rischia di catturare il
+      // framebuffer GPU prima che il compositor l'abbia effettivamente reso disponibile in lettura
+      // (causa più probabile dei fotogrammi neri: vedi isCanvasBlank sopra). Un rAF di margine dà
+      // al browser il tempo di completare lo swap, a costo di un frame di latenza impercettibile.
+      const fire = () => { if (!fired) { fired = true; requestAnimationFrame(() => { cb() }) } }
       let attempts = 0
       const MAX_TILE_WAIT_ATTEMPTS = 3
       const tryFire = () => {
@@ -2449,14 +2484,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // timestamp del video (il contatore fotogramma avanza comunque), che alcuni player
           // riempiono con un fotogramma nero invece di trattenere l'ultimo buono: un fotogramma
           // duplicato è impercettibile, un buco nella timeline no.
-          const mapAvailableO = mapCanvas.width > 0 && mapCanvas.height > 0
+          const mapAvailableO = mapCanvas.width > 0 && mapCanvas.height > 0 && !isCanvasBlank(mapCanvas)
           if (mapAvailableO) {
           ctx.clearRect(0, 0, outW, outH)
-          const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
-          try { ctx.filter=grading } catch {}
+          // ctx.filter (color grading) rimosso qui — vedi la nota estesa nel blocco "follow" più
+          // sotto sul perché.
           const crO = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
           ctx.drawImage(mapCanvas, crO.sx, crO.sy, crO.sw, crO.sh, 0, 0, outW, outH)
-          try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
           // User pin visible at start of outro, fades out over first 20%
           if (outroP < 0.2) {
@@ -2612,15 +2646,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // timestamp del video (il contatore fotogramma avanza comunque), che alcuni player
         // riempiono con un fotogramma nero invece di trattenere l'ultimo buono: un fotogramma
         // duplicato è impercettibile, un buco nella timeline no.
-        const mapAvailableF = mapCanvas.width > 0 && mapCanvas.height > 0
+        const mapAvailableF = mapCanvas.width > 0 && mapCanvas.height > 0 && !isCanvasBlank(mapCanvas)
         if (mapAvailableF) {
         ctx.clearRect(0, 0, outW, outH)
-        // Color grading: applica il grading del preset corrente
-        const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
-        try { ctx.filter=grading } catch {}
+        // Color grading (ctx.filter) rimosso qui di proposito, come debug mirato allo sfarfallio/
+        // fotogrammi neri segnalati: ctx.filter su canvas 2D è una delle operazioni più costose
+        // (spesso richiede un intero passaggio software di post-processing, non solo GPU) ed è nota
+        // per implementazioni incoerenti/difettose su alcuni motori mobile in accelerazione
+        // GPU — specialmente filtrando un drawImage che ha per sorgente un canvas WebGL, esattamente
+        // il caso qui (mapCanvas è il canvas di MapLibre). Applicato/rimosso ad OGNI fotogramma per
+        // l'intero video, non un uso occasionale. Punto ragionevole da eliminare prima di continuare
+        // a cercare altrove, avendo già escluso diverse altre cause plausibili senza risolvere.
         const crF = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
         ctx.drawImage(mapCanvas,crF.sx,crF.sy,crF.sw,crF.sh,0,0,outW,outH)
-        try { ctx.filter='none' } catch {}
 
         // Hyperlapse opzionale (Sezione 4): un leggero sdoppiamento della mappa a scala crescente e
         // opacità calante, solo nei tratti di viaggio più lunghi — dà energia dove il viaggio dura
