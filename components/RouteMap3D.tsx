@@ -963,6 +963,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoShowBody,     setVideoShowBody]    = useState(true)
   const [videoShowPois,     setVideoShowPois]    = useState(false)
   const [videoRecordedBlob, setVideoRecordedBlob]= useState<Blob | null>(null)
+  // Se l'ultimo render completato era un'anteprima veloce (solo una finestra di fotogrammi centrale
+  // al percorso) invece del video intero — cambia il testo della schermata "pronto" di conseguenza.
+  const [lastRenderWasPreview, setLastRenderWasPreview] = useState(false)
+  const [lastRenderSeconds, setLastRenderSeconds] = useState(0)
   const [renderProgress,    setRenderProgress]   = useState(0)
   const [renderFrame,       setRenderFrame]      = useState(0)
   const [renderTotal,       setRenderTotal]      = useState(0)
@@ -1673,7 +1677,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   // ── Cinematic rendering ───────────────────────────────────────────────────────
 
-  const startRendering=useCallback(async ()=>{
+  const startRendering=useCallback(async (previewOnly = false)=>{
     const map=mapRef.current; if(!map) return
     if(typeof MediaRecorder==='undefined'){
       setShareToast('Registrazione video non supportata su questo browser')
@@ -2107,6 +2111,44 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const photoTriggerRouteFrames = isCarousel ? [] : sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
     const TOTAL_FRAMES = HOOK_FRAMES + INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + OUTRO_FRAMES
 
+    // Anteprima veloce (Sezione 4, debug): renderizza solo una finestra di fotogrammi centrale al
+    // percorso invece del video intero — pensata per riprodurre in pochi secondi un bug legato a
+    // una sosta su una foto, senza aspettare l'intera esportazione. Individua le finestre "foto"
+    // (soste, stile Carosello; rivelazioni a schermo intero, stile Classico) in indice di
+    // fotogramma GLOBALE, sceglie quella più centrale, e vi aggiunge un contorno di viaggio prima e
+    // dopo così si vede anche la transizione, non solo la foto isolata.
+    const photoWindows: { start: number; end: number }[] = []
+    const followBase = HOOK_FRAMES + INTRO_FRAMES
+    if (isCarousel && journey) {
+      let curIdx = -1, curStart = -1
+      for (let f = 0; f < journey.totalFrames; f++) {
+        const idx = journey.stopIndexTable[f]
+        if (idx !== curIdx) {
+          if (curIdx >= 0) photoWindows.push({ start: followBase + curStart, end: followBase + f })
+          curIdx = idx; curStart = f
+        }
+      }
+      if (curIdx >= 0) photoWindows.push({ start: followBase + curStart, end: followBase + journey.totalFrames })
+    } else if (!isCarousel) {
+      let pauseOffset = 0
+      for (let i = 0; i < sortedPhotos.length; i++) {
+        const triggerF = photoTriggerRouteFrames[i] + pauseOffset
+        photoWindows.push({ start: followBase + triggerF, end: followBase + triggerF + PHOTO_REVEAL_FRAMES })
+        pauseOffset += PHOTO_REVEAL_FRAMES
+      }
+    }
+    const previewContextSec = videoHyperlapseEnabled ? 6 : 3
+    const previewContext = Math.round(TARGET_FPS * previewContextSec)
+    const previewChosen = photoWindows.length > 0
+      ? photoWindows[Math.floor(photoWindows.length / 2)]
+      : { start: followBase + Math.round(ROUTE_FRAMES / 2), end: followBase + Math.round(ROUTE_FRAMES / 2) }
+    const previewStartFrame = Math.max(0, previewChosen.start - previewContext)
+    const previewEndFrame = Math.min(TOTAL_FRAMES, previewChosen.end + previewContext)
+    const RENDER_START_FRAME = previewOnly ? previewStartFrame : 0
+    const RENDER_END_FRAME = previewOnly ? previewEndFrame : TOTAL_FRAMES
+    setLastRenderWasPreview(previewOnly)
+    setLastRenderSeconds((RENDER_END_FRAME - RENDER_START_FRAME) / TARGET_FPS)
+
     const frameToState = (frameIdx: number): {p:number; hookT?:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number; stopIndex?:number; stopT?:number} => {
       // Gancio: primissima fase, mappa non ancora coinvolta.
       if (frameIdx < HOOK_FRAMES) {
@@ -2148,7 +2190,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return {p: Math.min(1, routeFrame / Math.max(1, ROUTE_FRAMES - 1)), followFrame: routeFrame}
     }
 
-    setRenderTotal(TOTAL_FRAMES); setRenderFrame(0); frameCountRef.current=0; renderAbortRef.current=false
+    setRenderTotal(RENDER_END_FRAME - RENDER_START_FRAME); setRenderFrame(0); frameCountRef.current=RENDER_START_FRAME; renderAbortRef.current=false
     lastIconOpacityRef.current.clear()
 
     // Always recompute shots with current slider values so intro/follow/outro
@@ -2189,14 +2231,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const renderNextFrame = () => {
       if(renderAbortRef.current) return
       const frameIdx=frameCountRef.current
-      if(frameIdx>=TOTAL_FRAMES){
+      if(frameIdx>=RENDER_END_FRAME){
         if(videoEncoderRef.current){ finishRecording().catch(err=>{ console.error(err); failRendering('Errore durante la finalizzazione del video. Riprova.') }) }
         else { mediaRecorderRef.current?.stop() }
         return
       }
 
       const {p, hookT, introP, reveal, outroP, followFrame, stopIndex, stopT} = frameToState(frameIdx)
-      setRenderProgress(frameIdx/TOTAL_FRAMES); setRenderFrame(frameIdx)
+      setRenderProgress((frameIdx-RENDER_START_FRAME)/Math.max(1,RENDER_END_FRAME-RENDER_START_FRAME)); setRenderFrame(frameIdx-RENDER_START_FRAME)
 
       // Gancio iniziale: foto migliore a schermo intero con zoom "a scatto" + testo d'impatto,
       // prima ancora che la mappa entri in scena — vedi il commento su HOOK_FRAMES sopra.
@@ -2276,7 +2318,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (videoEncoderRef.current) {
             await waitForEncoderQueue(videoEncoderRef.current)
             let _vf: InstanceType<typeof VideoFrame> | null = null
-            try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
+            try { const lfi = frameCountRef.current - RENDER_START_FRAME; _vf = new VideoFrame(composite, { timestamp: Math.round(lfi * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: lfi % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
             finally { _vf?.close() }
           }
           } catch (err) { console.error('[dtrek] hook frame error:', err) }
@@ -2338,7 +2380,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (videoEncoderRef.current) {
             await waitForEncoderQueue(videoEncoderRef.current)
             let _vf: InstanceType<typeof VideoFrame> | null = null
-            try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
+            try { const lfi = frameCountRef.current - RENDER_START_FRAME; _vf = new VideoFrame(composite, { timestamp: Math.round(lfi * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: lfi % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
             finally { _vf?.close() }
           }
           } catch (err) { console.error('[dtrek] reveal frame error:', err) }
@@ -2454,7 +2496,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (videoEncoderRef.current) {
             await waitForEncoderQueue(videoEncoderRef.current)
             let _vf: InstanceType<typeof VideoFrame> | null = null
-            try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
+            try { const lfi = frameCountRef.current - RENDER_START_FRAME; _vf = new VideoFrame(composite, { timestamp: Math.round(lfi * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: lfi % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
             finally { _vf?.close() }
           }
           } catch (err) { console.error('[dtrek] outro frame error:', err) }
@@ -2685,7 +2727,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if (videoEncoderRef.current) {
           await waitForEncoderQueue(videoEncoderRef.current)
           let _vf: InstanceType<typeof VideoFrame> | null = null
-          try { _vf = new VideoFrame(composite, { timestamp: Math.round(frameCountRef.current * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: frameCountRef.current % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
+          try { const lfi = frameCountRef.current - RENDER_START_FRAME; _vf = new VideoFrame(composite, { timestamp: Math.round(lfi * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: lfi % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
           finally { _vf?.close() }
         }
         } catch (err) { console.error('[dtrek] frame error:', err) }
@@ -3488,9 +3530,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               </p>
             </div>
 
+            <button onClick={()=>startRendering(true)} className="w-full mb-3 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-2">
+              <Sparkles className="w-3.5 h-3.5"/> Anteprima veloce (pochi secondi centrali)
+            </button>
             <div className="flex gap-3">
               <button onClick={()=>setVideoState('config')} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">← Config</button>
-              <button onClick={startRendering} className="flex-[2] py-3.5 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold flex items-center justify-center gap-2">
+              <button onClick={()=>startRendering()} className="flex-[2] py-3.5 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold flex items-center justify-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-white animate-pulse"/>
                 Avvia rendering
               </button>
@@ -3548,8 +3593,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center mx-auto mb-3">
                 <Film className="w-7 h-7 text-green-400"/>
               </div>
-              <h2 className="text-white font-bold text-lg">Video pronto!</h2>
-              <p className="text-white/50 text-sm mt-1">1080p · {videoDuration}s · {videoOrientation} · {videoFps}fps</p>
+              <h2 className="text-white font-bold text-lg">{lastRenderWasPreview ? 'Anteprima pronta!' : 'Video pronto!'}</h2>
+              <p className="text-white/50 text-sm mt-1">1080p · {Math.round(lastRenderSeconds)}s · {videoOrientation} · {videoFps}fps</p>
+              {lastRenderWasPreview && <p className="text-white/35 text-xs mt-1">Solo pochi secondi centrali al percorso, con tutti gli effetti selezionati — non il video intero.</p>}
             </div>
             <div className="flex flex-col gap-2.5">
               <button onClick={handleVideoShare} className="w-full py-3.5 rounded-2xl bg-blue-500 hover:bg-blue-600 text-white font-bold flex items-center justify-center gap-2">
