@@ -8,6 +8,14 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Gradini di opacità usati dal design ma assenti dalla scala predefinita di Tailwind
+      // (che ha solo 0,5,10,15,20,…). Il modificatore con la barra (`bg-white/7`) si risolve su
+      // questa scala: senza questi valori quelle classi non generano NESSUNA regola CSS e
+      // spariscono in silenzio — è così che il foglio del wizard (`bg-stone-900/97`) restava senza
+      // sfondo e i campi di testo (`bg-white/7`) finivano bianchi col testo bianco sopra.
+      opacity: {
+        7: '0.07', 8: '0.08', 12: '0.12', 22: '0.22', 28: '0.28', 38: '0.38', 97: '0.97',
+      },
       fontFamily: {
         display: ['var(--font-display)', 'serif'],
         body: ['var(--font-body)', 'sans-serif'],
