@@ -136,6 +136,13 @@ function pinColorsForTrend(hrColorT: number): { light: string; dark: string; tip
   }
 }
 
+// Ogni ctx.save() qui sotto ha un ctx.restore() garantito da try/finally, non solo "in sequenza":
+// se una qualunque chiamata canvas nel mezzo lancia un'eccezione imprevista (un valore non finito
+// in un gradiente, per esempio), un ctx.restore() mancante lascerebbe la PILA save/restore del
+// contesto sbilanciata — e siccome lo stesso ctx viene riusato per TUTTI i fotogrammi del video,
+// non solo questo, una singola eccezione isolata potrebbe corrompere silenziosamente (clip/alpha/
+// trasformazione residui) ogni fotogramma successivo per il resto dell'esportazione. Con try/
+// finally, nel caso peggiore si perde solo il pin di QUESTO fotogramma — mai lo stato del contesto.
 function drawMapPin(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number,    // tip of pin = GPS position
@@ -143,62 +150,77 @@ function drawMapPin(
   faceImg: HTMLImageElement | null,
   hrColorT = 0,               // -1..1, vedi pinColorsForTrend — 0 = colore blu di sempre
 ) {
+  try {
   const R    = 32 * sc
   const tipH = 16 * sc
   const ccY  = cy - R - tipH   // circle center (pin tip is at cy)
   const { light, dark, tip } = pinColorsForTrend(hrColorT)
 
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 14*sc; ctx.shadowOffsetY = 6*sc
+  try {
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 14*sc; ctx.shadowOffsetY = 7*sc
 
-  // Teardrop tip
-  ctx.beginPath()
-  ctx.moveTo(cx - R*0.42, ccY + R*0.68)
-  ctx.lineTo(cx + R*0.42, ccY + R*0.68)
-  ctx.lineTo(cx, cy)
-  ctx.closePath()
-  ctx.fillStyle = tip; ctx.fill()
+    // Teardrop tip — proprio gradiente (non un piatto), coerente con il corpo
+    const tg = ctx.createLinearGradient(cx-R*0.42, ccY+R*0.5, cx, cy)
+    tg.addColorStop(0, dark); tg.addColorStop(1, tip)
+    ctx.beginPath()
+    ctx.moveTo(cx - R*0.42, ccY + R*0.68)
+    ctx.lineTo(cx + R*0.42, ccY + R*0.68)
+    ctx.lineTo(cx, cy)
+    ctx.closePath()
+    ctx.fillStyle = tg; ctx.fill()
 
-  ctx.shadowColor = 'transparent'
+    ctx.shadowColor = 'transparent'
 
-  // Circle body — gradiente più ampio e contrastato per un effetto lucido/plastico
-  const g = ctx.createRadialGradient(cx-R*0.32, ccY-R*0.34, R*0.02, cx, ccY, R*1.5)
-  g.addColorStop(0, light); g.addColorStop(0.55, dark); g.addColorStop(1, tip)
-  ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2)
-  ctx.fillStyle = g; ctx.fill()
+    // Corpo — gradiente ampio e contrastato per un effetto lucido/plastico
+    const g = ctx.createRadialGradient(cx-R*0.32, ccY-R*0.34, R*0.02, cx, ccY, R*1.5)
+    g.addColorStop(0, light); g.addColorStop(0.5, dark); g.addColorStop(1, tip)
+    ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2)
+    ctx.fillStyle = g; ctx.fill()
 
-  // White border
-  ctx.strokeStyle = 'white'; ctx.lineWidth = 3*sc
-  ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.stroke()
+    // Ombra interna sul bordo inferiore (dà volume, come un bordo in rilievo)
+    ctx.save()
+    try {
+      ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.clip()
+      const rim = ctx.createRadialGradient(cx, ccY, R*0.75, cx, ccY, R)
+      rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(1, 'rgba(0,0,0,0.35)')
+      ctx.fillStyle = rim
+      ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.fill()
+    } finally { ctx.restore() }
 
-  // Photo or person silhouette clipped to inner circle
-  ctx.save()
-  const ir = R - 2*sc
-  ctx.beginPath(); ctx.arc(cx, ccY, ir, 0, Math.PI*2); ctx.clip()
-  if (faceImg) {
-    ctx.drawImage(faceImg, cx-ir, ccY-ir, ir*2, ir*2)
-  } else {
-    ctx.fillStyle = dark
-    ctx.fillRect(cx-ir, ccY-ir, ir*2, ir*2)
-    // Person silhouette
-    ctx.fillStyle = 'rgba(255,255,255,0.88)'
-    ctx.beginPath(); ctx.arc(cx, ccY-ir*0.2, ir*0.32, 0, Math.PI*2); ctx.fill()
-    ctx.beginPath(); ctx.ellipse(cx, ccY+ir*0.32, ir*0.44, ir*0.26, 0, Math.PI, 0); ctx.fill()
-  }
-  ctx.restore()
+    // Bordo bianco
+    ctx.strokeStyle = 'white'; ctx.lineWidth = 3*sc
+    ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.stroke()
 
-  // Highlight speculare (l'accenno "lucido/3D") — un'ellisse chiara in alto a sinistra, che non
-  // copre la foto (bassa opacità, blend additivo tramite alpha basso invece di un blend mode
-  // costoso su canvas 2D).
-  ctx.save()
-  ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.clip()
-  const hl = ctx.createRadialGradient(cx-R*0.38, ccY-R*0.42, 0, cx-R*0.38, ccY-R*0.42, R*0.6)
-  hl.addColorStop(0, 'rgba(255,255,255,0.55)'); hl.addColorStop(1, 'rgba(255,255,255,0)')
-  ctx.fillStyle = hl
-  ctx.beginPath(); ctx.ellipse(cx-R*0.32, ccY-R*0.38, R*0.55, R*0.38, -0.5, 0, Math.PI*2); ctx.fill()
-  ctx.restore()
+    // Foto (o sagoma) ritagliata nel cerchio interno
+    ctx.save()
+    try {
+      const ir = R - 2*sc
+      ctx.beginPath(); ctx.arc(cx, ccY, ir, 0, Math.PI*2); ctx.clip()
+      if (faceImg) {
+        ctx.drawImage(faceImg, cx-ir, ccY-ir, ir*2, ir*2)
+      } else {
+        ctx.fillStyle = dark
+        ctx.fillRect(cx-ir, ccY-ir, ir*2, ir*2)
+        ctx.fillStyle = 'rgba(255,255,255,0.88)'
+        ctx.beginPath(); ctx.arc(cx, ccY-ir*0.2, ir*0.32, 0, Math.PI*2); ctx.fill()
+        ctx.beginPath(); ctx.ellipse(cx, ccY+ir*0.32, ir*0.44, ir*0.26, 0, Math.PI, 0); ctx.fill()
+      }
+    } finally { ctx.restore() }
 
-  ctx.restore()
+    // Highlight speculare, deciso (non un accenno) — il pezzo che fa leggere il pin come lucido/3D,
+    // non solo colorato piatto: bordo netto sull'interno, non un fade lungo (i fade molto larghi e
+    // sottili tendono a comprimere male in video, apparendo come anelli invece che come un bagliore).
+    ctx.save()
+    try {
+      ctx.beginPath(); ctx.arc(cx, ccY, R, 0, Math.PI*2); ctx.clip()
+      ctx.fillStyle = 'rgba(255,255,255,0.75)'
+      ctx.beginPath(); ctx.ellipse(cx-R*0.34, ccY-R*0.36, R*0.34, R*0.2, -0.55, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = 'rgba(255,255,255,0.95)'
+      ctx.beginPath(); ctx.ellipse(cx-R*0.4, ccY-R*0.42, R*0.13, R*0.08, -0.55, 0, Math.PI*2); ctx.fill()
+    } finally { ctx.restore() }
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawMapPin error:', err) }
 }
 
 // ── Battito cardiaco sopra al pin (opzionale) ───────────────────────────────────
@@ -226,41 +248,48 @@ function drawHeartBadge(
   pinCx: number, pinTipCy: number, sc: number,
   bpm: number, pulsePhase: number,
 ) {
-  if (bpm <= 0) return
+  if (!(bpm > 0)) return
+  try {
   const R = 32 * sc, tipH = 16 * sc
   const ccY = pinTipCy - R - tipH
-  const hx = pinCx, hy = ccY - R * 2.35   // fluttua sopra al pin, staccato — non attaccato
+  const hx = pinCx, hy = ccY - R * 2.5   // fluttua sopra al pin, staccato — non attaccato
   const scale = heartPulseScale(pulsePhase)
-  const size = 15 * sc * scale
+  const size = 20 * sc * scale   // più grande di prima: a taglia piccola un cuore si legge come una macchia
 
-  // Niente shadowBlur qui di proposito (uno dei costi per-frame più alti su canvas 2D): questo
-  // badge, a differenza degli altri usi occasionali di shadowBlur già rimossi in questo file,
-  // disegna per l'intera fase di seguimento quando l'effetto è attivo, non solo per una finestra
-  // breve — un alone morbido (gradiente radiale a bassa opacità, dietro al cuore) dà comunque
-  // profondità a costo trascurabile.
+  // Niente gradiente-alone morbido (comprimeva in video come un anello netto invece che come un
+  // bagliore, e niente shadowBlur — uno dei costi per-frame più alti su canvas 2D, qui attivo per
+  // l'intera fase di seguimento quando il toggle è acceso, non una finestra breve). Al suo posto:
+  // un contorno pieno più spesso, in stile fumetto/videogioco — nessun fade sottile da comprimere male.
   ctx.save()
-  const halo = ctx.createRadialGradient(hx, hy, 0, hx, hy, size*1.9)
-  halo.addColorStop(0, 'rgba(220,38,38,0.35)'); halo.addColorStop(1, 'rgba(220,38,38,0)')
-  ctx.fillStyle = halo
-  ctx.beginPath(); ctx.arc(hx, hy, size*1.9, 0, Math.PI*2); ctx.fill()
-  const hg = ctx.createRadialGradient(hx-size*0.2, hy-size*0.2, 0, hx, hy, size*1.1)
-  hg.addColorStop(0, '#fca5a5'); hg.addColorStop(1, '#dc2626')
-  ctx.fillStyle = hg
-  drawHeartPath(ctx, hx, hy, size)
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.2*sc
-  drawHeartPath(ctx, hx, hy, size); ctx.stroke()
-  ctx.restore()
+  try {
+    ctx.fillStyle = '#7f1d1d'
+    drawHeartPath(ctx, hx, hy, size * 1.18)
+    ctx.fill()
+    const hg = ctx.createLinearGradient(hx-size*0.4, hy-size*0.6, hx+size*0.3, hy+size*0.4)
+    hg.addColorStop(0, '#fecaca'); hg.addColorStop(0.45, '#f87171'); hg.addColorStop(1, '#dc2626')
+    ctx.fillStyle = hg
+    drawHeartPath(ctx, hx, hy, size)
+    ctx.fill()
+    // Highlight netto in stile "sticker" — non un fade, un piccolo blob pieno
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'
+    ctx.beginPath(); ctx.ellipse(hx-size*0.22, hy-size*0.28, size*0.15, size*0.09, -0.5, 0, Math.PI*2); ctx.fill()
+    ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5*sc
+    drawHeartPath(ctx, hx, hy, size); ctx.stroke()
+  } finally { ctx.restore() }
 
   ctx.save()
-  const label = `${Math.round(bpm)}`
-  ctx.font = `800 ${Math.round(17*sc)}px -apple-system,sans-serif`
-  const lw = ctx.measureText(label).width + 12*sc, lh = 22*sc
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'
-  rrect(ctx, hx-lw/2, hy-size*0.85-lh, lw, lh, lh/2); ctx.fill()
-  ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillText(label, hx, hy-size*0.85-lh/2)
-  ctx.restore()
+  try {
+    const label = `${Math.round(bpm)}`
+    ctx.font = `800 ${Math.round(18*sc)}px -apple-system,sans-serif`
+    const lw = ctx.measureText(label).width + 14*sc, lh = 24*sc
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'
+    rrect(ctx, hx-lw/2, hy-size*0.95-lh, lw, lh, lh/2); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1*sc
+    rrect(ctx, hx-lw/2, hy-size*0.95-lh, lw, lh, lh/2); ctx.stroke()
+    ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(label, hx, hy-size*0.95-lh/2)
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawHeartBadge error:', err) }
 }
 
 /** Tendenza -1..1 della FC nel punto `si` della serie appiattita — >0 in salita, <0 in calo,
@@ -286,8 +315,11 @@ function drawStarPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, siz
 }
 
 /** Scoppio di stelline dal punto (cx,cy) — un solo momento enfatizzato all'arrivo finale del
- *  percorso, non ripetuto ad ogni foto. `burstT` 0..1 copre l'intero scoppio (partenza→dissolvenza). */
+ *  percorso, non ripetuto ad ogni foto. `burstT` 0..1 copre l'intero scoppio (partenza→dissolvenza).
+ *  Niente shadowBlur (per lo stesso motivo del cuore sopra — e qui sfocava anche le punte della
+ *  stella fino a farla sembrare un cerchio): un contorno bianco netto dà definizione a costo fisso. */
 function drawArrivalStars(ctx: CanvasRenderingContext2D, cx: number, cy: number, sc: number, burstT: number) {
+  try {
   const N = 14
   for (let i = 0; i < N; i++) {
     const angle = (i / N) * Math.PI * 2 + (i % 3) * 0.15
@@ -299,15 +331,19 @@ function drawArrivalStars(ctx: CanvasRenderingContext2D, cx: number, cy: number,
     const dist = speed * eased
     const alpha = 1 - t
     const x = cx + Math.cos(angle) * dist, y = cy + Math.sin(angle) * dist
-    const starSize = (7 + (i % 3) * 2.5) * sc * (1 - t * 0.35)
+    // Taglia base più grande di prima: una stella piccola perde le punte e si legge come un pallino.
+    const starSize = (13 + (i % 3) * 4) * sc * (1 - t * 0.3)
     ctx.save()
-    ctx.globalAlpha = alpha
-    ctx.fillStyle = i % 2 === 0 ? '#fde047' : '#60a5fa'
-    ctx.shadowColor = ctx.fillStyle as string; ctx.shadowBlur = 6 * sc
-    drawStarPath(ctx, x, y, starSize)
-    ctx.fill()
-    ctx.restore()
+    try {
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = i % 2 === 0 ? '#fde047' : '#60a5fa'
+      drawStarPath(ctx, x, y, starSize)
+      ctx.fill()
+      ctx.strokeStyle = 'white'; ctx.lineWidth = 1.4 * sc
+      drawStarPath(ctx, x, y, starSize); ctx.stroke()
+    } finally { ctx.restore() }
   }
+  } catch (err) { console.error('[dtrek] drawArrivalStars error:', err) }
 }
 
 // ── Photo pin ─────────────────────────────────────────────────────────────────
@@ -384,6 +420,7 @@ function drawStopPhotoZoom(
   zoomT: number, stopT: number,
 ) {
   if (!(img.complete && img.naturalWidth > 0)) return
+  try {
   const peakW = Math.min(outW * 0.82, (outH * 0.72) / (1 + POLAROID_CAP_FRAC))
   const pinPx = Math.round(70 * sc)
   const cardW = pinPx + (peakW - pinPx) * zoomT
@@ -409,43 +446,52 @@ function drawStopPhotoZoom(
     ctx.fillRect(0, 0, outW, outH)
   }
 
+  // Ogni ctx.save() qui sotto ha un ctx.restore() garantito da try/finally: lo stesso ctx viene
+  // riusato per l'intero video, quindi una pila save/restore sbilanciata per un'eccezione
+  // imprevista in un frame corromperebbe (clip/trasformazione residui) anche tutti i successivi.
   ctx.save()
-  ctx.translate(cx, cy); ctx.rotate(rotRad); ctx.translate(-cx, -cy)
+  try {
+    ctx.translate(cx, cy); ctx.rotate(rotRad); ctx.translate(-cx, -cy)
 
-  // Ombra finta (nessuna sfocatura): un rettangolo pieno arretrato, dello stesso raggio, dietro la card.
-  const shOff = 6 * sc * zoomT
-  ctx.fillStyle = `rgba(0,0,0,${0.35 * zoomT})`
-  rrect(ctx, bx, by + shOff, cardW, cardH, r); ctx.fill()
-  ctx.fillStyle = '#fffdf4'
-  rrect(ctx, bx, by, cardW, cardH, r); ctx.fill()
-  ctx.save(); rrect(ctx, bx + pad, by + pad, photoSide, photoSide, r * 0.4); ctx.clip()
-  const crop = aspectFitCrop(img.width, img.height, 1)
-  ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, bx + pad, by + pad, photoSide, photoSide)
-  ctx.restore()
+    // Ombra finta (nessuna sfocatura): un rettangolo pieno arretrato, dello stesso raggio, dietro la card.
+    const shOff = 6 * sc * zoomT
+    ctx.fillStyle = `rgba(0,0,0,${0.35 * zoomT})`
+    rrect(ctx, bx, by + shOff, cardW, cardH, r); ctx.fill()
+    ctx.fillStyle = '#fffdf4'
+    rrect(ctx, bx, by, cardW, cardH, r); ctx.fill()
+    ctx.save()
+    try {
+      rrect(ctx, bx + pad, by + pad, photoSide, photoSide, r * 0.4); ctx.clip()
+      const crop = aspectFitCrop(img.width, img.height, 1)
+      ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, bx + pad, by + pad, photoSide, photoSide)
+    } finally { ctx.restore() }
 
-  // Didascalia, nella cornice sotto la foto — solo quando c'è abbastanza spazio per leggerla.
-  if (caption && zoomT > 0.55) {
-    const capAlpha = Math.min(1, (zoomT - 0.55) / 0.25)
-    ctx.save(); ctx.globalAlpha = capAlpha
-    ctx.fillStyle = '#2c1a0e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    const fontSz = Math.max(9, Math.round(cardW * 0.058))
-    ctx.font = `italic ${fontSz}px Georgia,serif`
-    const maxTW = cardW - pad * 2.5
-    const words = caption.split(' ')
-    const lines: string[] = []
-    let cur = ''
-    for (const wd of words) {
-      const test = cur ? cur + ' ' + wd : wd
-      if (ctx.measureText(test).width > maxTW && cur) { lines.push(cur); cur = wd } else { cur = test }
+    // Didascalia, nella cornice sotto la foto — solo quando c'è abbastanza spazio per leggerla.
+    if (caption && zoomT > 0.55) {
+      const capAlpha = Math.min(1, (zoomT - 0.55) / 0.25)
+      ctx.save()
+      try {
+        ctx.globalAlpha = capAlpha
+        ctx.fillStyle = '#2c1a0e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+        const fontSz = Math.max(9, Math.round(cardW * 0.058))
+        ctx.font = `italic ${fontSz}px Georgia,serif`
+        const maxTW = cardW - pad * 2.5
+        const words = caption.split(' ')
+        const lines: string[] = []
+        let cur = ''
+        for (const wd of words) {
+          const test = cur ? cur + ' ' + wd : wd
+          if (ctx.measureText(test).width > maxTW && cur) { lines.push(cur); cur = wd } else { cur = test }
+        }
+        if (cur) lines.push(cur)
+        const visLines = lines.slice(0, 2)
+        const lineH = fontSz * 1.35
+        const capCenterY = by + pad + photoSide + (cardH - pad - (pad + photoSide)) / 2
+        visLines.forEach((l, i) => ctx.fillText(l, cx, capCenterY + (i - (visLines.length - 1) / 2) * lineH))
+      } finally { ctx.restore() }
     }
-    if (cur) lines.push(cur)
-    const visLines = lines.slice(0, 2)
-    const lineH = fontSz * 1.35
-    const capCenterY = by + pad + photoSide + (cardH - pad - (pad + photoSide)) / 2
-    visLines.forEach((l, i) => ctx.fillText(l, cx, capCenterY + (i - (visLines.length - 1) / 2) * lineH))
-    ctx.restore()
-  }
-  ctx.restore()
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawStopPhotoZoom error:', err) }
 }
 
 // ── Graph (unchanged) ──────────────────────────────────────────────────────────
@@ -603,11 +649,13 @@ function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: number, sc
     if (peakDist < 0.042) {
       const peakAlpha = Math.pow(Math.max(0, 1 - peakDist / 0.042), 0.5)
       const maxAlt = Math.round(Math.max(...opts.altitudeSeries))
-      ctx.save(); ctx.globalAlpha = peakAlpha
-      ctx.fillStyle = '#60a5fa'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
-      ctx.font = `700 ${Math.round(15 * sc)}px -apple-system,sans-serif`
-      ctx.fillText(`▲ ${maxAlt} m`, w / 2, y + elH + Math.round(4 * sc))
-      ctx.restore()
+      ctx.save()
+      try {
+        ctx.globalAlpha = peakAlpha
+        ctx.fillStyle = '#60a5fa'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+        ctx.font = `700 ${Math.round(15 * sc)}px -apple-system,sans-serif`
+        ctx.fillText(`▲ ${maxAlt} m`, w / 2, y + elH + Math.round(4 * sc))
+      } finally { ctx.restore() }
     }
     y += elH + Math.round(16 * sc)
   }
@@ -2564,13 +2612,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
           const graphAlpha = 1 - stopZoomTNow
           if (graphAlpha > 0.01) {
-            ctx.save(); ctx.globalAlpha = graphAlpha
-            drawTopBand(ctx, outW, topBandH, sc2, {
-              title: displayTitle, showTitle: videoShowTitle, showStats: videoShowStats, showProgress: videoShowProgress,
-              coveredKm: +(p*totalKm).toFixed(1), totalKm: +totalKm.toFixed(1), alt: Math.round(alt), elevGain, progress: p,
-              altitudeSeries, peakRouteP, hrData, speedData,
-            })
-            ctx.restore()
+            ctx.save()
+            try {
+              ctx.globalAlpha = graphAlpha
+              drawTopBand(ctx, outW, topBandH, sc2, {
+                title: displayTitle, showTitle: videoShowTitle, showStats: videoShowStats, showProgress: videoShowProgress,
+                coveredKm: +(p*totalKm).toFixed(1), totalKm: +totalKm.toFixed(1), alt: Math.round(alt), elevGain, progress: p,
+                altitudeSeries, peakRouteP, hrData, speedData,
+              })
+            } finally { ctx.restore() }
           }
 
           // La foto in sosta si apre da pin a quasi schermo intero, poi si richiude — vedi
