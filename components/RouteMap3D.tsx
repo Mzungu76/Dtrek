@@ -177,6 +177,7 @@ function drawMapPin(
   sc: number,                // scale (outW/1080)
   faceImg: HTMLImageElement | null,
   effort: number | null = null,   // 0..1 fatica (vedi effortRgb); null = effetto spento, blu neutro
+  slope = 0,                      // -1..1 pendenza normalizzata; 0 = ombra tonda di sempre
 ) {
   try {
   const R    = 34 * sc
@@ -189,9 +190,15 @@ function drawMapPin(
 
   ctx.save()
   try {
-    // Ombra a terra: ellisse piena sotto la punta — niente shadowBlur (vedi nota in testa)
-    ctx.fillStyle = 'rgba(0,0,0,0.28)'
-    ctx.beginPath(); ctx.ellipse(cx + DX, cy + DEPTH*0.9, R*0.46, R*0.15, 0, 0, Math.PI*2); ctx.fill()
+    // Ombra a terra: ellisse piena sotto la punta — niente shadowBlur (vedi nota in testa).
+    // Con `slope` diverso da zero si allunga e si inclina come farebbe su un pendio: comunica la
+    // pendenza (quindi la fatica) senza scrivere un numero da nessuna parte.
+    const sl = Math.max(-1, Math.min(1, slope))
+    const asl = Math.abs(sl)
+    ctx.fillStyle = `rgba(0,0,0,${0.28 + 0.12*asl})`
+    ctx.beginPath()
+    ctx.ellipse(cx + DX + sl*R*0.22, cy + DEPTH*0.9, R*0.46*(1 + 0.85*asl), R*0.15*(1 - 0.3*asl), -sl*0.42, 0, Math.PI*2)
+    ctx.fill()
 
     // Spessore del gettone: la stessa sagoma ripetuta all'indietro, dal bordo più scuro alla faccia
     const STEPS = 9
@@ -513,6 +520,225 @@ function drawHookText(
   } catch (err) { console.error('[dtrek] drawHookText error:', err) }
 }
 
+// ── Scia dietro al pin (opzionale) ─────────────────────────────────────────────
+/** Coda che sfuma dietro al pin, già proiettata in coordinate del canvas composito (il chiamante
+ *  fa la proiezione perché serve la telecamera di MapLibre). `pts` va dalla coda (più vecchio) alla
+ *  punta (posizione attuale). Disegnata segmento per segmento con larghezza e opacità calanti: un
+ *  gradiente lungo un percorso curvo non seguirebbe la curva, e comunque i fade larghi comprimono
+ *  peggio di tanti tratti pieni corti. */
+function drawPinTrail(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[], sc: number, color: RGB) {
+  try {
+  if (pts.length < 2) return
+  ctx.save()
+  try {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    const n = pts.length
+    for (let i = 1; i < n; i++) {
+      const t = i / (n - 1)            // 0 = coda, 1 = pin
+      const a = pts[i-1], b = pts[i]
+      if (!isFinite(a.x) || !isFinite(a.y) || !isFinite(b.x) || !isFinite(b.y)) continue
+      // Alone largo e tenue sotto, tratto pieno sopra: dà corpo senza usare shadowBlur
+      ctx.globalAlpha = 0.16 * t * t
+      ctx.strokeStyle = rgbCss(color)
+      ctx.lineWidth = (4 + 16 * t) * sc
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+      ctx.globalAlpha = 0.85 * t * t
+      ctx.strokeStyle = rgbCss(shade(color, 1.35))
+      ctx.lineWidth = (1.5 + 6 * t) * sc
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+    }
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawPinTrail error:', err) }
+}
+
+// ── Numeri "a rullo" stile contachilometri (opzionale) ─────────────────────────
+/** Disegna `value` con ogni cifra che scorre verticalmente. Le cifre più significative scorrono solo
+ *  nell'ultimo 10% prima del riporto (come un contatore meccanico vero); l'ultima cifra scorre in
+ *  continuo. `ctx.font` e `ctx.fillStyle` vanno impostati dal chiamante. Ritorna la larghezza usata. */
+function drawOdometer(
+  ctx: CanvasRenderingContext2D,
+  value: number, decimals: number,
+  x: number, yTop: number, digitH: number,
+  align: 'left' | 'center' | 'right' = 'left',
+): number {
+  try {
+  const v = Math.abs(value)
+  const s = v.toFixed(decimals)
+  const chars = (value < 0 ? '-' : '') + s
+  const digitW = ctx.measureText('8').width
+  const isDigit = (c: string) => c >= '0' && c <= '9'
+  let total = 0
+  for (const ch of chars) total += isDigit(ch) ? digitW : ctx.measureText(ch).width
+  let cx = align === 'left' ? x : align === 'center' ? x - total / 2 : x - total
+  const startX = cx
+  const dot = s.indexOf('.')
+  const intLen = dot === -1 ? s.length : dot
+  const nDigits = s.length - (dot === -1 ? 0 : 1)
+  const prevAlign = ctx.textAlign, prevBase = ctx.textBaseline
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+  // Estensione REALE delle cifre, misurata: il riquadro del font è più alto del glifo, e se la
+  // finestra di scorrimento non combacia col glifo o si vede un vuoto a metà corsa (finestra troppo
+  // alta) o spuntano fette della cifra vicina quando è ferma (finestra troppo bassa).
+  const m0 = ctx.measureText('0')
+  const hasMetrics = typeof m0.actualBoundingBoxAscent === 'number' && typeof m0.actualBoundingBoxDescent === 'number'
+  const glyphTop = hasMetrics ? yTop - m0.actualBoundingBoxAscent : yTop + digitH * 0.22
+  const glyphH = hasMetrics
+    ? Math.max(1, m0.actualBoundingBoxAscent + m0.actualBoundingBoxDescent)
+    : digitH * 0.72
+  const margin = glyphH * 0.12
+  const travel = glyphH + margin * 2           // corsa che porta la cifra uscente fuori dalla finestra
+  const bandTop = glyphTop - margin, band = travel
+  let idx = 0
+  for (const ch of chars) {
+    if (!isDigit(ch)) { ctx.fillText(ch, cx, yTop); cx += ctx.measureText(ch).width; continue }
+    const place = intLen - 1 - idx
+    const scaled = v / Math.pow(10, place)
+    const base = Math.floor(scaled + 1e-9)
+    const frac = scaled - base
+    const d0 = ((base % 10) + 10) % 10
+    const isLast = idx === nDigits - 1
+    // La cifra sta ferma quasi sempre e passa in fretta: uno scorrimento lineare la lascerebbe a
+    // metà corsa per gran parte del tempo, e a metà corsa si leggono due mezze cifre invece di una.
+    // Le cifre più significative partono ancora più tardi, come i tamburi di un contatore meccanico.
+    const raw = isLast
+      ? clamp01((frac - 0.62) / 0.33)
+      : (frac > 0.92 ? (frac - 0.92) / 0.08 : 0)
+    const roll = raw * raw * (3 - 2 * raw)
+    idx++
+    ctx.save()
+    try {
+      ctx.beginPath(); ctx.rect(cx, bandTop, digitW, band); ctx.clip()
+      ctx.fillText(String(d0), cx, yTop - roll * travel)
+      ctx.fillText(String((d0 + 1) % 10), cx, yTop + (1 - roll) * travel)
+    } finally { ctx.restore() }
+    cx += digitW
+  }
+  ctx.textAlign = prevAlign; ctx.textBaseline = prevBase
+  return cx - startX
+  } catch (err) { console.error('[dtrek] drawOdometer error:', err); return 0 }
+}
+
+// ── Vetta conquistata (opzionale) ──────────────────────────────────────────────
+/** Un solo momento in tutto il video, al punto più alto: lampo, raggi che si aprono dal pin e la
+ *  quota in grande. `t` copre 0..1 l'intero momento. */
+function drawPeakConquered(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, w: number, h: number, sc: number,
+  altM: number, t: number,
+) {
+  try {
+  const k = clamp01(t)
+  // Lampo pieno schermo, brevissimo: è lo "stacco" che segnala il momento
+  if (k < 0.14) {
+    const f = 1 - k / 0.14
+    ctx.save()
+    try { ctx.globalAlpha = f * 0.5; ctx.fillStyle = '#fff7d6'; ctx.fillRect(0, 0, w, h) } finally { ctx.restore() }
+  }
+  // Raggi che si aprono dal pin e ruotano lentamente
+  if (k < 0.55) {
+    const rt = k / 0.55
+    ctx.save()
+    try {
+      ctx.globalAlpha = (1 - rt) * 0.55
+      ctx.translate(cx, cy); ctx.rotate(rt * 0.5)
+      ctx.fillStyle = '#fde047'
+      const R0 = 40 * sc, R1 = (110 + 190 * (1 - Math.pow(1 - rt, 2))) * sc
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2, sp = 0.05
+        ctx.beginPath()
+        ctx.moveTo(Math.cos(a - sp) * R0, Math.sin(a - sp) * R0)
+        ctx.lineTo(Math.cos(a) * R1, Math.sin(a) * R1)
+        ctx.lineTo(Math.cos(a + sp) * R0, Math.sin(a + sp) * R0)
+        ctx.closePath(); ctx.fill()
+      }
+    } finally { ctx.restore() }
+  }
+  const fadeIn = Math.min(1, k / 0.12)
+  const fadeOut = k > 0.62 ? Math.max(0, 1 - (k - 0.62) / 0.38) : 1
+  const alpha = fadeIn * fadeOut
+  if (alpha <= 0.01) return
+  const up = 1 - Math.pow(1 - k, 2.4)
+  const popT = Math.min(1, k / 0.26)
+  const c1 = 1.70158, c3 = c1 + 1
+  const scale = 0.5 + 0.5 * (1 + c3*Math.pow(popT-1, 3) + c1*Math.pow(popT-1, 2))
+  ctx.save()
+  try {
+    ctx.globalAlpha = alpha
+    ctx.translate(cx, cy - 250*sc * up)
+    ctx.scale(scale, scale)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
+    ctx.font = `900 ${Math.round(30*sc)}px -apple-system,sans-serif`
+    ctx.strokeStyle = 'rgba(6,20,32,0.92)'; ctx.lineWidth = 7*sc
+    ctx.strokeText('▲ VETTA', 0, -66*sc); ctx.fillStyle = '#fde047'; ctx.fillText('▲ VETTA', 0, -66*sc)
+    const label = `${Math.round(altM)} m`
+    ctx.font = `900 ${Math.round(96*sc)}px -apple-system,sans-serif`
+    ctx.strokeStyle = 'rgba(6,20,32,0.92)'; ctx.lineWidth = 12*sc
+    ctx.strokeText(label, 0, 0)
+    const g = ctx.createLinearGradient(0, -50*sc, 0, 50*sc)
+    g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#fbbf24')
+    ctx.fillStyle = g; ctx.fillText(label, 0, 0)
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawPeakConquered error:', err) }
+}
+
+// ── Mini-mappa d'insieme (opzionale) ───────────────────────────────────────────
+/** Tracciato completo normalizzato in un riquadro 0..1, aspetto preservato e centrato: si calcola
+ *  una volta sola per rendering, non ad ogni fotogramma. */
+function buildMiniRoute(pts: { lat?: number; lon?: number }[], maxPoints = 140): { x: number; y: number }[] {
+  const valid = pts.filter(p => p.lat != null && p.lon != null) as { lat: number; lon: number }[]
+  if (valid.length < 2) return []
+  const step = Math.max(1, Math.floor(valid.length / maxPoints))
+  const sampled = valid.filter((_, i) => i % step === 0 || i === valid.length - 1)
+  const latMid = (Math.min(...sampled.map(p => p.lat)) + Math.max(...sampled.map(p => p.lat))) / 2
+  const kx = Math.cos(latMid * Math.PI / 180)   // i gradi di longitudine si accorciano alle alte latitudini
+  const xs = sampled.map(p => p.lon * kx), ys = sampled.map(p => -p.lat)
+  const minX = Math.min(...xs), maxX = Math.max(...xs)
+  const minY = Math.min(...ys), maxY = Math.max(...ys)
+  const spanX = Math.max(1e-9, maxX - minX), spanY = Math.max(1e-9, maxY - minY)
+  const span = Math.max(spanX, spanY)   // stesso divisore sui due assi = niente deformazione
+  const offX = (span - spanX) / 2, offY = (span - spanY) / 2
+  return xs.map((x, i) => ({ x: (x - minX + offX) / span, y: (ys[i] - minY + offY) / span }))
+}
+
+/** Riquadro con il tracciato intero e il punto di avanzamento: dà il colpo d'occhio d'insieme che
+ *  manca quando la telecamera è sempre incollata al pin. */
+function drawMiniMap(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, size: number, sc: number,
+  route: { x: number; y: number }[], progress: number, color: RGB,
+) {
+  try {
+  if (route.length < 2) return
+  const pad = size * 0.12, inner = size - pad * 2
+  const px = (i: number) => x + pad + route[i].x * inner
+  const py = (i: number) => y + pad + route[i].y * inner
+  ctx.save()
+  try {
+    ctx.fillStyle = 'rgba(6,14,20,0.58)'
+    rrect(ctx, x, y, size, size, size * 0.16); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1.5 * sc
+    rrect(ctx, x, y, size, size, size * 0.16); ctx.stroke()
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    // Tracciato completo, tenue
+    ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = 2 * sc
+    ctx.beginPath()
+    for (let i = 0; i < route.length; i++) i === 0 ? ctx.moveTo(px(i), py(i)) : ctx.lineTo(px(i), py(i))
+    ctx.stroke()
+    // Parte già percorsa, piena
+    const upTo = Math.max(1, Math.round(clamp01(progress) * (route.length - 1)))
+    ctx.strokeStyle = rgbCss(color); ctx.lineWidth = 3 * sc
+    ctx.beginPath()
+    for (let i = 0; i <= upTo; i++) i === 0 ? ctx.moveTo(px(i), py(i)) : ctx.lineTo(px(i), py(i))
+    ctx.stroke()
+    // Punto corrente
+    ctx.fillStyle = 'white'
+    ctx.beginPath(); ctx.arc(px(upTo), py(upTo), 4 * sc, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = rgbCss(color)
+    ctx.beginPath(); ctx.arc(px(upTo), py(upTo), 2.4 * sc, 0, Math.PI * 2); ctx.fill()
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawMiniMap error:', err) }
+}
+
 // ── Photo pin ─────────────────────────────────────────────────────────────────
 
 function drawPhotoPin(
@@ -703,6 +929,41 @@ interface HUDOpts {
   showTitle:boolean; title:string; showStats:boolean; coveredKm:number; totalKm:number
   alt:number; elevGain:number; showProgress:boolean; progress:number
   showBody:boolean; hrData?:GraphData; speedData?:GraphData; shotLabel?:string
+  photoMarks?:number[]   // avanzamenti 0..1 delle foto, come tacche sulla barra (opzionale)
+  odometer?:boolean      // cifre a rullo invece di numeri che scattano (opzionale)
+}
+
+/** Tacche delle foto sulla barra di avanzamento: al passaggio del pin la tacca "scatta" con un
+ *  lampo. Il lampo è calcolato dalla DISTANZA dall'avanzamento corrente, non da un timer, così è
+ *  identico a qualunque frame rate e riproducibile fotogramma per fotogramma. */
+function drawProgressMarks(
+  ctx: CanvasRenderingContext2D,
+  barX: number, barY: number, barW: number, barH: number, sc: number,
+  marks: number[], progress: number,
+) {
+  try {
+  ctx.save()
+  try {
+    for (const m of marks) {
+      if (!(m >= 0 && m <= 1)) continue
+      const d = progress - m
+      const hit = d >= 0
+      const flash = (d >= 0 && d < 0.02) ? 1 - d / 0.02 : 0
+      const mx = barX + barW * m, my = barY + barH / 2
+      if (flash > 0) {
+        ctx.globalAlpha = flash * 0.85
+        ctx.strokeStyle = '#fde047'; ctx.lineWidth = 2.5 * sc
+        ctx.beginPath(); ctx.arc(mx, my, (5 + 16 * (1 - flash)) * sc, 0, Math.PI * 2); ctx.stroke()
+      }
+      ctx.globalAlpha = 1
+      const r = (3.2 + 2.4 * flash) * sc
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'
+      ctx.beginPath(); ctx.arc(mx, my, r + 1.4 * sc, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = hit ? '#fde047' : 'rgba(255,255,255,0.75)'
+      ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill()
+    }
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawProgressMarks error:', err) }
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opts: HUDOpts) {
@@ -719,12 +980,24 @@ function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opts: HUDO
     const barH=Math.max(6,Math.round(8*sc)); yBase-=barH
     ctx.fillStyle='rgba(255,255,255,0.22)'; rrect(ctx,0,yBase,w,barH,barH/2); ctx.fill()
     if(opts.progress>0){ctx.fillStyle='#3b82f6';rrect(ctx,0,yBase,Math.max(barH,w*opts.progress),barH,barH/2);ctx.fill()}
+    if(opts.photoMarks?.length) drawProgressMarks(ctx,0,yBase,w,barH,sc,opts.photoMarks,opts.progress)
     yBase-=Math.round(20*sc)
   }
   if(opts.showStats){
     ctx.textBaseline='bottom'; ctx.font=`bold ${statSz}px -apple-system,sans-serif`; ctx.fillStyle='white'
-    ctx.fillText(`${opts.coveredKm}/${opts.totalKm} km`,pad,yBase)
-    const aT=`${opts.alt} m`; ctx.fillText(aT,(w-ctx.measureText(aT).width)/2,yBase)
+    if(opts.odometer){
+      // yBase è una baseline "bottom": il rullo disegna dall'alto, quindi si converte in cima riga
+      const dH=statSz, top=yBase-dH
+      const kmW=drawOdometer(ctx,opts.coveredKm,1,pad,top,dH,'left')
+      ctx.textBaseline='top'; ctx.fillText(`/${opts.totalKm} km`,pad+kmW,top)
+      ctx.textBaseline='bottom'
+      drawOdometer(ctx,opts.alt,0,w/2,top,dH,'center')
+      ctx.textBaseline='top'; ctx.fillText(' m',w/2+ctx.measureText(String(opts.alt)).width/2,top)
+      ctx.textBaseline='bottom'
+    } else {
+      ctx.fillText(`${opts.coveredKm}/${opts.totalKm} km`,pad,yBase)
+      const aT=`${opts.alt} m`; ctx.fillText(aT,(w-ctx.measureText(aT).width)/2,yBase)
+    }
     ctx.fillStyle='rgba(255,255,255,0.82)'; const gT=`+${opts.elevGain} m`
     ctx.fillText(gT,w-ctx.measureText(gT).width-pad,yBase); yBase-=lineH
   }
@@ -766,6 +1039,8 @@ interface TopBandOpts {
   coveredKm: number; totalKm: number; alt: number; elevGain: number; progress: number
   altitudeSeries: number[]; peakRouteP: number
   hrData?: GraphData; speedData?: GraphData
+  photoMarks?: number[]   // avanzamenti 0..1 delle foto, come tacche sulla barra (opzionale)
+  odometer?: boolean      // cifre a rullo invece di numeri che scattano (opzionale)
 }
 
 function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: number, sc: number, opts: TopBandOpts) {
@@ -790,10 +1065,18 @@ function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: number, sc
   }
 
   if (opts.showStats) {
-    ctx.textBaseline = 'top'; ctx.font = `700 ${Math.round(22 * sc)}px -apple-system,sans-serif`
+    const fs = Math.round(22 * sc)
+    ctx.textBaseline = 'top'; ctx.font = `700 ${fs}px -apple-system,sans-serif`
     ctx.textAlign = 'left'; ctx.fillStyle = 'white'
-    ctx.fillText(`${opts.coveredKm}/${opts.totalKm} km`, pad, y)
-    ctx.textAlign = 'center'; ctx.fillText(`${opts.alt} m`, w / 2, y)
+    if (opts.odometer) {
+      const kmW = drawOdometer(ctx, opts.coveredKm, 1, pad, y, fs, 'left')
+      ctx.fillText(`/${opts.totalKm} km`, pad + kmW, y)
+      const altW = drawOdometer(ctx, opts.alt, 0, w / 2, y, fs, 'center')
+      ctx.fillText(' m', w / 2 + altW / 2, y)
+    } else {
+      ctx.fillText(`${opts.coveredKm}/${opts.totalKm} km`, pad, y)
+      ctx.textAlign = 'center'; ctx.fillText(`${opts.alt} m`, w / 2, y)
+    }
     ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.8)'
     ctx.fillText(`+${opts.elevGain} m`, w - pad, y)
     y += Math.round(32 * sc)
@@ -806,6 +1089,7 @@ function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: number, sc
       ctx.fillStyle = '#3b82f6'
       rrect(ctx, pad, y, Math.max(barH, (w - 2 * pad) * opts.progress), barH, barH / 2); ctx.fill()
     }
+    if (opts.photoMarks?.length) drawProgressMarks(ctx, pad, y, w - 2 * pad, barH, sc, opts.photoMarks, opts.progress)
     y += barH + Math.round(14 * sc)
   }
 
@@ -1163,6 +1447,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Traguardi 25/50/75%: il numero sale dal punto del percorso toccato dal pin — vedi
   // drawRouteMilestone. Non si attiva durante una sosta su foto (verrebbe coperto dalla polaroid).
   const [videoMilestonesEnabled, setVideoMilestonesEnabled] = useState(false)
+  // Scia che sfuma dietro al pin, lunga in proporzione alla velocità: rende leggibile il ritmo.
+  const [videoTrailEnabled, setVideoTrailEnabled] = useState(false)
+  // Tacche delle foto sulla barra di avanzamento, con lampo al passaggio del pin.
+  const [videoPhotoMarksEnabled, setVideoPhotoMarksEnabled] = useState(false)
+  // Cifre a rullo (contachilometri) per km e quota invece di numeri che scattano.
+  const [videoOdometerEnabled, setVideoOdometerEnabled] = useState(false)
+  // Momento "vetta conquistata" nel punto più alto: lampo, raggi e quota in grande.
+  const [videoPeakMomentEnabled, setVideoPeakMomentEnabled] = useState(false)
+  // Ombra del pin che si allunga e si inclina con la pendenza corrente.
+  const [videoSlopeShadowEnabled, setVideoSlopeShadowEnabled] = useState(false)
+  // Mini-mappa d'insieme in un angolo, con il tracciato intero e il punto di avanzamento.
+  const [videoMiniMapEnabled, setVideoMiniMapEnabled] = useState(false)
   // Anteprima dal vivo del carosello (schermata Montaggio) — sostituisce temporaneamente il foglio
   // impostazioni con la mappa a schermo pieno, usando lo stesso tick() di anteprima già presente
   // per lo scrub del percorso fuori dal wizard video.
@@ -2330,6 +2626,40 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // compare, ed è corretto così.
     const milestoneHitRef = [0.25, 0.5, 0.75].map(mark => ({ mark, hitFrame: -1 }))
     const MILESTONE_FRAMES = Math.round(TARGET_FPS * 1.7)
+    // Vetta conquistata: stesso meccanismo dei traguardi, ma una volta sola e sul punto più alto.
+    const peakHitRef = { current: -1 }
+    const PEAK_FRAMES = Math.round(TARGET_FPS * 2.0)
+    // Tracciato d'insieme normalizzato per la mini-mappa: calcolato UNA volta, non ad ogni fotogramma.
+    const miniRoute = videoMiniMapEnabled ? buildMiniRoute(pts) : []
+    // Avanzamenti delle foto incluse, per le tacche sulla barra
+    const photoMarks = videoPhotoMarksEnabled ? sortedPhotos.map(s => s.photo.progress) : undefined
+    // Proiezione di un punto GPS nelle coordinate del canvas composito: map.project dà pixel CSS del
+    // contenitore, mentre si disegna dal canvas WebGL ritagliato da coverRect — servono entrambe le
+    // conversioni (CSS→pixel del canvas, poi ritaglio→composito).
+    const projectToComposite = (lon: number, lat: number, cr: { sx:number; sy:number; sw:number; sh:number }) => {
+      const q = map!.project([lon, lat] as any)
+      const kx = mapCanvas.width / Math.max(1, mapCanvas.clientWidth)
+      const ky = mapCanvas.height / Math.max(1, mapCanvas.clientHeight)
+      return { x: (q.x * kx - cr.sx) * outW / cr.sw, y: (q.y * ky - cr.sy) * outH / cr.sh }
+    }
+    /** Punti della scia: dal pin all'indietro lungo il percorso, per una lunghezza che cresce con la
+     *  velocità corrente (corta quando si va piano, lunga quando si spinge). */
+    const trailPointsAt = (prog: number, speedKmh: number, cr: { sx:number; sy:number; sw:number; sh:number }) => {
+      const lenM = 70 + 320 * clamp01((speedKmh - 1.5) / 6)
+      const dNow = prog * totalDistanceM
+      const dFrom = Math.max(0, dNow - lenM)
+      const out: { x: number; y: number }[] = []
+      const STEPS = 22
+      for (let i = 0; i <= STEPS; i++) {
+        const d = dFrom + (dNow - dFrom) * (i / STEPS)
+        const pp = distanceMToProgress(d, cumDist)
+        const idx = Math.min(pts.length - 1, Math.max(0, Math.round(pp * (pts.length - 1))))
+        const q = pts[idx]
+        if (q?.lon == null || q?.lat == null) continue
+        out.push(projectToComposite(q.lon, q.lat, cr))
+      }
+      return out
+    }
 
     // Pre-compute peak position on route (for peak callout)
     const peakRouteP = (() => {
@@ -2889,14 +3219,43 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           heartPhaseRef.current = (heartPhaseRef.current + (bpmNow / 60) / TARGET_FPS) % 1
         }
 
+        // Pendenza normalizzata nel punto corrente (per l'ombra che si allunga in salita): differenza
+        // di quota su una finestra corta della serie già ricampionata, ±12 m di dislivello = ±1.
+        const slopeNow = (videoSlopeShadowEnabled && altitudeSeries.length > 2)
+          ? (() => {
+              const wgap = Math.max(1, Math.round(altitudeSeries.length * 0.02))
+              const iA = Math.max(0, siHr - wgap), iB = Math.min(altitudeSeries.length - 1, siHr)
+              return Math.max(-1, Math.min(1, (altitudeSeries[iB] - altitudeSeries[iA]) / 12))
+            })()
+          : 0
+
+        // Scia dietro al pin: sotto al pin stesso, così la coda gli passa "dietro" e non sopra.
+        if (videoTrailEnabled && introP === undefined && stopZoomTNow <= 0.001) {
+          const spNow = hasSpeed ? smoothSpeed[siHr] : 3
+          const trailCol = effortNow == null ? hexToRgb('#f97316') : effortRgb(effortNow)
+          drawPinTrail(ctx, trailPointsAt(p, spNow, crF), sc2, trailCol)
+        }
+
+        // Momento "vetta conquistata": un solo scatto, al primo superamento del punto più alto.
+        // Il pin fa un saltello mentre parte — da qui pinHop, applicato al disegno del pin sotto.
+        let pinHop = 0
+        if (videoPeakMomentEnabled && introP === undefined && stopZoomTNow <= 0.001) {
+          if (peakHitRef.current < 0 && p >= peakRouteP) peakHitRef.current = frameIdx
+          const el = peakHitRef.current < 0 ? -1 : frameIdx - peakHitRef.current
+          if (el >= 0 && el < PEAK_FRAMES) {
+            const ht = Math.min(1, el / (TARGET_FPS * 0.45))
+            pinHop = -Math.sin(ht * Math.PI) * 34 * sc2   // un solo balzo, torna a terra da solo
+          }
+        }
+
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
         if (stopZoomTNow <= 0.001) {
           if (introP === undefined) {
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, effortNow)
-            if (videoHeartEffectEnabled && bpmNow > 0) drawHeartBadge(ctx, outW/2, outH/2, outW/1080, bpmNow, heartPhaseRef.current)
+            drawMapPin(ctx, outW/2, outH/2 + pinHop, outW/1080, faceImgRef.current, effortNow, slopeNow)
+            if (videoHeartEffectEnabled && bpmNow > 0) drawHeartBadge(ctx, outW/2, outH/2 + pinHop, outW/1080, bpmNow, heartPhaseRef.current)
           } else if (introP > 0.7) {
             ctx.globalAlpha = (introP - 0.7) / 0.3
-            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, effortNow)
+            drawMapPin(ctx, outW/2, outH/2, outW/1080, faceImgRef.current, effortNow, slopeNow)
             if (videoHeartEffectEnabled && bpmNow > 0) drawHeartBadge(ctx, outW/2, outH/2, outW/1080, bpmNow, heartPhaseRef.current)
             ctx.globalAlpha = 1
           }
@@ -2912,6 +3271,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             if (el >= 0 && el < MILESTONE_FRAMES) {
               drawRouteMilestone(ctx, outW/2, outH/2, sc2, Math.round(mk.mark*100), el / MILESTONE_FRAMES)
             }
+          }
+        }
+
+        // Vetta: disegnata dopo il pin, così raggi e numero gli stanno davanti
+        if (videoPeakMomentEnabled && peakHitRef.current >= 0) {
+          const el = frameIdx - peakHitRef.current
+          if (el >= 0 && el < PEAK_FRAMES) {
+            drawPeakConquered(ctx, outW/2, outH/2, outW, outH, sc2, Math.max(...altitudeSeries), el / PEAK_FRAMES)
           }
         }
 
@@ -2931,6 +3298,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 title: displayTitle, showTitle: videoShowTitle, showStats: videoShowStats, showProgress: videoShowProgress,
                 coveredKm: +(p*totalKm).toFixed(1), totalKm: +totalKm.toFixed(1), alt: Math.round(alt), elevGain, progress: p,
                 altitudeSeries, peakRouteP, hrData, speedData,
+                photoMarks, odometer: videoOdometerEnabled,
               })
             } finally { ctx.restore() }
           }
@@ -2986,8 +3354,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
         const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
         if(showHUD){
-          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento'})
+          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento',photoMarks,odometer:videoOdometerEnabled})
         }
+        }
+
+        // Mini-mappa d'insieme: per ultima, così resta sopra a fascia/HUD. In alto a destra con lo
+        // stile Classico (l'HUD sta in basso), in basso a destra col Carosello (la fascia sta in alto).
+        if (videoMiniMapEnabled && miniRoute.length > 1 && introP === undefined) {
+          const mmSize = Math.round(outW * 0.17)
+          const mmPad = Math.round(22 * sc2)
+          const mmX = outW - mmSize - mmPad
+          const mmY = isCarousel ? outH - mmSize - Math.round(outH * 0.13) : Math.round(outH * 0.085)
+          const mmCol = effortNow == null ? hexToRgb('#f97316') : effortRgb(effortNow)
+          ctx.save()
+          try {
+            ctx.globalAlpha = 1 - stopZoomTNow   // sparisce mentre la polaroid si apre
+            if (ctx.globalAlpha > 0.01) drawMiniMap(ctx, mmX, mmY, mmSize, sc2, miniRoute, p, mmCol)
+          } finally { ctx.restore() }
         }
         }
 
@@ -3012,7 +3395,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
