@@ -1809,15 +1809,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // campione 8x8 rilevato come "quasi nero" indica proprio questo: si tratta il fotogramma come
     // "mappa non disponibile" e si salta SOLO il ridisegno (il composito trattiene l'ultimo buono,
     // vedi mapAvailableF/O più sotto), invece di incollare il nero nel video.
-    const blankSampleCanvas=document.createElement('canvas'); blankSampleCanvas.width=8; blankSampleCanvas.height=8
+    // Il campione è 16x16 e si contano le celle quasi nere invece della sola media globale: un
+    // fotogramma con un "buco" di terreno non ancora caricato (mezzo schermo nero, il resto
+    // disegnato) ha una media ben sopra qualsiasi soglia utile, ma è comunque da scartare. La mappa
+    // non è mai legittimamente nera (nessuna scena notturna, le dissolvenze al nero sono disegnate
+    // sul canvas composito, non su questo), quindi "in gran parte nera" significa sempre "non pronta".
+    const BLANK_CELL = 16
+    const blankSampleCanvas=document.createElement('canvas'); blankSampleCanvas.width=BLANK_CELL; blankSampleCanvas.height=BLANK_CELL
     const blankSampleCtx=blankSampleCanvas.getContext('2d',{willReadFrequently:true})
     const isCanvasBlank=(cv:HTMLCanvasElement):boolean=>{
       if(!blankSampleCtx||cv.width<=0||cv.height<=0) return false
       try{
-        blankSampleCtx.drawImage(cv,0,0,cv.width,cv.height,0,0,8,8)
-        const data=blankSampleCtx.getImageData(0,0,8,8).data
-        let sum=0; for(let i=0;i<data.length;i+=4) sum+=data[i]+data[i+1]+data[i+2]
-        return (sum/(64*3))<3
+        blankSampleCtx.clearRect(0,0,BLANK_CELL,BLANK_CELL)
+        blankSampleCtx.drawImage(cv,0,0,cv.width,cv.height,0,0,BLANK_CELL,BLANK_CELL)
+        const data=blankSampleCtx.getImageData(0,0,BLANK_CELL,BLANK_CELL).data
+        let sum=0, darkCells=0
+        const total=BLANK_CELL*BLANK_CELL
+        for(let i=0;i<data.length;i+=4){
+          const lum=data[i]+data[i+1]+data[i+2]
+          sum+=lum
+          if(lum<12) darkCells++   // ~4/255 medi per canale: nero, non semplicemente scuro
+        }
+        return (sum/(total*3))<3 || (darkCells/total)>0.6
       }catch{ return false }
     }
 
@@ -2280,10 +2293,26 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const tilesReady = typeof (map as any).areTilesLoaded === 'function' ? (map as any).areTilesLoaded() : true
         if (tilesReady || attempts >= MAX_TILE_WAIT_ATTEMPTS) { fire(); return }
         attempts++
-        try { map!.once('render' as any, tryFire) } catch { fire() }
+        // Richiedere un'altra ripittura è essenziale, non facoltativo: senza triggerRepaint la
+        // catena di tentativi si BLOCCA ogni volta che MapLibre non ha nulla da ridisegnare da sé
+        // (camera già assestata, in attesa dei tile dalla rete) — nessun evento 'render' arriva
+        // più e si finiva sistematicamente sul timeout qui sotto. È esattamente ciò che accade nei
+        // tratti veloci (tile mai pronti in tempo) e non in quelli lenti: la causa dell'asimmetria
+        // segnalata sui fotogrammi neri.
+        try { map!.once('render' as any, tryFire); map!.triggerRepaint() } catch { fire() }
       }
-      try { map!.once('render' as any, tryFire) } catch {}
-      setTimeout(fire, 600)
+      try { map!.once('render' as any, tryFire); map!.triggerRepaint() } catch {}
+      // Rete di sicurezza se gli eventi 'render' non arrivano affatto. Non cattura direttamente:
+      // catturare da un timer significa leggere il canvas WebGL in un istante arbitrario, anche a
+      // metà di una ripittura di MapLibre (dopo il suo gl.clear(), prima che abbia ridisegnato) —
+      // cioè un fotogramma nero. Forza invece una ripittura e cattura DENTRO il suo evento 'render'.
+      setTimeout(() => {
+        if (fired) return
+        try { map!.once('render' as any, fire); map!.triggerRepaint() } catch { fire() }
+        // Ultimissima istanza (mappa che non ripittura affatto): qui isCanvasBlank resta l'unica
+        // protezione, e in quel caso il composito trattiene l'ultimo fotogramma buono.
+        setTimeout(fire, 400)
+      }, 600)
     }
 
     const renderNextFrame = () => {
