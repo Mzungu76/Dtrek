@@ -1904,19 +1904,30 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         },
         error: (e: any) => console.error('VideoEncoder error:', e)
       })
-      // Pick highest-quality AVC profile the browser supports
-      const avcCandidates = ['avc1.640034','avc1.640028','avc1.4d4028','avc1.42003d','avc1.420028']
+      // Profilo AVC Baseline ('42' = profile_idc 66) invece di High/Main ('64'/'4d'): il profilo
+      // Baseline VIETA i B-frame per specifica H.264 (non è un'impostazione che l'encoder può
+      // scegliere di ignorare, è una restrizione del profilo stesso) — elimina strutturalmente la
+      // classe di bug legata all'ordine di decodifica dei B-frame nel muxing (vedi il commento in
+      // finishRecording), invece di limitarsi a gestirla correttamente. Costa una compressione
+      // leggermente meno efficiente (file un po' più grandi a parità di qualità) — un compromesso
+      // accettato qui perché la priorità è l'affidabilità, non la dimensione del file.
+      const avcCandidates = ['avc1.420034','avc1.42002a','avc1.420028','avc1.42001f']
       let chosenCodec = 'avc1.420028'
+      // Preferisce l'encoder SOFTWARE a quello hardware: gli encoder H.264 hardware su vari SoC
+      // Android hanno bug WebCodecs documentati (frame corrotti/riordinati) — 'prefer-software' è
+      // solo una preferenza (se non disponibile il browser ripiega comunque sull'hardware), non
+      // un requisito che possa far fallire isConfigSupported. Più lento, ma più prevedibile —
+      // la priorità qui è la correttezza del video, non la velocità di rendering.
       for (const c of avcCandidates) {
         try {
-          const sup = await VideoEncoder.isConfigSupported({ codec: c, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
+          const sup = await VideoEncoder.isConfigSupported({ codec: c, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality', hardwareAcceleration: 'prefer-software' })
           if (sup.supported) { chosenCodec = c; break }
         } catch {}
       }
       // 'quality' (not 'realtime'): this is a file export, not a live stream — the spec
       // explicitly allows 'realtime' encoders to drop/degrade frames under load to
       // minimize latency, which is the wrong tradeoff here and was producing flicker.
-      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality' })
+      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality', hardwareAcceleration: 'prefer-software' })
       videoEncoderRef.current = ve
 
     } else {
@@ -2452,11 +2463,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const mapAvailableO = mapCanvas.width > 0 && mapCanvas.height > 0
           if (mapAvailableO) {
           ctx.clearRect(0, 0, outW, outH)
-          const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
-          try { ctx.filter=grading } catch {}
+          // ctx.filter (color grading) rimosso qui — vedi la nota estesa nel blocco "follow" più
+          // sotto sul perché.
           const crO = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
           ctx.drawImage(mapCanvas, crO.sx, crO.sy, crO.sw, crO.sh, 0, 0, outW, outH)
-          try { ctx.filter='none' } catch {}
           const sc2 = Math.min(outW, outH) / 1080
           // User pin visible at start of outro, fades out over first 20%
           if (outroP < 0.2) {
@@ -2615,12 +2625,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const mapAvailableF = mapCanvas.width > 0 && mapCanvas.height > 0
         if (mapAvailableF) {
         ctx.clearRect(0, 0, outW, outH)
-        // Color grading: applica il grading del preset corrente
-        const grading = (VIDEO_PRESETS as Record<string,{grading:string}>)[videoPreset]?.grading ?? VIDEO_PRESETS.epico.grading
-        try { ctx.filter=grading } catch {}
+        // Color grading (ctx.filter) rimosso qui di proposito, come debug mirato allo sfarfallio/
+        // fotogrammi neri segnalati: ctx.filter su canvas 2D è una delle operazioni più costose
+        // (spesso richiede un intero passaggio software di post-processing, non solo GPU) ed è nota
+        // per implementazioni incoerenti/difettose su alcuni motori mobile in accelerazione
+        // GPU — specialmente filtrando un drawImage che ha per sorgente un canvas WebGL, esattamente
+        // il caso qui (mapCanvas è il canvas di MapLibre). Applicato/rimosso ad OGNI fotogramma per
+        // l'intero video, non un uso occasionale. Punto ragionevole da eliminare prima di continuare
+        // a cercare altrove, avendo già escluso diverse altre cause plausibili senza risolvere.
         const crF = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
         ctx.drawImage(mapCanvas,crF.sx,crF.sy,crF.sw,crF.sh,0,0,outW,outH)
-        try { ctx.filter='none' } catch {}
 
         // Hyperlapse opzionale (Sezione 4): un leggero sdoppiamento della mappa a scala crescente e
         // opacità calante, solo nei tratti di viaggio più lunghi — dà energia dove il viaggio dura
