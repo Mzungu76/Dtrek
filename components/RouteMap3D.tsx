@@ -37,8 +37,8 @@ import {
   hexToRgb, effortRgb, hrEffortAt, buildMiniRoute,
   drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
-  drawStopPhotoZoom, drawHUD, drawTopBand, drawVideoElevProfile, type GraphData,
-  drawPoiCard, drawTeiPanel, drawIdentikit,
+  drawStopPhotoZoom, drawHUD, drawTopBand, drawElevationMarker,
+  drawPoiTag, drawTeiPanel, drawIdentikit,
   drawNumbersBeat, drawElevationBeat, drawNatureBeat, drawNoticesBeat, drawPlacesBeat, drawStoryCaption,
   drawPositionDot,
 } from '@/lib/videoOverlays'
@@ -366,7 +366,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoShowTitle,    setVideoShowTitle]   = useState(true)
   const [videoShowStats,    setVideoShowStats]   = useState(true)
   const [videoShowProgress, setVideoShowProgress]= useState(true)
-  const [videoShowBody,     setVideoShowBody]    = useState(true)
   const [videoShowPois,     setVideoShowPois]    = useState(false)
   const [videoRecordedBlob, setVideoRecordedBlob]= useState<Blob | null>(null)
   // Se l'ultimo render completato era un'anteprima veloce (solo una finestra di fotogrammi centrale
@@ -408,6 +407,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoPoiRequireImage, setVideoPoiRequireImage] = useState(true)
   // Stacchi che spezzano il volo sul percorso — vedi lib/videoInterludes.ts.
   const [videoInterludes, setVideoInterludes] = useState<InterludeSetting[]>(DEFAULT_INTERLUDES)
+  // Quote lungo il percorso: sostituiscono il grafico altimetrico, che a schermo piccolo e in
+  // movimento non si leggeva. Numeri fermi nei punti che contano (vetta, punto più basso, salite
+  // decise), con la freccia della pendenza.
+  const [videoElevMarkersEnabled, setVideoElevMarkersEnabled] = useState(false)
   // Didascalie proposte dal testo della guida. Sono CANDIDATI modificabili, non un testo definitivo:
   // il testo della guida lo scrive un modello, e niente dovrebbe finire in un file destinato a
   // circolare senza che qualcuno l'abbia letto — vedi lib/videoCaptions.ts.
@@ -1712,6 +1715,27 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Gli avvisi delle guide più vecchie sono stringhe semplici invece di {severity,text}:
     // normalizzare prima dell'uso, non dare per scontata la forma nuova (vedi lib/guideNotices.ts).
     const normalizedNotices = normalizeGuideNotices(guide?.notices)
+    // Punti di quota da segnalare: la vetta, il punto più basso, e qualche gradino di dislivello
+    // in mezzo. Scelti sui MASSIMI/MINIMI reali invece che a intervalli regolari — un numero piazzato
+    // ogni tot per cento cadrebbe quasi sempre dove non succede niente.
+    const elevMarks = (() => {
+      if (!videoElevMarkersEnabled || altitudeSeries.length < 3) return [] as { p: number; m: number; trend: 'up'|'down'|'flat' }[]
+      const n = altitudeSeries.length
+      const maxI = altitudeSeries.indexOf(Math.max(...altitudeSeries))
+      const minI = altitudeSeries.indexOf(Math.min(...altitudeSeries))
+      const cand: number[] = [maxI, minI]
+      for (const frac of [0.25, 0.5, 0.75]) cand.push(Math.round(frac * (n - 1)))
+      const trendAt = (i: number): 'up'|'down'|'flat' => {
+        const w = Math.max(1, Math.round(n * 0.03))
+        const d = altitudeSeries[Math.min(n-1, i+w)] - altitudeSeries[Math.max(0, i-w)]
+        return d > 8 ? 'up' : d < -8 ? 'down' : 'flat'
+      }
+      return cand.filter((v, k) => cand.indexOf(v) === k).sort((a2,b2)=>a2-b2)
+        // Troppo vicini fra loro si accavallerebbero a schermo
+        .filter((i, k, arr) => k === 0 || i - arr[k-1] > n * 0.08)
+        .map(i => ({ p: i / (n - 1), m: altitudeSeries[i], trend: trendAt(i) }))
+    })()
+
     // Tempo realmente impiegato, dai timestamp del tracciato: è un fatto del percorso così com'è
     // stato camminato, non una stima teorica (e non è il CTS, che è tarato sulla persona).
     const routeTimeLabel = (() => {
@@ -2400,7 +2424,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             const lead = active.card.pois[0]
             const meta = POI_META[lead.type]
             const others = active.card.pois.slice(1)
-            drawPoiCard(ctx, outW, outH, sc2, {
+            // Ancora = il punto vero sulla mappa. Se cade fuori schermo si riporta al bordo: la
+            // linea continua a indicare la direzione giusta invece di uscire dal fotogramma.
+            const raw = projectToComposite(lead.lon, lead.lat, crF)
+            const mrg = 42 * sc2
+            const ax = Math.max(mrg, Math.min(outW - mrg, raw.x))
+            const ay = Math.max(mrg, Math.min(outH - mrg, raw.y))
+            drawPoiTag(ctx, outW, outH, sc2, ax, ay, {
               title: lead.name ?? meta.label,
               kind: meta.label,
               emoji: meta.emoji,
@@ -2426,9 +2456,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // Titolo, statistiche, profilo altimetrico e grafici corpo in un'unica fascia in alto,
           // sovrapposta alla mappa con una leggera trasparenza (drawTopBand) — sfuma via mentre la
           // foto in sosta si ingrandisce (graphAlpha), per non restare addosso alla foto.
-          const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
-          const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
-          const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
           const graphAlpha = 1 - stopZoomTNow
           if (graphAlpha > 0.01) {
             ctx.save()
@@ -2437,7 +2464,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               drawTopBand(ctx, outW, topBandH, sc2, {
                 title: displayTitle, showTitle: videoShowTitle, showStats: videoShowStats, showProgress: videoShowProgress,
                 coveredKm: +(p*totalKm).toFixed(1), totalKm: +totalKm.toFixed(1), alt: Math.round(alt), elevGain, progress: p,
-                altitudeSeries, peakRouteP, hrData, speedData,
                 photoMarks, odometer: videoOdometerEnabled,
               })
             } finally { ctx.restore() }
@@ -2451,13 +2477,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               stopZoomTNow, stopT ?? 0)
           }
         } else {
-        // Animated elevation profile (upper center, hidden during title card)
-        if(altitudeSeries.length>1&&!(videoShowTitle&&displayTitle&&frameIdx<Math.round(TARGET_FPS*1.8))){
-          const elW=Math.round(outW*0.36), elH=Math.round(34*sc2)
-          const elX=Math.round((outW-elW)/2), elY=Math.round(18*sc2)
-          drawVideoElevProfile(ctx,altitudeSeries,p,elX,elY,elW,elH,sc2)
-        }
-
         // Peak callout: appears when camera is near the route's highest point (follow phase only)
         const peakDist=Math.abs(p-peakRouteP)
         if(peakDist<0.042&&altitudeSeries.length>0&&introP===undefined&&frameIdx>TITLE_DUR){
@@ -2492,12 +2511,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
         // HUD (skip if title card is prominent)
         const showHUD = !(videoShowTitle&&displayTitle&&frameIdx<TITLE_DUR&&frameIdx<Math.round(TARGET_FPS*1.5))
-        const si=Math.min(Math.round(p*(SAMPLES-1)),SAMPLES-1)
-        const hrData:GraphData|undefined=(hasHr&&videoShowBody)?{series:smoothHr,label:'BPM',icon:'♥',strokeColor:'#ef4444',fillColor:'rgba(239,68,68,0.28)',minVal:Math.max(0,hrMin-5),maxVal:hrMax+5,currentValue:smoothHr[si]}:undefined
-        const speedData:GraphData|undefined=(hasSpeed&&videoShowBody)?{series:smoothSpeed,label:'km/h',icon:'⚡',strokeColor:'#60a5fa',fillColor:'rgba(96,165,250,0.28)',minVal:0,maxVal:spMax+1,currentValue:smoothSpeed[si]}:undefined
         if(showHUD){
-          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,showBody:videoShowBody,hrData,speedData,shotLabel:introP!==undefined?'Intro aereo':'Seguimento',photoMarks,odometer:videoOdometerEnabled})
+          drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,shotLabel:introP!==undefined?'Intro aereo':'Seguimento',photoMarks,odometer:videoOdometerEnabled})
         }
+        }
+
+        // Quota nei punti notevoli: compare quando la telecamera ci passa sopra e sfuma via.
+        // Ancorata poco sopra il centro, dove sta il pin — è quello il punto del percorso.
+        if (videoElevMarkersEnabled && !interlude && introP === undefined && stopZoomTNow <= 0.001) {
+          const windowP = Math.min(0.06, (TARGET_FPS * 2.2) / Math.max(1, ROUTE_FRAMES))
+          for (const em of elevMarks) {
+            const d = p - em.p
+            if (d >= 0 && d < windowP) {
+              drawElevationMarker(ctx, outW/2, outH/2 - 150*sc2, sc2, em.m, em.trend, d / windowP)
+              break
+            }
+          }
         }
 
         // Didascalia dalla guida: sopra al percorso, ma mai insieme a uno stacco o a una foto in
@@ -2552,11 +2581,24 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               }, it)
               break
             case 'luoghi': {
-              const top = (poiPlan?.cards.flatMap(c => c.pois) ?? [])
-              const list = (top.length ? top : (poiPlan?.markers ?? []))
+              // Luoghi notevoli e foto dell'utente insieme, in ordine di percorso: chi guarda si
+              // chiede "cosa c'è lungo il cammino", e sono due risposte alla stessa domanda.
+              const fromPois = (poiPlan?.cards.flatMap(c => c.pois) ?? [])
                 .filter(q => q.name)
-                .slice(0, 5)
-                .map(q => ({ name: q.name!, kind: POI_META[q.type].label, emoji: POI_META[q.type].emoji, color: POI_META[q.type].color }))
+                .map(q => ({
+                  atP: q.progress, name: q.name!, kind: POI_META[q.type].label,
+                  emoji: POI_META[q.type].emoji, color: POI_META[q.type].color,
+                  image: poiImages.get(q.id),
+                }))
+              const fromPhotos = photoStops.map(g => ({
+                atP: g.progress,
+                name: g.photos[0]?.photo.caption?.trim() || 'La tua foto',
+                kind: g.photos.length > 1 ? `${g.photos.length} scatti` : 'Il tuo scatto',
+                emoji: '📷', color: '#e08d3c',
+                image: g.photos[0]?.img,
+                caption: g.photos.length > 1 ? undefined : undefined,
+              }))
+              const list = [...fromPois, ...fromPhotos].sort((a2, b2) => a2.atP - b2.atP)
               if (list.length) drawPlacesBeat(ctx, outW, outH, sc2, list, it)
               break
             }
@@ -2598,7 +2640,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,videoElevMarkersEnabled,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2943,7 +2985,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         // Il pin è il soggetto di un ricordo e un intruso in una descrizione:
                         // lo si allinea alla modalità (e con lui gli effetti che gli stanno addosso).
                         setShowUserPin(opt.id==='ricordo')
-                        if (opt.id==='illustrativo') { setVideoShowPois(true); setVideoShowBody(false) }
+                        if (opt.id==='illustrativo') setVideoShowPois(true)
                       }}
                         className={`w-full text-left rounded-xl px-3.5 py-3 border transition-colors ${
                           videoMode===opt.id ? 'bg-forest-500/20 border-forest-400/60' : 'bg-white/7 border-transparent hover:bg-white/10'
@@ -3295,7 +3337,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       {l:'Titolo',v:videoShowTitle,s:setVideoShowTitle,ok:true},
                       {l:'Statistiche',v:videoShowStats,s:setVideoShowStats,ok:true},
                       {l:'Progresso',v:videoShowProgress,s:setVideoShowProgress,ok:true},
-                      {l:'Dati corporei',v:videoShowBody,s:setVideoShowBody,ok:hasBodyData},
+                      {l:'Quote sul percorso',v:videoElevMarkersEnabled,s:setVideoElevMarkersEnabled,ok:altitudeSeries.length>2},
                       {l:'POI',v:videoShowPois,s:setVideoShowPois,ok:(pois?.length??0)>0},
                     ].map(item=>(
                       <button key={item.l} onClick={()=>item.ok&&item.s(v=>!v)} disabled={!item.ok}
@@ -3305,6 +3347,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       </button>
                     ))}
                   </div>
+                  {videoElevMarkersEnabled&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">La quota compare come numero nei punti che contano (vetta, punto più basso, cambi di pendenza), con la freccia della salita — al posto del vecchio grafico altimetrico, illeggibile a schermo piccolo.</p>}
                   {videoShowPois&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">I punti di interesse non aggiungono tempo al video (a differenza delle foto) — vengono mostrati i {Math.min(MAX_VIDEO_POIS, pois?.length??0)} più rilevanti vicino al percorso.</p>}
                 </div>
 
