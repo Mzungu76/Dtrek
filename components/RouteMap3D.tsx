@@ -1448,6 +1448,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // il viaggio dura davvero — vedi lib/videoPhotoCarousel.ts hyperlapseIntensityAt. Default off:
   // effetto stilistico, non tutti lo vogliono.
   const [videoHyperlapseEnabled, setVideoHyperlapseEnabled] = useState(false)
+  // Pin dell'utente a schermo. Spegnendolo si spengono anche tutti gli effetti che gli sono
+  // appesi (cuore, colore fatica, scia, ombra): esistono solo in funzione del pin, e lasciarli
+  // accesi con il pin spento significherebbe un cuore che pulsa sopra il vuoto. Vedi
+  // setShowUserPin più sotto, che li azzera in un colpo solo.
+  const [videoShowUserPin, setVideoShowUserPin] = useState(true)
   // Gettone 3D a forma di cuore che pulsa al ritmo vero della FC, con i BPM correnti sopra —
   // entrambi gli stili video, richiede dati di frequenza cardiaca.
   const [videoHeartEffectEnabled, setVideoHeartEffectEnabled] = useState(false)
@@ -2154,6 +2159,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     setVideoStep(0); setVideoState('config')
   }
   const goToStep = (i: number) => setVideoStep(Math.max(0, Math.min(WIZARD_STEPS.length - 1, i)))
+
+  /** Accende/spegne il pin utente. Spegnendolo azzera anche gli effetti che dipendono da lui:
+   *  sono tutti ancorati alla sua posizione o alla sua sagoma, quindi senza pin non hanno nulla a
+   *  cui attaccarsi. Riaccendendo il pin NON si ripristinano da soli: erano scelte dell'utente,
+   *  ritornare a uno stato che non ha più chiesto sarebbe peggio che lasciarglieli riaccendere. */
+  function setShowUserPin(on: boolean) {
+    setVideoShowUserPin(on)
+    if (!on) {
+      setVideoHeartEffectEnabled(false)
+      setVideoPinEffortColorEnabled(false)
+      setVideoTrailEnabled(false)
+      setVideoSlopeShadowEnabled(false)
+    }
+  }
 
   function moveShot(id: string, dir: -1|1) {
     setShotPlan(prev=>{
@@ -3040,7 +3059,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           ctx.drawImage(mapCanvas, crO.sx, crO.sy, crO.sw, crO.sh, 0, 0, outW, outH)
           const sc2 = Math.min(outW, outH) / 1080
           // User pin visible at start of outro, fades out over first 20%
-          if (outroP < 0.2) {
+          if (videoShowUserPin && outroP < 0.2) {
             const siHrO = SAMPLES - 1  // p=1.0 in fase di finale: ultimo campione della serie
             const bpmNowO = hasHr ? smoothHr[siHrO] : 0
             const effortO = (videoPinEffortColorEnabled && hasHr) ? hrEffortAt(smoothHr, siHrO, hrMin, hrMax) : null
@@ -3249,7 +3268,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           : 0
 
         // Scia dietro al pin: sotto al pin stesso, così la coda gli passa "dietro" e non sopra.
-        if (videoTrailEnabled && introP === undefined && stopZoomTNow <= 0.001) {
+        if (videoShowUserPin && videoTrailEnabled && introP === undefined && stopZoomTNow <= 0.001) {
           const spNow = hasSpeed ? smoothSpeed[siHr] : 3
           const trailCol = effortNow == null ? hexToRgb('#f97316') : effortRgb(effortNow)
           drawPinTrail(ctx, trailPointsAt(p, spNow, crF), sc2, trailCol)
@@ -3268,7 +3287,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
 
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
-        if (stopZoomTNow <= 0.001) {
+        if (videoShowUserPin && stopZoomTNow <= 0.001) {
           if (introP === undefined) {
             drawMapPin(ctx, outW/2, outH/2 + pinHop, outW/1080, faceImgRef.current, effortNow, slopeNow)
             if (videoHeartEffectEnabled && bpmNow > 0) drawHeartBadge(ctx, outW/2, outH/2 + pinHop, outW/1080, bpmNow, heartPhaseRef.current)
@@ -3414,7 +3433,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -4148,29 +4167,42 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
                 <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">IL TUO PIN</p>
-                  <label className={`flex items-center gap-2 mb-2 ${hasBodyData?'cursor-pointer':'opacity-40'}`}>
-                    <input type="checkbox" checked={videoHeartEffectEnabled} disabled={!hasBodyData}
-                      onChange={e=>setVideoHeartEffectEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Cuore 3D che batte + BPM</span>
-                  </label>
-                  <label className={`flex items-center gap-2 mb-2 ${hasBodyData?'cursor-pointer':'opacity-40'}`}>
-                    <input type="checkbox" checked={videoPinEffortColorEnabled} disabled={!hasBodyData}
-                      onChange={e=>setVideoPinEffortColorEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Pin colorato dalla fatica</span>
-                  </label>
-                  {videoPinEffortColorEnabled&&hasBodyData&&(
-                    <p className="text-white/30 text-[11px] mb-2 pl-6 leading-relaxed">Gettone e foto virano insieme: celeste a riposo → verde → ambra → rosso nel punto di massimo sforzo.</p>
-                  )}
                   <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input type="checkbox" checked={videoTrailEnabled}
-                      onChange={e=>setVideoTrailEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Scia luminosa dietro al pin</span>
+                    <input type="checkbox" checked={videoShowUserPin}
+                      onChange={e=>setShowUserPin(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
+                    <span className="text-white text-xs font-semibold">Mostra il pin con la tua foto</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={videoSlopeShadowEnabled}
-                      onChange={e=>setVideoSlopeShadowEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Ombra che si allunga in salita</span>
-                  </label>
+                  {!videoShowUserPin&&(
+                    <p className="text-white/30 text-[11px] mb-2 pl-6 leading-relaxed">
+                      Senza pin il video racconta il percorso invece di te. Gli effetti qui sotto sono legati al pin e restano spenti.
+                    </p>
+                  )}
+                  {/* Tutto ciò che segue vive addosso al pin: senza, non ha nulla a cui attaccarsi */}
+                  <div className={videoShowUserPin?'':'opacity-40 pointer-events-none'}>
+                    <label className={`flex items-center gap-2 mb-2 ${hasBodyData&&videoShowUserPin?'cursor-pointer':'opacity-40'}`}>
+                      <input type="checkbox" checked={videoHeartEffectEnabled} disabled={!hasBodyData||!videoShowUserPin}
+                        onChange={e=>setVideoHeartEffectEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
+                      <span className="text-white text-xs font-semibold">Cuore 3D che batte + BPM</span>
+                    </label>
+                    <label className={`flex items-center gap-2 mb-2 ${hasBodyData&&videoShowUserPin?'cursor-pointer':'opacity-40'}`}>
+                      <input type="checkbox" checked={videoPinEffortColorEnabled} disabled={!hasBodyData||!videoShowUserPin}
+                        onChange={e=>setVideoPinEffortColorEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
+                      <span className="text-white text-xs font-semibold">Pin colorato dalla fatica</span>
+                    </label>
+                    {videoPinEffortColorEnabled&&hasBodyData&&videoShowUserPin&&(
+                      <p className="text-white/30 text-[11px] mb-2 pl-6 leading-relaxed">Gettone e foto virano insieme: celeste a riposo → verde → ambra → rosso nel punto di massimo sforzo.</p>
+                    )}
+                    <label className={`flex items-center gap-2 mb-2 ${videoShowUserPin?'cursor-pointer':''}`}>
+                      <input type="checkbox" checked={videoTrailEnabled} disabled={!videoShowUserPin}
+                        onChange={e=>setVideoTrailEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
+                      <span className="text-white text-xs font-semibold">Scia luminosa dietro al pin</span>
+                    </label>
+                    <label className={`flex items-center gap-2 ${videoShowUserPin?'cursor-pointer':''}`}>
+                      <input type="checkbox" checked={videoSlopeShadowEnabled} disabled={!videoShowUserPin}
+                        onChange={e=>setVideoSlopeShadowEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
+                      <span className="text-white text-xs font-semibold">Ombra che si allunga in salita</span>
+                    </label>
+                  </div>
                 </div>
 
                 <div>
@@ -4226,6 +4258,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 const est = videoDuration + Math.round(includedPhotoCount*photoDurationSec) + introOutro
                 const over = est > 60
                 const effects = [
+                  !videoShowUserPin&&'Senza pin utente',
                   videoHeartEffectEnabled&&'Cuore 3D + BPM',
                   videoPinEffortColorEnabled&&'Pin dalla fatica',
                   videoTrailEnabled&&'Scia',
