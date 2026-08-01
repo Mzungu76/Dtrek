@@ -80,7 +80,53 @@ const POI_NOTABILITY_TIER: Record<PoiType, 0|1|2> = {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type VideoState = 'idle' | 'config' | 'rendering' | 'finalizing' | 'done'
+type VideoState = 'idle' | 'config' | 'preparing' | 'rendering' | 'finalizing' | 'done'
+
+/** Massimo/minimo di una serie numerica SENZA lo spread `Math.max(...arr)`.
+ *
+ *  Lo spread passa un argomento per elemento: su una traccia GPS lunga (un'escursione registrata a
+ *  un punto al secondo arriva tranquillamente a decine di migliaia di punti) supera il limite di
+ *  argomenti del motore JS e lancia RangeError. Finiva nel `catch` della preparazione video, dove
+ *  diventava il messaggio generico "riprova con meno foto/POI" — che mandava a cercare il problema
+ *  esattamente dalla parte sbagliata, visto che dipendeva dalla LUNGHEZZA della traccia e non dalle
+ *  foto. Costa anche molto meno quando serve ad ogni fotogramma. */
+function seriesMax(arr: ArrayLike<number>): number {
+  let m = -Infinity
+  for (let i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i]
+  return m === -Infinity ? 0 : m
+}
+function seriesMin(arr: ArrayLike<number>): number {
+  let m = Infinity
+  for (let i = 0; i < arr.length; i++) if (arr[i] < m) m = arr[i]
+  return m === Infinity ? 0 : m
+}
+
+/** Annullamento chiesto dall'utente durante la preparazione: non è un errore e non deve mostrare
+ *  nessun messaggio di fallimento. */
+class PrepAborted extends Error {}
+
+/**
+ * Traduce l'eccezione della preparazione video in qualcosa che l'utente possa davvero usare.
+ *
+ * Prima qui c'era un unico messaggio ("riprova con meno foto/POI o riduci la durata") per QUALSIASI
+ * eccezione, e l'oggetto `err` veniva scartato senza nemmeno un log: in produzione il guasto era
+ * quindi indistinguibile — memoria esaurita, codec non supportato dal browser, modulo di codifica
+ * non scaricato, tutti mostravano lo stesso consiglio, giusto in un caso su quattro.
+ */
+function prepErrorMessage(stage: string, err: unknown): string {
+  const name = (err as { name?: string } | null)?.name ?? ''
+  const msg  = String((err as { message?: string } | null)?.message ?? err ?? '')
+  const both = `${name} ${msg}`
+  if (/ChunkLoadError|Loading chunk|dynamically imported module|Failed to fetch/i.test(both))
+    return 'Non è stato possibile scaricare il modulo di codifica video. Controlla la connessione e ricarica la pagina.'
+  if (name === 'NotSupportedError' || /codec|not supported|unsupported/i.test(both))
+    return 'Questo browser non riesce a codificare un video a questa risoluzione. Prova un altro formato (o un altro browser).'
+  if (name === 'SecurityError')
+    return 'Una delle immagini non è utilizzabile nel video: il browser ne blocca la lettura. Prova a escluderla dal passo "Foto".'
+  if (name === 'QuotaExceededError' || name === 'RangeError' || /out of memory|allocation (failed|size)/i.test(both))
+    return 'Memoria insufficiente per un video così ricco. Riduci la durata, le foto, oppure passa a 30 fps.'
+  return `Errore durante la preparazione del video (${stage}). Riprova con meno foto/POI o riduci la durata.`
+}
 
 // Passi del wizard video. L'ordine segue la TIMELINE del video stesso (apertura → viaggio → foto →
 // rifiniture) dopo la scelta tecnica iniziale del formato: chi lo compila ripercorre mentalmente il
@@ -376,6 +422,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [renderFrame,       setRenderFrame]      = useState(0)
   const [renderTotal,       setRenderTotal]      = useState(0)
   const [finalizeElapsedSec,setFinalizeElapsedSec]= useState(0)
+  // Fase di preparazione (prima che il primo fotogramma venga disegnato): la mappa deve caricare il
+  // terreno lungo tutto il percorso, e sono una ventina di attese in fila. Senza queste due
+  // variabili il wizard restava immobile per tutto il tempo e sembrava che il pulsante non avesse
+  // fatto nulla — la mappa si muoveva sullo sfondo, ma niente lo spiegava.
+  const [prepLabel,         setPrepLabel]        = useState('')
+  const [prepProgress,      setPrepProgress]     = useState(0)
+  /** Motivo dell'ultimo tentativo fallito, mostrato nel wizard finché non si riprova. */
+  const [videoError,        setVideoError]       = useState('')
+  /** Ultima fase raggiunta: serve al messaggio d'errore, che senza saperlo può solo tirare a indovinare. */
+  const prepStageRef = useRef('avvio')
   const [entertainIdx,      setEntertainIdx]      = useState(0)
   const [videoPreset,       setVideoPreset]      = useState<VideoPreset>('custom')
   const [photoDurationSec,  setPhotoDurationSec] = useState(3.0)
@@ -533,7 +589,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   }, [distanceProp, elevGainProp, pois, routePhotos, videoExcludedPhotoIds])
 
   useEffect(() => {
-    if (videoState !== 'rendering' && videoState !== 'finalizing') { setEntertainIdx(0); return }
+    if (videoState !== 'preparing' && videoState !== 'rendering' && videoState !== 'finalizing') { setEntertainIdx(0); return }
     const id = setInterval(() => setEntertainIdx(i => (i + 1) % Math.max(1, entertainmentContent.length)), 4200)
     return () => clearInterval(id)
   }, [videoState, entertainmentContent.length])
@@ -1162,8 +1218,27 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const startRendering=useCallback(async (previewOnly = false)=>{
     const map=mapRef.current; if(!map) return
     if(typeof MediaRecorder==='undefined'){
-      setShareToast('Registrazione video non supportata su questo browser')
-      setTimeout(()=>setShareToast(''),3000); setVideoState('idle'); return
+      setVideoError('Questo browser non supporta la registrazione video. Prova con una versione aggiornata di Chrome, Safari o Firefox.')
+      return
+    }
+
+    // Riscontro IMMEDIATO al clic. Tutto ciò che segue è asincrono e può durare parecchi secondi
+    // (il precaricamento del terreno da solo è una ventina di attese sulla mappa): finché lo stato
+    // passava a 'rendering' solo alla fine della preparazione, il wizard restava a schermo com'era
+    // e l'unico segnale che stesse succedendo qualcosa era la mappa che si muoveva dietro il velo.
+    renderAbortRef.current = false
+    prepStageRef.current = 'avvio'
+    setVideoError('')
+    setPrepLabel('Preparazione…'); setPrepProgress(0)
+    setVideoState('preparing')
+
+    /** Segna la fase corrente e, insieme, fa da punto di annullamento: prima di questa modifica la
+     *  preparazione non era interrompibile in nessun punto: premuto "Genera", l'unica via d'uscita
+     *  era aspettare. */
+    const prep = (label: string, pct: number) => {
+      if (renderAbortRef.current) throw new PrepAborted()
+      prepStageRef.current = label
+      setPrepLabel(label); setPrepProgress(Math.min(1, Math.max(0, pct)))
     }
 
     // Guards every map.once('idle') wait against a context that never settles (e.g. GPU
@@ -1201,27 +1276,38 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       try { map.resize() } catch {}
       if (typeof (map as any).setPixelRatio === 'function') { try{(map as any).setPixelRatio(window.devicePixelRatio||1)}catch{} }
       webglLostCleanupRef.current?.()
-      setVideoState('idle')
-      setShareToast(message)
-      setTimeout(()=>setShareToast(''),4500)
+      // Ritorno al wizard, non alla mappa: ogni messaggio di errore qui chiede di cambiare
+      // qualcosa e riprovare ("riduci la durata", "escludi quella foto", "prova un altro
+      // formato"), e da 'idle' l'utente dovrebbe riaprire il wizard e ricompilarlo da capo.
+      setVideoState('config')
+      setPrepProgress(0); setPrepLabel('')
+      setVideoError(message)
     }
     const onWebglContextLost = (e: Event) => {
       e.preventDefault?.()
       failRendering('Il contesto grafico (GPU) si è interrotto durante la generazione del video. Riprova con meno foto/POI o un video più breve.')
     }
+    // Dentro il try: da qui in poi lo stato è 'preparing', e qualunque eccezione non intercettata
+    // lascerebbe l'utente davanti a una schermata di preparazione che non finisce mai.
+    try {
+
     const renderCanvas = map.getCanvas()
     renderCanvas.addEventListener('webglcontextlost', onWebglContextLost)
     webglLostCleanupRef.current = () => { try { renderCanvas.removeEventListener('webglcontextlost', onWebglContextLost) } catch {}; webglLostCleanupRef.current = null }
 
-    try {
-
     cancelAnimationFrame(animRef.current); isPlayingRef.current=false; setIsPlaying(false)
     progressRef.current=0; setProgress(0)
-    const pts=gpsRef.current; if(pts.length<2) { webglLostCleanupRef.current?.(); return }
+    const pts=gpsRef.current
+    if(pts.length<2) {
+      webglLostCleanupRef.current?.()
+      setVideoError('Questa traccia non ha abbastanza punti GPS per generare un video.')
+      setVideoState('config'); return
+    }
 
     const [outW,outH]=VIDEO_DIMS[videoOrientation]
 
     // Resize map container to output resolution so tiles load at correct density
+    prep('Preparazione della mappa…', 0.02)
     const cont=containerRef.current!
     const dpr=window.devicePixelRatio||1
     cont.style.width=`${outW/dpr}px`
@@ -1249,14 +1335,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const PREWARM_STEPS = 20
     const prewarmIdxs = Array.from({length:PREWARM_STEPS},(_,i)=>
       Math.min(Math.round(i/(PREWARM_STEPS-1)*(pts.length-1)),pts.length-1))
-    for (const ki of prewarmIdxs) {
+    // È la parte più lunga della preparazione (una ventina di attese in fila, ognuna fino a 8s):
+    // vale la pena raccontarla passo per passo invece di lasciare lo schermo fermo.
+    for (let k = 0; k < prewarmIdxs.length; k++) {
+      const ki = prewarmIdxs[k]
+      prep(`Caricamento del terreno… ${k + 1}/${prewarmIdxs.length}`, 0.05 + 0.55 * (k / prewarmIdxs.length))
       const bearing = smoothRouteBears[Math.min(ki,smoothRouteBears.length-1)]??introBearing
       map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomFollow,pitch:48,bearing})
       await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     }
     // Outro position (zoomed out) and intro zoom/pitch
+    prep('Inquadratura finale…', 0.62)
     map.jumpTo({center:[pts[N-1].lon!,pts[N-1].lat!],zoom:zoomOutro,pitch:8,bearing:introBearing})
     await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
+    prep('Inquadratura di apertura…', 0.66)
     for (const ki of prewarmIdxs.slice(0,5)) {
       map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomIntro,pitch:20,bearing:introBearing})
       await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
@@ -1264,6 +1356,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Position at intro start
     map.jumpTo({center:[pts[0].lon!,pts[0].lat!],zoom:zoomIntro,pitch:20,bearing:introBearing})
     await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
+    prep('Tracciato del percorso…', 0.74)
 
     // Hide HTML marker during rendering
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='0'
@@ -1402,6 +1495,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
 
     if (hasWebCodecs) {
+      prep('Avvio del codificatore video…', 0.78)
       const { Muxer, ArrayBufferTarget } = await import('mp4-muxer')
       const muxTarget = new ArrayBufferTarget()
       muxerTargetRef.current = muxTarget
@@ -1444,7 +1538,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // 'quality' (not 'realtime'): this is a file export, not a live stream — the spec
       // explicitly allows 'realtime' encoders to drop/degrade frames under load to
       // minimize latency, which is the wrong tradeoff here and was producing flicker.
-      ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality', hardwareAcceleration: 'prefer-software' })
+      // configure() lancia (NotSupportedError) se il browser non regge questa combinazione di
+      // risoluzione/bitrate/profilo — succede su alcuni dispositivi e non su altri, ed è una delle
+      // cause plausibili del fallimento visto solo in produzione. Chiudere l'encoder prima di
+      // rilanciare: non è ancora in videoEncoderRef, quindi failRendering non lo troverebbe.
+      try {
+        ve.configure({ codec: chosenCodec, width: outW, height: outH, bitrate: videoFps===60?25_000_000:20_000_000, framerate: videoFps, latencyMode: 'quality', hardwareAcceleration: 'prefer-software' })
+      } catch (err) {
+        try { ve.close() } catch {}
+        throw err
+      }
       videoEncoderRef.current = ve
 
     } else {
@@ -1498,6 +1601,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // semplicemente non entra nella mappa qui sotto, e il suo luogo torna a essere un segnaposto.
     const poiImages = new Map<number, HTMLImageElement>()
     if (videoMode === 'illustrativo' && poiWiki?.length) {
+      prep('Immagini dei luoghi…', 0.82)
       await Promise.all(poiWiki.map(({ poi, wiki }) => new Promise<void>(resolve => {
         if (!wiki.thumbnail) { resolve(); return }
         const im = new Image()
@@ -1535,21 +1639,34 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const photoPinLayerId  = 'dtrek-photo-pins-layer'
     const photoPinSourceId = 'dtrek-photo-pins'
     if (sortedPhotos.length > 0) {
+      prep('Segnaposti delle foto…', 0.86)
       const iconSc = 2  // render 2× for crispness; pixelRatio:2 → 45×54 CSS px
       const photoPinImageIds: string[] = []
       for (const s of sortedPhotos) {
-        const W = 45 * iconSc, H = 45 * iconSc, tipH = 9 * iconSc
-        const offC = document.createElement('canvas')
-        offC.width = W; offC.height = H + tipH
-        const offCtx = offC.getContext('2d')!
-        offCtx.imageSmoothingEnabled = true; offCtx.imageSmoothingQuality = 'high'
-        drawPhotoPin(offCtx, W / 2, H + tipH, iconSc, s.img)
-        const imgId = `dtrek-photo-pin-${s.photo.id}`
-        const imageData = offCtx.getImageData(0, 0, offC.width, offC.height)
-        try { if (map.hasImage(imgId)) map.removeImage(imgId); map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
-        photoPinImageIds.push(imgId)
+        // Una foto sola non deve poter far fallire l'esportazione intera: getImageData lancia
+        // SecurityError se il canvas è contaminato (immagine remota senza CORS) e drawPhotoPin
+        // lancia se l'immagine non è decodificabile. Il pin salta, il video si fa lo stesso.
+        try {
+          const W = 45 * iconSc, H = 45 * iconSc, tipH = 9 * iconSc
+          const offC = document.createElement('canvas')
+          offC.width = W; offC.height = H + tipH
+          const offCtx = offC.getContext('2d')!
+          offCtx.imageSmoothingEnabled = true; offCtx.imageSmoothingQuality = 'high'
+          drawPhotoPin(offCtx, W / 2, H + tipH, iconSc, s.img)
+          const imgId = `dtrek-photo-pin-${s.photo.id}`
+          const imageData = offCtx.getImageData(0, 0, offC.width, offC.height)
+          if (map.hasImage(imgId)) map.removeImage(imgId)
+          map.addImage(imgId, imageData, { pixelRatio: iconSc })
+          photoPinImageIds.push(imgId)
+        } catch (err) {
+          console.error('[dtrek] segnaposto foto non creato', s.photo.id, err)
+        }
       }
-      const pinFeatures = sortedPhotos.map(s => {
+      // Solo i segnaposti la cui texture è stata davvero creata: un riferimento a un'icona
+      // inesistente lascerebbe MapLibre a lamentarsi ad ogni fotogramma per nulla.
+      const pinFeatures = sortedPhotos
+        .filter(s => photoPinImageIds.includes(`dtrek-photo-pin-${s.photo.id}`))
+        .map(s => {
         const pi = Math.min(Math.round(s.photo.progress * (N - 1)), N - 1)
         return {
           type: 'Feature' as const,
@@ -1590,22 +1707,36 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       .sort((a, b) => (POI_NOTABILITY_TIER[a.type] - POI_NOTABILITY_TIER[b.type]) || (a.distFromTrack - b.distFromTrack))
       .slice(0, MAX_VIDEO_POIS)
     if (videoShowPois && videoPois.length > 0) {
+      prep('Segnaposti dei luoghi…', 0.90)
       const iconSc = 2
       const poiPinImageIds: string[] = []
       const poiTypesUsed = Array.from(new Set(videoPois.map(p => p.type)))
       for (const type of poiTypesUsed) {
-        const D = 32 * iconSc
-        const offC = document.createElement('canvas')
-        offC.width = D; offC.height = D
-        const offCtx = offC.getContext('2d')!
-        offCtx.imageSmoothingEnabled = true; offCtx.imageSmoothingQuality = 'high'
-        drawPoiPin(offCtx, D / 2, D / 2, iconSc, POI_META[type].emoji)
-        const imgId = `dtrek-poi-pin-type-${type}`
-        const imageData = offCtx.getImageData(0, 0, D, D)
-        try { if (map.hasImage(imgId)) map.removeImage(imgId); map.addImage(imgId, imageData, { pixelRatio: iconSc }) } catch {}
-        poiPinImageIds.push(imgId)
+        // POI_META è indicizzato su PoiType, ma i POI arrivano da Overpass e possono essere stati
+        // salvati da una versione dell'app che conosceva un tipo in più: senza questa guardia un
+        // solo tipo sconosciuto faceva fallire l'INTERA preparazione con un TypeError, che il
+        // catch esterno riportava come "riprova con meno foto/POI".
+        const meta = POI_META[type]
+        if (!meta) { console.error('[dtrek] tipo di POI sconosciuto, segnaposto saltato:', type); continue }
+        try {
+          const D = 32 * iconSc
+          const offC = document.createElement('canvas')
+          offC.width = D; offC.height = D
+          const offCtx = offC.getContext('2d')!
+          offCtx.imageSmoothingEnabled = true; offCtx.imageSmoothingQuality = 'high'
+          drawPoiPin(offCtx, D / 2, D / 2, iconSc, meta.emoji)
+          const imgId = `dtrek-poi-pin-type-${type}`
+          const imageData = offCtx.getImageData(0, 0, D, D)
+          if (map.hasImage(imgId)) map.removeImage(imgId)
+          map.addImage(imgId, imageData, { pixelRatio: iconSc })
+          poiPinImageIds.push(imgId)
+        } catch (err) {
+          console.error('[dtrek] segnaposto POI non creato', type, err)
+        }
       }
-      const poiPinFeatures = videoPois.map(poi => ({
+      const poiPinFeatures = videoPois
+        .filter(poi => poiPinImageIds.includes(`dtrek-poi-pin-type-${poi.type}`))
+        .map(poi => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [poi.lon, poi.lat] },
         properties: { pinId: `dtrek-poi-pin-type-${poi.type}` },
@@ -1747,10 +1878,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Gli avvisi delle guide più vecchie sono stringhe semplici invece di {severity,text}:
     // normalizzare prima dell'uso, non dare per scontata la forma nuova (vedi lib/guideNotices.ts).
     const normalizedNotices = normalizeGuideNotices(guide?.notices)
+    // Calcolati UNA volta: servono in mezza dozzina di punti, alcuni dei quali dentro il ciclo dei
+    // fotogrammi. Vedi seriesMax/seriesMin sul perché non è più uno spread.
+    const altMaxAll = seriesMax(altitudeSeries)
+    const altMinAll = seriesMin(altitudeSeries)
     // Cifra d'apertura: si sceglie quella che colpisce di più per QUESTO percorso, non sempre la
     // stessa — su un anello pianeggiante il dislivello non dice niente, su una salita secca sì.
     const openingHeadline = (() => {
-      const altMax = altitudeSeries.length ? Math.max(...altitudeSeries) : 0
+      const altMax = altMaxAll
       if (elevGain >= 700) return `+${Math.round(elevGain)} m di salita`
       if (altMax >= 1800)  return `Fino a ${Math.round(altMax)} m`
       if (totalKm >= 12)   return `${totalKm.toFixed(1)} km a piedi`
@@ -1763,8 +1898,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const elevMarks = (() => {
       if (!videoElevMarkersEnabled || altitudeSeries.length < 3) return [] as { p: number; m: number; trend: 'up'|'down'|'flat' }[]
       const n = altitudeSeries.length
-      const maxI = altitudeSeries.indexOf(Math.max(...altitudeSeries))
-      const minI = altitudeSeries.indexOf(Math.min(...altitudeSeries))
+      const maxI = altitudeSeries.indexOf(altMaxAll)
+      const minI = altitudeSeries.indexOf(altMinAll)
       const cand: number[] = [maxI, minI]
       for (const frac of [0.25, 0.5, 0.75]) cand.push(Math.round(frac * (n - 1)))
       const trendAt = (i: number): 'up'|'down'|'flat' => {
@@ -1803,6 +1938,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }).filter((x): x is { start: number; end: number } => !!x)
       : photoTriggerRouteFrames.map(at => ({ start: at, end: at + PHOTO_REVEAL_FRAMES }))
 
+    prep('Montaggio della scaletta…', 0.94)
     const plannedInterludes = isIllustrativo ? planInterludes(videoInterludes, {
       fps: TARGET_FPS,
       routeFrames: ROUTE_FRAMES,
@@ -1976,7 +2112,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       })
     })()
 
-    setRenderTotal(RENDER_END_FRAME - RENDER_START_FRAME); setRenderFrame(0); frameCountRef.current=RENDER_START_FRAME; renderAbortRef.current=false
+    // NB: renderAbortRef viene azzerato all'INIZIO della preparazione, non qui — azzerarlo a questo
+    // punto cancellerebbe un annullamento chiesto durante la preparazione stessa, facendo partire
+    // il rendering che l'utente ha appena fermato.
+    setRenderTotal(RENDER_END_FRAME - RENDER_START_FRAME); setRenderFrame(0); frameCountRef.current=RENDER_START_FRAME
     lastIconOpacityRef.current.clear()
 
     // Always recompute shots with current slider values so intro/follow/outro
@@ -2423,7 +2562,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           drawIdentikit(ctx, outW, outH, sc2, displayTitle, [
             { k: 'distanza',  v: `${totalKm.toFixed(1)} km` },
             { k: 'dislivello', v: `+${elevGain} m` },
-            { k: 'quota max', v: `${Math.round(Math.max(...altitudeSeries))} m` },
+            { k: 'quota max', v: `${Math.round(altMaxAll)} m` },
             { k: 'luoghi',    v: `${poiPlan ? poiPlan.cards.length + poiPlan.markers.length : 0}` },
           ], introP)
         }
@@ -2523,7 +2662,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if (videoPeakMomentEnabled && peakHitRef.current >= 0) {
           const el = frameIdx - peakHitRef.current
           if (el >= 0 && el < PEAK_FRAMES) {
-            drawPeakConquered(ctx, outW/2, outH/2, outW, outH, sc2, Math.max(...altitudeSeries), el / PEAK_FRAMES)
+            drawPeakConquered(ctx, outW/2, outH/2, outW, outH, sc2, altMaxAll, el / PEAK_FRAMES)
           }
         }
 
@@ -2556,7 +2695,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const peakDist=Math.abs(p-peakRouteP)
         if(peakDist<0.042&&altitudeSeries.length>0&&introP===undefined&&frameIdx>TITLE_DUR){
           const peakAlpha=Math.pow(Math.max(0,1-peakDist/0.042),0.5)*0.9
-          const maxAlt=Math.round(Math.max(...altitudeSeries))
+          const maxAlt=Math.round(altMaxAll)
           const label=`▲ ${maxAlt} m`
           ctx.save()
           ctx.font=`700 ${Math.round(20*sc2)}px -apple-system,sans-serif`
@@ -2609,7 +2748,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               drawNumbersBeat(ctx, outW, outH, sc2, [
                 { k: 'distanza',   v: `${totalKm.toFixed(1)} km` },
                 { k: 'dislivello', v: `+${elevGain} m` },
-                { k: 'quota max',  v: `${Math.round(Math.max(...altitudeSeries))} m` },
+                { k: 'quota max',  v: `${Math.round(altMaxAll)} m` },
                 { k: 'in cammino', v: routeTimeLabel },
               ], it)
               break
@@ -2620,12 +2759,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               ], it)
               break
             case 'natura': {
-              const belt = estimateVegetationBelt(pts[0]?.lat ?? 45, Math.max(...altitudeSeries))
+              const belt = estimateVegetationBelt(pts[0]?.lat ?? 45, altMaxAll)
               drawNatureBeat(ctx, outW, outH, sc2, {
                 belt: belt.label.charAt(0).toUpperCase() + belt.label.slice(1),
                 description: belt.description,
                 extra: [
-                  { k: 'quota max', v: `${Math.round(Math.max(...altitudeSeries))} m` },
+                  { k: 'quota max', v: `${Math.round(altMaxAll)} m` },
                   { k: 'dislivello', v: `+${elevGain} m` },
                 ],
               }, it)
@@ -2700,11 +2839,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       })
     }
 
+    prep('Avvio del rendering…', 1)
     setVideoState('rendering')
     renderNextFrame()
 
     } catch (err) {
-      failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
+      // Annullamento dell'utente: cancelRendering ha già ripulito tutto e riportato lo stato a
+      // 'idle', non c'è nessun fallimento da segnalare.
+      if (err instanceof PrepAborted) { webglLostCleanupRef.current?.(); return }
+      // L'errore VERO, non solo il consiglio. Prima veniva scartato senza nemmeno un log: in
+      // produzione non c'era modo di sapere cosa fosse andato storto.
+      console.error(`[dtrek] preparazione video fallita (fase: ${prepStageRef.current}):`, err)
+      failRendering(prepErrorMessage(prepStageRef.current, err))
     }
   },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,videoElevMarkersEnabled,videoLoopEnding,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
@@ -2725,7 +2871,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const map=mapRef.current; const cont=map?.getContainer()
     if(cont){cont.style.width='';cont.style.height=''}
     if(map){try{map.resize()}catch{};if(typeof(map as any).setPixelRatio==='function'){try{(map as any).setPixelRatio(window.devicePixelRatio)}catch{}}}
-    setVideoState('idle'); setRenderProgress(0); setVideoRecordedBlob(null)
+    // Annullare durante la PREPARAZIONE riporta al wizard, non alla mappa: chi ferma la generazione
+    // in quella fase quasi sempre vuole cambiare un'impostazione e riprovare, e mandarlo a 'idle'
+    // gli farebbe riaprire il wizard da capo. Ad annullamento avvenuto durante il rendering vero, la
+    // destinazione resta 'idle' come prima.
+    setVideoState(s => s === 'preparing' ? 'config' : 'idle')
+    setRenderProgress(0); setPrepProgress(0); setPrepLabel(''); setVideoRecordedBlob(null)
   },[])
 
   const handleVideoDownload=useCallback(()=>{
@@ -2930,7 +3081,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           >
             <div className="relative mb-2">
               {altitudeSeries.length>1?(()=>{
-                const minA=Math.min(...altitudeSeries),maxA=Math.max(...altitudeSeries),range=maxA-minA||1,H=56
+                const minA=seriesMin(altitudeSeries),maxA=seriesMax(altitudeSeries),range=maxA-minA||1,H=56
                 const pp=altitudeSeries.map((a,i)=>`${((i/(altitudeSeries.length-1))*1000).toFixed(0)},${(H-((a-minA)/range)*(H-6)).toFixed(1)}`).join(' ')
                 const cx=(progress*1000).toFixed(1)
                 return(
@@ -3032,6 +3183,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 ))}
               </div>
             </div>
+
+            {/* Esito di un tentativo fallito. Non un toast che sparisce dopo qualche secondo: il
+                messaggio dice cosa cambiare ("riduci la durata", "escludi quella foto") e deve
+                restare leggibile mentre lo si cambia davvero. */}
+            {videoError&&(
+              <div className="mx-5 mt-4 rounded-xl bg-red-500/12 border border-red-400/40 px-3.5 py-3 flex items-start gap-2.5 shrink-0">
+                <span className="text-red-300 text-sm leading-none mt-0.5">⚠</span>
+                <p className="text-red-100 text-[12px] leading-relaxed flex-1">{videoError}</p>
+                <button onClick={()=>setVideoError('')} className="text-red-200/60 hover:text-red-100 shrink-0"><X className="w-4 h-4"/></button>
+              </div>
+            )}
 
             {/* Corpo scorrevole */}
             <div className="px-5 py-5 overflow-y-auto flex-1 space-y-6">
@@ -3836,33 +3998,44 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       )}
 
 
-      {/* ══ RENDERING ═══════════════════════════════════════════════════════════ */}
-      {(videoState==='rendering'||videoState==='finalizing')&&(
+      {/* ══ PREPARAZIONE / RENDERING ════════════════════════════════════════════ */}
+      {/* "preparazione" è una fase a sé e va mostrata come tale: dura parecchi secondi (la mappa
+          deve caricare il terreno lungo tutto il percorso, una ventina di attese in fila) e prima
+          non aveva alcuna schermata — si premeva "Genera" e non sembrava succedere nulla. */}
+      {(videoState==='preparing'||videoState==='rendering'||videoState==='finalizing')&&(
         <div className="absolute inset-0 z-20 pointer-events-none flex flex-col">
           <div className="absolute inset-0 bg-black/35 pointer-events-auto"/>
           <div className="absolute top-4 left-4 right-4 pointer-events-auto">
             <div className="bg-black/80 backdrop-blur-md rounded-2xl px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${videoState==='finalizing'?'bg-amber-400':'bg-red-500'}`}/>
-                  <span className="text-white text-sm font-bold tracking-wide">{videoState==='finalizing'?'ELABORAZIONE':'RENDERING'}</span>
+                  <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${videoState==='finalizing'?'bg-amber-400':videoState==='preparing'?'bg-forest-400':'bg-red-500'}`}/>
+                  <span className="text-white text-sm font-bold tracking-wide">
+                    {videoState==='finalizing'?'ELABORAZIONE':videoState==='preparing'?'PREPARAZIONE':'RENDERING'}
+                  </span>
                 </div>
-                {videoState==='rendering'&&<button onClick={cancelRendering} className="text-white/60 hover:text-white text-xs font-semibold px-3 py-1 bg-white/10 rounded-full">Annulla</button>}
+                {videoState!=='finalizing'&&<button onClick={cancelRendering} className="text-white/60 hover:text-white text-xs font-semibold px-3 py-1 bg-white/10 rounded-full">Annulla</button>}
               </div>
               <div className="w-full h-2 bg-white/15 rounded-full overflow-hidden mb-2">
                 {videoState==='finalizing'
                   ? <div className="h-full w-2/5 rounded-full bg-amber-400 progress-indeterminate"/>
-                  : <div className="h-full rounded-full bg-forest-500" style={{width:`${renderProgress*100}%`,transition:'none'}}/>
+                  : videoState==='preparing'
+                    ? <div className="h-full rounded-full bg-forest-400" style={{width:`${prepProgress*100}%`,transition:'width .25s ease-out'}}/>
+                    : <div className="h-full rounded-full bg-forest-500" style={{width:`${renderProgress*100}%`,transition:'none'}}/>
                 }
               </div>
               {videoState==='finalizing'
                 ? <p className="text-white/55 text-xs">Compressione in corso… ({finalizeElapsedSec}s)</p>
-                : <p className="text-white/55 text-xs">Frame {renderFrame}/{renderTotal} · {Math.round(renderProgress*100)}%</p>
+                : videoState==='preparing'
+                  ? <p className="text-white/55 text-xs">{prepLabel||'Preparazione…'}</p>
+                  : <p className="text-white/55 text-xs">Frame {renderFrame}/{renderTotal} · {Math.round(renderProgress*100)}%</p>
               }
               <p className="text-white/30 text-[10px] mt-0.5">
                 {videoState==='finalizing'
                   ? 'Può richiedere fino a 20-30s con video lunghi o molte foto — non chiudere questa schermata'
-                  : 'Frame-by-frame rendering — qualità cinematografica garantita'}
+                  : videoState==='preparing'
+                    ? 'La mappa sta caricando il terreno lungo tutto il percorso: serve a evitare buchi e scatti nel video'
+                    : 'Frame-by-frame rendering — qualità cinematografica garantita'}
               </p>
             </div>
           </div>
