@@ -22,16 +22,24 @@ import {
   buildCumulativeDistances, progressToDistanceM, distanceMToProgress, buildJourneyTables,
   stopPhotoZoomAt, polaroidRotationDeg, hyperlapseIntensityAt, TOP_BAND_FRACTION, type CarouselPhotoTiming,
 } from '@/lib/videoPhotoCarousel'
-import { suggestStatHookText, suggestCuriosityHookText } from '@/lib/videoHook'
 import { planPoiCards, projectPoisOnRoute, activeCardAt } from '@/lib/videoPoiCards'
+import {
+  planInterludes, interludeTotalFrames, DEFAULT_INTERLUDES, INTERLUDE_LABEL,
+  type InterludeKind, type InterludeSetting, type PlannedInterlude,
+} from '@/lib/videoInterludes'
+import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
 import type { BeautyScore } from '@/lib/beautyScore'
+import type { WikiPage } from '@/lib/wikipedia'
+import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
+import { estimateVegetationBelt } from '@/lib/vegetationBelt'
 import {
   coverRect, rrect, lerp, lerpAngle, distM, smoothArray, clamp01,
   hexToRgb, effortRgb, hrEffortAt, buildMiniRoute,
-  drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone, drawHookText,
+  drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
   drawStopPhotoZoom, drawHUD, drawTopBand, drawVideoElevProfile, type GraphData,
   drawPoiCard, drawTeiPanel, drawIdentikit,
+  drawNumbersBeat, drawElevationBeat, drawNatureBeat, drawNoticesBeat, drawPlacesBeat, drawStoryCaption,
 } from '@/lib/videoOverlays'
 
 const SPEEDS = [
@@ -190,6 +198,14 @@ interface Props {
   dtmProfile?: TrailDtmProfile
   /** Punteggio TEI già calcolato (activity.linkedBeautyScore) — usato dalla modalità Illustrativo. */
   beautyScore?: BeautyScore
+  /** POI abbinati alla loro pagina Wikipedia (immagine + estratto). Solo i POI che hanno
+   *  un'immagine finiscono nelle schede del video: un nome e un'icona non raccontano niente che
+   *  il segnaposto sulla mappa non dica già. */
+  poiWiki?: { poi: PoiItem; wiki: WikiPage }[]
+  /** Guida del percorso conservata sull'attività (lib/activitySave.ts). Assente sulle escursioni
+   *  mai pianificate e su quelle salvate prima di quella colonna: la modalità Illustrativo deve
+   *  funzionare comunque, semplicemente senza didascalie né stacchi che dipendono dal testo. */
+  guide?: { text: string; notices?: (GuideNotice | string)[]; generatedAt?: string }
 }
 
 // ── Zoom sulla foto in sosta (anteprima DOM) ─────────────────────────────────────
@@ -249,7 +265,7 @@ function PhotoZoomOverlay({ photo, zoomT, stopT }: { photo: RoutePhoto | null; z
   )
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState, dtmProfile, beautyScore }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState, dtmProfile, beautyScore, poiWiki, guide }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -378,6 +394,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // proposito: un video illustrativo è fatto per far arrivare gente, ed è così che certi posti si
   // rovinano. Restano comunque come segnaposto sulla mappa, solo senza nome a schermo.
   const [videoPoiIncludeSensitive, setVideoPoiIncludeSensitive] = useState(false)
+  // Solo i luoghi con un'immagine Wikipedia prendono una scheda. Acceso di default: una scheda
+  // fatta di nome e icona non aggiunge nulla al segnaposto già presente sulla mappa.
+  const [videoPoiRequireImage, setVideoPoiRequireImage] = useState(true)
+  // Stacchi che spezzano il volo sul percorso — vedi lib/videoInterludes.ts.
+  const [videoInterludes, setVideoInterludes] = useState<InterludeSetting[]>(DEFAULT_INTERLUDES)
+  // Didascalie proposte dal testo della guida. Sono CANDIDATI modificabili, non un testo definitivo:
+  // il testo della guida lo scrive un modello, e niente dovrebbe finire in un file destinato a
+  // circolare senza che qualcuno l'abbia letto — vedi lib/videoCaptions.ts.
+  const [videoCaptions, setVideoCaptions] = useState<CaptionCandidate[]>([])
+  useEffect(() => { setVideoCaptions(suggestCaptions(guide?.text)) }, [guide?.text])
   // Gettone 3D a forma di cuore che pulsa al ritmo vero della FC, con i BPM correnti sopra —
   // entrambi gli stili video, richiede dati di frequenza cardiaca.
   const [videoHeartEffectEnabled, setVideoHeartEffectEnabled] = useState(false)
@@ -409,15 +435,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Foto attualmente in sosta (con il suo avanzamento di zoom 0..1) nell'anteprima carosello — vedi
   // PhotoZoomOverlay più sotto e lib/videoPhotoCarousel.ts stopPhotoZoomAt.
   const [previewPhotoZoom, setPreviewPhotoZoom] = useState<{ photo: RoutePhoto | null; zoomT: number; stopT: number }>({ photo: null, zoomT: 0, stopT: 0 })
-  // Gancio iniziale — quattro elementi indipendenti, ognuno attivabile/disattivabile e (i due
-  // testuali) modificabile: statistica d'impatto, foto migliore, frase su un punto di interesse
-  // notevole, intro più rapida. null in *Override = usa il suggerimento automatico.
-  const [videoHookStatEnabled,      setVideoHookStatEnabled]      = useState(true)
-  const [videoHookCuriosityEnabled, setVideoHookCuriosityEnabled] = useState(true)
-  const [videoHookPhotoEnabled,     setVideoHookPhotoEnabled]     = useState(true)
+  // Ritmo d'ingresso: quanto dura il volo aereo iniziale prima che parta il percorso.
+  // (I "ganci" testuali/fotografici che precedevano l'intro sono stati rimossi: nella pratica
+  // rubavano il primo secondo senza aggiungere informazione, e il racconto ora è affidato alle
+  // didascalie dalla guida e agli stacchi lungo il percorso.)
   const [videoHookFastIntro,        setVideoHookFastIntro]        = useState(true)
-  const [hookStatOverride,      setHookStatOverride]      = useState<string | null>(null)
-  const [hookCuriosityOverride, setHookCuriosityOverride] = useState<string | null>(null)
   const [zoomIntro,         setZoomIntro]        = useState(10.5)
   const [zoomFollow,        setZoomFollow]        = useState(13.8)
   const [zoomOutro,         setZoomOutro]         = useState(7.5)
@@ -495,19 +517,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     return [...facts, ...tips]
   }, [distanceProp, elevGainProp, pois, routePhotos, videoExcludedPhotoIds])
 
-  // Gancio iniziale (Sezione 4) — due suggerimenti indipendenti da lib/videoHook.ts, ognuno
-  // attivabile/disattivabile e modificabile a sé (videoHookStatEnabled/videoHookCuriosityEnabled,
-  // hookStatOverride/hookCuriosityOverride).
-  const autoStatHook = useMemo(() => suggestStatHookText({
-    distanceKm: +((distanceProp ?? totalDistRef.current) / 1000).toFixed(1),
-    elevationGain: elevGainProp ?? elevStatsRef.current.gain,
-    altitudeMax: elevStatsRef.current.altMax,
-  }), [distanceProp, elevGainProp])
-  const autoCuriosityHook = useMemo(() => suggestCuriosityHookText(pois), [pois])
-  const statHookText = videoHookStatEnabled ? (hookStatOverride ?? autoStatHook).trim() : ''
-  const curiosityHookText = (videoHookCuriosityEnabled && (hookCuriosityOverride ?? autoCuriosityHook))
-    ? (hookCuriosityOverride ?? autoCuriosityHook ?? '').trim() : ''
-
   useEffect(() => {
     if (videoState !== 'rendering' && videoState !== 'finalizing') { setEntertainIdx(0); return }
     const id = setInterval(() => setEntertainIdx(i => (i + 1) % Math.max(1, entertainmentContent.length)), 4200)
@@ -568,9 +577,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const journey = buildJourneyTables(videoFps, cumDist, totalDistanceM, carouselPhotoTimings, photoDurationSec, cruiseMps)
     const introSec = Math.max(1.1, videoDuration * 0.05)
     const outroSec = Math.max(3, videoDuration * 0.17)
-    const hookSec = (carouselPhotoTimings.length > 0 || videoHookStatEnabled) ? 1.1 : 0
-    return Math.round(hookSec + introSec + journey.totalFrames / videoFps + outroSec)
-  }, [videoPhotoStyle, cumDist, totalDistanceM, carouselPhotoTimings, photoDurationSec, videoDuration, videoFps, videoHookStatEnabled])
+    return Math.round(introSec + journey.totalFrames / videoFps + outroSec)
+  }, [videoPhotoStyle, cumDist, totalDistanceM, carouselPhotoTimings, photoDurationSec, videoDuration, videoFps])
 
   const [weatherBadge, setWeatherBadge] = useState<{emoji:string;temp:number;label:string}|null>(null)
 
@@ -1436,6 +1444,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const totalKm=(distanceProp ?? totalDistRef.current) / 1000
     const elevGain = elevGainProp ?? elevStatsRef.current.gain
 
+    // Immagini Wikipedia dei luoghi (modalità Illustrativo). Caricate QUI, prima di aprire il
+    // rendering, e non a colpi di effetto asincrono: il piano delle schede si costruisce fra poche
+    // righe e deve già sapere quali luoghi hanno davvero un'immagine utilizzabile.
+    //
+    // crossOrigin='anonymous' non è un dettaglio: il canvas composito finisce in `new VideoFrame(...)`,
+    // che su canvas contaminato lancia — una singola immagine remota senza CORS farebbe fallire
+    // l'esportazione INTERA, non solo quel fotogramma. Chi non carica (rete, 404, CORS negato)
+    // semplicemente non entra nella mappa qui sotto, e il suo luogo torna a essere un segnaposto.
+    const poiImages = new Map<number, HTMLImageElement>()
+    if (videoMode === 'illustrativo' && poiWiki?.length) {
+      await Promise.all(poiWiki.map(({ poi, wiki }) => new Promise<void>(resolve => {
+        if (!wiki.thumbnail) { resolve(); return }
+        const im = new Image()
+        im.crossOrigin = 'anonymous'
+        const done = () => resolve()
+        const timer = setTimeout(done, 6000)   // una miniatura lenta non blocca la generazione
+        im.onload = () => { clearTimeout(timer); poiImages.set(poi.id, im); resolve() }
+        im.onerror = () => { clearTimeout(timer); done() }
+        im.src = wiki.thumbnail
+      })))
+    }
+
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
     const sortedPhotos = [...routePhotos]
@@ -1549,13 +1579,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
     }
 
-    // Gancio iniziale (Sezione 4): frazione di secondo prima ancora della mappa, pensata per
-    // fermare lo scroll sui social — foto migliore a schermo intero con zoom "a scatto" + testo/i
-    // d'impatto. Ogni elemento è opzionale (i toggle videoHook*): niente fase gancio se sono tutti
-    // disattivati o non c'è nulla da mostrare.
-    const hookPhoto = videoHookPhotoEnabled ? (sortedPhotos[0] ?? null) : null
-    const hookHasText = !!statHookText || !!curiosityHookText
-    const HOOK_FRAMES = (hookHasText || hookPhoto) ? Math.round(TARGET_FPS * 1.1) : 0
     // Intro: fixed duration where p=0 (route frozen, camera swoops in) — più breve se il toggle
     // "intro rapida" è attivo (Sezione 4: un'apertura lenta è il motivo #1 per cui si scrolla via
     // sui social), altrimenti la durata originale.
@@ -1649,7 +1672,54 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       : null
     const ROUTE_FRAMES = journey ? journey.totalFrames : Math.round(TARGET_FPS * videoDuration)
     const photoTriggerRouteFrames = isCarousel ? [] : sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
-    const TOTAL_FRAMES = HOOK_FRAMES + INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + OUTRO_FRAMES
+    // Le componenti TEI arrivano già pronte in linkedBeautyScore (vedi teiToBeautyScore in
+    // lib/tei.ts): le cinque V_* su scala 0-10, e f_antr come frazione di penalità.
+    const teiView = (() => {
+      if (!isIllustrativo || !beautyScore?.categories?.length) return null
+      const parts = beautyScore.categories
+        .filter(c => c.key.startsWith('v_'))
+        .map(c => ({ label: c.label.replace(/^V\.\s*/, ''), value: c.score / 10 }))
+      if (parts.length === 0) return null
+      const antr = beautyScore.categories.find(c => c.key === 'f_antr')
+      return {
+        score: beautyScore.overall,
+        label: beautyScore.gradeLabel,
+        color: beautyScore.color,
+        parts,
+        penalty: antr ? { label: 'Antropico', value: antr.score } : undefined,
+      }
+    })()
+
+    // Gli avvisi delle guide più vecchie sono stringhe semplici invece di {severity,text}:
+    // normalizzare prima dell'uso, non dare per scontata la forma nuova (vedi lib/guideNotices.ts).
+    const normalizedNotices = normalizeGuideNotices(guide?.notices)
+    // Tempo realmente impiegato, dai timestamp del tracciato: è un fatto del percorso così com'è
+    // stato camminato, non una stima teorica (e non è il CTS, che è tarato sulla persona).
+    const routeTimeLabel = (() => {
+      const t0 = pts.find(q => q.time)?.time, t1 = [...pts].reverse().find(q => q.time)?.time
+      if (!t0 || !t1) return '—'
+      const secs = (new Date(t1).getTime() - new Date(t0).getTime()) / 1000
+      if (!(secs > 0)) return '—'
+      const hh = Math.floor(secs / 3600), mm = Math.round((secs % 3600) / 60)
+      return hh > 0 ? `${hh}h ${mm}m` : `${mm}m`
+    })()
+
+    // Stacchi: fermano il volo per far leggere i dati. Solo quelli che hanno davvero qualcosa da
+    // mostrare — un pannello "avvisi" senza guida o "TEI" senza punteggio sarebbe una schermata vuota.
+    const plannedInterludes = isIllustrativo ? planInterludes(videoInterludes, {
+      fps: TARGET_FPS,
+      routeFrames: ROUTE_FRAMES,
+      available: (kind) => {
+        switch (kind) {
+          case 'tei':    return !!teiView
+          case 'avvisi': return normalizedNotices.length > 0
+          case 'luoghi': return (pois?.length ?? 0) > 0
+          case 'profilo': return altitudeSeries.length > 1
+          default: return true
+        }
+      },
+    }) : []
+    const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + interludeTotalFrames(plannedInterludes) + OUTRO_FRAMES
 
     // Anteprima veloce (Sezione 4, debug): renderizza solo una finestra di fotogrammi centrale al
     // percorso invece del video intero — pensata per riprodurre in pochi secondi un bug legato a
@@ -1658,7 +1728,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // fotogramma GLOBALE, sceglie quella più centrale, e vi aggiunge un contorno di viaggio prima e
     // dopo così si vede anche la transizione, non solo la foto isolata.
     const photoWindows: { start: number; end: number }[] = []
-    const followBase = HOOK_FRAMES + INTRO_FRAMES
+    const followBase = INTRO_FRAMES
     if (isCarousel && journey) {
       let curIdx = -1, curStart = -1
       for (let f = 0; f < journey.totalFrames; f++) {
@@ -1689,35 +1759,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     setLastRenderWasPreview(previewOnly)
     setLastRenderSeconds((RENDER_END_FRAME - RENDER_START_FRAME) / TARGET_FPS)
 
-    const frameToState = (frameIdx: number): {p:number; hookT?:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number; stopIndex?:number; stopT?:number} => {
-      // Gancio: primissima fase, mappa non ancora coinvolta.
-      if (frameIdx < HOOK_FRAMES) {
-        return {p: 0, hookT: frameIdx / Math.max(1, HOOK_FRAMES - 1)}
-      }
-      const afterHook = frameIdx - HOOK_FRAMES
-      // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
-      if (afterHook < INTRO_FRAMES) {
-        return {p: 0, introP: afterHook / Math.max(1, INTRO_FRAMES - 1)}
-      }
-      const afterIntro = afterHook - INTRO_FRAMES
-      let pauseOffset = 0
-      if (!isCarousel) {
-        for (let i = 0; i < sortedPhotos.length; i++) {
-          const triggerF = photoTriggerRouteFrames[i] + pauseOffset
-          if (afterIntro < triggerF) break
-          if (afterIntro < triggerF + PHOTO_REVEAL_FRAMES) {
-            return {p: sortedPhotos[i].photo.progress, reveal: {...sortedPhotos[i], revealFrame: afterIntro - triggerF}}
-          }
-          pauseOffset += PHOTO_REVEAL_FRAMES
-        }
-      }
-      const routeFrame = afterIntro - pauseOffset
-      if (routeFrame >= ROUTE_FRAMES) {
-        const outroFrame = routeFrame - ROUTE_FRAMES
-        return {p: 1.0, outroP: Math.min(1, outroFrame / Math.max(1, OUTRO_FRAMES - 1))}
-      }
+    /** Stato di "volo sul percorso" a un dato fotogramma di percorso — estratto perché serve sia al
+     *  caso normale sia agli stacchi, che congelano la telecamera su un fotogramma preciso. */
+    const followStateAt = (routeFrame: number) => {
       if (journey) {
-        const rf = Math.min(routeFrame, ROUTE_FRAMES - 1)
+        const rf = Math.min(Math.max(0, routeFrame), ROUTE_FRAMES - 1)
         const stopIdx = journey.stopIndexTable[rf]
         return {
           p: journey.pTable[rf], followFrame: routeFrame,
@@ -1727,7 +1773,67 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
       // Divide by ROUTE_FRAMES-1 so the last follow frame reaches p=1.0 (exactly pts[N-1]),
       // preventing a small center jump at the follow→outro transition
-      return {p: Math.min(1, routeFrame / Math.max(1, ROUTE_FRAMES - 1)), followFrame: routeFrame}
+      return { p: Math.min(1, routeFrame / Math.max(1, ROUTE_FRAMES - 1)), followFrame: routeFrame }
+    }
+
+    // Tutte le pause della fase percorso in UNA lista ordinata: rivelazioni foto (solo stile
+    // Classico) e stacchi (entrambi gli stili). Devono condividere un unico accumulatore, altrimenti
+    // due meccanismi di congelamento indipendenti si sommano male e ognuno sposta le posizioni
+    // dell'altro. `triggerRouteFrame` è in spazio "percorso", cioè al netto delle pause precedenti.
+    type Pause =
+      | { at: number; frames: number; kind: 'photo'; photoIdx: number }
+      | { at: number; frames: number; kind: 'interlude'; interlude: PlannedInterlude }
+    const pauses: Pause[] = [
+      ...(isCarousel ? [] : sortedPhotos.map((_, i): Pause => ({
+        at: photoTriggerRouteFrames[i], frames: PHOTO_REVEAL_FRAMES, kind: 'photo', photoIdx: i,
+      }))),
+      ...plannedInterludes.map((pi): Pause => ({
+        at: pi.triggerRouteFrame, frames: pi.frames, kind: 'interlude', interlude: pi,
+      })),
+    ].sort((a, b) => a.at - b.at)
+
+    // Finestre degli stacchi in fotogrammi globali — servono al piano delle schede POI per non
+    // programmarne una sotto un pannello.
+    const interludeRanges: { start: number; end: number }[] = []
+    {
+      let off = 0
+      for (const pz of pauses) {
+        const trig = pz.at + off
+        if (pz.kind === 'interlude') interludeRanges.push({ start: INTRO_FRAMES + trig, end: INTRO_FRAMES + trig + pz.frames })
+        off += pz.frames
+      }
+    }
+
+    const frameToState = (frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number; stopIndex?:number; stopT?:number; interlude?:{kind:InterludeKind; t:number}} => {
+      // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
+      if (frameIdx < INTRO_FRAMES) {
+        return {p: 0, introP: frameIdx / Math.max(1, INTRO_FRAMES - 1)}
+      }
+      const afterIntro = frameIdx - INTRO_FRAMES
+      let pauseOffset = 0
+      for (const pz of pauses) {
+        const triggerF = pz.at + pauseOffset
+        if (afterIntro < triggerF) break
+        if (afterIntro < triggerF + pz.frames) {
+          if (pz.kind === 'photo') {
+            const sp = sortedPhotos[pz.photoIdx]
+            return {p: sp.photo.progress, reveal: {...sp, revealFrame: afterIntro - triggerF}}
+          }
+          // Stacco: la telecamera resta ferma dov'era e il pannello si sovrappone alla mappa (che
+          // continua a essere disegnata), così l'entrata è una dissolvenza e non un taglio netto.
+          return {
+            ...followStateAt(pz.at),
+            interlude: { kind: pz.interlude.kind, t: (afterIntro - triggerF) / pz.frames },
+          }
+        }
+        pauseOffset += pz.frames
+      }
+      const routeFrame = afterIntro - pauseOffset
+      if (routeFrame >= ROUTE_FRAMES) {
+        const outroFrame = routeFrame - ROUTE_FRAMES
+        return {p: 1.0, outroP: Math.min(1, outroFrame / Math.max(1, OUTRO_FRAMES - 1))}
+      }
+      return followStateAt(routeFrame)
     }
 
     // ── Modalità "Illustrativo": pianificazione delle schede POI ────────────────
@@ -1735,38 +1841,29 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // spostano il fotogramma in cui la telecamera passa su un punto), quindi si costruisce una
     // tabella avanzamento→fotogramma percorrendo una volta sola la fase di percorso, invece di
     // ricavarla con una formula che dovrebbe replicare quelle stesse pause.
-    // Le componenti TEI arrivano già pronte in linkedBeautyScore (vedi teiToBeautyScore in
-    // lib/tei.ts): le cinque V_* su scala 0-10, e f_antr come frazione di penalità.
-    const teiView = (() => {
-      if (!isIllustrativo || !beautyScore?.categories?.length) return null
-      const parts = beautyScore.categories
-        .filter(c => c.key.startsWith('v_'))
-        .map(c => ({ label: c.label.replace(/^V\.\s*/, ''), value: c.score / 10 }))
-      if (parts.length === 0) return null
-      const antr = beautyScore.categories.find(c => c.key === 'f_antr')
-      return {
-        score: beautyScore.overall,
-        label: beautyScore.gradeLabel,
-        color: beautyScore.color,
-        parts,
-        penalty: antr ? { label: 'Antropico', value: antr.score } : undefined,
-      }
-    })()
-
     const poiPlan = (() => {
       if (!isIllustrativo || !pois?.length) return null
       const frameOfP: number[] = []
       for (let f = followBase; f < TOTAL_FRAMES; f++) {
         const st = frameToState(f)
         if (st.outroP !== undefined) break
-        if (st.followFrame === undefined) continue
+        // I fotogrammi di stacco vanno saltati: lì l'avanzamento è congelato e la scheda sarebbe
+        // comunque coperta dal pannello, quindi non sono un buon punto a cui agganciare un luogo.
+        if (st.interlude || st.followFrame === undefined) continue
         const bucket = Math.min(999, Math.max(0, Math.round(st.p * 999)))
         if (frameOfP[bucket] === undefined) frameOfP[bucket] = f
       }
       let last = followBase
       for (let i = 0; i < 1000; i++) { if (frameOfP[i] === undefined) frameOfP[i] = last; else last = frameOfP[i] }
       const routeLatLon = pts.filter(q => q.lat != null && q.lon != null).map(q => ({ lat: q.lat!, lon: q.lon! }))
-      return planPoiCards(projectPoisOnRoute(pois, routeLatLon), {
+      // `thumbnail` viene valorizzato SOLO per le immagini davvero caricate poco sopra: così un
+      // luogo la cui miniatura non è arrivata viene declassato a segnaposto da requireImage,
+      // invece di programmare una scheda che poi resterebbe con il riquadro vuoto.
+      const wikiById = new Map((poiWiki ?? []).map(({ poi, wiki }) => [poi.id, {
+        thumbnail: poiImages.has(poi.id) ? wiki.thumbnail : undefined,
+        extract: wiki.extract,
+      }]))
+      return planPoiCards(projectPoisOnRoute(pois, routeLatLon, wikiById), {
         progressToFrame: (p) => frameOfP[Math.min(999, Math.max(0, Math.round(p * 999)))],
         cardFrames:   Math.round(TARGET_FPS * 2.6),
         minGapFrames: Math.round(TARGET_FPS * 0.7),
@@ -1775,6 +1872,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         minSpacingP:  0.055,
         groupWindowP: 0.022,
         includeSensitive: videoPoiIncludeSensitive,
+        requireImage: videoPoiRequireImage,
+        blockedRanges: interludeRanges,
       })
     })()
 
@@ -1848,83 +1947,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         return
       }
 
-      const {p, hookT, introP, reveal, outroP, followFrame, stopIndex, stopT} = frameToState(frameIdx)
+      const {p, introP, reveal, outroP, followFrame, stopIndex, stopT, interlude} = frameToState(frameIdx)
       setRenderProgress((frameIdx-RENDER_START_FRAME)/Math.max(1,RENDER_END_FRAME-RENDER_START_FRAME)); setRenderFrame(frameIdx-RENDER_START_FRAME)
-
-      // Gancio iniziale: foto migliore a schermo intero con zoom "a scatto" + testo d'impatto,
-      // prima ancora che la mappa entri in scena — vedi il commento su HOOK_FRAMES sopra.
-      if (hookT !== undefined) {
-        requestAnimationFrame(async () => {
-          if (renderAbortRef.current) return
-          try {
-          ctx.clearRect(0, 0, outW, outH)
-          const img = hookPhoto?.img
-          const imgReady = !!img && img.complete && img.naturalWidth > 0
-          const sc3 = Math.min(outW, outH) / 1080
-          if (imgReady) {
-            // Push-in CONTINUO: strappo iniziale (ease-out aggressivo nei primi fotogrammi) seguito
-            // da una deriva lenta che non si ferma mai fino alla fine del gancio. Prima lo zoom si
-            // esauriva al 40% e il resto del gancio era un fermo-immagine — è la cosa che lo faceva
-            // sembrare "morto" a metà, proprio dove invece deve trattenere chi guarda.
-            const snapT = 1 - Math.pow(1 - Math.min(1, hookT / 0.28), 3)
-            const scale = 1.24 - 0.16 * snapT - 0.08 * hookT
-            const srcA = img!.width / img!.height, dstA = outW / outH
-            let sx=0, sy=0, sw=img!.width, sh=img!.height
-            if (srcA > dstA) { sw = Math.round(sh * dstA); sx = (img!.width - sw) / 2 }
-            else { sh = Math.round(sw / dstA); sy = (img!.height - sh) / 2 }
-            ctx.save()
-            try {
-              ctx.translate(outW/2, outH/2)
-              ctx.scale(scale, scale)
-              ctx.drawImage(img!, sx, sy, sw, sh, -outW/2, -outH/2, outW, outH)
-            } finally { ctx.restore() }
-            // Scrim direzionali invece della vignettatura radiale: la foto resta luminosa al centro
-            // (prima veniva incupita ovunque) e il buio si concentra dove va il testo, in basso.
-            const bottom = ctx.createLinearGradient(0, outH*0.42, 0, outH)
-            bottom.addColorStop(0, 'rgba(0,0,0,0)')
-            bottom.addColorStop(0.55, 'rgba(0,0,0,0.42)')
-            bottom.addColorStop(1, 'rgba(0,0,0,0.84)')
-            ctx.fillStyle = bottom; ctx.fillRect(0, outH*0.42, outW, outH*0.58)
-            const top = ctx.createLinearGradient(0, 0, 0, outH*0.20)
-            top.addColorStop(0, 'rgba(0,0,0,0.45)'); top.addColorStop(1, 'rgba(0,0,0,0)')
-            ctx.fillStyle = top; ctx.fillRect(0, 0, outW, outH*0.20)
-          } else {
-            const bg = ctx.createLinearGradient(0, 0, 0, outH)
-            bg.addColorStop(0, '#123047'); bg.addColorStop(1, '#08131c')
-            ctx.fillStyle = bg; ctx.fillRect(0, 0, outW, outH)
-          }
-          // Statistica e/o curiosità (ognuna opzionale, vedi i toggle in Montaggio) — se entrambe
-          // attive si alternano in due tempi uguali all'interno del gancio, altrimenti quella
-          // attiva occupa tutta la durata. drawHookText gestisce entrata, uscita e leggibilità.
-          const hookBeats = [statHookText, curiosityHookText].filter((t): t is string => !!t)
-          if (hookBeats.length > 0) {
-            const beatDur = 1 / hookBeats.length
-            const beatIdx = Math.min(hookBeats.length - 1, Math.floor(hookT / beatDur))
-            const localT = (hookT - beatIdx * beatDur) / beatDur
-            drawHookText(ctx, outW, outH, sc3, hookBeats[beatIdx], localT)
-          }
-          // Barra di avanzamento del gancio: dice a colpo d'occhio che dura pochissimo, e dà un
-          // movimento costante anche nei fotogrammi in cui il testo è fermo.
-          ctx.save()
-          try {
-            const bw = outW * 0.42, bx = (outW - bw) / 2, by = outH * 0.94
-            ctx.fillStyle = 'rgba(255,255,255,0.22)'
-            rrect(ctx, bx, by, bw, 4*sc3, 2*sc3); ctx.fill()
-            ctx.fillStyle = 'rgba(255,255,255,0.92)'
-            rrect(ctx, bx, by, bw * clamp01(hookT), 4*sc3, 2*sc3); ctx.fill()
-          } finally { ctx.restore() }
-          if (videoEncoderRef.current) {
-            await waitForEncoderQueue(videoEncoderRef.current)
-            let _vf: InstanceType<typeof VideoFrame> | null = null
-            try { const lfi = frameCountRef.current - RENDER_START_FRAME; _vf = new VideoFrame(composite, { timestamp: Math.round(lfi * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: lfi % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
-            finally { _vf?.close() }
-          }
-          } catch (err) { console.error('[dtrek] hook frame error:', err) }
-          frameCountRef.current++; renderedFramesRef.current++
-          renderNextFrame()
-        })
-        return
-      }
 
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
       if (reveal) {
@@ -2311,7 +2335,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // Schede dei luoghi (modalità Illustrativo): una sola casella a schermo per costruzione,
         // vedi lib/videoPoiCards.ts. Non si disegnano durante una sosta foto: la polaroid occupa
         // già il centro e le due cose si contenderebbero lo stesso spazio.
-        if (poiPlan && stopZoomTNow <= 0.001) {
+        if (poiPlan && !interlude && stopZoomTNow <= 0.001) {
           const active = activeCardAt(poiPlan, frameIdx)
           if (active) {
             const lead = active.card.pois[0]
@@ -2322,6 +2346,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               kind: meta.label,
               emoji: meta.emoji,
               color: meta.color,
+              blurb: lead.blurb,
+              image: poiImages.get(lead.id),
               extra: others.length
                 ? 'con ' + others.map(o => o.name ?? POI_META[o.type].label).join(' · ')
                 : undefined,
@@ -2413,6 +2439,69 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
         }
 
+        // Didascalia dalla guida: sopra al percorso, ma mai insieme a uno stacco o a una foto in
+        // sosta — tre testi contemporanei a schermo non li legge nessuno.
+        if (isIllustrativo && !interlude && stopZoomTNow <= 0.001 && introP === undefined) {
+          const capWindowP = Math.min(0.5, (TARGET_FPS * 3.6) / Math.max(1, ROUTE_FRAMES))
+          const act = activeCaptionAt(videoCaptions, p, capWindowP)
+          if (act) drawStoryCaption(ctx, outW, outH, sc2, act.caption.text, act.t)
+        }
+
+        // Stacco: pannello a schermo intero sopra la mappa (che resta disegnata sotto, ferma sul
+        // punto in cui la telecamera si è fermata) — così l'entrata è una dissolvenza, non un taglio.
+        // Va dopo fascia/HUD e prima della mini-mappa: quando il pannello è opaco copre tutto.
+        if (interlude) {
+          const it = interlude.t
+          switch (interlude.kind) {
+            case 'numeri':
+              drawNumbersBeat(ctx, outW, outH, sc2, [
+                { k: 'distanza',   v: `${totalKm.toFixed(1)} km` },
+                { k: 'dislivello', v: `+${elevGain} m` },
+                { k: 'quota max',  v: `${Math.round(Math.max(...altitudeSeries))} m` },
+                { k: 'in cammino', v: routeTimeLabel },
+              ], it)
+              break
+            case 'profilo':
+              drawElevationBeat(ctx, outW, outH, sc2, altitudeSeries, [
+                { k: 'dislivello +', v: `+${elevGain} m` },
+                { k: 'pendenza media', v: dtmProfile?.avgSlopeDeg != null ? `${Math.round(dtmProfile.avgSlopeDeg)}°` : '—' },
+              ], it)
+              break
+            case 'natura': {
+              const belt = estimateVegetationBelt(pts[0]?.lat ?? 45, Math.max(...altitudeSeries))
+              drawNatureBeat(ctx, outW, outH, sc2, {
+                belt: belt.label.charAt(0).toUpperCase() + belt.label.slice(1),
+                description: belt.description,
+                extra: [
+                  { k: 'quota max', v: `${Math.round(Math.max(...altitudeSeries))} m` },
+                  { k: 'dislivello', v: `+${elevGain} m` },
+                ],
+              }, it)
+              break
+            }
+            case 'tei':
+              if (teiView) drawTeiPanel(ctx, outW, outH, sc2, teiView, it)
+              break
+            case 'avvisi':
+              drawNoticesBeat(ctx, outW, outH, sc2, {
+                notices: normalizedNotices,
+                verifiedOn: guide?.generatedAt
+                  ? new Date(guide.generatedAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+                  : undefined,
+              }, it)
+              break
+            case 'luoghi': {
+              const top = (poiPlan?.cards.flatMap(c => c.pois) ?? [])
+              const list = (top.length ? top : (poiPlan?.markers ?? []))
+                .filter(q => q.name)
+                .slice(0, 5)
+                .map(q => ({ name: q.name!, kind: POI_META[q.type].label, emoji: POI_META[q.type].emoji, color: POI_META[q.type].color }))
+              if (list.length) drawPlacesBeat(ctx, outW, outH, sc2, list, it)
+              break
+            }
+          }
+        }
+
         // Mini-mappa d'insieme: per ultima, così resta sopra a fascia/HUD. In alto a destra con lo
         // stile Classico (l'HUD sta in basso), in basso a destra col Carosello (la fascia sta in alto).
         if (videoMiniMapEnabled && miniRoute.length > 1 && introP === undefined) {
@@ -2450,7 +2539,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2883,75 +2972,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 )}
               </>)}
 
-              {/* ── PASSO 2 · APERTURA (gancio) ─────────────────────────────────── */}
+              {/* ── PASSO 2 · APERTURA ──────────────────────────────────────────── */}
               {videoStep===1&&(<>
                 <div className="bg-forest-500/10 border border-forest-500/25 rounded-xl px-3.5 py-2.5">
                   <p className="text-white/70 text-[11px] leading-relaxed">
-                    Sui social si decide nel primo secondo: qui scegli cosa si vede <span className="text-white font-semibold">prima ancora della mappa</span>. Puoi riscrivere i testi suggeriti.
+                    Quanto dura il volo aereo prima che il percorso cominci a scorrere.
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-white/45 text-[11px] font-semibold tracking-wider mb-2.5">TESTI DI APERTURA</p>
-                  <div className="mb-3">
-                    <label className="flex items-center gap-2 mb-1.5 cursor-pointer">
-                      <input type="checkbox" checked={videoHookStatEnabled} onChange={e=>setVideoHookStatEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Statistica d&apos;impatto</span>
-                    </label>
-                    {videoHookStatEnabled && (
-                      <div className="pl-6">
-                        <input
-                          value={hookStatOverride ?? autoStatHook}
-                          onChange={e=>setHookStatOverride(e.target.value)}
-                          maxLength={60}
-                          className="w-full bg-white/7 rounded-xl px-3 py-2 text-white text-sm font-medium outline-none focus:bg-white/10 border border-transparent focus:border-white/20"
-                        />
-                        {hookStatOverride!==null&&hookStatOverride!==autoStatHook&&(
-                          <button onClick={()=>setHookStatOverride(null)} className="text-[10px] font-semibold text-terra-400 hover:text-terra-300 mt-1">
-                            Ripristina suggerito
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {autoCuriosityHook&&(
-                    <div>
-                      <label className="flex items-center gap-2 mb-1.5 cursor-pointer">
-                        <input type="checkbox" checked={videoHookCuriosityEnabled} onChange={e=>setVideoHookCuriosityEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                        <span className="text-white text-xs font-semibold">Curiosità sul percorso</span>
-                      </label>
-                      {videoHookCuriosityEnabled && (
-                        <div className="pl-6">
-                          <input
-                            value={hookCuriosityOverride ?? autoCuriosityHook}
-                            onChange={e=>setHookCuriosityOverride(e.target.value)}
-                            maxLength={80}
-                            className="w-full bg-white/7 rounded-xl px-3 py-2 text-white text-sm font-medium outline-none focus:bg-white/10 border border-transparent focus:border-white/20"
-                          />
-                          {hookCuriosityOverride!==null&&hookCuriosityOverride!==autoCuriosityHook&&(
-                            <button onClick={()=>setHookCuriosityOverride(null)} className="text-[10px] font-semibold text-terra-400 hover:text-terra-300 mt-1">
-                              Ripristina suggerito
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div>
                   <p className="text-white/45 text-[11px] font-semibold tracking-wider mb-2.5">RITMO D&apos;INGRESSO</p>
-                  {routePhotos.length>0&&(
-                    <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                      <input type="checkbox" checked={videoHookPhotoEnabled} onChange={e=>setVideoHookPhotoEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Apri con la foto migliore a schermo intero</span>
-                    </label>
-                  )}
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={videoHookFastIntro} onChange={e=>setVideoHookFastIntro(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
                     <span className="text-white text-xs font-semibold">Intro aerea più rapida</span>
                   </label>
+                  <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
+                    Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, l&apos;intro si accorcia e il percorso parte prima.
+                  </p>
                 </div>
               </>)}
 
@@ -3256,9 +3293,33 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">SCHEDE DEI LUOGHI</p>
                     <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                      I luoghi principali si presentano uno alla volta con il loro nome, in una sola casella a schermo.
+                      I luoghi si presentano uno alla volta, in una sola casella a schermo.
                       Fontane, panchine e aree picnic restano segnaposti sulla mappa: sono troppi e troppo fitti per meritarsi una scheda.
                     </p>
+                    <label className="flex items-start gap-2 mb-2 cursor-pointer">
+                      <input type="checkbox" checked={videoPoiRequireImage}
+                        onChange={e=>setVideoPoiRequireImage(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                      <span className="text-white text-xs font-semibold leading-snug">
+                        Solo luoghi con una foto da Wikipedia
+                        <span className="block text-white/35 text-[11px] font-normal mt-0.5">
+                          Una scheda con la foto del posto racconta qualcosa; un nome accanto a un&apos;icona ripete il segnaposto che c&apos;è già sulla mappa.
+                        </span>
+                      </span>
+                    </label>
+                    {(() => {
+                      const withImg = (poiWiki ?? []).filter(e => !!e.wiki.thumbnail).length
+                      if (withImg > 0) return (
+                        <p className="text-forest-300/80 text-[11px] mb-2 pl-6 leading-relaxed">
+                          Su questo percorso {withImg === 1 ? 'c\u2019è 1 luogo con foto' : `ce ne sono ${withImg} con foto`}.
+                        </p>
+                      )
+                      return (
+                        <p className="text-terra-300/85 text-[11px] mb-2 pl-6 leading-relaxed">
+                          Qui nessun luogo ha una foto su Wikipedia: con questa opzione attiva non comparirà nessuna scheda.
+                          Il resto del video (stacchi, punteggi, percorso) funziona comunque.
+                        </p>
+                      )
+                    })()}
                     <label className="flex items-start gap-2 cursor-pointer">
                       <input type="checkbox" checked={videoPoiIncludeSensitive}
                         onChange={e=>setVideoPoiIncludeSensitive(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
@@ -3269,6 +3330,110 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         </span>
                       </span>
                     </label>
+                  </div>
+                )}
+
+                {videoMode==='illustrativo'&&(
+                  <div>
+                    <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">STACCHI</p>
+                    <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                      Il volo si ferma e un pannello resta a schermo il tempo di essere letto. Sposta il cursore per decidere a che punto del percorso cade.
+                    </p>
+                    {videoInterludes.map((iv, idx) => {
+                      const unavailable =
+                        (iv.kind==='tei'    && !beautyScore?.categories?.length) ||
+                        (iv.kind==='avvisi' && normalizeGuideNotices(guide?.notices).length===0) ||
+                        (iv.kind==='luoghi' && (pois?.length ?? 0)===0)
+                      const patch = (change: Partial<InterludeSetting>) =>
+                        setVideoInterludes(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
+                      return (
+                        <div key={iv.kind} className={`mb-2.5 ${unavailable?'opacity-40':''}`}>
+                          <label className={`flex items-center gap-2 ${unavailable?'':'cursor-pointer'}`}>
+                            <input type="checkbox" checked={iv.enabled && !unavailable} disabled={unavailable}
+                              onChange={e=>patch({enabled:e.target.checked})} className="w-4 h-4 accent-forest-500"/>
+                            <span className="text-white text-xs font-semibold">{INTERLUDE_LABEL[iv.kind]}</span>
+                            {unavailable&&<span className="text-white/35 text-[10px]">— dati non disponibili</span>}
+                          </label>
+                          {iv.enabled&&!unavailable&&(
+                            <div className="pl-6 mt-1.5 space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-white/45 text-[10px] w-14 shrink-0">durata</span>
+                                <input type="range" min={3} max={8} step={0.5} value={iv.seconds}
+                                  onChange={e=>patch({seconds:+e.target.value})}
+                                  className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
+                                <span className="text-white/70 text-[10px] font-bold w-8 text-right">{iv.seconds}s</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-white/45 text-[10px] w-14 shrink-0">quando</span>
+                                <input type="range" min={5} max={95} step={1} value={Math.round(iv.atP*100)}
+                                  onChange={e=>patch({atP:+e.target.value/100})}
+                                  className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
+                                <span className="text-white/70 text-[10px] font-bold w-8 text-right">{Math.round(iv.atP*100)}%</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {(() => {
+                      // Su un percorso corto tre pannelli da cinque secondi diventano metà del video:
+                      // meglio dirlo qui che scoprirlo dopo aver aspettato la generazione.
+                      const secs = videoInterludes.filter(i=>i.enabled).reduce((a,i)=>a+i.seconds,0)
+                      if (secs > videoDuration * 0.5) return (
+                        <p className="text-terra-300/85 text-[11px] mt-1 leading-relaxed">
+                          {secs}s di pannelli fermi su ~{videoDuration}s di percorso: il video rischia di essere più fermo che in movimento.
+                        </p>
+                      )
+                      return null
+                    })()}
+                  </div>
+                )}
+
+                {videoMode==='illustrativo'&&(
+                  <div>
+                    <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">DIDASCALIE DALLA GUIDA</p>
+                    {videoCaptions.length===0?(
+                      <p className="text-white/35 text-[11px] leading-relaxed">
+                        {guide?.text
+                          ? 'Nella guida non ci sono frasi abbastanza brevi da stare a schermo.'
+                          : 'Questa escursione non ha una guida: le didascalie sono disponibili solo sui percorsi che ne avevano una.'}
+                      </p>
+                    ):(<>
+                      <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                        Frasi prese dalla guida. <span className="text-white/60">Rileggile prima di pubblicare</span>: le ha scritte l&apos;AI, e finiscono in un video che poi gira.
+                      </p>
+                      {videoCaptions.map((c, idx) => {
+                        const patch = (change: Partial<CaptionCandidate>) =>
+                          setVideoCaptions(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
+                        return (
+                          <div key={c.id} className="mb-2.5">
+                            <label className="flex items-start gap-2 cursor-pointer mb-1">
+                              <input type="checkbox" checked={c.enabled}
+                                onChange={e=>patch({enabled:e.target.checked})} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                              <span className="text-white/45 text-[10px] font-semibold uppercase tracking-wider">
+                                {c.source==='il_percorso'?'Il percorso':c.source==='luoghi'?'Luoghi':c.source==='natura'?'Natura':'Guida'}
+                              </span>
+                            </label>
+                            {c.enabled&&(
+                              <div className="pl-6">
+                                <textarea
+                                  value={c.text} rows={2} maxLength={110}
+                                  onChange={e=>patch({text:e.target.value})}
+                                  className="w-full bg-white/7 rounded-xl px-3 py-2 text-white text-xs font-medium outline-none focus:bg-white/10 border border-transparent focus:border-white/20 resize-none"
+                                />
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-white/45 text-[10px] w-14 shrink-0">quando</span>
+                                  <input type="range" min={5} max={95} step={1} value={Math.round(c.atP*100)}
+                                    onChange={e=>patch({atP:+e.target.value/100})}
+                                    className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
+                                  <span className="text-white/70 text-[10px] font-bold w-8 text-right">{Math.round(c.atP*100)}%</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </>)}
                   </div>
                 )}
 
@@ -3326,6 +3491,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 const over = est > 60
                 const effects = [
                   !videoShowUserPin&&'Senza pin utente',
+                  videoMode==='illustrativo'&&videoPoiRequireImage&&'Solo luoghi con foto',
                   videoHeartEffectEnabled&&'Cuore 3D + BPM',
                   videoPinEffortColorEnabled&&'Pin dalla fatica',
                   videoTrailEnabled&&'Scia',
@@ -3343,9 +3509,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   ['Formato', `${videoOrientation} · ${videoFps} fps`],
                   ['Stile foto', videoPhotoStyle==='classic'?'Classico':'Carosello'],
                   ['Foto incluse', includedPhotoCount===0?'nessuna':`${includedPhotoCount}`],
-                  ['Apertura', [videoHookStatEnabled&&'statistica', videoHookCuriosityEnabled&&autoCuriosityHook&&'curiosità', videoHookPhotoEnabled&&routePhotos.length>0&&'foto'].filter(Boolean).join(' · ')||'nessuna'],
+                  ['Apertura', videoHookFastIntro?'intro rapida':'intro estesa'],
                   ['Durata stimata', `~${est}s`],
                 ]
+                if (videoMode==='illustrativo') {
+                  const onBeats = videoInterludes.filter(i=>i.enabled)
+                  rows.splice(4, 0,
+                    ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
+                    ['Luoghi con foto', `${(poiWiki ?? []).filter(e=>!!e.wiki.thumbnail).length}`],
+                    ['Didascalie', `${videoCaptions.filter(c=>c.enabled&&c.text.trim()).length}`],
+                  )
+                }
                 return (<>
                   <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
                     {rows.map(([k,v],i)=>(

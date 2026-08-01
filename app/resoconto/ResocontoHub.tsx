@@ -22,6 +22,7 @@ import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import { exportActivityPdf } from '@/utils/pdfExport'
 import { type PoiItem } from '@/lib/overpass'
+import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { findSimilarActivities } from '@/lib/stats'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
@@ -94,6 +95,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [showAspect,   setShowAspect]   = useState(false)
   const [pois,            setPois]           = useState<PoiItem[]>([])
   const [poisLoaded,      setPoisLoaded]     = useState(false)
+  // Abbinamento POI↔Wikipedia (immagine + estratto) per la modalità video "Illustrativo".
+  // Le escursioni nate da un percorso pianificato se lo portano dietro dal piano (activity.poiWiki,
+  // vedi lib/activitySave.ts); per tutte le altre — GPX importati, o attività salvate prima di
+  // quella colonna — si risolve qui dal vivo, come già fa app/guida/GuidaHub.tsx.
+  const [poiWiki,         setPoiWiki]        = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
   const [ratingVal,       setRatingVal]      = useState(0)
   const [ratingNote,      setRatingNote]     = useState('')
   const [savingRating,    setSavingRating]   = useState(false)
@@ -200,11 +206,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
           const nearby = all.filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
             .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
           setPois(nearby)
+          if (!a.poiWiki?.length) {
+            fetchWikiForNamedPois(nearby).then(setPoiWiki).catch(() => {})
+          }
         })
         .catch(() => {})
         .finally(() => setPoisLoaded(true))
     }
-    setPois([]); setPoisLoaded(false); setPhotos([]); setPhotosError(false); setCoverPhotoId(null)
+    setPois([]); setPoisLoaded(false); setPoiWiki([]); setPhotos([]); setPhotosError(false); setCoverPhotoId(null)
     // No onRefresh callback here: getActivityById already persists the background-revalidated
     // copy to the local cache for next time. Wiring it into setActivity too would re-apply the
     // full activity (new object/array references) a second time once the network round-trip
@@ -690,7 +699,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
           onClose={() => { setShow3D(false); setOpenVideoWizard(false) }} plannedTrackPoints={activity.linkedPlannedTrackPoints}
           activityId={activity.id} initialVideoState={openVideoWizard ? 'config' : 'idle'}
           distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain} pois={pois} dtmProfile={dtmProfile}
-          beautyScore={activity.linkedBeautyScore} />
+          beautyScore={activity.linkedBeautyScore}
+          poiWiki={activity.poiWiki?.length ? activity.poiWiki : poiWiki}
+          guide={activity.guideText ? { text: activity.guideText, notices: activity.guideNotices, generatedAt: activity.guideGeneratedAt } : undefined} />
       )}
       {showStreetView && centerPt?.lat && centerPt?.lon && (
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity?.title ?? undefined} onClose={() => setShowStreetView(false)} />

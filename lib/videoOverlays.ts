@@ -411,66 +411,6 @@ export function drawRouteMilestone(
   } catch (err) { console.error('[dtrek] drawRouteMilestone error:', err) }
 }
 
-// ── Testo del gancio iniziale ──────────────────────────────────────────────────
-/** Righe che salgono in sequenza con contorno pieno e una barra accento che si allarga sotto.
- *  Niente riquadro semitrasparente dietro al testo: su una foto a schermo intero un rettangolo
- *  grigio in mezzo all'inquadratura è la cosa che fa sembrare il gancio "fatto male", mentre un
- *  contorno netto si legge su qualunque sfondo e non copre la foto. `localT` 0..1 sul singolo tempo. */
-export function drawHookText(
-  ctx: CanvasRenderingContext2D,
-  outW: number, outH: number, sc: number,
-  text: string, localT: number,
-) {
-  try {
-  const k = clamp01(localT)
-  const inT = Math.min(1, k / 0.20)
-  const outT = k > 0.84 ? (k - 0.84) / 0.16 : 0
-  const blockAlpha = inT * (1 - outT)
-  if (blockAlpha <= 0.01) return
-
-  ctx.save()
-  try {
-    ctx.font = `900 ${Math.round(58*sc)}px -apple-system,sans-serif`
-    const maxW = outW - 110*sc
-    const words = text.toUpperCase().split(' ')
-    const lines: string[] = []
-    let cur = ''
-    for (const w of words) {
-      const test = cur ? cur + ' ' + w : w
-      if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w } else { cur = test }
-    }
-    if (cur) lines.push(cur)
-    const visLines = lines.slice(0, 3)
-    const lineH = 70*sc
-    // Terzo basso, come nei reel: lascia respirare la foto sopra invece di piazzarsi al centro
-    const blockTop = outH*0.72 - (visLines.length - 1) * lineH / 2
-
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
-    visLines.forEach((l, i) => {
-      const li = clamp01((k - i*0.07) / 0.20)   // ogni riga entra poco dopo la precedente
-      const ease = 1 - Math.pow(1 - li, 3)
-      const a = blockAlpha * ease
-      if (a <= 0.01) return
-      const y = blockTop + i*lineH + (1 - ease) * 46*sc - outT * 40*sc
-      ctx.globalAlpha = a
-      ctx.strokeStyle = 'rgba(4,14,22,0.9)'; ctx.lineWidth = 11*sc
-      ctx.strokeText(l, outW/2, y)
-      ctx.fillStyle = 'white'
-      ctx.fillText(l, outW/2, y)
-    })
-
-    const barT = clamp01((k - 0.10) / 0.28)
-    const barW = 150*sc * (1 - Math.pow(1 - barT, 3))
-    if (barW > 1) {
-      ctx.globalAlpha = blockAlpha
-      ctx.fillStyle = '#38bdf8'
-      const by = blockTop + (visLines.length - 1)*lineH + 52*sc - outT*40*sc
-      rrect(ctx, outW/2 - barW/2, by, barW, 7*sc, 3.5*sc); ctx.fill()
-    }
-  } finally { ctx.restore() }
-  } catch (err) { console.error('[dtrek] drawHookText error:', err) }
-}
-
 // ── Scia dietro al pin (opzionale) ─────────────────────────────────────────────
 /** Coda che sfuma dietro al pin, già proiettata in coordinate del canvas composito (il chiamante
  *  fa la proiezione perché serve la telecamera di MapLibre). `pts` va dalla coda (più vecchio) alla
@@ -1129,6 +1069,11 @@ export interface PoiCardView {
   emoji: string
   color: string          // colore del tipo, da POI_META
   extra?: string         // altri luoghi del grappolo, già uniti in una riga
+  blurb?: string         // una riga dall'estratto Wikipedia
+  /** Immagine del luogo, già caricata e CORS-pulita dal chiamante. Quando c'è, è lei il soggetto
+   *  della scheda: un nome accanto a un'icona non racconta nulla che il segnaposto sulla mappa non
+   *  dica già, ed è il motivo per cui la versione precedente di questa scheda non serviva a niente. */
+  image?: CanvasImageSource & { width: number; height: number }
 }
 
 /** Unica casella a schermo per le schede POI: terzo basso, larghezza piena meno i margini.
@@ -1148,56 +1093,80 @@ export function drawPoiCard(
   const ease = 1 - Math.pow(1 - inT, 3)
   const slide = (1 - ease) * 54 * sc + outT * 26 * sc
 
+  const hasImg = !!card.image && card.image.width > 0 && card.image.height > 0
   const cardW = w - 88 * sc
-  const cardH = (card.extra ? 132 : 104) * sc
+  const imgH  = hasImg ? 240 * sc : 0
+  const textH = (card.blurb ? 128 : card.extra ? 122 : 100) * sc
+  const cardH = imgH + textH
   const x = (w - cardW) / 2
-  const y = h * 0.74 - cardH / 2 + slide
+  const y = h * 0.72 - cardH / 2 + slide
+  const R = 24 * sc
 
   ctx.save()
   try {
     ctx.globalAlpha = alpha
-    // Fondo pieno e opaco: la mappa sotto è viva e mossa, un pannello troppo trasparente rende
+    // Fondo pieno e opaco: la mappa sotto è viva e mossa, e un pannello troppo trasparente rende
     // il testo illeggibile proprio nei fotogrammi in cui passa un crinale chiaro.
-    ctx.fillStyle = 'rgba(8,18,26,0.88)'
-    rrect(ctx, x, y, cardW, cardH, 22 * sc); ctx.fill()
-    // Costa colorata del tipo di luogo: dà l'identità senza colorare tutto il pannello
+    ctx.fillStyle = 'rgba(8,18,26,0.9)'
+    rrect(ctx, x, y, cardW, cardH, R); ctx.fill()
+
+    if (hasImg) {
+      // Foto ritagliata a riempire la fascia superiore, angoli alti arrotondati come la scheda
+      ctx.save()
+      try {
+        ctx.beginPath()
+        ctx.moveTo(x, y + imgH)
+        ctx.lineTo(x, y + R); ctx.arcTo(x, y, x + R, y, R)
+        ctx.lineTo(x + cardW - R, y); ctx.arcTo(x + cardW, y, x + cardW, y + R, R)
+        ctx.lineTo(x + cardW, y + imgH)
+        ctx.closePath(); ctx.clip()
+        const src = aspectFitCrop(card.image!.width, card.image!.height, cardW / imgH)
+        ctx.drawImage(card.image!, src.sx, src.sy, src.sw, src.sh, x, y, cardW, imgH)
+        // Sfumatura in basso: il testo sotto stacca dalla foto senza una riga netta
+        const g = ctx.createLinearGradient(0, y + imgH * 0.55, 0, y + imgH)
+        g.addColorStop(0, 'rgba(8,18,26,0)'); g.addColorStop(1, 'rgba(8,18,26,0.92)')
+        ctx.fillStyle = g; ctx.fillRect(x, y + imgH * 0.55, cardW, imgH * 0.45)
+      } finally { ctx.restore() }
+    }
+
+    // Costa colorata del tipo di luogo, lungo tutto il fianco sinistro
     ctx.fillStyle = card.color
     rrect(ctx, x, y, 7 * sc, cardH, 3.5 * sc); ctx.fill()
     ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1.5 * sc
-    rrect(ctx, x, y, cardW, cardH, 22 * sc); ctx.stroke()
+    rrect(ctx, x, y, cardW, cardH, R); ctx.stroke()
 
     const padL = x + 30 * sc
-    // Pastiglia con l'emoji del tipo
-    const badgeR = 27 * sc, badgeCx = padL + badgeR, badgeCy = y + cardH / 2
-    ctx.fillStyle = card.color
-    ctx.beginPath(); ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2); ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2 * sc
-    ctx.beginPath(); ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2); ctx.stroke()
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.font = `${Math.round(28 * sc)}px -apple-system,sans-serif`
-    ctx.fillText(card.emoji, badgeCx, badgeCy + 2 * sc)
+    const maxTextW = cardW - 60 * sc
+    let ty = y + imgH + 24 * sc
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top'
 
-    const textX = badgeCx + badgeR + 22 * sc
-    const maxTextW = x + cardW - textX - 26 * sc
-    ctx.textAlign = 'left'
+    // Tipo del luogo, in piccolo e nel colore del tipo
     ctx.fillStyle = card.color
     ctx.font = `800 ${Math.round(15 * sc)}px -apple-system,sans-serif`
-    ctx.textBaseline = 'top'
-    const kindY = y + (card.extra ? 22 : 26) * sc
-    ctx.fillText(card.kind.toUpperCase(), textX, kindY)
+    ctx.fillText(`${card.emoji}  ${card.kind.toUpperCase()}`, padL, ty)
+    ty += 22 * sc
 
     ctx.fillStyle = 'white'
     ctx.font = `800 ${Math.round(31 * sc)}px -apple-system,sans-serif`
     let title = card.title
     while (ctx.measureText(title).width > maxTextW && title.length > 4) title = title.slice(0, -4) + '…'
-    ctx.fillText(title, textX, kindY + 22 * sc)
+    ctx.fillText(title, padL, ty)
+    ty += 40 * sc
 
+    if (card.blurb) {
+      ctx.fillStyle = 'rgba(255,255,255,0.62)'
+      ctx.font = `500 ${Math.round(17 * sc)}px -apple-system,sans-serif`
+      let bl = card.blurb
+      while (ctx.measureText(bl).width > maxTextW && bl.length > 4) bl = bl.slice(0, -4) + '…'
+      ctx.fillText(bl, padL, ty)
+      ty += 24 * sc
+    }
     if (card.extra) {
-      ctx.fillStyle = 'rgba(255,255,255,0.55)'
-      ctx.font = `600 ${Math.round(16 * sc)}px -apple-system,sans-serif`
+      ctx.fillStyle = 'rgba(255,255,255,0.45)'
+      ctx.font = `600 ${Math.round(15 * sc)}px -apple-system,sans-serif`
       let ex = card.extra
       while (ctx.measureText(ex).width > maxTextW && ex.length > 4) ex = ex.slice(0, -4) + '…'
-      ctx.fillText(ex, textX, kindY + 62 * sc)
+      ctx.fillText(ex, padL, ty)
     }
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawPoiCard error:', err) }
@@ -1329,4 +1298,339 @@ export function drawIdentikit(
     })
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawIdentikit error:', err) }
+}
+
+// ── Stacchi: pannelli che fermano il volo per far leggere i dati ───────────────
+// Convenzione condivisa: `t` 0..1 sulla vita del pannello, entrata/uscita gestite qui dentro.
+// Tutti si appoggiano a questo fondale comune invece di ridisegnarselo, così gli stacchi si
+// somigliano tra loro e si distinguono a colpo d'occhio dal volo sul percorso.
+
+/** Fondale + titolo di uno stacco. Ritorna l'opacità e la `y` da cui il contenuto può partire.
+ *  `contentH` serve a CENTRARE il blocco: su un 9:16 un pannello ancorato in alto lascia due terzi
+ *  di vuoto sotto, e uno stacco pieno di vuoto sembra un errore invece di una scelta. */
+function beatFrame(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  title: string, t: number, contentH: number,
+): { alpha: number; y: number } | null {
+  const k = clamp01(t)
+  const alpha = Math.min(1, k / 0.10) * (k > 0.9 ? Math.max(0, 1 - (k - 0.9) / 0.1) : 1)
+  if (alpha <= 0.01) return null
+  ctx.globalAlpha = alpha
+  const g = ctx.createLinearGradient(0, 0, 0, h)
+  g.addColorStop(0, 'rgba(6,14,20,0.93)'); g.addColorStop(1, 'rgba(4,10,15,0.97)')
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+  const HEAD = 74 * sc
+  const top = Math.max(h * 0.12, (h - (HEAD + contentH)) / 2)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = 'rgba(255,255,255,0.45)'
+  ctx.font = `800 ${Math.round(17 * sc)}px -apple-system,sans-serif`
+  ctx.fillText(title.toUpperCase(), w / 2, top)
+  ctx.fillStyle = '#e08d3c'
+  rrect(ctx, w / 2 - 22 * sc, top + 20 * sc, 44 * sc, 3 * sc, 1.5 * sc); ctx.fill()
+  return { alpha, y: top + HEAD }
+}
+
+/** Altezza di una griglia di statistiche a `cols` colonne. */
+function statsHeight(n: number, sc: number, cols = 2): number {
+  return Math.ceil(n / cols) * 104 * sc
+}
+
+/** Voci grandi con etichetta sotto, in griglia — entrano a scalare. */
+function beatStats(
+  ctx: CanvasRenderingContext2D,
+  w: number, sc: number, yTop: number, alpha: number, k: number,
+  rows: { k: string; v: string }[], cols = 2,
+) {
+  const cellW = (w - 130 * sc) / cols, x0 = 65 * sc
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  rows.forEach((r, i) => {
+    const f = clamp01((k - (0.16 + i * 0.07)) / 0.2)
+    if (f <= 0.01) return
+    const ease = 1 - Math.pow(1 - f, 3)
+    const cx = x0 + (i % cols) * cellW + cellW / 2
+    const cy = yTop + Math.floor(i / cols) * 104 * sc + (1 - ease) * 20 * sc
+    ctx.globalAlpha = alpha * ease
+    ctx.fillStyle = 'white'
+    ctx.font = `900 ${Math.round(42 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(r.v, cx, cy)
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'
+    ctx.font = `700 ${Math.round(14 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(r.k.toUpperCase(), cx, cy + 32 * sc)
+  })
+  ctx.globalAlpha = alpha
+}
+
+export function drawNumbersBeat(
+  ctx: CanvasRenderingContext2D, w: number, h: number, sc: number,
+  rows: { k: string; v: string }[], t: number,
+) {
+  try {
+  ctx.save()
+  try {
+    const f = beatFrame(ctx, w, h, sc, 'Il percorso in breve', t, statsHeight(rows.length, sc))
+    if (!f) return
+    beatStats(ctx, w, sc, f.y + 30 * sc, f.alpha, clamp01(t), rows)
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawNumbersBeat error:', err) }
+}
+
+/** Profilo altimetrico che si disegna da sinistra a destra mentre lo stacco avanza. */
+export function drawElevationBeat(
+  ctx: CanvasRenderingContext2D, w: number, h: number, sc: number,
+  series: number[], rows: { k: string; v: string }[], t: number,
+) {
+  try {
+  ctx.save()
+  try {
+    if (series.length < 2) return
+    const gh = 230 * sc
+    const f = beatFrame(ctx, w, h, sc, 'Il profilo', t, gh + 60 * sc + statsHeight(rows.length, sc))
+    if (!f) return
+    const k = clamp01(t)
+    const gx = 70 * sc, gw = w - 140 * sc, gy = f.y, gh2 = gh
+    const minA = Math.min(...series), maxA = Math.max(...series), range = maxA - minA || 1
+    const drawn = 1 - Math.pow(1 - clamp01((k - 0.1) / 0.45), 3)
+    const upTo = Math.max(1, Math.round(drawn * (series.length - 1)))
+    const px = (i: number) => gx + (i / (series.length - 1)) * gw
+    const py = (i: number) => gy + gh2 - ((series[i] - minA) / range) * gh2 * 0.9
+    // Profilo intero appena accennato: si capisce subito quanto manca da vedere
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 2 * sc
+    ctx.beginPath()
+    for (let i = 0; i < series.length; i++) i === 0 ? ctx.moveTo(px(i), py(i)) : ctx.lineTo(px(i), py(i))
+    ctx.stroke()
+    // Parte già "percorsa" dallo stacco, piena
+    const ag = ctx.createLinearGradient(0, gy, 0, gy + gh2)
+    ag.addColorStop(0, 'rgba(224,141,60,0.45)'); ag.addColorStop(1, 'rgba(224,141,60,0.03)')
+    ctx.beginPath(); ctx.moveTo(px(0), gy + gh2)
+    for (let i = 0; i <= upTo; i++) ctx.lineTo(px(i), py(i))
+    ctx.lineTo(px(upTo), gy + gh2); ctx.closePath()
+    ctx.fillStyle = ag; ctx.fill()
+    ctx.strokeStyle = '#e08d3c'; ctx.lineWidth = 3.5 * sc; ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+    ctx.beginPath()
+    for (let i = 0; i <= upTo; i++) i === 0 ? ctx.moveTo(px(i), py(i)) : ctx.lineTo(px(i), py(i))
+    ctx.stroke()
+    ctx.fillStyle = 'white'
+    ctx.beginPath(); ctx.arc(px(upTo), py(upTo), 6 * sc, 0, Math.PI * 2); ctx.fill()
+    beatStats(ctx, w, sc, gy + gh2 + 78 * sc, f.alpha, k, rows)
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawElevationBeat error:', err) }
+}
+
+export function drawNatureBeat(
+  ctx: CanvasRenderingContext2D, w: number, h: number, sc: number,
+  data: { belt: string; description: string; extra?: { k: string; v: string }[] }, t: number,
+) {
+  try {
+  ctx.save()
+  try {
+    const contentH = 170 * sc + (data.extra?.length ? statsHeight(data.extra.length, sc) : 0)
+    const f = beatFrame(ctx, w, h, sc, 'La natura intorno', t, contentH)
+    if (!f) return
+    const k = clamp01(t)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#8cc894'
+    ctx.font = `900 ${Math.round(40 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(data.belt, w / 2, f.y)
+    ctx.fillStyle = 'rgba(255,255,255,0.72)'
+    ctx.font = `500 ${Math.round(21 * sc)}px -apple-system,sans-serif`
+    wrapCentered(ctx, data.description, w / 2, f.y + 62 * sc, w - 150 * sc, 32 * sc, 4, clamp01((k - 0.14) / 0.3))
+    if (data.extra?.length) beatStats(ctx, w, sc, f.y + 230 * sc, f.alpha, k, data.extra)
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawNatureBeat error:', err) }
+}
+
+/** Avvisi dalla guida. La data di verifica NON è decorativa: un video resta e circola, e chi lo
+ *  guarda mesi dopo deve poter capire quanto è vecchia la notizia di una chiusura. */
+export function drawNoticesBeat(
+  ctx: CanvasRenderingContext2D, w: number, h: number, sc: number,
+  data: { notices: { severity: 'danger' | 'warning' | 'info'; text: string }[]; verifiedOn?: string }, t: number,
+) {
+  try {
+  ctx.save()
+  try {
+    const k = clamp01(t)
+    const COL = { danger: '#e24b4a', warning: '#e08d3c', info: '#378add' }
+    const ICON = { danger: '!', warning: '!', info: 'i' }
+    const bx = 62 * sc, bw = w - 124 * sc
+    // Le altezze si misurano PRIMA di disegnare il fondale: servono a beatFrame per centrare il
+    // blocco, e dipendono da quante righe occupa ogni avviso una volta mandato a capo.
+    ctx.font = `500 ${Math.round(20 * sc)}px -apple-system,sans-serif`
+    const items = data.notices.slice(0, 3).map(n => {
+      const lines = wrapLines(ctx, n.text, bw - 76 * sc, 3)
+      return { n, lines, boxH: Math.max(66 * sc, lines.length * 28 * sc + 38 * sc) }
+    })
+    const contentH = items.reduce((sum, it) => sum + it.boxH + 16 * sc, 0) + (data.verifiedOn ? 46 * sc : 0)
+    const f = beatFrame(ctx, w, h, sc, 'Da sapere prima di andare', t, contentH)
+    if (!f) return
+    let y = f.y
+    items.forEach(({ n, lines, boxH }, i) => {
+      const fIn = clamp01((k - (0.12 + i * 0.1)) / 0.24)
+      if (fIn <= 0.01) { y += boxH + 16 * sc; return }
+      const ease = 1 - Math.pow(1 - fIn, 3)
+      ctx.globalAlpha = f.alpha * ease
+      const col = COL[n.severity] ?? COL.info
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+      ctx.font = `500 ${Math.round(20 * sc)}px -apple-system,sans-serif`
+      const by = y + (1 - ease) * 18 * sc
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'
+      rrect(ctx, bx, by, bw, boxH, 16 * sc); ctx.fill()
+      ctx.fillStyle = col
+      rrect(ctx, bx, by, 6 * sc, boxH, 3 * sc); ctx.fill()
+      ctx.fillStyle = col
+      ctx.beginPath(); ctx.arc(bx + 40 * sc, by + 32 * sc, 15 * sc, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#06111a'; ctx.textAlign = 'center'
+      ctx.font = `900 ${Math.round(19 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(ICON[n.severity] ?? 'i', bx + 40 * sc, by + 22 * sc)
+      ctx.textAlign = 'left'
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'
+      ctx.font = `500 ${Math.round(20 * sc)}px -apple-system,sans-serif`
+      lines.forEach((l, li) => ctx.fillText(l, bx + 68 * sc, by + 18 * sc + li * 28 * sc))
+      y += boxH + 16 * sc
+    })
+    if (data.verifiedOn) {
+      ctx.globalAlpha = f.alpha * clamp01((k - 0.4) / 0.25)
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillStyle = 'rgba(255,255,255,0.42)'
+      ctx.font = `600 ${Math.round(15 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(`Verificato il ${data.verifiedOn} — potrebbe essere cambiato`, w / 2, y + 18 * sc)
+    }
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawNoticesBeat error:', err) }
+}
+
+export function drawPlacesBeat(
+  ctx: CanvasRenderingContext2D, w: number, h: number, sc: number,
+  places: { name: string; kind: string; emoji: string; color: string }[], t: number,
+) {
+  try {
+  ctx.save()
+  try {
+    const shown = places.slice(0, 5)
+    const f = beatFrame(ctx, w, h, sc, 'Cosa incontri', t, shown.length * 84 * sc)
+    if (!f) return
+    const k = clamp01(t)
+    const bx = 66 * sc, bw = w - 132 * sc
+    shown.forEach((pl, i) => {
+      const fIn = clamp01((k - (0.12 + i * 0.08)) / 0.24)
+      if (fIn <= 0.01) return
+      const ease = 1 - Math.pow(1 - fIn, 3)
+      ctx.globalAlpha = f.alpha * ease
+      const by = f.y + i * 84 * sc + (1 - ease) * 20 * sc
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'
+      rrect(ctx, bx, by, bw, 68 * sc, 16 * sc); ctx.fill()
+      ctx.fillStyle = pl.color
+      ctx.beginPath(); ctx.arc(bx + 44 * sc, by + 34 * sc, 22 * sc, 0, Math.PI * 2); ctx.fill()
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.font = `${Math.round(22 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(pl.emoji, bx + 44 * sc, by + 36 * sc)
+      ctx.textAlign = 'left'
+      ctx.fillStyle = pl.color
+      ctx.font = `800 ${Math.round(13 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(pl.kind.toUpperCase(), bx + 80 * sc, by + 24 * sc)
+      ctx.fillStyle = 'white'
+      ctx.font = `800 ${Math.round(24 * sc)}px -apple-system,sans-serif`
+      let nm = pl.name
+      while (ctx.measureText(nm).width > bw - 110 * sc && nm.length > 4) nm = nm.slice(0, -4) + '…'
+      ctx.fillText(nm, bx + 80 * sc, by + 48 * sc)
+    })
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawPlacesBeat error:', err) }
+}
+
+/** Spezza un testo in righe che stanno in `maxW`, al massimo `maxLines` (l'ultima con i puntini). */
+function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number, maxLines: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let cur = ''
+  for (const wd of words) {
+    const test = cur ? cur + ' ' + wd : wd
+    if (ctx.measureText(test).width > maxW && cur) {
+      lines.push(cur); cur = wd
+      if (lines.length === maxLines) break
+    } else cur = test
+  }
+  if (lines.length < maxLines && cur) lines.push(cur)
+  if (lines.length === maxLines && cur && lines[maxLines - 1] !== cur) {
+    let last = lines[maxLines - 1]
+    while (ctx.measureText(last + '…').width > maxW && last.length > 4) last = last.slice(0, -2)
+    lines[maxLines - 1] = last + '…'
+  }
+  return lines
+}
+
+/** Testo centrato su più righe, che compaiono una dopo l'altra. */
+function wrapCentered(
+  ctx: CanvasRenderingContext2D, text: string,
+  cx: number, y: number, maxW: number, lineH: number, maxLines: number, reveal: number,
+) {
+  const lines = wrapLines(ctx, text, maxW, maxLines)
+  const shown = Math.ceil(clamp01(reveal) * lines.length)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  lines.slice(0, shown).forEach((l, i) => ctx.fillText(l, cx, y + i * lineH))
+}
+
+// ── Didascalie dal testo della guida ───────────────────────────────────────────
+/** Didascalia in stile film: sottili bande orizzontali che entrano ed escono, testo centrato in
+ *  basso a gruppi di parole. Contorno pieno e mai un riquadro grigio dietro: sopra a una mappa in
+ *  movimento un rettangolo semitrasparente è la cosa che fa sembrare il video "fatto in casa",
+ *  mentre un contorno netto si legge su qualunque sfondo senza coprire niente. */
+export function drawStoryCaption(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  text: string, t: number,
+) {
+  try {
+  const k = clamp01(t)
+  const inT = Math.min(1, k / 0.18)
+  const outT = k > 0.82 ? (k - 0.82) / 0.18 : 0
+  const alpha = inT * (1 - outT)
+  if (alpha <= 0.01) return
+
+  ctx.save()
+  try {
+    // Bande cinematografiche: crescono all'entrata e si ritirano all'uscita
+    const barEase = (1 - Math.pow(1 - inT, 3)) * (1 - outT)
+    const barH = h * 0.055 * barEase
+    if (barH > 0.5) {
+      ctx.globalAlpha = alpha * 0.85
+      ctx.fillStyle = 'rgba(4,10,15,0.92)'
+      ctx.fillRect(0, 0, w, barH)
+      ctx.fillRect(0, h - barH, w, barH)
+    }
+
+    ctx.globalAlpha = alpha
+    ctx.font = `500 italic ${Math.round(38 * sc)}px Georgia,serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
+
+    // A capo su misura, al massimo tre righe
+    const maxW = w - 130 * sc
+    const words = text.split(/\s+/).filter(Boolean)
+    const lines: string[] = []
+    let cur = ''
+    for (const wd of words) {
+      const test = cur ? cur + ' ' + wd : wd
+      if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = wd } else cur = test
+    }
+    if (cur) lines.push(cur)
+    const vis = lines.slice(0, 3)
+    const lineH = 50 * sc
+    const baseY = h * 0.80 - (vis.length - 1) * lineH / 2
+
+    vis.forEach((l, i) => {
+      // Le righe entrano una dopo l'altra: dà il ritmo della lettura invece di scaricare
+      // tutto il blocco addosso a chi guarda
+      const li = clamp01((k - i * 0.06) / 0.18)
+      const ease = 1 - Math.pow(1 - li, 3)
+      const a = alpha * ease
+      if (a <= 0.01) return
+      const y = baseY + i * lineH + (1 - ease) * 22 * sc
+      ctx.globalAlpha = a
+      ctx.strokeStyle = 'rgba(4,12,18,0.88)'; ctx.lineWidth = 9 * sc
+      ctx.strokeText(l, w / 2, y)
+      ctx.fillStyle = 'rgba(255,255,255,0.96)'
+      ctx.fillText(l, w / 2, y)
+    })
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawStoryCaption error:', err) }
 }

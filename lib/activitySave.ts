@@ -1,6 +1,6 @@
 import type { TcxActivity, TrackPoint } from './tcxParser'
 import { saveActivity, type StoredActivity, type HikeNote } from './blobStore'
-import { deletePlanned } from './plannedStore'
+import { deletePlanned, getPlannedById } from './plannedStore'
 import { fetchPoisNearTrack } from './poisProxy'
 import { type PoiItem } from './overpass'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from './tei'
@@ -122,6 +122,27 @@ export async function saveActivityWithEnrichment(
     }
   } catch {} // non-blocking — save proceeds regardless
 
+  // ── Guida del percorso (best-effort) ───────────────────────────
+  // Va letta PRIMA del deletePlanned più sotto: quella riga porta con sé il testo della guida
+  // scritto da Giulia e l'abbinamento POI↔Wikipedia (immagini comprese), materiale generato una
+  // volta sola e altrimenti perso per sempre nel momento in cui il piano viene consumato in questa
+  // attività. Il resoconto e il video ne hanno bisogno per raccontare il percorso, non solo mostrarlo.
+  let guideCarry: Pick<StoredActivity, 'guideText'|'guideSubtitle'|'guideNotices'|'guideGeneratedAt'|'poiWiki'> = {}
+  if (opts.linkedPlannedId) {
+    try {
+      const planned = await getPlannedById(opts.linkedPlannedId)
+      if (planned) {
+        guideCarry = {
+          guideText:        planned.cachedGuide,
+          guideSubtitle:    planned.cachedGuideSubtitle,
+          guideNotices:     planned.cachedGuideNotices,
+          guideGeneratedAt: planned.guideGeneratedAt,
+          poiWiki:          planned.cachedPoiWiki as StoredActivity['poiWiki'],
+        }
+      }
+    } catch {} // non-blocking — un'escursione non deve fallire il salvataggio per la sua guida
+  }
+
   // ── Save ───────────────────────────────────────────────────────
   const stored: StoredActivity = {
     ...activity,
@@ -135,6 +156,7 @@ export async function saveActivityWithEnrichment(
     trailScoreConfidence,
     trailScoreComputedAt,
     weatherAtHike,
+    ...guideCarry,
   }
   await saveActivity(stored)
 

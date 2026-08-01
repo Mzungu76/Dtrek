@@ -43,6 +43,10 @@ export interface PoiOnRoute {
   name?: string
   progress: number        // 0..1 lungo il percorso, punto più vicino
   distFromTrackM: number
+  /** Miniatura Wikipedia del luogo, se ne esiste una (WikiPage.thumbnail). */
+  imageUrl?: string
+  /** Prima frase dell'estratto Wikipedia — una riga, non un paragrafo. */
+  blurb?: string
 }
 
 export interface PoiCard {
@@ -71,12 +75,32 @@ export interface PoiPlanOptions {
   /** Entro questa distanza in avanzamento due protagonisti finiscono nella stessa scheda. */
   groupWindowP: number
   includeSensitive?: boolean
+  /** Finestre (in fotogrammi globali) in cui una scheda non si vedrebbe — tipicamente gli stacchi,
+   *  che coprono lo schermo con un pannello. Una scheda che ci finisce dentro viene spostata dopo:
+   *  programmarla lì significherebbe farla vivere e morire nascosta. */
+  blockedRanges?: { start: number; end: number }[]
+  /** Solo i luoghi con un'immagine possono prendersi una scheda. Gli altri restano segnaposti:
+   *  una scheda fatta di nome e icona ripete quello che il segnaposto sulla mappa dice già. */
+  requireImage?: boolean
 }
 
 /** Proietta i POI sul percorso: per ognuno l'avanzamento del punto di tracciato più vicino. */
+/** Prima frase di un estratto, tagliata corta: a schermo una scheda regge una riga, non un capoverso. */
+function firstSentence(extract: string, maxLen = 120): string | undefined {
+  const clean = extract.replace(/\s+/g, ' ').trim()
+  if (!clean) return undefined
+  const m = clean.match(/^.{20,}?[.!?](?=\s|$)/)
+  const s = (m ? m[0] : clean).trim()
+  if (s.length <= maxLen) return s
+  const cut = s.slice(0, maxLen)
+  return cut.slice(0, Math.max(0, cut.lastIndexOf(' '))).trim() + '…'
+}
+
 export function projectPoisOnRoute(
   pois: PoiItem[],
   routeLatLon: { lat: number; lon: number }[],
+  /** Miniature/estratti Wikipedia per id di POI — vedi fetchWikiForNamedPois. */
+  wikiById?: Map<number, { thumbnail?: string; extract?: string }>,
 ): PoiOnRoute[] {
   if (routeLatLon.length < 2) return []
   const out: PoiOnRoute[] = []
@@ -90,10 +114,13 @@ export function projectPoisOnRoute(
       const d2 = dLat * dLat + dLon * dLon
       if (d2 < best) { best = d2; bestIdx = i }
     }
+    const w = wikiById?.get(poi.id)
     out.push({
       id: poi.id, type: poi.type, name: poi.name?.trim() || undefined,
       progress: bestIdx / (routeLatLon.length - 1),
       distFromTrackM: poi.distFromTrack,
+      imageUrl: w?.thumbnail,
+      blurb: w?.extract ? firstSentence(w.extract) : undefined,
     })
   }
   return out
@@ -120,14 +147,16 @@ export function scorePoi(p: PoiOnRoute): number {
 export function planPoiCards(pois: PoiOnRoute[], opts: PoiPlanOptions): PoiPlan {
   const {
     progressToFrame, cardFrames, minGapFrames, lastFrame,
-    maxCards, minSpacingP, groupWindowP, includeSensitive = false,
+    maxCards, minSpacingP, groupWindowP, includeSensitive = false, requireImage = false,
+    blockedRanges = [],
   } = opts
 
   const markers: PoiOnRoute[] = []
   const eligible: PoiOnRoute[] = []
   for (const p of pois) {
     const sensitive = !includeSensitive && SENSITIVE_POI_TYPES.includes(p.type)
-    if (sensitive || scorePoi(p) <= 0) markers.push(p)
+    const noImage = requireImage && !p.imageUrl
+    if (sensitive || noImage || scorePoi(p) <= 0) markers.push(p)
     else eligible.push(p)
   }
 
@@ -174,9 +203,16 @@ export function planPoiCards(pois: PoiOnRoute[], opts: PoiPlanOptions): PoiPlan 
   chosen.sort((a, b) => a.progress - b.progress)
   const cards: PoiCard[] = []
   let freeFrom = 0
+  const blocked = blockedRanges.slice().sort((a, b) => a.start - b.start)
   for (const c of chosen) {
     const wanted = progressToFrame(c.progress)
-    const start = Math.max(wanted, freeFrom)
+    let start = Math.max(wanted, freeFrom)
+    // Scavalca gli stacchi: le finestre sono disgiunte e ordinate, quindi il ciclo termina
+    for (;;) {
+      const hit = blocked.find(b => start < b.end && start + cardFrames > b.start)
+      if (!hit) break
+      start = hit.end
+    }
     if (start + cardFrames > lastFrame) break     // finito il percorso, niente code fuori tempo
     cards.push({
       key: `poi-${c.pois[0].id}`,
