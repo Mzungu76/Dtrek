@@ -430,6 +430,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [prepProgress,      setPrepProgress]     = useState(0)
   /** Motivo dell'ultimo tentativo fallito, mostrato nel wizard finché non si riprova. */
   const [videoError,        setVideoError]       = useState('')
+  /** Generazione sospesa perché l'app è finita in secondo piano — vedi runWhenVisible. */
+  const [renderPaused,      setRenderPaused]     = useState(false)
+  /** Disiscrive l'attesa di ritorno in primo piano, se ce n'è una in corso. */
+  const visibilityWaiterRef = useRef<(() => void) | null>(null)
   /** Ultima fase raggiunta: serve al messaggio d'errore, che senza saperlo può solo tirare a indovinare. */
   const prepStageRef = useRef('avvio')
   const [entertainIdx,      setEntertainIdx]      = useState(0)
@@ -538,10 +542,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // browser sospende il rendering WebGL/requestAnimationFrame — il video resta a metà finché
   // l'utente non riaccende lo schermo. Chiave su videoState (non su un punto specifico dentro
   // startRecording) così UN SOLO effetto copre tutti i percorsi di uscita (fine normale,
-  // errore, annullamento): qualunque cosa porti fuori da 'rendering'/'finalizing' fa scattare
+  // errore, annullamento): qualunque cosa porti fuori dagli stati attivi fa scattare
   // il cleanup dell'effetto, che rilascia il lock — niente da duplicare in ogni handler.
+  // Copre anche 'preparing': la preparazione è una ventina di attese sulla mappa in fila, e uno
+  // schermo che si spegne lì dentro si porta via il lavoro esattamente come durante il rendering.
   useEffect(() => {
-    if (videoState !== 'rendering' && videoState !== 'finalizing') return
+    if (videoState !== 'preparing' && videoState !== 'rendering' && videoState !== 'finalizing') return
     if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return
     let sentinel: WakeLockSentinel | null = null
     let active = true
@@ -561,6 +567,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       document.removeEventListener('visibilitychange', onVisibility)
       sentinel?.release().catch(() => {})
     }
+  }, [videoState])
+
+  // Chiudere o ricaricare la pagina durante la generazione butta via tutto: il video vive solo in
+  // memoria fino a quando il muxer non ha finito, e non c'è modo di riprenderlo da dove era. Il
+  // browser mostra la sua richiesta di conferma standard (il testo lo decide lui, non noi).
+  useEffect(() => {
+    if (videoState !== 'preparing' && videoState !== 'rendering' && videoState !== 'finalizing') return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [videoState])
 
   // Contenuti della schermata di attesa durante il rendering: alcuni fatti calcolati sul
@@ -878,6 +894,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     return ()=>{
       renderAbortRef.current=true
       cancelAnimationFrame(animRef.current)
+      visibilityWaiterRef.current?.()
       isPlayingRef.current=false
       if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
       try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
@@ -1264,6 +1281,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       renderFailed = true
       renderAbortRef.current = true
       cancelAnimationFrame(animRef.current)
+      visibilityWaiterRef.current?.(); setRenderPaused(false)
       console.error('[dtrek] video rendering failed:', message)
       try { videoEncoderRef.current?.close(); videoEncoderRef.current=null } catch {}
       muxerRef.current=null; muxerTargetRef.current=null
@@ -1490,6 +1508,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       cont.style.width=''; cont.style.height=''; map.resize()
       } finally {
         if (finalizeIntervalRef.current) { clearInterval(finalizeIntervalRef.current); finalizeIntervalRef.current = null }
+        visibilityWaiterRef.current?.(); setRenderPaused(false)
         webglLostCleanupRef.current?.()
       }
     }
@@ -2178,14 +2197,56 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }, 600)
     }
 
+    /**
+     * Sospende la generazione finché l'app non torna in primo piano, invece di lasciarla proseguire
+     * a vuoto.
+     *
+     * Con il documento nascosto requestAnimationFrame smette proprio di essere chiamato (è la
+     * specifica: gli animation frame girano solo per documenti visibili) e MapLibre di conseguenza
+     * non ridipinge più. Le due reti di sicurezza a tempo dentro onNextRender però continuavano a
+     * scattare, catturando il canvas COM'ERA RIMASTO: il video proseguiva con la mappa congelata e
+     * HUD, cuore e barra di avanzamento che scorrevano sopra un'immagine ferma, a circa un
+     * fotogramma al secondo di orologio. isCanvasBlank non poteva accorgersene — quel canvas non è
+     * nero, è solo vecchio — quindi il risultato era un video sbagliato che sembrava riuscito.
+     *
+     * Restituisce true se ha messo in pausa: chi chiama deve interrompersi subito e non fare nulla.
+     * Alla ripresa `resume` rifà il fotogramma da capo (il contatore non è ancora avanzato).
+     */
+    const runWhenVisible = (resume: () => void): boolean => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') return false
+      visibilityWaiterRef.current?.()   // una sola attesa alla volta
+      const onVis = () => {
+        if (document.visibilityState !== 'visible') return
+        visibilityWaiterRef.current?.()
+        setRenderPaused(false)
+        if (renderAbortRef.current) return
+        // La mappa in background non ha ridipinto: senza forzare una ripittura il primo fotogramma
+        // dopo la ripresa catturerebbe ancora il canvas vecchio, cioè proprio ciò che si evita qui.
+        try { map.triggerRepaint() } catch {}
+        resume()
+      }
+      document.addEventListener('visibilitychange', onVis)
+      visibilityWaiterRef.current = () => {
+        document.removeEventListener('visibilitychange', onVis)
+        visibilityWaiterRef.current = null
+      }
+      setRenderPaused(true)
+      return true
+    }
+
     const renderNextFrame = () => {
       if(renderAbortRef.current) return
       const frameIdx=frameCountRef.current
+      // La finalizzazione va lasciata correre anche a schermo spento: non disegna nulla, non
+      // dipende da requestAnimationFrame, e fermarla qui significherebbe buttare via un video
+      // ormai completo solo perché l'ultimo fotogramma è caduto nel momento sbagliato.
       if(frameIdx>=RENDER_END_FRAME){
         if(videoEncoderRef.current){ finishRecording().catch(err=>{ console.error(err); failRendering('Errore durante la finalizzazione del video. Riprova.') }) }
         else { mediaRecorderRef.current?.stop() }
         return
       }
+      // Punto di pausa principale: fra un fotogramma e l'altro, prima di impegnare qualsiasi cosa.
+      if (runWhenVisible(renderNextFrame)) return
 
       const {p, introP, reveal, outroP, followFrame, stopIndex, stopT, interlude} = frameToState(frameIdx)
       setRenderProgress((frameIdx-RENDER_START_FRAME)/Math.max(1,RENDER_END_FRAME-RENDER_START_FRAME)); setRenderFrame(frameIdx-RENDER_START_FRAME)
@@ -2194,6 +2255,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       if (reveal) {
         requestAnimationFrame(async ()=>{
           if (renderAbortRef.current) return
+          // Il contatore non è ancora avanzato: alla ripresa questo stesso fotogramma si rifà da capo.
+          if (runWhenVisible(renderNextFrame)) return
           try {
           const t = reveal.revealFrame / PHOTO_REVEAL_FRAMES
           const alpha = t<0.08 ? t/0.08 : t>0.92 ? (1-t)/0.08 : 1
@@ -2315,6 +2378,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         try { map!.triggerRepaint() } catch {}
         onNextRender(async () => {
           if (!mapRef.current) { frameCountRef.current++; renderedFramesRef.current++; renderNextFrame(); return }
+          // Pausa qui, PRIMA di catturare: è il punto in cui la rete di sicurezza a tempo di
+          // onNextRender scattava a mappa nascosta e incollava nel video un canvas vecchio.
+          if (runWhenVisible(renderNextFrame)) return
           try {
           // Se la mappa non è momentaneamente disponibile (resize/context hiccup) salta SOLO il
           // ridisegno: il canvas composito mantiene l'ultimo contenuto buono, che viene comunque
@@ -2495,6 +2561,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       try { map!.triggerRepaint() } catch {}
       onNextRender(async ()=>{
         if(!mapRef.current) { frameCountRef.current++; renderedFramesRef.current++; renderNextFrame(); return }
+        // Vedi il gemello nel ramo del finale: pausa prima di catturare, non dopo.
+        if (runWhenVisible(renderNextFrame)) return
         try {
 
         // Se la mappa non è momentaneamente disponibile (resize/context hiccup) salta SOLO il
@@ -2856,6 +2924,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
+    visibilityWaiterRef.current?.(); setRenderPaused(false)
     frameCountRef.current=0
     if(mediaRecorderRef.current&&mediaRecorderRef.current.state!=='inactive'){mediaRecorderRef.current.onstop=null;mediaRecorderRef.current.stop()}
     mediaRecorderRef.current=null; compositeCanvasRef.current=null
@@ -4009,9 +4078,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <div className="bg-black/80 backdrop-blur-md rounded-2xl px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${videoState==='finalizing'?'bg-amber-400':videoState==='preparing'?'bg-forest-400':'bg-red-500'}`}/>
+                  <div className={`w-2.5 h-2.5 rounded-full ${renderPaused?'bg-white/40':'animate-pulse '+(videoState==='finalizing'?'bg-amber-400':videoState==='preparing'?'bg-forest-400':'bg-red-500')}`}/>
                   <span className="text-white text-sm font-bold tracking-wide">
-                    {videoState==='finalizing'?'ELABORAZIONE':videoState==='preparing'?'PREPARAZIONE':'RENDERING'}
+                    {renderPaused?'IN PAUSA':videoState==='finalizing'?'ELABORAZIONE':videoState==='preparing'?'PREPARAZIONE':'RENDERING'}
                   </span>
                 </div>
                 {videoState!=='finalizing'&&<button onClick={cancelRendering} className="text-white/60 hover:text-white text-xs font-semibold px-3 py-1 bg-white/10 rounded-full">Annulla</button>}
@@ -4024,18 +4093,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     : <div className="h-full rounded-full bg-forest-500" style={{width:`${renderProgress*100}%`,transition:'none'}}/>
                 }
               </div>
-              {videoState==='finalizing'
-                ? <p className="text-white/55 text-xs">Compressione in corso… ({finalizeElapsedSec}s)</p>
-                : videoState==='preparing'
-                  ? <p className="text-white/55 text-xs">{prepLabel||'Preparazione…'}</p>
-                  : <p className="text-white/55 text-xs">Frame {renderFrame}/{renderTotal} · {Math.round(renderProgress*100)}%</p>
+              {renderPaused
+                ? <p className="text-white/55 text-xs">Ripresa in corso…</p>
+                : videoState==='finalizing'
+                  ? <p className="text-white/55 text-xs">Compressione in corso… ({finalizeElapsedSec}s)</p>
+                  : videoState==='preparing'
+                    ? <p className="text-white/55 text-xs">{prepLabel||'Preparazione…'}</p>
+                    : <p className="text-white/55 text-xs">Frame {renderFrame}/{renderTotal} · {Math.round(renderProgress*100)}%</p>
               }
               <p className="text-white/30 text-[10px] mt-0.5">
-                {videoState==='finalizing'
-                  ? 'Può richiedere fino a 20-30s con video lunghi o molte foto — non chiudere questa schermata'
-                  : videoState==='preparing'
-                    ? 'La mappa sta caricando il terreno lungo tutto il percorso: serve a evitare buchi e scatti nel video'
-                    : 'Frame-by-frame rendering — qualità cinematografica garantita'}
+                {renderPaused
+                  ? 'La generazione si è fermata quando l’app è passata in secondo piano: riprende da dove era rimasta'
+                  : videoState==='finalizing'
+                    ? 'Può richiedere fino a 20-30s con video lunghi o molte foto — non chiudere questa schermata'
+                    : videoState==='preparing'
+                      ? 'La mappa sta caricando il terreno lungo tutto il percorso: serve a evitare buchi e scatti nel video'
+                      : 'Tieni aperta questa schermata: il video si genera qui, e passando ad altre app si mette in pausa'}
               </p>
             </div>
           </div>
