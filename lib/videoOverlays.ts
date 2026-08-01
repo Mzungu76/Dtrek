@@ -59,6 +59,30 @@ export function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
   ctx.closePath()
 }
 
+// ── Zone sicure dei social ─────────────────────────────────────────────────────
+// Su Reels/TikTok/Shorts l'interfaccia dell'app copre stabilmente il fotogramma: didascalia, nome
+// utente e pulsanti in basso, indicatori in alto, colonna di azioni a destra. Tutto ciò che
+// finisce lì sotto è, di fatto, non pubblicato — e su un 9:16 è esattamente dove sta un HUD
+// disegnato "al bordo".
+//
+// Questi margini sono frazioni dell'altezza/larghezza e si applicano SOLO ai formati verticali:
+// su 16:9 (YouTube) o 1:1 nessuno copre niente, e restringere lì sprecherebbe spazio.
+export interface SafeInsets { top: number; bottom: number; left: number; right: number }
+
+const NO_INSETS: SafeInsets = { top: 0, bottom: 0, left: 0, right: 0 }
+
+/** Margini in PIXEL per una tela w×h. Verticale = 9:16 e simili (rapporto sotto ~0.65). */
+export function safeInsetsFor(w: number, h: number): SafeInsets {
+  const vertical = w / h < 0.65
+  if (!vertical) return NO_INSETS
+  return {
+    top: Math.round(h * 0.12),
+    bottom: Math.round(h * 0.20),
+    left: Math.round(w * 0.04),
+    right: Math.round(w * 0.14),   // la colonna dei pulsanti sta a destra
+  }
+}
+
 // ── Pin utente: "gettone 3D" ──────────────────────────────────────────────────
 // Pin e cuore sono gettoni SPESSI: la profondità viene da una vera estrusione (la stessa sagoma
 // ridisegnata più volte, spostata e scurita) invece che da un'ombra sfocata. shadowBlur è tra le
@@ -896,18 +920,23 @@ export function drawProgressMarks(
 }
 
 export function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opts: HUDOpts) {
-  const sc=Math.min(w,h)/1080, pad=Math.round(40*sc), lineH=Math.round(52*sc)
+  const sc=Math.min(w,h)/1080, lineH=Math.round(52*sc)
+  // Il riempimento laterale non scende mai sotto il margine sicuro: su 9:16 un HUD "al bordo"
+  // finisce sotto i pulsanti dell'app e tanto vale non averlo disegnato.
+  const ins=safeInsetsFor(w,h)
+  const pad=Math.max(Math.round(40*sc), ins.left)
   const statSz=Math.round(32*sc), labelSz=Math.round(22*sc), brandSz=Math.round(22*sc)
-  const gradTop=h*0.62
+  const gradTop=h*0.62-ins.bottom*0.5
   const grad=ctx.createLinearGradient(0,gradTop,0,h)
   grad.addColorStop(0,'rgba(0,0,0,0)'); grad.addColorStop(0.28,'rgba(0,0,0,0.45)'); grad.addColorStop(0.60,'rgba(0,0,0,0.80)'); grad.addColorStop(1,'rgba(0,0,0,0.93)')
   ctx.fillStyle=grad; ctx.fillRect(0,gradTop,w,h-gradTop)
-  ctx.textAlign='left'; let yBase=h-pad
+  ctx.textAlign='left'; let yBase=h-Math.max(pad,ins.bottom)
   if(opts.showProgress){
     const barH=Math.max(6,Math.round(8*sc)); yBase-=barH
-    ctx.fillStyle='rgba(255,255,255,0.22)'; rrect(ctx,0,yBase,w,barH,barH/2); ctx.fill()
-    if(opts.progress>0){ctx.fillStyle='#3b82f6';rrect(ctx,0,yBase,Math.max(barH,w*opts.progress),barH,barH/2);ctx.fill()}
-    if(opts.photoMarks?.length) drawProgressMarks(ctx,0,yBase,w,barH,sc,opts.photoMarks,opts.progress)
+    const barX=ins.left, barW=w-ins.left-ins.right
+    ctx.fillStyle='rgba(255,255,255,0.22)'; rrect(ctx,barX,yBase,barW,barH,barH/2); ctx.fill()
+    if(opts.progress>0){ctx.fillStyle='#3b82f6';rrect(ctx,barX,yBase,Math.max(barH,barW*opts.progress),barH,barH/2);ctx.fill()}
+    if(opts.photoMarks?.length) drawProgressMarks(ctx,barX,yBase,barW,barH,sc,opts.photoMarks,opts.progress)
     yBase-=Math.round(20*sc)
   }
   if(opts.showStats){
@@ -918,15 +947,15 @@ export function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opt
       const kmW=drawOdometer(ctx,opts.coveredKm,1,pad,top,dH,'left')
       ctx.textBaseline='top'; ctx.fillText(`/${opts.totalKm} km`,pad+kmW,top)
       ctx.textBaseline='bottom'
-      drawOdometer(ctx,opts.alt,0,w/2,top,dH,'center')
-      ctx.textBaseline='top'; ctx.fillText(' m',w/2+ctx.measureText(String(opts.alt)).width/2,top)
+      const altW=drawOdometer(ctx,opts.alt,0,(w-ins.right+ins.left)/2,top,dH,'center')
+      ctx.textBaseline='top'; ctx.fillText(' m',(w-ins.right+ins.left)/2+altW/2,top)
       ctx.textBaseline='bottom'
     } else {
       ctx.fillText(`${opts.coveredKm}/${opts.totalKm} km`,pad,yBase)
-      const aT=`${opts.alt} m`; ctx.fillText(aT,(w-ctx.measureText(aT).width)/2,yBase)
+      const aT=`${opts.alt} m`; ctx.fillText(aT,(w-ins.right+ins.left-ctx.measureText(aT).width)/2,yBase)
     }
     ctx.fillStyle='rgba(255,255,255,0.82)'; const gT=`+${opts.elevGain} m`
-    ctx.fillText(gT,w-ctx.measureText(gT).width-pad,yBase); yBase-=lineH
+    ctx.fillText(gT,w-ctx.measureText(gT).width-Math.max(pad,ins.right),yBase); yBase-=lineH
   }
   if(opts.showTitle&&opts.title){
     ctx.textBaseline='bottom'; ctx.font=`600 ${labelSz}px -apple-system,sans-serif`; ctx.fillStyle='rgba(255,255,255,0.78)'
@@ -940,7 +969,9 @@ export function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opt
     ctx.fillText(opts.shotLabel,Math.round(28*sc),Math.round(32*sc))
   }
   ctx.textBaseline='bottom'; ctx.font=`bold ${brandSz}px -apple-system,sans-serif`; ctx.fillStyle='rgba(255,255,255,0.38)'
-  const brand='DTrek'; ctx.fillText(brand,w-ctx.measureText(brand).width-pad,h-Math.round(10*sc))
+  // Ancorato AL margine sicuro, non a un offset dal fondo: su 9:16 il fondo è coperto dall'app.
+  const brand='DTrek'
+  ctx.fillText(brand,w-ctx.measureText(brand).width-Math.max(pad,ins.right),h-ins.bottom-Math.round(10*sc))
 }
 
 // ── Elevation profile in video HUD ────────────────────────────────────────────
@@ -957,6 +988,9 @@ export interface TopBandOpts {
   coveredKm: number; totalKm: number; alt: number; elevGain: number; progress: number
   photoMarks?: number[]   // avanzamenti 0..1 delle foto, come tacche sulla barra (opzionale)
   odometer?: boolean      // cifre a rullo invece di numeri che scattano (opzionale)
+  /** Margini coperti dall'interfaccia social — vedi safeInsetsFor. Questa funzione riceve solo
+   *  l'altezza della FASCIA, non quella della tela, quindi non può ricavarli da sé. */
+  insets?: SafeInsets
 }
 
 export function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: number, sc: number, opts: TopBandOpts) {
@@ -968,15 +1002,17 @@ export function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: num
   grad.addColorStop(1, 'rgba(6,14,20,0)')
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, w, bandH)
-  const pad = Math.round(28 * sc)
-  let y = pad
+  const ins = opts.insets ?? NO_INSETS
+  const pad = Math.max(Math.round(28 * sc), ins.left)
+  let y = Math.max(Math.round(28 * sc), ins.top)
 
   if (opts.showTitle && opts.title) {
     ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
     ctx.font = `700 ${Math.round(26 * sc)}px -apple-system,sans-serif`
     let t = opts.title
-    while (ctx.measureText(t).width > w - pad * 2 && t.length > 4) t = t.slice(0, -4) + '…'
-    ctx.fillText(t, w / 2, y)
+    const titleMaxW = w - pad - Math.max(pad, ins.right)
+    while (ctx.measureText(t).width > titleMaxW && t.length > 4) t = t.slice(0, -4) + '…'
+    ctx.fillText(t, (pad + (w - Math.max(pad, ins.right))) / 2, y)
     y += Math.round(34 * sc)
   }
 
@@ -985,27 +1021,30 @@ export function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: num
     ctx.textBaseline = 'top'; ctx.font = `700 ${fs}px -apple-system,sans-serif`
     ctx.textAlign = 'left'; ctx.fillStyle = 'white'
     if (opts.odometer) {
+      const mid = (pad + (w - Math.max(pad, ins.right))) / 2
       const kmW = drawOdometer(ctx, opts.coveredKm, 1, pad, y, fs, 'left')
       ctx.fillText(`/${opts.totalKm} km`, pad + kmW, y)
-      const altW = drawOdometer(ctx, opts.alt, 0, w / 2, y, fs, 'center')
-      ctx.fillText(' m', w / 2 + altW / 2, y)
+      const altW = drawOdometer(ctx, opts.alt, 0, mid, y, fs, 'center')
+      ctx.fillText(' m', mid + altW / 2, y)
     } else {
+      const mid = (pad + (w - Math.max(pad, ins.right))) / 2
       ctx.fillText(`${opts.coveredKm}/${opts.totalKm} km`, pad, y)
-      ctx.textAlign = 'center'; ctx.fillText(`${opts.alt} m`, w / 2, y)
+      ctx.textAlign = 'center'; ctx.fillText(`${opts.alt} m`, mid, y)
     }
     ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.8)'
-    ctx.fillText(`+${opts.elevGain} m`, w - pad, y)
+    ctx.fillText(`+${opts.elevGain} m`, w - Math.max(pad, ins.right), y)
     y += Math.round(32 * sc)
   }
 
   if (opts.showProgress) {
     const barH = Math.max(5, Math.round(6 * sc))
-    ctx.fillStyle = 'rgba(255,255,255,0.22)'; rrect(ctx, pad, y, w - 2 * pad, barH, barH / 2); ctx.fill()
+    const barX = pad, barW = w - pad - Math.max(pad, ins.right)
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; rrect(ctx, barX, y, barW, barH, barH / 2); ctx.fill()
     if (opts.progress > 0) {
       ctx.fillStyle = '#3b82f6'
-      rrect(ctx, pad, y, Math.max(barH, (w - 2 * pad) * opts.progress), barH, barH / 2); ctx.fill()
+      rrect(ctx, barX, y, Math.max(barH, barW * opts.progress), barH, barH / 2); ctx.fill()
     }
-    if (opts.photoMarks?.length) drawProgressMarks(ctx, pad, y, w - 2 * pad, barH, sc, opts.photoMarks, opts.progress)
+    if (opts.photoMarks?.length) drawProgressMarks(ctx, barX, y, barW, barH, sc, opts.photoMarks, opts.progress)
     y += barH + Math.round(14 * sc)
   }
 }
@@ -1070,8 +1109,9 @@ export function drawPoiTag(
   const legY = -54 * sc * ease
   let bx = goRight ? ax + legX : ax - legX - boxW
   let by = ay + legY - boxH / 2
-  bx = Math.max(16 * sc, Math.min(bx, w - boxW - 16 * sc))
-  by = Math.max(16 * sc, Math.min(by, h - boxH - 16 * sc))
+  const ins = safeInsetsFor(w, h)
+  bx = Math.max(ins.left + 8 * sc, Math.min(bx, w - ins.right - boxW - 8 * sc))
+  by = Math.max(ins.top + 8 * sc, Math.min(by, h - ins.bottom - boxH - 8 * sc))
 
   ctx.save()
   try {
@@ -1599,7 +1639,8 @@ export function drawStoryCaption(
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
 
     // A capo su misura, al massimo tre righe
-    const maxW = w - 130 * sc
+    const ins = safeInsetsFor(w, h)
+    const maxW = w - Math.max(130 * sc, ins.left + ins.right)
     const words = text.split(/\s+/).filter(Boolean)
     const lines: string[] = []
     let cur = ''
@@ -1610,7 +1651,9 @@ export function drawStoryCaption(
     if (cur) lines.push(cur)
     const vis = lines.slice(0, 3)
     const lineH = 50 * sc
-    const baseY = h * 0.80 - (vis.length - 1) * lineH / 2
+    // Ancorata al margine sicuro inferiore, non a una frazione dell'altezza: su 9:16 h*0.80 cade
+    // in pieno nella fascia coperta da didascalia e pulsanti dell'app.
+    const baseY = (h - ins.bottom - 40 * sc) - (vis.length - 1) * lineH
 
     vis.forEach((l, i) => {
       // Le righe entrano una dopo l'altra: dà il ritmo della lettura invece di scaricare
@@ -1622,9 +1665,10 @@ export function drawStoryCaption(
       const y = baseY + i * lineH + (1 - ease) * 22 * sc
       ctx.globalAlpha = a
       ctx.strokeStyle = 'rgba(4,12,18,0.88)'; ctx.lineWidth = 9 * sc
-      ctx.strokeText(l, w / 2, y)
+      const cxSafe = (ins.left + (w - ins.right)) / 2
+      ctx.strokeText(l, cxSafe, y)
       ctx.fillStyle = 'rgba(255,255,255,0.96)'
-      ctx.fillText(l, w / 2, y)
+      ctx.fillText(l, cxSafe, y)
     })
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawStoryCaption error:', err) }
@@ -1687,4 +1731,80 @@ export function drawElevationMarker(
     ctx.fillText(label, bx + padX + iconW + 8 * sc, ay + 1 * sc)
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawElevationMarker error:', err) }
+}
+
+// ── Apertura: titolo + dato d'impatto sull'intro aerea ────────────────────────
+/** Sovrimpressione sull'intro, non una schermata a sé: l'intro dura comunque, e lasciarla muta
+ *  significa aprire il video con qualche secondo in cui non c'è niente da leggere — sui social è il
+ *  modo più efficace per farsi scorrere via. Qui il titolo e la cifra più forte entrano SOPRA il
+ *  volo aereo, senza rubargli un fotogramma.
+ *
+ *  `t` è l'avanzamento dell'intro (0..1): il testo entra subito e sfuma verso la fine, così quando
+ *  il percorso comincia lo schermo è già pulito. */
+export function drawOpeningTitle(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  title: string, headline: string | undefined, t: number,
+) {
+  try {
+  const k = clamp01(t)
+  const inT = Math.min(1, k / 0.22)
+  const outT = k > 0.72 ? (k - 0.72) / 0.28 : 0
+  const alpha = inT * (1 - outT)
+  if (alpha <= 0.01) return
+  const ease = 1 - Math.pow(1 - inT, 3)
+  const ins = safeInsetsFor(w, h)
+  const cx = (ins.left + (w - ins.right)) / 2
+  const maxW = w - Math.max(120 * sc, ins.left + ins.right)
+
+  ctx.save()
+  try {
+    ctx.globalAlpha = alpha
+    // Velo dal basso: dà contrasto al testo senza spegnere la mappa, che è il soggetto
+    const g = ctx.createLinearGradient(0, h * 0.34, 0, h)
+    g.addColorStop(0, 'rgba(4,12,18,0)'); g.addColorStop(0.6, 'rgba(4,12,18,0.55)'); g.addColorStop(1, 'rgba(4,12,18,0.86)')
+    ctx.fillStyle = g; ctx.fillRect(0, h * 0.34, w, h * 0.66)
+
+    // Blocco ancorato al margine sicuro inferiore, non al bordo
+    let y = h - ins.bottom - 40 * sc
+
+    if (headline) {
+      // La cifra più forte, grande: è il motivo per cui qualcuno smette di scorrere
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.lineJoin = 'round'
+      ctx.font = `900 ${Math.round(64 * sc)}px -apple-system,sans-serif`
+      let hl = headline.toUpperCase()
+      while (ctx.measureText(hl).width > maxW && hl.length > 4) hl = hl.slice(0, -4) + '…'
+      const hy = y - (1 - ease) * 26 * sc
+      ctx.strokeStyle = 'rgba(4,12,18,0.85)'; ctx.lineWidth = 10 * sc
+      ctx.strokeText(hl, cx, hy)
+      const hg = ctx.createLinearGradient(0, hy - 56 * sc, 0, hy)
+      hg.addColorStop(0, '#ffffff'); hg.addColorStop(1, '#f2cd9d')
+      ctx.fillStyle = hg
+      ctx.fillText(hl, cx, hy)
+      y -= 82 * sc
+    }
+
+    // Titolo del percorso, sopra la cifra: dice DOVE, che è la seconda domanda dopo "quanto"
+    const tEase = 1 - Math.pow(1 - clamp01((k - 0.06) / 0.22), 3)
+    ctx.globalAlpha = alpha * tEase
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
+    ctx.font = `700 ${Math.round(30 * sc)}px -apple-system,sans-serif`
+    let tt = title
+    while (ctx.measureText(tt).width > maxW && tt.length > 4) tt = tt.slice(0, -4) + '…'
+    const ty = y - (1 - tEase) * 18 * sc
+    ctx.strokeStyle = 'rgba(4,12,18,0.8)'; ctx.lineWidth = 7 * sc
+    ctx.strokeText(tt, cx, ty)
+    ctx.fillStyle = 'rgba(255,255,255,0.92)'
+    ctx.fillText(tt, cx, ty)
+
+    // Filetto d'accento: chiude il blocco e dà un movimento in più nei primi fotogrammi
+    const barT = clamp01((k - 0.12) / 0.3)
+    const barW = 120 * sc * (1 - Math.pow(1 - barT, 3))
+    if (barW > 1) {
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = '#e08d3c'
+      rrect(ctx, cx - barW / 2, ty - 52 * sc, barW, 5 * sc, 2.5 * sc); ctx.fill()
+    }
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawOpeningTitle error:', err) }
 }
