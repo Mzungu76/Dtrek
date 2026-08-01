@@ -75,6 +75,10 @@ export interface PoiPlanOptions {
   /** Entro questa distanza in avanzamento due protagonisti finiscono nella stessa scheda. */
   groupWindowP: number
   includeSensitive?: boolean
+  /** Finestre (in fotogrammi globali) in cui una scheda non si vedrebbe — tipicamente gli stacchi,
+   *  che coprono lo schermo con un pannello. Una scheda che ci finisce dentro viene spostata dopo:
+   *  programmarla lì significherebbe farla vivere e morire nascosta. */
+  blockedRanges?: { start: number; end: number }[]
   /** Solo i luoghi con un'immagine possono prendersi una scheda. Gli altri restano segnaposti:
    *  una scheda fatta di nome e icona ripete quello che il segnaposto sulla mappa dice già. */
   requireImage?: boolean
@@ -144,6 +148,7 @@ export function planPoiCards(pois: PoiOnRoute[], opts: PoiPlanOptions): PoiPlan 
   const {
     progressToFrame, cardFrames, minGapFrames, lastFrame,
     maxCards, minSpacingP, groupWindowP, includeSensitive = false, requireImage = false,
+    blockedRanges = [],
   } = opts
 
   const markers: PoiOnRoute[] = []
@@ -198,9 +203,16 @@ export function planPoiCards(pois: PoiOnRoute[], opts: PoiPlanOptions): PoiPlan 
   chosen.sort((a, b) => a.progress - b.progress)
   const cards: PoiCard[] = []
   let freeFrom = 0
+  const blocked = blockedRanges.slice().sort((a, b) => a.start - b.start)
   for (const c of chosen) {
     const wanted = progressToFrame(c.progress)
-    const start = Math.max(wanted, freeFrom)
+    let start = Math.max(wanted, freeFrom)
+    // Scavalca gli stacchi: le finestre sono disgiunte e ordinate, quindi il ciclo termina
+    for (;;) {
+      const hit = blocked.find(b => start < b.end && start + cardFrames > b.start)
+      if (!hit) break
+      start = hit.end
+    }
     if (start + cardFrames > lastFrame) break     // finito il percorso, niente code fuori tempo
     cards.push({
       key: `poi-${c.pois[0].id}`,
