@@ -6,6 +6,9 @@ import { apiFetch, isPermanentClientError } from './apiFetch'
 import type { BeautyScore } from './beautyScore'
 import type { CtsConfidence } from './trailScore'
 import type { WeatherAtHike } from './openmeteo'
+import type { GuideNotice } from './guideNotices'
+import type { PoiItem } from './overpass'
+import type { WikiPage } from './wikipedia'
 import { computeDEP } from './stats'
 import { downsamplePolyline } from './downsamplePolyline'
 
@@ -43,6 +46,18 @@ export interface StoredActivity extends TcxActivity {
   trailScoreComputedAt?: string
   depKm?: number
   weatherAtHike?: WeatherAtHike
+  // ── Guida del percorso, travasata dal piano al momento del salvataggio ─────
+  // Il testo della guida vive su planned_hikes, e quella riga viene cancellata quando il piano
+  // viene "consumato" in questa attività (lib/activitySave.ts). Questi campi ne conservano il
+  // contenuto qui, altrimenti andrebbe perso — vedi supabase/migrations/add_activity_guide_columns.sql.
+  // Assenti su tutte le attività salvate prima di questa colonna e su quelle mai pianificate
+  // (import GPX diretto): chi li legge deve trattarli come opzionali, non come garantiti.
+  guideText?: string
+  guideSubtitle?: string
+  guideNotices?: (GuideNotice | string)[]
+  /** Data di generazione della guida — gli avvisi sopra sono una fotografia del web a quella data. */
+  guideGeneratedAt?: string
+  poiWiki?: { poi: PoiItem; wiki: WikiPage }[]
   // Preferito nella galleria Resoconto — vedi components/routehub/BottomGallery.tsx (stella sulla
   // scheda chiusa) e app/resoconto/ResocontoHub.tsx (filtro "Preferiti"), stesso concetto già
   // esistente per planned_hikes (vedi lib/plannedStore.ts).

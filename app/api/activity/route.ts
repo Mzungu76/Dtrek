@@ -57,6 +57,12 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     iev:                  row.iev                      as number | null | undefined,
     updatedAt:            row.updated_at               as string | undefined,
     favorite:             row.favorite                 as boolean | undefined,
+    // Guida travasata dal piano al salvataggio — vedi supabase/migrations/add_activity_guide_columns.sql
+    guideText:            row.guide_text               as string | undefined,
+    guideSubtitle:        row.guide_subtitle           as string | undefined,
+    guideNotices:         row.guide_notices            as StoredActivity['guideNotices'] | undefined,
+    guideGeneratedAt:     row.guide_generated_at       as string | undefined,
+    poiWiki:              row.poi_wiki                 as StoredActivity['poiWiki'] | undefined,
   }
 }
 
@@ -98,6 +104,11 @@ function activityToRow(a: StoredActivity) {
     pause_time_seconds:           a.pauseTimeSeconds ?? null,
     iev:                          a.iev ?? null,
     favorite:                     a.favorite ?? false,
+    guide_text:                   a.guideText ?? null,
+    guide_subtitle:               a.guideSubtitle ?? null,
+    guide_notices:                a.guideNotices ?? null,
+    guide_generated_at:           a.guideGeneratedAt ?? null,
+    poi_wiki:                     a.poiWiki ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }

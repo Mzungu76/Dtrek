@@ -24,6 +24,8 @@ import {
 } from '@/lib/videoPhotoCarousel'
 import { planPoiCards, projectPoisOnRoute, activeCardAt } from '@/lib/videoPoiCards'
 import type { BeautyScore } from '@/lib/beautyScore'
+import type { WikiPage } from '@/lib/wikipedia'
+import type { GuideNotice } from '@/lib/guideNotices'
 import {
   coverRect, rrect, lerp, lerpAngle, distM, smoothArray, clamp01,
   hexToRgb, effortRgb, hrEffortAt, buildMiniRoute,
@@ -189,6 +191,14 @@ interface Props {
   dtmProfile?: TrailDtmProfile
   /** Punteggio TEI già calcolato (activity.linkedBeautyScore) — usato dalla modalità Illustrativo. */
   beautyScore?: BeautyScore
+  /** POI abbinati alla loro pagina Wikipedia (immagine + estratto). Solo i POI che hanno
+   *  un'immagine finiscono nelle schede del video: un nome e un'icona non raccontano niente che
+   *  il segnaposto sulla mappa non dica già. */
+  poiWiki?: { poi: PoiItem; wiki: WikiPage }[]
+  /** Guida del percorso conservata sull'attività (lib/activitySave.ts). Assente sulle escursioni
+   *  mai pianificate e su quelle salvate prima di quella colonna: la modalità Illustrativo deve
+   *  funzionare comunque, semplicemente senza didascalie né stacchi che dipendono dal testo. */
+  guide?: { text: string; notices?: (GuideNotice | string)[]; generatedAt?: string }
 }
 
 // ── Zoom sulla foto in sosta (anteprima DOM) ─────────────────────────────────────
@@ -248,7 +258,7 @@ function PhotoZoomOverlay({ photo, zoomT, stopT }: { photo: RoutePhoto | null; z
   )
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState, dtmProfile, beautyScore }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState, dtmProfile, beautyScore, poiWiki, guide }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
