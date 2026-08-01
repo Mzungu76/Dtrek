@@ -218,6 +218,38 @@ export function drawMapPin(
   } catch (err) { console.error('[dtrek] drawMapPin error:', err) }
 }
 
+/** Segnaposto di posizione da usare al posto del pin quando l'utente lo spegne: senza di esso non
+ *  si capisce più a che punto del percorso si è, perché la telecamera è sempre centrata e il
+ *  tracciato colorato finisce esattamente al centro. Pulsa lentamente col colore del percorso, così
+ *  si distingue dal tracciato pur essendone evidentemente la punta. `phase` 0..1 è ciclica. */
+export function drawPositionDot(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, sc: number, color: string, phase: number,
+) {
+  try {
+  // sin² invece di sin: resta più a lungo "acceso" e passa in fretta dal minimo, che a schermo si
+  // legge come un battito e non come una dissolvenza continua
+  const puls = Math.pow(Math.sin(clamp01(phase) * Math.PI * 2) * 0.5 + 0.5, 2)
+  ctx.save()
+  try {
+    // Alone che si espande e sfuma: dà la pulsazione senza far cambiare taglia al punto vero,
+    // che deve restare fermo perché è lui a indicare la posizione esatta
+    const haloR = (16 + 20 * puls) * sc
+    ctx.globalAlpha = 0.30 * (1 - puls)
+    ctx.fillStyle = color
+    ctx.beginPath(); ctx.arc(cx, cy, haloR, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 0.55 + 0.45 * puls
+    ctx.strokeStyle = color; ctx.lineWidth = 3 * sc
+    ctx.beginPath(); ctx.arc(cx, cy, 15 * sc, 0, Math.PI * 2); ctx.stroke()
+    ctx.globalAlpha = 1
+    ctx.fillStyle = 'white'
+    ctx.beginPath(); ctx.arc(cx, cy, 11 * sc, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = color
+    ctx.beginPath(); ctx.arc(cx, cy, 8 * sc, 0, Math.PI * 2); ctx.fill()
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawPositionDot error:', err) }
+}
+
 // ── Battito cardiaco sopra al pin (opzionale) ───────────────────────────────────
 // Un cuore che pulsa fluttuante sopra al pin (non attaccato — stile "status icon" da videogioco),
 // con il numero BPM corrente sopra di esso. Il periodo del battito è quello VERO (60/bpm secondi),
@@ -697,46 +729,35 @@ export function aspectFitCrop(imgW: number, imgH: number, targetA: number): { sx
 const POLAROID_PAD_FRAC = 0.05   // bordo crema su alto/lati, come frazione della larghezza della card
 const POLAROID_CAP_FRAC = 0.22   // striscia in basso per la didascalia, come frazione della larghezza
 
-export function drawStopPhotoZoom(
+export interface StopPhoto { img: HTMLImageElement; caption?: string; id: string }
+
+/** Sfalsamenti per gruppi di polaroid "sparpagliate sul tavolo", espressi in frazioni della
+ *  LARGHEZZA DELLA CARD (non dello schermo): così restano corretti qualunque sia la dimensione a
+ *  cui le card si aprono, e crescono insieme a loro durante l'apertura.
+ *
+ *  Fissi e scelti a mano invece che casuali: vanno abbastanza distanti da non coprirsi il centro a
+ *  vicenda — è lì che sta il soggetto della foto — e un posizionamento casuale ci riesce raramente. */
+const POLAROID_SCATTER: [number, number][][] = [
+  [[0, 0]],
+  [[-0.52, -0.06], [0.52, 0.06]],
+  [[-0.64, -0.08], [0.00, 0.10], [0.64, -0.05]],
+  [[-0.74, -0.12], [-0.25, 0.12], [0.25, -0.10], [0.74, 0.14]],
+]
+
+/** Una singola polaroid, già posizionata e ruotata dal chiamante. */
+function drawOnePolaroid(
   ctx: CanvasRenderingContext2D,
-  outW: number, outH: number, sc: number,
-  img: HTMLImageElement, caption: string | undefined, photoId: string,
-  zoomT: number, stopT: number,
+  cx: number, cy: number, cardW: number, rotRad: number, sc: number,
+  img: HTMLImageElement, caption: string | undefined, zoomT: number, showCaption: boolean,
 ) {
-  if (!(img.complete && img.naturalWidth > 0)) return
-  try {
-  const peakW = Math.min(outW * 0.82, (outH * 0.72) / (1 + POLAROID_CAP_FRAC))
-  const pinPx = Math.round(70 * sc)
-  const cardW = pinPx + (peakW - pinPx) * zoomT
   const cardH = cardW * (1 + POLAROID_CAP_FRAC)
   const pad = cardW * POLAROID_PAD_FRAC
   const photoSide = cardW - pad * 2
-  // Leggero respiro quando è aperta (non un fermo immagine assoluto) — una lenta deriva, stessa
-  // idea del Ken Burns già usato per la rivelazione a schermo intero dello stile Classico.
-  const breathe = zoomT > 0.995 ? Math.sin(stopT * Math.PI * 2.4) * 0.008 : 0
-  const cx = outW / 2 + outW * breathe, cy = outH / 2
   const bx = cx - cardW / 2, by = cy - cardH / 2
   const r = Math.max(2 * sc, 8 * sc * zoomT)
-  // Piccola rotazione finale (mai perfettamente ortogonale allo schermo), diversa per ogni foto ma
-  // sempre la stessa per la stessa foto — vedi polaroidRotationDeg. Non fissa dall'inizio: ruota
-  // MENTRE si apre (proporzionale a zoomT, che include già il leggero superamento elastico), come
-  // una polaroid "posata" che si assesta, invece di comparire già storta.
-  const rotRad = polaroidRotationDeg(photoId) * Math.PI / 180 * zoomT
-
-  // La mappa si scurisce leggermente dietro la card mentre si apre (effetto "riflettore") — la
-  // rende leggibile come una scelta deliberata, non un frame corrotto. Non ruotata: è a schermo intero.
-  if (zoomT > 0.02) {
-    ctx.fillStyle = `rgba(0,0,0,${Math.min(0.4, zoomT * 0.45)})`
-    ctx.fillRect(0, 0, outW, outH)
-  }
-
-  // Ogni ctx.save() qui sotto ha un ctx.restore() garantito da try/finally: lo stesso ctx viene
-  // riusato per l'intero video, quindi una pila save/restore sbilanciata per un'eccezione
-  // imprevista in un frame corromperebbe (clip/trasformazione residui) anche tutti i successivi.
   ctx.save()
   try {
     ctx.translate(cx, cy); ctx.rotate(rotRad); ctx.translate(-cx, -cy)
-
     // Ombra finta (nessuna sfocatura): un rettangolo pieno arretrato, dello stesso raggio, dietro la card.
     const shOff = 6 * sc * zoomT
     ctx.fillStyle = `rgba(0,0,0,${0.35 * zoomT})`
@@ -751,30 +772,79 @@ export function drawStopPhotoZoom(
     } finally { ctx.restore() }
 
     // Didascalia, nella cornice sotto la foto — solo quando c'è abbastanza spazio per leggerla.
-    if (caption && zoomT > 0.55) {
-      const capAlpha = Math.min(1, (zoomT - 0.55) / 0.25)
+    if (showCaption && caption && zoomT > 0.55) {
       ctx.save()
       try {
-        ctx.globalAlpha = capAlpha
+        ctx.globalAlpha = Math.min(1, (zoomT - 0.55) / 0.25)
         ctx.fillStyle = '#2c1a0e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
         const fontSz = Math.max(9, Math.round(cardW * 0.058))
         ctx.font = `italic ${fontSz}px Georgia,serif`
-        const maxTW = cardW - pad * 2.5
-        const words = caption.split(' ')
-        const lines: string[] = []
-        let cur = ''
-        for (const wd of words) {
-          const test = cur ? cur + ' ' + wd : wd
-          if (ctx.measureText(test).width > maxTW && cur) { lines.push(cur); cur = wd } else { cur = test }
-        }
-        if (cur) lines.push(cur)
-        const visLines = lines.slice(0, 2)
+        const lines = wrapLines(ctx, caption, cardW - pad * 2.5, 2)
         const lineH = fontSz * 1.35
         const capCenterY = by + pad + photoSide + (cardH - pad - (pad + photoSide)) / 2
-        visLines.forEach((l, i) => ctx.fillText(l, cx, capCenterY + (i - (visLines.length - 1) / 2) * lineH))
+        lines.forEach((l, i) => ctx.fillText(l, cx, capCenterY + (i - (lines.length - 1) / 2) * lineH))
       } finally { ctx.restore() }
     }
   } finally { ctx.restore() }
+}
+
+/** Sosta su una o più foto. Con più foto si aprono INSIEME, sparpagliate come polaroid posate su un
+ *  tavolo: foto scattate a pochi metri l'una dall'altra sono lo stesso momento, e mostrarle una
+ *  dopo l'altra darebbe tre interruzioni di fila dove ne basta una. */
+export function drawStopPhotoZoom(
+  ctx: CanvasRenderingContext2D,
+  outW: number, outH: number, sc: number,
+  photos: StopPhoto[], zoomT: number, stopT: number,
+) {
+  try {
+  const ready = photos.filter(ph => ph.img.complete && ph.img.naturalWidth > 0)
+  if (ready.length === 0) return
+  const shown = ready.slice(0, 4)
+  const extra = ready.length - shown.length
+  const n = shown.length
+
+  // Con più card la singola si stringe, altrimenti il gruppo esce dallo schermo
+  const spread = 1 - 0.18 * (n - 1)
+  const peakW = Math.min(outW * 0.82, (outH * 0.72) / (1 + POLAROID_CAP_FRAC)) * spread
+  const pinPx = Math.round(70 * sc)
+  const cardW = pinPx + (peakW - pinPx) * zoomT
+  // Leggero respiro quando è aperta (non un fermo immagine assoluto) — una lenta deriva, stessa
+  // idea del Ken Burns già usato per la rivelazione a schermo intero dello stile Classico.
+  const breathe = zoomT > 0.995 ? Math.sin(stopT * Math.PI * 2.4) * 0.008 : 0
+  const cx0 = outW / 2 + outW * breathe, cy0 = outH / 2
+
+  // La mappa si scurisce leggermente dietro le card mentre si aprono (effetto "riflettore") — le
+  // rende leggibili come una scelta deliberata, non un frame corrotto.
+  if (zoomT > 0.02) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.min(0.4, zoomT * 0.45)})`
+    ctx.fillRect(0, 0, outW, outH)
+  }
+
+  const scatter = POLAROID_SCATTER[n - 1]
+  shown.forEach((ph, i) => {
+    const [ox, oy] = scatter[i]
+    // Sfalsamento in unità di card: crescendo cardW con l'apertura, partono sovrapposte sul pin e
+    // si distribuiscono da sole mentre si aprono, senza bisogno di interpolare a parte.
+    const cx = cx0 + ox * cardW
+    const cy = cy0 + oy * cardW
+    // Rotazione propria della foto (sempre la stessa per la stessa foto) più un ventaglio di gruppo
+    const fan = n > 1 ? (i - (n - 1) / 2) * 3.5 : 0
+    const rotRad = (polaroidRotationDeg(ph.id) + fan) * Math.PI / 180 * zoomT
+    // Con tre o più card la didascalia diventa illeggibile: resta la cornice, che basta a farle
+    // leggere come polaroid
+    drawOnePolaroid(ctx, cx, cy, cardW, rotRad, sc, ph.img, ph.caption, zoomT, n <= 2)
+  })
+
+  if (extra > 0 && zoomT > 0.6) {
+    ctx.save()
+    try {
+      ctx.globalAlpha = Math.min(1, (zoomT - 0.6) / 0.25)
+      ctx.fillStyle = 'rgba(255,255,255,0.75)'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.font = `700 ${Math.round(20 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(`+${extra}`, cx0, cy0 + peakW * 0.68)
+    } finally { ctx.restore() }
+  }
   } catch (err) { console.error('[dtrek] drawStopPhotoZoom error:', err) }
 }
 
@@ -1323,8 +1393,8 @@ function beatFrame(
   const HEAD = 74 * sc
   const top = Math.max(h * 0.12, (h - (HEAD + contentH)) / 2)
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillStyle = 'rgba(255,255,255,0.45)'
-  ctx.font = `800 ${Math.round(17 * sc)}px -apple-system,sans-serif`
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'
+  ctx.font = `800 ${Math.round(24 * sc)}px -apple-system,sans-serif`
   ctx.fillText(title.toUpperCase(), w / 2, top)
   ctx.fillStyle = '#e08d3c'
   rrect(ctx, w / 2 - 22 * sc, top + 20 * sc, 44 * sc, 3 * sc, 1.5 * sc); ctx.fill()
@@ -1333,7 +1403,7 @@ function beatFrame(
 
 /** Altezza di una griglia di statistiche a `cols` colonne. */
 function statsHeight(n: number, sc: number, cols = 2): number {
-  return Math.ceil(n / cols) * 104 * sc
+  return Math.ceil(n / cols) * 132 * sc
 }
 
 /** Voci grandi con etichetta sotto, in griglia — entrano a scalare. */
@@ -1352,11 +1422,11 @@ function beatStats(
     const cy = yTop + Math.floor(i / cols) * 104 * sc + (1 - ease) * 20 * sc
     ctx.globalAlpha = alpha * ease
     ctx.fillStyle = 'white'
-    ctx.font = `900 ${Math.round(42 * sc)}px -apple-system,sans-serif`
+    ctx.font = `900 ${Math.round(58 * sc)}px -apple-system,sans-serif`
     ctx.fillText(r.v, cx, cy)
-    ctx.fillStyle = 'rgba(255,255,255,0.45)'
-    ctx.font = `700 ${Math.round(14 * sc)}px -apple-system,sans-serif`
-    ctx.fillText(r.k.toUpperCase(), cx, cy + 32 * sc)
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'
+    ctx.font = `700 ${Math.round(19 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(r.k.toUpperCase(), cx, cy + 42 * sc)
   })
   ctx.globalAlpha = alpha
 }
@@ -1424,18 +1494,18 @@ export function drawNatureBeat(
   try {
   ctx.save()
   try {
-    const contentH = 170 * sc + (data.extra?.length ? statsHeight(data.extra.length, sc) : 0)
+    const contentH = 240 * sc + (data.extra?.length ? statsHeight(data.extra.length, sc) : 0)
     const f = beatFrame(ctx, w, h, sc, 'La natura intorno', t, contentH)
     if (!f) return
     const k = clamp01(t)
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     ctx.fillStyle = '#8cc894'
-    ctx.font = `900 ${Math.round(40 * sc)}px -apple-system,sans-serif`
+    ctx.font = `900 ${Math.round(52 * sc)}px -apple-system,sans-serif`
     ctx.fillText(data.belt, w / 2, f.y)
-    ctx.fillStyle = 'rgba(255,255,255,0.72)'
-    ctx.font = `500 ${Math.round(21 * sc)}px -apple-system,sans-serif`
-    wrapCentered(ctx, data.description, w / 2, f.y + 62 * sc, w - 150 * sc, 32 * sc, 4, clamp01((k - 0.14) / 0.3))
-    if (data.extra?.length) beatStats(ctx, w, sc, f.y + 230 * sc, f.alpha, k, data.extra)
+    ctx.fillStyle = 'rgba(255,255,255,0.78)'
+    ctx.font = `500 ${Math.round(27 * sc)}px -apple-system,sans-serif`
+    wrapCentered(ctx, data.description, w / 2, f.y + 76 * sc, w - 130 * sc, 40 * sc, 4, clamp01((k - 0.14) / 0.3))
+    if (data.extra?.length) beatStats(ctx, w, sc, f.y + 290 * sc, f.alpha, k, data.extra)
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawNatureBeat error:', err) }
 }
@@ -1455,12 +1525,12 @@ export function drawNoticesBeat(
     const bx = 62 * sc, bw = w - 124 * sc
     // Le altezze si misurano PRIMA di disegnare il fondale: servono a beatFrame per centrare il
     // blocco, e dipendono da quante righe occupa ogni avviso una volta mandato a capo.
-    ctx.font = `500 ${Math.round(20 * sc)}px -apple-system,sans-serif`
+    ctx.font = `500 ${Math.round(26 * sc)}px -apple-system,sans-serif`
     const items = data.notices.slice(0, 3).map(n => {
-      const lines = wrapLines(ctx, n.text, bw - 76 * sc, 3)
-      return { n, lines, boxH: Math.max(66 * sc, lines.length * 28 * sc + 38 * sc) }
+      const lines = wrapLines(ctx, n.text, bw - 92 * sc, 3)
+      return { n, lines, boxH: Math.max(84 * sc, lines.length * 36 * sc + 46 * sc) }
     })
-    const contentH = items.reduce((sum, it) => sum + it.boxH + 16 * sc, 0) + (data.verifiedOn ? 46 * sc : 0)
+    const contentH = items.reduce((sum, it) => sum + it.boxH + 18 * sc, 0) + (data.verifiedOn ? 56 * sc : 0)
     const f = beatFrame(ctx, w, h, sc, 'Da sapere prima di andare', t, contentH)
     if (!f) return
     let y = f.y
@@ -1471,29 +1541,29 @@ export function drawNoticesBeat(
       ctx.globalAlpha = f.alpha * ease
       const col = COL[n.severity] ?? COL.info
       ctx.textAlign = 'left'; ctx.textBaseline = 'top'
-      ctx.font = `500 ${Math.round(20 * sc)}px -apple-system,sans-serif`
+      ctx.font = `500 ${Math.round(26 * sc)}px -apple-system,sans-serif`
       const by = y + (1 - ease) * 18 * sc
       ctx.fillStyle = 'rgba(255,255,255,0.05)'
       rrect(ctx, bx, by, bw, boxH, 16 * sc); ctx.fill()
       ctx.fillStyle = col
       rrect(ctx, bx, by, 6 * sc, boxH, 3 * sc); ctx.fill()
       ctx.fillStyle = col
-      ctx.beginPath(); ctx.arc(bx + 40 * sc, by + 32 * sc, 15 * sc, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(bx + 46 * sc, by + 40 * sc, 19 * sc, 0, Math.PI * 2); ctx.fill()
       ctx.fillStyle = '#06111a'; ctx.textAlign = 'center'
-      ctx.font = `900 ${Math.round(19 * sc)}px -apple-system,sans-serif`
-      ctx.fillText(ICON[n.severity] ?? 'i', bx + 40 * sc, by + 22 * sc)
+      ctx.font = `900 ${Math.round(24 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(ICON[n.severity] ?? 'i', bx + 46 * sc, by + 29 * sc)
       ctx.textAlign = 'left'
-      ctx.fillStyle = 'rgba(255,255,255,0.9)'
-      ctx.font = `500 ${Math.round(20 * sc)}px -apple-system,sans-serif`
-      lines.forEach((l, li) => ctx.fillText(l, bx + 68 * sc, by + 18 * sc + li * 28 * sc))
+      ctx.fillStyle = 'rgba(255,255,255,0.92)'
+      ctx.font = `500 ${Math.round(26 * sc)}px -apple-system,sans-serif`
+      lines.forEach((l, li) => ctx.fillText(l, bx + 84 * sc, by + 22 * sc + li * 36 * sc))
       y += boxH + 16 * sc
     })
     if (data.verifiedOn) {
       ctx.globalAlpha = f.alpha * clamp01((k - 0.4) / 0.25)
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillStyle = 'rgba(255,255,255,0.42)'
-      ctx.font = `600 ${Math.round(15 * sc)}px -apple-system,sans-serif`
-      ctx.fillText(`Verificato il ${data.verifiedOn} — potrebbe essere cambiato`, w / 2, y + 18 * sc)
+      ctx.font = `600 ${Math.round(19 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(`Verificato il ${data.verifiedOn} — potrebbe essere cambiato`, w / 2, y + 24 * sc)
     }
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawNoticesBeat error:', err) }

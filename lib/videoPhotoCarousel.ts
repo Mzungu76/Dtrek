@@ -11,6 +11,36 @@
 
 export interface CarouselPhotoTiming { id: string; progress: number; distanceM: number }
 
+/** Foto scattate a poca distanza l'una dall'altra, mostrate in un'unica sosta. */
+export interface PhotoGroup { ids: string[]; progress: number; distanceM: number }
+
+/**
+ * Raggruppa le foto separate da meno di `minGapM` metri di percorso.
+ *
+ * Chi carica dieci foto dello stesso punto panoramico si ritroverebbe altrimenti dieci soste di
+ * fila: il video si spezzetta e il ritmo sparisce. Foto scattate a pochi metri l'una dall'altra
+ * sono lo stesso momento, e vanno mostrate insieme (come polaroid posate sul tavolo) invece che in
+ * sequenza. La sosta del gruppo si colloca alla distanza MEDIA delle sue foto, così resta dov'era
+ * il momento e non salta alla prima o all'ultima.
+ */
+export function groupPhotoTimings(photos: CarouselPhotoTiming[], minGapM: number): PhotoGroup[] {
+  if (photos.length === 0) return []
+  const sorted = [...photos].sort((a, b) => a.distanceM - b.distanceM)
+  const groups: CarouselPhotoTiming[][] = [[sorted[0]]]
+  for (let i = 1; i < sorted.length; i++) {
+    const last = groups[groups.length - 1]
+    // Confronto con l'ULTIMA del gruppo, non con la prima: una fila di foto distanziate ognuna
+    // meno del minimo è comunque un'unica sequenza continua, e va tenuta insieme.
+    if (sorted[i].distanceM - last[last.length - 1].distanceM <= minGapM) last.push(sorted[i])
+    else groups.push([sorted[i]])
+  }
+  return groups.map(g => ({
+    ids: g.map(x => x.id),
+    progress: g.reduce((a, x) => a + x.progress, 0) / g.length,
+    distanceM: g.reduce((a, x) => a + x.distanceM, 0) / g.length,
+  }))
+}
+
 // Frazione dell'altezza riservata in alto a grafici/testo (titolo, statistiche, barra di
 // avanzamento, profilo altimetrico, grafici FC/velocità) — sovrapposta alla mappa con una leggera
 // trasparenza, non una fascia dedicata separata: la mappa resta a schermo intero.
@@ -88,7 +118,7 @@ export interface JourneyTables {
  *  algoritmo applicato in modo incrementale, dall'anteprima live (vedi tick() in RouteMap3D). */
 export function buildJourneyTables(
   fps: number, cumDist: Float64Array, totalDistanceM: number,
-  sortedPhotos: CarouselPhotoTiming[], stopSeconds: number, cruiseMps: number,
+  sortedPhotos: { progress: number; distanceM: number }[], stopSeconds: number, cruiseMps: number,
 ): JourneyTables {
   const stopFrames = Math.max(1, Math.round(fps * stopSeconds))
   const safeCruise = Math.max(0.2, cruiseMps)

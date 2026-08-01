@@ -65,20 +65,70 @@ export const DEFAULT_INTERLUDES: InterludeSetting[] = [
  */
 export function planInterludes(
   settings: InterludeSetting[],
-  opts: { fps: number; routeFrames: number; available: (kind: InterludeKind) => boolean },
+  opts: {
+    fps: number
+    routeFrames: number
+    available: (kind: InterludeKind) => boolean
+    /** Fotogrammi di percorso in cui è già prevista una foto (sosta o rivelazione). Uno stacco che
+     *  ci cade sopra viene spostato — vedi `breathFrames`. */
+    photoFrames?: { start: number; end: number }[]
+    /** Respiro fra la fine di una foto e l'inizio di uno stacco. Attaccarlo subito dopo darebbe
+     *  comunque due interruzioni di fila: chi guarda ha appena smesso di leggere una polaroid e si
+     *  ritrova un pannello. Qualche secondo di percorso in mezzo rimette il ritmo a posto. */
+    breathFrames?: number
+  },
 ): PlannedInterlude[] {
-  const { fps, routeFrames, available } = opts
-  return settings
-    .filter(s => s.enabled && available(s.kind) && s.seconds > 0)
-    .slice()
-    .sort((a, b) => a.atP - b.atP)
-    .map(s => ({
-      kind: s.kind,
-      atP: s.atP,
-      frames: Math.max(1, Math.round(s.seconds * fps)),
-      triggerRouteFrame: Math.round(Math.min(0.995, Math.max(0, s.atP)) * routeFrames),
-    }))
+  const { fps, routeFrames, available, photoFrames = [], breathFrames = Math.round(fps * 4) } = opts
+
+  // Zone off-limits: le foto più il "respiro" DOPO di esse. Il respiro sta solo a valle perché è lì
+  // che serve — si esce da una polaroid e non si deve incontrare subito un pannello — e perché
+  // metterlo anche a monte raddoppierebbe lo spazio consumato, arrivando a non lasciare più posto
+  // a nessuno stacco su un percorso con parecchie foto.
+  const withBreath = (f: { start: number; end: number }) => ({ start: f.start, end: f.end + breathFrames })
+  const placed: { start: number; end: number }[] = []
+
+  /** Primo intervallo libero abbastanza capiente, il più vicino possibile alla posizione chiesta. */
+  const findSlot = (want: number, frames: number, blocked: { start: number; end: number }[]) => {
+    const sorted = blocked.slice().sort((x, y) => x.start - y.start)
+    const gaps: { start: number; end: number }[] = []
+    let cursor = 0
+    for (const bz of sorted) {
+      if (bz.start > cursor) gaps.push({ start: cursor, end: Math.min(bz.start, routeFrames) })
+      cursor = Math.max(cursor, bz.end)
+    }
+    if (cursor < routeFrames) gaps.push({ start: cursor, end: routeFrames })
+    let best: { at: number; dist: number } | null = null
+    for (const g of gaps) {
+      if (g.end - g.start < frames) continue
+      const at = Math.min(Math.max(want, g.start), g.end - frames)
+      const dist = Math.abs(at - want)
+      if (!best || dist < best.dist) best = { at, dist }
+    }
+    return best?.at ?? null
+  }
+
+  const out: PlannedInterlude[] = []
+  for (const st of settings.filter(x => x.enabled && available(x.kind) && x.seconds > 0).sort((a2, b2) => a2.atP - b2.atP)) {
+    const frames = Math.max(1, Math.round(st.seconds * fps))
+    const want = Math.round(clamp01(st.atP) * routeFrames)
+
+    // Cercare un intervallo libero è più affidabile che spingere in avanti finché si trova posto:
+    // la spinta, arrivata in fondo al percorso, andava ritagliata per rientrare — e il ritaglio
+    // rimetteva lo stacco esattamente sopra la foto che stava cercando di evitare.
+    // Primo tentativo col respiro; se il percorso è troppo affollato di foto si ripiega sul
+    // rispetto della sola foto, che resta il vincolo vero — meglio uno stacco attaccato a una
+    // polaroid che uno stacco che l'utente ha chiesto e non compare.
+    const at = findSlot(want, frames, [...photoFrames.map(withBreath), ...placed])
+             ?? findSlot(want, frames, [...photoFrames, ...placed])
+    if (at == null) continue   // davvero nessuno spazio: saltarlo è meglio che coprire una foto
+
+    placed.push({ start: at, end: at + frames })
+    out.push({ kind: st.kind, atP: at / Math.max(1, routeFrames), frames, triggerRouteFrame: at })
+  }
+  return out.sort((a2, b2) => a2.triggerRouteFrame - b2.triggerRouteFrame)
 }
+
+const clamp01 = (v: number) => Math.max(0, Math.min(0.995, v))
 
 /** Fotogrammi totali aggiunti al video dagli stacchi. */
 export function interludeTotalFrames(planned: PlannedInterlude[]): number {
