@@ -24,7 +24,7 @@ import {
 } from '@/lib/videoPhotoCarousel'
 import { planPoiCards, projectPoisOnRoute, activeCardAt } from '@/lib/videoPoiCards'
 import {
-  planInterludes, interludeTotalFrames, DEFAULT_INTERLUDES,
+  planInterludes, interludeTotalFrames, DEFAULT_INTERLUDES, INTERLUDE_LABEL,
   type InterludeKind, type InterludeSetting, type PlannedInterlude,
 } from '@/lib/videoInterludes'
 import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
@@ -3333,6 +3333,110 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   </div>
                 )}
 
+                {videoMode==='illustrativo'&&(
+                  <div>
+                    <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">STACCHI</p>
+                    <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                      Il volo si ferma e un pannello resta a schermo il tempo di essere letto. Sposta il cursore per decidere a che punto del percorso cade.
+                    </p>
+                    {videoInterludes.map((iv, idx) => {
+                      const unavailable =
+                        (iv.kind==='tei'    && !beautyScore?.categories?.length) ||
+                        (iv.kind==='avvisi' && normalizeGuideNotices(guide?.notices).length===0) ||
+                        (iv.kind==='luoghi' && (pois?.length ?? 0)===0)
+                      const patch = (change: Partial<InterludeSetting>) =>
+                        setVideoInterludes(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
+                      return (
+                        <div key={iv.kind} className={`mb-2.5 ${unavailable?'opacity-40':''}`}>
+                          <label className={`flex items-center gap-2 ${unavailable?'':'cursor-pointer'}`}>
+                            <input type="checkbox" checked={iv.enabled && !unavailable} disabled={unavailable}
+                              onChange={e=>patch({enabled:e.target.checked})} className="w-4 h-4 accent-forest-500"/>
+                            <span className="text-white text-xs font-semibold">{INTERLUDE_LABEL[iv.kind]}</span>
+                            {unavailable&&<span className="text-white/35 text-[10px]">— dati non disponibili</span>}
+                          </label>
+                          {iv.enabled&&!unavailable&&(
+                            <div className="pl-6 mt-1.5 space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-white/45 text-[10px] w-14 shrink-0">durata</span>
+                                <input type="range" min={3} max={8} step={0.5} value={iv.seconds}
+                                  onChange={e=>patch({seconds:+e.target.value})}
+                                  className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
+                                <span className="text-white/70 text-[10px] font-bold w-8 text-right">{iv.seconds}s</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-white/45 text-[10px] w-14 shrink-0">quando</span>
+                                <input type="range" min={5} max={95} step={1} value={Math.round(iv.atP*100)}
+                                  onChange={e=>patch({atP:+e.target.value/100})}
+                                  className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
+                                <span className="text-white/70 text-[10px] font-bold w-8 text-right">{Math.round(iv.atP*100)}%</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {(() => {
+                      // Su un percorso corto tre pannelli da cinque secondi diventano metà del video:
+                      // meglio dirlo qui che scoprirlo dopo aver aspettato la generazione.
+                      const secs = videoInterludes.filter(i=>i.enabled).reduce((a,i)=>a+i.seconds,0)
+                      if (secs > videoDuration * 0.5) return (
+                        <p className="text-terra-300/85 text-[11px] mt-1 leading-relaxed">
+                          {secs}s di pannelli fermi su ~{videoDuration}s di percorso: il video rischia di essere più fermo che in movimento.
+                        </p>
+                      )
+                      return null
+                    })()}
+                  </div>
+                )}
+
+                {videoMode==='illustrativo'&&(
+                  <div>
+                    <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">DIDASCALIE DALLA GUIDA</p>
+                    {videoCaptions.length===0?(
+                      <p className="text-white/35 text-[11px] leading-relaxed">
+                        {guide?.text
+                          ? 'Nella guida non ci sono frasi abbastanza brevi da stare a schermo.'
+                          : 'Questa escursione non ha una guida: le didascalie sono disponibili solo sui percorsi che ne avevano una.'}
+                      </p>
+                    ):(<>
+                      <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                        Frasi prese dalla guida. <span className="text-white/60">Rileggile prima di pubblicare</span>: le ha scritte l&apos;AI, e finiscono in un video che poi gira.
+                      </p>
+                      {videoCaptions.map((c, idx) => {
+                        const patch = (change: Partial<CaptionCandidate>) =>
+                          setVideoCaptions(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
+                        return (
+                          <div key={c.id} className="mb-2.5">
+                            <label className="flex items-start gap-2 cursor-pointer mb-1">
+                              <input type="checkbox" checked={c.enabled}
+                                onChange={e=>patch({enabled:e.target.checked})} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                              <span className="text-white/45 text-[10px] font-semibold uppercase tracking-wider">
+                                {c.source==='il_percorso'?'Il percorso':c.source==='luoghi'?'Luoghi':c.source==='natura'?'Natura':'Guida'}
+                              </span>
+                            </label>
+                            {c.enabled&&(
+                              <div className="pl-6">
+                                <textarea
+                                  value={c.text} rows={2} maxLength={110}
+                                  onChange={e=>patch({text:e.target.value})}
+                                  className="w-full bg-white/7 rounded-xl px-3 py-2 text-white text-xs font-medium outline-none focus:bg-white/10 border border-transparent focus:border-white/20 resize-none"
+                                />
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-white/45 text-[10px] w-14 shrink-0">quando</span>
+                                  <input type="range" min={5} max={95} step={1} value={Math.round(c.atP*100)}
+                                    onChange={e=>patch({atP:+e.target.value/100})}
+                                    className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
+                                  <span className="text-white/70 text-[10px] font-bold w-8 text-right">{Math.round(c.atP*100)}%</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </>)}
+                  </div>
+                )}
+
                 <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">MOMENTI SPECIALI</p>
                   <label className="flex items-center gap-2 mb-2 cursor-pointer">
@@ -3387,6 +3491,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 const over = est > 60
                 const effects = [
                   !videoShowUserPin&&'Senza pin utente',
+                  videoMode==='illustrativo'&&videoPoiRequireImage&&'Solo luoghi con foto',
                   videoHeartEffectEnabled&&'Cuore 3D + BPM',
                   videoPinEffortColorEnabled&&'Pin dalla fatica',
                   videoTrailEnabled&&'Scia',
@@ -3407,6 +3512,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   ['Apertura', videoHookFastIntro?'intro rapida':'intro estesa'],
                   ['Durata stimata', `~${est}s`],
                 ]
+                if (videoMode==='illustrativo') {
+                  const onBeats = videoInterludes.filter(i=>i.enabled)
+                  rows.splice(4, 0,
+                    ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
+                    ['Luoghi con foto', `${(poiWiki ?? []).filter(e=>!!e.wiki.thumbnail).length}`],
+                    ['Didascalie', `${videoCaptions.filter(c=>c.enabled&&c.text.trim()).length}`],
+                  )
+                }
                 return (<>
                   <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
                     {rows.map(([k,v],i)=>(
