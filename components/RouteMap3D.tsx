@@ -23,12 +23,15 @@ import {
   stopPhotoZoomAt, polaroidRotationDeg, hyperlapseIntensityAt, TOP_BAND_FRACTION, type CarouselPhotoTiming,
 } from '@/lib/videoPhotoCarousel'
 import { suggestStatHookText, suggestCuriosityHookText } from '@/lib/videoHook'
+import { planPoiCards, projectPoisOnRoute, activeCardAt } from '@/lib/videoPoiCards'
+import type { BeautyScore } from '@/lib/beautyScore'
 import {
   coverRect, rrect, lerp, lerpAngle, distM, smoothArray, clamp01,
   hexToRgb, effortRgb, hrEffortAt, buildMiniRoute,
   drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone, drawHookText,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
   drawStopPhotoZoom, drawHUD, drawTopBand, drawVideoElevProfile, type GraphData,
+  drawPoiCard, drawTeiPanel, drawIdentikit,
 } from '@/lib/videoOverlays'
 
 const SPEEDS = [
@@ -185,6 +188,8 @@ interface Props {
   pois?: PoiItem[]
   initialVideoState?: 'idle' | 'config'
   dtmProfile?: TrailDtmProfile
+  /** Punteggio TEI già calcolato (activity.linkedBeautyScore) — usato dalla modalità Illustrativo. */
+  beautyScore?: BeautyScore
 }
 
 // ── Zoom sulla foto in sosta (anteprima DOM) ─────────────────────────────────────
@@ -244,7 +249,7 @@ function PhotoZoomOverlay({ photo, zoomT, stopT }: { photo: RoutePhoto | null; z
   )
 }
 
-export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState, dtmProfile }: Props) {
+export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, plannedTrackPoints, activityId, distanceMeters: distanceProp, elevationGain: elevGainProp, pois, initialVideoState, dtmProfile, beautyScore }: Props) {
   const containerRef   = useRef<HTMLDivElement>(null)
   const mapRef         = useRef<MLMap | null>(null)
   const markerRef      = useRef<Marker | null>(null)
@@ -365,6 +370,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // accesi con il pin spento significherebbe un cuore che pulsa sopra il vuoto. Vedi
   // setShowUserPin più sotto, che li azzera in un colpo solo.
   const [videoShowUserPin, setVideoShowUserPin] = useState(true)
+  // Modalità del video. "ricordo" = il filmato della TUA uscita (il pin, la fatica, le tue foto).
+  // "illustrativo" = il percorso che si presenta: niente pin, niente dati personali, in primo piano
+  // i luoghi e i punteggi oggettivi. Cambia il soggetto, quindi cambia anche cosa ha senso mostrare.
+  const [videoMode, setVideoMode] = useState<'ricordo'|'illustrativo'>('ricordo')
+  // Anche i luoghi fragili (grotte, siti archeologici, rovine, sorgenti) nelle schede POI. Spento di
+  // proposito: un video illustrativo è fatto per far arrivare gente, ed è così che certi posti si
+  // rovinano. Restano comunque come segnaposto sulla mappa, solo senza nome a schermo.
+  const [videoPoiIncludeSensitive, setVideoPoiIncludeSensitive] = useState(false)
   // Gettone 3D a forma di cuore che pulsa al ritmo vero della FC, con i BPM correnti sopra —
   // entrambi gli stili video, richiede dati di frequenza cardiaca.
   const [videoHeartEffectEnabled, setVideoHeartEffectEnabled] = useState(false)
@@ -1550,6 +1563,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       ? Math.round(TARGET_FPS * Math.max(1.1, videoDuration * 0.05))
       : Math.round(TARGET_FPS * Math.max(2, videoDuration * 0.08))
     const isCarousel = videoPhotoStyle === 'carousel'
+    // In modalità Illustrativo il soggetto è il percorso: niente pin utente, niente dati corporei,
+    // e i POI diventano protagonisti invece che decorazione.
+    const isIllustrativo = videoMode === 'illustrativo'
     // La mappa resta sempre a schermo intero (mai ritagliata) — titolo/statistiche/grafici in alto
     // (drawTopBand) e la foto in sosta (drawStopPhotoZoom) le si sovrappongono, non la restringono.
     const topBandH = isCarousel ? Math.round(outH * TOP_BAND_FRACTION) : 0
@@ -1713,6 +1729,54 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       // preventing a small center jump at the follow→outro transition
       return {p: Math.min(1, routeFrame / Math.max(1, ROUTE_FRAMES - 1)), followFrame: routeFrame}
     }
+
+    // ── Modalità "Illustrativo": pianificazione delle schede POI ────────────────
+    // Il quando di ogni scheda dipende da frameToState (le pause foto e le soste del carosello
+    // spostano il fotogramma in cui la telecamera passa su un punto), quindi si costruisce una
+    // tabella avanzamento→fotogramma percorrendo una volta sola la fase di percorso, invece di
+    // ricavarla con una formula che dovrebbe replicare quelle stesse pause.
+    // Le componenti TEI arrivano già pronte in linkedBeautyScore (vedi teiToBeautyScore in
+    // lib/tei.ts): le cinque V_* su scala 0-10, e f_antr come frazione di penalità.
+    const teiView = (() => {
+      if (!isIllustrativo || !beautyScore?.categories?.length) return null
+      const parts = beautyScore.categories
+        .filter(c => c.key.startsWith('v_'))
+        .map(c => ({ label: c.label.replace(/^V\.\s*/, ''), value: c.score / 10 }))
+      if (parts.length === 0) return null
+      const antr = beautyScore.categories.find(c => c.key === 'f_antr')
+      return {
+        score: beautyScore.overall,
+        label: beautyScore.gradeLabel,
+        color: beautyScore.color,
+        parts,
+        penalty: antr ? { label: 'Antropico', value: antr.score } : undefined,
+      }
+    })()
+
+    const poiPlan = (() => {
+      if (!isIllustrativo || !pois?.length) return null
+      const frameOfP: number[] = []
+      for (let f = followBase; f < TOTAL_FRAMES; f++) {
+        const st = frameToState(f)
+        if (st.outroP !== undefined) break
+        if (st.followFrame === undefined) continue
+        const bucket = Math.min(999, Math.max(0, Math.round(st.p * 999)))
+        if (frameOfP[bucket] === undefined) frameOfP[bucket] = f
+      }
+      let last = followBase
+      for (let i = 0; i < 1000; i++) { if (frameOfP[i] === undefined) frameOfP[i] = last; else last = frameOfP[i] }
+      const routeLatLon = pts.filter(q => q.lat != null && q.lon != null).map(q => ({ lat: q.lat!, lon: q.lon! }))
+      return planPoiCards(projectPoisOnRoute(pois, routeLatLon), {
+        progressToFrame: (p) => frameOfP[Math.min(999, Math.max(0, Math.round(p * 999)))],
+        cardFrames:   Math.round(TARGET_FPS * 2.6),
+        minGapFrames: Math.round(TARGET_FPS * 0.7),
+        lastFrame:    followBase + ROUTE_FRAMES,
+        maxCards:     10,
+        minSpacingP:  0.055,
+        groupWindowP: 0.022,
+        includeSensitive: videoPoiIncludeSensitive,
+      })
+    })()
 
     setRenderTotal(RENDER_END_FRAME - RENDER_START_FRAME); setRenderFrame(0); frameCountRef.current=RENDER_START_FRAME; renderAbortRef.current=false
     lastIconOpacityRef.current.clear()
@@ -1987,8 +2051,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (videoArrivalStarsEnabled && outroP < STAR_BURST_WINDOW) {
             drawArrivalStars(ctx, outW/2, outH/2, outW/1080, outroP / STAR_BURST_WINDOW)
           }
+          // Pannello TEI (modalità Illustrativo): il "vale la pena?" occupa la prima parte del
+          // finale, prima che la schermata di chiusura copra tutto. Il punteggio e le componenti
+          // arrivano da activity.linkedBeautyScore (teiToBeautyScore, lib/tei.ts).
+          const TEI_WINDOW = 0.42
+          if (isIllustrativo && teiView && outroP < TEI_WINDOW) {
+            drawTeiPanel(ctx, outW, outH, sc2, teiView, outroP / TEI_WINDOW)
+          }
+
           // End card fades in during outro
-          const FADE_START = 0.35
+          const FADE_START = isIllustrativo && teiView ? 0.52 : 0.35
           if (outroP > FADE_START) {
             const fa = Math.pow((outroP - FADE_START) / (1 - FADE_START), 1.2)
             if (fa < 0.82) {
@@ -2169,6 +2241,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           heartPhaseRef.current = (heartPhaseRef.current + (bpmNow / 60) / TARGET_FPS) % 1
         }
 
+        // Carta d'identità del percorso, sopra l'intro aereo (modalità Illustrativo): solo numeri
+        // oggettivi, quelli veri per chiunque lo cammini. Niente CTS — è tarato sulla persona e
+        // descrive chi cammina, non il sentiero.
+        if (isIllustrativo && introP !== undefined) {
+          drawIdentikit(ctx, outW, outH, sc2, displayTitle, [
+            { k: 'distanza',  v: `${totalKm.toFixed(1)} km` },
+            { k: 'dislivello', v: `+${elevGain} m` },
+            { k: 'quota max', v: `${Math.round(Math.max(...altitudeSeries))} m` },
+            { k: 'luoghi',    v: `${poiPlan ? poiPlan.cards.length + poiPlan.markers.length : 0}` },
+          ], introP)
+        }
+
         // Pendenza normalizzata nel punto corrente (per l'ombra che si allunga in salita): differenza
         // di quota su una finestra corta della serie già ricampionata, ±12 m di dislivello = ±1.
         const slopeNow = (videoSlopeShadowEnabled && altitudeSeries.length > 2)
@@ -2221,6 +2305,27 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             if (el >= 0 && el < MILESTONE_FRAMES) {
               drawRouteMilestone(ctx, outW/2, outH/2, sc2, Math.round(mk.mark*100), el / MILESTONE_FRAMES)
             }
+          }
+        }
+
+        // Schede dei luoghi (modalità Illustrativo): una sola casella a schermo per costruzione,
+        // vedi lib/videoPoiCards.ts. Non si disegnano durante una sosta foto: la polaroid occupa
+        // già il centro e le due cose si contenderebbero lo stesso spazio.
+        if (poiPlan && stopZoomTNow <= 0.001) {
+          const active = activeCardAt(poiPlan, frameIdx)
+          if (active) {
+            const lead = active.card.pois[0]
+            const meta = POI_META[lead.type]
+            const others = active.card.pois.slice(1)
+            drawPoiCard(ctx, outW, outH, sc2, {
+              title: lead.name ?? meta.label,
+              kind: meta.label,
+              emoji: meta.emoji,
+              color: meta.color,
+              extra: others.length
+                ? 'con ' + others.map(o => o.name ?? POI_META[o.type].label).join(' · ')
+                : undefined,
+            }, active.t)
           }
         }
 
@@ -2345,7 +2450,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2677,6 +2782,36 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
               {/* ── PASSO 1 · FORMATO ───────────────────────────────────────────── */}
               {videoStep===0&&(<>
+                {/* La scelta che condiziona tutte le altre: di chi parla il video */}
+                <div>
+                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">A COSA SERVE QUESTO VIDEO</p>
+                  <div className="space-y-2">
+                    {([
+                      {id:'ricordo' as const, label:'Il mio ricordo', desc:'La tua uscita: il pin con la tua foto, la fatica, le tue immagini.'},
+                      {id:'illustrativo' as const, label:'Far conoscere il percorso', desc:'Il sentiero che si presenta: i luoghi con il loro nome e i punteggi. Senza dati personali.'},
+                    ]).map(opt=>(
+                      <button key={opt.id} onClick={()=>{
+                        setVideoMode(opt.id)
+                        // Il pin è il soggetto di un ricordo e un intruso in una descrizione:
+                        // lo si allinea alla modalità (e con lui gli effetti che gli stanno addosso).
+                        setShowUserPin(opt.id==='ricordo')
+                        if (opt.id==='illustrativo') { setVideoShowPois(true); setVideoShowBody(false) }
+                      }}
+                        className={`w-full text-left rounded-xl px-3.5 py-3 border transition-colors ${
+                          videoMode===opt.id ? 'bg-forest-500/20 border-forest-400/60' : 'bg-white/7 border-transparent hover:bg-white/10'
+                        }`}>
+                        <p className={`text-sm font-bold ${videoMode===opt.id?'text-forest-300':'text-white'}`}>{opt.label}</p>
+                        <p className="text-white/45 text-[11px] mt-0.5 leading-snug">{opt.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                  {videoMode==='illustrativo'&&(pois?.length??0)===0&&(
+                    <p className="text-terra-300 text-[11px] mt-2 leading-relaxed">
+                      Su questo percorso non risultano punti di interesse: il video resterà una descrizione di numeri e punteggi.
+                    </p>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <p className="text-white/45 text-[11px] font-semibold tracking-wider">FORMATO INSTAGRAM</p>
                   <div className="grid grid-cols-3 gap-2">
@@ -3117,6 +3252,26 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   </div>
                 </div>
 
+                {videoMode==='illustrativo'&&(
+                  <div>
+                    <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">SCHEDE DEI LUOGHI</p>
+                    <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                      I luoghi principali si presentano uno alla volta con il loro nome, in una sola casella a schermo.
+                      Fontane, panchine e aree picnic restano segnaposti sulla mappa: sono troppi e troppo fitti per meritarsi una scheda.
+                    </p>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="checkbox" checked={videoPoiIncludeSensitive}
+                        onChange={e=>setVideoPoiIncludeSensitive(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                      <span className="text-white text-xs font-semibold leading-snug">
+                        Nomina anche grotte, rovine, siti archeologici e sorgenti
+                        <span className="block text-white/35 text-[11px] font-normal mt-0.5">
+                          Spento, questi restano puntini senza nome. Un video fatto per girare porta gente: è così che certi posti si rovinano.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">MOMENTI SPECIALI</p>
                   <label className="flex items-center gap-2 mb-2 cursor-pointer">
@@ -3184,6 +3339,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   videoHyperlapseEnabled&&videoPhotoStyle==='carousel'&&'Hyperlapse',
                 ].filter(Boolean) as string[]
                 const rows: [string,string][] = [
+                  ['Modalità', videoMode==='ricordo'?'Il mio ricordo':'Descrizione del percorso'],
                   ['Formato', `${videoOrientation} · ${videoFps} fps`],
                   ['Stile foto', videoPhotoStyle==='classic'?'Classico':'Carosello'],
                   ['Foto incluse', includedPhotoCount===0?'nessuna':`${includedPhotoCount}`],

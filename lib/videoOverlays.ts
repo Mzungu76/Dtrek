@@ -1116,3 +1116,217 @@ export function drawTopBand(ctx: CanvasRenderingContext2D, w: number, bandH: num
     }
   }
 }
+
+// ── Modalità "Illustrativo": schede POI e pannello TEI ─────────────────────────
+// Queste due non ricevono tipi dell'app di proposito (niente PoiItem, niente TeiResult): il
+// chiamante passa già stringhe e colori risolti, così questo file resta senza dipendenze dal
+// modello dati e provabile da solo. La selezione di QUALI POI arrivano qui sta in
+// lib/videoPoiCards.ts, che è dove vive il problema difficile (la densità).
+
+export interface PoiCardView {
+  title: string          // nome del luogo, o etichetta del tipo se manca il nome
+  kind: string           // "Cascata", "Rifugio"…
+  emoji: string
+  color: string          // colore del tipo, da POI_META
+  extra?: string         // altri luoghi del grappolo, già uniti in una riga
+}
+
+/** Unica casella a schermo per le schede POI: terzo basso, larghezza piena meno i margini.
+ *  Essendo l'unica posizione possibile, due schede non possono sovrapporsi — vedi la nota in testa
+ *  a lib/videoPoiCards.ts. `t` copre 0..1 la vita della scheda. */
+export function drawPoiCard(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  card: PoiCardView, t: number,
+) {
+  try {
+  const k = clamp01(t)
+  const inT = Math.min(1, k / 0.16)
+  const outT = k > 0.86 ? (k - 0.86) / 0.14 : 0
+  const alpha = inT * (1 - outT)
+  if (alpha <= 0.01) return
+  const ease = 1 - Math.pow(1 - inT, 3)
+  const slide = (1 - ease) * 54 * sc + outT * 26 * sc
+
+  const cardW = w - 88 * sc
+  const cardH = (card.extra ? 132 : 104) * sc
+  const x = (w - cardW) / 2
+  const y = h * 0.74 - cardH / 2 + slide
+
+  ctx.save()
+  try {
+    ctx.globalAlpha = alpha
+    // Fondo pieno e opaco: la mappa sotto è viva e mossa, un pannello troppo trasparente rende
+    // il testo illeggibile proprio nei fotogrammi in cui passa un crinale chiaro.
+    ctx.fillStyle = 'rgba(8,18,26,0.88)'
+    rrect(ctx, x, y, cardW, cardH, 22 * sc); ctx.fill()
+    // Costa colorata del tipo di luogo: dà l'identità senza colorare tutto il pannello
+    ctx.fillStyle = card.color
+    rrect(ctx, x, y, 7 * sc, cardH, 3.5 * sc); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1.5 * sc
+    rrect(ctx, x, y, cardW, cardH, 22 * sc); ctx.stroke()
+
+    const padL = x + 30 * sc
+    // Pastiglia con l'emoji del tipo
+    const badgeR = 27 * sc, badgeCx = padL + badgeR, badgeCy = y + cardH / 2
+    ctx.fillStyle = card.color
+    ctx.beginPath(); ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2 * sc
+    ctx.beginPath(); ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2); ctx.stroke()
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.font = `${Math.round(28 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(card.emoji, badgeCx, badgeCy + 2 * sc)
+
+    const textX = badgeCx + badgeR + 22 * sc
+    const maxTextW = x + cardW - textX - 26 * sc
+    ctx.textAlign = 'left'
+    ctx.fillStyle = card.color
+    ctx.font = `800 ${Math.round(15 * sc)}px -apple-system,sans-serif`
+    ctx.textBaseline = 'top'
+    const kindY = y + (card.extra ? 22 : 26) * sc
+    ctx.fillText(card.kind.toUpperCase(), textX, kindY)
+
+    ctx.fillStyle = 'white'
+    ctx.font = `800 ${Math.round(31 * sc)}px -apple-system,sans-serif`
+    let title = card.title
+    while (ctx.measureText(title).width > maxTextW && title.length > 4) title = title.slice(0, -4) + '…'
+    ctx.fillText(title, textX, kindY + 22 * sc)
+
+    if (card.extra) {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)'
+      ctx.font = `600 ${Math.round(16 * sc)}px -apple-system,sans-serif`
+      let ex = card.extra
+      while (ctx.measureText(ex).width > maxTextW && ex.length > 4) ex = ex.slice(0, -4) + '…'
+      ctx.fillText(ex, textX, kindY + 62 * sc)
+    }
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawPoiCard error:', err) }
+}
+
+export interface TeiPart { label: string; value: number }   // value 0..1
+
+/** Pannello del punteggio TEI: il numero, poi le cinque componenti che si riempiono a scalare, poi
+ *  la penalità antropica che SOTTRAE — l'unica barra che cresce verso sinistra, così si legge a
+ *  colpo d'occhio che è un malus e non un merito. */
+export function drawTeiPanel(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  data: { score: number; label: string; color: string; parts: TeiPart[]; penalty?: TeiPart },
+  t: number,
+) {
+  try {
+  const k = clamp01(t)
+  const alpha = Math.min(1, k / 0.10) * (k > 0.92 ? Math.max(0, 1 - (k - 0.92) / 0.08) : 1)
+  if (alpha <= 0.01) return
+
+  ctx.save()
+  try {
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = 'rgba(6,14,20,0.82)'; ctx.fillRect(0, 0, w, h)
+
+    const cx = w / 2
+    let y = h * 0.26
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'
+    ctx.font = `800 ${Math.round(18 * sc)}px -apple-system,sans-serif`
+    ctx.fillText('QUANTO VALE QUESTO PERCORSO', cx, y - 62 * sc)
+
+    // Il punteggio sale da 0 al valore reale: un numero che si compone tiene lo sguardo
+    const shown = data.score * (1 - Math.pow(1 - Math.min(1, k / 0.32), 3))
+    ctx.fillStyle = data.color
+    ctx.font = `900 ${Math.round(104 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(shown.toFixed(1), cx, y)
+    ctx.fillStyle = 'white'
+    ctx.font = `800 ${Math.round(26 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(data.label, cx, y + 68 * sc)
+
+    // Le cinque componenti, una dopo l'altra
+    y = h * 0.47
+    const barW = w - 150 * sc, barX = (w - barW) / 2, rowH = 46 * sc
+    ctx.textBaseline = 'middle'
+    data.parts.forEach((p, i) => {
+      const d = 0.30 + i * 0.06
+      const f = clamp01((k - d) / 0.22)
+      const fill = (1 - Math.pow(1 - f, 3)) * clamp01(p.value)
+      const ry = y + i * rowH
+      ctx.textAlign = 'left'
+      ctx.fillStyle = 'rgba(255,255,255,0.72)'
+      ctx.font = `700 ${Math.round(17 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(p.label, barX, ry)
+      const tw = 128 * sc, tx = barX + tw
+      const tBarW = barW - tw
+      ctx.fillStyle = 'rgba(255,255,255,0.14)'
+      rrect(ctx, tx, ry - 7 * sc, tBarW, 14 * sc, 7 * sc); ctx.fill()
+      if (fill > 0.001) {
+        ctx.fillStyle = data.color
+        rrect(ctx, tx, ry - 7 * sc, Math.max(14 * sc, tBarW * fill), 14 * sc, 7 * sc); ctx.fill()
+      }
+    })
+
+    if (data.penalty) {
+      const ry = y + data.parts.length * rowH + 12 * sc
+      const f = clamp01((k - 0.30 - data.parts.length * 0.06) / 0.22)
+      const fill = (1 - Math.pow(1 - f, 3)) * clamp01(data.penalty.value)
+      ctx.textAlign = 'left'
+      ctx.fillStyle = 'rgba(248,113,113,0.9)'
+      ctx.font = `700 ${Math.round(17 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(data.penalty.label, barX, ry)
+      const tw = 128 * sc, tx = barX + tw, tBarW = barW - tw
+      ctx.fillStyle = 'rgba(255,255,255,0.14)'
+      rrect(ctx, tx, ry - 7 * sc, tBarW, 14 * sc, 7 * sc); ctx.fill()
+      if (fill > 0.001) {
+        // Cresce da destra verso sinistra: toglie, non aggiunge
+        const pw = Math.max(14 * sc, tBarW * fill)
+        ctx.fillStyle = '#ef4444'
+        rrect(ctx, tx + tBarW - pw, ry - 7 * sc, pw, 14 * sc, 7 * sc); ctx.fill()
+      }
+    }
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawTeiPanel error:', err) }
+}
+
+/** Carta d'identità del percorso: i numeri oggettivi, quelli che valgono per chiunque lo faccia
+ *  (niente CTS: è tarato sulla persona, non descrive il sentiero). */
+export function drawIdentikit(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  title: string, rows: { k: string; v: string }[], t: number,
+) {
+  try {
+  const k = clamp01(t)
+  const alpha = Math.min(1, k / 0.12) * (k > 0.9 ? Math.max(0, 1 - (k - 0.9) / 0.1) : 1)
+  if (alpha <= 0.01) return
+  ctx.save()
+  try {
+    ctx.globalAlpha = alpha
+    const grad = ctx.createLinearGradient(0, 0, 0, h)
+    grad.addColorStop(0, 'rgba(6,14,20,0.35)'); grad.addColorStop(1, 'rgba(6,14,20,0.85)')
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h)
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillStyle = 'white'
+    ctx.font = `900 ${Math.round(46 * sc)}px -apple-system,sans-serif`
+    let tt = title
+    while (ctx.measureText(tt).width > w - 110 * sc && tt.length > 4) tt = tt.slice(0, -4) + '…'
+    ctx.fillText(tt, w / 2, h * 0.30)
+
+    const cols = 2, cellW = (w - 130 * sc) / cols, x0 = 65 * sc
+    rows.forEach((r, i) => {
+      const d = 0.16 + i * 0.07
+      const f = clamp01((k - d) / 0.2)
+      if (f <= 0.01) return
+      const ease = 1 - Math.pow(1 - f, 3)
+      const cx = x0 + (i % cols) * cellW + cellW / 2
+      const cy = h * 0.44 + Math.floor(i / cols) * 108 * sc + (1 - ease) * 22 * sc
+      ctx.globalAlpha = alpha * ease
+      ctx.fillStyle = 'white'
+      ctx.font = `900 ${Math.round(40 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(r.v, cx, cy)
+      ctx.fillStyle = 'rgba(255,255,255,0.45)'
+      ctx.font = `700 ${Math.round(15 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(r.k.toUpperCase(), cx, cy + 32 * sc)
+    })
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawIdentikit error:', err) }
+}
