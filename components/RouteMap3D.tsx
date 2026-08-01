@@ -27,6 +27,7 @@ import {
   planInterludes, interludeTotalFrames, DEFAULT_INTERLUDES,
   type InterludeKind, type InterludeSetting, type PlannedInterlude,
 } from '@/lib/videoInterludes'
+import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
 import type { BeautyScore } from '@/lib/beautyScore'
 import type { WikiPage } from '@/lib/wikipedia'
 import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
@@ -38,7 +39,7 @@ import {
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
   drawStopPhotoZoom, drawHUD, drawTopBand, drawVideoElevProfile, type GraphData,
   drawPoiCard, drawTeiPanel, drawIdentikit,
-  drawNumbersBeat, drawElevationBeat, drawNatureBeat, drawNoticesBeat, drawPlacesBeat,
+  drawNumbersBeat, drawElevationBeat, drawNatureBeat, drawNoticesBeat, drawPlacesBeat, drawStoryCaption,
 } from '@/lib/videoOverlays'
 
 const SPEEDS = [
@@ -398,6 +399,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoPoiRequireImage, setVideoPoiRequireImage] = useState(true)
   // Stacchi che spezzano il volo sul percorso — vedi lib/videoInterludes.ts.
   const [videoInterludes, setVideoInterludes] = useState<InterludeSetting[]>(DEFAULT_INTERLUDES)
+  // Didascalie proposte dal testo della guida. Sono CANDIDATI modificabili, non un testo definitivo:
+  // il testo della guida lo scrive un modello, e niente dovrebbe finire in un file destinato a
+  // circolare senza che qualcuno l'abbia letto — vedi lib/videoCaptions.ts.
+  const [videoCaptions, setVideoCaptions] = useState<CaptionCandidate[]>([])
+  useEffect(() => { setVideoCaptions(suggestCaptions(guide?.text)) }, [guide?.text])
   // Gettone 3D a forma di cuore che pulsa al ritmo vero della FC, con i BPM correnti sopra —
   // entrambi gli stili video, richiede dati di frequenza cardiaca.
   const [videoHeartEffectEnabled, setVideoHeartEffectEnabled] = useState(false)
@@ -2433,6 +2439,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
         }
 
+        // Didascalia dalla guida: sopra al percorso, ma mai insieme a uno stacco o a una foto in
+        // sosta — tre testi contemporanei a schermo non li legge nessuno.
+        if (isIllustrativo && !interlude && stopZoomTNow <= 0.001 && introP === undefined) {
+          const capWindowP = Math.min(0.5, (TARGET_FPS * 3.6) / Math.max(1, ROUTE_FRAMES))
+          const act = activeCaptionAt(videoCaptions, p, capWindowP)
+          if (act) drawStoryCaption(ctx, outW, outH, sc2, act.caption.text, act.t)
+        }
+
         // Stacco: pannello a schermo intero sopra la mappa (che resta disegnata sotto, ferma sul
         // punto in cui la telecamera si è fermata) — così l'entrata è una dissolvenza, non un taglio.
         // Va dopo fascia/HUD e prima della mini-mappa: quando il pannello è opaco copre tutto.
@@ -2525,7 +2539,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)

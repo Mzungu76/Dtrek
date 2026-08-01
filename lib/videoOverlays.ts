@@ -1569,3 +1569,68 @@ function wrapCentered(
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   lines.slice(0, shown).forEach((l, i) => ctx.fillText(l, cx, y + i * lineH))
 }
+
+// ── Didascalie dal testo della guida ───────────────────────────────────────────
+/** Didascalia in stile film: sottili bande orizzontali che entrano ed escono, testo centrato in
+ *  basso a gruppi di parole. Contorno pieno e mai un riquadro grigio dietro: sopra a una mappa in
+ *  movimento un rettangolo semitrasparente è la cosa che fa sembrare il video "fatto in casa",
+ *  mentre un contorno netto si legge su qualunque sfondo senza coprire niente. */
+export function drawStoryCaption(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  text: string, t: number,
+) {
+  try {
+  const k = clamp01(t)
+  const inT = Math.min(1, k / 0.18)
+  const outT = k > 0.82 ? (k - 0.82) / 0.18 : 0
+  const alpha = inT * (1 - outT)
+  if (alpha <= 0.01) return
+
+  ctx.save()
+  try {
+    // Bande cinematografiche: crescono all'entrata e si ritirano all'uscita
+    const barEase = (1 - Math.pow(1 - inT, 3)) * (1 - outT)
+    const barH = h * 0.055 * barEase
+    if (barH > 0.5) {
+      ctx.globalAlpha = alpha * 0.85
+      ctx.fillStyle = 'rgba(4,10,15,0.92)'
+      ctx.fillRect(0, 0, w, barH)
+      ctx.fillRect(0, h - barH, w, barH)
+    }
+
+    ctx.globalAlpha = alpha
+    ctx.font = `500 italic ${Math.round(38 * sc)}px Georgia,serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
+
+    // A capo su misura, al massimo tre righe
+    const maxW = w - 130 * sc
+    const words = text.split(/\s+/).filter(Boolean)
+    const lines: string[] = []
+    let cur = ''
+    for (const wd of words) {
+      const test = cur ? cur + ' ' + wd : wd
+      if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = wd } else cur = test
+    }
+    if (cur) lines.push(cur)
+    const vis = lines.slice(0, 3)
+    const lineH = 50 * sc
+    const baseY = h * 0.80 - (vis.length - 1) * lineH / 2
+
+    vis.forEach((l, i) => {
+      // Le righe entrano una dopo l'altra: dà il ritmo della lettura invece di scaricare
+      // tutto il blocco addosso a chi guarda
+      const li = clamp01((k - i * 0.06) / 0.18)
+      const ease = 1 - Math.pow(1 - li, 3)
+      const a = alpha * ease
+      if (a <= 0.01) return
+      const y = baseY + i * lineH + (1 - ease) * 22 * sc
+      ctx.globalAlpha = a
+      ctx.strokeStyle = 'rgba(4,12,18,0.88)'; ctx.lineWidth = 9 * sc
+      ctx.strokeText(l, w / 2, y)
+      ctx.fillStyle = 'rgba(255,255,255,0.96)'
+      ctx.fillText(l, w / 2, y)
+    })
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawStoryCaption error:', err) }
+}
