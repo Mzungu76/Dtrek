@@ -1069,6 +1069,11 @@ export interface PoiCardView {
   emoji: string
   color: string          // colore del tipo, da POI_META
   extra?: string         // altri luoghi del grappolo, già uniti in una riga
+  blurb?: string         // una riga dall'estratto Wikipedia
+  /** Immagine del luogo, già caricata e CORS-pulita dal chiamante. Quando c'è, è lei il soggetto
+   *  della scheda: un nome accanto a un'icona non racconta nulla che il segnaposto sulla mappa non
+   *  dica già, ed è il motivo per cui la versione precedente di questa scheda non serviva a niente. */
+  image?: CanvasImageSource & { width: number; height: number }
 }
 
 /** Unica casella a schermo per le schede POI: terzo basso, larghezza piena meno i margini.
@@ -1088,56 +1093,80 @@ export function drawPoiCard(
   const ease = 1 - Math.pow(1 - inT, 3)
   const slide = (1 - ease) * 54 * sc + outT * 26 * sc
 
+  const hasImg = !!card.image && card.image.width > 0 && card.image.height > 0
   const cardW = w - 88 * sc
-  const cardH = (card.extra ? 132 : 104) * sc
+  const imgH  = hasImg ? 240 * sc : 0
+  const textH = (card.blurb ? 128 : card.extra ? 122 : 100) * sc
+  const cardH = imgH + textH
   const x = (w - cardW) / 2
-  const y = h * 0.74 - cardH / 2 + slide
+  const y = h * 0.72 - cardH / 2 + slide
+  const R = 24 * sc
 
   ctx.save()
   try {
     ctx.globalAlpha = alpha
-    // Fondo pieno e opaco: la mappa sotto è viva e mossa, un pannello troppo trasparente rende
+    // Fondo pieno e opaco: la mappa sotto è viva e mossa, e un pannello troppo trasparente rende
     // il testo illeggibile proprio nei fotogrammi in cui passa un crinale chiaro.
-    ctx.fillStyle = 'rgba(8,18,26,0.88)'
-    rrect(ctx, x, y, cardW, cardH, 22 * sc); ctx.fill()
-    // Costa colorata del tipo di luogo: dà l'identità senza colorare tutto il pannello
+    ctx.fillStyle = 'rgba(8,18,26,0.9)'
+    rrect(ctx, x, y, cardW, cardH, R); ctx.fill()
+
+    if (hasImg) {
+      // Foto ritagliata a riempire la fascia superiore, angoli alti arrotondati come la scheda
+      ctx.save()
+      try {
+        ctx.beginPath()
+        ctx.moveTo(x, y + imgH)
+        ctx.lineTo(x, y + R); ctx.arcTo(x, y, x + R, y, R)
+        ctx.lineTo(x + cardW - R, y); ctx.arcTo(x + cardW, y, x + cardW, y + R, R)
+        ctx.lineTo(x + cardW, y + imgH)
+        ctx.closePath(); ctx.clip()
+        const src = aspectFitCrop(card.image!.width, card.image!.height, cardW / imgH)
+        ctx.drawImage(card.image!, src.sx, src.sy, src.sw, src.sh, x, y, cardW, imgH)
+        // Sfumatura in basso: il testo sotto stacca dalla foto senza una riga netta
+        const g = ctx.createLinearGradient(0, y + imgH * 0.55, 0, y + imgH)
+        g.addColorStop(0, 'rgba(8,18,26,0)'); g.addColorStop(1, 'rgba(8,18,26,0.92)')
+        ctx.fillStyle = g; ctx.fillRect(x, y + imgH * 0.55, cardW, imgH * 0.45)
+      } finally { ctx.restore() }
+    }
+
+    // Costa colorata del tipo di luogo, lungo tutto il fianco sinistro
     ctx.fillStyle = card.color
     rrect(ctx, x, y, 7 * sc, cardH, 3.5 * sc); ctx.fill()
     ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1.5 * sc
-    rrect(ctx, x, y, cardW, cardH, 22 * sc); ctx.stroke()
+    rrect(ctx, x, y, cardW, cardH, R); ctx.stroke()
 
     const padL = x + 30 * sc
-    // Pastiglia con l'emoji del tipo
-    const badgeR = 27 * sc, badgeCx = padL + badgeR, badgeCy = y + cardH / 2
-    ctx.fillStyle = card.color
-    ctx.beginPath(); ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2); ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2 * sc
-    ctx.beginPath(); ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2); ctx.stroke()
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.font = `${Math.round(28 * sc)}px -apple-system,sans-serif`
-    ctx.fillText(card.emoji, badgeCx, badgeCy + 2 * sc)
+    const maxTextW = cardW - 60 * sc
+    let ty = y + imgH + 24 * sc
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top'
 
-    const textX = badgeCx + badgeR + 22 * sc
-    const maxTextW = x + cardW - textX - 26 * sc
-    ctx.textAlign = 'left'
+    // Tipo del luogo, in piccolo e nel colore del tipo
     ctx.fillStyle = card.color
     ctx.font = `800 ${Math.round(15 * sc)}px -apple-system,sans-serif`
-    ctx.textBaseline = 'top'
-    const kindY = y + (card.extra ? 22 : 26) * sc
-    ctx.fillText(card.kind.toUpperCase(), textX, kindY)
+    ctx.fillText(`${card.emoji}  ${card.kind.toUpperCase()}`, padL, ty)
+    ty += 22 * sc
 
     ctx.fillStyle = 'white'
     ctx.font = `800 ${Math.round(31 * sc)}px -apple-system,sans-serif`
     let title = card.title
     while (ctx.measureText(title).width > maxTextW && title.length > 4) title = title.slice(0, -4) + '…'
-    ctx.fillText(title, textX, kindY + 22 * sc)
+    ctx.fillText(title, padL, ty)
+    ty += 40 * sc
 
+    if (card.blurb) {
+      ctx.fillStyle = 'rgba(255,255,255,0.62)'
+      ctx.font = `500 ${Math.round(17 * sc)}px -apple-system,sans-serif`
+      let bl = card.blurb
+      while (ctx.measureText(bl).width > maxTextW && bl.length > 4) bl = bl.slice(0, -4) + '…'
+      ctx.fillText(bl, padL, ty)
+      ty += 24 * sc
+    }
     if (card.extra) {
-      ctx.fillStyle = 'rgba(255,255,255,0.55)'
-      ctx.font = `600 ${Math.round(16 * sc)}px -apple-system,sans-serif`
+      ctx.fillStyle = 'rgba(255,255,255,0.45)'
+      ctx.font = `600 ${Math.round(15 * sc)}px -apple-system,sans-serif`
       let ex = card.extra
       while (ctx.measureText(ex).width > maxTextW && ex.length > 4) ex = ex.slice(0, -4) + '…'
-      ctx.fillText(ex, textX, kindY + 62 * sc)
+      ctx.fillText(ex, padL, ty)
     }
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawPoiCard error:', err) }

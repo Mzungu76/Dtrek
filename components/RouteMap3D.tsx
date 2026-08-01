@@ -387,6 +387,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // proposito: un video illustrativo è fatto per far arrivare gente, ed è così che certi posti si
   // rovinano. Restano comunque come segnaposto sulla mappa, solo senza nome a schermo.
   const [videoPoiIncludeSensitive, setVideoPoiIncludeSensitive] = useState(false)
+  // Solo i luoghi con un'immagine Wikipedia prendono una scheda. Acceso di default: una scheda
+  // fatta di nome e icona non aggiunge nulla al segnaposto già presente sulla mappa.
+  const [videoPoiRequireImage, setVideoPoiRequireImage] = useState(true)
   // Gettone 3D a forma di cuore che pulsa al ritmo vero della FC, con i BPM correnti sopra —
   // entrambi gli stili video, richiede dati di frequenza cardiaca.
   const [videoHeartEffectEnabled, setVideoHeartEffectEnabled] = useState(false)
@@ -1427,6 +1430,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const totalKm=(distanceProp ?? totalDistRef.current) / 1000
     const elevGain = elevGainProp ?? elevStatsRef.current.gain
 
+    // Immagini Wikipedia dei luoghi (modalità Illustrativo). Caricate QUI, prima di aprire il
+    // rendering, e non a colpi di effetto asincrono: il piano delle schede si costruisce fra poche
+    // righe e deve già sapere quali luoghi hanno davvero un'immagine utilizzabile.
+    //
+    // crossOrigin='anonymous' non è un dettaglio: il canvas composito finisce in `new VideoFrame(...)`,
+    // che su canvas contaminato lancia — una singola immagine remota senza CORS farebbe fallire
+    // l'esportazione INTERA, non solo quel fotogramma. Chi non carica (rete, 404, CORS negato)
+    // semplicemente non entra nella mappa qui sotto, e il suo luogo torna a essere un segnaposto.
+    const poiImages = new Map<number, HTMLImageElement>()
+    if (videoMode === 'illustrativo' && poiWiki?.length) {
+      await Promise.all(poiWiki.map(({ poi, wiki }) => new Promise<void>(resolve => {
+        if (!wiki.thumbnail) { resolve(); return }
+        const im = new Image()
+        im.crossOrigin = 'anonymous'
+        const done = () => resolve()
+        const timer = setTimeout(done, 6000)   // una miniatura lenta non blocca la generazione
+        im.onload = () => { clearTimeout(timer); poiImages.set(poi.id, im); resolve() }
+        im.onerror = () => { clearTimeout(timer); done() }
+        im.src = wiki.thumbnail
+      })))
+    }
+
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
     const sortedPhotos = [...routePhotos]
@@ -1745,7 +1770,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       let last = followBase
       for (let i = 0; i < 1000; i++) { if (frameOfP[i] === undefined) frameOfP[i] = last; else last = frameOfP[i] }
       const routeLatLon = pts.filter(q => q.lat != null && q.lon != null).map(q => ({ lat: q.lat!, lon: q.lon! }))
-      return planPoiCards(projectPoisOnRoute(pois, routeLatLon), {
+      // `thumbnail` viene valorizzato SOLO per le immagini davvero caricate poco sopra: così un
+      // luogo la cui miniatura non è arrivata viene declassato a segnaposto da requireImage,
+      // invece di programmare una scheda che poi resterebbe con il riquadro vuoto.
+      const wikiById = new Map((poiWiki ?? []).map(({ poi, wiki }) => [poi.id, {
+        thumbnail: poiImages.has(poi.id) ? wiki.thumbnail : undefined,
+        extract: wiki.extract,
+      }]))
+      return planPoiCards(projectPoisOnRoute(pois, routeLatLon, wikiById), {
         progressToFrame: (p) => frameOfP[Math.min(999, Math.max(0, Math.round(p * 999)))],
         cardFrames:   Math.round(TARGET_FPS * 2.6),
         minGapFrames: Math.round(TARGET_FPS * 0.7),
@@ -1754,6 +1786,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         minSpacingP:  0.055,
         groupWindowP: 0.022,
         includeSensitive: videoPoiIncludeSensitive,
+        requireImage: videoPoiRequireImage,
       })
     })()
 
@@ -2226,6 +2259,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               kind: meta.label,
               emoji: meta.emoji,
               color: meta.color,
+              blurb: lead.blurb,
+              image: poiImages.get(lead.id),
               extra: others.length
                 ? 'con ' + others.map(o => o.name ?? POI_META[o.type].label).join(' · ')
                 : undefined,
@@ -2354,7 +2389,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -3108,9 +3143,33 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">SCHEDE DEI LUOGHI</p>
                     <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                      I luoghi principali si presentano uno alla volta con il loro nome, in una sola casella a schermo.
+                      I luoghi si presentano uno alla volta, in una sola casella a schermo.
                       Fontane, panchine e aree picnic restano segnaposti sulla mappa: sono troppi e troppo fitti per meritarsi una scheda.
                     </p>
+                    <label className="flex items-start gap-2 mb-2 cursor-pointer">
+                      <input type="checkbox" checked={videoPoiRequireImage}
+                        onChange={e=>setVideoPoiRequireImage(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                      <span className="text-white text-xs font-semibold leading-snug">
+                        Solo luoghi con una foto da Wikipedia
+                        <span className="block text-white/35 text-[11px] font-normal mt-0.5">
+                          Una scheda con la foto del posto racconta qualcosa; un nome accanto a un&apos;icona ripete il segnaposto che c&apos;è già sulla mappa.
+                        </span>
+                      </span>
+                    </label>
+                    {(() => {
+                      const withImg = (poiWiki ?? []).filter(e => !!e.wiki.thumbnail).length
+                      if (withImg > 0) return (
+                        <p className="text-forest-300/80 text-[11px] mb-2 pl-6 leading-relaxed">
+                          Su questo percorso {withImg === 1 ? 'c\u2019è 1 luogo con foto' : `ce ne sono ${withImg} con foto`}.
+                        </p>
+                      )
+                      return (
+                        <p className="text-terra-300/85 text-[11px] mb-2 pl-6 leading-relaxed">
+                          Qui nessun luogo ha una foto su Wikipedia: con questa opzione attiva non comparirà nessuna scheda.
+                          Il resto del video (stacchi, punteggi, percorso) funziona comunque.
+                        </p>
+                      )
+                    })()}
                     <label className="flex items-start gap-2 cursor-pointer">
                       <input type="checkbox" checked={videoPoiIncludeSensitive}
                         onChange={e=>setVideoPoiIncludeSensitive(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
