@@ -411,66 +411,6 @@ export function drawRouteMilestone(
   } catch (err) { console.error('[dtrek] drawRouteMilestone error:', err) }
 }
 
-// ── Testo del gancio iniziale ──────────────────────────────────────────────────
-/** Righe che salgono in sequenza con contorno pieno e una barra accento che si allarga sotto.
- *  Niente riquadro semitrasparente dietro al testo: su una foto a schermo intero un rettangolo
- *  grigio in mezzo all'inquadratura è la cosa che fa sembrare il gancio "fatto male", mentre un
- *  contorno netto si legge su qualunque sfondo e non copre la foto. `localT` 0..1 sul singolo tempo. */
-export function drawHookText(
-  ctx: CanvasRenderingContext2D,
-  outW: number, outH: number, sc: number,
-  text: string, localT: number,
-) {
-  try {
-  const k = clamp01(localT)
-  const inT = Math.min(1, k / 0.20)
-  const outT = k > 0.84 ? (k - 0.84) / 0.16 : 0
-  const blockAlpha = inT * (1 - outT)
-  if (blockAlpha <= 0.01) return
-
-  ctx.save()
-  try {
-    ctx.font = `900 ${Math.round(58*sc)}px -apple-system,sans-serif`
-    const maxW = outW - 110*sc
-    const words = text.toUpperCase().split(' ')
-    const lines: string[] = []
-    let cur = ''
-    for (const w of words) {
-      const test = cur ? cur + ' ' + w : w
-      if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w } else { cur = test }
-    }
-    if (cur) lines.push(cur)
-    const visLines = lines.slice(0, 3)
-    const lineH = 70*sc
-    // Terzo basso, come nei reel: lascia respirare la foto sopra invece di piazzarsi al centro
-    const blockTop = outH*0.72 - (visLines.length - 1) * lineH / 2
-
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
-    visLines.forEach((l, i) => {
-      const li = clamp01((k - i*0.07) / 0.20)   // ogni riga entra poco dopo la precedente
-      const ease = 1 - Math.pow(1 - li, 3)
-      const a = blockAlpha * ease
-      if (a <= 0.01) return
-      const y = blockTop + i*lineH + (1 - ease) * 46*sc - outT * 40*sc
-      ctx.globalAlpha = a
-      ctx.strokeStyle = 'rgba(4,14,22,0.9)'; ctx.lineWidth = 11*sc
-      ctx.strokeText(l, outW/2, y)
-      ctx.fillStyle = 'white'
-      ctx.fillText(l, outW/2, y)
-    })
-
-    const barT = clamp01((k - 0.10) / 0.28)
-    const barW = 150*sc * (1 - Math.pow(1 - barT, 3))
-    if (barW > 1) {
-      ctx.globalAlpha = blockAlpha
-      ctx.fillStyle = '#38bdf8'
-      const by = blockTop + (visLines.length - 1)*lineH + 52*sc - outT*40*sc
-      rrect(ctx, outW/2 - barW/2, by, barW, 7*sc, 3.5*sc); ctx.fill()
-    }
-  } finally { ctx.restore() }
-  } catch (err) { console.error('[dtrek] drawHookText error:', err) }
-}
-
 // ── Scia dietro al pin (opzionale) ─────────────────────────────────────────────
 /** Coda che sfuma dietro al pin, già proiettata in coordinate del canvas composito (il chiamante
  *  fa la proiezione perché serve la telecamera di MapLibre). `pts` va dalla coda (più vecchio) alla

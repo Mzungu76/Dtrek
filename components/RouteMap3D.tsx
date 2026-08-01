@@ -22,13 +22,12 @@ import {
   buildCumulativeDistances, progressToDistanceM, distanceMToProgress, buildJourneyTables,
   stopPhotoZoomAt, polaroidRotationDeg, hyperlapseIntensityAt, TOP_BAND_FRACTION, type CarouselPhotoTiming,
 } from '@/lib/videoPhotoCarousel'
-import { suggestStatHookText, suggestCuriosityHookText } from '@/lib/videoHook'
 import { planPoiCards, projectPoisOnRoute, activeCardAt } from '@/lib/videoPoiCards'
 import type { BeautyScore } from '@/lib/beautyScore'
 import {
   coverRect, rrect, lerp, lerpAngle, distM, smoothArray, clamp01,
   hexToRgb, effortRgb, hrEffortAt, buildMiniRoute,
-  drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone, drawHookText,
+  drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
   drawStopPhotoZoom, drawHUD, drawTopBand, drawVideoElevProfile, type GraphData,
   drawPoiCard, drawTeiPanel, drawIdentikit,
@@ -409,15 +408,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Foto attualmente in sosta (con il suo avanzamento di zoom 0..1) nell'anteprima carosello — vedi
   // PhotoZoomOverlay più sotto e lib/videoPhotoCarousel.ts stopPhotoZoomAt.
   const [previewPhotoZoom, setPreviewPhotoZoom] = useState<{ photo: RoutePhoto | null; zoomT: number; stopT: number }>({ photo: null, zoomT: 0, stopT: 0 })
-  // Gancio iniziale — quattro elementi indipendenti, ognuno attivabile/disattivabile e (i due
-  // testuali) modificabile: statistica d'impatto, foto migliore, frase su un punto di interesse
-  // notevole, intro più rapida. null in *Override = usa il suggerimento automatico.
-  const [videoHookStatEnabled,      setVideoHookStatEnabled]      = useState(true)
-  const [videoHookCuriosityEnabled, setVideoHookCuriosityEnabled] = useState(true)
-  const [videoHookPhotoEnabled,     setVideoHookPhotoEnabled]     = useState(true)
+  // Ritmo d'ingresso: quanto dura il volo aereo iniziale prima che parta il percorso.
+  // (I "ganci" testuali/fotografici che precedevano l'intro sono stati rimossi: nella pratica
+  // rubavano il primo secondo senza aggiungere informazione, e il racconto ora è affidato alle
+  // didascalie dalla guida e agli stacchi lungo il percorso.)
   const [videoHookFastIntro,        setVideoHookFastIntro]        = useState(true)
-  const [hookStatOverride,      setHookStatOverride]      = useState<string | null>(null)
-  const [hookCuriosityOverride, setHookCuriosityOverride] = useState<string | null>(null)
   const [zoomIntro,         setZoomIntro]        = useState(10.5)
   const [zoomFollow,        setZoomFollow]        = useState(13.8)
   const [zoomOutro,         setZoomOutro]         = useState(7.5)
@@ -495,19 +490,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     return [...facts, ...tips]
   }, [distanceProp, elevGainProp, pois, routePhotos, videoExcludedPhotoIds])
 
-  // Gancio iniziale (Sezione 4) — due suggerimenti indipendenti da lib/videoHook.ts, ognuno
-  // attivabile/disattivabile e modificabile a sé (videoHookStatEnabled/videoHookCuriosityEnabled,
-  // hookStatOverride/hookCuriosityOverride).
-  const autoStatHook = useMemo(() => suggestStatHookText({
-    distanceKm: +((distanceProp ?? totalDistRef.current) / 1000).toFixed(1),
-    elevationGain: elevGainProp ?? elevStatsRef.current.gain,
-    altitudeMax: elevStatsRef.current.altMax,
-  }), [distanceProp, elevGainProp])
-  const autoCuriosityHook = useMemo(() => suggestCuriosityHookText(pois), [pois])
-  const statHookText = videoHookStatEnabled ? (hookStatOverride ?? autoStatHook).trim() : ''
-  const curiosityHookText = (videoHookCuriosityEnabled && (hookCuriosityOverride ?? autoCuriosityHook))
-    ? (hookCuriosityOverride ?? autoCuriosityHook ?? '').trim() : ''
-
   useEffect(() => {
     if (videoState !== 'rendering' && videoState !== 'finalizing') { setEntertainIdx(0); return }
     const id = setInterval(() => setEntertainIdx(i => (i + 1) % Math.max(1, entertainmentContent.length)), 4200)
@@ -568,9 +550,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const journey = buildJourneyTables(videoFps, cumDist, totalDistanceM, carouselPhotoTimings, photoDurationSec, cruiseMps)
     const introSec = Math.max(1.1, videoDuration * 0.05)
     const outroSec = Math.max(3, videoDuration * 0.17)
-    const hookSec = (carouselPhotoTimings.length > 0 || videoHookStatEnabled) ? 1.1 : 0
-    return Math.round(hookSec + introSec + journey.totalFrames / videoFps + outroSec)
-  }, [videoPhotoStyle, cumDist, totalDistanceM, carouselPhotoTimings, photoDurationSec, videoDuration, videoFps, videoHookStatEnabled])
+    return Math.round(introSec + journey.totalFrames / videoFps + outroSec)
+  }, [videoPhotoStyle, cumDist, totalDistanceM, carouselPhotoTimings, photoDurationSec, videoDuration, videoFps])
 
   const [weatherBadge, setWeatherBadge] = useState<{emoji:string;temp:number;label:string}|null>(null)
 
@@ -1549,13 +1530,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
     }
 
-    // Gancio iniziale (Sezione 4): frazione di secondo prima ancora della mappa, pensata per
-    // fermare lo scroll sui social — foto migliore a schermo intero con zoom "a scatto" + testo/i
-    // d'impatto. Ogni elemento è opzionale (i toggle videoHook*): niente fase gancio se sono tutti
-    // disattivati o non c'è nulla da mostrare.
-    const hookPhoto = videoHookPhotoEnabled ? (sortedPhotos[0] ?? null) : null
-    const hookHasText = !!statHookText || !!curiosityHookText
-    const HOOK_FRAMES = (hookHasText || hookPhoto) ? Math.round(TARGET_FPS * 1.1) : 0
     // Intro: fixed duration where p=0 (route frozen, camera swoops in) — più breve se il toggle
     // "intro rapida" è attivo (Sezione 4: un'apertura lenta è il motivo #1 per cui si scrolla via
     // sui social), altrimenti la durata originale.
@@ -1649,7 +1623,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       : null
     const ROUTE_FRAMES = journey ? journey.totalFrames : Math.round(TARGET_FPS * videoDuration)
     const photoTriggerRouteFrames = isCarousel ? [] : sortedPhotos.map(s => Math.round(s.photo.progress * ROUTE_FRAMES))
-    const TOTAL_FRAMES = HOOK_FRAMES + INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + OUTRO_FRAMES
+    const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + OUTRO_FRAMES
 
     // Anteprima veloce (Sezione 4, debug): renderizza solo una finestra di fotogrammi centrale al
     // percorso invece del video intero — pensata per riprodurre in pochi secondi un bug legato a
@@ -1658,7 +1632,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // fotogramma GLOBALE, sceglie quella più centrale, e vi aggiunge un contorno di viaggio prima e
     // dopo così si vede anche la transizione, non solo la foto isolata.
     const photoWindows: { start: number; end: number }[] = []
-    const followBase = HOOK_FRAMES + INTRO_FRAMES
+    const followBase = INTRO_FRAMES
     if (isCarousel && journey) {
       let curIdx = -1, curStart = -1
       for (let f = 0; f < journey.totalFrames; f++) {
@@ -1689,17 +1663,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     setLastRenderWasPreview(previewOnly)
     setLastRenderSeconds((RENDER_END_FRAME - RENDER_START_FRAME) / TARGET_FPS)
 
-    const frameToState = (frameIdx: number): {p:number; hookT?:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number; stopIndex?:number; stopT?:number} => {
-      // Gancio: primissima fase, mappa non ancora coinvolta.
-      if (frameIdx < HOOK_FRAMES) {
-        return {p: 0, hookT: frameIdx / Math.max(1, HOOK_FRAMES - 1)}
-      }
-      const afterHook = frameIdx - HOOK_FRAMES
+    const frameToState = (frameIdx: number): {p:number; introP?:number; reveal?:{photo:RoutePhoto;img:HTMLImageElement;revealFrame:number}; outroP?:number; followFrame?:number; stopIndex?:number; stopT?:number} => {
       // Intro phase: route frozen at p=0, camera interpolates via introP 0→1
-      if (afterHook < INTRO_FRAMES) {
-        return {p: 0, introP: afterHook / Math.max(1, INTRO_FRAMES - 1)}
+      if (frameIdx < INTRO_FRAMES) {
+        return {p: 0, introP: frameIdx / Math.max(1, INTRO_FRAMES - 1)}
       }
-      const afterIntro = afterHook - INTRO_FRAMES
+      const afterIntro = frameIdx - INTRO_FRAMES
       let pauseOffset = 0
       if (!isCarousel) {
         for (let i = 0; i < sortedPhotos.length; i++) {
@@ -1848,83 +1817,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         return
       }
 
-      const {p, hookT, introP, reveal, outroP, followFrame, stopIndex, stopT} = frameToState(frameIdx)
+      const {p, introP, reveal, outroP, followFrame, stopIndex, stopT} = frameToState(frameIdx)
       setRenderProgress((frameIdx-RENDER_START_FRAME)/Math.max(1,RENDER_END_FRAME-RENDER_START_FRAME)); setRenderFrame(frameIdx-RENDER_START_FRAME)
-
-      // Gancio iniziale: foto migliore a schermo intero con zoom "a scatto" + testo d'impatto,
-      // prima ancora che la mappa entri in scena — vedi il commento su HOOK_FRAMES sopra.
-      if (hookT !== undefined) {
-        requestAnimationFrame(async () => {
-          if (renderAbortRef.current) return
-          try {
-          ctx.clearRect(0, 0, outW, outH)
-          const img = hookPhoto?.img
-          const imgReady = !!img && img.complete && img.naturalWidth > 0
-          const sc3 = Math.min(outW, outH) / 1080
-          if (imgReady) {
-            // Push-in CONTINUO: strappo iniziale (ease-out aggressivo nei primi fotogrammi) seguito
-            // da una deriva lenta che non si ferma mai fino alla fine del gancio. Prima lo zoom si
-            // esauriva al 40% e il resto del gancio era un fermo-immagine — è la cosa che lo faceva
-            // sembrare "morto" a metà, proprio dove invece deve trattenere chi guarda.
-            const snapT = 1 - Math.pow(1 - Math.min(1, hookT / 0.28), 3)
-            const scale = 1.24 - 0.16 * snapT - 0.08 * hookT
-            const srcA = img!.width / img!.height, dstA = outW / outH
-            let sx=0, sy=0, sw=img!.width, sh=img!.height
-            if (srcA > dstA) { sw = Math.round(sh * dstA); sx = (img!.width - sw) / 2 }
-            else { sh = Math.round(sw / dstA); sy = (img!.height - sh) / 2 }
-            ctx.save()
-            try {
-              ctx.translate(outW/2, outH/2)
-              ctx.scale(scale, scale)
-              ctx.drawImage(img!, sx, sy, sw, sh, -outW/2, -outH/2, outW, outH)
-            } finally { ctx.restore() }
-            // Scrim direzionali invece della vignettatura radiale: la foto resta luminosa al centro
-            // (prima veniva incupita ovunque) e il buio si concentra dove va il testo, in basso.
-            const bottom = ctx.createLinearGradient(0, outH*0.42, 0, outH)
-            bottom.addColorStop(0, 'rgba(0,0,0,0)')
-            bottom.addColorStop(0.55, 'rgba(0,0,0,0.42)')
-            bottom.addColorStop(1, 'rgba(0,0,0,0.84)')
-            ctx.fillStyle = bottom; ctx.fillRect(0, outH*0.42, outW, outH*0.58)
-            const top = ctx.createLinearGradient(0, 0, 0, outH*0.20)
-            top.addColorStop(0, 'rgba(0,0,0,0.45)'); top.addColorStop(1, 'rgba(0,0,0,0)')
-            ctx.fillStyle = top; ctx.fillRect(0, 0, outW, outH*0.20)
-          } else {
-            const bg = ctx.createLinearGradient(0, 0, 0, outH)
-            bg.addColorStop(0, '#123047'); bg.addColorStop(1, '#08131c')
-            ctx.fillStyle = bg; ctx.fillRect(0, 0, outW, outH)
-          }
-          // Statistica e/o curiosità (ognuna opzionale, vedi i toggle in Montaggio) — se entrambe
-          // attive si alternano in due tempi uguali all'interno del gancio, altrimenti quella
-          // attiva occupa tutta la durata. drawHookText gestisce entrata, uscita e leggibilità.
-          const hookBeats = [statHookText, curiosityHookText].filter((t): t is string => !!t)
-          if (hookBeats.length > 0) {
-            const beatDur = 1 / hookBeats.length
-            const beatIdx = Math.min(hookBeats.length - 1, Math.floor(hookT / beatDur))
-            const localT = (hookT - beatIdx * beatDur) / beatDur
-            drawHookText(ctx, outW, outH, sc3, hookBeats[beatIdx], localT)
-          }
-          // Barra di avanzamento del gancio: dice a colpo d'occhio che dura pochissimo, e dà un
-          // movimento costante anche nei fotogrammi in cui il testo è fermo.
-          ctx.save()
-          try {
-            const bw = outW * 0.42, bx = (outW - bw) / 2, by = outH * 0.94
-            ctx.fillStyle = 'rgba(255,255,255,0.22)'
-            rrect(ctx, bx, by, bw, 4*sc3, 2*sc3); ctx.fill()
-            ctx.fillStyle = 'rgba(255,255,255,0.92)'
-            rrect(ctx, bx, by, bw * clamp01(hookT), 4*sc3, 2*sc3); ctx.fill()
-          } finally { ctx.restore() }
-          if (videoEncoderRef.current) {
-            await waitForEncoderQueue(videoEncoderRef.current)
-            let _vf: InstanceType<typeof VideoFrame> | null = null
-            try { const lfi = frameCountRef.current - RENDER_START_FRAME; _vf = new VideoFrame(composite, { timestamp: Math.round(lfi * 1_000_000 / TARGET_FPS), duration: Math.round(1_000_000 / TARGET_FPS) }); videoEncoderRef.current.encode(_vf, { keyFrame: lfi % (TARGET_FPS * 2) === 0 }); encodedFramesRef.current++ } catch {}
-            finally { _vf?.close() }
-          }
-          } catch (err) { console.error('[dtrek] hook frame error:', err) }
-          frameCountRef.current++; renderedFramesRef.current++
-          renderNextFrame()
-        })
-        return
-      }
 
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
       if (reveal) {
@@ -2450,7 +2344,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     } catch (err) {
       failRendering('Errore durante la preparazione del video. Riprova con meno foto/POI o riduci la durata.')
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,statHookText,curiosityHookText,videoHookPhotoEnabled,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,videoShowBody,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -2883,75 +2777,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 )}
               </>)}
 
-              {/* ── PASSO 2 · APERTURA (gancio) ─────────────────────────────────── */}
+              {/* ── PASSO 2 · APERTURA ──────────────────────────────────────────── */}
               {videoStep===1&&(<>
                 <div className="bg-forest-500/10 border border-forest-500/25 rounded-xl px-3.5 py-2.5">
                   <p className="text-white/70 text-[11px] leading-relaxed">
-                    Sui social si decide nel primo secondo: qui scegli cosa si vede <span className="text-white font-semibold">prima ancora della mappa</span>. Puoi riscrivere i testi suggeriti.
+                    Quanto dura il volo aereo prima che il percorso cominci a scorrere.
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-white/45 text-[11px] font-semibold tracking-wider mb-2.5">TESTI DI APERTURA</p>
-                  <div className="mb-3">
-                    <label className="flex items-center gap-2 mb-1.5 cursor-pointer">
-                      <input type="checkbox" checked={videoHookStatEnabled} onChange={e=>setVideoHookStatEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Statistica d&apos;impatto</span>
-                    </label>
-                    {videoHookStatEnabled && (
-                      <div className="pl-6">
-                        <input
-                          value={hookStatOverride ?? autoStatHook}
-                          onChange={e=>setHookStatOverride(e.target.value)}
-                          maxLength={60}
-                          className="w-full bg-white/7 rounded-xl px-3 py-2 text-white text-sm font-medium outline-none focus:bg-white/10 border border-transparent focus:border-white/20"
-                        />
-                        {hookStatOverride!==null&&hookStatOverride!==autoStatHook&&(
-                          <button onClick={()=>setHookStatOverride(null)} className="text-[10px] font-semibold text-terra-400 hover:text-terra-300 mt-1">
-                            Ripristina suggerito
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {autoCuriosityHook&&(
-                    <div>
-                      <label className="flex items-center gap-2 mb-1.5 cursor-pointer">
-                        <input type="checkbox" checked={videoHookCuriosityEnabled} onChange={e=>setVideoHookCuriosityEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                        <span className="text-white text-xs font-semibold">Curiosità sul percorso</span>
-                      </label>
-                      {videoHookCuriosityEnabled && (
-                        <div className="pl-6">
-                          <input
-                            value={hookCuriosityOverride ?? autoCuriosityHook}
-                            onChange={e=>setHookCuriosityOverride(e.target.value)}
-                            maxLength={80}
-                            className="w-full bg-white/7 rounded-xl px-3 py-2 text-white text-sm font-medium outline-none focus:bg-white/10 border border-transparent focus:border-white/20"
-                          />
-                          {hookCuriosityOverride!==null&&hookCuriosityOverride!==autoCuriosityHook&&(
-                            <button onClick={()=>setHookCuriosityOverride(null)} className="text-[10px] font-semibold text-terra-400 hover:text-terra-300 mt-1">
-                              Ripristina suggerito
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div>
                   <p className="text-white/45 text-[11px] font-semibold tracking-wider mb-2.5">RITMO D&apos;INGRESSO</p>
-                  {routePhotos.length>0&&(
-                    <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                      <input type="checkbox" checked={videoHookPhotoEnabled} onChange={e=>setVideoHookPhotoEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Apri con la foto migliore a schermo intero</span>
-                    </label>
-                  )}
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={videoHookFastIntro} onChange={e=>setVideoHookFastIntro(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
                     <span className="text-white text-xs font-semibold">Intro aerea più rapida</span>
                   </label>
+                  <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
+                    Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, l&apos;intro si accorcia e il percorso parte prima.
+                  </p>
                 </div>
               </>)}
 
@@ -3343,7 +3185,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   ['Formato', `${videoOrientation} · ${videoFps} fps`],
                   ['Stile foto', videoPhotoStyle==='classic'?'Classico':'Carosello'],
                   ['Foto incluse', includedPhotoCount===0?'nessuna':`${includedPhotoCount}`],
-                  ['Apertura', [videoHookStatEnabled&&'statistica', videoHookCuriosityEnabled&&autoCuriosityHook&&'curiosità', videoHookPhotoEnabled&&routePhotos.length>0&&'foto'].filter(Boolean).join(' · ')||'nessuna'],
+                  ['Apertura', videoHookFastIntro?'intro rapida':'intro estesa'],
                   ['Durata stimata', `~${est}s`],
                 ]
                 return (<>
