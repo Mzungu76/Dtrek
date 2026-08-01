@@ -43,6 +43,8 @@ export interface PoiOnRoute {
   name?: string
   progress: number        // 0..1 lungo il percorso, punto più vicino
   distFromTrackM: number
+  lat: number
+  lon: number
   /** Miniatura Wikipedia del luogo, se ne esiste una (WikiPage.thumbnail). */
   imageUrl?: string
   /** Prima frase dell'estratto Wikipedia — una riga, non un paragrafo. */
@@ -117,6 +119,7 @@ export function projectPoisOnRoute(
     const w = wikiById?.get(poi.id)
     out.push({
       id: poi.id, type: poi.type, name: poi.name?.trim() || undefined,
+      lat: poi.lat, lon: poi.lon,
       progress: bestIdx / (routeLatLon.length - 1),
       distFromTrackM: poi.distFromTrack,
       imageUrl: w?.thumbnail,
