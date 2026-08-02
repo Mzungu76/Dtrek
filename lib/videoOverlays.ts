@@ -565,9 +565,11 @@ export function drawOdometer(
   } catch (err) { console.error('[dtrek] drawOdometer error:', err); return 0 }
 }
 
-// ── Vetta conquistata (opzionale) ──────────────────────────────────────────────
+// ── Quota massima raggiunta (opzionale) ────────────────────────────────────────
 /** Un solo momento in tutto il video, al punto più alto: lampo, raggi che si aprono dal pin e la
- *  quota in grande. `t` copre 0..1 l'intero momento. */
+ *  quota in grande. "Quota massima" e non "vetta": il punto più alto di un tracciato è quasi mai
+ *  una cima, e su un anello di fondovalle chiamarlo vetta sarebbe semplicemente falso.
+ *  `t` copre 0..1 l'intero momento. */
 export function drawPeakConquered(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number, w: number, h: number, sc: number,
@@ -614,9 +616,9 @@ export function drawPeakConquered(
     ctx.translate(cx, cy - 250*sc * up)
     ctx.scale(scale, scale)
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'
-    ctx.font = `900 ${Math.round(30*sc)}px -apple-system,sans-serif`
+    ctx.font = `900 ${Math.round(34*sc)}px -apple-system,sans-serif`
     ctx.strokeStyle = 'rgba(6,20,32,0.92)'; ctx.lineWidth = 7*sc
-    ctx.strokeText('▲ VETTA', 0, -66*sc); ctx.fillStyle = '#fde047'; ctx.fillText('▲ VETTA', 0, -66*sc)
+    ctx.strokeText('▲ QUOTA MAX', 0, -70*sc); ctx.fillStyle = '#fde047'; ctx.fillText('▲ QUOTA MAX', 0, -70*sc)
     const label = `${Math.round(altM)} m`
     ctx.font = `900 ${Math.round(96*sc)}px -apple-system,sans-serif`
     ctx.strokeStyle = 'rgba(6,20,32,0.92)'; ctx.lineWidth = 12*sc
@@ -1179,34 +1181,32 @@ export function drawTeiPanel(
 ) {
   try {
   const k = clamp01(t)
-  const alpha = Math.min(1, k / 0.10) * (k > 0.92 ? Math.max(0, 1 - (k - 0.92) / 0.08) : 1)
-  if (alpha <= 0.01) return
-
   ctx.save()
   try {
-    ctx.globalAlpha = alpha
-    ctx.fillStyle = 'rgba(6,14,20,0.82)'; ctx.fillRect(0, 0, w, h)
-
+    // Stesso telaio degli altri stacchi (fondale, titolo, centratura verticale) invece di un
+    // pannello con le sue coordinate: prima il punteggio era ancorato a h*0.26 e le barre a h*0.47,
+    // che su un 9:16 lasciava un terzo di schermo vuoto sotto e lo faceva sembrare un errore.
     const cx = w / 2
-    let y = h * 0.26
+    const rowH = 66 * sc
+    const contentH = 210 * sc + data.parts.length * rowH + (data.penalty ? rowH + 12 * sc : 0)
+    const f = beatFrame(ctx, w, h, sc, 'Punteggio', t, contentH)
+    if (!f) return
+    let y = f.y + 74 * sc
 
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'
-    ctx.font = `800 ${Math.round(18 * sc)}px -apple-system,sans-serif`
-    ctx.fillText('QUANTO VALE QUESTO PERCORSO', cx, y - 62 * sc)
 
     // Il punteggio sale da 0 al valore reale: un numero che si compone tiene lo sguardo
     const shown = data.score * (1 - Math.pow(1 - Math.min(1, k / 0.32), 3))
     ctx.fillStyle = data.color
-    ctx.font = `900 ${Math.round(104 * sc)}px -apple-system,sans-serif`
+    ctx.font = `900 ${Math.round(124 * sc)}px -apple-system,sans-serif`
     ctx.fillText(shown.toFixed(1), cx, y)
     ctx.fillStyle = 'white'
-    ctx.font = `800 ${Math.round(26 * sc)}px -apple-system,sans-serif`
-    ctx.fillText(data.label, cx, y + 68 * sc)
+    ctx.font = `800 ${Math.round(34 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(data.label, cx, y + 82 * sc)
 
     // Le cinque componenti, una dopo l'altra
-    y = h * 0.47
-    const barW = w - 150 * sc, barX = (w - barW) / 2, rowH = 46 * sc
+    y = f.y + 210 * sc
+    const barW = w - 120 * sc, barX = (w - barW) / 2
     ctx.textBaseline = 'middle'
     data.parts.forEach((p, i) => {
       const d = 0.30 + i * 0.06
@@ -1214,16 +1214,16 @@ export function drawTeiPanel(
       const fill = (1 - Math.pow(1 - f, 3)) * clamp01(p.value)
       const ry = y + i * rowH
       ctx.textAlign = 'left'
-      ctx.fillStyle = 'rgba(255,255,255,0.72)'
-      ctx.font = `700 ${Math.round(17 * sc)}px -apple-system,sans-serif`
+      ctx.fillStyle = 'rgba(255,255,255,0.78)'
+      ctx.font = `700 ${Math.round(28 * sc)}px -apple-system,sans-serif`
       ctx.fillText(p.label, barX, ry)
-      const tw = 128 * sc, tx = barX + tw
+      const tw = 208 * sc, tx = barX + tw
       const tBarW = barW - tw
       ctx.fillStyle = 'rgba(255,255,255,0.14)'
-      rrect(ctx, tx, ry - 7 * sc, tBarW, 14 * sc, 7 * sc); ctx.fill()
+      rrect(ctx, tx, ry - 9 * sc, tBarW, 18 * sc, 9 * sc); ctx.fill()
       if (fill > 0.001) {
         ctx.fillStyle = data.color
-        rrect(ctx, tx, ry - 7 * sc, Math.max(14 * sc, tBarW * fill), 14 * sc, 7 * sc); ctx.fill()
+        rrect(ctx, tx, ry - 9 * sc, Math.max(18 * sc, tBarW * fill), 18 * sc, 9 * sc); ctx.fill()
       }
     })
 
@@ -1232,17 +1232,17 @@ export function drawTeiPanel(
       const f = clamp01((k - 0.30 - data.parts.length * 0.06) / 0.22)
       const fill = (1 - Math.pow(1 - f, 3)) * clamp01(data.penalty.value)
       ctx.textAlign = 'left'
-      ctx.fillStyle = 'rgba(248,113,113,0.9)'
-      ctx.font = `700 ${Math.round(17 * sc)}px -apple-system,sans-serif`
+      ctx.fillStyle = 'rgba(248,113,113,0.92)'
+      ctx.font = `700 ${Math.round(28 * sc)}px -apple-system,sans-serif`
       ctx.fillText(data.penalty.label, barX, ry)
-      const tw = 128 * sc, tx = barX + tw, tBarW = barW - tw
+      const tw = 208 * sc, tx = barX + tw, tBarW = barW - tw
       ctx.fillStyle = 'rgba(255,255,255,0.14)'
-      rrect(ctx, tx, ry - 7 * sc, tBarW, 14 * sc, 7 * sc); ctx.fill()
+      rrect(ctx, tx, ry - 9 * sc, tBarW, 18 * sc, 9 * sc); ctx.fill()
       if (fill > 0.001) {
         // Cresce da destra verso sinistra: toglie, non aggiunge
-        const pw = Math.max(14 * sc, tBarW * fill)
+        const pw = Math.max(18 * sc, tBarW * fill)
         ctx.fillStyle = '#ef4444'
-        rrect(ctx, tx + tBarW - pw, ry - 7 * sc, pw, 14 * sc, 7 * sc); ctx.fill()
+        rrect(ctx, tx + tBarW - pw, ry - 9 * sc, pw, 18 * sc, 9 * sc); ctx.fill()
       }
     }
   } finally { ctx.restore() }
@@ -1314,20 +1314,20 @@ function beatFrame(
   const g = ctx.createLinearGradient(0, 0, 0, h)
   g.addColorStop(0, 'rgba(6,14,20,0.93)'); g.addColorStop(1, 'rgba(4,10,15,0.97)')
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
-  const HEAD = 74 * sc
+  const HEAD = 92 * sc
   const top = Math.max(h * 0.12, (h - (HEAD + contentH)) / 2)
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   ctx.fillStyle = 'rgba(255,255,255,0.55)'
-  ctx.font = `800 ${Math.round(24 * sc)}px -apple-system,sans-serif`
+  ctx.font = `800 ${Math.round(36 * sc)}px -apple-system,sans-serif`
   ctx.fillText(title.toUpperCase(), w / 2, top)
   ctx.fillStyle = '#e08d3c'
-  rrect(ctx, w / 2 - 22 * sc, top + 20 * sc, 44 * sc, 3 * sc, 1.5 * sc); ctx.fill()
+  rrect(ctx, w / 2 - 28 * sc, top + 27 * sc, 56 * sc, 4 * sc, 2 * sc); ctx.fill()
   return { alpha, y: top + HEAD }
 }
 
 /** Altezza di una griglia di statistiche a `cols` colonne. */
 function statsHeight(n: number, sc: number, cols = 2): number {
-  return Math.ceil(n / cols) * 132 * sc
+  return Math.ceil(n / cols) * 164 * sc
 }
 
 /** Voci grandi con etichetta sotto, in griglia — entrano a scalare. */
@@ -1343,14 +1343,14 @@ function beatStats(
     if (f <= 0.01) return
     const ease = 1 - Math.pow(1 - f, 3)
     const cx = x0 + (i % cols) * cellW + cellW / 2
-    const cy = yTop + Math.floor(i / cols) * 104 * sc + (1 - ease) * 20 * sc
+    const cy = yTop + Math.floor(i / cols) * 130 * sc + (1 - ease) * 20 * sc
     ctx.globalAlpha = alpha * ease
     ctx.fillStyle = 'white'
-    ctx.font = `900 ${Math.round(58 * sc)}px -apple-system,sans-serif`
+    ctx.font = `900 ${Math.round(74 * sc)}px -apple-system,sans-serif`
     ctx.fillText(r.v, cx, cy)
-    ctx.fillStyle = 'rgba(255,255,255,0.55)'
-    ctx.font = `700 ${Math.round(19 * sc)}px -apple-system,sans-serif`
-    ctx.fillText(r.k.toUpperCase(), cx, cy + 42 * sc)
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.font = `700 ${Math.round(25 * sc)}px -apple-system,sans-serif`
+    ctx.fillText(r.k.toUpperCase(), cx, cy + 54 * sc)
   })
   ctx.globalAlpha = alpha
 }
@@ -1378,8 +1378,8 @@ export function drawElevationBeat(
   ctx.save()
   try {
     if (series.length < 2) return
-    const gh = 230 * sc
-    const f = beatFrame(ctx, w, h, sc, 'Il profilo', t, gh + 60 * sc + statsHeight(rows.length, sc))
+    const gh = 260 * sc
+    const f = beatFrame(ctx, w, h, sc, 'Il profilo', t, gh + 74 * sc + statsHeight(rows.length, sc))
     if (!f) return
     const k = clamp01(t)
     const gx = 70 * sc, gw = w - 140 * sc, gy = f.y, gh2 = gh
@@ -1406,7 +1406,7 @@ export function drawElevationBeat(
     ctx.stroke()
     ctx.fillStyle = 'white'
     ctx.beginPath(); ctx.arc(px(upTo), py(upTo), 6 * sc, 0, Math.PI * 2); ctx.fill()
-    beatStats(ctx, w, sc, gy + gh2 + 78 * sc, f.alpha, k, rows)
+    beatStats(ctx, w, sc, gy + gh2 + 92 * sc, f.alpha, k, rows)
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawElevationBeat error:', err) }
 }
@@ -1418,18 +1418,18 @@ export function drawNatureBeat(
   try {
   ctx.save()
   try {
-    const contentH = 240 * sc + (data.extra?.length ? statsHeight(data.extra.length, sc) : 0)
+    const contentH = 400 * sc + (data.extra?.length ? statsHeight(data.extra.length, sc) : 0)
     const f = beatFrame(ctx, w, h, sc, 'La natura intorno', t, contentH)
     if (!f) return
     const k = clamp01(t)
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
     ctx.fillStyle = '#8cc894'
-    ctx.font = `900 ${Math.round(52 * sc)}px -apple-system,sans-serif`
+    ctx.font = `900 ${Math.round(64 * sc)}px -apple-system,sans-serif`
     ctx.fillText(data.belt, w / 2, f.y)
-    ctx.fillStyle = 'rgba(255,255,255,0.78)'
-    ctx.font = `500 ${Math.round(27 * sc)}px -apple-system,sans-serif`
-    wrapCentered(ctx, data.description, w / 2, f.y + 76 * sc, w - 130 * sc, 40 * sc, 4, clamp01((k - 0.14) / 0.3))
-    if (data.extra?.length) beatStats(ctx, w, sc, f.y + 290 * sc, f.alpha, k, data.extra)
+    ctx.fillStyle = 'rgba(255,255,255,0.82)'
+    ctx.font = `500 ${Math.round(42 * sc)}px -apple-system,sans-serif`
+    wrapCentered(ctx, data.description, w / 2, f.y + 100 * sc, w - 110 * sc, 60 * sc, 4, clamp01((k - 0.14) / 0.3))
+    if (data.extra?.length) beatStats(ctx, w, sc, f.y + 400 * sc, f.alpha, k, data.extra)
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawNatureBeat error:', err) }
 }
@@ -1449,45 +1449,45 @@ export function drawNoticesBeat(
     const bx = 62 * sc, bw = w - 124 * sc
     // Le altezze si misurano PRIMA di disegnare il fondale: servono a beatFrame per centrare il
     // blocco, e dipendono da quante righe occupa ogni avviso una volta mandato a capo.
-    ctx.font = `500 ${Math.round(26 * sc)}px -apple-system,sans-serif`
+    ctx.font = `500 ${Math.round(40 * sc)}px -apple-system,sans-serif`
     const items = data.notices.slice(0, 3).map(n => {
-      const lines = wrapLines(ctx, n.text, bw - 92 * sc, 3)
-      return { n, lines, boxH: Math.max(84 * sc, lines.length * 36 * sc + 46 * sc) }
+      const lines = wrapLines(ctx, n.text, bw - 130 * sc, 3)
+      return { n, lines, boxH: Math.max(122 * sc, lines.length * 54 * sc + 62 * sc) }
     })
-    const contentH = items.reduce((sum, it) => sum + it.boxH + 18 * sc, 0) + (data.verifiedOn ? 56 * sc : 0)
+    const contentH = items.reduce((sum, it) => sum + it.boxH + 20 * sc, 0) + (data.verifiedOn ? 68 * sc : 0)
     const f = beatFrame(ctx, w, h, sc, 'Da sapere prima di andare', t, contentH)
     if (!f) return
     let y = f.y
     items.forEach(({ n, lines, boxH }, i) => {
       const fIn = clamp01((k - (0.12 + i * 0.1)) / 0.24)
-      if (fIn <= 0.01) { y += boxH + 16 * sc; return }
+      if (fIn <= 0.01) { y += boxH + 20 * sc; return }
       const ease = 1 - Math.pow(1 - fIn, 3)
       ctx.globalAlpha = f.alpha * ease
       const col = COL[n.severity] ?? COL.info
       ctx.textAlign = 'left'; ctx.textBaseline = 'top'
-      ctx.font = `500 ${Math.round(26 * sc)}px -apple-system,sans-serif`
+      ctx.font = `500 ${Math.round(40 * sc)}px -apple-system,sans-serif`
       const by = y + (1 - ease) * 18 * sc
       ctx.fillStyle = 'rgba(255,255,255,0.05)'
       rrect(ctx, bx, by, bw, boxH, 16 * sc); ctx.fill()
       ctx.fillStyle = col
       rrect(ctx, bx, by, 6 * sc, boxH, 3 * sc); ctx.fill()
       ctx.fillStyle = col
-      ctx.beginPath(); ctx.arc(bx + 46 * sc, by + 40 * sc, 19 * sc, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(bx + 56 * sc, by + 54 * sc, 26 * sc, 0, Math.PI * 2); ctx.fill()
       ctx.fillStyle = '#06111a'; ctx.textAlign = 'center'
-      ctx.font = `900 ${Math.round(24 * sc)}px -apple-system,sans-serif`
-      ctx.fillText(ICON[n.severity] ?? 'i', bx + 46 * sc, by + 29 * sc)
+      ctx.font = `900 ${Math.round(34 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(ICON[n.severity] ?? 'i', bx + 56 * sc, by + 39 * sc)
       ctx.textAlign = 'left'
-      ctx.fillStyle = 'rgba(255,255,255,0.92)'
-      ctx.font = `500 ${Math.round(26 * sc)}px -apple-system,sans-serif`
-      lines.forEach((l, li) => ctx.fillText(l, bx + 84 * sc, by + 22 * sc + li * 36 * sc))
-      y += boxH + 16 * sc
+      ctx.fillStyle = 'rgba(255,255,255,0.94)'
+      ctx.font = `500 ${Math.round(40 * sc)}px -apple-system,sans-serif`
+      lines.forEach((l, li) => ctx.fillText(l, bx + 112 * sc, by + 30 * sc + li * 54 * sc))
+      y += boxH + 20 * sc
     })
     if (data.verifiedOn) {
       ctx.globalAlpha = f.alpha * clamp01((k - 0.4) / 0.25)
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.fillStyle = 'rgba(255,255,255,0.42)'
-      ctx.font = `600 ${Math.round(19 * sc)}px -apple-system,sans-serif`
-      ctx.fillText(`Verificato il ${data.verifiedOn} — potrebbe essere cambiato`, w / 2, y + 24 * sc)
+      ctx.font = `600 ${Math.round(28 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(`Verificato il ${data.verifiedOn} — potrebbe essere cambiato`, w / 2, y + 30 * sc)
     }
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawNoticesBeat error:', err) }
@@ -1515,7 +1515,7 @@ export function drawPlacesBeat(
   ctx.save()
   try {
     const shown = places.slice(0, 4)
-    const rowH = 108 * sc
+    const rowH = 152 * sc
     const f = beatFrame(ctx, w, h, sc, 'Cosa incontri', t, shown.length * rowH)
     if (!f) return
     const k = clamp01(t)
@@ -1526,11 +1526,11 @@ export function drawPlacesBeat(
       const ease = 1 - Math.pow(1 - fIn, 3)
       ctx.globalAlpha = f.alpha * ease
       const by = f.y + i * rowH + (1 - ease) * 20 * sc
-      const boxH = 92 * sc
+      const boxH = 134 * sc
       ctx.fillStyle = 'rgba(255,255,255,0.06)'
       rrect(ctx, bx, by, bw, boxH, 18 * sc); ctx.fill()
 
-      const thumb = 68 * sc, tx0 = bx + 14 * sc, ty0 = by + (boxH - thumb) / 2
+      const thumb = 102 * sc, tx0 = bx + 16 * sc, ty0 = by + (boxH - thumb) / 2
       const hasImg = !!pl.image && pl.image.width > 0 && pl.image.height > 0
       if (hasImg) {
         ctx.save()
@@ -1554,19 +1554,19 @@ export function drawPlacesBeat(
       const maxTW = bx + bw - tx - 18 * sc
       ctx.textAlign = 'left'; ctx.textBaseline = 'top'
       ctx.fillStyle = pl.color
-      ctx.font = `800 ${Math.round(15 * sc)}px -apple-system,sans-serif`
-      ctx.fillText(pl.kind.toUpperCase(), tx, by + 18 * sc)
+      ctx.font = `800 ${Math.round(24 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(pl.kind.toUpperCase(), tx, by + 22 * sc)
       ctx.fillStyle = 'white'
-      ctx.font = `800 ${Math.round(28 * sc)}px -apple-system,sans-serif`
+      ctx.font = `800 ${Math.round(42 * sc)}px -apple-system,sans-serif`
       let nm = pl.name
       while (ctx.measureText(nm).width > maxTW && nm.length > 4) nm = nm.slice(0, -4) + '…'
-      ctx.fillText(nm, tx, by + 40 * sc)
+      ctx.fillText(nm, tx, by + 54 * sc)
       if (pl.caption) {
-        ctx.fillStyle = 'rgba(255,255,255,0.55)'
-        ctx.font = `italic 500 ${Math.round(17 * sc)}px Georgia,serif`
+        ctx.fillStyle = 'rgba(255,255,255,0.58)'
+        ctx.font = `italic 500 ${Math.round(26 * sc)}px Georgia,serif`
         let cp = pl.caption
         while (ctx.measureText(cp).width > maxTW && cp.length > 4) cp = cp.slice(0, -4) + '…'
-        ctx.fillText(cp, tx, by + 70 * sc)
+        ctx.fillText(cp, tx, by + 100 * sc)
       }
     })
   } finally { ctx.restore() }
@@ -1807,4 +1807,75 @@ export function drawOpeningTitle(
     }
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawOpeningTitle error:', err) }
+}
+
+// ── Schermata di chiusura ──────────────────────────────────────────────────────
+/**
+ * Il congedo del video: un velo sul paesaggio, il titolo, i due numeri che contano.
+ *
+ * Prima era disegnata a mano dentro RouteMap3D (l'unico disegno rimasto fuori da questo file) ed
+ * erano DUE dissolvenze in fila: un nero che saliva fino a coprire tutto, la scheda che compariva
+ * solo oltre l'82% di quel nero, e — con la chiusura ad anello — il nero che se ne andava
+ * riscoprendo la mappa. Da fuori si vedeva "zoom indietro, buio, e di nuovo la mappa": tre eventi
+ * scollegati che sembravano un errore di montaggio.
+ *
+ * Qui la mappa non sparisce MAI: il velo la scurisce quanto basta a leggere, e scheda e velo sono
+ * una dissolvenza sola. `fade` 0..1 li governa entrambi — chi chiama lo porta a 1 e ce lo lascia
+ * (finale normale), oppure lo riporta a 0 mentre la telecamera torna all'inquadratura d'apertura
+ * (chiusura ad anello), e allora l'ultimo fotogramma è identico al primo.
+ */
+export function drawEndCard(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, sc: number,
+  data: { title: string; km: number; elevGain: number },
+  fade: number,
+) {
+  try {
+  const fa = clamp01(fade)
+  if (fa <= 0.001) return
+  ctx.save()
+  try {
+    const veil = ctx.createLinearGradient(0, 0, 0, h)
+    veil.addColorStop(0,    'rgba(4,11,17,0.58)')
+    veil.addColorStop(0.45, 'rgba(4,11,17,0.82)')
+    veil.addColorStop(1,    'rgba(4,11,17,0.68)')
+    ctx.globalAlpha = fa; ctx.fillStyle = veil; ctx.fillRect(0, 0, w, h)
+
+    // Il testo entra DOPO che il velo ha cominciato a scurire: scritte piene su mappa ancora chiara
+    // sarebbero illeggibili nei primi fotogrammi, che è quando lo sguardo ci si posa.
+    ctx.globalAlpha = Math.pow(clamp01((fa - 0.25) / 0.75), 1.1)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+
+    ctx.fillStyle = '#22d3ee'
+    ctx.font = `800 ${Math.round(30 * sc)}px -apple-system,sans-serif`
+    ctx.fillText('DTrek', w / 2, h / 2 - Math.round(108 * sc))
+
+    ctx.fillStyle = 'white'
+    ctx.font = `700 ${Math.round(54 * sc)}px -apple-system,sans-serif`
+    let et = data.title
+    while (ctx.measureText(et).width > w - Math.round(80 * sc) && et.length > 4) et = et.slice(0, -4) + '…'
+    ctx.fillText(et, w / 2, h / 2 - Math.round(36 * sc))
+
+    const stats = [
+      { v: `${+data.km.toFixed(1)} km`, l: 'distanza' },
+      { v: `${Math.round(data.elevGain)} m`, l: 'D+' },
+    ]
+    const cw = Math.round(180 * sc), gap = Math.round(24 * sc)
+    const total = stats.length * cw + (stats.length - 1) * gap
+    const x0 = w / 2 - total / 2 + cw / 2, sy = h / 2 + Math.round(66 * sc)
+    stats.forEach((s, i) => {
+      const x = x0 + i * (cw + gap)
+      ctx.fillStyle = 'white'
+      ctx.font = `800 ${Math.round(50 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(s.v, x, sy)
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'
+      ctx.font = `600 ${Math.round(18 * sc)}px -apple-system,sans-serif`
+      ctx.fillText(s.l.toUpperCase(), x, sy + Math.round(38 * sc))
+    })
+
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'
+    ctx.font = `400 ${Math.round(16 * sc)}px -apple-system,sans-serif`
+    ctx.fillText('Tracciato con DTrek', w / 2, h / 2 + Math.round(150 * sc))
+  } finally { ctx.restore() }
+  } catch (err) { console.error('[dtrek] drawEndCard error:', err) }
 }

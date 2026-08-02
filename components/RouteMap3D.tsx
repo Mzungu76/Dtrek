@@ -25,7 +25,8 @@ import {
 import { planPoiCards, projectPoisOnRoute, activeCardAt } from '@/lib/videoPoiCards'
 import {
   planInterludes, interludeTotalFrames, DEFAULT_INTERLUDES, INTERLUDE_LABEL,
-  type InterludeKind, type InterludeSetting, type PlannedInterlude,
+  recommendedInterludeSeconds, interludeIsDense,
+  type InterludeKind, type InterludeSetting, type PlannedInterlude, type InterludeContent,
 } from '@/lib/videoInterludes'
 import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
 import type { BeautyScore } from '@/lib/beautyScore'
@@ -38,7 +39,7 @@ import {
   drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
   drawStopPhotoZoom, drawHUD, drawTopBand, drawElevationMarker, safeInsetsFor, drawOpeningTitle,
-  drawPoiTag, drawTeiPanel, drawIdentikit,
+  drawPoiTag, drawTeiPanel, drawIdentikit, drawEndCard,
   drawNumbersBeat, drawElevationBeat, drawNatureBeat, drawNoticesBeat, drawPlacesBeat, drawStoryCaption,
   drawPositionDot,
 } from '@/lib/videoOverlays'
@@ -131,10 +132,12 @@ function prepErrorMessage(stage: string, err: unknown): string {
 // Passi del wizard video. L'ordine segue la TIMELINE del video stesso (apertura → viaggio → foto →
 // rifiniture) dopo la scelta tecnica iniziale del formato: chi lo compila ripercorre mentalmente il
 // filmato dall'inizio alla fine, invece di saltare tra impostazioni scollegate.
+// Il passo "Apertura" conteneva UNA casella e una nota che ripeteva la casella: un passo intero da
+// attraversare per una scelta sola. L'intro rapida è una questione di ritmo e ora sta nel passo
+// "Percorso", accanto alla durata — che è la stessa domanda posta da un altro lato.
 const WIZARD_STEPS = [
   { id: 'formato',  title: 'Formato',  sub: 'Dove pubblicherai il video' },
-  { id: 'apertura', title: 'Apertura', sub: 'I primi secondi, quelli che fermano lo scroll' },
-  { id: 'percorso', title: 'Percorso', sub: 'Come si vede il viaggio' },
+  { id: 'percorso', title: 'Percorso', sub: 'Il viaggio: ritmo, inquadrature, durata' },
   { id: 'foto',     title: 'Foto',     sub: 'Le tue foto lungo il tracciato' },
   { id: 'effetti',  title: 'Effetti',  sub: 'Dati a schermo e tocchi scenici' },
   { id: 'genera',   title: 'Genera',   sub: 'Controlla il riepilogo e avvia' },
@@ -690,6 +693,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
   }, [carouselPhotoTimings, cumDist, totalDistanceM, photoDurationSec, videoDuration, videoFps,
       videoPhotoStyle, videoHookFastIntro, videoMode, videoInterludes])
+
+  /** Contenuto reale di ogni stacco su QUESTA escursione, per calcolarne la durata consigliata.
+   *  Vedi recommendedInterludeSeconds: la durata giusta è quanto ci vuole a leggere ciò che c'è
+   *  dentro, e cambia da percorso a percorso — tre avvisi lunghi non si leggono nel tempo di
+   *  quattro numeri. */
+  const interludeContent = useMemo((): Record<InterludeKind, InterludeContent> => {
+    const countWords = (t: string) => t.trim().split(/\s+/).filter(Boolean).length
+    const notices = normalizeGuideNotices(guide?.notices).slice(0, 3)   // drawNoticesBeat ne mostra 3
+    const altMax = altitudeSeries.length ? Math.max(...altitudeSeries.slice(0, 20000)) : 0
+    const belt = estimateVegetationBelt(trackPoints[0]?.lat ?? 45, altMax)
+    const teiParts = (beautyScore?.categories ?? []).filter(c => c.key.startsWith('v_')).length
+    const hasPenalty = (beautyScore?.categories ?? []).some(c => c.key === 'f_antr')
+    return {
+      numeri:  { items: 4, proseWords: 0 },
+      profilo: { items: 2, proseWords: 0 },
+      natura:  { items: 2, proseWords: countWords(belt.description) },
+      tei:     { items: teiParts + (hasPenalty ? 1 : 0), proseWords: 0 },
+      avvisi:  { items: notices.length, proseWords: notices.reduce((a, n) => a + countWords(n.text), 0) },
+      // drawPlacesBeat ne mostra al massimo 4, mescolando luoghi notevoli e foto dell'utente
+      luoghi:  { items: Math.min(4, Math.min(MAX_VIDEO_POIS, pois?.length ?? 0) + videoEstimate.stops), proseWords: 0 },
+    }
+  }, [guide?.notices, altitudeSeries, trackPoints, beautyScore, pois, videoEstimate.stops])
 
   const carouselEstimatedSec = videoPhotoStyle === 'carousel' ? videoEstimate.total : null
 
@@ -1819,9 +1844,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // compare, ed è corretto così.
     const milestoneHitRef = [0.25, 0.5, 0.75].map(mark => ({ mark, hitFrame: -1 }))
     const MILESTONE_FRAMES = Math.round(TARGET_FPS * 1.7)
-    // Vetta conquistata: stesso meccanismo dei traguardi, ma una volta sola e sul punto più alto.
+    // Quota massima raggiunta: stesso meccanismo dei traguardi, ma una volta sola e sul punto più
+    // alto. 1,6 s invece di 2: è un lampo che sottolinea un momento, e a due secondi cominciava a
+    // sembrare che il video si fosse fermato lì.
     const peakHitRef = { current: -1 }
-    const PEAK_FRAMES = Math.round(TARGET_FPS * 2.0)
+    const PEAK_FRAMES = Math.round(TARGET_FPS * 1.6)
     // Tracciato d'insieme normalizzato per la mini-mappa: calcolato UNA volta, non ad ogni fotogramma.
     const miniRoute = videoMiniMapEnabled ? buildMiniRoute(pts) : []
     // Avanzamenti delle foto incluse, per le tacche sulla barra
@@ -2413,54 +2440,25 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (videoArrivalStarsEnabled && outroP < STAR_BURST_WINDOW) {
             drawArrivalStars(ctx, outW/2, outH/2, outW/1080, outroP / STAR_BURST_WINDOW)
           }
-          // Pannello TEI (modalità Illustrativo): il "vale la pena?" occupa la prima parte del
-          // finale, prima che la schermata di chiusura copra tutto. Il punteggio e le componenti
-          // arrivano da activity.linkedBeautyScore (teiToBeautyScore, lib/tei.ts).
-          const TEI_WINDOW = 0.42
-          if (isIllustrativo && teiView && outroP < TEI_WINDOW) {
-            drawTeiPanel(ctx, outW, outH, sc2, teiView, outroP / TEI_WINDOW)
-          }
+          // Il punteggio NON compare più nel finale: era l'unica cosa che ci finiva sempre, senza
+          // che nessuno l'avesse chiesta, e come stacco esiste già fra le opzioni (INTERLUDE_LABEL
+          // 'tei'), dove l'utente decide se e dove metterlo.
 
-          // End card fades in during outro. Con la chiusura ad anello la scheda si forma PRIMA
-          // (entro LOOP_BACK_FROM) e poi sfuma via insieme al nero, lasciando riapparire la mappa
-          // già tornata all'inquadratura d'apertura: è quello che rende il riavvolgimento continuo.
-          const FADE_START = isIllustrativo && teiView ? 0.52 : 0.35
-          const cardEnd = videoLoopEnding ? LOOP_BACK_FROM : 1
+          // Schermata di chiusura — il disegno sta in drawEndCard (lib/videoOverlays.ts), qui
+          // resta solo il QUANDO. `fade` sale da FADE_START e, con la chiusura ad anello, ritorna a
+          // zero mentre la telecamera rientra sull'inquadratura d'apertura: velo e scheda se ne
+          // vanno insieme e l'ultimo fotogramma coincide col primo.
+          const FADE_START = 0.34
+          // Senza anello la scheda deve essere PIENA prima della fine, non arrivarci appena in
+          // tempo: prima si completava esattamente all'ultimo fotogramma e restava leggibile per
+          // una frazione di secondo.
+          const cardEnd = videoLoopEnding ? LOOP_BACK_FROM : 0.62
           const loopOutRaw = videoLoopEnding && outroP > LOOP_BACK_FROM
             ? (outroP - LOOP_BACK_FROM) / (1 - LOOP_BACK_FROM) : 0
           const loopOut = 1 - loopOutRaw * loopOutRaw * (3 - 2 * loopOutRaw)
           if (outroP > FADE_START) {
             const fa = Math.pow(Math.max(0, Math.min(1, (outroP - FADE_START) / Math.max(0.01, cardEnd - FADE_START))), 1.2) * loopOut
-            if (fa < 0.82) {
-              ctx.globalAlpha = fa * 0.95; ctx.fillStyle = 'black'; ctx.fillRect(0, 0, outW, outH); ctx.globalAlpha = 1
-            } else {
-              ctx.globalAlpha = fa; ctx.fillStyle = 'black'; ctx.fillRect(0, 0, outW, outH); ctx.globalAlpha = 1
-              const cardAlpha = Math.min(1, (fa - 0.82) / 0.18)
-              ctx.globalAlpha = cardAlpha
-              ctx.fillStyle = '#22d3ee'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-              ctx.font = `800 ${Math.round(26*sc2)}px -apple-system,sans-serif`
-              ctx.fillText('DTrek', outW/2, outH/2 - Math.round(92*sc2))
-              ctx.fillStyle = 'white'; ctx.font = `700 ${Math.round(44*sc2)}px -apple-system,sans-serif`
-              let et = displayTitle; while(ctx.measureText(et).width > outW - Math.round(80*sc2) && et.length > 4) et = et.slice(0,-4)+'…'
-              ctx.fillText(et, outW/2, outH/2 - Math.round(30*sc2))
-              const statItems:{v:string;l:string;col:string}[] = [
-                {v:`${+totalKm.toFixed(1)} km`, l:'distanza', col:'white'},
-                {v:`${elevGain} m`, l:'D+', col:'white'},
-              ]
-              const sw2 = Math.round(150*sc2), sgap = Math.round(20*sc2)
-              const tw2 = statItems.length*sw2+(statItems.length-1)*sgap
-              const sx0 = outW/2-tw2/2+sw2/2, sy2 = outH/2+Math.round(52*sc2)
-              statItems.forEach((s,i)=>{
-                const sx3 = sx0+i*(sw2+sgap)
-                ctx.fillStyle = s.col; ctx.font = `800 ${Math.round(40*sc2)}px -apple-system,sans-serif`
-                ctx.fillText(s.v, sx3, sy2)
-                ctx.fillStyle = 'rgba(255,255,255,0.42)'; ctx.font = `500 ${Math.round(14*sc2)}px -apple-system,sans-serif`
-                ctx.fillText(s.l, sx3, sy2+Math.round(30*sc2))
-              })
-              ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.font = `400 ${Math.round(12*sc2)}px -apple-system,sans-serif`
-              ctx.fillText('Tracciato con DTrek', outW/2, outH/2+Math.round(130*sc2))
-              ctx.globalAlpha = 1
-            }
+            drawEndCard(ctx, outW, outH, sc2, { title: displayTitle, km: totalKm, elevGain }, fa)
           }
           }
 
@@ -2759,10 +2757,21 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               stopZoomTNow, stopT ?? 0)
           }
         } else {
-        // Peak callout: appears when camera is near the route's highest point (follow phase only)
+        // Pillola con la quota massima quando la telecamera ci passa sopra.
+        //
+        // La finestra era ±0,042 di PERCORSO, cioè l'8,4% del tracciato: su un video da un minuto
+        // sono cinque secondi buoni, e con lo stile Carosello — dove l'avanzamento si ferma davvero
+        // durante le soste — bastava una foto vicino al punto più alto per lasciarla incollata a
+        // schermo per tutta la sosta. Era questo il "si blocca per troppi secondi".
+        // Ora la finestra è un TEMPO (≈2,4 s), convertito in percorso: la stessa cosa che fanno già
+        // i segnalini di quota poco sopra.
+        // Non compare se sono attivi i segnalini di quota (mostrano lo stesso numero nello stesso
+        // punto) o il momento della quota massima (che è la versione in grande di questa pillola):
+        // erano tre modi di dire la stessa cosa, sovrapposti.
+        const peakWindowP = Math.min(0.042, (TARGET_FPS * 2.4) / Math.max(1, ROUTE_FRAMES))
         const peakDist=Math.abs(p-peakRouteP)
-        if(peakDist<0.042&&altitudeSeries.length>0&&introP===undefined&&frameIdx>TITLE_DUR){
-          const peakAlpha=Math.pow(Math.max(0,1-peakDist/0.042),0.5)*0.9
+        if(!videoElevMarkersEnabled&&!videoPeakMomentEnabled&&peakDist<peakWindowP&&altitudeSeries.length>0&&introP===undefined&&frameIdx>TITLE_DUR){
+          const peakAlpha=Math.pow(Math.max(0,1-peakDist/peakWindowP),0.5)*0.9
           const maxAlt=Math.round(altMaxAll)
           const label=`▲ ${maxAlt} m`
           ctx.save()
@@ -3352,6 +3361,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       </button>
                     ))}
                   </div>
+                  {(videoOrientation==='9:16'||videoOrientation==='4:5')&&(
+                    <p className="text-white/30 text-[11px] mt-2 leading-relaxed">
+                      Sui formati verticali la grafica resta dentro i margini che Instagram e TikTok coprono con didascalia e pulsanti.
+                    </p>
+                  )}
                 </div>
 
                 {videoOrientation==='9:16'&&(
@@ -3370,28 +3384,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 )}
               </>)}
 
-              {/* ── PASSO 2 · APERTURA ──────────────────────────────────────────── */}
+              {/* ── PASSO 2 · PERCORSO ──────────────────────────────────────────── */}
               {videoStep===1&&(<>
-                <div className="bg-forest-500/10 border border-forest-500/25 rounded-xl px-3.5 py-2.5">
-                  <p className="text-white/70 text-[11px] leading-relaxed">
-                    Quanto dura il volo aereo prima che il percorso cominci a scorrere.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold tracking-wider mb-2.5">RITMO D&apos;INGRESSO</p>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={videoHookFastIntro} onChange={e=>setVideoHookFastIntro(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Intro aerea più rapida</span>
-                  </label>
-                  <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
-                    Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, l&apos;intro si accorcia e il percorso parte prima.
-                  </p>
-                </div>
-              </>)}
-
-              {/* ── PASSO 3 · PERCORSO ──────────────────────────────────────────── */}
-              {videoStep===2&&(<>
                 <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">STILE MAPPA</p>
                   <div className="flex gap-2">
@@ -3405,7 +3399,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
 
                 <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DURATA DEL PERCORSO</p>
+                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">RITMO</p>
+                  <label className="flex items-center gap-2 cursor-pointer mb-1">
+                    <input type="checkbox" checked={videoHookFastIntro} onChange={e=>setVideoHookFastIntro(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
+                    <span className="text-white text-xs font-semibold">Intro aerea più rapida</span>
+                  </label>
+                  <p className="text-white/30 text-[11px] mb-3 pl-6 leading-relaxed">
+                    Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, il volo iniziale si accorcia e il percorso parte prima.
+                  </p>
                   <div className="flex gap-2">
                     {[15,30,60,90].map(d=>(
                       <button key={d} onClick={()=>setVideoDuration(d)}
@@ -3496,8 +3497,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
               </>)}
 
-              {/* ── PASSO 4 · FOTO ──────────────────────────────────────────────── */}
-              {videoStep===3&&(<>
+              {/* ── PASSO 3 · FOTO ──────────────────────────────────────────────── */}
+              {videoStep===2&&(<>
                 <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">COME APPAIONO LE FOTO</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -3633,8 +3634,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
               </>)}
 
-              {/* ── PASSO 5 · EFFETTI ───────────────────────────────────────────── */}
-              {videoStep===4&&(<>
+              {/* ── PASSO 4 · EFFETTI ───────────────────────────────────────────── */}
+              {videoStep===3&&(<>
                 <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DATI A SCHERMO</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -3652,7 +3653,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       </button>
                     ))}
                   </div>
-                  {videoElevMarkersEnabled&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">La quota compare come numero nei punti che contano (vetta, punto più basso, cambi di pendenza), con la freccia della salita — al posto del vecchio grafico altimetrico, illeggibile a schermo piccolo.</p>}
+                  {videoElevMarkersEnabled&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">La quota compare come numero nei punti che contano (il più alto, il più basso, i cambi di pendenza), con la freccia della salita — al posto del vecchio grafico altimetrico, illeggibile a schermo piccolo.</p>}
                   {videoShowPois&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">I punti di interesse non aggiungono tempo al video (a differenza delle foto) — vengono mostrati i {Math.min(MAX_VIDEO_POIS, pois?.length??0)} più rilevanti vicino al percorso.</p>}
                 </div>
 
@@ -3744,7 +3745,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">STACCHI</p>
                     <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                      Il volo si ferma e un pannello resta a schermo il tempo di essere letto. Sposta il cursore per decidere a che punto del percorso cade.
+                      Il volo si ferma e un pannello resta a schermo il tempo di essere letto. La durata consigliata è calcolata su quanto c&apos;è davvero da leggere in quel pannello, su questo percorso.
                     </p>
                     {videoInterludes.map((iv, idx) => {
                       const unavailable =
@@ -3753,13 +3754,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         (iv.kind==='luoghi' && (pois?.length ?? 0)===0)
                       const patch = (change: Partial<InterludeSetting>) =>
                         setVideoInterludes(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
+                      const advised = recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind])
+                      const dense = interludeIsDense(iv.kind, interludeContent[iv.kind])
+                      const offAdvice = Math.abs(iv.seconds - advised) >= 0.5
                       return (
                         <div key={iv.kind} className={`mb-2.5 ${unavailable?'opacity-40':''}`}>
                           <label className={`flex items-center gap-2 ${unavailable?'':'cursor-pointer'}`}>
                             <input type="checkbox" checked={iv.enabled && !unavailable} disabled={unavailable}
-                              onChange={e=>patch({enabled:e.target.checked})} className="w-4 h-4 accent-forest-500"/>
+                              onChange={e=>{
+                                // Attivandolo si parte dalla durata consigliata invece che da un numero
+                                // fisso uguale per tutti: è la scelta giusta nella grande maggioranza
+                                // dei casi, e resta comunque spostabile col cursore qui sotto.
+                                patch(e.target.checked ? {enabled:true, seconds:advised} : {enabled:false})
+                              }} className="w-4 h-4 accent-forest-500"/>
                             <span className="text-white text-xs font-semibold">{INTERLUDE_LABEL[iv.kind]}</span>
-                            {unavailable&&<span className="text-white/35 text-[10px]">— dati non disponibili</span>}
+                            {unavailable
+                              ? <span className="text-white/35 text-[10px]">— dati non disponibili</span>
+                              : <span className="text-white/30 text-[10px]">· consigliati {advised}s</span>}
                           </label>
                           {iv.enabled&&!unavailable&&(
                             <div className="pl-6 mt-1.5 space-y-1.5">
@@ -3770,6 +3781,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                                   className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
                                 <span className="text-white/70 text-[10px] font-bold w-8 text-right">{iv.seconds}s</span>
                               </div>
+                              {offAdvice&&(
+                                <button onClick={()=>patch({seconds:advised})}
+                                  className="text-terra-300/90 hover:text-terra-200 text-[10px] font-semibold underline underline-offset-2">
+                                  {iv.seconds < advised
+                                    ? `Sotto il consigliato: a ${iv.seconds}s non si fa in tempo a leggerlo — porta a ${advised}s`
+                                    : `Sopra il consigliato: bastano ${advised}s — porta a ${advised}s`}
+                                </button>
+                              )}
+                              {dense&&(
+                                <p className="text-white/30 text-[10px] leading-relaxed">
+                                  Questo pannello ha parecchio da leggere: sopra i 7s però diventa una pausa, quindi il contenuto viene comunque mostrato in forma ridotta.
+                                </p>
+                              )}
                               <div className="flex items-center gap-2">
                                 <span className="text-white/45 text-[10px] w-14 shrink-0">quando</span>
                                 <input type="range" min={5} max={95} step={1} value={Math.round(iv.atP*100)}
@@ -3845,38 +3869,38 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 )}
 
                 <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">PER I SOCIAL</p>
-                  <label className="flex items-start gap-2 mb-2 cursor-pointer">
-                    <input type="checkbox" checked={videoLoopEnding}
-                      onChange={e=>setVideoLoopEnding(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                    <span className="text-white text-xs font-semibold leading-snug">
-                      Chiusura ad anello
-                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
-                        Il finale torna all&apos;inquadratura d&apos;apertura. Reels e TikTok riavvolgono da soli: chiudere dove si è aperti fa ripartire il video senza stacco, e spesso lo si guarda due volte.
-                      </span>
-                    </span>
-                  </label>
-                  <p className="text-white/30 text-[11px] leading-relaxed">
-                    Su formato verticale la grafica resta dentro i margini che l&apos;app di Instagram/TikTok copre con didascalia e pulsanti.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">MOMENTI SPECIALI</p>
+                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">MOMENTI LUNGO IL CAMMINO</p>
                   <label className="flex items-center gap-2 mb-2 cursor-pointer">
                     <input type="checkbox" checked={videoMilestonesEnabled}
                       onChange={e=>setVideoMilestonesEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
                     <span className="text-white text-xs font-semibold">Traguardi 25/50/75% del percorso</span>
                   </label>
-                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={videoPeakMomentEnabled}
                       onChange={e=>setVideoPeakMomentEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Vetta conquistata nel punto più alto</span>
+                    <span className="text-white text-xs font-semibold">Quota massima raggiunta</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
+                    Un lampo e la quota in grande nel punto più alto del tracciato. Non lo chiamiamo &quot;vetta&quot;: il punto più alto di un giro non è quasi mai una cima.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">IL FINALE</p>
+                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
                     <input type="checkbox" checked={videoArrivalStarsEnabled}
                       onChange={e=>setVideoArrivalStarsEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Stelline all&apos;arrivo finale</span>
+                    <span className="text-white text-xs font-semibold">Stelline all&apos;arrivo</span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={videoLoopEnding}
+                      onChange={e=>setVideoLoopEnding(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                    <span className="text-white text-xs font-semibold leading-snug">
+                      Chiusura ad anello
+                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
+                        La telecamera torna all&apos;inquadratura d&apos;apertura e la schermata di chiusura sfuma via con lei: l&apos;ultimo fotogramma è uguale al primo. Reels e TikTok riavvolgono da soli, e così il video riparte senza stacco.
+                      </span>
+                    </span>
                   </label>
                 </div>
 
@@ -3902,13 +3926,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <div className="bg-white/5 rounded-xl px-3 py-2.5 border border-white/8">
                   <p className="text-white/45 text-[10px] font-semibold uppercase tracking-wider mb-1">Sempre attivi, senza toccare nulla</p>
                   <p className="text-white/38 text-[10px] leading-relaxed">
-                    ✦ Ken Burns sulle foto &nbsp;·&nbsp; ✦ Profilo altimetrico animato &nbsp;·&nbsp; ✦ Quota di vetta &nbsp;·&nbsp; ✦ Schermata finale con statistiche &nbsp;·&nbsp; ✦ Camera fluida
+                    ✦ Movimento lento sulle foto &nbsp;·&nbsp; ✦ Titolo e dato forte sull&apos;apertura &nbsp;·&nbsp; ✦ Percorso che si colora avanzando &nbsp;·&nbsp; ✦ Schermata finale con le statistiche &nbsp;·&nbsp; ✦ Camera fluida
                   </p>
                 </div>
               </>)}
 
-              {/* ── PASSO 6 · GENERA ────────────────────────────────────────────── */}
-              {videoStep===5&&(()=>{
+              {/* ── PASSO 5 · GENERA ────────────────────────────────────────────── */}
+              {videoStep===4&&(()=>{
                 const includedPhotoCount = videoEstimate.photos
                 const est = videoEstimate.total
                 const over = est > 60
@@ -3922,7 +3946,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   videoTrailEnabled&&'Scia',
                   videoSlopeShadowEnabled&&'Ombra in salita',
                   videoMilestonesEnabled&&'Traguardi %',
-                  videoPeakMomentEnabled&&'Vetta',
+                  videoPeakMomentEnabled&&'Quota max',
                   videoArrivalStarsEnabled&&'Stelline',
                   videoPhotoMarksEnabled&&'Tacche foto',
                   videoOdometerEnabled&&'Numeri a rullo',
@@ -3932,14 +3956,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 const rows: [string,string][] = [
                   ['Modalità', videoMode==='ricordo'?'Il mio ricordo':'Descrizione del percorso'],
                   ['Formato', `${videoOrientation} · ${videoFps} fps`],
+                  ['Ritmo', videoHookFastIntro?'intro rapida':'intro estesa'],
                   ['Stile foto', videoPhotoStyle==='classic'?'Classico':'Carosello'],
                   ['Foto incluse', includedPhotoCount===0?'nessuna':`${includedPhotoCount}${videoEstimate.stops<includedPhotoCount?` in ${videoEstimate.stops} soste`:''}`],
-                  ['Apertura', videoHookFastIntro?'intro rapida':'intro estesa'],
                   ['Durata reale', `~${est}s${videoEstimate.stillPct>0?` · ${videoEstimate.stillPct}% fermo`:''}`],
                 ]
                 if (videoMode==='illustrativo') {
                   const onBeats = videoInterludes.filter(i=>i.enabled)
-                  rows.splice(4, 0,
+                  rows.splice(5, 0,
                     ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
                     ['Luoghi con foto', `${(poiWiki ?? []).filter(e=>!!e.wiki.thumbnail).length}`],
                     ['Didascalie', `${videoCaptions.filter(c=>c.enabled&&c.text.trim()).length}`],
@@ -3958,7 +3982,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
                     {effects.length===0?(
-                      <p className="text-white/35 text-xs">Nessuno — il video sarà pulito e sobrio. Puoi tornare al passo <button onClick={()=>goToStep(4)} className="text-terra-400 font-semibold hover:text-terra-300">Effetti</button> per aggiungerne.</p>
+                      <p className="text-white/35 text-xs">Nessuno — il video sarà pulito e sobrio. Puoi tornare al passo <button onClick={()=>goToStep(3)} className="text-terra-400 font-semibold hover:text-terra-300">Effetti</button> per aggiungerne.</p>
                     ):(
                       <div className="flex flex-wrap gap-1.5">
                         {effects.map(e=>(

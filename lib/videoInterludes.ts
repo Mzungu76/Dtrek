@@ -47,14 +47,79 @@ export interface PlannedInterlude {
   triggerRouteFrame: number
 }
 
+// I `seconds` di partenza sono le durate consigliate a contenuto tipico (vedi
+// recommendedInterludeSeconds più sotto). Il wizard le ricalcola sul contenuto REALE
+// dell'escursione appena uno stacco viene attivato: questi valori servono solo come punto di
+// partenza coerente, non come numeri scelti a sentimento.
 export const DEFAULT_INTERLUDES: InterludeSetting[] = [
-  { kind: 'numeri',  enabled: true,  seconds: 4, atP: 0.22 },
-  { kind: 'profilo', enabled: true,  seconds: 4, atP: 0.50 },
-  { kind: 'tei',     enabled: false, seconds: 5, atP: 0.78 },
-  { kind: 'natura',  enabled: false, seconds: 4, atP: 0.64 },
-  { kind: 'avvisi',  enabled: false, seconds: 5, atP: 0.36 },
-  { kind: 'luoghi',  enabled: false, seconds: 4, atP: 0.86 },
+  { kind: 'numeri',  enabled: true,  seconds: 3.5, atP: 0.22 },
+  { kind: 'profilo', enabled: true,  seconds: 4,   atP: 0.50 },
+  { kind: 'tei',     enabled: false, seconds: 5.5, atP: 0.78 },
+  { kind: 'natura',  enabled: false, seconds: 5,   atP: 0.64 },
+  { kind: 'avvisi',  enabled: false, seconds: 5.5, atP: 0.36 },
+  { kind: 'luoghi',  enabled: false, seconds: 4,   atP: 0.86 },
 ]
+
+// ── Quanto tenere a schermo uno stacco ────────────────────────────────────────
+//
+// La durata giusta non è un gusto: è quanto ci vuole a LEGGERE quello che c'è dentro. Un pannello
+// di quattro numeri e uno con tre avvisi di due righe l'uno non possono durare lo stesso tempo — il
+// primo diventa una fermata inutilmente lunga, il secondo sparisce a metà frase.
+//
+// Due velocità diverse, perché sono due gesti diversi:
+//  · le voci brevi (una statistica, una barra del punteggio, il nome di un luogo) si COLGONO con
+//    un'occhiata — mezzo secondo l'una, e non si leggono davvero parola per parola;
+//  · le frasi vere (la descrizione della fascia vegetazionale, il testo di un avviso) si LEGGONO,
+//    a ~3 parole al secondo: meno della lettura silenziosa da fermi (~4), perché qui si legge da un
+//    video che scorre, col telefono in mano e senza poter tornare indietro.
+// Applicare la velocità della prosa anche ai numeri era l'errore della prima versione: dava sette
+// secondi a un pannello di quattro cifre.
+const PROSE_WORDS_PER_SECOND = 3.0
+/** Tempo per una voce breve colta a colpo d'occhio. Include lo scaglionamento con cui entrano. */
+const GLANCE_SECONDS = 0.55
+/** L'animazione d'entrata è la stessa per tutti gli stacchi. */
+const ENTRY_SECONDS = 1.4
+/** Oltre questo uno stacco non è più una pausa di lettura ma un'interruzione. Se il contenuto ne
+ *  chiederebbe di più, vuol dire che è troppo denso: va accorciato il contenuto, non allungato il
+ *  pannello (drawNoticesBeat mostra al massimo 3 avvisi, drawPlacesBeat 4 luoghi, proprio per questo). */
+const MAX_RECOMMENDED = 7
+const MIN_RECOMMENDED = 3
+
+/** Contenuto reale dello stacco, per pesarne la durata. Tutto opzionale: senza dati si ricade su
+ *  una stima tipica del tipo di pannello. */
+export interface InterludeContent {
+  /** Voci brevi che compaiono: statistiche, barre, righe di elenco. */
+  items?: number
+  /** Parole di prosa vera da leggere (descrizioni, testi degli avvisi). Non i numeri. */
+  proseWords?: number
+}
+
+/** Durata consigliata in secondi, al mezzo secondo. */
+export function recommendedInterludeSeconds(kind: InterludeKind, content: InterludeContent = {}): number {
+  const items = content.items ?? DEFAULT_ITEMS[kind]
+  const prose = content.proseWords ?? DEFAULT_PROSE_WORDS[kind]
+  const raw = ENTRY_SECONDS + items * GLANCE_SECONDS + prose / PROSE_WORDS_PER_SECOND + EXTRA_SECONDS[kind]
+  return Math.min(MAX_RECOMMENDED, Math.max(MIN_RECOMMENDED, Math.round(raw * 2) / 2))
+}
+
+/** True quando il contenuto chiederebbe più del massimo: il pannello sarà comunque tagliato corto. */
+export function interludeIsDense(kind: InterludeKind, content: InterludeContent = {}): boolean {
+  const items = content.items ?? DEFAULT_ITEMS[kind]
+  const prose = content.proseWords ?? DEFAULT_PROSE_WORDS[kind]
+  return ENTRY_SECONDS + items * GLANCE_SECONDS + prose / PROSE_WORDS_PER_SECOND + EXTRA_SECONDS[kind] > MAX_RECOMMENDED
+}
+
+const DEFAULT_ITEMS: Record<InterludeKind, number> = {
+  numeri: 4, profilo: 2, natura: 2, tei: 5, avvisi: 2, luoghi: 3,
+}
+const DEFAULT_PROSE_WORDS: Record<InterludeKind, number> = {
+  numeri: 0, profilo: 0, natura: 18, tei: 0, avvisi: 24, luoghi: 0,
+}
+/** Tempo che il pannello si prende a prescindere dal testo: il profilo si disegna da sinistra a
+ *  destra, il punteggio conta da zero e riempie cinque barre — animazioni che vanno viste finire. */
+const EXTRA_SECONDS: Record<InterludeKind, number> = {
+  numeri: 0, profilo: 1.6, natura: 0, tei: 1.4, avvisi: 0.4, luoghi: 0.4,
+}
 
 /**
  * Prepara gli stacchi da inserire nella fase di percorso: scarta quelli disattivati o senza dati,
