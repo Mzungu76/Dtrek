@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, ChevronUp, Star, GitCompare } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronUp, Star, GitCompare, CalendarClock } from 'lucide-react'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RoutePage from './RoutePage'
@@ -27,6 +27,7 @@ export default function RouteHub({
   tabScrollRef, primaryAction, summaryBanner, weatherIcon, onSectionChange,
   scoreBadges, scoreGaugeBadge, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
   subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite, onCompare,
+  nextOutingFilter, onToggleNextOutingFilter,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
@@ -146,9 +147,19 @@ export default function RouteHub({
   const searchQueryNorm = searchQuery.trim().toLowerCase()
   const visibleItems = useMemo(() => {
     let out = favoritesFilter ? sortedItems.filter(i => i.favorite) : sortedItems
+    // "Prossima uscita" è una restrizione DENTRO i preferiti, non un filtro parallelo: restano solo
+    // quelli con una data programmata da oggi in avanti, e l'ordine passa al calendario (la più
+    // imminente per prima) invece che a `sortBy` — in una lista di cose da fare l'unico ordine che
+    // conta è quando le farai, e il selettore Data/Km/D+/TS qui direbbe altro.
+    if (favoritesFilter && nextOutingFilter) {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+      out = out
+        .filter(i => i.plannedDate != null && new Date(i.plannedDate).getTime() >= todayStart.getTime())
+        .sort((a, b) => new Date(a.plannedDate!).getTime() - new Date(b.plannedDate!).getTime())
+    }
     if (searchQueryNorm) out = out.filter(i => i.title.toLowerCase().includes(searchQueryNorm))
     return out
-  }, [sortedItems, favoritesFilter, searchQueryNorm])
+  }, [sortedItems, favoritesFilter, nextOutingFilter, searchQueryNorm])
 
   // `visibleItems` can reorder/shrink for several reasons (sort change, a route's score/date
   // quietly updating live, the favorites filter toggling). Either way, `state.index` must keep
@@ -241,11 +252,25 @@ export default function RouteHub({
   if (visibleItems.length === 0) {
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
-        <Star className="w-8 h-8 text-stone-600" />
-        <p>{searchQueryNorm ? `Nessun percorso trovato per «${searchQuery.trim()}».` : 'Nessun percorso preferito.'}</p>
+        {favoritesFilter && nextOutingFilter && !searchQueryNorm
+          ? <CalendarClock className="w-8 h-8 text-stone-600" />
+          : <Star className="w-8 h-8 text-stone-600" />}
+        <p>
+          {searchQueryNorm
+            ? `Nessun percorso trovato per «${searchQuery.trim()}».`
+            : favoritesFilter && nextOutingFilter
+              // Vuoto qui non vuol dire "non hai preferiti", ma "nessuno di essi ha una data" —
+              // e la via d'uscita è programmarne una col chip calendario, non togliere il filtro.
+              ? 'Nessuna uscita programmata tra i preferiti. Apri un percorso e assegnagli una data con il chip calendario.'
+              : 'Nessun percorso preferito.'}
+        </p>
         {searchQueryNorm ? (
           <button onClick={() => setSearchQuery('')} className="text-sky-400 font-semibold">
             Cancella la ricerca
+          </button>
+        ) : favoritesFilter && nextOutingFilter && onToggleNextOutingFilter ? (
+          <button onClick={onToggleNextOutingFilter} className="text-sky-400 font-semibold">
+            Mostra tutti i preferiti
           </button>
         ) : onToggleFavoritesFilter && (
           <button onClick={onToggleFavoritesFilter} className="text-sky-400 font-semibold">
@@ -388,6 +413,7 @@ export default function RouteHub({
           sortBy={sortBy} onSortChange={handleSortChange}
           importLabel={importLabel} onImport={onImport}
           favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}
+          nextOutingFilter={nextOutingFilter} onToggleNextOutingFilter={onToggleNextOutingFilter}
           searchQuery={searchQuery} onSearchQueryChange={setSearchQuery}
           onExpand={() => setGalleryExpanded(true)}
         />
@@ -411,6 +437,7 @@ export default function RouteHub({
           onClose={() => setGalleryExpanded(false)}
           sortBy={sortBy} onSortChange={handleSortChange}
           favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}
+          nextOutingFilter={nextOutingFilter} onToggleNextOutingFilter={onToggleNextOutingFilter}
           searchQuery={searchQuery} onSearchQueryChange={setSearchQuery}
         />
       )}

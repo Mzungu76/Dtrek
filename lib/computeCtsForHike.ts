@@ -9,6 +9,7 @@ import { updatePlannedMeta, type PlannedHike } from './plannedStore'
 import { refreshTsForHike } from './computeTsForHike'
 import type { BeautyScore } from './beautyScore'
 import { getUserSettingsCached } from './sync/userSettingsStore'
+import { effectiveHikeMetrics, type RouteMode } from './routeMode'
 
 const FETCH_TIMEOUT_MS = 25000
 
@@ -35,6 +36,12 @@ export interface CtsCoreInput {
   elevationLoss: number
   altitudeMax: number
   avgHeartRate?: number
+  /** Sola andata o andata e ritorno, per i percorsi lineari (vedi lib/routeMode.ts) — 'round_trip'
+   *  raddoppia distanza/dislivello prima di TEI e TrailScore, così i punteggi descrivono la
+   *  camminata che l'utente ha davvero scelto di fare e non la sola metà andata della traccia.
+   *  Assente ⇒ nessun raddoppio (comportamento storico, e l'unico corretto per anelli e attività
+   *  già concluse, dove la traccia registrata contiene già tutto il camminato). */
+  routeMode?: RouteMode | null
 }
 
 export interface CtsCoreResult {
@@ -59,6 +66,14 @@ export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetc
     .filter(p => p.lat && p.lon)
     .map(p => [p.lat!, p.lon!] as [number, number])
   if (gps.length < 2) return null
+
+  // Le cifre "effettive": raddoppiate se l'utente ha dichiarato che questo percorso lineare lo
+  // fa andata e ritorno. La traccia GPS invece NON si duplica — POI, pendenze, terreno e area
+  // protetta sono esattamente gli stessi metri camminati due volte, e duplicarli falserebbe le
+  // densità che TEI calcola per chilometro.
+  const { distanceMeters, elevationGain, elevationLoss } = effectiveHikeMetrics(
+    { ...hike, estimatedTimeSeconds: 0 }, hike.routeMode,
+  )
 
   const deadline = <T>(): Promise<T | null> => new Promise(r => setTimeout(() => r(null), FETCH_TIMEOUT_MS))
   const bbox = computeBbox(gps)
@@ -97,8 +112,8 @@ export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetc
 
   const tei = computeTEI({
     track: gps,
-    elevGain: hike.elevationGain,
-    distanceMeters: hike.distanceMeters,
+    elevGain: elevationGain,
+    distanceMeters,
     altitudeMax: hike.altitudeMax,
     elevProfile,
     pois,
@@ -114,9 +129,9 @@ export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetc
   const confidence: CtsConfidence = tei.confidence
 
   let { ts } = computeTrailScore(bs, {
-    distanceMeters: hike.distanceMeters,
-    elevationGain:  hike.elevationGain,
-    elevationLoss:  hike.elevationLoss,
+    distanceMeters,
+    elevationGain,
+    elevationLoss,
     altitudeMax:    hike.altitudeMax,
     avgHeartRate:   hike.avgHeartRate,
     prefSforzo:     prefs.prefSforzo,
@@ -141,7 +156,7 @@ export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetc
  * just from a page that has already loaded some of the same data for its own UI.
  */
 export async function computeCtsForHike(hike: Pick<PlannedHike,
-  'id' | 'trackPoints' | 'elevationGain' | 'distanceMeters' | 'elevationLoss' | 'altitudeMax'
+  'id' | 'trackPoints' | 'elevationGain' | 'distanceMeters' | 'elevationLoss' | 'altitudeMax' | 'routeMode'
 >, prefetched?: CtsPrefetched): Promise<{ cachedBeautyScore: BeautyScore; cachedTrailScore: number; cachedTrailScoreConfidence: CtsConfidence; cachedScoresComputedAt: string } | null> {
   const core = await computeCtsCore(hike, prefetched)
   if (!core) return null

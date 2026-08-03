@@ -15,7 +15,7 @@ import type { PaceUpdateResult } from '@/lib/navigation/paceAssistant'
 import { altitudeTerrainMultiplier } from '@/lib/trailScore'
 import { daylightMarginMinutes } from '@/lib/daylight'
 import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
-import { haversineM } from '@/lib/geoUtils'
+import { haversineM, bearingDeg } from '@/lib/geoUtils'
 import { extractCuriosita } from '@/lib/guideText'
 import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
 import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
@@ -24,6 +24,7 @@ import {
   loadNavigationSession, saveNavigationSession, newSessionSnapshot,
   queueTrackFix, drainTrackQueue, requeueTrackFixes, type NavigationSessionSnapshot,
   appendRecordedTrackPoint, loadRecordedTrack, clearRecordedTrack,
+  loadParkingSpot, saveParkingSpot, clearParkingSpot, type ParkingSpot,
 } from '@/lib/navigation/navigationStore'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
@@ -41,6 +42,7 @@ import { PoiSpatialIndex } from '@/lib/navigation/poiProximity'
 import { EPOCH_LABELS, type Epoch, type EpochPoi } from '@/lib/epochPois'
 import InstructionBanner from './InstructionBanner'
 import NavBottomSheet from './NavBottomSheet'
+import ParkingSpotControl from './ParkingSpotControl'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
@@ -107,6 +109,10 @@ export default function ActiveNavigationView({ hike }: Props) {
   const [bottomAlertsExpanded, setBottomAlertsExpanded] = useState(false)
   const turnBackAlertedRef = useRef(false)
   const [showFieldNote, setShowFieldNote] = useState(false)
+  // Punto in cui è rimasta l'auto — vedi lib/navigation/navigationStore.ts. Ricaricato all'apertura
+  // così sopravvive a un refresh (o a un crash) a metà escursione, che è proprio il momento in cui
+  // servirebbe di più.
+  const [parkingSpot, setParkingSpot] = useState<ParkingSpot | null>(null)
   // Live-editable copy of the hike's notes: appended to as the hiker saves field notes during
   // navigation, persisted immediately (updatePlannedMeta) so nothing is lost if the app closes,
   // and read from here (not the stale hike.hikeNotes prop) when the recorded activity is saved.
@@ -162,6 +168,33 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const nearbyTrails = useNearbyTrails(hike.id, routePolyline)
   const natura2000Features = useNatura2000Overlay(hike.id, routePolyline)
+
+  useEffect(() => {
+    let cancelled = false
+    loadParkingSpot(hike.id).then(spot => { if (!cancelled) setParkingSpot(spot) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.id])
+
+  const handleSaveParking = () => {
+    if (!position) return
+    const spot: ParkingSpot = { lat: position.lat, lon: position.lon, savedAt: Date.now() }
+    setParkingSpot(spot)
+    saveParkingSpot(hike.id, spot).catch(() => {})
+    logEvent('parking_saved', { lat: spot.lat, lon: spot.lon })
+    haptics.success()
+  }
+
+  const handleClearParking = () => {
+    setParkingSpot(null)
+    clearParkingSpot(hike.id).catch(() => {})
+  }
+
+  const parkingDistanceM = parkingSpot && position
+    ? haversineM(position.lat, position.lon, parkingSpot.lat, parkingSpot.lon)
+    : null
+  const parkingBearingDeg = parkingSpot && position
+    ? bearingDeg(position.lat, position.lon, parkingSpot.lat, parkingSpot.lon)
+    : null
 
   const positionRef = useRef(position)
   positionRef.current = position
@@ -546,12 +579,13 @@ export default function ActiveNavigationView({ hike }: Props) {
   return (
     <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
-        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} accuracyM={accuracyM} />
+        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} accuracyM={accuracyM} parkingSpot={parkingSpot} />
       ) : (
         <NavigationMapLibre
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000}
+          parkingSpot={parkingSpot}
         />
       )}
 
@@ -612,8 +646,10 @@ export default function ActiveNavigationView({ hike }: Props) {
         />
       </div>
 
-      {routePolyline.length >= 2 && (
-        <div className="absolute left-3 z-10" style={{ top: 'calc(50% + 60px)' }}>
+      {/* Colonna sinistra dei controlli mappa: scarico offline (quando ha senso) e punto auto.
+          Impilati verticalmente invece di contendersi lo stesso `top`, come fa la colonna destra. */}
+      <div className="absolute left-3 z-10 flex flex-col gap-2" style={{ top: 'calc(50% + 60px)' }}>
+        {routePolyline.length >= 2 && (
           <button
             onClick={() => setShowOfflineSheet(true)}
             title={offlineReady ? 'Mappa scaricata per offline' : 'Scarica mappa per offline'}
@@ -623,8 +659,16 @@ export default function ActiveNavigationView({ hike }: Props) {
           >
             {offlineReady ? <CheckCircle2 className="w-5 h-5 text-white" /> : <Download className="w-5 h-5 text-stone-700" />}
           </button>
-        </div>
-      )}
+        )}
+        <ParkingSpotControl
+          spot={parkingSpot}
+          position={position}
+          distanceM={parkingDistanceM}
+          bearingToSpotDeg={parkingBearingDeg}
+          onSave={handleSaveParking}
+          onClear={handleClearParking}
+        />
+      </div>
 
       <Sheet
         open={showOfflineSheet}

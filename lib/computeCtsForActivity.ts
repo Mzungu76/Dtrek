@@ -102,7 +102,10 @@ export async function computeCtsForActivity(activity: Pick<StoredActivity,
     hrMax:          prefs.hrMax ?? undefined,
     avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
   })
-  if (confidence === 'estimated') ts = Math.round(ts * 0.9)
+  // Identica alla penalità applicata al percorso pianificato (lib/computeCtsForHike.ts): era
+  // rimasta a -10% qui quando lì venne dimezzata a -5%, ed era la causa per cui lo stesso percorso
+  // mostrava un Comfort TrailScore più basso nel resoconto che nella guida da cui era nato.
+  if (confidence === 'estimated') ts = Math.round(ts * 0.95)
 
   const result = {
     linkedBeautyScore: bs, trailScore: ts, trailScoreConfidence: confidence,

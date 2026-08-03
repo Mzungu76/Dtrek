@@ -10,7 +10,10 @@ import { isScoreFresh } from '@/lib/scoreFreshness'
 // "no data"), then refreshes in the background if it's missing or older than SCORE_STALE_DAYS —
 // normally that background refresh already happened at import time (app/upload/page.tsx), so
 // this is the "reopen it later" half of the same policy.
-export function useSafetyScore(hike: PlannedHike | null, setHike: Dispatch<SetStateAction<PlannedHike | null>>): SafetyScore | null {
+export function useSafetyScore(
+  hike: PlannedHike | null,
+  setHike: Dispatch<SetStateAction<PlannedHike | null>>,
+): { safetyScore: SafetyScore | null; setSafetyScore: Dispatch<SetStateAction<SafetyScore | null>> } {
   const [safetyScore, setSafetyScore] = useState<SafetyScore | null>(null)
 
   useEffect(() => {
@@ -27,5 +30,9 @@ export function useSafetyScore(hike: PlannedHike | null, setHike: Dispatch<SetSt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hike?.id])
 
-  return safetyScore
+  // Il setter è esposto perché la Sicurezza non dipende solo dal percorso ma anche da scelte che
+  // l'utente può cambiare mentre la guida è aperta (la tipologia sola andata / andata e ritorno,
+  // vedi lib/routeMode.ts): chi provoca il ricalcolo deve poter riportare qui il nuovo valore,
+  // altrimenti resterebbe visibile quello vecchio finché la scheda non viene riaperta.
+  return { safetyScore, setSafetyScore }
 }

@@ -2,7 +2,7 @@
 
 import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TrackPoint } from '@/lib/tcxParser'
 
 interface RoutePhoto {
@@ -31,21 +31,34 @@ interface Props {
 }
 
 function getPhotoLatLon(ph: RoutePhoto, pts: TrackPoint[]): { lat: number; lon: number } | null {
-  if (ph.hasExifGps && ph.lat && ph.lon) return { lat: ph.lat, lon: ph.lon }
+  // `!= null`, non un controllo di verità: una coordinata a 0 gradi è legittima (e prima faceva
+  // silenziosamente ricadere la foto sul ramo `progress`, portandola altrove sul percorso).
+  if (ph.hasExifGps && ph.lat != null && ph.lon != null) return { lat: ph.lat, lon: ph.lon }
+  if (pts.length === 0) return null
   const idx = Math.round(ph.progress * (pts.length - 1))
-  const pt  = pts[Math.min(idx, pts.length - 1)]
-  return pt.lat && pt.lon ? { lat: pt.lat, lon: pt.lon } : null
+  const pt  = pts[Math.min(Math.max(idx, 0), pts.length - 1)]
+  return pt.lat != null && pt.lon != null ? { lat: pt.lat, lon: pt.lon } : null
 }
 
 export default function RoutePhotoMap({ trackPoints, photos, height = '180px', onPhotoTap, interactive = true, fitSignal }: Props) {
   const mapRef      = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const polyRef     = useRef<L.Polyline | null>(null)
+  const markerLayer = useRef<L.LayerGroup | null>(null)
   const interactiveRef = useRef(interactive)
   interactiveRef.current = interactive
+  // I pin si ridisegnano ogni volta che cambiano le foto (vedi l'effetto dedicato più sotto), che
+  // rimonta i marker ma non la mappa: onPhotoTap arriva da un chiamante che lo ricrea a ogni
+  // render, quindi tenerlo in un ref evita di rifare il giro solo per l'identità della callback.
+  const onPhotoTapRef = useRef(onPhotoTap)
+  onPhotoTapRef.current = onPhotoTap
 
-  const gpsPoints = trackPoints.filter(p => p.lat && p.lon)
-  const sorted    = [...photos].sort((a, b) => a.progress - b.progress)
+  // La mappa nasce dentro un import() dinamico, quindi non esiste ancora al primo giro degli
+  // effetti: questo flag è ciò che fa ripartire il disegno dei pin appena è pronta.
+  const [mapReady, setMapReady] = useState(false)
+
+  const gpsPoints = useMemo(() => trackPoints.filter(p => p.lat != null && p.lon != null), [trackPoints])
+  const sorted    = useMemo(() => [...photos].sort((a, b) => a.progress - b.progress), [photos])
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current || gpsPoints.length < 2) return
@@ -70,18 +83,8 @@ export default function RoutePhotoMap({ trackPoints, photos, height = '180px', o
       polyRef.current = poly
       map.fitBounds(poly.getBounds(), { padding: [14, 14] })
 
-      sorted.forEach((ph, i) => {
-        const pos = getPhotoLatLon(ph, gpsPoints)
-        if (!pos) return
-        const icon = L.divIcon({
-          html: `<div style="background:#f59e0b;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)${onPhotoTap ? ';cursor:pointer' : ''}">${i + 1}</div>`,
-          iconSize: [20, 20], iconAnchor: [10, 10], className: '',
-        })
-        const marker = L.marker([pos.lat, pos.lon], { icon })
-          .addTo(map)
-          .bindTooltip(`${i + 1}. ${ph.caption}`, { direction: 'top', offset: [0, -6] })
-        if (onPhotoTap) marker.on('click', () => onPhotoTap(ph.id))
-      })
+      markerLayer.current = L.layerGroup().addTo(map)
+      setMapReady(true)
 
       // La mappa cambia dimensioni quando si entra/esce da schermo intero (vedi
       // components/resoconto/PhotoMapSection.tsx) — senza invalidateSize() i tile restano
@@ -94,9 +97,38 @@ export default function RoutePhotoMap({ trackPoints, photos, height = '180px', o
     return () => {
       cancelled = true
       if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null }
+      markerLayer.current = null
+      setMapReady(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Pin numerati — in un effetto proprio, dipendente dalle foto, non dentro la creazione della
+  // mappa (che gira una volta sola, a deps vuote). Prima una foto appena caricata non compariva
+  // finché non si chiudeva e riapriva la scheda del percorso: il suo marker non era mai stato
+  // disegnato, perché quel codice non tornava più a girare dopo il mount.
+  useEffect(() => {
+    if (!mapReady) return
+    let cancelled = false
+    import('leaflet').then(L => {
+      if (cancelled || !markerLayer.current) return
+      markerLayer.current.clearLayers()
+      sorted.forEach((ph, i) => {
+        const pos = getPhotoLatLon(ph, gpsPoints)
+        if (!pos) return
+        const tappable = !!onPhotoTapRef.current
+        const icon = L.divIcon({
+          html: `<div style="background:#f59e0b;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)${tappable ? ';cursor:pointer' : ''}">${i + 1}</div>`,
+          iconSize: [20, 20], iconAnchor: [10, 10], className: '',
+        })
+        const marker = L.marker([pos.lat, pos.lon], { icon })
+          .bindTooltip(`${i + 1}. ${ph.caption}`, { direction: 'top', offset: [0, -6] })
+        marker.on('click', () => onPhotoTapRef.current?.(ph.id))
+        markerLayer.current!.addLayer(marker)
+      })
+    })
+    return () => { cancelled = true }
+  }, [mapReady, sorted, gpsPoints])
 
   // Blocca/sblocca il pan/zoom nativo — il lucchetto in PhotoMapSection.
   useEffect(() => {

@@ -14,6 +14,7 @@ import { getProfile } from '@/lib/userProfile'
 import { type PoiItem, type PoiType, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
+import { readExifGps, EXIF_MAX_SNAP_DISTANCE_M } from '@/lib/exifGps'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
@@ -177,43 +178,6 @@ function shotCamera(shot: ShotSegment, routeBearing: number, p: number, orbitBas
 }
 
 // ── EXIF GPS parser ────────────────────────────────────────────────────────────
-
-async function readExifGps(file: File): Promise<{lat:number;lon:number}|null> {
-  return new Promise(resolve => {
-    const reader = new FileReader()
-    reader.onload = e => {
-      const buf=e.target?.result as ArrayBuffer; if(!buf){resolve(null);return}
-      const view=new DataView(buf)
-      try {
-        if(view.getUint16(0)!==0xFFD8){resolve(null);return}
-        let off=2
-        while(off<view.byteLength-2){
-          const marker=view.getUint16(off); off+=2
-          if(marker===0xFFE1){
-            const len=view.getUint16(off); off+=2
-            const hb=new Uint8Array(buf,off,4)
-            if(Array.from(hb).map(b=>String.fromCharCode(b)).join('')!=='Exif'){resolve(null);return}
-            const ts=off+6, tv=new DataView(buf,ts), le=tv.getUint16(0)===0x4949
-            const rd16=(o:number)=>tv.getUint16(o,le), rd32=(o:number)=>tv.getUint32(o,le)
-            const ifd0=rd32(4), n0=rd16(ifd0); let gOff=0
-            for(let i=0;i<n0;i++){const eo=ifd0+2+i*12;if(rd16(eo)===0x8825){gOff=rd32(eo+8);break}}
-            if(!gOff){resolve(null);return}
-            const gN=rd16(gOff), gd:Record<number,number[]>={}
-            for(let i=0;i<gN;i++){
-              const eo=gOff+2+i*12, tag=rd16(eo), type=rd16(eo+2), count=rd32(eo+4)
-              if(type===5){const vOff=rd32(eo+8), vals:number[]=[];for(let j=0;j<count;j++){const n=rd32(vOff+j*8),d=rd32(vOff+j*8+4);vals.push(d?n/d:0)};gd[tag]=vals}
-            }
-            const la=gd[2],lo=gd[4]; if(!la||!lo){resolve(null);return}
-            resolve({lat:la[0]+la[1]/60+la[2]/3600,lon:lo[0]+lo[1]/60+lo[2]/3600}); return
-          }
-          off+=view.getUint16(off)-2+2
-        }
-      } catch {}
-      resolve(null)
-    }
-    reader.readAsArrayBuffer(file.slice(0,65536))
-  })
-}
 
 // ── Progressive route reveal helpers ──────────────────────────────────────────
 
@@ -1194,14 +1158,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const ci=new Image(); await new Promise<void>(res=>{ci.onload=()=>res();ci.src=cropped})
 
       // EXIF GPS
+      // Stessa regola di app/components/ActivityPhotoManager.tsx: una coordinata EXIF troppo
+      // lontana dal tracciato non appartiene a questa escursione e va trattata come assente,
+      // invece di ancorare il pin all'estremo di percorso più vicino a un luogo che sta altrove.
       const gpsCoords=await readExifGps(file)
       let progress=0.5, hasExifGps=false, exifLat: number|undefined, exifLon: number|undefined
       if(gpsCoords&&pts.length>1){
-        hasExifGps=true
-        exifLat=gpsCoords.lat; exifLon=gpsCoords.lon
         let minD=Infinity, bestIdx=0
         for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,gpsCoords.lat,gpsCoords.lon);if(d<minD){minD=d;bestIdx=i}}
-        progress=bestIdx/(pts.length-1)
+        if(minD<=EXIF_MAX_SNAP_DISTANCE_M){
+          hasExifGps=true
+          exifLat=gpsCoords.lat; exifLon=gpsCoords.lon
+          progress=bestIdx/(pts.length-1)
+        }
       }
 
       const id=`photo-${Date.now()}-${Math.random().toString(36).slice(2)}`

@@ -20,6 +20,9 @@ interface Props {
   accuracyM?: number | null
   /** Called if the MapTiler style hasn't finished loading within a few seconds, or errors out (missing/invalid key, no connectivity, domain-restricted key...) — the caller should fall back to the offline-safe map. `reason` is a short diagnostic string, always logged to the console regardless of environment so this is debuggable in production. */
   onStyleFailed?: (reason: string) => void
+  /** Dove l'escursionista ha lasciato l'auto (vedi components/navigation/ParkingSpotControl.tsx) —
+   *  un pin fisso, distinto da quelli dei POI. Null ⇒ nessun pin. */
+  parkingSpot?: { lat: number; lon: number } | null
   /** Natura 2000 protected-area polygons for the route's bbox (fetched once by the caller), drawn as a translucent overlay when showNatura2000 is on. */
   natura2000Features?: Natura2000Feature[] | null
   showNatura2000?: boolean
@@ -103,12 +106,13 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000 }: Props) {
+export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, parkingSpot }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
   const userMarker = useRef<maplibregl.Marker | null>(null)
   const userMarkerArrow = useRef<HTMLDivElement | null>(null)
+  const parkingMarker = useRef<maplibregl.Marker | null>(null)
   const hasCentered = useRef(false)
   const styleWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
   const errorListener = useRef<((e: any) => void) | null>(null)
@@ -391,6 +395,34 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     else map.once('idle', () => setupTerrain(map))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [is3D])
+
+  // Pin dell'auto — indipendente dal fix GPS (a differenza del marker dell'escursionista qui
+  // sotto): deve comparire nell'istante in cui viene fissato, non al prossimo aggiornamento
+  // di posizione. A differenza dei layer dello stile, un Marker sopravvive a un cambio di stile
+  // MapTiler, quindi non serve ridisegnarlo su 'style.load'.
+  useEffect(() => {
+    if (!parkingSpot) {
+      parkingMarker.current?.remove()
+      parkingMarker.current = null
+      return
+    }
+    let cancelled = false
+    import('maplibre-gl').then((mod) => {
+      const maplibregl = mod.default ?? mod
+      const map = mapRef.current
+      if (cancelled || !map) return
+      if (parkingMarker.current) {
+        parkingMarker.current.setLngLat([parkingSpot.lon, parkingSpot.lat])
+        return
+      }
+      const el = document.createElement('div')
+      el.title = 'La mia auto'
+      el.style.cssText = 'width:26px;height:26px;border-radius:50%;background:#292524;border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center'
+      el.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2l-1.6-5.6A2 2 0 0 0 17.5 10H6.5a2 2 0 0 0-1.9 1.4L3 17h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 17h6"/></svg>'
+      parkingMarker.current = new maplibregl.Marker({ element: el }).setLngLat([parkingSpot.lon, parkingSpot.lat]).addTo(map)
+    })
+    return () => { cancelled = true }
+  }, [parkingSpot, styleLoading])
 
   useEffect(() => {
     if (!position || !mapRef.current) return

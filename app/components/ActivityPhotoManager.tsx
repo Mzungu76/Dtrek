@@ -5,66 +5,10 @@ import dynamic from 'next/dynamic'
 import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
+import { readExifGps, EXIF_MAX_SNAP_DISTANCE_M } from '@/lib/exifGps'
 import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff, Map, AlertTriangle } from 'lucide-react'
 
 const PhotoPlacementMap = dynamic(() => import('@/app/components/PhotoPlacementMap'), { ssr: false })
-
-// ── EXIF GPS parser (mirrors RouteMap3D logic) ─────────────────────────────────
-
-async function readExifGps(file: File): Promise<{ lat: number; lon: number } | null> {
-  return new Promise(resolve => {
-    const reader = new FileReader()
-    reader.onload = e => {
-      const buf = e.target?.result as ArrayBuffer
-      if (!buf) { resolve(null); return }
-      const view = new DataView(buf)
-      try {
-        if (view.getUint16(0) !== 0xFFD8) { resolve(null); return }
-        let off = 2
-        while (off < view.byteLength - 2) {
-          const marker = view.getUint16(off); off += 2
-          if (marker === 0xFFE1) {
-            const len = view.getUint16(off); off += 2; void len
-            const hb = new Uint8Array(buf, off, 4)
-            if (Array.from(hb).map(b => String.fromCharCode(b)).join('') !== 'Exif') { resolve(null); return }
-            const ts = off + 6, tv = new DataView(buf, ts), le = tv.getUint16(0) === 0x4949
-            const rd16 = (o: number) => tv.getUint16(o, le)
-            const rd32 = (o: number) => tv.getUint32(o, le)
-            const ifd0 = rd32(4), n0 = rd16(ifd0)
-            let gOff = 0
-            for (let i = 0; i < n0; i++) {
-              const eo = ifd0 + 2 + i * 12
-              if (rd16(eo) === 0x8825) { gOff = rd32(eo + 8); break }
-            }
-            if (!gOff) { resolve(null); return }
-            const gN = rd16(gOff)
-            const gd: Record<number, number[]> = {}
-            for (let i = 0; i < gN; i++) {
-              const eo = gOff + 2 + i * 12
-              const tag = rd16(eo), type = rd16(eo + 2), count = rd32(eo + 4)
-              if (type === 5) {
-                const vOff = rd32(eo + 8)
-                const vals: number[] = []
-                for (let j = 0; j < count; j++) {
-                  const n = rd32(vOff + j * 8), d = rd32(vOff + j * 8 + 4)
-                  vals.push(d ? n / d : 0)
-                }
-                gd[tag] = vals
-              }
-            }
-            const la = gd[2], lo = gd[4]
-            if (!la || !lo) { resolve(null); return }
-            resolve({ lat: la[0] + la[1] / 60 + la[2] / 3600, lon: lo[0] + lo[1] / 60 + lo[2] / 3600 })
-            return
-          }
-          off += view.getUint16(off) - 2 + 2
-        }
-      } catch { /* ignore */ }
-      resolve(null)
-    }
-    reader.readAsArrayBuffer(file.slice(0, 65536))
-  })
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -129,7 +73,11 @@ export default function ActivityPhotoManager({
         )
         const cropped = cv.toDataURL('image/jpeg', 0.82)
 
-        // EXIF GPS → nearest trackpoint → progress
+        // EXIF GPS → punto di traccia più vicino → progressione lungo il percorso.
+        // Una coordinata troppo lontana dal tracciato (foto che con questa escursione non c'entra,
+        // vedi EXIF_MAX_SNAP_DISTANCE_M) viene trattata come "senza GPS": ancorarla comunque
+        // vorrebbe dire piantarne il pin sull'estremo del percorso più vicino a un luogo che sta
+        // altrove — ed è esattamente così che più foto finivano ammucchiate sullo stesso punto.
         const gps = await readExifGps(file)
         let progress = 0.5
         let hasExifGps = false
@@ -137,15 +85,17 @@ export default function ActivityPhotoManager({
         let lon: number | undefined
 
         if (gps && pts.length > 1) {
-          hasExifGps = true
-          lat = gps.lat
-          lon = gps.lon
           let minD = Infinity, bestIdx = 0
           pts.forEach((pt, i) => {
             const d = haversineM(pt.lat!, pt.lon!, gps.lat, gps.lon)
             if (d < minD) { minD = d; bestIdx = i }
           })
-          progress = bestIdx / (pts.length - 1)
+          if (minD <= EXIF_MAX_SNAP_DISTANCE_M) {
+            hasExifGps = true
+            lat = gps.lat
+            lon = gps.lon
+            progress = bestIdx / (pts.length - 1)
+          }
         }
 
         const id = `photo-${Date.now()}-${Math.random().toString(36).slice(2)}`
