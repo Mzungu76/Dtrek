@@ -28,10 +28,14 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
 }
 
 function getPhotoPos(ph: RoutePhoto, pts: TrackPoint[]): { lat: number; lon: number } | null {
-  if (ph.hasExifGps && ph.lat && ph.lon) return { lat: ph.lat, lon: ph.lon }
+  // `!= null`, non un controllo di verità — stessa correzione di app/components/RoutePhotoMap.tsx:
+  // una coordinata a 0 gradi è legittima e faceva silenziosamente ricadere la foto sul ramo
+  // `progress`, spostandola altrove sul percorso.
+  if (ph.hasExifGps && ph.lat != null && ph.lon != null) return { lat: ph.lat, lon: ph.lon }
+  if (pts.length === 0) return null
   const idx = Math.round(ph.progress * (pts.length - 1))
-  const pt  = pts[Math.min(idx, pts.length - 1)]
-  return pt.lat && pt.lon ? { lat: pt.lat, lon: pt.lon } : null
+  const pt  = pts[Math.min(Math.max(idx, 0), pts.length - 1)]
+  return pt.lat != null && pt.lon != null ? { lat: pt.lat, lon: pt.lon } : null
 }
 
 export default function PhotoPlacementMap({
