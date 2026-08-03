@@ -53,6 +53,10 @@ export interface RouteHubItem {
   safetyPreview?: SafetyPreview
   /** Guida-only "preferito" flag — undefined for Resoconto items (no favorite concept there). */
   favorite?: boolean
+  /** Data di uscita programmata (YYYY-MM-DD), se impostata — vedi il chip calendario in
+   *  app/guida/GuidaHub.tsx. È ciò che distingue un preferito qualsiasi da una "prossima uscita"
+   *  (sottosezione dei preferiti: quelli con una data da qui in avanti, in ordine di calendario). */
+  plannedDate?: string
 }
 
 /** One tab of the Screen 2 page's pill tab-bar — only meaningful when bodyMode === 'tabbed'. */
@@ -132,6 +136,12 @@ export interface RouteHubProps {
    *  presence entirely by whether it passes these two props at all (Resoconto passes neither). */
   favoritesFilter?: boolean
   onToggleFavoritesFilter?: () => void
+  /** Sottosezione dei preferiti: solo quelli con una data di uscita programmata da oggi in avanti,
+   *  in ordine di calendario (la più imminente per prima) invece che per `sortBy`. Ha effetto solo
+   *  con `favoritesFilter` attivo — è una restrizione dei preferiti, non un filtro parallelo, e la
+   *  UI la presenta così (vedi BottomGallery.tsx). */
+  nextOutingFilter?: boolean
+  onToggleNextOutingFilter?: () => void
   /** Toggles `item.favorite` — renders a star button on the closed-card cover and (if the caller
    *  also renders one, e.g. in headerActions) anywhere else that needs the same action. */
   onToggleFavorite?: (item: RouteHubItem) => void

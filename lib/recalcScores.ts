@@ -12,6 +12,7 @@ import { type PoiItem } from '@/lib/overpass'
 import { computeSafetyScore, type WildlifeRisk } from '@/lib/safetyScore'
 import { fetchWildlifeRiskFromGbif } from '@/lib/wildlifeRiskFromGbif'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { effectiveHikeMetrics } from '@/lib/routeMode'
 
 export async function batchUpdate<T>(
   items: T[],
@@ -127,13 +128,16 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
       if (guardianResult.status === 'fulfilled' && guardianResult.value) guardianDogRisk = guardianResult.value
     }
 
+    // Cifre effettive: un andata e ritorno dichiarato vale il doppio (lib/routeMode.ts), esattamente
+    // come in computeSafetyForHike — le due strade non devono dare risultati diversi.
+    const effective = effectiveHikeMetrics(meta, meta.routeMode)
     const safety = computeSafetyScore({
-      distanceMeters: meta.distanceMeters,
-      elevationGain: meta.elevationGain,
-      elevationLoss: meta.elevationLoss,
+      distanceMeters: effective.distanceMeters,
+      elevationGain: effective.elevationGain,
+      elevationLoss: effective.elevationLoss,
       altitudeMax: meta.altitudeMax,
       altitudeMin: meta.altitudeMin,
-      estimatedTimeSeconds: meta.estimatedTimeSeconds,
+      estimatedTimeSeconds: effective.estimatedTimeSeconds,
       routePolyline: meta.routePolyline,
       plannedDate: meta.plannedDate,
       gbifWildlifeRisks,

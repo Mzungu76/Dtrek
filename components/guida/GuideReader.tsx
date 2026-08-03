@@ -21,6 +21,8 @@ import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { extractGuideAiError, type GuideAiError } from '@/lib/guideAiError'
 import CreditErrorModal from './CreditErrorModal'
+import RouteModeDialog from './RouteModeDialog'
+import { effectiveHikeMetrics, type RouteMode } from '@/lib/routeMode'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { AlertTriangle, Link2, KeyRound, Info } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
@@ -151,6 +153,13 @@ interface Props {
   showGradient?: boolean
   showAspect?: boolean
   dtmProfile?: TrailDtmProfile
+  /** Cambio di tipologia (sola andata / andata e ritorno) per un percorso lineare — vedi
+   *  lib/routeMode.ts. Il chiamante persiste `routeMode` e ricalcola i punteggi che ne dipendono;
+   *  questo componente si limita a leggere `hike.routeMode` come unica fonte di verità. Assente ⇒
+   *  nessun toggle e nessun popup di scelta (percorso non lineare, o chiamante che non gestisce la
+   *  persistenza). La Promise si risolve quando la scelta è salvata: il popup resta aperto fino ad
+   *  allora, così la generazione AI non parte su cifre ancora vecchie. */
+  onRouteModeChange?: (mode: RouteMode) => Promise<void> | void
   scores?: ScoresBundle
   safetyDetails?: SafetyDetailsBundle
   poiList?: PoiListBundle
@@ -215,6 +224,7 @@ export default function GuideReader({
   hike, onHikeUpdate, enrichmentReady, hasAiAccess, aiUnavailable,
   scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
   weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura, driving,
+  onRouteModeChange,
 }: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
   const [guideNotices, setGuideNotices] = useState<GuideNotice[]>(normalizeGuideNotices(hike.cachedGuideNotices))
@@ -237,6 +247,28 @@ export default function GuideReader({
   const [aiCreditError, setAiCreditError] = useState<GuideAiError | null>(null)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
+
+  // Un percorso a tratta unica (start/end lontani — non un anello, non un andata-ritorno già
+  // rilevato come tale dalla geometria) si percorre in uno di due modi, e quale dei due è una
+  // proprietà del percorso salvata su Supabase (planned_hikes.route_mode), non uno stato di sola
+  // visualizzazione: le cifre qui sotto E i punteggi che ne derivano seguono la scelta. Vedi
+  // lib/routeMode.ts per il calcolo delle cifre effettive e il perché del raddoppio semplice.
+  const isLinearRoute = useMemo(() => classifyTrackShape(hike.routePolyline ?? []) === 'linear', [hike.routePolyline])
+  const showAsRoundTrip = isLinearRoute && hike.routeMode === 'round_trip'
+  const effective = effectiveHikeMetrics(hike, isLinearRoute ? hike.routeMode : undefined)
+  // Scelta mai fatta su un percorso lineare ⇒ popup bloccante. Deve arrivare PRIMA della
+  // generazione automatica dei testi (vedi l'effetto che la lancia, che aspetta questa risposta):
+  // il prompt riceve le cifre effettive, e un testo scritto per la sola andata non si riscrive da
+  // solo se in seguito la tipologia cambia.
+  const needsRouteModeChoice = isLinearRoute && hike.routeMode == null && !!onRouteModeChange
+  const [savingRouteMode, setSavingRouteMode] = useState(false)
+
+  const chooseRouteMode = async (mode: RouteMode) => {
+    if (!onRouteModeChange) return
+    setSavingRouteMode(true)
+    try { await onRouteModeChange(mode) }
+    finally { setSavingRouteMode(false) }
+  }
 
   const parsedSections = useMemo(() => guideText ? parseGuideSections(guideText) : [], [guideText])
 
@@ -410,6 +442,7 @@ export default function GuideReader({
           altitudeMax:          hike.altitudeMax,
           altitudeMin:          hike.altitudeMin,
           estimatedTimeSeconds: hike.estimatedTimeSeconds,
+          routeMode:            hike.routeMode,
           assessment:           hike.assessment,
           cachedPois:           hike.cachedPois,
           cachedPoiWiki:        hike.cachedPoiWiki,
@@ -526,7 +559,7 @@ export default function GuideReader({
   }, [
     generating, generatingSections, guideText, guideNotices, guideSources,
     hike.id, hike.title, hike.plannedDate, hike.userNotes, hike.tags,
-    hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin,
+    hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin, hike.routeMode,
     hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
     hike.cachedEpochPois,
     onHikeUpdate, sectionLengths,
@@ -555,10 +588,15 @@ export default function GuideReader({
     if (hike.cachedGuide || generating) return
     if (!enrichmentReady || hasAiAccess !== true) return
     if (!autoGenSections || autoGenSections.length === 0) return
+    // Percorso lineare la cui tipologia non è ancora stata scelta: si aspetta la risposta al popup
+    // (RouteModeDialog). Il prompt riceve le cifre effettive, che raddoppiano con "andata e
+    // ritorno" — generare adesso vorrebbe dire scrivere una guida su un'ipotesi, e i testi già
+    // scritti non si riallineano da soli al cambio successivo.
+    if (needsRouteModeChoice) return
     if (autoTriggeredForRef.current === hike.id) return
     autoTriggeredForRef.current = hike.id
     generateSections(autoGenSections)
-  }, [hike.id, hike.cachedGuide, enrichmentReady, hasAiAccess, autoGenSections]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hike.id, hike.cachedGuide, enrichmentReady, hasAiAccess, autoGenSections, needsRouteModeChoice]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function scrollToSection(idx: number) {
     sectionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -866,17 +904,6 @@ export default function GuideReader({
       .map(({ wiki: w }) => ({ url: w.url, imageUrl: w.thumbnail!, title: w.title }))
   }, [hike.cachedPoiWiki])
 
-  // Un percorso a tratta unica (start/end lontani — non un anello, non un andata-ritorno già
-  // rilevato come tale dalla geometria) può essere guardato "come se" fosse andata e ritorno: le
-  // cifre in GuideStatsStrip raddoppiano, MAI il percorso salvato. Raddoppio semplice anche per il
-  // dislivello (non salita+discesa): elevationLoss non è mai mostrato altrove nell'app ed è più
-  // esposto al rumore GPS/DTM (piccoli saliscendi che si accumulano) di elevationGain, che invece è
-  // già la cifra "Dislivello" mostrata da sempre — usarlo da solo, raddoppiato, resta prevedibile e
-  // coerente con distanza/durata qui sopra, invece di introdurre un dato mai verificato in UI.
-  const isLinearRoute = useMemo(() => classifyTrackShape(hike.routePolyline ?? []) === 'linear', [hike.routePolyline])
-  const [roundTripView, setRoundTripView] = useState(false)
-  const showAsRoundTrip = isLinearRoute && roundTripView
-
   // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
   // chi non vuole tornare a piedi sui propri passi (sottosezione "Tornare al punto di partenza" in
   // "Luoghi da non perdere", vedi PoiListWidget.tsx/ReturnOptionsSection.tsx).
@@ -926,11 +953,15 @@ export default function GuideReader({
       />
 
       <GuideStatsStrip
-        distanceKm={(hike.distanceMeters / 1000) * (showAsRoundTrip ? 2 : 1)}
-        elevationGain={hike.elevationGain * (showAsRoundTrip ? 2 : 1)}
+        distanceKm={effective.distanceMeters / 1000}
+        elevationGain={effective.elevationGain}
         altitudeMax={hike.altitudeMax}
-        durationLabel={formatDuration(hike.estimatedTimeSeconds * (showAsRoundTrip ? 2 : 1))}
-        roundTrip={isLinearRoute ? { active: roundTripView, onToggle: () => setRoundTripView(v => !v) } : undefined}
+        durationLabel={formatDuration(effective.estimatedTimeSeconds)}
+        roundTrip={isLinearRoute && onRouteModeChange ? {
+          active: showAsRoundTrip,
+          saving: savingRouteMode,
+          onToggle: () => chooseRouteMode(showAsRoundTrip ? 'one_way' : 'round_trip'),
+        } : undefined}
       />
 
       <PhotoMosaic
@@ -1206,6 +1237,17 @@ export default function GuideReader({
           </div>
         </div>
       </div>
+
+      {needsRouteModeChoice && (
+        <RouteModeDialog
+          distanceMeters={hike.distanceMeters}
+          elevationGain={hike.elevationGain}
+          durationLabel={formatDuration(hike.estimatedTimeSeconds)}
+          durationRoundTripLabel={formatDuration(hike.estimatedTimeSeconds * 2)}
+          onChoose={chooseRouteMode}
+          saving={savingRouteMode}
+        />
+      )}
 
       {aiCreditError && (
         <CreditErrorModal message={aiCreditError.message} onClose={() => setAiCreditError(null)} />

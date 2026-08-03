@@ -10,12 +10,15 @@ import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/rout
 import { computeTrailScoreTotal, computeTrailScoreBreakdown, isTrailScoreVetoed, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
+import CoverNoticesChip from '@/components/guida/CoverNoticesChip'
 import { useFlora } from '@/lib/useFlora'
 import {
   getAllPlanned, getPlannedById, updatePlannedMeta, deletePlanned,
   type PlannedHike, type PlannedHikeMeta,
 } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
+import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
+import type { RouteMode } from '@/lib/routeMode'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
@@ -97,6 +100,7 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     // sotto, che per il percorso davvero aperto preferisce comunque quello.
     safetyPreview: h.cachedSafetyScore ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label } : undefined,
     favorite: h.favorite,
+    plannedDate: h.plannedDate,
   }
 }
 
@@ -127,6 +131,10 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [showPendingActions, setShowPendingActions] = useState(false)
   const [favoritesFilter, setFavoritesFilter] = useState(false)
+  // "Prossima uscita": sottosezione dei preferiti, non un filtro a sé — vedi RouteHub.tsx per il
+  // criterio (preferiti con data programmata da oggi in poi, in ordine di calendario). Spegnere i
+  // preferiti la spegne con sé: da sola non avrebbe più un insieme di partenza da restringere.
+  const [nextOutingFilter, setNextOutingFilter] = useState(false)
   // Conferma "Percorso eliminato" — la cancellazione locale (deletePlanned) è già istantanea, ma
   // handleDelete naviga subito dopo verso '/guida', che rimonta questo componente da zero e mostra
   // il prossimo percorso (o lo scheletro di caricamento): senza un segnale esplicito, l'utente non
@@ -176,7 +184,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       : undefined
     return { ...driving, mapsUrl }
   }, [driving, userOrigin, hike?.routePolyline])
-  const safetyScore = useSafetyScore(hike, setHike)
+  const { safetyScore, setSafetyScore } = useSafetyScore(hike, setHike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   // Sicurezza "per te" (Oggettiva + Idoneità per Te, vedi lib/personalSafetyFit.ts) — la Sicurezza
@@ -513,14 +521,14 @@ export default function GuidaHub({ id }: { id?: string }) {
       // to the final value — otherwise the TS-sorted gallery reshuffles on every intermediate score
       // update while the user is still looking at the route they just opened.
       const stableCts = ctsSettled ? (preview?.value ?? 0) : (it.sortValues?.cts ?? preview?.value ?? 0)
-      return { ...it, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, stableCts, distanceMeters), scorePreview: preview }
+      return { ...it, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, stableCts, distanceMeters), scorePreview: preview, plannedDate: hike.plannedDate }
     })
     // Deep link to a hike outside the active list (e.g. archived/expired) — still show it
     // standalone rather than 404, once its full record has loaded.
     if (hike && !mapped.some(it => it.id === hike.id)) {
       const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
       const preview = scorePreviewFor(hike)
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite }, ...mapped]
+      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite, plannedDate: hike.plannedDate }, ...mapped]
     }
     return mapped
   }, [items, hike, driving, userOrigin, driveCache, ctsSettled])
@@ -622,6 +630,50 @@ export default function GuidaHub({ id }: { id?: string }) {
     }
   }
 
+  /**
+   * L'utente ha dichiarato come percorre un itinerario lineare (sola andata / andata e ritorno,
+   * vedi lib/routeMode.ts) — sia dal popup obbligatorio all'import sia dal toggle nella striscia
+   * dei dati. Non è una preferenza di visualizzazione: distanza, dislivello e durata effettivi
+   * cambiano, e con loro TEI/Comfort TrailScore e Sicurezza. Quindi si persiste la scelta e si
+   * rifanno subito entrambi i punteggi (che a loro volta rimaterializzano il Trail Score v2
+   * aggregato, vedi refreshTsForHike), invece di lasciare in vista dei numeri che descrivono una
+   * camminata diversa da quella che l'utente ha appena dichiarato.
+   *
+   * I testi già scritti da Giulia NON si rigenerano: sono contenuto dell'utente, riscriverli in
+   * automatico (a pagamento, per giunta) sarebbe una sorpresa costosa. Il popup lo dice
+   * esplicitamente prima della scelta.
+   */
+  const handleRouteModeChange = async (mode: RouteMode) => {
+    if (!hike || hike.routeMode === mode) return
+    const updated: PlannedHike = { ...hike, routeMode: mode }
+    setHike(updated)
+    setCtsComputing(true)
+    try {
+      await updatePlannedMeta(hike.id, { routeMode: mode })
+      const [cts, safety] = await Promise.all([
+        computeCtsForHike(updated, {
+          pois: poisFullyLoaded ? pois : undefined,
+          dtmProfile, terrainProfile, inProtectedArea,
+          prefs: prefsLoaded ? { prefSforzo, prefDurata, hrRest, hrMax } : undefined,
+        }).catch(() => null),
+        computeSafetyForHike(updated).catch(() => null),
+      ])
+      if (safety) setSafetyScore(safety)
+      setHike(prev => prev && prev.id === updated.id ? {
+        ...prev,
+        ...(cts ?? {}),
+        ...(safety ? { cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() } : {}),
+      } : prev)
+      // cachedTsTotal è ricalcolato in background da refreshTsForHike (chiamato dalle due funzioni
+      // qui sopra) e riletto dalla cache locale: senza rileggerlo, la copertina continuerebbe a
+      // mostrare l'aggregato precedente finché la scheda non viene riaperta.
+      const refreshed = await getPlannedById(updated.id)
+      if (refreshed) setHike(prev => prev && prev.id === updated.id ? { ...prev, cachedTsTotal: refreshed.cachedTsTotal } : prev)
+    } finally {
+      setCtsComputing(false)
+    }
+  }
+
   const gpsPoints = hike?.trackPoints?.filter(p => p.lat && p.lon) ?? []
   const centerPt  = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps    = gpsPoints.length > 0
@@ -645,7 +697,14 @@ export default function GuidaHub({ id }: { id?: string }) {
             <input
               type="date"
               defaultValue={hike?.plannedDate ?? ''}
-              onChange={e => { patch({ plannedDate: e.target.value || undefined }); setShowDatePicker(false) }}
+              onChange={e => {
+                const next = e.target.value || undefined
+                patch({ plannedDate: next })
+                // Anche nella lista, non solo sul percorso aperto: è `items` a nutrire galleria e
+                // carosello, ed è da lì che la sottosezione "Prossima uscita" legge le date.
+                setItems(prev => prev.map(it => it.id === hike?.id ? { ...it, plannedDate: next } : it))
+                setShowDatePicker(false)
+              }}
               className="text-sm text-stone-800 outline-none border border-stone-200 rounded-lg px-2 py-1.5"
             />
           </div>
@@ -728,23 +787,35 @@ export default function GuidaHub({ id }: { id?: string }) {
     // shrink-to-fit, che con testo whitespace-nowrap dentro (combinedSafety può essere lungo)
     // considera come larghezza minima l'intera frase non spezzata — il bottone si allargava oltre
     // lo schermo prima ancora che l'overflow-hidden interno al badge potesse entrare in gioco.
+    // I puntini sull'anello Sicurezza dicono che c'è un avviso; la pillola qui sotto è ciò che si
+    // tocca per leggerlo, senza dover prima aprire la guida e cercare "Verificato online" — vedi
+    // components/guida/CoverNoticesChip.tsx per il perché non siano i puntini stessi il bersaglio.
+    // Fuori dal <button> del badge, non dentro: due elementi interattivi annidati sarebbero HTML
+    // non valido, e al tocco vincerebbe comunque quello esterno.
+    const notices = normalizeGuideNotices(hike.cachedGuideNotices)
     return (
-      <button
-        onClick={() => { setPendingScrollSection('dati_sicurezza'); onTap() }}
-        title="Trail Score"
-        className="block w-full min-w-0 text-left"
-      >
-        <TrailScoreGaugeBadge
-          total={scoreLoading ? null : trailScoreTotal}
-          value={breakdown.value}
-          safety={refinedSafety}
-          personalSafety={personalSafety}
-          disclaimer="popup"
-          loading={scoreLoading}
-          vetoed={isTrailScoreVetoed(refinedSafety)}
-          notices={normalizeGuideNotices(hike.cachedGuideNotices)}
+      <div className="flex flex-col items-start gap-2">
+        <button
+          onClick={() => { setPendingScrollSection('dati_sicurezza'); onTap() }}
+          title="Trail Score"
+          className="block w-full min-w-0 text-left"
+        >
+          <TrailScoreGaugeBadge
+            total={scoreLoading ? null : trailScoreTotal}
+            value={breakdown.value}
+            safety={refinedSafety}
+            personalSafety={personalSafety}
+            disclaimer="popup"
+            loading={scoreLoading}
+            vetoed={isTrailScoreVetoed(refinedSafety)}
+            notices={notices}
+          />
+        </button>
+        <CoverNoticesChip
+          notices={notices}
+          onOpenVerificato={() => { setPendingScrollSection('verificato'); onTap() }}
         />
-      </button>
+      </div>
     )
   }
 
@@ -766,6 +837,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         <GuideReader
           hike={hike}
           onHikeUpdate={patch => setHike(prev => prev ? { ...prev, ...patch } : prev)}
+          onRouteModeChange={handleRouteModeChange}
           enrichmentReady={enrichmentReady}
           hasAiAccess={hasAiAccess}
           aiUnavailable={aiUnavailable}
@@ -875,7 +947,15 @@ export default function GuidaHub({ id }: { id?: string }) {
         items={displayItems}
         initialIndex={initialIndex}
         favoritesFilter={favoritesFilter}
-        onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
+        nextOutingFilter={nextOutingFilter}
+        onToggleNextOutingFilter={() => setNextOutingFilter(v => !v)}
+        onToggleFavoritesFilter={() => setFavoritesFilter(v => {
+          // Uscendo dai preferiti si esce anche dalla loro sottosezione: "Prossima uscita" da sola
+          // non avrebbe un insieme da restringere, e riaccendendo la stella si ritroverebbe attiva
+          // una vista che l'utente non ha chiesto.
+          if (v) setNextOutingFilter(false)
+          return !v
+        })}
         onToggleFavorite={handleToggleFavorite}
         onCompare={(routeItem) => router.push(`/statistiche?tab=confronta&pre=${encodeURIComponent(`p:${routeItem.id}`)}`)}
         onIndexChange={(item) => {

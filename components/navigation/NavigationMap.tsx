@@ -16,6 +16,10 @@ interface Props {
   nearbyTrails?: [number, number][][]
   /** Current GPS fix accuracy in meters, drawn as a translucent circle around the position marker so the hiker can tell a trustworthy fix (few meters) from a noisy one (tens of meters, e.g. under tree cover). */
   accuracyM?: number | null
+  /** Dove l'escursionista ha lasciato l'auto (vedi components/navigation/ParkingSpotControl.tsx) —
+   *  un pin fisso, distinto da quelli dei POI, così a fine giro è visibile sulla mappa e non solo
+   *  come distanza in un pannellino. Null ⇒ nessun pin. */
+  parkingSpot?: { lat: number; lon: number } | null
 }
 
 const FOLLOW_ZOOM = 17
@@ -45,13 +49,17 @@ const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
  * hiker manually pans/zooms the map, follow mode turns off so their gesture
  * isn't fought, and a "recenter" button brings it back.
  */
-export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM }: Props) {
+export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM, parkingSpot }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const userMarker = useRef<L.Marker | null>(null)
+  const parkingMarker = useRef<L.Marker | null>(null)
   const accuracyCircle = useRef<L.Circle | null>(null)
   const hasCentered = useRef(false)
   const [followMode, setFollowMode] = useState(true)
+  // La mappa nasce dentro un import() dinamico: gli effetti che ci disegnano sopra devono poter
+  // ripartire quando è pronta, non solo quando cambiano i loro dati.
+  const [mapReady, setMapReady] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -106,10 +114,11 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       map.on('dragstart zoomstart', () => setFollowMode(false))
 
       mapInstance.current = map
+      setMapReady(true)
       // The container may still have been zero-sized while CSS was loading — force a relayout once mounted.
       setTimeout(() => map.invalidateSize(), 0)
     })
-    return () => { cancelled = true; mapInstance.current?.remove(); mapInstance.current = null }
+    return () => { cancelled = true; mapInstance.current?.remove(); mapInstance.current = null; parkingMarker.current = null; setMapReady(false) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -157,6 +166,36 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       else if (followMode) map.panTo([position.lat, position.lon], { animate: true, duration: 0.5 })
     })
   }, [position, bearingDeg, state, followMode, accuracyM])
+
+  // Pin dell'auto — effetto a sé, così compare/si sposta/sparisce nel momento in cui l'escursionista
+  // tocca il controllo, senza aspettare il prossimo fix GPS.
+  useEffect(() => {
+    if (!mapReady) return
+    if (!parkingSpot) {
+      parkingMarker.current?.remove()
+      parkingMarker.current = null
+      return
+    }
+    let cancelled = false
+    import('leaflet').then((L) => {
+      if (cancelled || !mapInstance.current) return
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:26px;height:26px;border-radius:50%;background:#292524;border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2l-1.6-5.6A2 2 0 0 0 17.5 10H6.5a2 2 0 0 0-1.9 1.4L3 17h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 17h6"/></svg>
+               </div>`,
+        iconSize: [26, 26], iconAnchor: [13, 13],
+      })
+      if (parkingMarker.current) {
+        parkingMarker.current.setLatLng([parkingSpot.lat, parkingSpot.lon])
+        parkingMarker.current.setIcon(icon)
+      } else {
+        parkingMarker.current = L.marker([parkingSpot.lat, parkingSpot.lon], { icon, title: 'La mia auto', zIndexOffset: 900 })
+          .addTo(mapInstance.current)
+      }
+    })
+    return () => { cancelled = true }
+  }, [mapReady, parkingSpot])
 
   const handleRecenter = () => {
     setFollowMode(true)

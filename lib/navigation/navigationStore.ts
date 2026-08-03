@@ -36,6 +36,38 @@ export function newSessionSnapshot(hikeId: string, sessionId: string): Navigatio
   }
 }
 
+// ── Punto in cui è rimasta l'auto ──────────────────────────────────────────────
+// Capita spesso di parcheggiare spostati rispetto all'inizio del sentiero (parcheggio pieno,
+// sterrata chiusa, sosta lungo la strada): a fine giro il punto di partenza della traccia non
+// basta a ritrovare la macchina. Si fissa una volta, con un tocco, e resta.
+//
+// Vive solo in IndexedDB come il resto della sessione di navigazione: è un dato utile durante
+// UNA uscita, in un momento in cui il telefono è quasi sempre offline, e chiedere una scrittura
+// remota (che fallirebbe e finirebbe in outbox) per ritrovare la propria auto non aggiungerebbe
+// nulla. Sopravvive a un refresh/crash della pagina, che è ciò che conta davvero.
+
+const PARKING_KEY = (hikeId: string) => `nav-parking:${hikeId}`
+
+export interface ParkingSpot {
+  lat: number
+  lon: number
+  /** Quando è stato fissato — mostrato accanto alla distanza, così si distingue un punto salvato
+   *  oggi da uno rimasto lì da un'uscita precedente sullo stesso percorso. */
+  savedAt: number
+}
+
+export async function loadParkingSpot(hikeId: string): Promise<ParkingSpot | null> {
+  return lsGet<ParkingSpot>(PARKING_KEY(hikeId))
+}
+
+export async function saveParkingSpot(hikeId: string, spot: ParkingSpot): Promise<void> {
+  await lsSet(PARKING_KEY(hikeId), spot)
+}
+
+export async function clearParkingSpot(hikeId: string): Promise<void> {
+  await lsDel(PARKING_KEY(hikeId))
+}
+
 // ── Offline track queue: fixes buffered locally, flushed to hike_navigation_track when back online ──
 
 const TRACK_QUEUE_KEY = (sessionId: string) => `nav-track-queue:${sessionId}`

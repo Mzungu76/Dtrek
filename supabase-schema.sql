@@ -250,6 +250,13 @@ CREATE INDEX IF NOT EXISTS idx_planned_pending_expires ON planned_hikes (pending
 -- backfill_missing_planned_hikes_columns.sql) — ogni salvataggio falliva silenziosamente.
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT false;
 
+-- Tipologia scelta dall'utente per un percorso a tratta unica (lineare): sola andata o andata e
+-- ritorno. Distanza/dislivello/durata effettivi raddoppiano con 'round_trip' (vedi lib/routeMode.ts),
+-- quindi TEI e Comfort TrailScore vanno ricalcolati ad ogni cambio. NULL = scelta non ancora fatta
+-- (fa comparire il popup obbligatorio all'import) oppure percorso non lineare, dove non si applica.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS route_mode TEXT
+  CHECK (route_mode IN ('one_way', 'round_trip'));
+
 -- Scadenza predefinita (in giorni) applicata ai nuovi percorsi importati in Guida
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS guide_pending_days SMALLINT DEFAULT 30;
 

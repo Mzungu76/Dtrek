@@ -3,7 +3,7 @@ import type * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
-import { Mountain, ArrowUpDown, Upload, Star, Search, X, Rows3 } from 'lucide-react'
+import { Mountain, ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
@@ -56,8 +56,13 @@ function TextBadge({ children }: { children: ReactNode }) {
 
 /** The thumbnail's top-left badge mirrors whichever sort is currently active, instead of always
  *  showing the same score — sorting by date shows the date, by distance shows the distance, etc. */
-function ThumbBadge({ sortBy, item }: { sortBy: SortKey; item: RouteHubItem }) {
+function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: RouteHubItem; showPlannedDate?: boolean }) {
   const sv = item.sortValues
+  // In "Prossima uscita" il badge mostra la data programmata: è il criterio con cui l'elenco è
+  // ordinato, e senza si vedrebbero delle miniature in un ordine apparentemente arbitrario.
+  if (showPlannedDate && item.plannedDate) {
+    return <TextBadge>{new Date(item.plannedDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</TextBadge>
+  }
   if (!sv) return null
   switch (sortBy) {
     // Guida: doppio anello (Sicurezza fuori, TS dentro) — vedi components/TrailScoreGaugeBadge.tsx.
@@ -175,6 +180,10 @@ interface Props {
    *  group. Absent (both undefined) hides the star button entirely, e.g. in Resoconto. */
   favoritesFilter?: boolean
   onToggleFavoritesFilter?: () => void
+  /** Sottosezione di "Preferiti": mostrata solo quando quel filtro è attivo, e ordina per data di
+   *  uscita invece che per `sortBy` (vedi RouteHub.tsx). */
+  nextOutingFilter?: boolean
+  onToggleNextOutingFilter?: () => void
   /** Ricerca per titolo — filtra sia questa striscia sia il carosello sopra (vedi RouteHub.tsx,
    *  che compone la ricerca nello stesso `visibleItems` passato a entrambi). */
   searchQuery: string
@@ -188,7 +197,8 @@ interface Props {
 
 export default function BottomGallery({
   mode, items, currentId, onSelect, sortBy, onSortChange, importLabel, onImport,
-  favoritesFilter, onToggleFavoritesFilter, searchQuery, onSearchQueryChange, onExpand,
+  favoritesFilter, onToggleFavoritesFilter, nextOutingFilter, onToggleNextOutingFilter,
+  searchQuery, onSearchQueryChange, onExpand,
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const hasSortData = items.some(i => i.sortValues)
@@ -256,8 +266,24 @@ export default function BottomGallery({
               <Star className="w-3 h-3" fill={favoritesFilter ? 'currentColor' : 'none'} />
             </button>
           )}
-          {hasSortData && <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />}
-          {sortOptions.map(s => (
+          {/* Sottosezione dei preferiti — compare solo a filtro preferiti attivo, subito dopo la
+              stella e leggermente rientrata: si legge come una costola di "Preferiti", non come un
+              settimo filtro indipendente. */}
+          {favoritesFilter && onToggleNextOutingFilter && (
+            <button
+              onClick={onToggleNextOutingFilter}
+              title="Solo le uscite già programmate, in ordine di data"
+              className={`shrink-0 flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-full border backdrop-blur-md text-[10px] font-bold transition-colors ${
+                nextOutingFilter ? 'bg-sky-400 border-sky-300 text-white' : 'bg-black/40 text-stone-200 border-white/20'
+              }`}
+            >
+              <CalendarClock className="w-3 h-3" /> Prossima uscita
+            </button>
+          )}
+          {/* In "Prossima uscita" l'ordine è il calendario, non `sortBy` — mostrare comunque i
+              chip Data/Km/D+/TS lascerebbe intendere che facciano qualcosa. */}
+          {hasSortData && !(favoritesFilter && nextOutingFilter) && <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />}
+          {!(favoritesFilter && nextOutingFilter) && sortOptions.map(s => (
             <button
               key={s.id}
               onClick={() => onSortChange(s.id)}
@@ -314,9 +340,9 @@ export default function BottomGallery({
               // la mappa, come prima.
               <GalleryMapThumb polyline={item.polyline} />
             )}
-            {hasSortData && (
+            {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
               <div className="absolute top-1 left-1">
-                <ThumbBadge sortBy={sortBy} item={item} />
+                <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
               </div>
             )}
             <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">

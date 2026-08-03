@@ -1,5 +1,5 @@
 'use client'
-import { Repeat } from 'lucide-react'
+import { Repeat, Loader2 } from 'lucide-react'
 import StatFigure from '@/components/ui/StatFigure'
 
 interface Stat { value: string; label: string; href?: string }
@@ -10,11 +10,13 @@ interface Props {
   altitudeMax: number
   durationLabel: string
   /** Percorso a tratta unica (non un anello, non già un andata-ritorno) — mostra un toggle sotto le
-   *  cifre per vederle come se si tornasse sui propri passi (distanza/durata/dislivello raddoppiati
-   *  qui sopra). Puramente di visualizzazione: `distanceKm`/`elevationGain`/`durationLabel` vanno già
-   *  passati raddoppiati dal chiamante quando `active` — questo componente non fa il calcolo, solo
-   *  il bottone. Assente ⇒ nessun toggle (anello, o andata-ritorno che è già un giro completo). */
-  roundTrip?: { active: boolean; onToggle: () => void }
+   *  cifre per dichiarare se si torna sui propri passi. NON è una preferenza di visualizzazione: la
+   *  scelta è persistita sul percorso e i punteggi si ricalcolano (vedi lib/routeMode.ts e
+   *  components/guida/GuideReader.tsx). `distanceKm`/`elevationGain`/`durationLabel` vanno comunque
+   *  passati già raddoppiati dal chiamante quando `active` — questo componente non fa il calcolo,
+   *  solo il bottone. `saving` è true mentre la scelta viene salvata e i punteggi ricalcolati.
+   *  Assente ⇒ nessun toggle (anello, o andata-ritorno che è già un giro completo). */
+  roundTrip?: { active: boolean; onToggle: () => void; saving?: boolean }
 }
 
 /** Cifre editoriali (StatFigure, vedi components/ui/StatFigure.tsx) al posto dei vecchi badge
@@ -52,12 +54,19 @@ export default function GuideStatsStrip({ distanceKm, elevationGain, altitudeMax
       {roundTrip && (
         <button
           onClick={roundTrip.onToggle}
-          className={`w-full flex items-center justify-start gap-1.5 px-4 py-2 text-xs font-semibold border-b border-stone-200 transition-colors text-left ${
+          disabled={roundTrip.saving}
+          className={`w-full flex items-center justify-start gap-1.5 px-4 py-2 text-xs font-semibold border-b border-stone-200 transition-colors text-left disabled:opacity-70 ${
             roundTrip.active ? 'bg-forest-50 text-forest-700' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'
           }`}
         >
-          <Repeat className="w-3.5 h-3.5 shrink-0" />
-          {roundTrip.active ? 'Percorso Andata e Ritorno. Clicca per modificare in Sola Andata' : 'Percorso di Sola Andata. Clicca per modificare in Andata e Ritorno'}
+          {roundTrip.saving
+            ? <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+            : <Repeat className="w-3.5 h-3.5 shrink-0" />}
+          {roundTrip.saving
+            ? 'Aggiorno i punteggi…'
+            : roundTrip.active
+              ? 'Percorso Andata e Ritorno. Clicca per modificare in Sola Andata'
+              : 'Percorso di Sola Andata. Clicca per modificare in Andata e Ritorno'}
         </button>
       )}
     </div>

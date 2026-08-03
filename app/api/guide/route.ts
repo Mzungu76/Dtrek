@@ -33,6 +33,7 @@ import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { extractEpochPois } from '@/lib/epochPois'
+import { effectiveHikeMetrics } from '@/lib/routeMode'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
 import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
@@ -406,6 +407,7 @@ interface GuideHikeFallback {
   altitudeMax?: number
   altitudeMin?: number
   estimatedTimeSeconds?: number
+  routeMode?: PlannedHike['routeMode']
   assessment?: PlannedHike['assessment']
   cachedPois?: PlannedHike['cachedPois']
   cachedPoiWiki?: PlannedHike['cachedPoiWiki']
@@ -433,6 +435,7 @@ function hikeFromFallback(hikeId: string, hikeFallback: GuideHikeFallback): Plan
     altitudeMax:          hikeFallback.altitudeMax ?? 0,
     altitudeMin:          hikeFallback.altitudeMin ?? 0,
     estimatedTimeSeconds: hikeFallback.estimatedTimeSeconds ?? 0,
+    routeMode:            hikeFallback.routeMode,
     assessment:           hikeFallback.assessment,
     cachedPois:           hikeFallback.cachedPois,
     cachedPoiWiki:        hikeFallback.cachedPoiWiki,
@@ -521,18 +524,29 @@ function buildPrompt(
     .join('\n\n')
   const sectionTitles = sectionsToWrite.map(k => GUIDE_SECTIONS.find(s => s.key === k)!.title).join(', ')
 
+  // Cifre effettive, non quelle grezze della traccia: su un percorso lineare dichiarato "andata e
+  // ritorno" (lib/routeMode.ts) sono il doppio, ed è quello che l'escursionista camminerà davvero.
+  // Dichiararlo anche a parole evita che Giulia descriva l'arrivo come punto finale del cammino
+  // quando invece è il giro di boa.
+  const effective = effectiveHikeMetrics(hike, hike.routeMode)
+  const routeModeLine = hike.routeMode === 'round_trip'
+    ? 'TIPOLOGIA: andata e ritorno sullo stesso tracciato (le cifre qui sotto sono già quelle del giro completo; il punto di arrivo della traccia è il giro di boa, non la fine della camminata)\n'
+    : hike.routeMode === 'one_way'
+      ? 'TIPOLOGIA: sola andata (punto di partenza e punto di arrivo sono diversi; chi cammina non torna sui propri passi)\n'
+      : ''
+
   return `${isFirstGeneration
     ? `Crea una guida escursionistica per questo percorso, analizzando tutti i dati disponibili qui sotto:`
     : `Scrivi una o più sezioni, finora senza testo, di una guida escursionistica già esistente per questo percorso (le altre sezioni sono già scritte e non vanno toccate), analizzando tutti i dati disponibili qui sotto:`}
 
 NOME: ${hike.title}
 ${dateStr ? `DATA: ${dateStr}` : ''}
-DISTANZA: ${(hike.distanceMeters / 1000).toFixed(1)} km
-DISLIVELLO POSITIVO: ${Math.round(hike.elevationGain)} m
-DISLIVELLO NEGATIVO: ${Math.round(hike.elevationLoss)} m
+${routeModeLine}DISTANZA: ${(effective.distanceMeters / 1000).toFixed(1)} km
+DISLIVELLO POSITIVO: ${Math.round(effective.elevationGain)} m
+DISLIVELLO NEGATIVO: ${Math.round(effective.elevationLoss)} m
 QUOTA MASSIMA: ${Math.round(hike.altitudeMax)} m slm
 QUOTA MINIMA: ${Math.round(hike.altitudeMin)} m slm
-DURATA STIMATA: ${formatDuration(hike.estimatedTimeSeconds)}
+DURATA STIMATA: ${formatDuration(effective.estimatedTimeSeconds)}
 ${diffStr ? `DIFFICOLTÀ: ${diffStr}` : ''}
 ${assessment?.suitabilityScore ? `ADATTA A: ${assessment.suitabilityScore}% degli escursionisti` : ''}
 
@@ -834,6 +848,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         altitudeMax:          data.altitude_max,
         altitudeMin:          data.altitude_min,
         estimatedTimeSeconds: data.estimated_time_seconds,
+        routeMode:            data.route_mode           ?? undefined,
         assessment:           data.assessment           ?? undefined,
         cachedPois:           data.cached_pois          ?? undefined,
         cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,

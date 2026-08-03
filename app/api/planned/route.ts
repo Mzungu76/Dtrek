@@ -61,6 +61,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     pendingExpiresAt:             row.pending_expires_at             as string | undefined,
     archivedAt:                   row.archived_at                    as string | undefined,
     favorite:                     row.favorite                       as boolean | undefined,
+    routeMode:                    row.route_mode                     as PlannedHike['routeMode'],
     dtmProfile:                   row.dtm_profile                    as PlannedHike['dtmProfile'],
     dtmTrackHash:                 row.dtm_track_hash                 as string | undefined,
     dtmComputedAt:                row.dtm_computed_at                as string | undefined,
@@ -125,6 +126,7 @@ function hikeToRow(h: PlannedHike) {
     pending_expires_at:               h.pendingExpiresAt ?? null,
     archived_at:                      h.archivedAt ?? null,
     favorite:                         h.favorite ?? false,
+    route_mode:                       h.routeMode ?? null,
     source_url:                       h.sourceUrl ?? null,
     comfort_verdict:                  h.comfortVerdict ?? null,
     comfort_note:                     h.comfortNote ?? null,
@@ -143,7 +145,7 @@ const META_COLS = [
   'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
-  'pending_expires_at', 'archived_at', 'favorite', 'updated_at',
+  'pending_expires_at', 'archived_at', 'favorite', 'route_mode', 'updated_at',
   'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty',
 ].join(', ')
 
@@ -362,6 +364,7 @@ export async function PATCH(req: NextRequest) {
       pendingExpiresAt?: string | null
       archivedAt?: string | null
       favorite?: boolean
+      routeMode?: PlannedHike['routeMode']
       dtmProfile?: PlannedHike['dtmProfile']
       dtmTrackHash?: string
       dtmComputedAt?: string
@@ -405,6 +408,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.pendingExpiresAt             !== undefined) dbPatch.pending_expires_at             = patch.pendingExpiresAt
     if (patch.archivedAt                   !== undefined) dbPatch.archived_at                    = patch.archivedAt
     if (patch.favorite                     !== undefined) dbPatch.favorite                       = patch.favorite
+    if (patch.routeMode                    !== undefined) dbPatch.route_mode                     = patch.routeMode
     if (patch.dtmProfile                   !== undefined) dbPatch.dtm_profile                    = patch.dtmProfile
     if (patch.dtmTrackHash                 !== undefined) dbPatch.dtm_track_hash                 = patch.dtmTrackHash
     if (patch.dtmComputedAt                !== undefined) dbPatch.dtm_computed_at                = patch.dtmComputedAt

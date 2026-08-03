@@ -3,6 +3,7 @@ import { fetchWildlifeRiskFromGbif } from './wildlifeRiskFromGbif'
 import { computeBbox } from './geoUtils'
 import { updatePlannedMeta, type PlannedHike } from './plannedStore'
 import { refreshTsForHike } from './computeTsForHike'
+import { effectiveHikeMetrics } from './routeMode'
 
 export interface SafetyCoreInput {
   routePolyline?: PlannedHike['routePolyline']
@@ -55,9 +56,11 @@ export async function computeSafetyCore(hike: SafetyCoreInput): Promise<SafetySc
  * is added, not just when the hike happens to be open.
  */
 export async function computeSafetyForHike(hike: Pick<PlannedHike,
-  'id' | 'routePolyline' | 'distanceMeters' | 'elevationGain' | 'elevationLoss' | 'altitudeMax' | 'altitudeMin' | 'estimatedTimeSeconds' | 'plannedDate'
+  'id' | 'routePolyline' | 'distanceMeters' | 'elevationGain' | 'elevationLoss' | 'altitudeMax' | 'altitudeMin' | 'estimatedTimeSeconds' | 'plannedDate' | 'routeMode'
 >): Promise<SafetyScore> {
-  const safety = await computeSafetyCore(hike)
+  // Un andata e ritorno dichiarato è il doppio della fatica e del tempo sotto il sole: la
+  // Sicurezza si calcola sulle cifre effettive (lib/routeMode.ts), non sulla sola andata.
+  const safety = await computeSafetyCore({ ...hike, ...effectiveHikeMetrics(hike, hike.routeMode) })
   await updatePlannedMeta(hike.id, { cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() })
   refreshTsForHike(hike.id).catch(() => {})
   return safety

@@ -1,7 +1,7 @@
 'use client'
 import { useRef } from 'react'
 import Image from 'next/image'
-import { ArrowUpDown, Search, Star, X } from 'lucide-react'
+import { ArrowUpDown, CalendarClock, Search, Star, X } from 'lucide-react'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
@@ -20,6 +20,9 @@ interface Props {
   onSortChange: (key: SortKey) => void
   favoritesFilter?: boolean
   onToggleFavoritesFilter?: () => void
+  /** Sottosezione di "Preferiti" — vedi BottomGallery.tsx e RouteHub.tsx. */
+  nextOutingFilter?: boolean
+  onToggleNextOutingFilter?: () => void
   searchQuery: string
   onSearchQueryChange: (query: string) => void
 }
@@ -30,7 +33,8 @@ interface Props {
  *  ricerca/ordinamento/preferiti di BottomGallery.tsx, non duplicati con una logica propria. */
 export default function ExpandedGalleryList({
   mode, items, currentId, onSelect, onClose, sortBy, onSortChange,
-  favoritesFilter, onToggleFavoritesFilter, searchQuery, onSearchQueryChange,
+  favoritesFilter, onToggleFavoritesFilter, nextOutingFilter, onToggleNextOutingFilter,
+  searchQuery, onSearchQueryChange,
 }: Props) {
   const hasSortData = items.some(i => i.sortValues)
   const hasDistance = items.some(i => i.sortValues?.distance != null)
@@ -92,8 +96,20 @@ export default function ExpandedGalleryList({
                 <Star className="w-3 h-3" fill={favoritesFilter ? 'currentColor' : 'none'} />
               </button>
             )}
-            {hasSortData && <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />}
-            {sortOptions.map(s => (
+            {favoritesFilter && onToggleNextOutingFilter && (
+              <button
+                onClick={onToggleNextOutingFilter}
+                title="Solo le uscite già programmate, in ordine di data"
+                className={`shrink-0 flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-full border backdrop-blur-md text-[10px] font-bold transition-colors ${
+                  nextOutingFilter ? 'bg-sky-400 border-sky-300 text-white' : 'bg-black/40 text-stone-200 border-white/20'
+                }`}
+              >
+                <CalendarClock className="w-3 h-3" /> Prossima uscita
+              </button>
+            )}
+            {/* Vedi BottomGallery.tsx: in "Prossima uscita" l'ordine è il calendario, non `sortBy`. */}
+            {hasSortData && !(favoritesFilter && nextOutingFilter) && <ArrowUpDown className="w-3 h-3 text-white/50 shrink-0" />}
+            {!(favoritesFilter && nextOutingFilter) && sortOptions.map(s => (
               <button
                 key={s.id}
                 onClick={() => onSortChange(s.id)}
