@@ -149,6 +149,8 @@ function buildPrompt(
    *  components/profilo/SectionAiPrivacy.tsx. */
   aiUseBiometricData = true,
   styleProfile: WritingStyleProfile | null = null,
+  /** Quando la guida pre-uscita è stata scritta — serve a datarla nel prompt. */
+  guideGeneratedAt?: string,
 ): { text: string; imageBlocks: Anthropic.ImageBlockParam[] } {
   const dateStr = activity.start_time
     ? format(new Date(activity.start_time as string), "EEEE d MMMM yyyy", { locale: it })
@@ -216,8 +218,17 @@ function buildPrompt(
       ].filter(Boolean).join('\n\n')
     : '(nessun materiale fotografico)'
 
+  // La guida è stata scritta PRIMA di partire, da chi il sentiero non l'aveva ancora visto: è
+  // un'aspettativa documentata, non un resoconto. Etichettarla come tale (invece di consegnarla
+  // come "contesto" indistinto insieme ai dati reali) è ciò che permette al reportage di METTERE A
+  // CONFRONTO le due cose — quello che era previsto e quello che si è trovato — invece di ripetere
+  // la guida al passato. Il confronto è anche l'unico modo per accorgersi delle discrepanze:
+  // riscrivere la guida al passato le nasconderebbe.
+  const guideDate = guideGeneratedAt
+    ? format(new Date(guideGeneratedAt), 'd MMMM yyyy', { locale: it })
+    : null
   const guideBlock = guideText
-    ? `\nCONTESTO STORICO-NATURALISTICO (estratto dalla guida del percorso — usalo come fonte per approfondimenti):\n${guideText.slice(0, 2500)}\n`
+    ? `\nGUIDA SCRITTA PRIMA DELL'USCITA${guideDate ? ` (redatta il ${guideDate}, quindi PRIMA di percorrere il sentiero)` : ' (redatta prima di percorrere il sentiero)'} — è quello che ci si ASPETTAVA di trovare, non quello che è stato trovato:\n${guideText.slice(0, 2500)}\n`
     : ''
 
   const poiSection = poiBlock
@@ -279,16 +290,16 @@ Scrivi il reportage strutturato in queste ${hasQa ? 'quattro' : 'tre'} sezioni (
 ## Il percorso
 Descrivi il tracciato e il territorio attraversato: paesaggio, morfologia del terreno,
 punti panoramici, cambi di vegetazione. Contestualizza geograficamente il percorso
-senza usare toni enfatici. Usa i dati di distanza, dislivello e quota come ancoraggio.${weatherLine ? ' Se rilevante, integra il METEO IL GIORNO DELL\'ESCURSIONE fornito sopra come elemento narrativo (luce, condizioni del sentiero, visibilità), non come sezione a parte.' : ''}
+senza usare toni enfatici. Usa i dati di distanza, dislivello e quota come ancoraggio.${guideBlock ? ' Metti a confronto la GUIDA SCRITTA PRIMA DELL\'USCITA con quello che i dati e le foto mostrano davvero: dove trova conferma, dove il terreno si è rivelato diverso da come era descritto (tempi, difficoltà, condizioni del sentiero, presenza d\'acqua). Se una previsione della guida non trova riscontro nei dati reali, dillo esplicitamente invece di riscrivere la guida al passato — è proprio quello lo scarto che rende utile un resoconto rispetto a una guida.' : ''}${weatherLine ? ' Se rilevante, integra il METEO IL GIORNO DELL\'ESCURSIONE fornito sopra come elemento narrativo (luce, condizioni del sentiero, visibilità), non come sezione a parte.' : ''}
 ${cronacaBlock}
 ## Natura e storia
 Approfondisci i luoghi attraversati: geologia, flora, fauna, siti storici o
 archeologici nelle vicinanze, tradizioni locali. Includi almeno un fatto poco noto
-che arricchisca la conoscenza del territorio.${natureBlock ? ' Fonda la parte naturalistica sui DATI NATURALISTICI E FENOLOGICI REALI forniti sopra (specie osservate, tipo di bosco, fenologia satellitare).' : ''}${poiBlock ? ' Usa i PUNTI DI INTERESSE forniti sopra per la parte storico-culturale.' : ''}
+che arricchisca la conoscenza del territorio.${natureBlock ? ' Fonda la parte naturalistica sui DATI NATURALISTICI E FENOLOGICI REALI forniti sopra (specie osservate, tipo di bosco, fenologia satellitare).' : ''}${poiBlock ? ' Usa i PUNTI DI INTERESSE forniti sopra per la parte storico-culturale.' : ''}${guideBlock ? ' La guida pre-uscita ha già raccolto contesto storico-naturalistico: riprendilo, ma verifica se le foto e i dati dell\'uscita lo confermano o lo correggono, e aggiungi ciò che si è potuto sapere solo essendoci stati.' : ''}
 
 ## In sintesi
 Valutazione complessiva: difficoltà effettiva, qualità del contesto, periodo ideale,
-consigli pratici. Una o due frasi conclusive che catturino l'essenza dell'esperienza.
+consigli pratici. Una o due frasi conclusive che catturino l'essenza dell'esperienza.${guideBlock ? ' I consigli pratici devono valere per chi ci andrà DOPO: dove la guida pre-uscita era ottimista o pessimista, dove serve un\'avvertenza che prima non c\'era.' : ''}
 
 ${positionedPhotos.length > 0 ? `Quando fai riferimento a una foto geolocalizzata, usa il suo numero (es. "nella foto 1", "lo scatto 3 mostra"). Le foto della galleria generica possono essere citate per nome senza posizione nel percorso.` : ''}
 Scrivi in italiano preciso, diretto, senza aggettivi inflazionati o toni epici.
@@ -436,17 +447,28 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  let guideText: string | undefined
-  let poiBlock: string | undefined
-  if (activity.linked_planned_id) {
+  // Guida scritta PRIMA dell'uscita. Veniva letta solo da planned_hikes tramite
+  // linked_planned_id — ma quella riga viene CANCELLATA quando l'uscita si completa
+  // (saveActivityWithEnrichment → deleteLinkedPlanned), quindi la lettura trovava sempre il vuoto e
+  // il reportage non ha mai visto una riga di guida. Ora la fonte principale è l'attività stessa
+  // (le colonne guide_* / poi_wiki, travasate al salvataggio); planned_hikes resta come ripiego per
+  // i casi in cui il piano esiste ancora — attività salvate prima della migrazione, o uscite
+  // completate mentre il piano non era ancora stato rimosso.
+  let guideText: string | undefined = (activity.guide_text as string | undefined) || undefined
+  let guideGeneratedAt: string | undefined = (activity.guide_generated_at as string | undefined) || undefined
+  let poiBlock: string | undefined = buildPoiBlock(undefined, activity.poi_wiki as { poi: PoiItem; wiki: WikiPage }[] | undefined) || undefined
+  if ((!guideText || !poiBlock) && activity.linked_planned_id) {
     const { data: hike } = await supabase
       .from('planned_hikes')
-      .select('cached_guide, cached_pois, cached_poi_wiki')
+      .select('cached_guide, cached_pois, cached_poi_wiki, guide_generated_at')
       .eq('id', activity.linked_planned_id)
       .eq('user_id', user.id)
       .maybeSingle()
-    if (hike?.cached_guide) guideText = hike.cached_guide
-    if (hike) poiBlock = buildPoiBlock(hike.cached_pois, hike.cached_poi_wiki)
+    if (!guideText && hike?.cached_guide) {
+      guideText = hike.cached_guide
+      guideGeneratedAt = guideGeneratedAt ?? (hike.guide_generated_at as string | undefined) ?? undefined
+    }
+    if (!poiBlock && hike) poiBlock = buildPoiBlock(hike.cached_pois, hike.cached_poi_wiki) || undefined
   }
 
   const track: TrackPoint[] = Array.isArray(activity.track_points) ? activity.track_points : []
@@ -473,7 +495,7 @@ export async function POST(req: NextRequest) {
   const styleProfile = await readProfile(user.id)
 
   const client  = new Anthropic({ apiKey })
-  const { text: prompt, imageBlocks } = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData, styleProfile)
+  const { text: prompt, imageBlocks } = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData, styleProfile, guideGeneratedAt)
   const { maxTokens } = LENGTH_CONFIG[length]
 
   let fullText = ''
