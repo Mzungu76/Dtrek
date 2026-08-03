@@ -1160,18 +1160,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const ci=new Image(); await new Promise<void>(res=>{ci.onload=()=>res();ci.src=cropped})
 
       // EXIF GPS
-      // Stessa regola di app/components/ActivityPhotoManager.tsx: una coordinata EXIF troppo
-      // lontana dal tracciato non appartiene a questa escursione e va trattata come assente,
-      // invece di ancorare il pin all'estremo di percorso più vicino a un luogo che sta altrove.
+      // Stessa regola di app/components/ActivityPhotoManager.tsx: le coordinate valide si salvano
+      // sempre (indipendentemente dalla traccia, che serve solo a ricavare la progressione), e si
+      // scartano solo quelle assurdamente lontane — una foto che con questa escursione non c'entra.
       const gpsCoords=await readExifGps(file)
       let progress=0.5, hasExifGps=false, exifLat: number|undefined, exifLon: number|undefined
-      if(gpsCoords&&pts.length>1){
+      if(gpsCoords){
         let minD=Infinity, bestIdx=0
         for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,gpsCoords.lat,gpsCoords.lon);if(d<minD){minD=d;bestIdx=i}}
-        if(minD<=EXIF_MAX_SNAP_DISTANCE_M){
+        if(pts.length===0||minD<=EXIF_MAX_SNAP_DISTANCE_M){
           hasExifGps=true
           exifLat=gpsCoords.lat; exifLon=gpsCoords.lon
-          progress=bestIdx/(pts.length-1)
+          if(pts.length>1) progress=bestIdx/(pts.length-1)
         }
       }
 

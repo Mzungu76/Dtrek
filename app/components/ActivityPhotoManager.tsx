@@ -78,28 +78,34 @@ export default function ActivityPhotoManager({
         )
         const cropped = cv.toDataURL('image/jpeg', 0.82)
 
-        // EXIF GPS → punto di traccia più vicino → progressione lungo il percorso.
-        // Una coordinata troppo lontana dal tracciato (foto che con questa escursione non c'entra,
-        // vedi EXIF_MAX_SNAP_DISTANCE_M) viene trattata come "senza GPS": ancorarla comunque
-        // vorrebbe dire piantarne il pin sull'estremo del percorso più vicino a un luogo che sta
-        // altrove — ed è esattamente così che più foto finivano ammucchiate sullo stesso punto.
+        // Coordinate EXIF → posizione della foto, e punto di traccia più vicino → progressione
+        // lungo il percorso (che serve solo a ordinarla tra le altre).
+        //
+        // Le due cose sono deliberatamente indipendenti: se la foto ha coordinate valide vengono
+        // sempre salvate, anche senza traccia GPS con cui confrontarle. Legarle insieme era
+        // sbagliato — una traccia assente o con un solo punto azzerava anche il GPS della foto, che
+        // così perdeva il badge e finiva a metà percorso pur avendo una posizione perfettamente
+        // buona. Solo una coordinata assurdamente lontana (EXIF_MAX_SNAP_DISTANCE_M: una foto che
+        // con questa escursione non c'entra nulla) viene ignorata del tutto, perché ancorarla
+        // trascinerebbe un pin fuori dalla mappa del percorso.
         const gps = await readExifGps(file)
         let progress = 0.5
         let hasExifGps = false
         let lat: number | undefined
         let lon: number | undefined
 
-        if (gps && pts.length > 1) {
+        if (gps) {
           let minD = Infinity, bestIdx = 0
           pts.forEach((pt, i) => {
             const d = haversineM(pt.lat!, pt.lon!, gps.lat, gps.lon)
             if (d < minD) { minD = d; bestIdx = i }
           })
-          if (minD <= EXIF_MAX_SNAP_DISTANCE_M) {
+          const belongsToThisHike = pts.length === 0 || minD <= EXIF_MAX_SNAP_DISTANCE_M
+          if (belongsToThisHike) {
             hasExifGps = true
             lat = gps.lat
             lon = gps.lon
-            progress = bestIdx / (pts.length - 1)
+            if (pts.length > 1) progress = bestIdx / (pts.length - 1)
           }
         }
 
