@@ -2,7 +2,7 @@
 
 import { getBrowserSupabase } from './supabaseBrowser'
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from './localStore'
-import { registerEntityFlusher, scheduleFlush, flushRows } from './sync/syncEngine'
+import { registerEntityFlusher, scheduleFlush, flushRows, getPendingRecordIds } from './sync/syncEngine'
 import { revalidateListInBackground } from './sync/pullEngine'
 import { isStaleSwResponse } from './apiFetch'
 
@@ -116,6 +116,34 @@ async function fetchFromServer(activityId: string): Promise<RoutePhoto[]> {
     .sort((a, b) => a.progress - b.progress)
 }
 
+/**
+ * La lista del server, ma con le scritture locali non ancora sincronizzate che continuano a
+ * vincere — quello che registerListReconciler (lib/sync/pullEngine.ts) fa già per gli altri
+ * store, e che la più semplice revalidateListInBackground da sola non fa.
+ *
+ * Senza questa riconciliazione una foto eliminata offline (o solo un attimo prima che l'outbox
+ * riuscisse a svuotarsi) tornava a comparire alla riapertura successiva: la rivalidazione in
+ * background chiedeva l'elenco al server, che la DELETE non l'aveva ancora ricevuta, e
+ * sovrascriveva con quella risposta la cache locale da cui la foto era già stata tolta. Stessa
+ * cosa per una didascalia riscritta o una foto riposizionata.
+ */
+async function fetchReconciled(activityId: string): Promise<RoutePhoto[]> {
+  const [server, pendingIds] = await Promise.all([
+    fetchFromServer(activityId),
+    getPendingRecordIds(ENTITY_TYPE).catch(() => new Set<string>()),
+  ])
+  if (pendingIds.size === 0) return server
+
+  const local = (await lsGet<RoutePhoto[]>(LS_KEYS.activityPhotos(activityId))) ?? []
+  const localById = new Map(local.map(p => [p.id, p]))
+  return server
+    // In sospeso e sparita dalla copia locale ⇒ eliminata qui, il server non lo sa ancora.
+    .filter(p => !pendingIds.has(p.id) || localById.has(p.id))
+    // In sospeso e ancora presente ⇒ modificata qui, la versione locale è la più recente.
+    .map(p => pendingIds.has(p.id) ? localById.get(p.id)! : p)
+    .sort((a, b) => a.progress - b.progress)
+}
+
 // Le foto caricate prima di questa fix vivono solo in localStorage (dtrek_vp_${id}, base64).
 // Se il server non ha ancora nulla per questa escursione, le migriamo una volta sul backend;
 // la chiave locale viene rimossa solo se TUTTE le foto sono state migrate con successo, così
@@ -163,16 +191,15 @@ async function migrateLegacyPhotos(activityId: string): Promise<RoutePhoto[] | n
 
 /**
  * Returns the local copy if present; only hits Supabase (and the legacy
- * localStorage migration) when there's no local copy yet. Metadata edits
- * (caption/position) applied while this activity's photo list isn't
- * currently cached won't be reflected here until the next full refetch —
- * an accepted limitation since every editor already keeps its own React
- * state in sync for the duration of the session (see updateActivityPhoto).
+ * localStorage migration) when there's no local copy yet. Ogni scrittura
+ * (aggiunta, modifica, eliminazione) aggiorna la cache prima di accodare la
+ * chiamata remota, quindi questa lettura cache-first non può più restituire
+ * una foto già eliminata o una didascalia già riscritta.
  */
 export async function fetchActivityPhotos(activityId: string): Promise<RoutePhoto[]> {
   const local = await lsGet<RoutePhoto[]>(LS_KEYS.activityPhotos(activityId))
   if (local) {
-    revalidateListInBackground(LS_KEYS.activityPhotos(activityId), local, () => fetchFromServer(activityId))
+    revalidateListInBackground(LS_KEYS.activityPhotos(activityId), local, () => fetchReconciled(activityId))
     return local
   }
 
@@ -220,19 +247,43 @@ export async function addActivityPhoto(activityId: string, photo: {
   return result
 }
 
-/** Queues the metadata patch for background sync — never blocks on the network (callers already keep their own optimistic UI state, see components/RouteMap3D.tsx). */
-export async function updateActivityPhoto(id: string, patch: {
+/**
+ * Applies the metadata patch to the local cache immediately and queues it for background sync —
+ * never blocks on the network.
+ *
+ * `activityId` esiste per poter scrivere anche nella cache locale, non solo in outbox: senza,
+ * una didascalia riscritta o una foto riposizionata sopravviveva solo nello stato React del
+ * chiamante e spariva alla riapertura della scheda, perché fetchActivityPhotos legge prima la
+ * cache (che era rimasta a com'era) e solo dopo, in background, il server.
+ */
+export async function updateActivityPhoto(activityId: string, id: string, patch: {
   caption?: string
   progress?: number
   lat?: number
   lon?: number
 }): Promise<void> {
+  const local = await lsGet<RoutePhoto[]>(LS_KEYS.activityPhotos(activityId))
+  if (local) {
+    await lsSet(
+      LS_KEYS.activityPhotos(activityId),
+      local.map(p => p.id === id ? { ...p, ...patch } : p).sort((a, b) => a.progress - b.progress),
+    )
+  }
   await obEnqueue(ENTITY_TYPE, id, 'patch', { id, ...patch })
   scheduleFlush()
 }
 
-/** Queues the deletion for background sync. */
-export async function removeActivityPhoto(id: string): Promise<void> {
+/**
+ * Removes the photo from the local cache immediately and queues the deletion for background sync.
+ *
+ * La rimozione dalla cache è la metà che mancava: prima si accodava solo la DELETE remota, quindi
+ * riaprendo la scheda la foto "eliminata" tornava a comparire — servita dalla cache locale, che non
+ * aveva mai saputo nulla. E anche a sincronizzazione avvenuta la cache restava sbagliata finché non
+ * vinceva la rivalidazione in background, cioè in un momento non prevedibile dall'utente.
+ */
+export async function removeActivityPhoto(activityId: string, id: string): Promise<void> {
+  const local = await lsGet<RoutePhoto[]>(LS_KEYS.activityPhotos(activityId))
+  if (local) await lsSet(LS_KEYS.activityPhotos(activityId), local.filter(p => p.id !== id))
   await obEnqueue(ENTITY_TYPE, id, 'delete')
   scheduleFlush()
 }

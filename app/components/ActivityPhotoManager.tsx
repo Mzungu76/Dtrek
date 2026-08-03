@@ -6,7 +6,7 @@ import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import { readExifGps, EXIF_MAX_SNAP_DISTANCE_M } from '@/lib/exifGps'
-import { Upload, X, Pencil, Check, Camera, MapPin, ImageOff, Map, AlertTriangle } from 'lucide-react'
+import { Upload, Pencil, Check, Camera, MapPin, ImageOff, Map, AlertTriangle, Trash2, Loader2 } from 'lucide-react'
 
 const PhotoPlacementMap = dynamic(() => import('@/app/components/PhotoPlacementMap'), { ssr: false })
 
@@ -31,6 +31,11 @@ export default function ActivityPhotoManager({
   const [editCaption,setEditCaption]= useState('')
   const [dragging,          setDragging]          = useState(false)
   const [showPlacementMap,  setShowPlacementMap]  = useState(false)
+  // Foto per cui è stata chiesta l'eliminazione, in attesa di conferma — un'azione distruttiva e
+  // irreversibile (la foto sparisce anche dallo Storage) non deve dipendere da un singolo tocco
+  // andato a segno per caso.
+  const [pendingDelete, setPendingDelete] = useState<RoutePhoto | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileRef   = useRef<HTMLInputElement>(null)
 
@@ -124,14 +129,21 @@ export default function ActivityPhotoManager({
     }
   }
 
-  async function removePhoto(id: string) {
+  async function confirmRemovePhoto() {
+    const photo = pendingDelete
+    if (!photo) return
     setError(null)
+    setDeleting(true)
     try {
-      await removeActivityPhoto(id)
-      onPhotosChange(photos.filter(p => p.id !== id))
+      await removeActivityPhoto(activityId, photo.id)
+      onPhotosChange(photos.filter(p => p.id !== photo.id))
+      setPendingDelete(null)
     } catch (e) {
       console.error('removeActivityPhoto:', e)
       setError('Eliminazione foto non riuscita. Riprova.')
+      setPendingDelete(null)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -147,7 +159,7 @@ export default function ActivityPhotoManager({
     setEditingId(null)
     if (!caption) return
     try {
-      await updateActivityPhoto(id, { caption })
+      await updateActivityPhoto(activityId, id, { caption })
       onPhotosChange(photos.map(p => p.id === id ? { ...p, caption } : p))
     } catch (e) {
       console.error('updateActivityPhoto:', e)
@@ -227,12 +239,6 @@ export default function ActivityPhotoManager({
                       </span>
                     </div>
                 }
-                {/* Delete */}
-                <button
-                  onClick={e => { e.stopPropagation(); removePhoto(photo.id) }}
-                  className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 w-5 h-5 bg-red-500/90 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-opacity">
-                  <X className="w-3 h-3" />
-                </button>
               </div>
 
               {/* Caption */}
@@ -251,21 +257,82 @@ export default function ActivityPhotoManager({
                   </div>
                 ) : (
                   <button onClick={() => startEdit(photo)}
-                    className="w-full flex items-center justify-between gap-1 group/cap">
+                    className="w-full flex items-center justify-between gap-1 py-1 group/cap">
                     <span className="text-[11px] text-stone-600 truncate leading-snug text-left">
                       {photo.caption || <span className="italic text-stone-400">senza nome</span>}
                     </span>
-                    <Pencil className="w-2.5 h-2.5 text-stone-300 group-hover/cap:text-forest-500 shrink-0" />
+                    <Pencil className="w-3 h-3 text-stone-300 group-hover/cap:text-forest-500 shrink-0" />
                   </button>
                 )}
+              </div>
+
+              {/* Azioni esplicite, sempre visibili e a piena larghezza. Prima "elimina" era una
+                  crocetta di 20 px in un angolo, rivelata dall'hover: su un telefono l'hover non
+                  esiste, quindi il bersaglio restava invisibile e andava centrato a intuito — e
+                  quando lo si centrava la foto spariva senza chiedere nulla. Qui il bersaglio è
+                  un'intera metà della riga (~36 px di altezza, ben oltre la soglia tattile) ed è
+                  etichettato, e l'eliminazione passa comunque da una conferma. */}
+              <div className="flex border-t border-stone-100 text-[10.5px] font-semibold">
+                <button
+                  onClick={() => setShowPlacementMap(true)}
+                  className="flex-1 flex items-center justify-center gap-1 py-2 text-stone-500 hover:bg-stone-50 transition-colors"
+                >
+                  <Map className="w-3 h-3" /> Posiziona
+                </button>
+                <button
+                  onClick={() => setPendingDelete(photo)}
+                  className="flex-1 flex items-center justify-center gap-1 py-2 text-red-500 hover:bg-red-50 border-l border-stone-100 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" /> Elimina
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* Conferma di eliminazione — con l'anteprima della foto, così si vede subito se il tocco è
+          finito su quella giusta (in una griglia di miniature quadrate è facile sbagliare vicino). */}
+      {pendingDelete && (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={e => { if (e.target === e.currentTarget && !deleting) setPendingDelete(null) }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
+            <div className="flex items-start gap-3 px-5 pt-5 pb-4">
+              <img src={pendingDelete.url} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0 border border-stone-200" />
+              <div className="min-w-0">
+                <h3 className="font-display font-bold text-stone-800 text-[15px] leading-snug">Eliminare questa foto?</h3>
+                <p className="text-[11.5px] text-stone-500 leading-snug mt-1">
+                  {pendingDelete.caption
+                    ? `«${pendingDelete.caption}» sparirà dal resoconto, dalla galleria e dalla mappa. Non si può annullare.`
+                    : 'Sparirà dal resoconto, dalla galleria e dalla mappa. Non si può annullare.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 px-5 pb-5">
+              <button
+                onClick={() => setPendingDelete(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl border border-stone-200 text-stone-600 text-[13px] font-semibold hover:bg-stone-50 transition-colors disabled:opacity-50"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={confirmRemovePhoto}
+                disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold transition-colors disabled:opacity-60"
+              >
+                {deleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPlacementMap && (
         <PhotoPlacementMap
+          activityId={activityId}
           trackPoints={trackPoints}
           photos={photos}
           onClose={() => { setShowPlacementMap(false); refreshPhotos() }}

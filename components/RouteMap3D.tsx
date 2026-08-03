@@ -492,6 +492,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Post-production
   const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
   const [routePhotos,     setRoutePhotos]    = useState<RoutePhoto[]>([])
+  // Foto in attesa di conferma di eliminazione — vedi il bottone a due tempi nell'elenco foto.
+  const [pendingDeletePhotoId, setPendingDeletePhotoId] = useState<string|null>(null)
   // Foto escluse dal video (di default nessuna, cioè tutte incluse) — non persistito: è una
   // preferenza per-generazione, come videoPreset/videoDuration/ecc., non un dato della foto stessa.
   const [videoExcludedPhotoIds, setVideoExcludedPhotoIds] = useState<Set<string>>(new Set())
@@ -716,7 +718,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       setRoutePhotos(prev=>prev.map(p=>p.id===photoId
         ?{...p,progress:prog,lat:nearLat,lon:nearLon}:p))
       setPlacingPhoto(null)
-      updateActivityPhoto(photoId,{progress:prog,lat:nearLat,lon:nearLon}).catch(()=>{
+      updateActivityPhoto(activityId!,photoId,{progress:prog,lat:nearLat,lon:nearLon}).catch(()=>{
         setShareToast('Errore: posizionamento foto non salvato'); setTimeout(()=>setShareToast(''),3000)
       })
     }
@@ -3564,7 +3566,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                                 onChange={e=>setRoutePhotos(prev=>prev.map(p=>p.id===photo.id?{...p,caption:e.target.value}:p))}
                                 onBlur={e=>{
                                   const caption=e.target.value
-                                  updateActivityPhoto(photo.id,{caption}).catch(()=>{
+                                  updateActivityPhoto(activityId!,photo.id,{caption}).catch(()=>{
                                     setShareToast('Errore: didascalia non salvata'); setTimeout(()=>setShareToast(''),3000)
                                   })
                                 }}
@@ -3582,17 +3584,36 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                                 {photo.hasExifGps&&(
                                   <span className="text-[10px] text-forest-300 font-medium">📍 {Math.round(photo.progress*100)}%</span>
                                 )}
-                                <button onClick={()=>{
-                                  const id=photo.id
-                                  setRoutePhotos(prev=>prev.filter(p=>p.id!==id));photoImgsRef.current.delete(id)
-                                  setVideoExcludedPhotoIds(prev=>{ if(!prev.has(id)) return prev; const next=new Set(prev); next.delete(id); return next })
-                                  removeActivityPhoto(id).catch(()=>{
-                                    setShareToast('Errore: eliminazione foto non riuscita'); setTimeout(()=>setShareToast(''),3000)
-                                  })
-                                }}
-                                  className="ml-auto text-white/25 hover:text-red-400 transition-colors">
-                                  <X className="w-3.5 h-3.5"/>
-                                </button>
+                                {/* Eliminazione a due tempi: il primo tocco chiede conferma al
+                                    posto della crocetta, il secondo elimina. Una crocetta da 14 px
+                                    che cancella per sempre una foto al primo tocco è troppo facile
+                                    da centrare per sbaglio, soprattutto su un telefono. */}
+                                {pendingDeletePhotoId===photo.id ? (
+                                  <span className="ml-auto flex items-center gap-1">
+                                    <button onClick={()=>setPendingDeletePhotoId(null)}
+                                      className="text-[10px] font-semibold text-white/45 hover:text-white/80 px-1.5 py-1 transition-colors">
+                                      Annulla
+                                    </button>
+                                    <button onClick={()=>{
+                                      const id=photo.id
+                                      setPendingDeletePhotoId(null)
+                                      setRoutePhotos(prev=>prev.filter(p=>p.id!==id));photoImgsRef.current.delete(id)
+                                      setVideoExcludedPhotoIds(prev=>{ if(!prev.has(id)) return prev; const next=new Set(prev); next.delete(id); return next })
+                                      removeActivityPhoto(activityId!,id).catch(()=>{
+                                        setShareToast('Errore: eliminazione foto non riuscita'); setTimeout(()=>setShareToast(''),3000)
+                                      })
+                                    }}
+                                      className="text-[10px] font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg px-2 py-1 transition-colors">
+                                      Elimina
+                                    </button>
+                                  </span>
+                                ) : (
+                                  <button onClick={()=>setPendingDeletePhotoId(photo.id)}
+                                    title="Elimina questa foto"
+                                    className="ml-auto text-white/25 hover:text-red-400 transition-colors p-1 -m-1">
+                                    <X className="w-3.5 h-3.5"/>
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>

@@ -9,6 +9,10 @@ import { updateActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import { X, MapPin, AlertTriangle } from 'lucide-react'
 
 interface Props {
+  /** Serve a updateActivityPhoto per aggiornare anche la cache locale delle foto di questa
+   *  escursione, non solo la coda di sincronizzazione — senza, un riposizionamento spariva alla
+   *  riapertura della scheda (vedi lib/activityPhotos.ts). */
+  activityId: string
   trackPoints: TrackPoint[]
   photos: RoutePhoto[]
   onClose: () => void
@@ -31,7 +35,7 @@ function getPhotoPos(ph: RoutePhoto, pts: TrackPoint[]): { lat: number; lon: num
 }
 
 export default function PhotoPlacementMap({
-  trackPoints, photos: initialPhotos, onClose, onUpdate,
+  activityId, trackPoints, photos: initialPhotos, onClose, onUpdate,
 }: Props) {
   const mapRef        = useRef<HTMLDivElement>(null)
   const mapInstance   = useRef<L.Map | null>(null)
@@ -101,7 +105,7 @@ export default function PhotoPlacementMap({
         const nextId = sorted[(newIdx + 1) % sorted.length]?.id ?? null
         setSelectedId(nextId)
 
-        updateActivityPhoto(sid, { progress, lat: nearPt.lat!, lon: nearPt.lon! })
+        updateActivityPhoto(activityId, sid, { progress, lat: nearPt.lat!, lon: nearPt.lon! })
           .then(onUpdate)
           .catch(() => {
             setError('Posizionamento foto non riuscito. Riprova.')
