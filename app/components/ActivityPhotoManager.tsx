@@ -5,10 +5,32 @@ import dynamic from 'next/dynamic'
 import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
-import { readExifGps, EXIF_MAX_SNAP_DISTANCE_M } from '@/lib/exifGps'
+import { readExifMetadata, placePhotoOnTrack, type PhotoPlacementSource } from '@/lib/exifGps'
 import { Upload, Pencil, Check, Camera, MapPin, ImageOff, Map, AlertTriangle, Trash2, Loader2 } from 'lucide-react'
 
 const PhotoPlacementMap = dynamic(() => import('@/app/components/PhotoPlacementMap'), { ssr: false })
+
+/** Riassunto leggibile di come sono state posizionate le foto appena caricate. Null quando sono
+ *  finite tutte al posto giusto grazie alle proprie coordinate: in quel caso non c'è nulla da
+ *  spiegare, e un messaggio comparirebbe solo per dire che è andato tutto bene. */
+function describePlacements(sources: PhotoPlacementSource[]): string | null {
+  const byGps = sources.filter(s => s === 'gps').length
+  const byTime = sources.filter(s => s === 'time').length
+  const none = sources.filter(s => s === 'none').length
+  if (none === 0 && byTime === 0) return null
+
+  const parts: string[] = []
+  if (byGps) parts.push(`${byGps} dalle coordinate GPS`)
+  if (byTime) parts.push(`${byTime} dall'orario di scatto`)
+  const placed = parts.length ? `Posizionate: ${parts.join(', ')}.` : ''
+  const unplaced = none
+    ? ` ${none === 1 ? 'Una foto non aveva' : `${none} foto non avevano`} né coordinate né orario utilizzabili: ${none === 1 ? 'è' : 'sono'} in mezzo al percorso, spostal${none === 1 ? 'a' : 'e'} con "Posiziona".`
+    : ''
+  const why = none
+    ? ' Molti telefoni rimuovono la posizione dalle foto quando le passano a una pagina web: se vuoi il posizionamento automatico, concedi al browser l\'accesso alla posizione delle foto nelle impostazioni di sistema.'
+    : ''
+  return `${placed}${unplaced}${why}`.trim()
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -37,6 +59,11 @@ export default function ActivityPhotoManager({
   const [pendingDelete, setPendingDelete] = useState<RoutePhoto | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Esito del posizionamento dell'ultimo caricamento: senza, una foto finita a metà percorso è
+  // indistinguibile da una messa lì di proposito, e non c'è modo di capire se il problema sia
+  // l'app o il file. Con Android e iOS che rimuovono la posizione dalle foto consegnate alle
+  // pagine web, "il file non conteneva coordinate" è un'informazione che l'utente merita di avere.
+  const [placementNotice, setPlacementNotice] = useState<string | null>(null)
   const fileRef   = useRef<HTMLInputElement>(null)
 
   async function refreshPhotos() {
@@ -54,7 +81,9 @@ export default function ActivityPhotoManager({
     if (!imgs.length) return
     setUploading(true)
     setError(null)
+    setPlacementNotice(null)
     const added: RoutePhoto[] = []
+    const placements: PhotoPlacementSource[] = []
 
     try {
       for (const file of imgs) {
@@ -78,36 +107,18 @@ export default function ActivityPhotoManager({
         )
         const cropped = cv.toDataURL('image/jpeg', 0.82)
 
-        // Coordinate EXIF → posizione della foto, e punto di traccia più vicino → progressione
-        // lungo il percorso (che serve solo a ordinarla tra le altre).
+        // Dove va la foto lungo il percorso — vedi placePhotoOnTrack in lib/exifGps.ts: coordinate
+        // proprie se il file le ha, altrimenti orario di scatto confrontato con gli orari della
+        // traccia, altrimenti metà percorso in attesa di un posizionamento manuale.
         //
-        // Le due cose sono deliberatamente indipendenti: se la foto ha coordinate valide vengono
-        // sempre salvate, anche senza traccia GPS con cui confrontarle. Legarle insieme era
-        // sbagliato — una traccia assente o con un solo punto azzerava anche il GPS della foto, che
-        // così perdeva il badge e finiva a metà percorso pur avendo una posizione perfettamente
-        // buona. Solo una coordinata assurdamente lontana (EXIF_MAX_SNAP_DISTANCE_M: una foto che
-        // con questa escursione non c'entra nulla) viene ignorata del tutto, perché ancorarla
-        // trascinerebbe un pin fuori dalla mappa del percorso.
-        const gps = await readExifGps(file)
-        let progress = 0.5
-        let hasExifGps = false
-        let lat: number | undefined
-        let lon: number | undefined
-
-        if (gps) {
-          let minD = Infinity, bestIdx = 0
-          pts.forEach((pt, i) => {
-            const d = haversineM(pt.lat!, pt.lon!, gps.lat, gps.lon)
-            if (d < minD) { minD = d; bestIdx = i }
-          })
-          const belongsToThisHike = pts.length === 0 || minD <= EXIF_MAX_SNAP_DISTANCE_M
-          if (belongsToThisHike) {
-            hasExifGps = true
-            lat = gps.lat
-            lon = gps.lon
-            if (pts.length > 1) progress = bestIdx / (pts.length - 1)
-          }
-        }
+        // L'EXIF si legge dal file ORIGINALE, prima del ritaglio qui sopra: il ritaglio via canvas
+        // produce un JPEG nuovo e quindi senza metadati, ma a quel punto coordinate e orario sono
+        // già stati estratti e finiscono in colonne proprie. La compressione non c'entra nulla con
+        // le foto che risultano prive di posizione.
+        const meta = await readExifMetadata(file)
+        const placement = placePhotoOnTrack(meta, trackPoints)
+        const { progress, hasExifGps, lat, lon } = placement
+        placements.push(placement.source)
 
         const id = `photo-${Date.now()}-${Math.random().toString(36).slice(2)}`
         const caption = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').slice(0, 50)
@@ -120,6 +131,7 @@ export default function ActivityPhotoManager({
       }
 
       onPhotosChange([...photos, ...added].sort((a, b) => a.progress - b.progress))
+      setPlacementNotice(describePlacements(placements))
 
       // Single upload → open its caption editor right away so the user writes
       // their own caption instead of keeping the filename-derived default.
@@ -190,6 +202,16 @@ export default function ActivityPhotoManager({
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-5">
           <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
           <p className="text-[11px] text-red-600 leading-snug">{error}</p>
+        </div>
+      )}
+
+      {placementNotice && (
+        <div className="flex items-start gap-2 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 mb-5">
+          <MapPin className="w-3.5 h-3.5 text-sky-500 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-sky-800 leading-snug flex-1">{placementNotice}</p>
+          <button onClick={() => setPlacementNotice(null)} className="text-sky-400 hover:text-sky-700 shrink-0" aria-label="Chiudi">
+            <Check className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

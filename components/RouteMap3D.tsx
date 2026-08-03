@@ -14,7 +14,7 @@ import { getProfile } from '@/lib/userProfile'
 import { type PoiItem, type PoiType, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
-import { readExifGps, EXIF_MAX_SNAP_DISTANCE_M } from '@/lib/exifGps'
+import { readExifMetadata, placePhotoOnTrack } from '@/lib/exifGps'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
@@ -724,7 +724,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
     map.on('click',handler)
     return ()=>{map.off('click',handler)}
-  },[placingPhoto])
+  },[placingPhoto,activityId])
 
   // ── Photo markers on map ──────────────────────────────────────────────────────
 
@@ -1160,20 +1160,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const ci=new Image(); await new Promise<void>(res=>{ci.onload=()=>res();ci.src=cropped})
 
       // EXIF GPS
-      // Stessa regola di app/components/ActivityPhotoManager.tsx: le coordinate valide si salvano
-      // sempre (indipendentemente dalla traccia, che serve solo a ricavare la progressione), e si
-      // scartano solo quelle assurdamente lontane — una foto che con questa escursione non c'entra.
-      const gpsCoords=await readExifGps(file)
-      let progress=0.5, hasExifGps=false, exifLat: number|undefined, exifLon: number|undefined
-      if(gpsCoords){
-        let minD=Infinity, bestIdx=0
-        for(let i=0;i<pts.length;i++){const d=distM(pts[i].lat!,pts[i].lon!,gpsCoords.lat,gpsCoords.lon);if(d<minD){minD=d;bestIdx=i}}
-        if(pts.length===0||minD<=EXIF_MAX_SNAP_DISTANCE_M){
-          hasExifGps=true
-          exifLat=gpsCoords.lat; exifLon=gpsCoords.lon
-          if(pts.length>1) progress=bestIdx/(pts.length-1)
-        }
-      }
+      // Stessa regola di app/components/ActivityPhotoManager.tsx, ora condivisa invece che
+      // duplicata (lib/exifGps.ts): coordinate proprie, altrimenti orario di scatto, altrimenti
+      // metà percorso. L'EXIF si legge dal file originale, non dal ritaglio prodotto qui sopra.
+      const exifMeta=await readExifMetadata(file)
+      const {progress,hasExifGps,lat:exifLat,lon:exifLon}=placePhotoOnTrack(exifMeta,pts)
 
       const id=`photo-${Date.now()}-${Math.random().toString(36).slice(2)}`
       const caption=file.name.replace(/\.[^.]+$/,'').replace(/[-_]/g,' ').slice(0,40)
