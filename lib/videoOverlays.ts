@@ -36,8 +36,14 @@ export function smoothArray(arr: number[], half = 4): number[] {
 export function lerp(a: number, b: number, t: number) { return a + (b-a)*t }
 
 export function lerpAngle(a: number, b: number, t: number): number {
-  const d = ((b - a) % 360 + 540) % 360 - 180
-  return (a + d * t + 360) % 360
+  return (a + shortestAngleTo(a, b) * t + 360) % 360
+}
+
+/** Rotazione con segno (-180..180) da `from` a `to` percorrendo il verso più corto. Serve ovunque
+ *  si voglia arrivare a un orientamento preciso senza far girare la telecamera dalla parte lunga —
+ *  es. il raddrizzamento a nord dello zoom out finale in components/RouteMap3D.tsx. */
+export function shortestAngleTo(from: number, to: number): number {
+  return ((to - from) % 360 + 540) % 360 - 180
 }
 
 

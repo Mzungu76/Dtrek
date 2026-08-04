@@ -35,7 +35,7 @@ import type { WikiPage } from '@/lib/wikipedia'
 import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { estimateVegetationBelt } from '@/lib/vegetationBelt'
 import {
-  coverRect, rrect, lerp, lerpAngle, distM, smoothArray, clamp01,
+  coverRect, rrect, lerp, lerpAngle, shortestAngleTo, distM, smoothArray, clamp01,
   hexToRgb, effortRgb, hrEffortAt, buildMiniRoute,
   drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
@@ -181,24 +181,73 @@ function shotCamera(shot: ShotSegment, routeBearing: number, p: number, orbitBas
 
 // ── Progressive route reveal helpers ──────────────────────────────────────────
 
-/** Colore del tracciato già percorso. Condiviso col pallino di posizione (drawPositionDot): sono
- *  la stessa cosa vista in due modi, se divergessero il pallino non si leggerebbe più come la
- *  punta del percorso. */
-const ROUTE_TRAVELED_COLOR = '#f97316'
+/** Le quattro tinte selezionabili per il tracciato. Non una tavolozza libera: quattro tinte scelte
+ *  per restare leggibili sopra un satellitare (dove il verde scuro sparisce nella vegetazione e il
+ *  blu nell'acqua), tutte sature abbastanza da reggere la compressione di Reels e TikTok, che
+ *  impasta per prime le tinte tenui. L'arancione resta il default — è quello con cui i video sono
+ *  stati fatti finora. */
+export type RouteColorKey = 'verde' | 'arancione' | 'blu' | 'rosso'
 
-function setupRouteReveal(map: MLMap, pts: TrackPoint[]) {
+export const ROUTE_COLORS: Record<RouteColorKey, { label: string; hex: string }> = {
+  verde:     { label: 'Verde',     hex: '#22c55e' },
+  arancione: { label: 'Arancione', hex: '#f97316' },
+  blu:       { label: 'Blu',       hex: '#38bdf8' },
+  rosso:     { label: 'Rosso',     hex: '#ef4444' },
+}
+
+const DEFAULT_ROUTE_COLOR: RouteColorKey = 'arancione'
+
+/** Alone attorno al tracciato: una linea larga e sfocata sotto quella piena, dello stesso colore.
+ *  Serve a staccare il percorso dal terreno anche dove ci passa sopra qualcosa di simile per tinta
+ *  (un sentiero già disegnato nella mappa, una radura chiara, la neve) — su un satellitare la sola
+ *  linea piena a volte si perde. Volutamente discreto: non deve leggersi come un effetto. */
+const GLOW_WIDTH_MULT = 3.4
+const GLOW_BLUR = 10
+const GLOW_OPACITY = 0.42
+
+function applyRouteGlowLayer(
+  map: MLMap, id: string, source: string, beforeId: string | undefined,
+  colorHex: string, baseWidth: number, enabled: boolean,
+) {
+  try {
+    if (!enabled) {
+      if (map.getLayer(id)) map.removeLayer(id)
+      return
+    }
+    if (!map.getLayer(id)) {
+      map.addLayer({
+        id, type: 'line', source,
+        paint: {
+          'line-color': colorHex, 'line-width': baseWidth * GLOW_WIDTH_MULT,
+          'line-blur': GLOW_BLUR, 'line-opacity': GLOW_OPACITY,
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      }, beforeId && map.getLayer(beforeId) ? beforeId : undefined)
+    } else {
+      map.setPaintProperty(id, 'line-color', colorHex)
+    }
+  } catch {}
+}
+
+function setupRouteReveal(map: MLMap, pts: TrackPoint[], colorHex: string, glow: boolean) {
   if(map.getSource('route-traveled')) return
   map.addSource('route-traveled',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:[[pts[0].lon!,pts[0].lat!]]},properties:{}}})
-  map.addLayer({id:'route-traveled',type:'line',source:'route-traveled',paint:{'line-color':ROUTE_TRAVELED_COLOR,'line-width':5,'line-opacity':0.9},layout:{'line-cap':'round','line-join':'round'}})
+  applyRouteGlowLayer(map,'route-traveled-glow','route-traveled',undefined,colorHex,5,glow)
+  map.addLayer({id:'route-traveled',type:'line',source:'route-traveled',paint:{'line-color':colorHex,'line-width':5,'line-opacity':0.9},layout:{'line-cap':'round','line-join':'round'}})
   try{map.setPaintProperty('route-line','line-opacity',0.22)}catch{}
   try{map.setPaintProperty('route-casing','line-opacity',0.18)}catch{}
+  // L'alone del percorso ancora da percorrere si spegne durante il rivelamento: resterebbe acceso
+  // sopra tutto il tracciato, annullando proprio la distinzione fra fatto e da fare.
+  try{if(map.getLayer('route-glow'))map.setPaintProperty('route-glow','line-opacity',GLOW_OPACITY*0.25)}catch{}
 }
 
 function cleanupRouteReveal(map: MLMap) {
   try{if(map.getLayer('route-traveled'))map.removeLayer('route-traveled')}catch{}
+  try{if(map.getLayer('route-traveled-glow'))map.removeLayer('route-traveled-glow')}catch{}
   try{if(map.getSource('route-traveled'))map.removeSource('route-traveled')}catch{}
   try{map.setPaintProperty('route-line','line-opacity',1)}catch{}
   try{map.setPaintProperty('route-casing','line-opacity',0.55)}catch{}
+  try{if(map.getLayer('route-glow'))map.setPaintProperty('route-glow','line-opacity',GLOW_OPACITY)}catch{}
 }
 
 
@@ -437,6 +486,35 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Chiusura ad anello: il finale torna all'inquadratura d'apertura invece di restare sul nero.
   // Reels e TikTok riavvolgono da soli, e nero→mappa è uno stacco che rompe il ciclo.
   const [videoLoopEnding, setVideoLoopEnding] = useState(true)
+  // Tinta del tracciato (vedi ROUTE_COLORS) e alone attorno ad esso. L'alone è acceso di default:
+  // costa nulla in resa e risolve il caso in cui il percorso si confonde con quello che ha sotto.
+  const [routeColorKey, setRouteColorKey] = useState<RouteColorKey>(DEFAULT_ROUTE_COLOR)
+  const [routeGlowEnabled, setRouteGlowEnabled] = useState(true)
+  const routeColorHex = ROUTE_COLORS[routeColorKey].hex
+  // Ref accanto allo state: i layer della mappa e il ciclo di render dei fotogrammi girano dentro
+  // callback registrate una volta sola, che sullo state leggerebbero il valore congelato al
+  // momento della registrazione — stesso motivo di exaggRef/gpsRef qui sopra.
+  const routeColorRef = useRef(routeColorHex)
+  routeColorRef.current = routeColorHex
+  const routeGlowRef = useRef(routeGlowEnabled)
+  routeGlowRef.current = routeGlowEnabled
+
+  // Applica tinta e alone ai layer già in mappa quando l'utente li cambia dal wizard: senza, la
+  // scelta si vedrebbe solo nel video generato e non nell'anteprima che si ha davanti.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const apply = () => {
+      try { if (map.getLayer('route-line')) map.setPaintProperty('route-line', 'line-color', routeColorHex) } catch {}
+      try { if (map.getLayer('route-traveled')) map.setPaintProperty('route-traveled', 'line-color', routeColorHex) } catch {}
+      applyRouteGlowLayer(map, 'route-glow', 'route', 'route-casing', routeColorHex, 4, routeGlowEnabled)
+      if (map.getSource('route-traveled')) {
+        applyRouteGlowLayer(map, 'route-traveled-glow', 'route-traveled', 'route-traveled', routeColorHex, 5, routeGlowEnabled)
+      }
+    }
+    if (map.isStyleLoaded()) apply()
+    else map.once('idle', apply)
+  }, [routeColorHex, routeGlowEnabled])
   // Quote lungo il percorso: sostituiscono il grafico altimetrico, che a schermo piccolo e in
   // movimento non si leggeva. Numeri fermi nei punti che contano (vetta, punto più basso, salite
   // decise), con la freccia della pendenza.
@@ -809,8 +887,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const coords=pts.map(p=>[p.lon!,p.lat!] as [number,number])
     if(map.getSource('route')){(map.getSource('route') as any).setData({type:'Feature',geometry:{type:'LineString',coordinates:coords},properties:{}})}
     else{map.addSource('route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:coords},properties:{}}})}
+    applyRouteGlowLayer(map,'route-glow','route',undefined,routeColorRef.current,4,routeGlowRef.current)
     if(!map.getLayer('route-casing')) map.addLayer({id:'route-casing',type:'line',source:'route',paint:{'line-color':'#ffffff','line-width':8,'line-opacity':0.55},layout:{'line-cap':'round','line-join':'round'}})
-    if(!map.getLayer('route-line'))   map.addLayer({id:'route-line',type:'line',source:'route',paint:{'line-color':'#ff4444','line-width':4},layout:{'line-cap':'round','line-join':'round'}})
+    if(!map.getLayer('route-line'))   map.addLayer({id:'route-line',type:'line',source:'route',paint:{'line-color':routeColorRef.current,'line-width':4},layout:{'line-cap':'round','line-join':'round'}})
     const i0=Math.min(Math.floor(progressRef.current*(N-1)),N-1)
     markerRef.current?.setLngLat([pts[i0].lon!,pts[i0].lat!])
   },[])
@@ -1349,9 +1428,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomFollow,pitch:48,bearing})
       await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     }
-    // Outro position (zoomed out) and intro zoom/pitch
+    // Outro position (zoomed out) and intro zoom/pitch. Bearing 0: l'inquadratura d'insieme finale
+    // si raddrizza sempre a nord (vedi la fase di finale nel ciclo di render), quindi è a nord che
+    // vanno pre-caricate le tile — pre-caricarle con l'orientamento di apertura lascerebbe proprio
+    // il fotogramma più largo, e più a lungo in vista, a caricarsi sotto gli occhi di chi guarda.
     prep('Inquadratura finale…', 0.62)
-    map.jumpTo({center:[pts[N-1].lon!,pts[N-1].lat!],zoom:zoomOutro,pitch:8,bearing:introBearing})
+    map.jumpTo({center:[pts[N-1].lon!,pts[N-1].lat!],zoom:zoomOutro,pitch:8,bearing:0})
     await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     prep('Inquadratura di apertura…', 0.66)
     for (const ki of prewarmIdxs.slice(0,5)) {
@@ -1373,7 +1455,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     orbitBaseRef.current=introBearing
 
     // Setup progressive route reveal
-    try { setupRouteReveal(map, pts) } catch {}
+    try { setupRouteReveal(map, pts, routeColorRef.current, routeGlowRef.current) } catch {}
 
     const mapCanvas=map.getCanvas()
     // Margini che l'interfaccia di Reels/TikTok copre stabilmente: calcolati una volta, usati da
@@ -2318,13 +2400,29 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         return
       }
 
-      // Outro phase: camera orbits and pulls back from route end after traversal completes
+      // Outro phase: camera pulls back from the route end, straightening to north, after traversal
       if (outroP !== undefined) {
+        const LOOP_BACK_FROM = 0.72
         if (outroStartBearRef.current < 0) outroStartBearRef.current = smoothBearRef.current
         // Ease-in² on orbit so it starts at near-zero angular velocity, eliminating the
         // bearing velocity discontinuity at the follow→outro transition
         const easedOutroP = outroP * outroP
-        const outroBearing = (outroStartBearRef.current - easedOutroP * 100 + 360) % 360
+        // Lo zoom out finale si raddrizza sempre col nord fisico in alto. Fino a qui la telecamera
+        // ha seguito la direzione di marcia, quindi il tracciato appariva ruotato di un angolo
+        // qualsiasi: nell'inquadratura d'insieme — quella che si guarda per capire DOVE si è stati,
+        // e l'unica che si può confrontare con una cartina — l'orientamento arbitrario è proprio
+        // ciò che rende il percorso irriconoscibile. Si arriva a nord per la via più corta
+        // (shortestAngleTo), non ruotando sempre nello stesso verso, altrimenti mezzo giro di
+        // troppo verrebbe percorso all'indietro.
+        //
+        // Con la chiusura ad anello attiva il nord viene raggiunto alla fine dell'allargamento
+        // (LOOP_BACK_FROM), non all'ultimo fotogramma: dopo di quello la telecamera torna
+        // all'inquadratura d'apertura per chiudere il ciclo. È l'inquadratura d'insieme a essere
+        // orientata a nord, che è quella che conta.
+        const northTurnSpan = videoLoopEnding ? LOOP_BACK_FROM : 1
+        const northT = Math.min(1, easedOutroP / (northTurnSpan * northTurnSpan))
+        const outroBearing = (outroStartBearRef.current
+          + shortestAngleTo(outroStartBearRef.current, 0) * northT + 360) % 360
         const outroPitch = lerp(48, 8, outroP)
         const outroZoom_val = lerp(zoomFollow, zoomOutro, outroP)
         smoothBearRef.current = lerpAngle(smoothBearRef.current, outroBearing, 0.04)
@@ -2335,7 +2433,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // e riparte da una mappa dà uno stacco netto che rompe il ciclo — mentre chiudere dove si è
         // aperti fa ripartire il filmato senza soluzione di continuità, e chi guarda spesso lo vede
         // due o tre volte invece di una.
-        const LOOP_BACK_FROM = 0.72
         const loopT = (videoLoopEnding && outroP > LOOP_BACK_FROM)
           ? (outroP - LOOP_BACK_FROM) / (1 - LOOP_BACK_FROM) : 0
         const loopEase = loopT * loopT * (3 - 2 * loopT)   // parte e arriva con velocità nulla
@@ -2608,7 +2705,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // Scia dietro al pin: sotto al pin stesso, così la coda gli passa "dietro" e non sopra.
         if (videoShowUserPin && videoTrailEnabled && introP === undefined && stopZoomTNow <= 0.001) {
           const spNow = hasSpeed ? smoothSpeed[siHr] : 3
-          const trailCol = effortNow == null ? hexToRgb('#f97316') : effortRgb(effortNow)
+          const trailCol = effortNow == null ? hexToRgb(routeColorRef.current) : effortRgb(effortNow)
           drawPinTrail(ctx, trailPointsAt(p, spNow, crF), sc2, trailCol)
         }
 
@@ -2628,7 +2725,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // punta colorata del tracciato finisce esattamente al centro dello schermo. Un pallino che
         // pulsa nel colore del percorso segna la posizione senza reintrodurre la persona.
         if (!videoShowUserPin && introP === undefined && stopZoomTNow <= 0.001) {
-          drawPositionDot(ctx, outW/2, outH/2, sc2, ROUTE_TRAVELED_COLOR, (frameIdx / (TARGET_FPS * 1.4)) % 1)
+          drawPositionDot(ctx, outW/2, outH/2, sc2, routeColorRef.current, (frameIdx / (TARGET_FPS * 1.4)) % 1)
         }
 
         // User pin: canvas center = GPS position; always visible in follow, fades in over last 30% of intro
@@ -2856,7 +2953,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const mmY = isCarousel
             ? outH - safeInsets.bottom - mmSize - mmPad
             : safeInsets.top + mmPad
-          const mmCol = effortNow == null ? hexToRgb('#f97316') : effortRgb(effortNow)
+          const mmCol = effortNow == null ? hexToRgb(routeColorRef.current) : effortRgb(effortNow)
           // Resta visibile anche durante una sosta su foto: è il riferimento d'insieme, e proprio
           // mentre una polaroid occupa il centro serve di più, non di meno.
           drawMiniMap(ctx, mmX, mmY, mmSize, sc2, miniRoute, p, mmCol)
@@ -3867,7 +3964,47 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
 
                 <div>
+                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">IL TRACCIATO</p>
+                  <div className="flex gap-2 mb-3">
+                    {(Object.keys(ROUTE_COLORS) as RouteColorKey[]).map(k => (
+                      <button
+                        key={k}
+                        onClick={() => setRouteColorKey(k)}
+                        title={ROUTE_COLORS[k].label}
+                        className={`flex-1 flex flex-col items-center gap-1.5 py-2 rounded-xl border transition-colors ${
+                          routeColorKey === k ? 'border-white/70 bg-white/10' : 'border-white/10 hover:border-white/25'
+                        }`}
+                      >
+                        <span
+                          className="w-full h-1.5 rounded-full"
+                          style={{
+                            background: ROUTE_COLORS[k].hex,
+                            boxShadow: routeGlowEnabled ? `0 0 7px 1px ${ROUTE_COLORS[k].hex}` : 'none',
+                          }}
+                        />
+                        <span className={`text-[10px] font-semibold ${routeColorKey === k ? 'text-white' : 'text-white/45'}`}>
+                          {ROUTE_COLORS[k].label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={routeGlowEnabled}
+                      onChange={e=>setRouteGlowEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                    <span className="text-white text-xs font-semibold leading-snug">
+                      Alone attorno al tracciato
+                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
+                        Una sfumatura dello stesso colore sotto la linea: stacca il percorso dal terreno anche dove ci passa sopra qualcosa di simile per tinta — un sentiero già disegnato, una radura chiara, la neve.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">IL FINALE</p>
+                  <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                    L&apos;inquadratura d&apos;insieme si raddrizza sempre col nord in alto, come una cartina: è quella che si guarda per capire dove si è stati.
+                  </p>
                   <label className="flex items-center gap-2 mb-2 cursor-pointer">
                     <input type="checkbox" checked={videoArrivalStarsEnabled}
                       onChange={e=>setVideoArrivalStarsEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
@@ -3919,6 +4056,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 const over = est > 60
                 const effects = [
                   !videoShowUserPin&&'Senza pin utente',
+                  routeColorKey!==DEFAULT_ROUTE_COLOR&&`Tracciato ${ROUTE_COLORS[routeColorKey].label.toLowerCase()}`,
+                  !routeGlowEnabled&&'Senza alone',
                   videoMode==='illustrativo'&&videoPoiRequireImage&&'Solo luoghi con foto',
                   videoLoopEnding&&'Chiusura ad anello',
                   videoElevMarkersEnabled&&'Quote sul percorso',
