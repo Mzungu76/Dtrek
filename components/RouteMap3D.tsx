@@ -1732,10 +1732,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       right:  Math.max(visionSafe.right, Math.round(outW * 0.18)),
     }
     const visionCenter = visionBounds ? centerOfBounds(visionBounds) : { lat: pts[0].lat!, lon: pts[0].lon! }
+
+    // ATTENZIONE all'unità di misura. MapLibre calcola lo zoom sul proprio viewport in pixel CSS
+    // (clientWidth/clientHeight del contenitore), mentre outW/outH sono i pixel del VIDEO. Qui il
+    // contenitore è largo outW/dpr, quindi passare outW significava chiedere l'inquadratura per un
+    // viewport dpr volte più grande di quello vero: log2(dpr) livelli di zoom di troppo, cioè su un
+    // telefono a dpr 2 un tracciato grande il doppio del fotogramma. Era questo il motivo per cui
+    // il percorso continuava a uscire dai bordi.
+    //
+    // Si legge la dimensione reale del contenitore invece di dividere per dpr a mano: così il
+    // calcolo resta corretto anche se un domani il contenitore venisse dimensionato diversamente.
+    const contW = map.getContainer().clientWidth || outW
+    const contH = map.getContainer().clientHeight || outH
+    const toCss = contW / outW
+    const visionPaddingCss = {
+      top: visionPadding.top * toCss, bottom: visionPadding.bottom * toCss,
+      left: visionPadding.left * toCss, right: visionPadding.right * toCss,
+    }
+    // `let` sul campo zoom: il controllo empirico più sotto può abbassarlo.
     const visionFit = {
       lon: visionCenter.lon,
       lat: visionCenter.lat,
-      zoom: visionBounds ? fitZoomForBounds(visionBounds, { width: outW, height: outH }, visionPadding) : zoomOutro,
+      zoom: visionBounds ? fitZoomForBounds(visionBounds, { width: contW, height: contH }, visionPaddingCss) : zoomOutro,
     }
     const visionSetting = videoInterludes.find(i => i.kind === 'visione')
     const visionSeconds = visionSetting?.seconds ?? 6
@@ -1747,7 +1765,40 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     if (visionSetting?.enabled && visionCallouts.length > 0) {
       prep('Inquadratura d\u2019insieme\u2026', 0.60)
       if (mapRef.current) setVisionLayerOpacity(mapRef.current, 1, visionOpacityCache.current)
-      map.jumpTo({ center: [visionFit.lon, visionFit.lat], zoom: visionFit.zoom, pitch: 6, bearing: 0 })
+
+      // Verifica empirica dell'inquadratura, non solo il calcolo.
+      //
+      // La formula è esatta per una vista dall'alto su terreno piatto; la realtà ha
+      // l'inclinazione della telecamera e il rilievo 3D, che spostano i punti proiettati in modi
+      // che nessuna formula chiusa cattura del tutto (un crinale vicino al bordo si proietta più
+      // in fuori del terreno che gli sta sotto). Invece di aggiungere margini a intuito, qui si
+      // guarda dove i punti finiscono DAVVERO — map.project tiene conto sia dell'inclinazione sia
+      // del terreno — e si allarga finché non sono tutti dentro.
+      //
+      // Converge in un paio di giri; il tetto di iterazioni evita che un caso patologico allarghi
+      // all'infinito. Si campiona il tracciato: duecento punti descrivono l'ingombro quanto
+      // diecimila, e questo gira dentro il ciclo di preparazione.
+      const sampleStep = Math.max(1, Math.ceil(pts.length / 200))
+      const samples = pts.filter((_, i) => i % sampleStep === 0 || i === pts.length - 1)
+      for (let attempt = 0; attempt < 5; attempt++) {
+        map.jumpTo({ center: [visionFit.lon, visionFit.lat], zoom: visionFit.zoom, pitch: 6, bearing: 0 })
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+        for (const sp of samples) {
+          const pr = map.project([sp.lon!, sp.lat!])
+          if (pr.x < minX) minX = pr.x
+          if (pr.x > maxX) maxX = pr.x
+          if (pr.y < minY) minY = pr.y
+          if (pr.y > maxY) maxY = pr.y
+        }
+        const availW = Math.max(1, contW - visionPaddingCss.left - visionPaddingCss.right)
+        const availH = Math.max(1, contH - visionPaddingCss.top - visionPaddingCss.bottom)
+        const overflow = Math.max((maxX - minX) / availW, (maxY - minY) / availH)
+        if (!Number.isFinite(overflow) || overflow <= 1) break
+        // log2 dell'eccedenza è esattamente di quanto va abbassato lo zoom, più un'inezia perché
+        // il giro successivo non si fermi esattamente sul filo.
+        visionFit.zoom -= Math.log2(overflow) + 0.02
+      }
+
       await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
       if (mapRef.current) setVisionLayerOpacity(mapRef.current, 0, visionOpacityCache.current)
     }
