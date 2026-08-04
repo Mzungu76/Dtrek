@@ -19,6 +19,7 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY, maptilerRasterTileUrl } from '@/lib/mapStyles'
+import { getSunPosition, terrainSunLook, type TerrainSunLook } from '@/lib/daylight'
 import {
   buildCumulativeDistances, progressToDistanceM, distanceMToProgress, buildJourneyTables, groupPhotoTimings,
   stopPhotoZoomAt, polaroidRotationDeg, hyperlapseIntensityAt, TOP_BAND_FRACTION, type CarouselPhotoTiming,
@@ -233,6 +234,72 @@ function applyRouteGlowLayer(
       map.setPaintProperty(id, 'line-color', colorHex)
     }
   } catch {}
+}
+
+// ── Luce del sole coerente con l'ora ──────────────────────────────────────────
+
+/**
+ * Ombreggiatura del rilievo calcolata dal DEM già caricato per il terreno 3D, illuminata dalla
+ * direzione in cui il sole stava davvero durante l'escursione.
+ *
+ * `hillshade-illumination-anchor: 'map'` è la parte che conta: con l'ancoraggio predefinito
+ * ('viewport') la luce è agganciata allo schermo e ruota insieme alla telecamera — le ombre
+ * girerebbero mentre il volo cambia direzione, che è esattamente il contrario di un sole fermo nel
+ * cielo. Ancorata alla mappa, la luce resta dov'è e a girare è solo chi guarda.
+ *
+ * Sotto ai layer del percorso: è illuminazione del terreno, non un elemento da leggere.
+ */
+function setupSunHillshade(map: MLMap) {
+  if (map.getLayer('sun-hillshade')) return
+  const under = ['vision-topo', 'route-glow', 'route-casing', 'route-line'].find(id => map.getLayer(id))
+  try {
+    map.addLayer({
+      id: 'sun-hillshade', type: 'hillshade', source: 'terrain',
+      paint: {
+        'hillshade-illumination-anchor': 'map',
+        'hillshade-illumination-direction': 315,
+        'hillshade-exaggeration': 0,
+      },
+    } as never, under)
+  } catch {}
+}
+
+/**
+ * Applica la luce al terreno e al cielo. Quantizzata al grado e memorizzata: MapLibre ricalcola lo
+ * stile a ogni setPaintProperty anche quando il valore non cambia, e questo verrebbe chiamato
+ * sessanta volte al secondo per un sole che in tutta l'escursione si sposta di qualche decina di
+ * gradi.
+ */
+function applySunLook(map: MLMap, look: TerrainSunLook, cache: Map<string, number | string>) {
+  const set = (layer: string, prop: string, v: number | string) => {
+    if (!map.getLayer(layer)) return
+    const k = `${layer}:${prop}`
+    if (cache.get(k) === v) return
+    try { map.setPaintProperty(layer, prop, v as never); cache.set(k, v) } catch {}
+  }
+  const dir = Math.round(look.illuminationDirection)
+  set('sun-hillshade', 'hillshade-illumination-direction', dir)
+  set('sun-hillshade', 'hillshade-exaggeration', Math.round(look.exaggeration * 100) / 100)
+  set('sun-hillshade', 'hillshade-highlight-color', look.highlightColor)
+  set('sun-hillshade', 'hillshade-shadow-color', look.shadowColor)
+  set('sun-hillshade', 'hillshade-accent-color', look.accentColor)
+  // Il cielo segue lo stesso sole: la foschia si accende dalla parte giusta dell'orizzonte, che è
+  // ciò che rende credibile l'ombreggiatura del terreno invece di farla sembrare un filtro.
+  const polar = Math.round(look.skyPolar)
+  const skyKey = `sky:${dir}:${polar}`
+  if (cache.get('sky') !== skyKey && map.getLayer('sky')) {
+    try {
+      map.setPaintProperty('sky', 'sky-atmosphere-sun', [dir, polar] as never)
+      cache.set('sky', skyKey)
+    } catch {}
+  }
+}
+
+/** Spegne l'ombreggiatura senza rimuovere il layer: rimontarlo a ogni cambio costerebbe di più. */
+function clearSunLook(map: MLMap, cache: Map<string, number | string>) {
+  if (!map.getLayer('sun-hillshade')) return
+  if (cache.get('sun-hillshade:hillshade-exaggeration') === 0) return
+  try { map.setPaintProperty('sun-hillshade', 'hillshade-exaggeration', 0); cache.set('sun-hillshade:hillshade-exaggeration', 0) } catch {}
 }
 
 // ── Stacco "Visione": velo topografico e linee affioranti ─────────────────────
@@ -568,6 +635,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoPoiRequireImage, setVideoPoiRequireImage] = useState(true)
   // Stacchi che spezzano il volo sul percorso — vedi lib/videoInterludes.ts.
   const [videoInterludes, setVideoInterludes] = useState<InterludeSetting[]>(DEFAULT_INTERLUDES)
+  // Luce del terreno calcolata dalla posizione reale del sole all'ora dell'escursione, che avanza
+  // insieme al cursore: all'inizio del video il sole sta dov'era alla partenza, alla fine dov'era
+  // all'arrivo. Su un'uscita che comincia all'alba e finisce nel pomeriggio la luce gira davvero.
+  const [videoSunLightEnabled, setVideoSunLightEnabled] = useState(true)
   // Categorie annotate dallo stacco "Visione" — vedi lib/videoVision.ts.
   const [visionCategories, setVisionCategories] = useState<VisionCategory[]>(DEFAULT_VISION_CATEGORIES)
   // Velo topografico durante la Visione: le tile dello stile outdoor sfumate sopra il satellitare.
@@ -608,6 +679,47 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       visionCategories, MAX_VISION_CALLOUTS,
     )
   }, [visionLines, pois, visionCategories])
+
+  /** Finestra oraria vera dell'escursione, dai tempi registrati nella traccia.
+   *
+   *  Senza orari (percorso pianificato mai camminato, o traccia senza tempi) si ricade sulla data
+   *  prevista alle 10 del mattino: è un'ipotesi dichiarata, non un dato — ma dà comunque una luce
+   *  plausibile per la stagione e la latitudine, che è meglio dell'illuminazione di default fissa
+   *  a nord-ovest indipendente da tutto. */
+  const hikeTimeWindow = useMemo(() => {
+    const withTime = (trackPoints ?? []).filter(t => t.time)
+    const first = withTime[0]?.time ? new Date(withTime[0].time).getTime() : NaN
+    const last = withTime[withTime.length - 1]?.time ? new Date(withTime[withTime.length - 1].time).getTime() : NaN
+    if (Number.isFinite(first) && Number.isFinite(last) && last > first) return { start: first, end: last, real: true }
+    const base = plannedDate ? new Date(plannedDate) : new Date()
+    base.setHours(10, 0, 0, 0)
+    return { start: base.getTime(), end: base.getTime() + 3 * 3600_000, real: false }
+  }, [trackPoints, plannedDate])
+
+  const sunLightRef = useRef(videoSunLightEnabled)
+  sunLightRef.current = videoSunLightEnabled
+  const hikeTimeWindowRef = useRef(hikeTimeWindow)
+  hikeTimeWindowRef.current = hikeTimeWindow
+  /** Ultimo valore scritto per ogni proprietà di luce — vedi applySunLook. */
+  const sunLookCache = useRef(new Map<string, number | string>())
+
+  // Anche fuori dalla generazione: la mappa interattiva mostra la stessa luce, così quello che si
+  // vede nell'anteprima è quello che finirà nel video.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const apply = () => {
+      setupSunHillshade(map)
+      if (!videoSunLightEnabled) { clearSunLook(map, sunLookCache.current); return }
+      const pts0 = gps.current
+      if (!pts0.length) return
+      const mid = pts0[Math.floor(pts0.length / 2)]
+      const look = terrainSunLook(getSunPosition(mid.lat!, mid.lon!, new Date(hikeTimeWindow.start)))
+      applySunLook(map, look, sunLookCache.current)
+    }
+    if (map.isStyleLoaded()) apply()
+    else map.once('idle', apply)
+  }, [videoSunLightEnabled, hikeTimeWindow])
 
   // Stessa ragione di routeColorRef: setupLayers gira dentro una callback registrata una volta e
   // leggerebbe il valore congelato al momento della registrazione.
@@ -1045,6 +1157,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     if(!map.getLayer('route-line'))   map.addLayer({id:'route-line',type:'line',source:'route',paint:{'line-color':routeColorRef.current,'line-width':4},layout:{'line-cap':'round','line-join':'round'}})
     // Layer della Visione, invisibili finché non parte lo stacco — vedi setupVisionLayers.
     setupVisionLayers(map, visionLinesRef.current, visionVeilRef.current)
+    setupSunHillshade(map)
     const i0=Math.min(Math.floor(progressRef.current*(N-1)),N-1)
     markerRef.current?.setLngLat([pts[i0].lon!,pts[i0].lat!])
   },[])
@@ -2519,6 +2632,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
       const {p, introP, reveal, outroP, followFrame, stopIndex, stopT, interlude} = frameToState(frameIdx)
       setRenderProgress((frameIdx-RENDER_START_FRAME)/Math.max(1,RENDER_END_FRAME-RENDER_START_FRAME)); setRenderFrame(frameIdx-RENDER_START_FRAME)
+
+      // Luce del terreno all'ora vera del punto in cui si è arrivati. Il sole avanza col cursore:
+      // trenta secondi di video ripercorrono le ore vere dell'escursione, quindi su un'uscita che
+      // parte all'alba e finisce nel pomeriggio le ombre girano e si accorciano davvero. Prima di
+      // disegnare, così l'ombreggiatura è già quella giusta nel fotogramma che sta per essere
+      // catturato invece di arrivare con un fotogramma di ritardo.
+      if (mapRef.current) {
+        if (sunLightRef.current) {
+          const win = hikeTimeWindowRef.current
+          const sunP = clamp01(introP !== undefined ? 0 : outroP !== undefined ? 1 : p)
+          const when = new Date(win.start + (win.end - win.start) * sunP)
+          const si = Math.min(Math.max(0, Math.round(sunP * (N - 1))), N - 1)
+          applySunLook(mapRef.current, terrainSunLook(getSunPosition(pts[si].lat!, pts[si].lon!, when)), sunLookCache.current)
+        } else {
+          clearSunLook(mapRef.current, sunLookCache.current)
+        }
+      }
 
       // During photo reveal: hold camera, show photo fullscreen with Ken Burns effect
       if (reveal) {
@@ -4290,6 +4420,33 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
 
                 <div>
+                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">LUCE</p>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={videoSunLightEnabled}
+                      onChange={e=>setVideoSunLightEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                    <span className="text-white text-xs font-semibold leading-snug">
+                      Ombre del sole all&apos;ora vera
+                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
+                        Il rilievo viene illuminato da dove stava davvero il sole, e la luce avanza col cursore: se sei partito all&apos;alba, nel video le ombre si accorciano e girano come quel giorno. Col sole basso diventano più lunghe e più calde.
+                      </span>
+                    </span>
+                  </label>
+                  {videoSunLightEnabled && (() => {
+                    const fmt = (t: number) => new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                    const day = new Date(hikeTimeWindow.start).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })
+                    return hikeTimeWindow.real ? (
+                      <p className="text-forest-300/80 text-[11px] mt-1.5 pl-6 leading-relaxed">
+                        Dagli orari della traccia: {day}, dalle {fmt(hikeTimeWindow.start)} alle {fmt(hikeTimeWindow.end)}.
+                      </p>
+                    ) : (
+                      <p className="text-terra-300/85 text-[11px] mt-1.5 pl-6 leading-relaxed">
+                        Questa traccia non ha orari: la luce è quella del {day} verso le {fmt(hikeTimeWindow.start)}, una stima plausibile per stagione e latitudine, non l&apos;ora reale.
+                      </p>
+                    )
+                  })()}
+                </div>
+
+                <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">IL TRACCIATO</p>
                   <div className="flex gap-2 mb-3">
                     {(Object.keys(ROUTE_COLORS) as RouteColorKey[]).map(k => (
@@ -4384,6 +4541,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   !videoShowUserPin&&'Senza pin utente',
                   routeColorKey!==DEFAULT_ROUTE_COLOR&&`Tracciato ${ROUTE_COLORS[routeColorKey].label.toLowerCase()}`,
                   !routeGlowEnabled&&'Senza alone',
+                  videoSunLightEnabled&&(hikeTimeWindow.real?'Ombre all\u2019ora vera':'Ombre (ora stimata)'),
                   videoMode==='illustrativo'&&videoPoiRequireImage&&'Solo luoghi con foto',
                   videoLoopEnding&&'Chiusura ad anello',
                   videoElevMarkersEnabled&&'Quote sul percorso',
