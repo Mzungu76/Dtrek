@@ -13,6 +13,7 @@
 // Logica pura: nessun canvas, nessun React.
 
 export type InterludeKind =
+  | 'visione'    // sguardo d'insieme: tutto il percorso a volo d'uccello, annotato — vedi lib/videoVision.ts
   | 'profilo'    // profilo altimetrico, dislivello, pendenza
   | 'numeri'     // distanza, tempo, quota
   | 'natura'     // fascia vegetazionale, ambiente
@@ -21,6 +22,7 @@ export type InterludeKind =
   | 'luoghi'     // i luoghi principali in elenco
 
 export const INTERLUDE_LABEL: Record<InterludeKind, string> = {
+  visione: 'Visione d’insieme',
   profilo: 'Profilo altimetrico',
   numeri:  'I numeri del percorso',
   natura:  'La natura intorno',
@@ -52,6 +54,10 @@ export interface PlannedInterlude {
 // dell'escursione appena uno stacco viene attivato: questi valori servono solo come punto di
 // partenza coerente, non come numeri scelti a sentimento.
 export const DEFAULT_INTERLUDES: InterludeSetting[] = [
+  // Vicino alla partenza: serve a capire dove si sta per andare, e messa in fondo racconterebbe
+  // una cosa già vista. Acceso di default — è l'unico stacco che spiega il percorso invece di
+  // commentarlo.
+  { kind: 'visione', enabled: true,  seconds: 6,   atP: 0.06 },
   { kind: 'numeri',  enabled: true,  seconds: 3.5, atP: 0.22 },
   { kind: 'profilo', enabled: true,  seconds: 4,   atP: 0.50 },
   { kind: 'tei',     enabled: false, seconds: 5.5, atP: 0.78 },
@@ -110,15 +116,17 @@ export function interludeIsDense(kind: InterludeKind, content: InterludeContent 
 }
 
 const DEFAULT_ITEMS: Record<InterludeKind, number> = {
-  numeri: 4, profilo: 2, natura: 2, tei: 5, avvisi: 2, luoghi: 3,
+  visione: 4, numeri: 4, profilo: 2, natura: 2, tei: 5, avvisi: 2, luoghi: 3,
 }
 const DEFAULT_PROSE_WORDS: Record<InterludeKind, number> = {
-  numeri: 0, profilo: 0, natura: 18, tei: 0, avvisi: 24, luoghi: 0,
+  visione: 0, numeri: 0, profilo: 0, natura: 18, tei: 0, avvisi: 24, luoghi: 0,
 }
 /** Tempo che il pannello si prende a prescindere dal testo: il profilo si disegna da sinistra a
  *  destra, il punteggio conta da zero e riempie cinque barre — animazioni che vanno viste finire. */
 const EXTRA_SECONDS: Record<InterludeKind, number> = {
-  numeri: 0, profilo: 1.6, natura: 0, tei: 1.4, avvisi: 0.4, luoghi: 0.4,
+  // La Visione si prende il tempo dell'allargamento della telecamera prima che compaia la prima
+  // etichetta: senza, le annotazioni arriverebbero mentre la mappa si sta ancora muovendo.
+  visione: 2.6, numeri: 0, profilo: 1.6, natura: 0, tei: 1.4, avvisi: 0.4, luoghi: 0.4,
 }
 
 /**

@@ -36,8 +36,14 @@ export function smoothArray(arr: number[], half = 4): number[] {
 export function lerp(a: number, b: number, t: number) { return a + (b-a)*t }
 
 export function lerpAngle(a: number, b: number, t: number): number {
-  const d = ((b - a) % 360 + 540) % 360 - 180
-  return (a + d * t + 360) % 360
+  return (a + shortestAngleTo(a, b) * t + 360) % 360
+}
+
+/** Rotazione con segno (-180..180) da `from` a `to` percorrendo il verso più corto. Serve ovunque
+ *  si voglia arrivare a un orientamento preciso senza far girare la telecamera dalla parte lunga —
+ *  es. il raddrizzamento a nord dello zoom out finale in components/RouteMap3D.tsx. */
+export function shortestAngleTo(from: number, to: number): number {
+  return ((to - from) % 360 + 540) % 360 - 180
 }
 
 
@@ -1878,4 +1884,139 @@ export function drawEndCard(
     ctx.fillText('Tracciato con DTrek', w / 2, h / 2 + Math.round(150 * sc))
   } finally { ctx.restore() }
   } catch (err) { console.error('[dtrek] drawEndCard error:', err) }
+}
+
+// ── Stacco "Visione": etichette con linea guida ───────────────────────────────
+
+export interface VisionCalloutDraw {
+  name: string
+  qualifier: string
+  anchorX: number
+  anchorY: number
+  labelX: number
+  labelY: number
+  side: 'left' | 'right'
+  order: number
+}
+
+/** Colore per categoria: il pallino sul punto annotato e la linea che ne parte. Le stesse tinte
+ *  con cui gli elementi sono disegnati sulla mappa sotto, così etichetta e linea sulla mappa si
+ *  leggono come la stessa cosa. */
+export const VISION_CATEGORY_COLOR: Record<string, string> = {
+  idrografia: '#38bdf8',
+  sentieri:   '#fbbf24',
+  luoghi:     '#f472b6',
+  toponimi:   '#a5b4fc',
+}
+
+/**
+ * Un'etichetta della Visione: pallino sul punto, linea sottile a gomito fino al bordo, nome
+ * sopra un filo di sottolineatura.
+ *
+ * Il gomito (non una diagonale diretta) è ciò che rende leggibile l'insieme: tutte le linee
+ * arrivano orizzontali all'etichetta, quindi il testo si stacca sempre allo stesso modo dal
+ * fondo e le linee non incrociano il tracciato con angoli casuali. È lo schema delle infografiche
+ * cartografiche, e funziona per questo motivo, non per gusto.
+ *
+ * `t` 0→1 è la comparsa della singola etichetta: prima cresce la linea dal punto verso il bordo,
+ * poi appare il testo. Disegnare tutto insieme dava un lampo confuso; così l'occhio viene
+ * accompagnato dal luogo al suo nome.
+ */
+export function drawVisionCallout(
+  ctx: CanvasRenderingContext2D, sc: number, c: VisionCalloutDraw, color: string, t: number,
+) {
+  const k = clamp01(t)
+  if (k <= 0.001) return
+  ctx.save()
+  try {
+    const lineT = clamp01(k / 0.55)
+    const textT = clamp01((k - 0.45) / 0.55)
+    const ease = (x: number) => 1 - Math.pow(1 - x, 3)
+
+    // Il gomito sta a metà strada fra punto ed etichetta: il tratto orizzontale finale è lungo
+    // quanto basta perché il testo non sembri appeso alla diagonale.
+    const elbowX = c.side === 'left'
+      ? c.labelX + (c.anchorX - c.labelX) * 0.38
+      : c.labelX - (c.labelX - c.anchorX) * 0.38
+    const endX = c.side === 'left' ? c.labelX + 4 * sc : c.labelX - 4 * sc
+
+    const seg1 = clamp01(lineT / 0.6), seg2 = clamp01((lineT - 0.4) / 0.6)
+    ctx.strokeStyle = color
+    ctx.lineWidth = Math.max(1, 1.6 * sc)
+    ctx.lineCap = 'round'
+    ctx.globalAlpha = 0.9 * ease(lineT)
+    ctx.beginPath()
+    ctx.moveTo(c.anchorX, c.anchorY)
+    const midX = c.anchorX + (elbowX - c.anchorX) * ease(seg1)
+    const midY = c.anchorY + (c.labelY - c.anchorY) * ease(seg1)
+    ctx.lineTo(midX, midY)
+    if (seg2 > 0) ctx.lineTo(midX + (endX - elbowX) * ease(seg2) + (elbowX - midX), c.labelY)
+    ctx.stroke()
+
+    // Pallino sul punto annotato — con un alone scuro sotto, perché su un satellitare chiaro un
+    // pallino colorato di 4 px sparisce.
+    ctx.globalAlpha = ease(lineT)
+    ctx.beginPath(); ctx.arc(c.anchorX, c.anchorY, 5.5 * sc, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill()
+    ctx.beginPath(); ctx.arc(c.anchorX, c.anchorY, 3.5 * sc, 0, Math.PI * 2)
+    ctx.fillStyle = color; ctx.fill()
+
+    if (textT > 0.01) {
+      ctx.globalAlpha = ease(textT)
+      const align: CanvasTextAlign = c.side === 'left' ? 'left' : 'right'
+      const tx = c.side === 'left' ? c.labelX + 8 * sc : c.labelX
+      ctx.textAlign = align
+      ctx.textBaseline = 'alphabetic'
+
+      if (c.qualifier) {
+        ctx.font = `600 ${Math.round(17 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+        ctx.fillStyle = 'rgba(255,255,255,0.62)'
+        ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 8 * sc
+        ctx.fillText(c.qualifier.toUpperCase(), tx, c.labelY - 26 * sc)
+      }
+      ctx.font = `800 ${Math.round(30 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+      ctx.fillStyle = '#fff'
+      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 10 * sc
+      ctx.fillText(c.name, tx, c.labelY - 4 * sc)
+      ctx.shadowBlur = 0
+
+      // Sottolineatura che cresce col testo: è il filo che lega il nome alla sua linea guida,
+      // come nell'infografica di riferimento.
+      const w = Math.min(ctx.measureText(c.name).width + 10 * sc, 320 * sc) * ease(textT)
+      ctx.strokeStyle = color
+      ctx.lineWidth = Math.max(1, 2 * sc)
+      ctx.globalAlpha = 0.85 * ease(textT)
+      ctx.beginPath()
+      const ux = c.side === 'left' ? tx : tx - w
+      ctx.moveTo(ux, c.labelY + 5 * sc)
+      ctx.lineTo(ux + w, c.labelY + 5 * sc)
+      ctx.stroke()
+    }
+  } catch (err) { console.error('[dtrek] drawVisionCallout error:', err) }
+  ctx.restore()
+}
+
+/** Titolo dello stacco Visione, in alto: dice che cosa si sta guardando prima che arrivino le
+ *  etichette. Sfuma via sul finire, per lasciare la mappa pulita quando la telecamera riparte. */
+export function drawVisionTitle(
+  ctx: CanvasRenderingContext2D, w: number, sc: number, topInset: number, title: string, t: number,
+) {
+  const inT = clamp01(t / 0.18)
+  const outT = 1 - clamp01((t - 0.88) / 0.12)
+  const a = Math.min(inT, outT)
+  if (a <= 0.01) return
+  ctx.save()
+  try {
+    ctx.globalAlpha = a
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 12 * sc
+    ctx.font = `600 ${Math.round(18 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+    ctx.fillStyle = 'rgba(255,255,255,0.66)'
+    ctx.fillText('UNO SGUARDO D’INSIEME', w / 2, topInset + 18 * sc)
+    ctx.font = `800 ${Math.round(38 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+    ctx.fillStyle = '#fff'
+    ctx.fillText(title, w / 2, topInset + 44 * sc)
+  } catch (err) { console.error('[dtrek] drawVisionTitle error:', err) }
+  ctx.restore()
 }
