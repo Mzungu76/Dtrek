@@ -15,6 +15,20 @@ export const MAPTILER_STYLES: MapTilerStyleOption[] = [
   { id: 'winter',    label: 'Winter',    url: () => `https://api.maptiler.com/maps/winter-v2/style.json?key=${MAPTILER_KEY}` },
 ]
 
+/**
+ * Tile RASTER già renderizzate di uno stile MapTiler, da sovrapporre a un altro basemap.
+ *
+ * Diverso da maptilerStyleUrl, che restituisce lo style.json vettoriale: quello si può solo
+ * APPLICARE con setStyle(), che smonta e ricostruisce tutti i layer della mappa — inaccettabile a
+ * metà registrazione di un video, dove significa fotogrammi incompleti. Queste invece sono un
+ * semplice layer raster in più, con la propria opacità animabile: è così che lo stacco "Visione"
+ * fa affiorare la topografia sopra il satellitare senza toccare nient'altro.
+ */
+export function maptilerRasterTileUrl(id: MapTilerStyleId): string {
+  const styleName = id === 'satellite' ? 'hybrid' : `${id}-v2`
+  return `https://api.maptiler.com/maps/${styleName}/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`
+}
+
 export function maptilerStyleUrl(id: MapTilerStyleId): string {
   return (MAPTILER_STYLES.find((s) => s.id === id) ?? MAPTILER_STYLES[0]).url()
 }

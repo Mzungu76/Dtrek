@@ -18,7 +18,7 @@ import { readExifMetadata, placePhotoOnTrack } from '@/lib/exifGps'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
-import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY } from '@/lib/mapStyles'
+import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY, maptilerRasterTileUrl } from '@/lib/mapStyles'
 import {
   buildCumulativeDistances, progressToDistanceM, distanceMToProgress, buildJourneyTables, groupPhotoTimings,
   stopPhotoZoomAt, polaroidRotationDeg, hyperlapseIntensityAt, TOP_BAND_FRACTION, type CarouselPhotoTiming,
@@ -29,6 +29,11 @@ import {
   recommendedInterludeSeconds, interludeIsDense,
   type InterludeKind, type InterludeSetting, type PlannedInterlude, type InterludeContent,
 } from '@/lib/videoInterludes'
+import {
+  selectVisionFeatures, layoutVisionCallouts, recommendedVisionSeconds,
+  DEFAULT_VISION_CATEGORIES, VISION_CATEGORY_LABEL, MAX_VISION_CALLOUTS, VISION_CAMERA_SECONDS,
+  type VisionCategory, type VisionSourceLine, type VisionFeature,
+} from '@/lib/videoVision'
 import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
 import type { BeautyScore } from '@/lib/beautyScore'
 import type { WikiPage } from '@/lib/wikipedia'
@@ -39,6 +44,7 @@ import {
   hexToRgb, effortRgb, hrEffortAt, buildMiniRoute,
   drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
+  drawVisionCallout, drawVisionTitle, VISION_CATEGORY_COLOR,
   drawStopPhotoZoom, drawHUD, drawTopBand, drawElevationMarker, safeInsetsFor, drawOpeningTitle,
   drawPoiTag, drawTeiPanel, drawIdentikit, drawEndCard,
   drawNumbersBeat, drawElevationBeat, drawNatureBeat, drawNoticesBeat, drawPlacesBeat, drawStoryCaption,
@@ -227,6 +233,85 @@ function applyRouteGlowLayer(
       map.setPaintProperty(id, 'line-color', colorHex)
     }
   } catch {}
+}
+
+// ── Stacco "Visione": velo topografico e linee affioranti ─────────────────────
+
+/** Tinte delle linee che affiorano: le stesse di VISION_CATEGORY_COLOR, così una linea sulla mappa
+ *  e l'etichetta che la nomina si leggono come la stessa cosa. */
+const VISION_WATER_COLOR = '#38bdf8'
+const VISION_TRAIL_COLOR = '#fbbf24'
+
+/**
+ * Prepara (una volta) i tre layer della Visione, tutti a opacità zero: il velo topografico e le due
+ * famiglie di linee. Restano invisibili per tutto il video e si accendono solo durante lo stacco.
+ *
+ * Aggiunti sotto al tracciato (`beforeId`) di proposito: il percorso dell'utente deve restare
+ * l'elemento in primo piano anche mentre la mappa si riempie di contesto.
+ */
+function setupVisionLayers(map: MLMap, lines: VisionSourceLine[], veil: boolean) {
+  const under = ['route-glow', 'route-casing', 'route-line'].find(id => map.getLayer(id))
+  try {
+    if (veil) {
+      if (!map.getSource('vision-topo-src')) {
+        map.addSource('vision-topo-src', {
+          type: 'raster', tiles: [maptilerRasterTileUrl('outdoor')], tileSize: 256,
+        } as never)
+      }
+      if (!map.getLayer('vision-topo')) {
+        map.addLayer({ id: 'vision-topo', type: 'raster', source: 'vision-topo-src',
+          paint: { 'raster-opacity': 0 } } as never, under)
+      }
+    } else if (map.getLayer('vision-topo')) {
+      map.removeLayer('vision-topo')
+    }
+  } catch {}
+
+  const toFeature = (l: VisionSourceLine) => ({
+    type: 'Feature' as const,
+    geometry: { type: 'LineString' as const, coordinates: l.geometry.map(([la, lo]) => [lo, la]) },
+    properties: { name: l.name },
+  })
+  const groups: [string, string, VisionSourceLine['kind']][] = [
+    ['vision-water', VISION_WATER_COLOR, 'waterway'],
+    ['vision-trails', VISION_TRAIL_COLOR, 'trail'],
+  ]
+  for (const [id, color, kind] of groups) {
+    const data = { type: 'FeatureCollection' as const, features: lines.filter(l => l.kind === kind).map(toFeature) }
+    try {
+      const src = map.getSource(`${id}-src`) as { setData?: (d: unknown) => void } | undefined
+      if (src?.setData) src.setData(data)
+      else map.addSource(`${id}-src`, { type: 'geojson', data } as never)
+      if (!map.getLayer(id)) {
+        map.addLayer({
+          id, type: 'line', source: `${id}-src`,
+          paint: {
+            'line-color': color, 'line-width': kind === 'waterway' ? 3.2 : 2.4,
+            'line-opacity': 0,
+            ...(kind === 'trail' ? { 'line-dasharray': [2, 1.6] } : {}),
+          },
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+        } as never, under)
+      }
+    } catch {}
+  }
+}
+
+/** Opacità dei tre layer durante lo stacco. Chiamata a ogni fotogramma della Visione (e una volta
+ *  a zero quando finisce), quindi tiene una cache dell'ultimo valore: setPaintProperty forza un
+ *  ricalcolo dello stile anche quando il valore non cambia. */
+function setVisionLayerOpacity(map: MLMap, k: number, cache: Map<string, number>) {
+  const set = (id: string, prop: string, v: number) => {
+    if (!map.getLayer(id)) return
+    const ck = `${id}:${prop}`
+    if (cache.get(ck) === v) return
+    try { map.setPaintProperty(id, prop, v); cache.set(ck, v) } catch {}
+  }
+  // Il velo si ferma sotto la piena opacità: il satellitare deve restare riconoscibile sotto, è
+  // metà del senso di questo stacco. A opacità piena tanto varrebbe cambiare mappa.
+  set('vision-topo', 'raster-opacity', k * 0.72)
+  set('vision-water', 'line-opacity', k * 0.95)
+  set('vision-trails', 'line-opacity', k * 0.9)
 }
 
 function setupRouteReveal(map: MLMap, pts: TrackPoint[], colorHex: string, glow: boolean) {
@@ -483,6 +568,67 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoPoiRequireImage, setVideoPoiRequireImage] = useState(true)
   // Stacchi che spezzano il volo sul percorso — vedi lib/videoInterludes.ts.
   const [videoInterludes, setVideoInterludes] = useState<InterludeSetting[]>(DEFAULT_INTERLUDES)
+  // Categorie annotate dallo stacco "Visione" — vedi lib/videoVision.ts.
+  const [visionCategories, setVisionCategories] = useState<VisionCategory[]>(DEFAULT_VISION_CATEGORIES)
+  // Velo topografico durante la Visione: le tile dello stile outdoor sfumate sopra il satellitare.
+  // Serve a far comparire ciò che la vegetazione nasconde (impluvi, curve di livello, sentieri
+  // già mappati) senza rinunciare al satellitare, che è quello che rende il video bello.
+  const [visionTopoVeil, setVisionTopoVeil] = useState(true)
+  // Corsi d'acqua e sentieri con geometria per il bbox del percorso (/api/route-features).
+  // Scaricati una volta all'apertura del wizard, non a ogni generazione.
+  const [visionLines, setVisionLines] = useState<VisionSourceLine[]>([])
+
+  // Scarica corsi d'acqua e sentieri una sola volta, e solo quando il wizard video è aperto: chi
+  // apre la mappa 3D per guardarla non deve pagare una chiamata Overpass che non userà.
+  useEffect(() => {
+    if (videoState !== 'config') return
+    const pts = gps.current
+    if (pts.length < 2) return
+    let cancelled = false
+    const lats = pts.map(p => p.lat!), lons = pts.map(p => p.lon!)
+    const pad = 0.01
+    const bbox = [Math.min(...lats) - pad, Math.min(...lons) - pad, Math.max(...lats) + pad, Math.max(...lons) + pad].join(',')
+    fetch(`/api/route-features?bbox=${bbox}`)
+      .then(r => r.ok ? r.json() : { lines: [] })
+      .then((d: { lines?: VisionSourceLine[] }) => { if (!cancelled) setVisionLines(d.lines ?? []) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [videoState])
+
+  /** Le cose che la Visione annoterà davvero, già filtrate e ordinate — vedi lib/videoVision.ts.
+   *  Calcolate qui (non al momento della generazione) perché il wizard deve poterle mostrare in
+   *  anteprima e ricavarne la durata consigliata dello stacco. */
+  const visionFeatures = useMemo<VisionFeature[]>(() => {
+    const pts = gps.current
+    if (pts.length < 2) return []
+    const route = pts.map(p => [p.lat!, p.lon!] as [number, number])
+    return selectVisionFeatures(
+      route, visionLines,
+      (pois ?? []).map(p => ({ id: p.id, name: p.name, lat: p.lat, lon: p.lon, type: p.type, distFromTrack: p.distFromTrack })),
+      visionCategories, MAX_VISION_CALLOUTS,
+    )
+  }, [visionLines, pois, visionCategories])
+
+  // Stessa ragione di routeColorRef: setupLayers gira dentro una callback registrata una volta e
+  // leggerebbe il valore congelato al momento della registrazione.
+  const visionLinesRef = useRef(visionLines)
+  visionLinesRef.current = visionLines
+  const visionVeilRef = useRef(visionTopoVeil)
+  visionVeilRef.current = visionTopoVeil
+  const visionFeaturesRef = useRef(visionFeatures)
+  visionFeaturesRef.current = visionFeatures
+  /** Ultimo valore scritto per ogni proprietà dei layer Visione — vedi setVisionLayerOpacity. */
+  const visionOpacityCache = useRef(new Map<string, number>())
+
+  // Le linee arrivano dopo che la mappa è già in piedi: vanno versate nei layer quando atterrano,
+  // altrimenti la Visione accenderebbe dei layer vuoti.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const apply = () => setupVisionLayers(map, visionLines, visionTopoVeil)
+    if (map.isStyleLoaded()) apply()
+    else map.once('idle', apply)
+  }, [visionLines, visionTopoVeil])
   // Chiusura ad anello: il finale torna all'inquadratura d'apertura invece di restare sul nero.
   // Reels e TikTok riavvolgono da soli, e nero→mappa è uno stacco che rompe il ciclo.
   const [videoLoopEnding, setVideoLoopEnding] = useState(true)
@@ -721,8 +867,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       routeSec = journey.totalFrames / videoFps
     }
     const photoSec = videoPhotoStyle === 'carousel' ? 0 : stops.length * photoDurationSec
-    const beatSec = videoMode === 'illustrativo'
-      ? videoInterludes.filter(i => i.enabled).reduce((a, i) => a + i.seconds, 0) : 0
+    // Fuori dall'Illustrativo l'unico stacco che va in onda è la Visione — stessa regola di
+    // interludeSettingsForMode nella generazione. Contarli tutti darebbe una stima più lunga del
+    // video che verrà davvero prodotto.
+    const beatSec = videoInterludes
+      .filter(i => i.enabled && (videoMode === 'illustrativo' || i.kind === 'visione'))
+      .reduce((a, i) => a + i.seconds, 0)
     const total = introSec + routeSec + photoSec + beatSec + outroSec
     // "Fermo" = tempo in cui la telecamera non avanza: soste foto e pannelli. Contare solo gli
     // stacchi, come faceva l'avviso di prima, nascondeva il caso peggiore — quello con molte foto.
@@ -757,8 +907,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       avvisi:  { items: notices.length, proseWords: notices.reduce((a, n) => a + countWords(n.text), 0) },
       // drawPlacesBeat ne mostra al massimo 4, mescolando luoghi notevoli e foto dell'utente
       luoghi:  { items: Math.min(4, Math.min(MAX_VIDEO_POIS, pois?.length ?? 0) + videoEstimate.stops), proseWords: 0 },
+      // La Visione dura quanto ci vuole a leggere le etichette che avrà davvero: su un percorso
+      // senza corsi d'acqua né bivi mappati sono due, non sei.
+      visione: { items: Math.max(1, visionFeatures.length), proseWords: 0 },
     }
-  }, [guide?.notices, altitudeSeries, trackPoints, beautyScore, pois, videoEstimate.stops])
+  }, [guide?.notices, altitudeSeries, trackPoints, beautyScore, pois, videoEstimate.stops, visionFeatures.length])
 
   const carouselEstimatedSec = videoPhotoStyle === 'carousel' ? videoEstimate.total : null
 
@@ -890,6 +1043,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     applyRouteGlowLayer(map,'route-glow','route',undefined,routeColorRef.current,4,routeGlowRef.current)
     if(!map.getLayer('route-casing')) map.addLayer({id:'route-casing',type:'line',source:'route',paint:{'line-color':'#ffffff','line-width':8,'line-opacity':0.55},layout:{'line-cap':'round','line-join':'round'}})
     if(!map.getLayer('route-line'))   map.addLayer({id:'route-line',type:'line',source:'route',paint:{'line-color':routeColorRef.current,'line-width':4},layout:{'line-cap':'round','line-join':'round'}})
+    // Layer della Visione, invisibili finché non parte lo stacco — vedi setupVisionLayers.
+    setupVisionLayers(map, visionLinesRef.current, visionVeilRef.current)
     const i0=Math.min(Math.floor(progressRef.current*(N-1)),N-1)
     markerRef.current?.setLngLat([pts[i0].lon!,pts[i0].lat!])
   },[])
@@ -1355,6 +1510,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current=null } catch {}
       try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current=null } catch {}
       try { cleanupRouteReveal(map) } catch {}
+      try { setVisionLayerOpacity(map, 0, visionOpacityCache.current) } catch {}
       const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
       const cont=containerRef.current; if(cont){cont.style.width='';cont.style.height=''}
       try { map.resize() } catch {}
@@ -1428,6 +1584,36 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       map.jumpTo({center:[pts[ki].lon!,pts[ki].lat!],zoom:zoomFollow,pitch:48,bearing})
       await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     }
+    // Inquadratura d'insieme dello stacco "Visione": tutto il tracciato dentro il fotogramma, a
+    // nord, vista dall'alto. cameraForBounds tiene conto di dimensioni e proporzioni reali del
+    // canvas, quindi la stessa escursione si inquadra correttamente in 9:16 come in 16:9 — un
+    // livello di zoom fisso non potrebbe.
+    const visionBounds: [[number, number], [number, number]] = [
+      [Math.min(...pts.map(pp => pp.lon!)), Math.min(...pts.map(pp => pp.lat!))],
+      [Math.max(...pts.map(pp => pp.lon!)), Math.max(...pts.map(pp => pp.lat!))],
+    ]
+    // Il margine lascia respiro alle etichette lungo i bordi, che è dove la Visione le mette.
+    const visionCam = map.cameraForBounds(visionBounds, { padding: { top: 90, bottom: 120, left: 80, right: 80 }, bearing: 0 })
+    const visionFit = {
+      lon: visionCam?.center ? (visionCam.center as { lng: number }).lng : (visionBounds[0][0] + visionBounds[1][0]) / 2,
+      lat: visionCam?.center ? (visionCam.center as { lat: number }).lat : (visionBounds[0][1] + visionBounds[1][1]) / 2,
+      zoom: typeof visionCam?.zoom === 'number' ? visionCam.zoom : zoomOutro,
+    }
+    const visionSetting = videoInterludes.find(i => i.kind === 'visione')
+    const visionSeconds = visionSetting?.seconds ?? 6
+    const visionCallouts = visionFeaturesRef.current
+
+    // Pre-caricamento delle tile dell'inquadratura d'insieme, col velo topografico già acceso: è
+    // un livello di zoom che il resto del video non tocca mai, quindi senza questo passaggio le
+    // sue tile si caricherebbero sotto gli occhi proprio durante lo stacco.
+    if (visionSetting?.enabled && visionCallouts.length > 0) {
+      prep('Inquadratura d\u2019insieme\u2026', 0.60)
+      if (mapRef.current) setVisionLayerOpacity(mapRef.current, 1, visionOpacityCache.current)
+      map.jumpTo({ center: [visionFit.lon, visionFit.lat], zoom: visionFit.zoom, pitch: 6, bearing: 0 })
+      await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
+      if (mapRef.current) setVisionLayerOpacity(mapRef.current, 0, visionOpacityCache.current)
+    }
+
     // Outro position (zoomed out) and intro zoom/pitch. Bearing 0: l'inquadratura d'insieme finale
     // si raddrizza sempre a nord (vedi la fase di finale nel ciclo di render), quindi è a nord che
     // vanno pre-caricate le tile — pre-caricarle con l'orientamento di apertura lascerebbe proprio
@@ -1571,6 +1757,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
       if(mEl) mEl.style.opacity='1'
       try { cleanupRouteReveal(map) } catch {}
+      try { setVisionLayerOpacity(map, 0, visionOpacityCache.current) } catch {}
       try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
       try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current = null } catch {}
       if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
@@ -1649,6 +1836,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         setVideoRecordedBlob(blob); setVideoState('done')
         if(mEl) mEl.style.opacity='1'
         try { cleanupRouteReveal(map) } catch {}
+        try { setVisionLayerOpacity(map, 0, visionOpacityCache.current) } catch {}
+      try { setVisionLayerOpacity(map, 0, visionOpacityCache.current) } catch {}
         try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
         try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current = null } catch {}
         if (typeof (map as any).setPixelRatio === 'function') { ;(map as any).setPixelRatio(dpr) }
@@ -2029,7 +2218,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       : photoTriggerRouteFrames.map(at => ({ start: at, end: at + PHOTO_REVEAL_FRAMES }))
 
     prep('Montaggio della scaletta…', 0.94)
-    const plannedInterludes = isIllustrativo ? planInterludes(videoInterludes, {
+    // Gli stacchi "commento" (numeri, profilo, TEI…) restano una cosa della modalità Illustrativo.
+    // La Visione no: non commenta l'escursione, spiega il percorso — e serve tanto a chi racconta
+    // la propria uscita quanto a chi presenta l'itinerario. Nelle altre modalità è l'unico ammesso.
+    const interludeSettingsForMode = isIllustrativo
+      ? videoInterludes
+      : videoInterludes.filter(i => i.kind === 'visione')
+    const plannedInterludes = planInterludes(interludeSettingsForMode, {
       fps: TARGET_FPS,
       routeFrames: ROUTE_FRAMES,
       photoFrames: photoBusyFrames,
@@ -2040,10 +2235,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           case 'avvisi': return normalizedNotices.length > 0
           case 'luoghi': return (pois?.length ?? 0) > 0
           case 'profilo': return altitudeSeries.length > 1
+          // Senza niente di caratteristico da annotare la Visione sarebbe solo un allargamento
+          // muto: meglio non farla che farla vuota.
+          case 'visione': return visionFeaturesRef.current.length > 0
           default: return true
         }
       },
-    }) : []
+    })
     const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + interludeTotalFrames(plannedInterludes) + OUTRO_FRAMES
 
     // Anteprima veloce (Sezione 4, debug): renderizza solo una finestra di fotogrammi centrale al
@@ -2542,7 +2740,33 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const lat=pts[i0].lat!+(pts[i1].lat!-pts[i0].lat!)*frac
       const alt=(pts[i0].altitudeMeters??0)+((pts[i1].altitudeMeters??0)-(pts[i0].altitudeMeters??0))*frac
 
-      if (introP !== undefined) {
+      if (interlude?.kind === 'visione') {
+        // ── Visione: la telecamera si alza e allarga fino a inquadrare tutto il percorso ──────
+        // A differenza degli altri stacchi (pannello sopra una mappa ferma) qui la mappa è il
+        // contenuto: si allarga a volo d'uccello, orientata a nord come una cartina, e su di essa
+        // affiorano le linee. Il ritorno alla telecamera di percorso non serve programmarlo: appena
+        // lo stacco finisce il ramo "follow" riprende a inseguire il proprio bersaglio, e i lerp
+        // riportano l'inquadratura al suo posto con la stessa morbidezza di sempre.
+        const vt = clamp01(interlude.t)
+        // Ingresso e uscita: si allarga nel primo tratto, resta larga mentre si leggono le
+        // etichette, e ricomincia a stringere sull'ultimo pezzo così il rientro non è uno scatto.
+        const enter = clamp01(vt / (VISION_CAMERA_SECONDS / Math.max(0.1, visionSeconds)))
+        const leave = clamp01((vt - 0.86) / 0.14)
+        const wide = Math.min(1 - Math.pow(1 - enter, 3), 1 - leave * leave)
+        smoothBearRef.current  = lerpAngle(smoothBearRef.current, 0, 0.05)
+        smoothPitchRef.current = lerp(smoothPitchRef.current, lerp(48, 6, wide), 0.07)
+        smoothZoomRef.current  = lerp(smoothZoomRef.current, lerp(zoomFollow, visionFit.zoom, wide), 0.07)
+        const vLon = lon + (visionFit.lon - lon) * wide
+        const vLat = lat + (visionFit.lat - lat) * wide
+        const vElev = mapRef.current?.queryTerrainElevation?.([vLon, vLat]) ?? undefined
+        mapRef.current?.jumpTo({
+          center: [vLon, vLat], bearing: smoothBearRef.current,
+          pitch: smoothPitchRef.current, zoom: smoothZoomRef.current,
+          ...(vElev != null ? { elevation: vElev } : {}),
+        })
+        // Le linee e il velo entrano insieme all'allargamento e se ne vanno con esso.
+        if (mapRef.current) setVisionLayerOpacity(mapRef.current, wide, visionOpacityCache.current)
+      } else if (introP !== undefined) {
         // ── Intro: camera swoops in, route stays at p=0, pin hidden ──────────
         const introShot = currentShots.find(s => s.id === 'intro') ?? currentShots[0]
         // Ease-out on introP: target reaches follow values by ~80% of intro, giving
@@ -2880,6 +3104,54 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         if (interlude) {
           const it = interlude.t
           switch (interlude.kind) {
+            case 'visione': {
+              // Unico stacco che NON copre la mappa con un pannello: la mappa è il contenuto. Si
+              // disegna solo il titolo e, sopra ai punti veri, le etichette collegate da una linea.
+              //
+              // La proiezione va chiesta alla mappa a ogni fotogramma (non calcolata una volta):
+              // durante l'allargamento la telecamera si sta ancora muovendo, e un'ancora calcolata
+              // in anticipo scivolerebbe via dal luogo che sta indicando. Le coordinate tornano in
+              // pixel del canvas della mappa e vanno riportate nel fotogramma finale, che è
+              // ritagliato in proporzione diversa (coverRect).
+              const mapC = mapRef.current
+              if (mapC && visionCallouts.length > 0) {
+                const crV = coverRect(mapCanvas.width, mapCanvas.height, outW, outH)
+                const kx = outW / crV.sw, ky = outH / crV.sh
+                const dprV = mapCanvas.width / Math.max(1, mapC.getContainer().clientWidth)
+                const project = (la: number, lo: number) => {
+                  const pt = mapC.project([lo, la])
+                  return { x: (pt.x * dprV - crV.sx) * kx, y: (pt.y * dprV - crV.sy) * ky }
+                }
+                const laid = layoutVisionCallouts(visionCallouts, project, {
+                  width: outW, height: outH,
+                  insets: {
+                    top: safeInsets.top + Math.round(96 * sc2), bottom: safeInsets.bottom + Math.round(70 * sc2),
+                    left: safeInsets.left + Math.round(14 * sc2), right: safeInsets.right + Math.round(14 * sc2),
+                  },
+                  labelWidth: Math.round(300 * sc2),
+                  rowHeight: Math.round(96 * sc2),
+                })
+                drawVisionTitle(ctx, outW, sc2, safeInsets.top, title ?? 'Il percorso', it)
+                // Le etichette entrano una dopo l'altra dentro la finestra che resta dopo
+                // l'allargamento della telecamera: tutte insieme sarebbero un lampo illeggibile.
+                const startAt = VISION_CAMERA_SECONDS / Math.max(0.1, visionSeconds)
+                const window = Math.max(0.05, 0.9 - startAt)
+                const per = window / Math.max(1, laid.length)
+                for (const c of laid) {
+                  const localT = clamp01((it - (startAt + c.order * per * 0.75)) / Math.max(0.06, per * 1.6))
+                  const fadeOut = 1 - clamp01((it - 0.9) / 0.1)
+                  if (localT <= 0.001) continue
+                  ctx.globalAlpha = fadeOut
+                  drawVisionCallout(ctx, sc2, {
+                    name: c.feature.name, qualifier: c.feature.qualifier,
+                    anchorX: c.anchorX, anchorY: c.anchorY,
+                    labelX: c.labelX, labelY: c.labelY, side: c.side, order: c.order,
+                  }, VISION_CATEGORY_COLOR[c.feature.category] ?? '#fff', localT)
+                  ctx.globalAlpha = 1
+                }
+              }
+              break
+            }
             case 'numeri':
               drawNumbersBeat(ctx, outW, outH, sc2, [
                 { k: 'distanza',   v: `${totalKm.toFixed(1)} km` },
@@ -3002,6 +3274,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     try { webglLostCleanupRef.current?.() } catch {}
     const mEl=markerRef.current?.getElement(); if(mEl) mEl.style.opacity='1'
     if(mapRef.current) try{cleanupRouteReveal(mapRef.current)}catch{}
+    // I layer della Visione tornano invisibili: restano montati per il prossimo video, ma la mappa
+    // interattiva non deve ritrovarsi addosso il velo topografico dopo una generazione.
+    if(mapRef.current) try{setVisionLayerOpacity(mapRef.current,0,visionOpacityCache.current)}catch{}
     try { photoPinCleanupRef.current?.(); photoPinCleanupRef.current = null } catch {}
     try { poiPinCleanupRef.current?.(); poiPinCleanupRef.current = null } catch {}
     // Restore container size and map DPR (set at render start, normally restored by finishRecording)
@@ -3775,6 +4050,51 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   </div>
                 </div>
 
+                <div>
+                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">VISIONE D&rsquo;INSIEME</p>
+                  <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                    Poco dopo la partenza il volo si allarga fino a inquadrare tutto il percorso, orientato a nord.
+                    Sopra il satellitare affiora ciò che la vegetazione nasconde, e le cose caratteristiche vengono nominate una alla volta.
+                    Si accende e si spegne dallo stacco &laquo;{INTERLUDE_LABEL.visione}&raquo; qui sopra.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 mb-2.5">
+                    {(Object.keys(VISION_CATEGORY_LABEL) as VisionCategory[]).map(cat => {
+                      const on = visionCategories.includes(cat)
+                      const count = visionFeatures.filter(f => f.category === cat).length
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => setVisionCategories(prev => on ? prev.filter(c => c !== cat) : [...prev, cat])}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors border ${
+                            on ? 'bg-white/15 border-white/40 text-white' : 'bg-transparent border-white/10 text-white/40'
+                          }`}
+                        >
+                          {VISION_CATEGORY_LABEL[cat]}{on && count > 0 ? ` · ${count}` : ''}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <label className="flex items-start gap-2 mb-2.5 cursor-pointer">
+                    <input type="checkbox" checked={visionTopoVeil}
+                      onChange={e=>setVisionTopoVeil(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                    <span className="text-white text-xs font-semibold leading-snug">
+                      Velo topografico
+                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
+                        La mappa outdoor sfuma sopra il satellitare per la durata dello stacco: impluvi, curve di livello e sentieri già mappati tornano visibili. Il satellitare resta riconoscibile sotto.
+                      </span>
+                    </span>
+                  </label>
+                  {visionFeatures.length > 0 ? (
+                    <p className="text-forest-300/80 text-[11px] leading-relaxed">
+                      Verranno nominati: {visionFeatures.map(f => f.name).join(' · ')}.
+                    </p>
+                  ) : (
+                    <p className="text-terra-300/85 text-[11px] leading-relaxed">
+                      Qui OpenStreetMap non ha corsi d&apos;acqua, sentieri o luoghi con un nome vicino al tracciato: senza niente da nominare la Visione viene saltata.
+                    </p>
+                  )}
+                </div>
+
                 {videoMode==='illustrativo'&&(
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">SCHEDE DEI LUOGHI</p>
@@ -3819,17 +4139,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   </div>
                 )}
 
-                {videoMode==='illustrativo'&&(
+                {(
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">STACCHI</p>
                     <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                      Il volo si ferma e un pannello resta a schermo il tempo di essere letto. La durata consigliata è calcolata su quanto c&apos;è davvero da leggere in quel pannello, su questo percorso.
+                      {videoMode==='illustrativo'
+                        ? 'Il volo si ferma e un pannello resta a schermo il tempo di essere letto. La durata consigliata è calcolata su quanto c\u2019è davvero da leggere in quel pannello, su questo percorso.'
+                        : 'Gli stacchi che commentano i dati appartengono alla modalità Illustrativo. La Visione no: non commenta l\u2019escursione, spiega il percorso — e serve anche quando stai raccontando la tua uscita.'}
                     </p>
                     {videoInterludes.map((iv, idx) => {
+                      // Fuori dall'Illustrativo l'unico stacco disponibile è la Visione — vedi
+                      // interludeSettingsForMode nella generazione, che applica la stessa regola.
+                      if (videoMode!=='illustrativo' && iv.kind!=='visione') return null
                       const unavailable =
                         (iv.kind==='tei'    && !beautyScore?.categories?.length) ||
                         (iv.kind==='avvisi' && normalizeGuideNotices(guide?.notices).length===0) ||
-                        (iv.kind==='luoghi' && (pois?.length ?? 0)===0)
+                        (iv.kind==='luoghi' && (pois?.length ?? 0)===0) ||
+                        (iv.kind==='visione' && visionFeatures.length===0)
                       const patch = (change: Partial<InterludeSetting>) =>
                         setVideoInterludes(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
                       const advised = recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind])
