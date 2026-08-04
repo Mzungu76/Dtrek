@@ -649,14 +649,25 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Scaricati una volta all'apertura del wizard, non a ogni generazione.
   const [visionLines, setVisionLines] = useState<VisionSourceLine[]>([])
 
+  /** Punti con coordinate valide, direttamente dalla prop.
+   *
+   *  NON `gps.current`: quel ref è dichiarato più in basso nel corpo del componente, e leggerlo da
+   *  un useMemo — che gira DURANTE il render, a differenza di un useEffect — cade nella zona morta
+   *  temporale della const e fa esplodere l'intera pagina con "Cannot access ... before
+   *  initialization". Vale per qualunque cosa qui sopra: durante il render si possono leggere solo
+   *  binding già dichiarati sopra di sé. */
+  const visionRoutePoints = useMemo(
+    () => trackPoints.filter(t => t.lat != null && t.lon != null),
+    [trackPoints],
+  )
+
   // Scarica corsi d'acqua e sentieri una sola volta, e solo quando il wizard video è aperto: chi
   // apre la mappa 3D per guardarla non deve pagare una chiamata Overpass che non userà.
   useEffect(() => {
     if (videoState !== 'config') return
-    const pts = gps.current
-    if (pts.length < 2) return
+    if (visionRoutePoints.length < 2) return
     let cancelled = false
-    const lats = pts.map(p => p.lat!), lons = pts.map(p => p.lon!)
+    const lats = visionRoutePoints.map(p => p.lat!), lons = visionRoutePoints.map(p => p.lon!)
     const pad = 0.01
     const bbox = [Math.min(...lats) - pad, Math.min(...lons) - pad, Math.max(...lats) + pad, Math.max(...lons) + pad].join(',')
     fetch(`/api/route-features?bbox=${bbox}`)
@@ -664,21 +675,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       .then((d: { lines?: VisionSourceLine[] }) => { if (!cancelled) setVisionLines(d.lines ?? []) })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [videoState])
+  }, [videoState, visionRoutePoints])
 
   /** Le cose che la Visione annoterà davvero, già filtrate e ordinate — vedi lib/videoVision.ts.
    *  Calcolate qui (non al momento della generazione) perché il wizard deve poterle mostrare in
    *  anteprima e ricavarne la durata consigliata dello stacco. */
   const visionFeatures = useMemo<VisionFeature[]>(() => {
-    const pts = gps.current
-    if (pts.length < 2) return []
-    const route = pts.map(p => [p.lat!, p.lon!] as [number, number])
+    if (visionRoutePoints.length < 2) return []
+    const route = visionRoutePoints.map(p => [p.lat!, p.lon!] as [number, number])
     return selectVisionFeatures(
       route, visionLines,
       (pois ?? []).map(p => ({ id: p.id, name: p.name, lat: p.lat, lon: p.lon, type: p.type, distFromTrack: p.distFromTrack })),
       visionCategories, MAX_VISION_CALLOUTS,
     )
-  }, [visionLines, pois, visionCategories])
+  }, [visionRoutePoints, visionLines, pois, visionCategories])
 
   /** Finestra oraria vera dell'escursione, dai tempi registrati nella traccia.
    *
@@ -711,15 +721,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const apply = () => {
       setupSunHillshade(map)
       if (!videoSunLightEnabled) { clearSunLook(map, sunLookCache.current); return }
-      const pts0 = gps.current
-      if (!pts0.length) return
-      const mid = pts0[Math.floor(pts0.length / 2)]
+      if (!visionRoutePoints.length) return
+      const mid = visionRoutePoints[Math.floor(visionRoutePoints.length / 2)]
       const look = terrainSunLook(getSunPosition(mid.lat!, mid.lon!, new Date(hikeTimeWindow.start)))
       applySunLook(map, look, sunLookCache.current)
     }
     if (map.isStyleLoaded()) apply()
     else map.once('idle', apply)
-  }, [videoSunLightEnabled, hikeTimeWindow])
+  }, [videoSunLightEnabled, hikeTimeWindow, visionRoutePoints])
 
   // Stessa ragione di routeColorRef: setupLayers gira dentro una callback registrata una volta e
   // leggerebbe il valore congelato al momento della registrazione.
