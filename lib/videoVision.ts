@@ -297,3 +297,81 @@ export function recommendedVisionSeconds(calloutCount: number): number {
   const raw = VISION_CAMERA_SECONDS + Math.max(1, calloutCount) * VISION_PER_CALLOUT_SECONDS + 1.4
   return Math.min(VISION_MAX_SECONDS, Math.max(VISION_MIN_SECONDS, Math.round(raw * 2) / 2))
 }
+
+// ── Inquadratura che contiene tutto il percorso ───────────────────────────────
+
+/** MapLibre: la larghezza del mondo in pixel è 512 · 2^zoom. */
+const MAPLIBRE_TILE_SIZE = 512
+
+/**
+ * Margine di zoom sottratto al risultato esatto.
+ *
+ * Il calcolo qui sotto è esatto per una vista perfettamente dall'alto e su terreno piatto. La
+ * Visione però inclina un poco la telecamera e la mappa ha il rilievo 3D attivo: un picco vicino
+ * al bordo si proietta più in fuori del punto del terreno che gli sta sotto, e l'inclinazione
+ * allarga il fondo dell'inquadratura restringendone la cima. Mezzo livello di zoom copre entrambi
+ * gli effetti con abbondanza — e "un po' più largo del necessario" è esattamente l'errore giusto
+ * da commettere qui: il difetto da evitare è il percorso tagliato fuori, non quello un po' piccolo.
+ */
+const FIT_ZOOM_MARGIN = 0.5
+
+export interface LatLonBounds { minLat: number; minLon: number; maxLat: number; maxLon: number }
+
+export function boundsOfRoute(route: [number, number][]): LatLonBounds | null {
+  if (route.length === 0) return null
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity
+  for (const [la, lo] of route) {
+    if (la < minLat) minLat = la
+    if (la > maxLat) maxLat = la
+    if (lo < minLon) minLon = lo
+    if (lo > maxLon) maxLon = lo
+  }
+  return { minLat, maxLat, minLon, maxLon }
+}
+
+/** Coordinata Y di Mercator normalizzata (0 al polo nord, 1 al polo sud). */
+function mercatorY(lat: number): number {
+  const clamped = Math.max(-85.051129, Math.min(85.051129, lat))
+  const phi = clamped * Math.PI / 180
+  return (1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2
+}
+
+/**
+ * Il livello di zoom al quale l'intero rettangolo sta dentro il fotogramma, margini esclusi.
+ *
+ * Calcolato invece di chiesto a `map.cameraForBounds`: quel metodo parte dallo stato corrente
+ * della telecamera — inclinazione compresa — e durante la preparazione del video la mappa è ancora
+ * inclinata a 48° per il pre-caricamento del volo, quindi restituiva uno zoom tarato su
+ * un'inquadratura diversa da quella che poi la Visione avrebbe usato davvero. Risultato: un pezzo
+ * di percorso fuori dal fotogramma proprio nel momento pensato per mostrarlo tutto.
+ *
+ * Questa formula non dipende da nessuno stato: date le dimensioni del fotogramma e i margini,
+ * restituisce sempre lo stesso numero, ed è verificabile da sola.
+ */
+export function fitZoomForBounds(
+  bounds: LatLonBounds,
+  viewport: { width: number; height: number },
+  padding: { top: number; bottom: number; left: number; right: number },
+  margin = FIT_ZOOM_MARGIN,
+): number {
+  const availW = Math.max(1, viewport.width - padding.left - padding.right)
+  const availH = Math.max(1, viewport.height - padding.top - padding.bottom)
+
+  // Frazioni di mondo occupate dal rettangolo. Il minimo evita che un percorso quasi puntiforme
+  // (o del tutto verticale/orizzontale) produca uno zoom infinito.
+  const fx = Math.max(1e-7, Math.abs((bounds.maxLon - bounds.minLon) / 360))
+  const fy = Math.max(1e-7, Math.abs(mercatorY(bounds.minLat) - mercatorY(bounds.maxLat)))
+
+  const zoomX = Math.log2(availW / (MAPLIBRE_TILE_SIZE * fx))
+  const zoomY = Math.log2(availH / (MAPLIBRE_TILE_SIZE * fy))
+  return Math.min(zoomX, zoomY) - margin
+}
+
+/** Centro geografico dell'inquadratura: il punto medio in spazio Mercator, non la media delle
+ *  latitudini — alle nostre latitudini differiscono di poco, ma la seconda non è il centro dello
+ *  schermo e su percorsi molto estesi in verticale lo scarto si vede. */
+export function centerOfBounds(bounds: LatLonBounds): { lat: number; lon: number } {
+  const yMid = (mercatorY(bounds.minLat) + mercatorY(bounds.maxLat)) / 2
+  const phi = Math.atan(Math.sinh(Math.PI * (1 - 2 * yMid)))
+  return { lat: phi * 180 / Math.PI, lon: (bounds.minLon + bounds.maxLon) / 2 }
+}

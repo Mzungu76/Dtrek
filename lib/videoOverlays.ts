@@ -982,6 +982,22 @@ export function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, opt
   ctx.fillText(brand,w-ctx.measureText(brand).width-Math.max(pad,ins.right),h-ins.bottom-Math.round(10*sc))
 }
 
+/**
+ * Y del bordo superiore della barra di avanzamento dell'HUD — o del punto in cui starebbe se la
+ * barra fosse spenta.
+ *
+ * Esportata perché ci si possa ancorare sopra elementi flottanti (la mini-mappa) senza ricopiare
+ * la stessa aritmetica di margini in un secondo posto, dove poi divergerebbe alla prima modifica
+ * dell'HUD. Rispecchia esattamente il calcolo di yBase in drawHUD qui sopra.
+ */
+export function hudProgressBarTop(w: number, h: number, showProgress: boolean): number {
+  const sc = Math.min(w, h) / 1080
+  const ins = safeInsetsFor(w, h)
+  const pad = Math.max(Math.round(40 * sc), ins.left)
+  const base = h - Math.max(pad, ins.bottom)
+  return showProgress ? base - Math.max(6, Math.round(8 * sc)) : base
+}
+
 // ── Elevation profile in video HUD ────────────────────────────────────────────
 
 

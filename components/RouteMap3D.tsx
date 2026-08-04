@@ -33,6 +33,7 @@ import {
 import {
   selectVisionFeatures, layoutVisionCallouts, recommendedVisionSeconds,
   DEFAULT_VISION_CATEGORIES, VISION_CATEGORY_LABEL, MAX_VISION_CALLOUTS, VISION_CAMERA_SECONDS,
+  boundsOfRoute, fitZoomForBounds, centerOfBounds,
   type VisionCategory, type VisionSourceLine, type VisionFeature,
 } from '@/lib/videoVision'
 import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
@@ -46,7 +47,7 @@ import {
   drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
   drawVisionCallout, drawVisionTitle, VISION_CATEGORY_COLOR,
-  drawStopPhotoZoom, drawHUD, drawTopBand, drawElevationMarker, safeInsetsFor, drawOpeningTitle,
+  drawStopPhotoZoom, drawHUD, drawTopBand, hudProgressBarTop, drawElevationMarker, safeInsetsFor, drawOpeningTitle,
   drawPoiTag, drawTeiPanel, drawIdentikit, drawEndCard,
   drawNumbersBeat, drawElevationBeat, drawNatureBeat, drawNoticesBeat, drawPlacesBeat, drawStoryCaption,
   drawPositionDot,
@@ -740,6 +741,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   visionFeaturesRef.current = visionFeatures
   /** Ultimo valore scritto per ogni proprietà dei layer Visione — vedi setVisionLayerOpacity. */
   const visionOpacityCache = useRef(new Map<string, number>())
+  /** Telecamera al primo fotogramma della Visione — origine e destinazione del rientro. */
+  const visionStartCamRef = useRef<{ zoom: number; pitch: number; bearing: number; lon: number; lat: number } | null>(null)
 
   // Le linee arrivano dopo che la mappa è già in piedi: vanno versate nei layer quando atterrano,
   // altrimenti la Visione accenderebbe dei layer vuoti.
@@ -1707,19 +1710,32 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       await withTimeout(new Promise<void>(r=>map.once('idle',r as any)), 8000).catch(()=>{})
     }
     // Inquadratura d'insieme dello stacco "Visione": tutto il tracciato dentro il fotogramma, a
-    // nord, vista dall'alto. cameraForBounds tiene conto di dimensioni e proporzioni reali del
-    // canvas, quindi la stessa escursione si inquadra correttamente in 9:16 come in 16:9 — un
-    // livello di zoom fisso non potrebbe.
-    const visionBounds: [[number, number], [number, number]] = [
-      [Math.min(...pts.map(pp => pp.lon!)), Math.min(...pts.map(pp => pp.lat!))],
-      [Math.max(...pts.map(pp => pp.lon!)), Math.max(...pts.map(pp => pp.lat!))],
-    ]
-    // Il margine lascia respiro alle etichette lungo i bordi, che è dove la Visione le mette.
-    const visionCam = map.cameraForBounds(visionBounds, { padding: { top: 90, bottom: 120, left: 80, right: 80 }, bearing: 0 })
+    // nord, vista dall'alto.
+    //
+    // Lo zoom si CALCOLA (lib/videoVision.ts), non si chiede a map.cameraForBounds: quel metodo
+    // parte dallo stato corrente della telecamera, inclinazione compresa, e qui la mappa è ancora
+    // a 48° per il pre-caricamento del volo — restituiva quindi uno zoom tarato su un'inquadratura
+    // diversa da quella che la Visione avrebbe poi usato, lasciando un pezzo di percorso fuori dal
+    // fotogramma proprio nel momento fatto per mostrarlo tutto.
+    //
+    // I margini tengono conto di dove finiscono le etichette: colonne laterali per i nomi, la
+    // fascia del titolo in alto, il margine sicuro in basso.
+    // safeInsetsFor invece della const `safeInsets`, che è dichiarata più in basso in questa
+    // funzione: è una funzione pura sulle sole dimensioni, quindi le due danno lo stesso risultato.
+    const visionSafe = safeInsetsFor(outW, outH)
+    const visionRouteLatLon = pts.map(pp => [pp.lat!, pp.lon!] as [number, number])
+    const visionBounds = boundsOfRoute(visionRouteLatLon)
+    const visionPadding = {
+      top:    visionSafe.top + Math.round(outH * 0.10),
+      bottom: visionSafe.bottom + Math.round(outH * 0.06),
+      left:   Math.max(visionSafe.left, Math.round(outW * 0.18)),
+      right:  Math.max(visionSafe.right, Math.round(outW * 0.18)),
+    }
+    const visionCenter = visionBounds ? centerOfBounds(visionBounds) : { lat: pts[0].lat!, lon: pts[0].lon! }
     const visionFit = {
-      lon: visionCam?.center ? (visionCam.center as { lng: number }).lng : (visionBounds[0][0] + visionBounds[1][0]) / 2,
-      lat: visionCam?.center ? (visionCam.center as { lat: number }).lat : (visionBounds[0][1] + visionBounds[1][1]) / 2,
-      zoom: typeof visionCam?.zoom === 'number' ? visionCam.zoom : zoomOutro,
+      lon: visionCenter.lon,
+      lat: visionCenter.lat,
+      zoom: visionBounds ? fitZoomForBounds(visionBounds, { width: outW, height: outH }, visionPadding) : zoomOutro,
     }
     const visionSetting = videoInterludes.find(i => i.kind === 'visione')
     const visionSeconds = visionSetting?.seconds ?? 6
@@ -2873,6 +2889,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         return
       }
 
+      // Quanto è "aperta" la Visione in questo fotogramma, 0→1. Serve anche al disegno, più sotto:
+      // titolo, statistiche e barra di avanzamento appartengono al volo, e mentre la mappa si
+      // allarga per essere annotata devono uscire di scena — altrimenti si sovrappongono proprio
+      // alle etichette, che è quello che succedeva.
+      let visionWide = 0
+
       const rawIdx=p*(N-1), i0=Math.floor(rawIdx), i1=Math.min(i0+1,N-1), frac=rawIdx-i0
       // During intro p=0 → lon/lat = pts[0]; follow/outro → actual position
       const lon=pts[i0].lon!+(pts[i1].lon!-pts[i0].lon!)*frac
@@ -2887,16 +2909,31 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // lo stacco finisce il ramo "follow" riprende a inseguire il proprio bersaglio, e i lerp
         // riportano l'inquadratura al suo posto con la stessa morbidezza di sempre.
         const vt = clamp01(interlude.t)
+        // Inquadratura di partenza congelata al primo fotogramma dello stacco: da lì si va al fit
+        // e da lì si torna, quindi il rientro riconsegna alla fase di volo esattamente la
+        // telecamera che le era stata tolta.
+        if (!visionStartCamRef.current) {
+          visionStartCamRef.current = {
+            zoom: smoothZoomRef.current, pitch: smoothPitchRef.current, bearing: smoothBearRef.current,
+            lon, lat,
+          }
+        }
+        const from = visionStartCamRef.current
         // Ingresso e uscita: si allarga nel primo tratto, resta larga mentre si leggono le
         // etichette, e ricomincia a stringere sull'ultimo pezzo così il rientro non è uno scatto.
         const enter = clamp01(vt / (VISION_CAMERA_SECONDS / Math.max(0.1, visionSeconds)))
         const leave = clamp01((vt - 0.86) / 0.14)
         const wide = Math.min(1 - Math.pow(1 - enter, 3), 1 - leave * leave)
-        smoothBearRef.current  = lerpAngle(smoothBearRef.current, 0, 0.05)
-        smoothPitchRef.current = lerp(smoothPitchRef.current, lerp(48, 6, wide), 0.07)
-        smoothZoomRef.current  = lerp(smoothZoomRef.current, lerp(zoomFollow, visionFit.zoom, wide), 0.07)
-        const vLon = lon + (visionFit.lon - lon) * wide
-        const vLat = lat + (visionFit.lat - lat) * wide
+        visionWide = wide
+        // Assegnazione diretta, non il filtro esponenziale usato nel volo: lì serve ad ammorbidire
+        // un bersaglio che sobbalza col GPS, qui il movimento è una coreografia e il filtro
+        // introdurrebbe solo un ritardo — con l'effetto che l'inquadratura non raggiunge mai
+        // davvero il fit e il percorso resta tagliato, che è il difetto da correggere.
+        smoothBearRef.current  = lerpAngle(from.bearing, 0, wide)
+        smoothPitchRef.current = lerp(from.pitch, 6, wide)
+        smoothZoomRef.current  = lerp(from.zoom, visionFit.zoom, wide)
+        const vLon = from.lon + (visionFit.lon - from.lon) * wide
+        const vLat = from.lat + (visionFit.lat - from.lat) * wide
         const vElev = mapRef.current?.queryTerrainElevation?.([vLon, vLat]) ?? undefined
         mapRef.current?.jumpTo({
           center: [vLon, vLat], bearing: smoothBearRef.current,
@@ -2906,6 +2943,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // Le linee e il velo entrano insieme all'allargamento e se ne vanno con esso.
         if (mapRef.current) setVisionLayerOpacity(mapRef.current, wide, visionOpacityCache.current)
       } else if (introP !== undefined) {
+        visionStartCamRef.current = null
         // ── Intro: camera swoops in, route stays at p=0, pin hidden ──────────
         const introShot = currentShots.find(s => s.id === 'intro') ?? currentShots[0]
         // Ease-out on introP: target reaches follow values by ~80% of intro, giving
@@ -2931,6 +2969,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           ...(introElev != null ? { elevation: introElev } : {}),
         })
       } else {
+        visionStartCamRef.current = null
         // ── Follow: camera tracks GPS, pin moves ──────────────────────────────
         // Route bearing: look 12% ahead so camera anticipates direction
         const lookIdx=Math.min(Math.round((p+0.12)*(N-1)),smoothRouteBears.length-1)
@@ -3158,7 +3197,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           // Titolo, statistiche, profilo altimetrico e grafici corpo in un'unica fascia in alto,
           // sovrapposta alla mappa con una leggera trasparenza (drawTopBand) — sfuma via mentre la
           // foto in sosta si ingrandisce (graphAlpha), per non restare addosso alla foto.
-          const graphAlpha = 1 - stopZoomTNow
+          // Sfuma anche con la Visione, per lo stesso motivo dell'HUD Classico: la fascia porta il
+          // titolo e le statistiche del volo, e resterebbe sopra le etichette dello stacco.
+          const graphAlpha = (1 - stopZoomTNow) * (1 - visionWide)
           if (graphAlpha > 0.01) {
             ctx.save()
             try {
@@ -3211,8 +3252,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // arrivava DOPO l'intro, cioè dopo il momento in cui si decide se guardare, e per farlo
         // spegneva la mappa proprio mentre il percorso partiva. Il suo compito lo fa ora
         // drawOpeningTitle, sovrimpresso all'intro senza rubarle tempo.
-        {
+        // Sfuma via mentre la Visione si apre: il suo titolo e le sue etichette occupano lo stesso
+        // spazio, e due titoli sovrapposti non si leggono né l'uno né l'altro.
+        if (visionWide < 0.99) {
+          ctx.globalAlpha = 1 - visionWide
           drawHUD(ctx,outW,outH,{showTitle:videoShowTitle,title:displayTitle,showStats:videoShowStats,coveredKm:+(p*totalKm).toFixed(1),totalKm:+totalKm.toFixed(1),alt:Math.round(alt),elevGain,showProgress:videoShowProgress,progress:p,shotLabel:introP!==undefined?'Intro aereo':'Seguimento',photoMarks,odometer:videoOdometerEnabled})
+          ctx.globalAlpha = 1
         }
         }
 
@@ -3353,21 +3398,31 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           }
         }
 
-        // Mini-mappa d'insieme: per ultima, così resta sopra a fascia/HUD. In alto a destra con lo
-        // stile Classico (l'HUD sta in basso), in basso a destra col Carosello (la fascia sta in alto).
-        if (videoMiniMapEnabled && miniRoute.length > 1 && introP === undefined) {
-          const mmSize = Math.round(outW * 0.17)
-          const mmPad = Math.round(22 * sc2)
-          // Dentro i margini sicuri: in alto a destra finirebbe sotto gli indicatori dell'app, e
-          // sul bordo destro sotto la colonna dei pulsanti.
-          const mmX = outW - safeInsets.right - mmSize - mmPad
+        // Mini-mappa d'insieme: per ultima, così resta sopra a fascia/HUD.
+        //
+        // Appoggiata alla barra di avanzamento in basso a destra, non più a mezz'aria sopra la
+        // mappa: lì galleggiava proprio nella fascia dove passano le polaroid dei punti foto e ci
+        // finiva sopra. Ancorata al chrome sta dove l'occhio già cerca i dati del video, e la
+        // striscia bassa è l'unica che nessun altro elemento attraversa.
+        //
+        // Durante la Visione non si disegna affatto: quello stacco È una mappa d'insieme, e
+        // sovrapporgliene una seconda in miniatura è ridondante oltre che un ingombro in più
+        // proprio dove servono le etichette.
+        if (videoMiniMapEnabled && miniRoute.length > 1 && introP === undefined && visionWide < 0.5) {
+          const mmSize = Math.round(outW * 0.15)
+          const mmPad = Math.round(18 * sc2)
+          const mmX = outW - Math.max(safeInsets.right, mmPad) - mmSize
           const mmY = isCarousel
+            // Col Carosello la barra sta nella fascia in alto: in basso resta libero, e ci si
+            // appoggia al margine sicuro invece che a un HUD che qui non c'è.
             ? outH - safeInsets.bottom - mmSize - mmPad
-            : safeInsets.top + mmPad
+            : Math.round(hudProgressBarTop(outW, outH, videoShowProgress)) - mmSize - mmPad
           const mmCol = effortNow == null ? hexToRgb(routeColorRef.current) : effortRgb(effortNow)
           // Resta visibile anche durante una sosta su foto: è il riferimento d'insieme, e proprio
           // mentre una polaroid occupa il centro serve di più, non di meno.
+          ctx.globalAlpha = 1 - visionWide * 2
           drawMiniMap(ctx, mmX, mmY, mmSize, sc2, miniRoute, p, mmCol)
+          ctx.globalAlpha = 1
         }
         }
 
