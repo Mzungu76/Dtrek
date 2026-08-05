@@ -142,74 +142,76 @@ export function planInterludes(
     fps: number
     routeFrames: number
     available: (kind: InterludeKind) => boolean
-    /** Fotogrammi di percorso in cui è già prevista una foto (sosta o rivelazione). Uno stacco che
-     *  ci cade sopra viene spostato — vedi `breathFrames`. */
+    /** Tratti di percorso già occupati da una foto.
+     *
+     *  Attenzione a cosa è un "tratto" qui, che è la sottigliezza da cui dipende tutto il calcolo.
+     *  In stile Carosello la sosta su una foto fa davvero parte della timeline di percorso (la
+     *  costruisce buildJourneyTables) e l'intervallo è reale. In stile Classico no: la polaroid è
+     *  una pausa AGGIUNTA sopra al percorso, che di percorso non consuma nulla, e l'intervallo giusto
+     *  da passare qui è lungo zero — il solo fotogramma di innesco. Passare la durata della pausa,
+     *  come si faceva prima, gonfiava ogni foto di 2,5 s di percorso inesistente: con quattro foto
+     *  su un volo breve le zone occupate coprivano il tracciato intero e ogni stacco finiva
+     *  addosso a una polaroid. */
     photoFrames?: { start: number; end: number }[]
-    /** Respiro fra la fine di una foto e l'inizio di uno stacco. Attaccarlo subito dopo darebbe
+    /** Quanto percorso deve scorrere fra un'interruzione e la successiva. Due pause attaccate danno
      *  comunque due interruzioni di fila: chi guarda ha appena smesso di leggere una polaroid e si
-     *  ritrova un pannello. Qualche secondo di percorso in mezzo rimette il ritmo a posto. */
+     *  ritrova un pannello. */
     breathFrames?: number
   },
 ): PlannedInterlude[] {
   const { fps, routeFrames, available, photoFrames = [], breathFrames = Math.round(fps * 4) } = opts
 
-  // Zone off-limits: le foto più il "respiro" DOPO di esse. Il respiro sta solo a valle perché è lì
-  // che serve — si esce da una polaroid e non si deve incontrare subito un pannello — e perché
-  // metterlo anche a monte raddoppierebbe lo spazio consumato, arrivando a non lasciare più posto
-  // a nessuno stacco su un percorso con parecchie foto.
-  const withBreath = (f: { start: number; end: number }) => ({ start: f.start, end: f.end + breathFrames })
-  const placed: { start: number; end: number }[] = []
+  /** Distanza di un punto da un intervallo occupato: 0 se ci sta dentro. */
+  const gapTo = (at: number, z: { start: number; end: number }) =>
+    at < z.start ? z.start - at : at > z.end ? at - z.end : 0
 
-  /** Primo intervallo libero abbastanza capiente, il più vicino possibile alla posizione chiesta. */
-  const findSlot = (want: number, frames: number, blocked: { start: number; end: number }[]) => {
-    const sorted = blocked.slice().sort((x, y) => x.start - y.start)
-    const gaps: { start: number; end: number }[] = []
-    let cursor = 0
-    for (const bz of sorted) {
-      if (bz.start > cursor) gaps.push({ start: cursor, end: Math.min(bz.start, routeFrames) })
-      cursor = Math.max(cursor, bz.end)
+  /**
+   * Dove mettere uno stacco, dato ciò che è già occupato.
+   *
+   * Uno stacco NON consuma fotogrammi di percorso: congela il volo dov'è e allunga il video (vedi
+   * frameToState in components/RouteMap3D.tsx — tutte le pause condividono un accumulatore, e due
+   * pause sullo stesso fotogramma si susseguono invece di sovrapporsi). Quindi non serve cercargli
+   * un "varco largo quanto la sua durata": serve un PUNTO abbastanza lontano dalle altre
+   * interruzioni. Era proprio quella richiesta senza senso fisico a far sparire in silenzio gli
+   * stacchi accesi su qualunque video non lungo e lento.
+   *
+   * Si prende il punto col respiro maggiore attorno; a parità di respiro, il più vicino a quello
+   * chiesto, così la scelta resta prevedibile. Se nemmeno il migliore raggiunge il respiro voluto
+   * lo si usa lo stesso — meglio uno stacco un po' stretto fra due foto che uno stacco che l'utente
+   * ha acceso e non compare.
+   */
+  const placeBeat = (want: number, blocked: { start: number; end: number }[]): number => {
+    const clamp = (v: number) => Math.max(0, Math.min(Math.round(v), routeFrames))
+    if (blocked.length === 0) return clamp(want)
+    const zones = blocked.slice().sort((x, y) => x.start - y.start)
+
+    const candidates: number[] = [clamp(want), 0, routeFrames]
+    for (let i = 0; i < zones.length; i++) {
+      candidates.push(clamp(zones[i].start - breathFrames))
+      candidates.push(clamp(zones[i].end + breathFrames))
+      if (i + 1 < zones.length) candidates.push(clamp((zones[i].end + zones[i + 1].start) / 2))
     }
-    if (cursor < routeFrames) gaps.push({ start: cursor, end: routeFrames })
-    let best: { at: number; dist: number } | null = null
-    for (const g of gaps) {
-      if (g.end - g.start < frames) continue
-      const at = Math.min(Math.max(want, g.start), g.end - frames)
-      const dist = Math.abs(at - want)
-      if (!best || dist < best.dist) best = { at, dist }
+    const clearance = (at: number) => Math.min(...zones.map(z => gapTo(at, z)))
+
+    let best = clamp(want), bestClear = -1
+    for (const at of candidates) {
+      const c = Math.min(clearance(at), breathFrames)   // oltre il respiro voluto non serve di più
+      if (c > bestClear || (c === bestClear && Math.abs(at - want) < Math.abs(best - want))) {
+        best = at; bestClear = c
+      }
     }
-    return best?.at ?? null
+    return best
   }
 
+  const placed: { start: number; end: number }[] = []
   const out: PlannedInterlude[] = []
   for (const st of settings.filter(x => x.enabled && available(x.kind) && x.seconds > 0).sort((a2, b2) => a2.atP - b2.atP)) {
     const frames = Math.max(1, Math.round(st.seconds * fps))
     const want = Math.round(clamp01(st.atP) * routeFrames)
-
-    // Tre tentativi in ordine di preferenza, e l'ultimo non fallisce mai.
-    //
-    // I primi due cercano un intervallo libero — col respiro dopo le foto, poi senza — perché è la
-    // disposizione che si legge meglio. Cercare un intervallo è più affidabile che spingere in
-    // avanti finché si trova posto: la spinta, arrivata in fondo al percorso, andava ritagliata per
-    // rientrare, e il ritaglio rimetteva lo stacco esattamente sopra la foto che stava cercando di
-    // evitare.
-    //
-    // Il terzo è il punto chiesto e basta. Prima al suo posto c'era un `continue`: uno stacco che
-    // l'utente aveva acceso spariva dal video, e il wizard poteva solo avvisare che sarebbe
-    // successo. Era un errore di modello, non di disposizione — uno stacco NON consuma fotogrammi
-    // di percorso, li AGGIUNGE: congela il volo dov'è e allunga il video (vedi frameToState in
-    // components/RouteMap3D.tsx, dove tutte le pause condividono un unico accumulatore, e due pause
-    // sullo stesso fotogramma si susseguono invece di sovrapporsi). Pretendere un "varco libero
-    // lungo quanto lo stacco" era quindi una richiesta senza senso fisico, e su un percorso corto o
-    // con un cursore veloce non era quasi mai soddisfacibile: il video da 3 s di volo non poteva
-    // ospitare nessuno stacco da 6 s, e li perdeva tutti in silenzio.
-    //
-    // La regola ora è quella chiesta esplicitamente: tutto ciò che si accende finisce nel video, e
-    // ad allungarsi è la durata totale — che il wizard mostra sempre in chiaro.
-    const at = findSlot(want, frames, [...photoFrames.map(withBreath), ...placed])
-             ?? findSlot(want, frames, [...photoFrames, ...placed])
-             ?? Math.max(0, Math.min(want, routeFrames))
-
-    placed.push({ start: at, end: at + frames })
+    const at = placeBeat(want, [...photoFrames, ...placed])
+    // Lo stacco appena messo diventa a sua volta un'interruzione da cui stare alla larga, ma resta
+    // un punto: non occupa percorso, quindi l'intervallo che lascia è lungo zero.
+    placed.push({ start: at, end: at })
     out.push({ kind: st.kind, atP: at / Math.max(1, routeFrames), frames, triggerRouteFrame: at })
   }
   return out.sort((a2, b2) => a2.triggerRouteFrame - b2.triggerRouteFrame)

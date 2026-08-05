@@ -39,13 +39,15 @@ import {
   selectVisionFeatures, layoutVisionCallouts, recommendedVisionSeconds,
   DEFAULT_VISION_CATEGORIES, VISION_CATEGORY_LABEL, MAX_VISION_CALLOUTS, VISION_CAMERA_SECONDS,
   boundsOfRoute, fitZoomForBounds, centerOfBounds,
-  projectWorldMarker, visionMarkerEdgeFade, visionMarkerAltitudeM,
+  visionMarkerEdgeFade, visionMarkerLiftPx, metersPerPixelAt,
   type VisionCategory, type VisionSourceLine, type VisionFeature,
 } from '@/lib/videoVision'
 import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
 import type { BeautyScore } from '@/lib/beautyScore'
 import type { WikiPage } from '@/lib/wikipedia'
 import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
+import { classifyTrackShape } from '@/lib/geoUtils'
+import RouteTimelineEditor, { type TimelineEditorItem } from '@/components/video/RouteTimelineEditor'
 import { estimateVegetationBelt } from '@/lib/vegetationBelt'
 import {
   coverRect, rrect, lerp, lerpAngle, shortestAngleTo, distM, smoothArray, clamp01,
@@ -866,6 +868,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Post-production
   const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
   const [routePhotos,     setRoutePhotos]    = useState<RoutePhoto[]>([])
+  /**
+   * Dove far comparire una foto nel VIDEO, quando l'utente la sposta nell'editor del percorso.
+   *
+   * Deliberatamente separato da `photo.progress`, che è un dato di fatto — il punto in cui lo
+   * scatto è stato preso, ricavato dalle coordinate EXIF o dall'orario. Quello non si tocca:
+   * riscriverlo per far quadrare un montaggio falsificherebbe il resoconto, e la modifica
+   * resterebbe lì anche per la mappa delle foto e per il prossimo video. Questo è invece un
+   * accorgimento di regia, valido per questo video e basta.
+   */
+  const [videoPhotoAtP,   setVideoPhotoAtP]  = useState<Record<string, number>>({})
   // Foto in attesa di conferma di eliminazione — vedi il bottone a due tempi nell'elenco foto.
   const [pendingDeletePhotoId, setPendingDeletePhotoId] = useState<string|null>(null)
   // Foto escluse dal video (di default nessuna, cioè tutte incluse) — non persistito: è una
@@ -991,12 +1003,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   // Timing condiviso da tick() (sosta+viaggio in anteprima) e dal render offline in goToRendering —
   // stessa forma { id, progress, distanceM }, non liste filtrate/ordinate indipendentemente.
+  /** Dove ogni foto compare nel video: la sua posizione reale, salvo che l'utente non l'abbia
+   *  spostata nell'editor del percorso — vedi videoPhotoAtP. */
+  const videoPhotoProgress = useCallback(
+    (p: { id: string; progress: number }) => videoPhotoAtP[p.id] ?? p.progress,
+    [videoPhotoAtP],
+  )
+
   const carouselPhotoTimings = useMemo<CarouselPhotoTiming[]>(
     () => routePhotos
       .filter(p => !videoExcludedPhotoIds.has(p.id))
-      .map(p => ({ id: p.id, progress: p.progress, distanceM: progressToDistanceM(p.progress, cumDist) }))
+      .map(p => {
+        const progress = videoPhotoAtP[p.id] ?? p.progress
+        return { id: p.id, progress, distanceM: progressToDistanceM(progress, cumDist) }
+      })
       .sort((a, b) => a.progress - b.progress),
-    [routePhotos, videoExcludedPhotoIds, cumDist],
+    [routePhotos, videoExcludedPhotoIds, cumDist, videoPhotoAtP],
   )
 
   // Durata REALE del video, non quella dello slider. Lo slider imposta solo il ritmo del percorso:
@@ -1061,6 +1083,32 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
   }, [carouselPhotoTimings, totalDistanceM, photoDurationSec, videoSpeedKmS,
       videoHookFastIntro, videoMode, videoInterludes, interludeFitPreview])
+
+  /** Forma della traccia: serve all'editor per sapere se disegnare un arrivo distinto dalla
+   *  partenza, e se il percorso è un andata-ritorno già contenuto nella traccia. */
+  const timelineTrackShape = useMemo(
+    () => classifyTrackShape(trackPoints.filter(p => p.lat != null && p.lon != null).map(p => [p.lat!, p.lon!] as [number, number])),
+    [trackPoints],
+  )
+
+  /** Foto e stacchi come elementi trascinabili sul percorso — vedi lib/videoTimeline.ts. */
+  const timelineItems = useMemo<TimelineEditorItem[]>(() => {
+    const photos = carouselPhotoTimings.map(t => {
+      const src = routePhotos.find(p => p.id === t.id)
+      return {
+        id: `photo:${t.id}`, kind: 'photo' as const, atP: t.progress,
+        label: src?.caption?.trim() || 'Foto', seconds: photoDurationSec,
+      }
+    })
+    const beats = videoInterludes
+      .filter(i => i.enabled && (videoMode === 'illustrativo' || i.kind === 'visione'))
+      .filter(i => interludeFitPreview.has(i.kind))
+      .map(i => ({
+        id: `beat:${i.kind}`, kind: 'interlude' as const, atP: i.atP,
+        label: INTERLUDE_LABEL[i.kind], seconds: i.seconds, interludeKind: i.kind,
+      }))
+    return [...photos, ...beats]
+  }, [carouselPhotoTimings, routePhotos, photoDurationSec, videoInterludes, videoMode, interludeFitPreview])
 
   /** Applica il carattere di un preset: solo un punto di partenza per la velocità, coerente col
    *  suo ritmo editoriale — non un bersaglio da raggiungere. Da qui l'utente parte e aggiusta con
@@ -2147,8 +2195,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     const TARGET_FPS=videoFps
     const PHOTO_REVEAL_FRAMES = Math.round(TARGET_FPS * photoDurationSec)
-    const sortedPhotos = [...routePhotos]
+    // `progress` riscritto con l'eventuale spostamento deciso nell'editor del percorso: da qui in
+    // giù il montaggio deve vedere la posizione DI REGIA, non quella di scatto (vedi videoPhotoAtP).
+    const sortedPhotos = routePhotos
       .filter(ph => !videoExcludedPhotoIds.has(ph.id))
+      .map(ph => ({ ...ph, progress: videoPhotoProgress(ph) }))
       .sort((a,b)=>a.progress-b.progress)
       .filter(ph => photoImgsRef.current.has(ph.id))
       .map(ph => ({photo:ph, img:photoImgsRef.current.get(ph.id)!}))
@@ -2473,7 +2524,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           }
           return start >= 0 ? { start, end } : null
         }).filter((x): x is { start: number; end: number } => !!x)
-      : photoTriggerRouteFrames.map(at => ({ start: at, end: at + PHOTO_REVEAL_FRAMES }))
+      // Classico: la polaroid è una pausa AGGIUNTA sopra al percorso, non un tratto di percorso.
+      // In fotogrammi di percorso occupa quindi il solo istante d'innesco — vedi il commento su
+      // photoFrames in planInterludes. Sommarci PHOTO_REVEAL_FRAMES, come si faceva, dichiarava
+      // occupati secondi di tracciato che la foto non tocca: con quattro foto su un volo breve le
+      // zone occupate coprivano il percorso intero e ogni stacco finiva addosso a una polaroid.
+      : photoTriggerRouteFrames.map(at => ({ start: at, end: at }))
 
     prep('Montaggio della scaletta…', 0.94)
     // Gli stacchi "commento" (numeri, profilo, TEI…) restano una cosa della modalità Illustrativo.
@@ -3199,47 +3255,46 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // più sotto) a occupare il centro schermo: il pin dell'utente non si disegna in quel caso.
         const stopZoomTNow = (isCarousel && stopIndex !== undefined) ? stopPhotoZoomAt(stopT ?? 0) : 0
 
-        // Cartelli della Visione rimasti nella mappa: solo dopo che lo stacco li ha rivelati, solo
+        // Cartelli della Visione rimasti sulla mappa: solo dopo che lo stacco li ha rivelati, solo
         // nel volo (non davanti a un altro stacco o a una foto in sosta, che coprono comunque lo
-        // schermo), disegnati SOTTO il pin — vedi lib/videoVision.ts → projectWorldMarker.
+        // schermo), disegnati prima del pin così gli passa davanti.
+        //
+        // La posizione a terra viene da map.project(), che tiene conto del rilievo ed è la stessa
+        // chiamata che qualche riga più sotto piazza correttamente le etichette DURANTE lo stacco:
+        // se funziona lì funziona qui. Il filo sopra di essa è lungo quanto lo sarebbe un palo
+        // verticale a questa inclinazione — vedi visionMarkerLiftPx in lib/videoVision.ts.
         if (visionRevealedRef.current && !interlude && introP === undefined && outroP === undefined
             && stopZoomTNow <= 0.001 && visionCallouts.length > 0 && mapRef.current) {
           const mapV = mapRef.current
-          const vt = (mapV as any).transform
-          const matrix = vt?.modelViewProjectionMatrix as ArrayLike<number> | undefined
-          // worldSize è indispensabile, non un di più: la matrice di MapLibre vuole i pixel di
-          // mondo, non il mercatore normalizzato — vedi il commento su projectWorldMarker.
-          const worldSizeV = vt?.worldSize as number | undefined
-          if (matrix && vt.width > 0 && vt.height > 0 && worldSizeV) {
-            const viewportV = { width: vt.width, height: vt.height, worldSize: worldSizeV }
-            const dprV2 = mapCanvas.width / Math.max(1, mapV.getContainer().clientWidth)
-            const kxV = outW / crF.sw, kyV = outH / crF.sh
-            const toOut = (pt: { x: number; y: number }) => ({ x: (pt.x * dprV2 - crF.sx) * kxV, y: (pt.y * dprV2 - crF.sy) * kyV })
-            const edgeMargin = 90 * sc2
-            for (const f of visionCallouts) {
-              // Ripiego sulla quota del centro mappa, non su zero: se la tile del rilievo non è
-              // ancora caricata, zero pianterebbe il cartello al livello del mare — cioè centinaia
-              // di metri sotto il terreno vero, e il filo uscirebbe dal fondo dell'inquadratura.
-              const groundElevF = mapV.queryTerrainElevation?.([f.lon, f.lat]) ?? (vt.elevation ?? 0)
-              const headP = projectWorldMarker(matrix, f.lat, f.lon, visionMarkerAltitudeM(groundElevF, f.lat, worldSizeV), viewportV)
-              const groundP = projectWorldMarker(matrix, f.lat, f.lon, groundElevF, viewportV)
-              const prevA = visionMarkerAlphaRef.current.get(f.key) ?? 0
-              let targetA = 0
-              let headOut: { x: number; y: number } | null = null, groundOut: { x: number; y: number } | null = null
-              if (headP && groundP) {
-                headOut = toOut(headP); groundOut = toOut(groundP)
-                targetA = visionMarkerEdgeFade(headOut.x, headOut.y, outW, outH, edgeMargin)
-              }
-              // Filtrato nel tempo come la telecamera: un cartello che entra o esce dall'inquadratura
-              // di scatto sembrerebbe un HUD, non un oggetto piantato nella scena.
-              const alphaV = lerp(prevA, targetA, 0.14)
-              visionMarkerAlphaRef.current.set(f.key, alphaV)
-              if (alphaV > 0.01 && headOut && groundOut) {
-                drawVisionMarker(ctx, sc2, {
-                  headX: headOut.x, headY: headOut.y, groundX: groundOut.x, groundY: groundOut.y,
-                  name: f.name, qualifier: f.qualifier,
-                }, VISION_CATEGORY_COLOR[f.category] ?? '#fff', alphaV, Math.round(240 * sc2))
-              }
+          const vtV = (mapV as any).transform
+          const dprV2 = mapCanvas.width / Math.max(1, mapV.getContainer().clientWidth)
+          const kxV = outW / crF.sw, kyV = outH / crF.sh
+          const edgeMargin = 90 * sc2
+          const liftV = visionMarkerLiftPx(mapV.getPitch(), sc2)
+          // Oltre l'orizzonte map.project() restituisce coordinate specchiate, che potrebbero
+          // cadere dentro il fotogramma e disegnare un cartello nel posto sbagliato. Il raggio
+          // inquadrato, con abbondanza, è il modo più semplice per escluderle.
+          const centerV = mapV.getCenter()
+          const mPerPxV = metersPerPixelAt(centerV.lat, vtV?.worldSize ?? (512 * Math.pow(2, mapV.getZoom())))
+          const maxDistM = Math.max(vtV?.width ?? 512, vtV?.height ?? 512) * mPerPxV * 4
+          for (const f of visionCallouts) {
+            let targetA = 0
+            let gOut: { x: number; y: number } | null = null
+            if (distM(centerV.lat, centerV.lng, f.lat, f.lon) <= maxDistM) {
+              const g = mapV.project([f.lon, f.lat])
+              gOut = { x: (g.x * dprV2 - crF.sx) * kxV, y: (g.y * dprV2 - crF.sy) * kyV }
+              // Si valuta la visibilità sulla targhetta, non sul piede: è quella che si legge.
+              targetA = visionMarkerEdgeFade(gOut.x, gOut.y - liftV, outW, outH, edgeMargin)
+            }
+            // Filtrato nel tempo come la telecamera: un cartello che entra o esce dall'inquadratura
+            // di scatto sembrerebbe un HUD, non un elemento della scena.
+            const alphaV = lerp(visionMarkerAlphaRef.current.get(f.key) ?? 0, targetA, 0.14)
+            visionMarkerAlphaRef.current.set(f.key, alphaV)
+            if (alphaV > 0.01 && gOut) {
+              drawVisionMarker(ctx, sc2, {
+                headX: gOut.x, headY: gOut.y - liftV, groundX: gOut.x, groundY: gOut.y,
+                name: f.name, qualifier: f.qualifier,
+              }, VISION_CATEGORY_COLOR[f.category] ?? '#fff', alphaV, Math.round(240 * sc2))
             }
           }
         }
@@ -3637,7 +3692,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       console.error(`[dtrek] preparazione video fallita (fase: ${prepStageRef.current}):`, err)
       failRendering(prepErrorMessage(prepStageRef.current, err))
     }
-  },[videoSpeedKmS,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,videoElevMarkersEnabled,videoLoopEnding,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoSpeedKmS,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,videoElevMarkersEnabled,videoLoopEnding,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM,videoPhotoProgress])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -4507,6 +4562,38 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     </label>
                   </div>
                 )}
+
+                {/* Il percorso come figura: dove cade ogni foto e ogni stacco, e come spostarli.
+                    Sta qui, prima dell'elenco degli stacchi, perché è la vista che rende leggibile
+                    tutto quello che viene dopo — accendere uno stacco senza vedere dove finisce era
+                    proprio il modo in cui foto e pannelli si accavallavano. */}
+                <div>
+                  <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">DOVE CADONO LE COSE</p>
+                  <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                    Il tuo percorso visto dall&apos;alto, senza mappa. Trascina foto e stacchi lungo la linea per decidere dove il video si ferma.
+                  </p>
+                  <RouteTimelineEditor
+                    trackPoints={trackPoints}
+                    routeSeconds={videoEstimate.routeSec}
+                    shape={timelineTrackShape}
+                    roundTrip={timelineTrackShape==='out_and_back'}
+                    items={timelineItems}
+                    onMove={(id, atP) => {
+                      if (id.startsWith('beat:')) {
+                        const kind = id.slice(5) as InterludeKind
+                        setVideoInterludes(prev => prev.map(x => x.kind===kind ? {...x, atP} : x))
+                      } else {
+                        setVideoPhotoAtP(prev => ({ ...prev, [id.slice(6)]: atP }))
+                      }
+                    }}
+                  />
+                  {Object.keys(videoPhotoAtP).length > 0 && (
+                    <button onClick={()=>setVideoPhotoAtP({})}
+                      className="mt-2 text-terra-300/90 hover:text-terra-200 text-[10px] font-semibold underline underline-offset-2">
+                      Rimetti le {Object.keys(videoPhotoAtP).length===1?'foto spostata':'foto spostate'} dove {Object.keys(videoPhotoAtP).length===1?'è stata scattata':'sono state scattate'}
+                    </button>
+                  )}
+                </div>
 
                 {(
                   <div>
