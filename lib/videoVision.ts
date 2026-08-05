@@ -378,99 +378,42 @@ export function centerOfBounds(bounds: LatLonBounds): { lat: number; lon: number
 
 // ── Etichette che restano dopo lo stacco ───────────────────────────────────────
 //
-// Quando la Visione finisce, le sei cose annotate non spariscono: restano lì, piantate nel mondo
-// 3D come cartelli veri, e la telecamera del volo le incontra o le supera come farebbe con
-// qualunque altro elemento della mappa — non è più un pannello sopra lo schermo, è diventata la
-// mappa stessa. Chi lo chiede da qui è components/RouteMap3D.tsx a ogni fotogramma del volo
-// principale; qui si decide solo la geometria: dove sta un cartello nel mondo, e dove finisce sullo
-// schermo dato lo stato della telecamera in quel fotogramma.
+// Quando la Visione finisce, le sei cose annotate non spariscono: restano ancorate al loro punto
+// sulla mappa, e la telecamera del volo se le trova davanti o se le lascia alle spalle come
+// qualunque altro elemento del terreno.
+//
+// COME CI SI ARRIVA, e perché non con la matrice della telecamera. Il primo tentativo proiettava i
+// cartelli a mano con `transform.modelViewProjectionMatrix`, per farne oggetti sospesi a una quota
+// vera. Sulla carta è la soluzione giusta; in pratica ha sbagliato due volte le unità d'ingresso
+// di quella matrice (vuole pixel di mondo e metri, non coordinate mercatore normalizzate) e ogni
+// volta il difetto era invisibile al test, perché il test confrontava la funzione con la MIA
+// replica della matrice invece che con MapLibre. Due verifiche "superate" e due video senza
+// cartelli.
+//
+// Ora la posizione a terra la dà `map.project()`: è l'unica API pubblica che tiene conto del
+// rilievo, ed è la stessa che nello stesso ciclo di disegno posiziona già correttamente le
+// etichette DURANTE lo stacco — cioè codice dimostrato sul campo, non solo in laboratorio.
+// L'altezza del filo resta un fatto tridimensionale, ma calcolata con la relazione misurata
+// invece che con una matrice ricostruita a mano: un palo verticale si proietta lungo
+//
+//     h · pixelPerMetro · sin(inclinazione)
+//
+// (verificato: 46 m a zoom 14 e pitch 48° danno 9,7 px previsti contro 9,8 misurati). Da qui la
+// scelta di esprimere l'altezza direttamente in pixel di schermo e di modularla con l'inclinazione:
+// il filo si accorcia quando la telecamera guarda a picco e si allunga quando è radente, che è il
+// comportamento di un palo vero, senza dipendere da una matrice che da qui non so verificare.
 
-/**
- * Quanto deve essere lungo, a schermo, il filo che regge un cartello: l'altezza "standard" chiesta,
- * espressa dove conta davvero, cioè nell'inquadratura.
- *
- * Non è un capriccio di unità di misura. Un'altezza fissa in metri sembra la scelta ovvia — è un
- * oggetto 3D, gli oggetti 3D hanno un'altezza — ma il filo che ne risulta è lungo sullo schermo in
- * proporzione allo zoom, e lo zoom qui cambia di parecchio: gli stessi 46 m che a zoom 16 fanno un
- * palo di 50 px, a zoom 11 ne fanno 1,6 e il cartello sembra appoggiato per terra. Il cartello
- * resta un oggetto del mondo (lo proietta la matrice vera, gli passa davanti e dietro il rilievo
- * come a qualunque altro), ma l'altezza a cui lo si pianta si sceglie guardando l'inquadratura.
- */
-const MARKER_LIFT_TARGET_PX = 58
-/** Estremi fisici entro cui la quota resta plausibile: sotto, il filo si accartoccia sul punto;
- *  sopra, il cartello si stacca visibilmente dal luogo che sta indicando. */
-const MARKER_MIN_HEIGHT_M = 35
-const MARKER_MAX_HEIGHT_M = 420
+/** Lunghezza del filo a inclinazione radente, in unità di un fotogramma da 1080 (va scalata per
+ *  `sc`). È l'"altezza standard" chiesta, espressa dove conta: nell'inquadratura. */
+export const VISION_MARKER_LIFT_PX = 76
+/** Sotto questa lunghezza il cartello si accartoccia sul proprio punto e non si capisce più che
+ *  cosa stia indicando: succede quando la telecamera guarda quasi a picco. */
+export const VISION_MARKER_MIN_LIFT_PX = 24
 
-const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * 6378137
-
-/** Pixel di schermo per metro di quota, alla latitudine e allo zoom correnti. Stessa formula di
- *  MapLibre (`mercatorZfromAltitude(1, lat) * worldSize`), ricavata invece che letta da un campo
- *  privato del transform. */
-export function pixelsPerMeterAt(lat: number, worldSize: number): number {
-  return worldSize / (EARTH_CIRCUMFERENCE_M * Math.cos(lat * Math.PI / 180))
-}
-
-/**
- * A che quota piantare il cartello di un punto che sta a `groundElevM` sul livello del mare, perché
- * il suo filo misuri all'incirca MARKER_LIFT_TARGET_PX nell'inquadratura corrente.
- *
- * Torna una quota ASSOLUTA (sul livello del mare), pronta per projectWorldMarker.
- */
-export function visionMarkerAltitudeM(groundElevM: number, lat: number, worldSize: number, liftPx = MARKER_LIFT_TARGET_PX): number {
-  const ppm = pixelsPerMeterAt(lat, worldSize)
-  const wanted = ppm > 1e-9 ? liftPx / ppm : MARKER_MIN_HEIGHT_M
-  return groundElevM + Math.min(MARKER_MAX_HEIGHT_M, Math.max(MARKER_MIN_HEIGHT_M, wanted))
-}
-
-function mercatorX(lon: number): number { return (180 + lon) / 360 }
-
-/**
- * Proietta un punto SOSPESO nel mondo (lat, lon, quota sul livello del mare) in pixel CSS del
- * fotogramma, usando la matrice vista-proiezione della mappa (`transform.modelViewProjectionMatrix`
- * di MapLibre — colonne, non righe, come ogni matrice WebGL/glMatrix).
- *
- * `map.project()` non basta: sa proiettare solo un punto SUL terreno. Qui il punto sta a una quota
- * fissa SOPRA il terreno — vedi VISION_MARKER_HEIGHT_M — e serve la proiezione prospettica vera
- * perché il cartello si muova sullo schermo come un oggetto 3D reale quando la telecamera gira o
- * si avvicina, non come un'etichetta incollata al display.
- *
- * ATTENZIONE alle unità di ingresso, che non sono quelle che il nome "mercator" farebbe supporre e
- * sono costate la prima versione di questa funzione (i cartelli non comparivano mai). La matrice
- * di MapLibre — vedi `_calcMatrices` in mercator_transform — si costruisce così:
- *
- *     translate(m, [-x, -y, 0])      con x,y = mercatore × worldSize   → PIXEL DI MONDO
- *     scale(m, [1, 1, pixelPerMeter])                                  → z in METRI
- *     translate(m, [0, 0, -elevation])
- *
- * quindi vuole x,y in pixel di mondo (mercatore normalizzato MOLTIPLICATO per `worldSize`, che a
- * zoom 14 vale già ~8,4 milioni) e z in metri sul livello del mare, non in unità mercatore. Passare
- * il mercatore normalizzato — l'errore della prima versione — collassava ogni cartello vicino
- * all'origine del mondo, cioè dietro la telecamera: `w` usciva negativo e la funzione tornava
- * `null` per tutti, sempre. Da qui il parametro `worldSize`, che il chiamante legge da
- * `transform.worldSize`.
- *
- * Torna null quando il punto è dietro la telecamera (w ≤ 0): oltre quel limite la divisione
- * prospettica specchierebbe le coordinate, facendo comparire un fantasma del cartello dalla parte
- * opposta del fotogramma — capita normalmente quando il volo supera un cartello incontrato prima.
- */
-export function projectWorldMarker(
-  matrix: ArrayLike<number>,
-  lat: number, lon: number, altitudeM: number,
-  viewport: { width: number; height: number; worldSize: number },
-): { x: number; y: number } | null {
-  const x = mercatorX(lon) * viewport.worldSize
-  const y = mercatorY(lat) * viewport.worldSize
-  const z = altitudeM
-  const m = matrix
-  const cx = m[0] * x + m[4] * y + m[8] * z + m[12]
-  const cy = m[1] * x + m[5] * y + m[9] * z + m[13]
-  const cw = m[3] * x + m[7] * y + m[11] * z + m[15]
-  if (!Number.isFinite(cw) || cw <= 1e-9) return null
-  return {
-    x: (cx / cw * 0.5 + 0.5) * viewport.width,
-    y: (1 - (cy / cw * 0.5 + 0.5)) * viewport.height,
-  }
+/** Lunghezza del filo per l'inclinazione corrente della telecamera. */
+export function visionMarkerLiftPx(pitchDeg: number, sc: number): number {
+  const s = Math.abs(Math.sin((pitchDeg || 0) * Math.PI / 180))
+  return Math.max(VISION_MARKER_MIN_LIFT_PX, VISION_MARKER_LIFT_PX * s) * sc
 }
 
 /**
@@ -489,3 +432,17 @@ export function visionMarkerEdgeFade(
   const my = Math.min(y, height - y) / margin
   return Math.max(0, Math.min(1, Math.min(mx, my)))
 }
+
+/**
+ * Metri di terreno per pixel di schermo, alla latitudine e allo zoom correnti.
+ *
+ * Serve a capire se un punto è dentro il mondo inquadrato o dall'altra parte dell'orizzonte:
+ * `map.project()` di un punto DIETRO la telecamera restituisce coordinate specchiate, che senza un
+ * controllo potrebbero cadere dentro il fotogramma e far comparire il fantasma di un cartello nel
+ * posto sbagliato.
+ */
+export function metersPerPixelAt(lat: number, worldSize: number): number {
+  return (EARTH_CIRCUMFERENCE_M * Math.cos(lat * Math.PI / 180)) / Math.max(1, worldSize)
+}
+
+const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * 6378137
