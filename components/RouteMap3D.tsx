@@ -19,6 +19,11 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY, maptilerRasterTileUrl } from '@/lib/mapStyles'
+import {
+  computeVideoBudget, speedForTargetTotal, initialSpeedFor, clampSpeed,
+  speedFromSlider, sliderFromSpeed, formatSpeed, formatTotal,
+  INTRO_SEC, INTRO_FAST_SEC, OUTRO_SEC, MIN_ROUTE_SEC,
+} from '@/lib/videoBudget'
 import { getSunPosition, terrainSunLook, type TerrainSunLook } from '@/lib/daylight'
 import {
   buildCumulativeDistances, progressToDistanceM, distanceMToProgress, buildJourneyTables, groupPhotoTimings,
@@ -59,12 +64,18 @@ const SPEEDS = [
   { label: '3×', v: 3   },
 ]
 
+// I preset non fissano più una durata: nel nuovo modello la durata è la somma delle parti (vedi
+// lib/videoBudget.ts), quindi un preset che dichiarasse "30s" mentirebbe appena si accende
+// un'opzione. Dichiarano invece il BERSAGLIO a cui portare il totale — da cui si ricava la
+// velocità del cursore — e il ritmo dell'intro. Sono diventati stili editoriali: "Snappy" vuole un
+// video corto e nervoso, "Epico" uno disteso, e la velocità è la conseguenza di quella intenzione
+// su QUESTO percorso, non un numero uguale per tutti.
 const VIDEO_PRESETS = {
-  reels:  { duration: 30, styleIdx: 1, orientation: '9:16'   as const, label: 'Reels',    desc: '9:16 · 1080×1920',   grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  feed45: { duration: 30, styleIdx: 1, orientation: '4:5'    as const, label: 'Feed 4:5', desc: '4:5 · 1080×1350',    grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  feed11: { duration: 30, styleIdx: 1, orientation: '1:1'    as const, label: 'Feed 1:1', desc: '1:1 · 1080×1080',    grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  epico:  { duration: 30, styleIdx: 0, orientation: '9:16'   as const, label: 'Epico',    desc: '9:16 · cinematico',   grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
-  snappy: { duration: 15, styleIdx: 1, orientation: '9:16'   as const, label: 'Snappy',   desc: '9:16 · social-ready', grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
+  reels:  { targetSec: 30, fastIntro: true,  styleIdx: 1, orientation: '9:16'   as const, label: 'Reels',    desc: '9:16 · ~30s',        grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  feed45: { targetSec: 30, fastIntro: true,  styleIdx: 1, orientation: '4:5'    as const, label: 'Feed 4:5', desc: '4:5 · ~30s',         grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  feed11: { targetSec: 30, fastIntro: true,  styleIdx: 1, orientation: '1:1'    as const, label: 'Feed 1:1', desc: '1:1 · ~30s',         grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  epico:  { targetSec: 60, fastIntro: false, styleIdx: 0, orientation: '9:16'   as const, label: 'Epico',    desc: '9:16 · disteso',      grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
+  snappy: { targetSec: 15, fastIntro: true,  styleIdx: 1, orientation: '9:16'   as const, label: 'Snappy',   desc: '9:16 · corto e teso', grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
 } as const
 
 
@@ -574,7 +585,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Video config
   const [videoState,        setVideoState]       = useState<VideoState>(initialVideoState ?? 'idle')
   const [videoStep,         setVideoStep]        = useState(0)   // passo corrente del wizard, vedi WIZARD_STEPS
-  const [videoDuration,     setVideoDuration]    = useState(30)
+  // Velocità del cursore lungo il tracciato, in km di percorso per secondo di video: è QUESTO il
+  // parametro che si imposta. La durata del video non si sceglie più, è la somma delle parti —
+  // vedi lib/videoBudget.ts. Il valore iniziale si adatta al percorso (effetto più sotto): fisso
+  // sarebbe assurdo su un giro da 25 km tanto quanto su uno da 2.
+  const [videoSpeedKmS,     setVideoSpeedKmS]    = useState(0.35)
+  const speedInitedRef = useRef<string | null>(null)
   const [videoOrientation,  setVideoOrientation] = useState<'9:16'|'4:5'|'1:1'|'1.91:1'|'16:9'>('9:16')
   const [videoFps,          setVideoFps]         = useState<30|60>(30)
   const [coverPhotoId,      setCoverPhotoId]      = useState<string|null>(null)
@@ -843,7 +859,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Foto in attesa di conferma di eliminazione — vedi il bottone a due tempi nell'elenco foto.
   const [pendingDeletePhotoId, setPendingDeletePhotoId] = useState<string|null>(null)
   // Foto escluse dal video (di default nessuna, cioè tutte incluse) — non persistito: è una
-  // preferenza per-generazione, come videoPreset/videoDuration/ecc., non un dato della foto stessa.
+  // preferenza per-generazione, come videoPreset/videoSpeedKmS/ecc., non un dato della foto stessa.
   const [videoExcludedPhotoIds, setVideoExcludedPhotoIds] = useState<Set<string>>(new Set())
   const togglePhotoIncluded = (id: string) => setVideoExcludedPhotoIds(prev => {
     const next = new Set(prev)
@@ -977,45 +993,175 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // soste foto, stacchi, intro e finale si aggiungono, e con qualche foto il totale arriva al
   // doppio. Chi imposta 30s si aspetta 30s, quindi il numero vero va mostrato dov'è la manopola.
   // Un'unica fonte per lo slider, il riepilogo e gli avvisi, così non possono divergere.
-  const videoEstimate = useMemo(() => {
-    // Le foto vicine diventano UNA sosta sola (vedi groupPhotoTimings): contarle una per una
-    // gonfierebbe la stima proprio nel caso in cui il raggruppamento serve di più.
-    const stops = groupPhotoTimings(carouselPhotoTimings, PHOTO_GROUP_GAP_M)
-    const introSec = videoHookFastIntro ? Math.max(1.1, videoDuration * 0.05) : Math.max(2, videoDuration * 0.08)
-    const outroSec = Math.max(3, videoDuration * 0.17)
-    let routeSec = videoDuration
-    if (videoPhotoStyle === 'carousel') {
-      const cruiseMps = totalDistanceM > 0 ? totalDistanceM / Math.max(5, videoDuration) : 3.5
-      const journey = buildJourneyTables(videoFps, cumDist, totalDistanceM, stops, photoDurationSec, cruiseMps)
-      // Nel Carosello le soste sono già dentro le tabelle del viaggio
-      routeSec = journey.totalFrames / videoFps
-    }
-    const photoSec = videoPhotoStyle === 'carousel' ? 0 : stops.length * photoDurationSec
-    // Fuori dall'Illustrativo l'unico stacco che va in onda è la Visione — stessa regola di
-    // interludeSettingsForMode nella generazione. Contarli tutti darebbe una stima più lunga del
-    // video che verrà davvero prodotto.
-    const beatSec = videoInterludes
+  /**
+   * Quali stacchi (fra quelli accesi ora) troveranno davvero un varco nel montaggio, con la durata
+   * e le foto attuali — la stessa domanda che planInterludes si pone in fase di generazione, posta
+   * qui in anteprima.
+   *
+   * Nasce da un difetto reale: uno stacco acceso può restare fuori dal video senza che nulla lo
+   * segnali — planInterludes lo scarta in silenzio quando non trova un intervallo abbastanza
+   * lungo e libero da foto, e prima di questo controllo l'utente lo scopriva solo guardando il
+   * video finito, senza sapere il perché. Qui si rifà lo stesso calcolo (stessa formula di
+   * ROUTE_FRAMES/photoBusyFrames vista in goToRendering) sui dati correnti del wizard, così il
+   * wizard può dirlo PRIMA di generare — e dire anche perché: quasi sempre sono le foto a occupare
+   * lo spazio, la causa più comune e meno intuitiva da collegare all'effetto.
+   */
+  const fittingInterludesAt = useCallback((speedKmS: number) => {
+    const fps = videoFps
+    const photoReveal = Math.round(fps * photoDurationSec)
+    const isCarouselPreview = videoPhotoStyle === 'carousel'
+    const sorted = [...routePhotos].filter(ph => !videoExcludedPhotoIds.has(ph.id)).sort((a, b) => a.progress - b.progress)
+    const stops = groupPhotoTimings(
+      sorted.map(ph => ({ id: ph.id, progress: ph.progress, distanceM: progressToDistanceM(ph.progress, cumDist) })),
+      PHOTO_GROUP_GAP_M,
+    )
+    // La velocità è ora il parametro primario: i metri al secondo del cursore SONO la velocità
+    // scelta, non più un valore ricavato da una durata bersaglio.
+    const cruiseMps = speedKmS * 1000
+    const journey = isCarouselPreview
+      ? buildJourneyTables(fps, cumDist, totalDistanceM, stops, photoDurationSec, cruiseMps)
+      : null
+    const routeFrames = journey
+      ? journey.totalFrames
+      : Math.round(fps * Math.max(MIN_ROUTE_SEC, (totalDistanceM / 1000) / clampSpeed(speedKmS)))
+    const triggerFrames = isCarouselPreview ? [] : stops.map(g => Math.round(g.progress * routeFrames))
+    const photoFrames = isCarouselPreview && journey
+      ? stops.map((_, i) => {
+          let start = -1, end = -1
+          for (let f = 0; f < routeFrames; f++) { if (journey.stopIndexTable[f] === i) { if (start < 0) start = f; end = f + 1 } }
+          return start >= 0 ? { start, end } : null
+        }).filter((x): x is { start: number; end: number } => !!x)
+      : triggerFrames.map(at => ({ start: at, end: at + photoReveal }))
+
+    const isIllustrativoPreview = videoMode === 'illustrativo'
+    const settingsForMode = isIllustrativoPreview ? videoInterludes : videoInterludes.filter(i => i.kind === 'visione')
+    const planned = planInterludes(settingsForMode, {
+      fps, routeFrames, photoFrames, breathFrames: Math.round(fps * 4),
+      available: (kind) => {
+        switch (kind) {
+          case 'tei':     return !!beautyScore?.categories?.length
+          case 'avvisi':  return normalizeGuideNotices(guide?.notices).length > 0
+          case 'luoghi':  return (pois?.length ?? 0) > 0
+          case 'profilo': return altitudeSeries.length > 1
+          case 'visione': return visionFeatures.length > 0
+          default: return true
+        }
+      },
+    })
+    return new Set(planned.map(pl => pl.kind))
+  }, [videoFps, photoDurationSec, videoPhotoStyle, routePhotos, videoExcludedPhotoIds, cumDist,
+      totalDistanceM, videoMode, videoInterludes, beautyScore, guide?.notices, pois,
+      altitudeSeries, visionFeatures])
+
+  /** Gli stacchi che entrano alla velocità attualmente scelta. */
+  const interludeFitPreview = useMemo(() => fittingInterludesAt(videoSpeedKmS), [fittingInterludesAt, videoSpeedKmS])
+
+  /** Secondi di stacchi che finiranno davvero nel video a una data velocità. */
+  const interludeSecAt = useCallback((speedKmS: number) => {
+    const fit = fittingInterludesAt(speedKmS)
+    return videoInterludes
       .filter(i => i.enabled && (videoMode === 'illustrativo' || i.kind === 'visione'))
+      .filter(i => fit.has(i.kind))
       .reduce((a, i) => a + i.seconds, 0)
-    const total = introSec + routeSec + photoSec + beatSec + outroSec
-    // "Fermo" = tempo in cui la telecamera non avanza: soste foto e pannelli. Contare solo gli
-    // stacchi, come faceva l'avviso di prima, nascondeva il caso peggiore — quello con molte foto.
-    const stillSec = beatSec + (videoPhotoStyle === 'carousel' ? stops.length * photoDurationSec : photoSec)
+  }, [fittingInterludesAt, videoInterludes, videoMode])
+
+  const photoStopCount = useMemo(
+    () => groupPhotoTimings(carouselPhotoTimings, PHOTO_GROUP_GAP_M).length,
+    [carouselPhotoTimings],
+  )
+
+  /**
+   * La velocità che porta il totale al bersaglio — risolta per iterazione, non in un colpo solo.
+   *
+   * Serve perché le due grandezze si inseguono: quanti stacchi entrano nel montaggio dipende da
+   * quanto è lungo il volo, e quanto è lungo il volo dipende dalla velocità che sto cercando.
+   * Risolvendo una volta sola con gli stacchi che entrano ADESSO si ottiene una velocità che, una
+   * volta applicata, ne fa entrare di meno — e il video esce più corto del bersaglio. Misurato su
+   * un caso reale (8,4 km, 5 soste, tre stacchi accesi): il bersaglio "60s" consegnava 46,5s.
+   *
+   * Poche iterazioni bastano, ma non si assume che convergano: si tengono tutti i candidati e si
+   * sceglie quello il cui totale VERO è più vicino al bersaglio. Così anche un caso che oscilla —
+   * uno stacco che entra a una velocità ed esce a quella successiva — dà comunque il risultato
+   * migliore disponibile invece dell'ultimo per caso.
+   */
+  const solveSpeedForTarget = useCallback((targetSec: number): number | null => {
+    const base = {
+      routeDistanceM: totalDistanceM,
+      fastIntro: videoHookFastIntro,
+      photoStops: photoStopCount,
+      photoStopSec: photoDurationSec,
+    }
+    const totalAt = (speedKmS: number) => computeVideoBudget({
+      ...base, speedKmS, interludeSec: interludeSecAt(speedKmS),
+    }).totalSec
+
+    let interludeSec = interludeSecAt(videoSpeedKmS)
+    const candidates: number[] = []
+    for (let i = 0; i < 5; i++) {
+      const next = speedForTargetTotal(targetSec, { ...base, interludeSec })
+      if (next == null) break
+      candidates.push(next)
+      const nextInterludeSec = interludeSecAt(next)
+      if (Math.abs(nextInterludeSec - interludeSec) < 1e-9) break
+      interludeSec = nextInterludeSec
+    }
+    if (candidates.length === 0) return null
+    return candidates.reduce((best, c) =>
+      Math.abs(totalAt(c) - targetSec) < Math.abs(totalAt(best) - targetSec) ? c : best)
+  }, [totalDistanceM, videoHookFastIntro, photoStopCount, photoDurationSec, interludeSecAt, videoSpeedKmS])
+
+  /**
+   * Da cosa è fatta la durata del video, voce per voce — vedi lib/videoBudget.ts.
+   *
+   * Non è più una stima che rincorre uno slider "durata": è il calcolo vero, e il totale che
+   * mostra è quello che verrà generato. Le soste si contano per GRUPPO (le foto vicine si aprono
+   * insieme) e gli stacchi solo per quelli che troveranno davvero posto nel montaggio — contare
+   * quelli accesi ma scartati darebbe un totale più lungo del video reale.
+   */
+  const videoEstimate = useMemo(() => {
+    const stops = groupPhotoTimings(carouselPhotoTimings, PHOTO_GROUP_GAP_M)
+    const interludeSec = videoInterludes
+      .filter(i => i.enabled && (videoMode === 'illustrativo' || i.kind === 'visione'))
+      .filter(i => interludeFitPreview.has(i.kind))
+      .reduce((a, i) => a + i.seconds, 0)
+    const budget = computeVideoBudget({
+      routeDistanceM: totalDistanceM,
+      speedKmS: videoSpeedKmS,
+      fastIntro: videoHookFastIntro,
+      photoStops: stops.length,
+      photoStopSec: photoDurationSec,
+      interludeSec,
+    })
     return {
-      total: Math.round(total),
+      ...budget,
+      total: Math.round(budget.totalSec),
       stops: stops.length,
       photos: carouselPhotoTimings.length,
-      beatSec,
-      stillSec: Math.round(stillSec),
-      stillPct: total > 0 ? Math.round((stillSec / total) * 100) : 0,
+      beatSec: interludeSec,
     }
-  }, [carouselPhotoTimings, cumDist, totalDistanceM, photoDurationSec, videoDuration, videoFps,
-      videoPhotoStyle, videoHookFastIntro, videoMode, videoInterludes])
+  }, [carouselPhotoTimings, totalDistanceM, photoDurationSec, videoSpeedKmS,
+      videoHookFastIntro, videoMode, videoInterludes, interludeFitPreview])
 
-  /** Contenuto reale di ogni stacco su QUESTA escursione, per calcolarne la durata consigliata.
-   *  Vedi recommendedInterludeSeconds: la durata giusta è quanto ci vuole a leggere ciò che c'è
-   *  dentro, e cambia da percorso a percorso — tre avvisi lunghi non si leggono nel tempo di
-   *  quattro numeri. */
+  /** Applica il ritmo di un preset: porta il totale al bersaglio dichiarato risolvendo per la
+   *  velocità, con le opzioni accese in questo momento. Se il bersaglio è irraggiungibile (soste e
+   *  stacchi da soli lo superano già) si prende la velocità più alta disponibile — il video sarà
+   *  più lungo del preset, e il totale in cima lo dice apertamente invece di far finta di niente. */
+  const applyPresetPacing = (pr: keyof typeof VIDEO_PRESETS) => {
+    const cfg = VIDEO_PRESETS[pr]
+    setVideoHookFastIntro(cfg.fastIntro)
+    setVideoSpeedKmS(solveSpeedForTarget(cfg.targetSec) ?? clampSpeed(Infinity))
+  }
+
+  // Velocità iniziale tarata sul percorso: un valore fisso darebbe un video di dieci secondi su un
+  // giro da 2 km e di quattro minuti su uno da 25. Si imposta una sola volta per percorso — dopo
+  // comanda l'utente, e non va sovrascritta a ogni foto aggiunta o opzione accesa.
+  useEffect(() => {
+    const key = `${trackPoints.length}:${Math.round(totalDistanceM)}`
+    if (speedInitedRef.current === key || totalDistanceM <= 0) return
+    speedInitedRef.current = key
+    setVideoSpeedKmS(initialSpeedFor(totalDistanceM, 30, { fastIntro: videoHookFastIntro }))
+  }, [totalDistanceM, trackPoints.length, videoHookFastIntro])
+
   const interludeContent = useMemo((): Record<InterludeKind, InterludeContent> => {
     const countWords = (t: string) => t.trim().split(/\s+/).filter(Boolean).length
     const notices = normalizeGuideNotices(guide?.notices).slice(0, 3)   // drawNoticesBeat ne mostra 3
@@ -1358,7 +1504,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           if (remaining <= 0) { carouselStopUntilRef.current = null }
           else { stopTVal = 1 - remaining / stopMs; stoppedPhotoIdx = carouselNextPhotoRef.current - 1 }
         } else {
-          const cruiseMps = totalDistanceM > 0 ? totalDistanceM / Math.max(5, videoDuration) : 3.5
+          const cruiseMps = videoSpeedKmS * 1000
           carouselTraveledMRef.current += cruiseMps * dt / 1000
           const nextPhoto = carouselPhotoTimings[carouselNextPhotoRef.current]
           if (nextPhoto && carouselTraveledMRef.current >= nextPhoto.distanceM) {
@@ -1425,7 +1571,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       cancelAnimationFrame(animRef.current)
       if(poiOpenTimeoutRef.current){clearTimeout(poiOpenTimeoutRef.current);poiOpenTimeoutRef.current=null}
     }
-  },[isPlaying,speedIdx,showPois,pois,previewingCarousel,carouselPhotoTimings,cumDist,totalDistanceM,videoDuration,photoDurationSec,routePhotos])
+  },[isPlaying,speedIdx,showPois,pois,previewingCarousel,carouselPhotoTimings,cumDist,totalDistanceM,videoSpeedKmS,photoDurationSec,routePhotos])
 
   const reset=useCallback(()=>{
     cancelAnimationFrame(animRef.current); isPlayingRef.current=false; progressRef.current=0
@@ -2233,9 +2379,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // Intro: fixed duration where p=0 (route frozen, camera swoops in) — più breve se il toggle
     // "intro rapida" è attivo (Sezione 4: un'apertura lenta è il motivo #1 per cui si scrolla via
     // sui social), altrimenti la durata originale.
-    const INTRO_FRAMES = videoHookFastIntro
-      ? Math.round(TARGET_FPS * Math.max(1.1, videoDuration * 0.05))
-      : Math.round(TARGET_FPS * Math.max(2, videoDuration * 0.08))
+    // Assoluti, non più una frazione della durata: nel nuovo modello la durata è la SOMMA delle
+    // parti, quindi farne dipendere una parte sarebbe circolare. Ed è comunque la scelta giusta —
+    // la soglia oltre cui un'apertura "è lunga" sta nell'attenzione di chi guarda, non nella
+    // lunghezza del video. Vedi lib/videoBudget.ts.
+    const INTRO_FRAMES = Math.round(TARGET_FPS * (videoHookFastIntro ? INTRO_FAST_SEC : INTRO_SEC))
     const isCarousel = videoPhotoStyle === 'carousel'
     // In modalità Illustrativo il soggetto è il percorso: niente pin utente, niente dati corporei,
     // e i POI diventano protagonisti invece che decorazione.
@@ -2250,7 +2398,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       id: s.photo.id, progress: s.photo.progress, distanceM: progressToDistanceM(s.photo.progress, cumDist),
     }))
     // Outro: separate phase after route completes (~17% of route duration, min 3s)
-    const OUTRO_FRAMES = Math.round(TARGET_FPS * Math.max(3, videoDuration * 0.17))
+    const OUTRO_FRAMES = Math.round(TARGET_FPS * OUTRO_SEC)
 
     renderedFramesRef.current = 0
     encodedFramesRef.current  = 0
@@ -2317,13 +2465,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // photoDurationSec), poi viaggio verso la successiva a ritmo costante rispetto alla distanza
     // REALE (cruiseMps, derivato dallo slider "durata" come riferimento di ritmo, non più un
     // traguardo fisso — la durata effettiva del video ne è una conseguenza). "Classico": invariato,
-    // percorso a ritmo costante per esattamente videoDuration secondi, con la pausa a schermo
+    // percorso a ritmo costante alla velocità scelta, con la pausa a schermo
     // intero aggiunta per ogni foto (vedi il branch "Classico" più sotto).
-    const cruiseMps = totalDistanceM > 0 ? totalDistanceM / Math.max(5, videoDuration) : 3.5
+    const cruiseMps = videoSpeedKmS * 1000
     const journey = isCarousel
       ? buildJourneyTables(TARGET_FPS, cumDist, totalDistanceM, photoStops, photoDurationSec, cruiseMps)
       : null
-    const ROUTE_FRAMES = journey ? journey.totalFrames : Math.round(TARGET_FPS * videoDuration)
+    const ROUTE_FRAMES = journey
+      ? journey.totalFrames
+      : Math.round(TARGET_FPS * Math.max(MIN_ROUTE_SEC, (totalDistanceM / 1000) / clampSpeed(videoSpeedKmS)))
     const photoTriggerRouteFrames = isCarousel ? [] : photoStops.map(g => Math.round(g.progress * ROUTE_FRAMES))
     // Le componenti TEI arrivano già pronte in linkedBeautyScore (vedi teiToBeautyScore in
     // lib/tei.ts): le cinque V_* su scala 0-10, e f_antr come frazione di penalità.
@@ -2431,7 +2581,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
       },
     })
-    const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : sortedPhotos.length * PHOTO_REVEAL_FRAMES) + interludeTotalFrames(plannedInterludes) + OUTRO_FRAMES
+    // photoStops, non sortedPhotos: le pause reali sono una per GRUPPO di foto vicine (vedi la
+    // lista `pauses` più sotto, costruita su photoStops). Contare le foto una per una allocava
+    // fotogrammi che nessuna pausa avrebbe mai occupato, e quel surplus finiva nel ramo del finale
+    // con outroP già saturo a 1 — cioè in una coda di fotogrammi congelati in fondo al video, tanto
+    // più lunga quanto più le foto erano raggruppate. Con 5 foto in 2 soste erano 9 secondi di
+    // immagine ferma. Ora il totale allocato coincide con quello consumato.
+    const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + (isCarousel ? 0 : photoStops.length * PHOTO_REVEAL_FRAMES) + interludeTotalFrames(plannedInterludes) + OUTRO_FRAMES
 
     // Anteprima veloce (Sezione 4, debug): renderizza solo una finestra di fotogrammi centrale al
     // percorso invece del video intero — pensata per riprodurre in pochi secondi un bug legato a
@@ -2453,7 +2609,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       if (curIdx >= 0) photoWindows.push({ start: followBase + curStart, end: followBase + journey.totalFrames })
     } else if (!isCarousel) {
       let pauseOffset = 0
-      for (let i = 0; i < sortedPhotos.length; i++) {
+      // Su photoStops, come la lista `pauses`: photoTriggerRouteFrames è indicizzato per gruppo,
+      // quindi iterare sulle singole foto leggeva indici inesistenti oltre il numero di soste.
+      for (let i = 0; i < photoStops.length; i++) {
         const triggerF = photoTriggerRouteFrames[i] + pauseOffset
         photoWindows.push({ start: followBase + triggerF, end: followBase + triggerF + PHOTO_REVEAL_FRAMES })
         pauseOffset += PHOTO_REVEAL_FRAMES
@@ -3510,7 +3668,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       console.error(`[dtrek] preparazione video fallita (fase: ${prepStageRef.current}):`, err)
       failRendering(prepErrorMessage(prepStageRef.current, err))
     }
-  },[videoDuration,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,videoElevMarkersEnabled,videoLoopEnding,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
+  },[videoSpeedKmS,videoFps,videoOrientation,videoShowTitle,videoShowStats,videoShowProgress,title,routePhotos,videoExcludedPhotoIds,videoPreset,altitudeSeries,photoDurationSec,zoomIntro,zoomFollow,zoomOutro,pois,videoShowPois,videoPhotoStyle,videoHookFastIntro,videoHyperlapseEnabled,videoMode,videoPoiIncludeSensitive,videoPoiRequireImage,poiWiki,guide,videoInterludes,videoCaptions,videoElevMarkersEnabled,videoLoopEnding,beautyScore,videoShowUserPin,videoHeartEffectEnabled,videoPinEffortColorEnabled,videoArrivalStarsEnabled,videoMilestonesEnabled,videoTrailEnabled,videoPhotoMarksEnabled,videoOdometerEnabled,videoPeakMomentEnabled,videoSlopeShadowEnabled,videoMiniMapEnabled,cumDist,totalDistanceM])
 
   const cancelRendering=useCallback(()=>{
     renderAbortRef.current=true; cancelAnimationFrame(animRef.current)
@@ -3844,6 +4002,47 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     className={`flex-1 h-1.5 rounded-full transition-colors ${i===videoStep?'bg-terra-400':i<videoStep?'bg-forest-500':'bg-white/15 hover:bg-white/25'}`}/>
                 ))}
               </div>
+
+              {/* Durata totale, sempre in vista in OGNI passo — è il senso del nuovo modello: non
+                  si imposta una durata, la si compone, quindi ogni opzione accesa o spenta deve
+                  avere un effetto visibile nel momento in cui la si tocca, non alla fine.
+                  La barra sotto il numero mostra DI COSA è fatta: è lì che si legge cosa togliere
+                  per accorciare, cosa che il solo numero non può dire. */}
+              {(()=>{
+                const est = videoEstimate
+                const parts: { key: string; label: string; sec: number; color: string }[] = [
+                  { key:'intro', label:'intro',   sec: est.introSec,     color:'#64748b' },
+                  { key:'volo',  label:'volo',    sec: est.routeSec,     color:'#22c55e' },
+                  { key:'foto',  label:'soste',   sec: est.photoSec,     color:'#f59e0b' },
+                  { key:'beat',  label:'stacchi', sec: est.interludeSec, color:'#38bdf8' },
+                  { key:'fine',  label:'finale',  sec: est.outroSec,     color:'#64748b' },
+                ].filter(p=>p.sec>0.05)
+                const over = est.total > 60
+                return (
+                  <div className="mt-3">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-white/45 text-[10px] font-bold tracking-[0.14em]">DURATA TOTALE</span>
+                      <span className={`text-lg font-black tabular-nums leading-none ${over?'text-terra-300':'text-white'}`}>
+                        {formatTotal(est.totalSec)}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 flex h-1.5 rounded-full overflow-hidden bg-white/10">
+                      {parts.map(pt=>(
+                        <div key={pt.key} title={`${pt.label}: ${Math.round(pt.sec)}s`}
+                          style={{ width:`${(pt.sec/Math.max(1,est.totalSec))*100}%`, background:pt.color }}/>
+                      ))}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                      {parts.map(pt=>(
+                        <span key={pt.key} className="flex items-center gap-1 text-[10px] text-white/45">
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:pt.color}}/>
+                          {pt.label} {Math.round(pt.sec)}s
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Esito di un tentativo fallito. Non un toast che sparisce dopo qualche secondo: il
@@ -3898,7 +4097,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     {(['reels','feed45','feed11'] as const).map(pr=>(
                       <button key={pr} onClick={()=>{
                         setVideoPreset(pr)
-                        setVideoDuration(VIDEO_PRESETS[pr].duration)
+                        applyPresetPacing(pr)
                         switchStyle(VIDEO_PRESETS[pr].styleIdx)
                         setVideoOrientation(VIDEO_PRESETS[pr].orientation)
                         setVideoFps(30)
@@ -3913,7 +4112,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     {(['epico','snappy'] as const).map(pr=>(
                       <button key={pr} onClick={()=>{
                         setVideoPreset(pr)
-                        setVideoDuration(VIDEO_PRESETS[pr].duration)
+                        applyPresetPacing(pr)
                         switchStyle(VIDEO_PRESETS[pr].styleIdx)
                         setVideoOrientation(VIDEO_PRESETS[pr].orientation)
                         setVideoFps(30)
@@ -3983,47 +4182,73 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
 
                 <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">RITMO</p>
-                  <label className="flex items-center gap-2 cursor-pointer mb-1">
+                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">VELOCITÀ DEL CURSORE</p>
+                  <p className="text-white/30 text-[11px] mb-3 leading-relaxed">
+                    Quanto percorso scorre in un secondo di video. La durata non si imposta più: è la somma di questa velocità e di tutto ciò che accendi — la trovi sempre in cima.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <input type="range" min={0} max={1} step={0.001}
+                      value={sliderFromSpeed(videoSpeedKmS)}
+                      onChange={e=>{ setVideoSpeedKmS(speedFromSlider(+e.target.value)); setVideoPreset('custom') }}
+                      className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
+                    <span className="text-white text-xs font-bold tabular-nums w-[4.8rem] text-right">{formatSpeed(videoSpeedKmS)}</span>
+                  </div>
+                  <p className="text-white/40 text-[11px] mt-1.5 leading-relaxed">
+                    Il percorso scorre in ~{Math.round(videoEstimate.routeSec)}s{videoEstimate.stillSec>0?`, più ${Math.round(videoEstimate.stillSec)}s a telecamera ferma fra foto e pannelli`:''}.
+                  </p>
+
+                  {/* Bersagli: l'altra direzione del modello. La velocità resta il controllo, ma
+                      quando serve un video "da 30 secondi" — perché va pubblicato da qualche parte —
+                      si preme il bersaglio e la velocità ci si adegua. Un bersaglio irraggiungibile
+                      con le opzioni accese si disabilita, invece di consegnare una velocità che non
+                      mantiene la promessa. */}
+                  <p className="text-white/45 text-[11px] font-semibold mt-4 mb-1.5 tracking-wider">OPPURE PORTA IL TOTALE A</p>
+                  <div className="flex gap-2">
+                    {[15,30,60,90].map(target=>{
+                      const solved = solveSpeedForTarget(target)
+                      const active = Math.abs(videoEstimate.totalSec - target) < 0.6
+                      return (
+                        <button key={target} disabled={solved==null}
+                          onClick={()=>{ if(solved!=null){ setVideoSpeedKmS(solved); setVideoPreset('custom') } }}
+                          title={solved==null?'Con le opzioni accese questo totale non è raggiungibile: intro, finale, soste e stacchi da soli lo superano già':undefined}
+                          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                            solved==null ? 'bg-white/5 text-white/25 cursor-not-allowed'
+                            : active ? 'bg-forest-500 text-white' : 'bg-white/10 text-white/70 hover:bg-white/20'}`}>
+                          {target}s
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer mt-4">
                     <input type="checkbox" checked={videoHookFastIntro} onChange={e=>setVideoHookFastIntro(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
                     <span className="text-white text-xs font-semibold">Intro aerea più rapida</span>
                   </label>
-                  <p className="text-white/30 text-[11px] mb-3 pl-6 leading-relaxed">
-                    Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, il volo iniziale si accorcia e il percorso parte prima.
+                  <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
+                    Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, il volo iniziale dura {INTRO_FAST_SEC}s invece di {INTRO_SEC}s.
                   </p>
-                  <div className="flex gap-2">
-                    {[15,30,60,90].map(d=>(
-                      <button key={d} onClick={()=>setVideoDuration(d)}
-                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoDuration===d?'bg-forest-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                        {d}s
-                      </button>
-                    ))}
-                  </div>
+
                   {(()=>{
                     const est = videoEstimate
                     const over = est.total > 60
                     const tooStill = est.stillPct > 45
+                    const grouped = est.photos > est.stops
+                    if (!over && !tooStill && !grouped) return null
                     return (
-                      <div className={`mt-2 rounded-xl px-3.5 py-2.5 ${over||tooStill ? 'bg-terra-500/15 border border-terra-500/35' : 'bg-white/5'}`}>
-                        <p className="text-white text-sm font-bold">
-                          Durata reale del video: ~{est.total}s
-                        </p>
-                        <p className="text-white/45 text-[11px] mt-1 leading-relaxed">
-                          Lo slider qui sopra regola il ritmo del percorso ({videoDuration}s){est.stops>0?`; le ${est.stops===1?'sosta foto aggiunge':`${est.stops} soste foto aggiungono`} tempo`:''}{est.beatSec>0?`, più ${est.beatSec}s di stacchi`:''}, oltre a intro e finale.
-                        </p>
-                        {est.photos>est.stops&&(
-                          <p className="text-forest-300/80 text-[11px] mt-1 leading-relaxed">
+                      <div className={`mt-3 rounded-xl px-3.5 py-2.5 ${over||tooStill ? 'bg-terra-500/15 border border-terra-500/35' : 'bg-white/5'}`}>
+                        {grouped&&(
+                          <p className="text-forest-300/80 text-[11px] leading-relaxed">
                             {est.photos} foto raggruppate in {est.stops} soste: quelle vicine si aprono insieme.
                           </p>
                         )}
                         {over && (
-                          <p className="text-terra-300/85 text-[11px] mt-1 leading-relaxed">
-                            Oltre i 60s Instagram declassa i Reels e i caroselli non lo accettano. Accorcia il percorso, la sosta per foto o gli stacchi.
+                          <p className={`text-terra-300/85 text-[11px] leading-relaxed ${grouped?'mt-1':''}`}>
+                            Oltre i 60s Instagram declassa i Reels e i caroselli non lo accettano. Alza la velocità, accorcia la sosta per foto o spegni qualche stacco.
                           </p>
                         )}
                         {tooStill && (
                           <p className="text-terra-300/85 text-[11px] mt-1 leading-relaxed">
-                            {est.stillSec}s su {est.total}s ({est.stillPct}%) sono a telecamera ferma fra foto e pannelli: il video rischia di sembrare più una presentazione che un viaggio.
+                            {Math.round(est.stillSec)}s su {est.total}s ({est.stillPct}%) sono a telecamera ferma fra foto e pannelli: il video rischia di sembrare più una presentazione che un viaggio.
                           </p>
                         )}
                       </div>
@@ -4411,6 +4636,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       const advised = recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind])
                       const dense = interludeIsDense(iv.kind, interludeContent[iv.kind])
                       const offAdvice = Math.abs(iv.seconds - advised) >= 0.5
+                      // Acceso, con dati da mostrare, ma senza un varco abbastanza lungo e libero
+                      // da foto in cui stare: planInterludes lo scarterebbe in silenzio in fase di
+                      // generazione. Vedi interludeFitPreview per il perché di questo controllo.
+                      const wontFit = iv.enabled && !unavailable && !interludeFitPreview.has(iv.kind)
                       return (
                         <div key={iv.kind} className={`mb-2.5 ${unavailable?'opacity-40':''}`}>
                           <label className={`flex items-center gap-2 ${unavailable?'':'cursor-pointer'}`}>
@@ -4426,6 +4655,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                               ? <span className="text-white/35 text-[10px]">— dati non disponibili</span>
                               : <span className="text-white/30 text-[10px]">· consigliati {advised}s</span>}
                           </label>
+                          {wontFit && (
+                            <p className="pl-6 mt-1 text-amber-300/90 text-[10px] leading-relaxed">
+                              Con la durata e le foto attuali non c&apos;è un momento libero abbastanza lungo: nel video generato questo stacco non comparirà. Sono di solito le foto a occupare lo spazio — prova ad accorciarne la durata, a togliere qualche foto, oppure ad allungare il percorso qui sotto.
+                            </p>
+                          )}
                           {iv.enabled&&!unavailable&&(
                             <div className="pl-6 mt-1.5 space-y-1.5">
                               <div className="flex items-center gap-2">
@@ -4461,12 +4695,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       )
                     })}
                     {(() => {
-                      // Su un percorso corto tre pannelli da cinque secondi diventano metà del video:
-                      // meglio dirlo qui che scoprirlo dopo aver aspettato la generazione.
-                      const secs = videoInterludes.filter(i=>i.enabled).reduce((a,i)=>a+i.seconds,0)
-                      if (secs > videoDuration * 0.5) return (
+                      // Ora si confronta col TOTALE vero, non più con la durata del solo volo: è il
+                      // totale che l'utente vede in cima, ed è rispetto a quello che "metà video di
+                      // pannelli fermi" significa qualcosa.
+                      const secs = videoEstimate.beatSec
+                      if (secs > videoEstimate.totalSec * 0.4) return (
                         <p className="text-terra-300/85 text-[11px] mt-1 leading-relaxed">
-                          {secs}s di pannelli fermi su ~{videoDuration}s di percorso: il video rischia di essere più fermo che in movimento.
+                          {Math.round(secs)}s di pannelli fermi su {formatTotal(videoEstimate.totalSec)} di video: rischia di essere più una presentazione che un viaggio.
                         </p>
                       )
                       return null
@@ -4685,10 +4920,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   ['Foto incluse', includedPhotoCount===0?'nessuna':`${includedPhotoCount}${videoEstimate.stops<includedPhotoCount?` in ${videoEstimate.stops} soste`:''}`],
                   ['Durata reale', `~${est}s${videoEstimate.stillPct>0?` · ${videoEstimate.stillPct}% fermo`:''}`],
                 ]
+                // Fuori dall'Illustrativo l'unico stacco candidato è la Visione — stessa regola di
+                // interludeSettingsForMode in goToRendering. Prima questa riga compariva solo in
+                // Illustrativo, quindi in "Il mio ricordo" la Visione restava fuori dal riepilogo
+                // anche quando accesa: non si vedeva né che ci sarebbe stata né che sarebbe mancata.
+                const beatsForMode = videoMode==='illustrativo' ? videoInterludes : videoInterludes.filter(i=>i.kind==='visione')
+                const onBeats = beatsForMode.filter(i=>i.enabled)
+                const fittingBeats = onBeats.filter(i=>interludeFitPreview.has(i.kind))
+                const droppedBeats = onBeats.filter(i=>!interludeFitPreview.has(i.kind))
+                rows.splice(5, 0,
+                  ['Stacchi', fittingBeats.length ? `${fittingBeats.length} · ${fittingBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
+                )
                 if (videoMode==='illustrativo') {
-                  const onBeats = videoInterludes.filter(i=>i.enabled)
-                  rows.splice(5, 0,
-                    ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
+                  rows.splice(6, 0,
                     ['Luoghi con foto', `${(poiWiki ?? []).filter(e=>!!e.wiki.thumbnail).length}`],
                     ['Didascalie', `${videoCaptions.filter(c=>c.enabled&&c.text.trim()).length}`],
                   )
@@ -4702,6 +4946,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       </div>
                     ))}
                   </div>
+                  {droppedBeats.length > 0 && (
+                    <p className="text-amber-300/90 text-[11px] leading-relaxed -mt-1">
+                      {droppedBeats.length===1
+                        ? `"${INTERLUDE_LABEL[droppedBeats[0].kind]}" è acceso ma non troverà un momento libero abbastanza lungo: non comparirà in questo video.`
+                        : `${droppedBeats.map(b=>`"${INTERLUDE_LABEL[b.kind]}"`).join(' e ')} sono accesi ma non troveranno un momento libero abbastanza lungo: non compariranno in questo video.`}
+                      {' '}Torna al passo <button onClick={()=>goToStep(3)} className="text-terra-300 font-semibold hover:text-terra-200 underline underline-offset-2">Effetti</button> per vedere perché.
+                    </p>
+                  )}
 
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
