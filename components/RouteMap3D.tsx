@@ -1037,6 +1037,62 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     }
   }, [guide?.notices, altitudeSeries, trackPoints, beautyScore, pois, videoEstimate.stops, visionFeatures.length])
 
+  /**
+   * Quali stacchi (fra quelli accesi ora) troveranno davvero un varco nel montaggio, con la durata
+   * e le foto attuali — la stessa domanda che planInterludes si pone in fase di generazione, posta
+   * qui in anteprima.
+   *
+   * Nasce da un difetto reale: uno stacco acceso può restare fuori dal video senza che nulla lo
+   * segnali — planInterludes lo scarta in silenzio quando non trova un intervallo abbastanza
+   * lungo e libero da foto, e prima di questo controllo l'utente lo scopriva solo guardando il
+   * video finito, senza sapere il perché. Qui si rifà lo stesso calcolo (stessa formula di
+   * ROUTE_FRAMES/photoBusyFrames vista in goToRendering) sui dati correnti del wizard, così il
+   * wizard può dirlo PRIMA di generare — e dire anche perché: quasi sempre sono le foto a occupare
+   * lo spazio, la causa più comune e meno intuitiva da collegare all'effetto.
+   */
+  const interludeFitPreview = useMemo(() => {
+    const fps = videoFps
+    const photoReveal = Math.round(fps * photoDurationSec)
+    const isCarouselPreview = videoPhotoStyle === 'carousel'
+    const sorted = [...routePhotos].filter(ph => !videoExcludedPhotoIds.has(ph.id)).sort((a, b) => a.progress - b.progress)
+    const stops = groupPhotoTimings(
+      sorted.map(ph => ({ id: ph.id, progress: ph.progress, distanceM: progressToDistanceM(ph.progress, cumDist) })),
+      PHOTO_GROUP_GAP_M,
+    )
+    const cruiseMps = totalDistanceM > 0 ? totalDistanceM / Math.max(5, videoDuration) : 3.5
+    const journey = isCarouselPreview
+      ? buildJourneyTables(fps, cumDist, totalDistanceM, stops, photoDurationSec, cruiseMps)
+      : null
+    const routeFrames = journey ? journey.totalFrames : Math.round(fps * videoDuration)
+    const triggerFrames = isCarouselPreview ? [] : stops.map(g => Math.round(g.progress * routeFrames))
+    const photoFrames = isCarouselPreview && journey
+      ? stops.map((_, i) => {
+          let start = -1, end = -1
+          for (let f = 0; f < routeFrames; f++) { if (journey.stopIndexTable[f] === i) { if (start < 0) start = f; end = f + 1 } }
+          return start >= 0 ? { start, end } : null
+        }).filter((x): x is { start: number; end: number } => !!x)
+      : triggerFrames.map(at => ({ start: at, end: at + photoReveal }))
+
+    const isIllustrativoPreview = videoMode === 'illustrativo'
+    const settingsForMode = isIllustrativoPreview ? videoInterludes : videoInterludes.filter(i => i.kind === 'visione')
+    const planned = planInterludes(settingsForMode, {
+      fps, routeFrames, photoFrames, breathFrames: Math.round(fps * 4),
+      available: (kind) => {
+        switch (kind) {
+          case 'tei':     return !!beautyScore?.categories?.length
+          case 'avvisi':  return normalizeGuideNotices(guide?.notices).length > 0
+          case 'luoghi':  return (pois?.length ?? 0) > 0
+          case 'profilo': return altitudeSeries.length > 1
+          case 'visione': return visionFeatures.length > 0
+          default: return true
+        }
+      },
+    })
+    return new Set(planned.map(pl => pl.kind))
+  }, [videoFps, photoDurationSec, videoPhotoStyle, routePhotos, videoExcludedPhotoIds, cumDist,
+      totalDistanceM, videoDuration, videoMode, videoInterludes, beautyScore, guide?.notices, pois,
+      altitudeSeries, visionFeatures])
+
   const carouselEstimatedSec = videoPhotoStyle === 'carousel' ? videoEstimate.total : null
 
   const [weatherBadge, setWeatherBadge] = useState<{emoji:string;temp:number;label:string}|null>(null)
@@ -4411,6 +4467,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       const advised = recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind])
                       const dense = interludeIsDense(iv.kind, interludeContent[iv.kind])
                       const offAdvice = Math.abs(iv.seconds - advised) >= 0.5
+                      // Acceso, con dati da mostrare, ma senza un varco abbastanza lungo e libero
+                      // da foto in cui stare: planInterludes lo scarterebbe in silenzio in fase di
+                      // generazione. Vedi interludeFitPreview per il perché di questo controllo.
+                      const wontFit = iv.enabled && !unavailable && !interludeFitPreview.has(iv.kind)
                       return (
                         <div key={iv.kind} className={`mb-2.5 ${unavailable?'opacity-40':''}`}>
                           <label className={`flex items-center gap-2 ${unavailable?'':'cursor-pointer'}`}>
@@ -4426,6 +4486,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                               ? <span className="text-white/35 text-[10px]">— dati non disponibili</span>
                               : <span className="text-white/30 text-[10px]">· consigliati {advised}s</span>}
                           </label>
+                          {wontFit && (
+                            <p className="pl-6 mt-1 text-amber-300/90 text-[10px] leading-relaxed">
+                              Con la durata e le foto attuali non c&apos;è un momento libero abbastanza lungo: nel video generato questo stacco non comparirà. Sono di solito le foto a occupare lo spazio — prova ad accorciarne la durata, a togliere qualche foto, oppure ad allungare il percorso qui sotto.
+                            </p>
+                          )}
                           {iv.enabled&&!unavailable&&(
                             <div className="pl-6 mt-1.5 space-y-1.5">
                               <div className="flex items-center gap-2">
@@ -4685,10 +4750,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   ['Foto incluse', includedPhotoCount===0?'nessuna':`${includedPhotoCount}${videoEstimate.stops<includedPhotoCount?` in ${videoEstimate.stops} soste`:''}`],
                   ['Durata reale', `~${est}s${videoEstimate.stillPct>0?` · ${videoEstimate.stillPct}% fermo`:''}`],
                 ]
+                // Fuori dall'Illustrativo l'unico stacco candidato è la Visione — stessa regola di
+                // interludeSettingsForMode in goToRendering. Prima questa riga compariva solo in
+                // Illustrativo, quindi in "Il mio ricordo" la Visione restava fuori dal riepilogo
+                // anche quando accesa: non si vedeva né che ci sarebbe stata né che sarebbe mancata.
+                const beatsForMode = videoMode==='illustrativo' ? videoInterludes : videoInterludes.filter(i=>i.kind==='visione')
+                const onBeats = beatsForMode.filter(i=>i.enabled)
+                const fittingBeats = onBeats.filter(i=>interludeFitPreview.has(i.kind))
+                const droppedBeats = onBeats.filter(i=>!interludeFitPreview.has(i.kind))
+                rows.splice(5, 0,
+                  ['Stacchi', fittingBeats.length ? `${fittingBeats.length} · ${fittingBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
+                )
                 if (videoMode==='illustrativo') {
-                  const onBeats = videoInterludes.filter(i=>i.enabled)
-                  rows.splice(5, 0,
-                    ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
+                  rows.splice(6, 0,
                     ['Luoghi con foto', `${(poiWiki ?? []).filter(e=>!!e.wiki.thumbnail).length}`],
                     ['Didascalie', `${videoCaptions.filter(c=>c.enabled&&c.text.trim()).length}`],
                   )
@@ -4702,6 +4776,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       </div>
                     ))}
                   </div>
+                  {droppedBeats.length > 0 && (
+                    <p className="text-amber-300/90 text-[11px] leading-relaxed -mt-1">
+                      {droppedBeats.length===1
+                        ? `"${INTERLUDE_LABEL[droppedBeats[0].kind]}" è acceso ma non troverà un momento libero abbastanza lungo: non comparirà in questo video.`
+                        : `${droppedBeats.map(b=>`"${INTERLUDE_LABEL[b.kind]}"`).join(' e ')} sono accesi ma non troveranno un momento libero abbastanza lungo: non compariranno in questo video.`}
+                      {' '}Torna al passo <button onClick={()=>goToStep(3)} className="text-terra-300 font-semibold hover:text-terra-200 underline underline-offset-2">Effetti</button> per vedere perché.
+                    </p>
+                  )}
 
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
