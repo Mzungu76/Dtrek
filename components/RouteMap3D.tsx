@@ -39,7 +39,7 @@ import {
   selectVisionFeatures, layoutVisionCallouts, recommendedVisionSeconds,
   DEFAULT_VISION_CATEGORIES, VISION_CATEGORY_LABEL, MAX_VISION_CALLOUTS, VISION_CAMERA_SECONDS,
   boundsOfRoute, fitZoomForBounds, centerOfBounds,
-  projectWorldMarker, visionMarkerEdgeFade, VISION_MARKER_HEIGHT_M,
+  projectWorldMarker, visionMarkerEdgeFade, visionMarkerAltitudeM,
   type VisionCategory, type VisionSourceLine, type VisionFeature,
 } from '@/lib/videoVision'
 import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
@@ -1004,84 +1004,39 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // doppio. Chi imposta 30s si aspetta 30s, quindi il numero vero va mostrato dov'è la manopola.
   // Un'unica fonte per lo slider, il riepilogo e gli avvisi, così non possono divergere.
   /**
-   * Quali stacchi (fra quelli accesi ora) troveranno davvero un varco nel montaggio, con la durata
-   * e le foto attuali — la stessa domanda che planInterludes si pone in fase di generazione, posta
-   * qui in anteprima.
+   * Gli stacchi che hanno davvero qualcosa da mostrare — la stessa domanda che `available` pone a
+   * planInterludes in fase di generazione, posta qui per il wizard.
    *
-   * Nasce da un difetto reale: uno stacco acceso può restare fuori dal video senza che nulla lo
-   * segnali — planInterludes lo scarta in silenzio quando non trova un intervallo abbastanza
-   * lungo e libero da foto, e prima di questo controllo l'utente lo scopriva solo guardando il
-   * video finito, senza sapere il perché. Qui si rifà lo stesso calcolo (stessa formula di
-   * ROUTE_FRAMES/photoBusyFrames vista in goToRendering) sui dati correnti del wizard, così il
-   * wizard può dirlo PRIMA di generare — e dire anche perché: quasi sempre sono le foto a occupare
-   * lo spazio, la causa più comune e meno intuitiva da collegare all'effetto.
+   * È rimasto solo questo perché è l'unico motivo per cui uno stacco può non entrare nel video:
+   * non c'è niente dentro (nessun avviso da leggere, nessun punteggio calcolato, nessun luogo
+   * nominabile). Prima c'era anche un secondo motivo — non trovare un "varco libero" nel
+   * montaggio — che era un difetto di modello e non una scelta: uno stacco non consuma fotogrammi
+   * di percorso, li aggiunge, e pretendere un varco lungo quanto lo stacco faceva sparire in
+   * silenzio quello che l'utente aveva acceso. Ora planInterludes non scarta più nulla per spazio
+   * (vedi il commento sui tre tentativi lì), quindi qui non c'è più niente da simulare: acceso e
+   * con contenuto ⇒ nel video, e ad allungarsi è la durata totale.
    */
-  const fittingInterludesAt = useCallback((speedKmS: number) => {
-    const fps = videoFps
-    const photoReveal = Math.round(fps * photoDurationSec)
-    const isCarouselPreview = videoPhotoStyle === 'carousel'
-    const sorted = [...routePhotos].filter(ph => !videoExcludedPhotoIds.has(ph.id)).sort((a, b) => a.progress - b.progress)
-    const stops = groupPhotoTimings(
-      sorted.map(ph => ({ id: ph.id, progress: ph.progress, distanceM: progressToDistanceM(ph.progress, cumDist) })),
-      PHOTO_GROUP_GAP_M,
-    )
-    // La velocità è ora il parametro primario: i metri al secondo del cursore SONO la velocità
-    // scelta, non più un valore ricavato da una durata bersaglio.
-    const cruiseMps = speedKmS * 1000
-    const journey = isCarouselPreview
-      ? buildJourneyTables(fps, cumDist, totalDistanceM, stops, photoDurationSec, cruiseMps)
-      : null
-    const routeFrames = journey
-      ? journey.totalFrames
-      : Math.round(fps * Math.max(MIN_ROUTE_SEC, (totalDistanceM / 1000) / clampSpeed(speedKmS)))
-    const triggerFrames = isCarouselPreview ? [] : stops.map(g => Math.round(g.progress * routeFrames))
-    const photoFrames = isCarouselPreview && journey
-      ? stops.map((_, i) => {
-          let start = -1, end = -1
-          for (let f = 0; f < routeFrames; f++) { if (journey.stopIndexTable[f] === i) { if (start < 0) start = f; end = f + 1 } }
-          return start >= 0 ? { start, end } : null
-        }).filter((x): x is { start: number; end: number } => !!x)
-      : triggerFrames.map(at => ({ start: at, end: at + photoReveal }))
-
-    const isIllustrativoPreview = videoMode === 'illustrativo'
-    const settingsForMode = isIllustrativoPreview ? videoInterludes : videoInterludes.filter(i => i.kind === 'visione')
-    const planned = planInterludes(settingsForMode, {
-      fps, routeFrames, photoFrames, breathFrames: Math.round(fps * 4),
-      available: (kind) => {
-        switch (kind) {
-          case 'tei':     return !!beautyScore?.categories?.length
-          case 'avvisi':  return normalizeGuideNotices(guide?.notices).length > 0
-          case 'luoghi':  return (pois?.length ?? 0) > 0
-          case 'profilo': return altitudeSeries.length > 1
-          case 'visione': return visionFeatures.length > 0
-          default: return true
-        }
-      },
-    })
-    return new Set(planned.map(pl => pl.kind))
-  }, [videoFps, photoDurationSec, videoPhotoStyle, routePhotos, videoExcludedPhotoIds, cumDist,
-      totalDistanceM, videoMode, videoInterludes, beautyScore, guide?.notices, pois,
-      altitudeSeries, visionFeatures])
-
-  /** Gli stacchi che entrano alla velocità attualmente scelta. */
-  const interludeFitPreview = useMemo(() => fittingInterludesAt(videoSpeedKmS), [fittingInterludesAt, videoSpeedKmS])
-
-  /** Secondi di stacchi che finiranno davvero nel video a una data velocità. */
-  const interludeSecAt = useCallback((speedKmS: number) => {
-    const fit = fittingInterludesAt(speedKmS)
-    return videoInterludes
-      .filter(i => i.enabled && (videoMode === 'illustrativo' || i.kind === 'visione'))
-      .filter(i => fit.has(i.kind))
-      .reduce((a, i) => a + i.seconds, 0)
-  }, [fittingInterludesAt, videoInterludes, videoMode])
+  const interludeFitPreview = useMemo(() => {
+    const kinds: InterludeKind[] = ['visione','numeri','profilo','natura','tei','avvisi','luoghi']
+    return new Set(kinds.filter(kind => {
+      switch (kind) {
+        case 'tei':     return !!beautyScore?.categories?.length
+        case 'avvisi':  return normalizeGuideNotices(guide?.notices).length > 0
+        case 'luoghi':  return (pois?.length ?? 0) > 0
+        case 'profilo': return altitudeSeries.length > 1
+        case 'visione': return visionFeatures.length > 0
+        default: return true
+      }
+    }))
+  }, [beautyScore, guide?.notices, pois, altitudeSeries, visionFeatures])
 
   /**
    * Da cosa è fatta la durata del video, voce per voce — vedi lib/videoBudget.ts.
    *
    * Non è più una stima che rincorre uno slider "durata": è il calcolo vero, e il totale che
    * mostra è quello che verrà generato. Le soste si contano per GRUPPO (le foto vicine si aprono
-   * insieme) e gli stacchi solo per quelli che troveranno davvero posto nel montaggio — contare
-   * quelli accesi ma scartati darebbe un totale più lungo del video reale.
+   * insieme) e gli stacchi sono tutti quelli accesi che hanno un contenuto — nessuno viene più
+   * scartato per mancanza di spazio, quindi il conto e il montaggio non possono divergere.
    */
   const videoEstimate = useMemo(() => {
     const stops = groupPhotoTimings(carouselPhotoTimings, PHOTO_GROUP_GAP_M)
@@ -3252,15 +3207,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const mapV = mapRef.current
           const vt = (mapV as any).transform
           const matrix = vt?.modelViewProjectionMatrix as ArrayLike<number> | undefined
-          if (matrix && vt.width > 0 && vt.height > 0) {
+          // worldSize è indispensabile, non un di più: la matrice di MapLibre vuole i pixel di
+          // mondo, non il mercatore normalizzato — vedi il commento su projectWorldMarker.
+          const worldSizeV = vt?.worldSize as number | undefined
+          if (matrix && vt.width > 0 && vt.height > 0 && worldSizeV) {
+            const viewportV = { width: vt.width, height: vt.height, worldSize: worldSizeV }
             const dprV2 = mapCanvas.width / Math.max(1, mapV.getContainer().clientWidth)
             const kxV = outW / crF.sw, kyV = outH / crF.sh
             const toOut = (pt: { x: number; y: number }) => ({ x: (pt.x * dprV2 - crF.sx) * kxV, y: (pt.y * dprV2 - crF.sy) * kyV })
             const edgeMargin = 90 * sc2
             for (const f of visionCallouts) {
-              const groundElevF = mapV.queryTerrainElevation?.([f.lon, f.lat]) ?? 0
-              const headP = projectWorldMarker(matrix, f.lat, f.lon, groundElevF + VISION_MARKER_HEIGHT_M, { width: vt.width, height: vt.height })
-              const groundP = projectWorldMarker(matrix, f.lat, f.lon, groundElevF, { width: vt.width, height: vt.height })
+              // Ripiego sulla quota del centro mappa, non su zero: se la tile del rilievo non è
+              // ancora caricata, zero pianterebbe il cartello al livello del mare — cioè centinaia
+              // di metri sotto il terreno vero, e il filo uscirebbe dal fondo dell'inquadratura.
+              const groundElevF = mapV.queryTerrainElevation?.([f.lon, f.lat]) ?? (vt.elevation ?? 0)
+              const headP = projectWorldMarker(matrix, f.lat, f.lon, visionMarkerAltitudeM(groundElevF, f.lat, worldSizeV), viewportV)
+              const groundP = projectWorldMarker(matrix, f.lat, f.lon, groundElevF, viewportV)
               const prevA = visionMarkerAlphaRef.current.get(f.key) ?? 0
               let targetA = 0
               let headOut: { x: number; y: number } | null = null, groundOut: { x: number; y: number } | null = null
@@ -4568,10 +4530,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       const advised = recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind])
                       const dense = interludeIsDense(iv.kind, interludeContent[iv.kind])
                       const offAdvice = Math.abs(iv.seconds - advised) >= 0.5
-                      // Acceso, con dati da mostrare, ma senza un varco abbastanza lungo e libero
-                      // da foto in cui stare: planInterludes lo scarterebbe in silenzio in fase di
-                      // generazione. Vedi interludeFitPreview per il perché di questo controllo.
-                      const wontFit = iv.enabled && !unavailable && !interludeFitPreview.has(iv.kind)
                       return (
                         <div key={iv.kind} className={`mb-2.5 ${unavailable?'opacity-40':''}`}>
                           <label className={`flex items-center gap-2 ${unavailable?'':'cursor-pointer'}`}>
@@ -4587,11 +4545,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                               ? <span className="text-white/35 text-[10px]">— dati non disponibili</span>
                               : <span className="text-white/30 text-[10px]">· consigliati {advised}s</span>}
                           </label>
-                          {wontFit && (
-                            <p className="pl-6 mt-1 text-amber-300/90 text-[10px] leading-relaxed">
-                              Con la durata e le foto attuali non c&apos;è un momento libero abbastanza lungo: nel video generato questo stacco non comparirà. Sono di solito le foto a occupare lo spazio — prova ad accorciarne la durata, a togliere qualche foto, oppure ad allungare il percorso qui sotto.
-                            </p>
-                          )}
                           {iv.enabled&&!unavailable&&(
                             <div className="pl-6 mt-1.5 space-y-1.5">
                               <div className="flex items-center gap-2">
@@ -4857,11 +4810,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 // Illustrativo, quindi in "Il mio ricordo" la Visione restava fuori dal riepilogo
                 // anche quando accesa: non si vedeva né che ci sarebbe stata né che sarebbe mancata.
                 const beatsForMode = videoMode==='illustrativo' ? videoInterludes : videoInterludes.filter(i=>i.kind==='visione')
-                const onBeats = beatsForMode.filter(i=>i.enabled)
-                const fittingBeats = onBeats.filter(i=>interludeFitPreview.has(i.kind))
-                const droppedBeats = onBeats.filter(i=>!interludeFitPreview.has(i.kind))
+                // Tutti quelli accesi CON contenuto: nessuno viene più scartato per spazio, quindi
+                // questa riga è il montaggio vero e non una previsione che potrebbe smentirsi.
+                const onBeats = beatsForMode.filter(i=>i.enabled && interludeFitPreview.has(i.kind))
                 rows.splice(5, 0,
-                  ['Stacchi', fittingBeats.length ? `${fittingBeats.length} · ${fittingBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
+                  ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
                 )
                 if (videoMode==='illustrativo') {
                   rows.splice(6, 0,
@@ -4878,14 +4831,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       </div>
                     ))}
                   </div>
-                  {droppedBeats.length > 0 && (
-                    <p className="text-amber-300/90 text-[11px] leading-relaxed -mt-1">
-                      {droppedBeats.length===1
-                        ? `"${INTERLUDE_LABEL[droppedBeats[0].kind]}" è acceso ma non troverà un momento libero abbastanza lungo: non comparirà in questo video.`
-                        : `${droppedBeats.map(b=>`"${INTERLUDE_LABEL[b.kind]}"`).join(' e ')} sono accesi ma non troveranno un momento libero abbastanza lungo: non compariranno in questo video.`}
-                      {' '}Torna al passo <button onClick={()=>goToStep(3)} className="text-terra-300 font-semibold hover:text-terra-200 underline underline-offset-2">Effetti</button> per vedere perché.
-                    </p>
-                  )}
 
                   {/* Ultima leva sul tempo, messa qui apposta: tutto quello che allunga o accorcia
                       il totale è già stato deciso nei passi precedenti, e questo slider è l'unico

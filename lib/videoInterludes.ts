@@ -185,15 +185,29 @@ export function planInterludes(
     const frames = Math.max(1, Math.round(st.seconds * fps))
     const want = Math.round(clamp01(st.atP) * routeFrames)
 
-    // Cercare un intervallo libero è più affidabile che spingere in avanti finché si trova posto:
-    // la spinta, arrivata in fondo al percorso, andava ritagliata per rientrare — e il ritaglio
-    // rimetteva lo stacco esattamente sopra la foto che stava cercando di evitare.
-    // Primo tentativo col respiro; se il percorso è troppo affollato di foto si ripiega sul
-    // rispetto della sola foto, che resta il vincolo vero — meglio uno stacco attaccato a una
-    // polaroid che uno stacco che l'utente ha chiesto e non compare.
+    // Tre tentativi in ordine di preferenza, e l'ultimo non fallisce mai.
+    //
+    // I primi due cercano un intervallo libero — col respiro dopo le foto, poi senza — perché è la
+    // disposizione che si legge meglio. Cercare un intervallo è più affidabile che spingere in
+    // avanti finché si trova posto: la spinta, arrivata in fondo al percorso, andava ritagliata per
+    // rientrare, e il ritaglio rimetteva lo stacco esattamente sopra la foto che stava cercando di
+    // evitare.
+    //
+    // Il terzo è il punto chiesto e basta. Prima al suo posto c'era un `continue`: uno stacco che
+    // l'utente aveva acceso spariva dal video, e il wizard poteva solo avvisare che sarebbe
+    // successo. Era un errore di modello, non di disposizione — uno stacco NON consuma fotogrammi
+    // di percorso, li AGGIUNGE: congela il volo dov'è e allunga il video (vedi frameToState in
+    // components/RouteMap3D.tsx, dove tutte le pause condividono un unico accumulatore, e due pause
+    // sullo stesso fotogramma si susseguono invece di sovrapporsi). Pretendere un "varco libero
+    // lungo quanto lo stacco" era quindi una richiesta senza senso fisico, e su un percorso corto o
+    // con un cursore veloce non era quasi mai soddisfacibile: il video da 3 s di volo non poteva
+    // ospitare nessuno stacco da 6 s, e li perdeva tutti in silenzio.
+    //
+    // La regola ora è quella chiesta esplicitamente: tutto ciò che si accende finisce nel video, e
+    // ad allungarsi è la durata totale — che il wizard mostra sempre in chiaro.
     const at = findSlot(want, frames, [...photoFrames.map(withBreath), ...placed])
              ?? findSlot(want, frames, [...photoFrames, ...placed])
-    if (at == null) continue   // davvero nessuno spazio: saltarlo è meglio che coprire una foto
+             ?? Math.max(0, Math.min(want, routeFrames))
 
     placed.push({ start: at, end: at + frames })
     out.push({ kind: st.kind, atP: at / Math.max(1, routeFrames), frames, triggerRouteFrame: at })

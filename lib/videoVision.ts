@@ -386,44 +386,82 @@ export function centerOfBounds(bounds: LatLonBounds): { lat: number; lon: number
 // schermo dato lo stato della telecamera in quel fotogramma.
 
 /**
- * Quota fissa, sopra il terreno, a cui "stanno in piedi" i cartelli una volta tornati parte della
- * mappa. Non è arbitraria: abbastanza alta da restare leggibile sopra un bosco o un crinale vicino
- * (che a quote più basse la coprirebbe alla vista), abbastanza bassa da non staccarsi visibilmente
- * dal punto che indica quando il tracciato sale o scende sotto di lei.
+ * Quanto deve essere lungo, a schermo, il filo che regge un cartello: l'altezza "standard" chiesta,
+ * espressa dove conta davvero, cioè nell'inquadratura.
+ *
+ * Non è un capriccio di unità di misura. Un'altezza fissa in metri sembra la scelta ovvia — è un
+ * oggetto 3D, gli oggetti 3D hanno un'altezza — ma il filo che ne risulta è lungo sullo schermo in
+ * proporzione allo zoom, e lo zoom qui cambia di parecchio: gli stessi 46 m che a zoom 16 fanno un
+ * palo di 50 px, a zoom 11 ne fanno 1,6 e il cartello sembra appoggiato per terra. Il cartello
+ * resta un oggetto del mondo (lo proietta la matrice vera, gli passa davanti e dietro il rilievo
+ * come a qualunque altro), ma l'altezza a cui lo si pianta si sceglie guardando l'inquadratura.
  */
-export const VISION_MARKER_HEIGHT_M = 46
+const MARKER_LIFT_TARGET_PX = 58
+/** Estremi fisici entro cui la quota resta plausibile: sotto, il filo si accartoccia sul punto;
+ *  sopra, il cartello si stacca visibilmente dal luogo che sta indicando. */
+const MARKER_MIN_HEIGHT_M = 35
+const MARKER_MAX_HEIGHT_M = 420
 
 const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * 6378137
 
-function mercatorX(lon: number): number { return (180 + lon) / 360 }
-
-/** Stessa formula di MapLibre (MercatorCoordinate.fromLngLat → mercatorZfromAltitude): la quota
- *  mercator equivalente a un'altitudine in metri. Si restringe verso i poli perché lì un metro di
- *  mondo reale copre più mondo mercator che all'equatore. */
-function mercatorZFromAltitude(altitudeM: number, lat: number): number {
-  return altitudeM / (EARTH_CIRCUMFERENCE_M * Math.cos(lat * Math.PI / 180))
+/** Pixel di schermo per metro di quota, alla latitudine e allo zoom correnti. Stessa formula di
+ *  MapLibre (`mercatorZfromAltitude(1, lat) * worldSize`), ricavata invece che letta da un campo
+ *  privato del transform. */
+export function pixelsPerMeterAt(lat: number, worldSize: number): number {
+  return worldSize / (EARTH_CIRCUMFERENCE_M * Math.cos(lat * Math.PI / 180))
 }
 
 /**
- * Proietta un punto SOSPESO nel mondo (lat, lon, altitudine sopra il terreno) in pixel del
+ * A che quota piantare il cartello di un punto che sta a `groundElevM` sul livello del mare, perché
+ * il suo filo misuri all'incirca MARKER_LIFT_TARGET_PX nell'inquadratura corrente.
+ *
+ * Torna una quota ASSOLUTA (sul livello del mare), pronta per projectWorldMarker.
+ */
+export function visionMarkerAltitudeM(groundElevM: number, lat: number, worldSize: number, liftPx = MARKER_LIFT_TARGET_PX): number {
+  const ppm = pixelsPerMeterAt(lat, worldSize)
+  const wanted = ppm > 1e-9 ? liftPx / ppm : MARKER_MIN_HEIGHT_M
+  return groundElevM + Math.min(MARKER_MAX_HEIGHT_M, Math.max(MARKER_MIN_HEIGHT_M, wanted))
+}
+
+function mercatorX(lon: number): number { return (180 + lon) / 360 }
+
+/**
+ * Proietta un punto SOSPESO nel mondo (lat, lon, quota sul livello del mare) in pixel CSS del
  * fotogramma, usando la matrice vista-proiezione della mappa (`transform.modelViewProjectionMatrix`
  * di MapLibre — colonne, non righe, come ogni matrice WebGL/glMatrix).
  *
- * `map.project()` non basta: sa proiettare solo un punto SUL terreno (interroga il DEM per la sua
- * quota). Qui il punto sta a una quota fissa SOPRA il terreno — vedi VISION_MARKER_HEIGHT_M — e
- * serve la proiezione prospettica vera perché il cartello si muova sullo schermo come un oggetto
- * 3D reale quando la telecamera gira o si avvicina, non come un'etichetta incollata al display.
+ * `map.project()` non basta: sa proiettare solo un punto SUL terreno. Qui il punto sta a una quota
+ * fissa SOPRA il terreno — vedi VISION_MARKER_HEIGHT_M — e serve la proiezione prospettica vera
+ * perché il cartello si muova sullo schermo come un oggetto 3D reale quando la telecamera gira o
+ * si avvicina, non come un'etichetta incollata al display.
  *
- * Restituisce null quando il punto è dietro la telecamera (w ≤ 0): oltre quel limite la divisione
+ * ATTENZIONE alle unità di ingresso, che non sono quelle che il nome "mercator" farebbe supporre e
+ * sono costate la prima versione di questa funzione (i cartelli non comparivano mai). La matrice
+ * di MapLibre — vedi `_calcMatrices` in mercator_transform — si costruisce così:
+ *
+ *     translate(m, [-x, -y, 0])      con x,y = mercatore × worldSize   → PIXEL DI MONDO
+ *     scale(m, [1, 1, pixelPerMeter])                                  → z in METRI
+ *     translate(m, [0, 0, -elevation])
+ *
+ * quindi vuole x,y in pixel di mondo (mercatore normalizzato MOLTIPLICATO per `worldSize`, che a
+ * zoom 14 vale già ~8,4 milioni) e z in metri sul livello del mare, non in unità mercatore. Passare
+ * il mercatore normalizzato — l'errore della prima versione — collassava ogni cartello vicino
+ * all'origine del mondo, cioè dietro la telecamera: `w` usciva negativo e la funzione tornava
+ * `null` per tutti, sempre. Da qui il parametro `worldSize`, che il chiamante legge da
+ * `transform.worldSize`.
+ *
+ * Torna null quando il punto è dietro la telecamera (w ≤ 0): oltre quel limite la divisione
  * prospettica specchierebbe le coordinate, facendo comparire un fantasma del cartello dalla parte
  * opposta del fotogramma — capita normalmente quando il volo supera un cartello incontrato prima.
  */
 export function projectWorldMarker(
   matrix: ArrayLike<number>,
   lat: number, lon: number, altitudeM: number,
-  viewport: { width: number; height: number },
+  viewport: { width: number; height: number; worldSize: number },
 ): { x: number; y: number } | null {
-  const x = mercatorX(lon), y = mercatorY(lat), z = mercatorZFromAltitude(altitudeM, lat)
+  const x = mercatorX(lon) * viewport.worldSize
+  const y = mercatorY(lat) * viewport.worldSize
+  const z = altitudeM
   const m = matrix
   const cx = m[0] * x + m[4] * y + m[8] * z + m[12]
   const cy = m[1] * x + m[5] * y + m[9] * z + m[13]
