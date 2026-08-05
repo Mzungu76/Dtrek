@@ -2082,3 +2082,56 @@ export function drawVisionTitle(
   } catch (err) { console.error('[dtrek] drawVisionTitle error:', err) }
   ctx.restore()
 }
+
+/**
+ * Un cartello della Visione tornato parte della mappa: piccolo, quieto, piantato nel mondo invece
+ * che scritto sullo schermo — la differenza con drawVisionCallout non è di dettaglio, è di ruolo.
+ * Là era il protagonista di uno stacco che si spiega da solo; qui è un elemento della scena fra i
+ * tanti, e deve avere la discrezione di un cartello vero incontrato camminando: si nota se lo si
+ * guarda, non prima.
+ *
+ * `groundX/groundY` e `headX/headY` arrivano già proiettati dal chiamante (vedi
+ * lib/videoVision.ts → projectWorldMarker): il primo è il punto sul terreno che il cartello segna,
+ * il secondo è lo stesso punto sollevato di VISION_MARKER_HEIGHT_M — la proiezione prospettica dei
+ * due, fatta a monte, è ciò che fa inclinare il filo con la telecamera come farebbe un vero palo.
+ */
+export function drawVisionMarker(
+  ctx: CanvasRenderingContext2D, sc: number,
+  m: { headX: number; headY: number; groundX: number; groundY: number; name: string; qualifier: string },
+  color: string, alpha: number, maxLabelWidth = 220,
+) {
+  const a = clamp01(alpha)
+  if (a <= 0.01) return
+  ctx.save()
+  try {
+    ctx.globalAlpha = a
+    haloedPolyline(ctx, [[m.groundX, m.groundY], [m.headX, m.headY]], color, Math.max(1, 1.5 * sc))
+    ctx.beginPath(); ctx.arc(m.groundX, m.groundY, 3.2 * sc, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fill()
+    ctx.beginPath(); ctx.arc(m.groundX, m.groundY, 2 * sc, 0, Math.PI * 2)
+    ctx.fillStyle = color; ctx.fill()
+
+    ctx.font = `700 ${Math.round(15 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+    const label = m.qualifier ? `${m.qualifier.toUpperCase()} · ${m.name}` : m.name
+    const text = ellipsize(ctx, label, maxLabelWidth)
+    const textW = ctx.measureText(text).width
+    const padX = 10 * sc, padY = 6 * sc, dotR = 3.4 * sc, gap = 6 * sc, textH = 15 * sc
+    const chipW = textW + padX * 2 + dotR * 2 + gap
+    const chipH = textH + padY * 2
+    // Ancorata sopra il capo del filo, non sul punto stesso: il testo deve galleggiare sul
+    // cartello, non stargli sopra come un'ombra.
+    const chipX = m.headX - chipW / 2, chipY = m.headY - chipH - 9 * sc
+    ctx.fillStyle = 'rgba(8,14,10,0.5)'
+    rrect(ctx, chipX, chipY, chipW, chipH, chipH / 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(chipX + padX + dotR, chipY + chipH / 2, dotR, 0, Math.PI * 2)
+    ctx.fillStyle = color; ctx.fill()
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+    ctx.fillStyle = 'rgba(255,255,255,0.92)'
+    ctx.fillText(text, chipX + padX + dotR * 2 + gap, chipY + chipH / 2 + 0.5 * sc)
+    // Cerniera fra il filo e il cartello: senza, l'ultimo tratto del filo sembra fermarsi nel vuoto
+    // un po' sotto la targhetta.
+    ctx.beginPath(); ctx.arc(m.headX, chipY + chipH, 2.6 * sc, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill()
+  } catch (err) { console.error('[dtrek] drawVisionMarker error:', err) }
+  ctx.restore()
+}

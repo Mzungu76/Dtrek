@@ -39,6 +39,7 @@ import {
   selectVisionFeatures, layoutVisionCallouts, recommendedVisionSeconds,
   DEFAULT_VISION_CATEGORIES, VISION_CATEGORY_LABEL, MAX_VISION_CALLOUTS, VISION_CAMERA_SECONDS,
   boundsOfRoute, fitZoomForBounds, centerOfBounds,
+  projectWorldMarker, visionMarkerEdgeFade, VISION_MARKER_HEIGHT_M,
   type VisionCategory, type VisionSourceLine, type VisionFeature,
 } from '@/lib/videoVision'
 import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
@@ -51,7 +52,7 @@ import {
   hexToRgb, effortRgb, hrEffortAt, buildMiniRoute,
   drawMapPin, drawHeartBadge, drawArrivalStars, drawRouteMilestone,
   drawPinTrail, drawPeakConquered, drawMiniMap, drawPhotoPin, drawPoiPin,
-  drawVisionCallout, drawVisionTitle, VISION_CATEGORY_COLOR,
+  drawVisionCallout, drawVisionTitle, drawVisionMarker, VISION_CATEGORY_COLOR,
   drawStopPhotoZoom, drawHUD, drawTopBand, hudProgressBarTop, drawElevationMarker, safeInsetsFor, drawOpeningTitle,
   drawPoiTag, drawTeiPanel, drawIdentikit, drawEndCard,
   drawNumbersBeat, drawElevationBeat, drawNatureBeat, drawNoticesBeat, drawPlacesBeat, drawStoryCaption,
@@ -759,6 +760,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const visionOpacityCache = useRef(new Map<string, number>())
   /** Telecamera al primo fotogramma della Visione — origine e destinazione del rientro. */
   const visionStartCamRef = useRef<{ zoom: number; pitch: number; bearing: number; lon: number; lat: number } | null>(null)
+  /** Diventa true al primo fotogramma dello stacco Visione: da lì in poi, nel volo principale, i
+   *  cartelli restano piantati nella mappa — vedi il disegno con drawVisionMarker più sotto. Prima
+   *  che lo stacco sia passato non c'è nulla da mostrare: il percorso non è ancora stato annotato. */
+  const visionRevealedRef = useRef(false)
+  /** Opacità corrente di ciascun cartello persistente, per etichetta (chiave = feature.key).
+   *  Filtrata nel tempo come la telecamera: entrare/uscire dall'inquadratura di scatto farebbe
+   *  sembrare i cartelli un HUD invece che oggetti della scena. */
+  const visionMarkerAlphaRef = useRef(new Map<string, number>())
 
   // Le linee arrivano dopo che la mappa è già in piedi: vanno versate nei layer quando atterrano,
   // altrimenti la Visione accenderebbe dei layer vuoti.
@@ -2752,6 +2761,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // il rendering che l'utente ha appena fermato.
     setRenderTotal(RENDER_END_FRAME - RENDER_START_FRAME); setRenderFrame(0); frameCountRef.current=RENDER_START_FRAME
     lastIconOpacityRef.current.clear()
+    visionRevealedRef.current = false
+    visionMarkerAlphaRef.current.clear()
 
     // Always recompute shots with current slider values so intro/follow/outro
     // all use the same zoomFollow, even if sliders were changed after the wizard opened
@@ -3111,6 +3122,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       const alt=(pts[i0].altitudeMeters??0)+((pts[i1].altitudeMeters??0)-(pts[i0].altitudeMeters??0))*frac
 
       if (interlude?.kind === 'visione') {
+        // Da qui in poi, nel volo principale, i cartelli restano piantati nella mappa — vedi
+        // visionRevealedRef e il disegno con drawVisionMarker più sotto.
+        visionRevealedRef.current = true
         // ── Visione: la telecamera si alza e allarga fino a inquadrare tutto il percorso ──────
         // A differenza degli altri stacchi (pannello sopra una mappa ferma) qui la mappa è il
         // contenuto: si allarga a volo d'uccello, orientata a nord come una cartina, e su di essa
@@ -3274,6 +3288,44 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // Con lo stile "Carosello", durante la sosta su una foto è quest'ultima (drawStopPhotoZoom,
         // più sotto) a occupare il centro schermo: il pin dell'utente non si disegna in quel caso.
         const stopZoomTNow = (isCarousel && stopIndex !== undefined) ? stopPhotoZoomAt(stopT ?? 0) : 0
+
+        // Cartelli della Visione rimasti nella mappa: solo dopo che lo stacco li ha rivelati, solo
+        // nel volo (non davanti a un altro stacco o a una foto in sosta, che coprono comunque lo
+        // schermo), disegnati SOTTO il pin — vedi lib/videoVision.ts → projectWorldMarker.
+        if (visionRevealedRef.current && !interlude && introP === undefined && outroP === undefined
+            && stopZoomTNow <= 0.001 && visionCallouts.length > 0 && mapRef.current) {
+          const mapV = mapRef.current
+          const vt = (mapV as any).transform
+          const matrix = vt?.modelViewProjectionMatrix as ArrayLike<number> | undefined
+          if (matrix && vt.width > 0 && vt.height > 0) {
+            const dprV2 = mapCanvas.width / Math.max(1, mapV.getContainer().clientWidth)
+            const kxV = outW / crF.sw, kyV = outH / crF.sh
+            const toOut = (pt: { x: number; y: number }) => ({ x: (pt.x * dprV2 - crF.sx) * kxV, y: (pt.y * dprV2 - crF.sy) * kyV })
+            const edgeMargin = 90 * sc2
+            for (const f of visionCallouts) {
+              const groundElevF = mapV.queryTerrainElevation?.([f.lon, f.lat]) ?? 0
+              const headP = projectWorldMarker(matrix, f.lat, f.lon, groundElevF + VISION_MARKER_HEIGHT_M, { width: vt.width, height: vt.height })
+              const groundP = projectWorldMarker(matrix, f.lat, f.lon, groundElevF, { width: vt.width, height: vt.height })
+              const prevA = visionMarkerAlphaRef.current.get(f.key) ?? 0
+              let targetA = 0
+              let headOut: { x: number; y: number } | null = null, groundOut: { x: number; y: number } | null = null
+              if (headP && groundP) {
+                headOut = toOut(headP); groundOut = toOut(groundP)
+                targetA = visionMarkerEdgeFade(headOut.x, headOut.y, outW, outH, edgeMargin)
+              }
+              // Filtrato nel tempo come la telecamera: un cartello che entra o esce dall'inquadratura
+              // di scatto sembrerebbe un HUD, non un oggetto piantato nella scena.
+              const alphaV = lerp(prevA, targetA, 0.14)
+              visionMarkerAlphaRef.current.set(f.key, alphaV)
+              if (alphaV > 0.01 && headOut && groundOut) {
+                drawVisionMarker(ctx, sc2, {
+                  headX: headOut.x, headY: headOut.y, groundX: groundOut.x, groundY: groundOut.y,
+                  name: f.name, qualifier: f.qualifier,
+                }, VISION_CATEGORY_COLOR[f.category] ?? '#fff', alphaV, Math.round(240 * sc2))
+              }
+            }
+          }
+        }
 
         // Cuore/colore FC (opzionali e indipendenti, entrambi gli stili): fatica nel punto corrente
         // del percorso e avanzamento della fase del battito — vedi hrEffortAt/heartPhaseRef sopra.

@@ -330,7 +330,7 @@ export function boundsOfRoute(route: [number, number][]): LatLonBounds | null {
 }
 
 /** Coordinata Y di Mercator normalizzata (0 al polo nord, 1 al polo sud). */
-function mercatorY(lat: number): number {
+export function mercatorY(lat: number): number {
   const clamped = Math.max(-85.051129, Math.min(85.051129, lat))
   const phi = clamped * Math.PI / 180
   return (1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2
@@ -374,4 +374,80 @@ export function centerOfBounds(bounds: LatLonBounds): { lat: number; lon: number
   const yMid = (mercatorY(bounds.minLat) + mercatorY(bounds.maxLat)) / 2
   const phi = Math.atan(Math.sinh(Math.PI * (1 - 2 * yMid)))
   return { lat: phi * 180 / Math.PI, lon: (bounds.minLon + bounds.maxLon) / 2 }
+}
+
+// ── Etichette che restano dopo lo stacco ───────────────────────────────────────
+//
+// Quando la Visione finisce, le sei cose annotate non spariscono: restano lì, piantate nel mondo
+// 3D come cartelli veri, e la telecamera del volo le incontra o le supera come farebbe con
+// qualunque altro elemento della mappa — non è più un pannello sopra lo schermo, è diventata la
+// mappa stessa. Chi lo chiede da qui è components/RouteMap3D.tsx a ogni fotogramma del volo
+// principale; qui si decide solo la geometria: dove sta un cartello nel mondo, e dove finisce sullo
+// schermo dato lo stato della telecamera in quel fotogramma.
+
+/**
+ * Quota fissa, sopra il terreno, a cui "stanno in piedi" i cartelli una volta tornati parte della
+ * mappa. Non è arbitraria: abbastanza alta da restare leggibile sopra un bosco o un crinale vicino
+ * (che a quote più basse la coprirebbe alla vista), abbastanza bassa da non staccarsi visibilmente
+ * dal punto che indica quando il tracciato sale o scende sotto di lei.
+ */
+export const VISION_MARKER_HEIGHT_M = 46
+
+const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * 6378137
+
+function mercatorX(lon: number): number { return (180 + lon) / 360 }
+
+/** Stessa formula di MapLibre (MercatorCoordinate.fromLngLat → mercatorZfromAltitude): la quota
+ *  mercator equivalente a un'altitudine in metri. Si restringe verso i poli perché lì un metro di
+ *  mondo reale copre più mondo mercator che all'equatore. */
+function mercatorZFromAltitude(altitudeM: number, lat: number): number {
+  return altitudeM / (EARTH_CIRCUMFERENCE_M * Math.cos(lat * Math.PI / 180))
+}
+
+/**
+ * Proietta un punto SOSPESO nel mondo (lat, lon, altitudine sopra il terreno) in pixel del
+ * fotogramma, usando la matrice vista-proiezione della mappa (`transform.modelViewProjectionMatrix`
+ * di MapLibre — colonne, non righe, come ogni matrice WebGL/glMatrix).
+ *
+ * `map.project()` non basta: sa proiettare solo un punto SUL terreno (interroga il DEM per la sua
+ * quota). Qui il punto sta a una quota fissa SOPRA il terreno — vedi VISION_MARKER_HEIGHT_M — e
+ * serve la proiezione prospettica vera perché il cartello si muova sullo schermo come un oggetto
+ * 3D reale quando la telecamera gira o si avvicina, non come un'etichetta incollata al display.
+ *
+ * Restituisce null quando il punto è dietro la telecamera (w ≤ 0): oltre quel limite la divisione
+ * prospettica specchierebbe le coordinate, facendo comparire un fantasma del cartello dalla parte
+ * opposta del fotogramma — capita normalmente quando il volo supera un cartello incontrato prima.
+ */
+export function projectWorldMarker(
+  matrix: ArrayLike<number>,
+  lat: number, lon: number, altitudeM: number,
+  viewport: { width: number; height: number },
+): { x: number; y: number } | null {
+  const x = mercatorX(lon), y = mercatorY(lat), z = mercatorZFromAltitude(altitudeM, lat)
+  const m = matrix
+  const cx = m[0] * x + m[4] * y + m[8] * z + m[12]
+  const cy = m[1] * x + m[5] * y + m[9] * z + m[13]
+  const cw = m[3] * x + m[7] * y + m[11] * z + m[15]
+  if (!Number.isFinite(cw) || cw <= 1e-9) return null
+  return {
+    x: (cx / cw * 0.5 + 0.5) * viewport.width,
+    y: (1 - (cy / cw * 0.5 + 0.5)) * viewport.height,
+  }
+}
+
+/**
+ * Quanto far svanire un cartello vicino al bordo del fotogramma, 0-1: pieno oltre `margin` px dal
+ * bordo, sfumato a zero esattamente sul bordo.
+ *
+ * Senza questa sfumatura un cartello entrerebbe ed uscirebbe dall'inquadratura di scatto — un
+ * comportamento da HUD, non da oggetto della scena. Un vero cartello ai margini del campo visivo
+ * si perde gradualmente nella periferia, non sparisce di colpo al bordo del fotogramma.
+ */
+export function visionMarkerEdgeFade(
+  x: number, y: number, width: number, height: number, margin: number,
+): number {
+  if (margin <= 0) return x >= 0 && x <= width && y >= 0 && y <= height ? 1 : 0
+  const mx = Math.min(x, width - x) / margin
+  const my = Math.min(y, height - y) / margin
+  return Math.max(0, Math.min(1, Math.min(mx, my)))
 }
