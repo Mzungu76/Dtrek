@@ -3360,11 +3360,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 const laid = layoutVisionCallouts(visionCallouts, project, {
                   width: outW, height: outH,
                   insets: {
-                    top: safeInsets.top + Math.round(96 * sc2), bottom: safeInsets.bottom + Math.round(70 * sc2),
+                    // Sotto al blocco del titolo dello stacco, che col corpo più grande arriva a
+                    // circa 105·sc dal margine sicuro: sopra ci finirebbe la prima etichetta.
+                    top: safeInsets.top + Math.round(124 * sc2), bottom: safeInsets.bottom + Math.round(70 * sc2),
                     left: safeInsets.left + Math.round(14 * sc2), right: safeInsets.right + Math.round(14 * sc2),
                   },
-                  labelWidth: Math.round(300 * sc2),
-                  rowHeight: Math.round(96 * sc2),
+                  labelWidth: Math.round(360 * sc2),
+                  // Alzato con la dimensione del testo: qualificatore, nome e sottolineatura
+                  // occupano ora più spazio in verticale, e righe troppo fitte li farebbero
+                  // toccare fra un'etichetta e la successiva.
+                  rowHeight: Math.round(124 * sc2),
                 })
                 drawVisionTitle(ctx, outW, sc2, safeInsets.top, title ?? 'Il percorso', it)
                 // Le etichette entrano una dopo l'altra dentro la finestra che resta dopo
@@ -3381,7 +3386,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     name: c.feature.name, qualifier: c.feature.qualifier,
                     anchorX: c.anchorX, anchorY: c.anchorY,
                     labelX: c.labelX, labelY: c.labelY, side: c.side, order: c.order,
-                  }, VISION_CATEGORY_COLOR[c.feature.category] ?? '#fff', localT)
+                  }, VISION_CATEGORY_COLOR[c.feature.category] ?? '#fff', localT, Math.round(360 * sc2))
                   ctx.globalAlpha = 1
                 }
               }

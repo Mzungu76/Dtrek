@@ -1938,8 +1938,66 @@ export const VISION_CATEGORY_COLOR: Record<string, string> = {
  * poi appare il testo. Disegnare tutto insieme dava un lampo confuso; così l'occhio viene
  * accompagnato dal luogo al suo nome.
  */
+/**
+ * Testo con contorno scuro (halo) sotto al riempimento.
+ *
+ * È lo standard cartografico per le etichette sopra un'immagine, ed è necessario perché un'ombra
+ * sfumata NON basta: su un fondo chiaro sfoca il contorno invece di staccarlo, e una mappa
+ * topografica è chiara quasi ovunque. Il contorno dà invece un bordo netto che regge sia sul verde
+ * scuro del bosco sia sul beige dei coltivi, senza dover mettere una targa dietro ogni scritta —
+ * che risolverebbe la leggibilità ma appesantirebbe l'insieme.
+ *
+ * `lineJoin: 'round'` con un `miterLimit` basso evita le punte che un contorno spesso genera sugli
+ * angoli acuti delle lettere.
+ */
+function strokedText(
+  ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
+  fill: string, haloPx: number, haloColor = 'rgba(0,0,0,0.85)',
+) {
+  ctx.save()
+  ctx.lineJoin = 'round'
+  ctx.miterLimit = 2
+  ctx.lineWidth = haloPx
+  ctx.strokeStyle = haloColor
+  ctx.strokeText(text, x, y)
+  ctx.fillStyle = fill
+  ctx.fillText(text, x, y)
+  ctx.restore()
+}
+
+/** Traccia una spezzata due volte: prima scura e spessa, poi colorata e sottile sopra. Stessa
+ *  ragione del contorno sul testo — una linea di un colore acceso su un fondo chiaro si legge
+ *  solo se ha un bordo scuro che la stacca. */
+function haloedPolyline(
+  ctx: CanvasRenderingContext2D, pts: [number, number][], color: string, widthPx: number,
+) {
+  if (pts.length < 2) return
+  const path = () => {
+    ctx.beginPath()
+    ctx.moveTo(pts[0][0], pts[0][1])
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1])
+  }
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+  ctx.lineWidth = widthPx * 2.4
+  path(); ctx.stroke()
+  ctx.strokeStyle = color
+  ctx.lineWidth = widthPx
+  path(); ctx.stroke()
+}
+
+/** Accorcia con l'ellissi finché non sta nella larghezza data — il font va impostato prima. */
+function ellipsize(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+  if (ctx.measureText(text).width <= maxW) return text
+  let t = text
+  while (t.length > 1 && ctx.measureText(t + '\u2026').width > maxW) t = t.slice(0, -1)
+  return t + '\u2026'
+}
+
 export function drawVisionCallout(
   ctx: CanvasRenderingContext2D, sc: number, c: VisionCalloutDraw, color: string, t: number,
+  maxLabelWidth = 340,
 ) {
   const k = clamp01(t)
   if (k <= 0.001) return
@@ -1957,56 +2015,45 @@ export function drawVisionCallout(
     const endX = c.side === 'left' ? c.labelX + 4 * sc : c.labelX - 4 * sc
 
     const seg1 = clamp01(lineT / 0.6), seg2 = clamp01((lineT - 0.4) / 0.6)
-    ctx.strokeStyle = color
-    ctx.lineWidth = Math.max(1, 1.6 * sc)
-    ctx.lineCap = 'round'
-    ctx.globalAlpha = 0.9 * ease(lineT)
-    ctx.beginPath()
-    ctx.moveTo(c.anchorX, c.anchorY)
+    ctx.globalAlpha = ease(lineT)
     const midX = c.anchorX + (elbowX - c.anchorX) * ease(seg1)
     const midY = c.anchorY + (c.labelY - c.anchorY) * ease(seg1)
-    ctx.lineTo(midX, midY)
-    if (seg2 > 0) ctx.lineTo(midX + (endX - elbowX) * ease(seg2) + (elbowX - midX), c.labelY)
-    ctx.stroke()
+    const segments: [number, number][] = [[c.anchorX, c.anchorY], [midX, midY]]
+    if (seg2 > 0) segments.push([midX + (endX - elbowX) * ease(seg2) + (elbowX - midX), c.labelY])
+    haloedPolyline(ctx, segments, color, Math.max(2, 3.4 * sc))
 
-    // Pallino sul punto annotato — con un alone scuro sotto, perché su un satellitare chiaro un
-    // pallino colorato di 4 px sparisce.
-    ctx.globalAlpha = ease(lineT)
+    // Pallino sul punto annotato: anello scuro spesso sotto, così regge anche sul beige chiaro dei
+    // coltivi, dove un pallino colorato piccolo sparisce del tutto.
+    ctx.beginPath(); ctx.arc(c.anchorX, c.anchorY, 9 * sc, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill()
     ctx.beginPath(); ctx.arc(c.anchorX, c.anchorY, 5.5 * sc, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill()
-    ctx.beginPath(); ctx.arc(c.anchorX, c.anchorY, 3.5 * sc, 0, Math.PI * 2)
     ctx.fillStyle = color; ctx.fill()
+    ctx.beginPath(); ctx.arc(c.anchorX, c.anchorY, 5.5 * sc, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = Math.max(1, 1.6 * sc); ctx.stroke()
 
     if (textT > 0.01) {
       ctx.globalAlpha = ease(textT)
-      const align: CanvasTextAlign = c.side === 'left' ? 'left' : 'right'
-      const tx = c.side === 'left' ? c.labelX + 8 * sc : c.labelX
-      ctx.textAlign = align
+      ctx.textAlign = c.side === 'left' ? 'left' : 'right'
       ctx.textBaseline = 'alphabetic'
+      const tx = c.side === 'left' ? c.labelX + 8 * sc : c.labelX
 
       if (c.qualifier) {
-        ctx.font = `600 ${Math.round(17 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
-        ctx.fillStyle = 'rgba(255,255,255,0.62)'
-        ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 8 * sc
-        ctx.fillText(c.qualifier.toUpperCase(), tx, c.labelY - 26 * sc)
+        // Nel colore della categoria invece che in bianco sbiadito: dice a colpo d'occhio di che
+        // cosa si tratta, ed è lo stesso colore della linea che porta al punto — le due cose si
+        // leggono come una sola.
+        ctx.font = `700 ${Math.round(22 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+        strokedText(ctx, c.qualifier.toUpperCase(), tx, c.labelY - 34 * sc, color, 5 * sc)
       }
-      ctx.font = `800 ${Math.round(30 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
-      ctx.fillStyle = '#fff'
-      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 10 * sc
-      ctx.fillText(c.name, tx, c.labelY - 4 * sc)
-      ctx.shadowBlur = 0
 
-      // Sottolineatura che cresce col testo: è il filo che lega il nome alla sua linea guida,
-      // come nell'infografica di riferimento.
-      const w = Math.min(ctx.measureText(c.name).width + 10 * sc, 320 * sc) * ease(textT)
-      ctx.strokeStyle = color
-      ctx.lineWidth = Math.max(1, 2 * sc)
-      ctx.globalAlpha = 0.85 * ease(textT)
-      ctx.beginPath()
+      ctx.font = `800 ${Math.round(42 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+      const name = ellipsize(ctx, c.name, maxLabelWidth)
+      strokedText(ctx, name, tx, c.labelY - 4 * sc, '#fff', 7 * sc)
+
+      // Sottolineatura che cresce col testo: è il filo che lega il nome alla sua linea guida.
+      const w = Math.min(ctx.measureText(name).width + 10 * sc, maxLabelWidth) * ease(textT)
       const ux = c.side === 'left' ? tx : tx - w
-      ctx.moveTo(ux, c.labelY + 5 * sc)
-      ctx.lineTo(ux + w, c.labelY + 5 * sc)
-      ctx.stroke()
+      const uy = c.labelY + 9 * sc
+      haloedPolyline(ctx, [[ux, uy], [ux + w, uy]], color, Math.max(2, 3.4 * sc))
     }
   } catch (err) { console.error('[dtrek] drawVisionCallout error:', err) }
   ctx.restore()
@@ -2026,13 +2073,12 @@ export function drawVisionTitle(
     ctx.globalAlpha = a
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 12 * sc
-    ctx.font = `600 ${Math.round(18 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
-    ctx.fillStyle = 'rgba(255,255,255,0.66)'
-    ctx.fillText('UNO SGUARDO D’INSIEME', w / 2, topInset + 18 * sc)
-    ctx.font = `800 ${Math.round(38 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
-    ctx.fillStyle = '#fff'
-    ctx.fillText(title, w / 2, topInset + 44 * sc)
+    // Stesso contorno delle etichette, per lo stesso motivo: qui sotto c'è la mappa topografica
+    // chiara, e il bianco su chiaro con la sola ombra sfumata non si stacca.
+    ctx.font = `700 ${Math.round(22 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+    strokedText(ctx, 'UNO SGUARDO D’INSIEME', w / 2, topInset + 18 * sc, 'rgba(255,255,255,0.86)', 5 * sc)
+    ctx.font = `800 ${Math.round(46 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+    strokedText(ctx, ellipsize(ctx, title, w * 0.86), w / 2, topInset + 50 * sc, '#fff', 8 * sc)
   } catch (err) { console.error('[dtrek] drawVisionTitle error:', err) }
   ctx.restore()
 }
