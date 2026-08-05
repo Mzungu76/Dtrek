@@ -154,3 +154,29 @@ export function formatTotal(sec: number): string {
   if (r < 60) return `${r}s`
   return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`
 }
+
+/**
+ * A cosa corrisponde una velocità, in parole. Non ci sono più bersagli in secondi da premere: lo
+ * slider è l'unico comando, e chi non ha mai ragionato in km/s ha bisogno di un punto di
+ * riferimento per capire se il valore scelto è "lento" o "da social" — non del numero esatto in
+ * cima, di un giudizio.
+ *
+ * Le soglie sono qualitative, non un contratto: km/s è indipendente dalla lunghezza del percorso
+ * per costruzione (vedi il commento su MIN/MAX_SPEED_KM_S), quindi la stessa banda descrive bene
+ * sia un anello di 3 km sia una traversata di 25 — ma "bene" per un ritmo resta un giudizio, non
+ * una misura.
+ */
+export interface SpeedBand { label: string; desc: string }
+
+const SPEED_BANDS: (SpeedBand & { maxKmS: number })[] = [
+  { maxKmS: 0.12, label: 'Lenta',       desc: 'Contemplativa: indugia su ogni tratto. Bene per un racconto lungo, non per i social.' },
+  { maxKmS: 0.35, label: 'Distesa',     desc: 'Il ritmo di un racconto: si vede il percorso, non solo il traguardo.' },
+  { maxKmS: 0.75, label: 'Da social',   desc: 'Il passo di un Reel o una Storia: scorre senza dilungarsi.' },
+  { maxKmS: 1.6,  label: 'Veloce',      desc: 'Sintesi rapida: bene su un percorso molto lungo o per un teaser.' },
+  { maxKmS: Infinity, label: 'Molto veloce', desc: 'Il percorso è quasi un lampo: restano leggibili solo i punti fermi.' },
+]
+
+export function speedBandFor(kmS: number): SpeedBand {
+  const s = clampSpeed(kmS)
+  return SPEED_BANDS.find(b => s <= b.maxKmS) ?? SPEED_BANDS[SPEED_BANDS.length - 1]
+}
