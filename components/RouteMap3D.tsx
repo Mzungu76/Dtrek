@@ -20,8 +20,8 @@ import { slopeDegToColor, aspectDegToColor } from '@/lib/dtm/dtmColors'
 import { bearingDeg, circularMeanBearings } from '@/lib/navigation/orientation'
 import { MAPTILER_STYLES as STYLES, MAPTILER_KEY as KEY, maptilerRasterTileUrl } from '@/lib/mapStyles'
 import {
-  computeVideoBudget, speedForTargetTotal, initialSpeedFor, clampSpeed,
-  speedFromSlider, sliderFromSpeed, formatSpeed, formatTotal,
+  computeVideoBudget, initialSpeedFor, clampSpeed,
+  speedFromSlider, sliderFromSpeed, formatSpeed, formatTotal, speedBandFor,
   INTRO_SEC, INTRO_FAST_SEC, OUTRO_SEC, MIN_ROUTE_SEC,
 } from '@/lib/videoBudget'
 import { getSunPosition, terrainSunLook, type TerrainSunLook } from '@/lib/daylight'
@@ -65,18 +65,19 @@ const SPEEDS = [
   { label: '3×', v: 3   },
 ]
 
-// I preset non fissano più una durata: nel nuovo modello la durata è la somma delle parti (vedi
-// lib/videoBudget.ts), quindi un preset che dichiarasse "30s" mentirebbe appena si accende
-// un'opzione. Dichiarano invece il BERSAGLIO a cui portare il totale — da cui si ricava la
-// velocità del cursore — e il ritmo dell'intro. Sono diventati stili editoriali: "Snappy" vuole un
-// video corto e nervoso, "Epico" uno disteso, e la velocità è la conseguenza di quella intenzione
-// su QUESTO percorso, non un numero uguale per tutti.
+// I preset non fissano più una durata, nemmeno indirettamente: nel nuovo modello non esiste un
+// bersaglio da raggiungere, la durata è semplicemente la somma di tutto ciò che l'utente accende
+// (vedi lib/videoBudget.ts), e sarà lui a deciderla togliendo o aggiungendo. Un preset qui suggerisce
+// solo un PUNTO DI PARTENZA per la velocità del cursore — coerente col suo carattere editoriale
+// ("Snappy" parte veloce, "Epico" parte lento — vedi SPEED_BANDS in lib/videoBudget.ts per cosa
+// vuol dire in pratica) — che resta un suggerimento: lo slider in fondo al wizard lo sovrascrive
+// in qualunque momento, ed è lì che si decide il tempo vero.
 const VIDEO_PRESETS = {
-  reels:  { targetSec: 30, fastIntro: true,  styleIdx: 1, orientation: '9:16'   as const, label: 'Reels',    desc: '9:16 · ~30s',        grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  feed45: { targetSec: 30, fastIntro: true,  styleIdx: 1, orientation: '4:5'    as const, label: 'Feed 4:5', desc: '4:5 · ~30s',         grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  feed11: { targetSec: 30, fastIntro: true,  styleIdx: 1, orientation: '1:1'    as const, label: 'Feed 1:1', desc: '1:1 · ~30s',         grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  epico:  { targetSec: 60, fastIntro: false, styleIdx: 0, orientation: '9:16'   as const, label: 'Epico',    desc: '9:16 · disteso',      grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
-  snappy: { targetSec: 15, fastIntro: true,  styleIdx: 1, orientation: '9:16'   as const, label: 'Snappy',   desc: '9:16 · corto e teso', grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
+  reels:  { speedKmS: 0.55, fastIntro: true,  styleIdx: 1, orientation: '9:16'   as const, label: 'Reels',    desc: '9:16 · ritmo social',  grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  feed45: { speedKmS: 0.55, fastIntro: true,  styleIdx: 1, orientation: '4:5'    as const, label: 'Feed 4:5', desc: '4:5 · ritmo social',   grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  feed11: { speedKmS: 0.55, fastIntro: true,  styleIdx: 1, orientation: '1:1'    as const, label: 'Feed 1:1', desc: '1:1 · ritmo social',   grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
+  epico:  { speedKmS: 0.18, fastIntro: false, styleIdx: 0, orientation: '9:16'   as const, label: 'Epico',    desc: '9:16 · disteso',        grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
+  snappy: { speedKmS: 1.1,  fastIntro: true,  styleIdx: 1, orientation: '9:16'   as const, label: 'Snappy',   desc: '9:16 · corto e teso',   grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
 } as const
 
 
@@ -158,10 +159,10 @@ function prepErrorMessage(stage: string, err: unknown): string {
 // "Percorso", accanto alla durata — che è la stessa domanda posta da un altro lato.
 const WIZARD_STEPS = [
   { id: 'formato',  title: 'Formato',  sub: 'Dove pubblicherai il video' },
-  { id: 'percorso', title: 'Percorso', sub: 'Il viaggio: ritmo, inquadrature, durata' },
+  { id: 'percorso', title: 'Percorso', sub: 'Il viaggio: zoom e inquadrature' },
   { id: 'foto',     title: 'Foto',     sub: 'Le tue foto lungo il tracciato' },
   { id: 'effetti',  title: 'Effetti',  sub: 'Dati a schermo e tocchi scenici' },
-  { id: 'genera',   title: 'Genera',   sub: 'Controlla il riepilogo e avvia' },
+  { id: 'genera',   title: 'Genera',   sub: 'Il tempo, il riepilogo, l’avvio' },
 ] as const
 type VideoPreset = 'reels' | 'feed45' | 'feed11' | 'epico' | 'snappy' | 'custom'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
@@ -1074,51 +1075,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       .reduce((a, i) => a + i.seconds, 0)
   }, [fittingInterludesAt, videoInterludes, videoMode])
 
-  const photoStopCount = useMemo(
-    () => groupPhotoTimings(carouselPhotoTimings, PHOTO_GROUP_GAP_M).length,
-    [carouselPhotoTimings],
-  )
-
-  /**
-   * La velocità che porta il totale al bersaglio — risolta per iterazione, non in un colpo solo.
-   *
-   * Serve perché le due grandezze si inseguono: quanti stacchi entrano nel montaggio dipende da
-   * quanto è lungo il volo, e quanto è lungo il volo dipende dalla velocità che sto cercando.
-   * Risolvendo una volta sola con gli stacchi che entrano ADESSO si ottiene una velocità che, una
-   * volta applicata, ne fa entrare di meno — e il video esce più corto del bersaglio. Misurato su
-   * un caso reale (8,4 km, 5 soste, tre stacchi accesi): il bersaglio "60s" consegnava 46,5s.
-   *
-   * Poche iterazioni bastano, ma non si assume che convergano: si tengono tutti i candidati e si
-   * sceglie quello il cui totale VERO è più vicino al bersaglio. Così anche un caso che oscilla —
-   * uno stacco che entra a una velocità ed esce a quella successiva — dà comunque il risultato
-   * migliore disponibile invece dell'ultimo per caso.
-   */
-  const solveSpeedForTarget = useCallback((targetSec: number): number | null => {
-    const base = {
-      routeDistanceM: totalDistanceM,
-      fastIntro: videoHookFastIntro,
-      photoStops: photoStopCount,
-      photoStopSec: photoDurationSec,
-    }
-    const totalAt = (speedKmS: number) => computeVideoBudget({
-      ...base, speedKmS, interludeSec: interludeSecAt(speedKmS),
-    }).totalSec
-
-    let interludeSec = interludeSecAt(videoSpeedKmS)
-    const candidates: number[] = []
-    for (let i = 0; i < 5; i++) {
-      const next = speedForTargetTotal(targetSec, { ...base, interludeSec })
-      if (next == null) break
-      candidates.push(next)
-      const nextInterludeSec = interludeSecAt(next)
-      if (Math.abs(nextInterludeSec - interludeSec) < 1e-9) break
-      interludeSec = nextInterludeSec
-    }
-    if (candidates.length === 0) return null
-    return candidates.reduce((best, c) =>
-      Math.abs(totalAt(c) - targetSec) < Math.abs(totalAt(best) - targetSec) ? c : best)
-  }, [totalDistanceM, videoHookFastIntro, photoStopCount, photoDurationSec, interludeSecAt, videoSpeedKmS])
-
   /**
    * Da cosa è fatta la durata del video, voce per voce — vedi lib/videoBudget.ts.
    *
@@ -1151,14 +1107,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   }, [carouselPhotoTimings, totalDistanceM, photoDurationSec, videoSpeedKmS,
       videoHookFastIntro, videoMode, videoInterludes, interludeFitPreview])
 
-  /** Applica il ritmo di un preset: porta il totale al bersaglio dichiarato risolvendo per la
-   *  velocità, con le opzioni accese in questo momento. Se il bersaglio è irraggiungibile (soste e
-   *  stacchi da soli lo superano già) si prende la velocità più alta disponibile — il video sarà
-   *  più lungo del preset, e il totale in cima lo dice apertamente invece di far finta di niente. */
+  /** Applica il carattere di un preset: solo un punto di partenza per la velocità, coerente col
+   *  suo ritmo editoriale — non un bersaglio da raggiungere. Da qui l'utente parte e aggiusta con
+   *  lo slider in fondo al wizard, che resta l'unico comando reale sul tempo. */
   const applyPresetPacing = (pr: keyof typeof VIDEO_PRESETS) => {
     const cfg = VIDEO_PRESETS[pr]
     setVideoHookFastIntro(cfg.fastIntro)
-    setVideoSpeedKmS(solveSpeedForTarget(cfg.targetSec) ?? clampSpeed(Infinity))
+    setVideoSpeedKmS(cfg.speedKmS)
   }
 
   // Velocità iniziale tarata sul percorso: un valore fisso darebbe un video di dieci secondi su un
@@ -4234,81 +4189,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 </div>
 
                 <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">VELOCITÀ DEL CURSORE</p>
-                  <p className="text-white/30 text-[11px] mb-3 leading-relaxed">
-                    Quanto percorso scorre in un secondo di video. La durata non si imposta più: è la somma di questa velocità e di tutto ciò che accendi — la trovi sempre in cima.
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <input type="range" min={0} max={1} step={0.001}
-                      value={sliderFromSpeed(videoSpeedKmS)}
-                      onChange={e=>{ setVideoSpeedKmS(speedFromSlider(+e.target.value)); setVideoPreset('custom') }}
-                      className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
-                    <span className="text-white text-xs font-bold tabular-nums w-[4.8rem] text-right">{formatSpeed(videoSpeedKmS)}</span>
-                  </div>
-                  <p className="text-white/40 text-[11px] mt-1.5 leading-relaxed">
-                    Il percorso scorre in ~{Math.round(videoEstimate.routeSec)}s{videoEstimate.stillSec>0?`, più ${Math.round(videoEstimate.stillSec)}s a telecamera ferma fra foto e pannelli`:''}.
-                  </p>
-
-                  {/* Bersagli: l'altra direzione del modello. La velocità resta il controllo, ma
-                      quando serve un video "da 30 secondi" — perché va pubblicato da qualche parte —
-                      si preme il bersaglio e la velocità ci si adegua. Un bersaglio irraggiungibile
-                      con le opzioni accese si disabilita, invece di consegnare una velocità che non
-                      mantiene la promessa. */}
-                  <p className="text-white/45 text-[11px] font-semibold mt-4 mb-1.5 tracking-wider">OPPURE PORTA IL TOTALE A</p>
-                  <div className="flex gap-2">
-                    {[15,30,60,90].map(target=>{
-                      const solved = solveSpeedForTarget(target)
-                      const active = Math.abs(videoEstimate.totalSec - target) < 0.6
-                      return (
-                        <button key={target} disabled={solved==null}
-                          onClick={()=>{ if(solved!=null){ setVideoSpeedKmS(solved); setVideoPreset('custom') } }}
-                          title={solved==null?'Con le opzioni accese questo totale non è raggiungibile: intro, finale, soste e stacchi da soli lo superano già':undefined}
-                          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                            solved==null ? 'bg-white/5 text-white/25 cursor-not-allowed'
-                            : active ? 'bg-forest-500 text-white' : 'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                          {target}s
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  <label className="flex items-center gap-2 cursor-pointer mt-4">
-                    <input type="checkbox" checked={videoHookFastIntro} onChange={e=>setVideoHookFastIntro(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Intro aerea più rapida</span>
-                  </label>
-                  <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
-                    Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, il volo iniziale dura {INTRO_FAST_SEC}s invece di {INTRO_SEC}s.
-                  </p>
-
-                  {(()=>{
-                    const est = videoEstimate
-                    const over = est.total > 60
-                    const tooStill = est.stillPct > 45
-                    const grouped = est.photos > est.stops
-                    if (!over && !tooStill && !grouped) return null
-                    return (
-                      <div className={`mt-3 rounded-xl px-3.5 py-2.5 ${over||tooStill ? 'bg-terra-500/15 border border-terra-500/35' : 'bg-white/5'}`}>
-                        {grouped&&(
-                          <p className="text-forest-300/80 text-[11px] leading-relaxed">
-                            {est.photos} foto raggruppate in {est.stops} soste: quelle vicine si aprono insieme.
-                          </p>
-                        )}
-                        {over && (
-                          <p className={`text-terra-300/85 text-[11px] leading-relaxed ${grouped?'mt-1':''}`}>
-                            Oltre i 60s Instagram declassa i Reels e i caroselli non lo accettano. Alza la velocità, accorcia la sosta per foto o spegni qualche stacco.
-                          </p>
-                        )}
-                        {tooStill && (
-                          <p className="text-terra-300/85 text-[11px] mt-1 leading-relaxed">
-                            {Math.round(est.stillSec)}s su {est.total}s ({est.stillPct}%) sono a telecamera ferma fra foto e pannelli: il video rischia di sembrare più una presentazione che un viaggio.
-                          </p>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </div>
-
-                <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-3 tracking-wider">ZOOM CINEMATICO</p>
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -5006,6 +4886,62 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       {' '}Torna al passo <button onClick={()=>goToStep(3)} className="text-terra-300 font-semibold hover:text-terra-200 underline underline-offset-2">Effetti</button> per vedere perché.
                     </p>
                   )}
+
+                  {/* Ultima leva sul tempo, messa qui apposta: tutto quello che allunga o accorcia
+                      il totale è già stato deciso nei passi precedenti, e questo slider è l'unico
+                      comando che resta — un ritocco fine, non un bersaglio da centrare. Nessun
+                      tetto: se il totale non piace si torna indietro e si spegne qualcosa, non lo
+                      si forza con la velocità. */}
+                  <div>
+                    <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">VELOCITÀ DEL CURSORE</p>
+                    <p className="text-white/30 text-[11px] mb-3 leading-relaxed">
+                      L&apos;ultimo ritocco: quanto percorso scorre in un secondo di video. Il totale qui sopra è la somma di tutto ciò che hai acceso nei passi precedenti — se non ti piace, torna indietro e cambia cosa accendere; questo slider serve solo ad affinare il ritmo di quello che hai scelto.
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <input type="range" min={0} max={1} step={0.001}
+                        value={sliderFromSpeed(videoSpeedKmS)}
+                        onChange={e=>{ setVideoSpeedKmS(speedFromSlider(+e.target.value)); setVideoPreset('custom') }}
+                        className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
+                      <span className="text-white text-xs font-bold tabular-nums w-[4.8rem] text-right">{formatSpeed(videoSpeedKmS)}</span>
+                    </div>
+                    {(()=>{ const band = speedBandFor(videoSpeedKmS); return (
+                      <p className="text-[11px] mt-1.5 leading-relaxed">
+                        <span className="text-terra-300 font-semibold">{band.label}.</span>{' '}
+                        <span className="text-white/40">{band.desc}</span>
+                      </p>
+                    )})()}
+                    <p className="text-white/40 text-[11px] mt-1.5 leading-relaxed">
+                      Il percorso scorre in ~{Math.round(videoEstimate.routeSec)}s{videoEstimate.stillSec>0?`, più ${Math.round(videoEstimate.stillSec)}s a telecamera ferma fra foto e pannelli`:''}.
+                    </p>
+
+                    <label className="flex items-center gap-2 cursor-pointer mt-4">
+                      <input type="checkbox" checked={videoHookFastIntro} onChange={e=>setVideoHookFastIntro(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
+                      <span className="text-white text-xs font-semibold">Intro aerea più rapida</span>
+                    </label>
+                    <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
+                      Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, il volo iniziale dura {INTRO_FAST_SEC}s invece di {INTRO_SEC}s.
+                    </p>
+
+                    {(()=>{
+                      const tooStill = videoEstimate.stillPct > 45
+                      const grouped = videoEstimate.photos > videoEstimate.stops
+                      if (!tooStill && !grouped) return null
+                      return (
+                        <div className={`mt-3 rounded-xl px-3.5 py-2.5 ${tooStill ? 'bg-terra-500/15 border border-terra-500/35' : 'bg-white/5'}`}>
+                          {grouped&&(
+                            <p className="text-forest-300/80 text-[11px] leading-relaxed">
+                              {videoEstimate.photos} foto raggruppate in {videoEstimate.stops} soste: quelle vicine si aprono insieme.
+                            </p>
+                          )}
+                          {tooStill && (
+                            <p className={`text-terra-300/85 text-[11px] leading-relaxed ${grouped?'mt-1':''}`}>
+                              {Math.round(videoEstimate.stillSec)}s su {videoEstimate.total}s ({videoEstimate.stillPct}%) sono a telecamera ferma fra foto e pannelli: il video rischia di sembrare più una presentazione che un viaggio.
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
 
                   <div>
                     <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
