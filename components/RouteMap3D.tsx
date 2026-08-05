@@ -1006,7 +1006,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
    * wizard può dirlo PRIMA di generare — e dire anche perché: quasi sempre sono le foto a occupare
    * lo spazio, la causa più comune e meno intuitiva da collegare all'effetto.
    */
-  const interludeFitPreview = useMemo(() => {
+  const fittingInterludesAt = useCallback((speedKmS: number) => {
     const fps = videoFps
     const photoReveal = Math.round(fps * photoDurationSec)
     const isCarouselPreview = videoPhotoStyle === 'carousel'
@@ -1017,13 +1017,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     )
     // La velocità è ora il parametro primario: i metri al secondo del cursore SONO la velocità
     // scelta, non più un valore ricavato da una durata bersaglio.
-    const cruiseMps = videoSpeedKmS * 1000
+    const cruiseMps = speedKmS * 1000
     const journey = isCarouselPreview
       ? buildJourneyTables(fps, cumDist, totalDistanceM, stops, photoDurationSec, cruiseMps)
       : null
     const routeFrames = journey
       ? journey.totalFrames
-      : Math.round(fps * Math.max(MIN_ROUTE_SEC, (totalDistanceM / 1000) / clampSpeed(videoSpeedKmS)))
+      : Math.round(fps * Math.max(MIN_ROUTE_SEC, (totalDistanceM / 1000) / clampSpeed(speedKmS)))
     const triggerFrames = isCarouselPreview ? [] : stops.map(g => Math.round(g.progress * routeFrames))
     const photoFrames = isCarouselPreview && journey
       ? stops.map((_, i) => {
@@ -1050,8 +1050,65 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     })
     return new Set(planned.map(pl => pl.kind))
   }, [videoFps, photoDurationSec, videoPhotoStyle, routePhotos, videoExcludedPhotoIds, cumDist,
-      totalDistanceM, videoSpeedKmS, videoMode, videoInterludes, beautyScore, guide?.notices, pois,
+      totalDistanceM, videoMode, videoInterludes, beautyScore, guide?.notices, pois,
       altitudeSeries, visionFeatures])
+
+  /** Gli stacchi che entrano alla velocità attualmente scelta. */
+  const interludeFitPreview = useMemo(() => fittingInterludesAt(videoSpeedKmS), [fittingInterludesAt, videoSpeedKmS])
+
+  /** Secondi di stacchi che finiranno davvero nel video a una data velocità. */
+  const interludeSecAt = useCallback((speedKmS: number) => {
+    const fit = fittingInterludesAt(speedKmS)
+    return videoInterludes
+      .filter(i => i.enabled && (videoMode === 'illustrativo' || i.kind === 'visione'))
+      .filter(i => fit.has(i.kind))
+      .reduce((a, i) => a + i.seconds, 0)
+  }, [fittingInterludesAt, videoInterludes, videoMode])
+
+  const photoStopCount = useMemo(
+    () => groupPhotoTimings(carouselPhotoTimings, PHOTO_GROUP_GAP_M).length,
+    [carouselPhotoTimings],
+  )
+
+  /**
+   * La velocità che porta il totale al bersaglio — risolta per iterazione, non in un colpo solo.
+   *
+   * Serve perché le due grandezze si inseguono: quanti stacchi entrano nel montaggio dipende da
+   * quanto è lungo il volo, e quanto è lungo il volo dipende dalla velocità che sto cercando.
+   * Risolvendo una volta sola con gli stacchi che entrano ADESSO si ottiene una velocità che, una
+   * volta applicata, ne fa entrare di meno — e il video esce più corto del bersaglio. Misurato su
+   * un caso reale (8,4 km, 5 soste, tre stacchi accesi): il bersaglio "60s" consegnava 46,5s.
+   *
+   * Poche iterazioni bastano, ma non si assume che convergano: si tengono tutti i candidati e si
+   * sceglie quello il cui totale VERO è più vicino al bersaglio. Così anche un caso che oscilla —
+   * uno stacco che entra a una velocità ed esce a quella successiva — dà comunque il risultato
+   * migliore disponibile invece dell'ultimo per caso.
+   */
+  const solveSpeedForTarget = useCallback((targetSec: number): number | null => {
+    const base = {
+      routeDistanceM: totalDistanceM,
+      fastIntro: videoHookFastIntro,
+      photoStops: photoStopCount,
+      photoStopSec: photoDurationSec,
+    }
+    const totalAt = (speedKmS: number) => computeVideoBudget({
+      ...base, speedKmS, interludeSec: interludeSecAt(speedKmS),
+    }).totalSec
+
+    let interludeSec = interludeSecAt(videoSpeedKmS)
+    const candidates: number[] = []
+    for (let i = 0; i < 5; i++) {
+      const next = speedForTargetTotal(targetSec, { ...base, interludeSec })
+      if (next == null) break
+      candidates.push(next)
+      const nextInterludeSec = interludeSecAt(next)
+      if (Math.abs(nextInterludeSec - interludeSec) < 1e-9) break
+      interludeSec = nextInterludeSec
+    }
+    if (candidates.length === 0) return null
+    return candidates.reduce((best, c) =>
+      Math.abs(totalAt(c) - targetSec) < Math.abs(totalAt(best) - targetSec) ? c : best)
+  }, [totalDistanceM, videoHookFastIntro, photoStopCount, photoDurationSec, interludeSecAt, videoSpeedKmS])
 
   /**
    * Da cosa è fatta la durata del video, voce per voce — vedi lib/videoBudget.ts.
@@ -1092,14 +1149,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const applyPresetPacing = (pr: keyof typeof VIDEO_PRESETS) => {
     const cfg = VIDEO_PRESETS[pr]
     setVideoHookFastIntro(cfg.fastIntro)
-    const solved = speedForTargetTotal(cfg.targetSec, {
-      routeDistanceM: totalDistanceM,
-      fastIntro: cfg.fastIntro,
-      photoStops: videoEstimate.stops,
-      photoStopSec: photoDurationSec,
-      interludeSec: videoEstimate.beatSec,
-    })
-    setVideoSpeedKmS(solved ?? clampSpeed(Infinity))
+    setVideoSpeedKmS(solveSpeedForTarget(cfg.targetSec) ?? clampSpeed(Infinity))
   }
 
   // Velocità iniziale tarata sul percorso: un valore fisso darebbe un video di dieci secondi su un
@@ -4155,13 +4205,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   <p className="text-white/45 text-[11px] font-semibold mt-4 mb-1.5 tracking-wider">OPPURE PORTA IL TOTALE A</p>
                   <div className="flex gap-2">
                     {[15,30,60,90].map(target=>{
-                      const solved = speedForTargetTotal(target, {
-                        routeDistanceM: totalDistanceM,
-                        fastIntro: videoHookFastIntro,
-                        photoStops: videoEstimate.stops,
-                        photoStopSec: photoDurationSec,
-                        interludeSec: videoEstimate.beatSec,
-                      })
+                      const solved = solveSpeedForTarget(target)
                       const active = Math.abs(videoEstimate.totalSec - target) < 0.6
                       return (
                         <button key={target} disabled={solved==null}
