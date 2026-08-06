@@ -47,7 +47,7 @@ import type { BeautyScore } from '@/lib/beautyScore'
 import type { WikiPage } from '@/lib/wikipedia'
 import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { classifyTrackShape } from '@/lib/geoUtils'
-import { declutterItems, MIN_ITEM_GAP_SEC, type TimelineItem } from '@/lib/videoTimeline'
+import { declutterItems, selectPhotosAvoidingCrowding, MIN_ITEM_GAP_SEC, type TimelineItem } from '@/lib/videoTimeline'
 import RouteLeafletEditor, { INTERLUDE_GLYPH, type TimelineEditorItem } from '@/components/video/RouteLeafletEditor'
 import VideoStudio from '@/components/video/VideoStudio'
 import type { StudioControl, StudioGroup } from '@/lib/videoStudio'
@@ -88,6 +88,12 @@ interface FullPresetConfig {
   desc: string
   orientation: '9:16' | '4:5' | '1:1' | '1.91:1' | '16:9'
   styleIdx: number
+  /** Zoom d'apertura, di seguimento e di chiusura — vedi planShots/shotCamera. Non un dettaglio
+   *  tecnico: è la differenza fra un'inquadratura larga e stabilita e una stretta e dinamica, e fa
+   *  parte del carattere del preset quanto il ritmo o la modalità. */
+  zoomIntro: number
+  zoomFollow: number
+  zoomOutro: number
   speedKmS: number
   fastIntro: boolean
   grading: string
@@ -109,10 +115,16 @@ interface FullPresetConfig {
   sunLight: boolean
 }
 
+// Satellite (styleIdx 1) è la mappa di default per quattro preset su cinque: è la mappa che
+// mostra il TERRENO VERO — la vegetazione, la roccia, l'acqua — invece di una sua rappresentazione
+// cartografica, ed è quella che regge meglio la compressione di un video. Minimo resta su Outdoor
+// apposta: è l'unico preset pensato per essere il più neutro possibile, e uno sfondo fotografico è
+// l'opposto della neutralità.
 const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', FullPresetConfig> = {
   veloce: {
     label: 'Racconto veloce', desc: '9:16 · ritmo social · il tuo ricordo',
-    orientation: '9:16', styleIdx: 1, speedKmS: 0.55, fastIntro: true,
+    orientation: '9:16', styleIdx: 1, zoomIntro: 11.5, zoomFollow: 14.5, zoomOutro: 8.5,
+    speedKmS: 0.55, fastIntro: true,
     grading: 'contrast(1.12) saturate(1.32) brightness(1.04)',
     mode: 'ricordo', photoStyle: 'carousel', photoDurationSec: 3, hyperlapse: true,
     interludeKinds: [],
@@ -124,7 +136,8 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
   },
   epico: {
     label: 'Racconto epico', desc: '9:16 · disteso · il tuo ricordo',
-    orientation: '9:16', styleIdx: 0, speedKmS: 0.10, fastIntro: false,
+    orientation: '9:16', styleIdx: 1, zoomIntro: 8.5, zoomFollow: 12.5, zoomOutro: 6.5,
+    speedKmS: 0.10, fastIntro: false,
     grading: 'contrast(1.04) saturate(1.15) brightness(1.01)',
     mode: 'ricordo', photoStyle: 'classic', photoDurationSec: 6, hyperlapse: false,
     interludeKinds: [],
@@ -136,7 +149,8 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
   },
   guida: {
     label: 'Guida del percorso', desc: '4:5 · spiega il sentiero',
-    orientation: '4:5', styleIdx: 0, speedKmS: 0.30, fastIntro: true,
+    orientation: '4:5', styleIdx: 1, zoomIntro: 10, zoomFollow: 13.5, zoomOutro: 7.5,
+    speedKmS: 0.30, fastIntro: true,
     grading: 'contrast(1.06) saturate(1.15) brightness(1.02)',
     mode: 'illustrativo', photoStyle: 'carousel', photoDurationSec: 4, hyperlapse: false,
     interludeKinds: ['visione', 'numeri', 'profilo', 'luoghi'],
@@ -148,7 +162,8 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
   },
   minimo: {
     label: 'Minimo', desc: '1:1 · solo percorso e foto',
-    orientation: '1:1', styleIdx: 0, speedKmS: 0.28, fastIntro: true,
+    orientation: '1:1', styleIdx: 0, zoomIntro: 10.5, zoomFollow: 13.8, zoomOutro: 7.5,
+    speedKmS: 0.28, fastIntro: true,
     grading: 'contrast(1) saturate(1) brightness(1)',
     mode: 'ricordo', photoStyle: 'classic', photoDurationSec: 4, hyperlapse: false,
     interludeKinds: [],
@@ -160,7 +175,8 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
   },
   natura: {
     label: 'Natura e luoghi', desc: '1:1 · disteso · l’ambiente intorno',
-    orientation: '1:1', styleIdx: 1, speedKmS: 0.15, fastIntro: false,
+    orientation: '1:1', styleIdx: 1, zoomIntro: 9.5, zoomFollow: 13, zoomOutro: 7,
+    speedKmS: 0.15, fastIntro: false,
     grading: 'contrast(1.05) saturate(1.22) brightness(1.02)',
     mode: 'illustrativo', photoStyle: 'carousel', photoDurationSec: 5, hyperlapse: false,
     interludeKinds: ['visione', 'natura', 'luoghi'],
@@ -184,6 +200,9 @@ const VIDEO_DIMS: Record<string, [number, number]> = {
 // Overpass returns POIs with no cap (a route near villages/refuges can return 50-100+), and
 // baking one GPU texture per POI in the video stalled rendering — cap to the most notable ones.
 const MAX_VIDEO_POIS = 15
+// Dove cade la Visione d'insieme quando un preset la richiede il più vicino possibile all'inizio:
+// non 0 esatto, che si accavallerebbe con l'atterraggio della telecamera dall'intro aereo.
+const VISION_START_ATP = 0.02
 // Sotto questa distanza lungo il percorso due foto sono lo stesso momento e finiscono nella stessa
 // sosta — vedi groupPhotoTimings.
 const PHOTO_GROUP_GAP_M = 250
@@ -1233,7 +1252,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   /**
    * Applica un CARATTERE di video, non solo un formato: modalità, stacchi, luoghi, pin ed effetti,
-   * dati a schermo, colore e luce del tracciato — vedi il commento su VIDEO_PRESETS per il perché.
+   * dati a schermo, colore e luce del tracciato, inquadrature — vedi il commento su VIDEO_PRESETS
+   * per il perché.
    *
    * Ogni leva del preset viene impostata esplicitamente, comprese quelle spente: cambiare preset
    * da "Racconto veloce" a "Minimo" deve spegnere il pin, non lasciarlo acceso perché il preset
@@ -1243,19 +1263,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
    *
    * Gli stacchi vanno riaccesi ricalcolando la durata sul contenuto REALE (recommendedInterludeSeconds
    * con interludeContent), non con un numero fisso uguale per tutti i percorsi — la stessa regola
-   * che vale quando si accende uno stacco a mano nel binario.
+   * che vale quando si accende uno stacco a mano nel binario. La Visione d'insieme, quando è fra
+   * gli stacchi accesi, va anche spinta il più vicino possibile all'inizio del percorso — è lo
+   * stacco che spiega dove si sta per andare, e messo altrove risponderebbe a una domanda già
+   * passata. Gli altri stacchi restano decluttered fra loro (declutterItems) per non accavallarsi
+   * su un percorso corto, ma non si muovono MAI per fare posto a una foto.
    *
-   * Infine tutto ciò che finisce sulla mappa — foto incluse più gli stacchi appena accesi — passa
-   * da declutterItems (lib/videoTimeline.ts): un preset accende stacchi in punti pensati per un
-   * percorso medio, ma le foto vere hanno posizioni proprie, e le due cose insieme possono cadere
-   * a un secondo l'una dall'altra su un anello corto. Il preset distanzia da solo invece di lasciare
-   * la pastiglia "troppo vicini" accesa nel momento stesso in cui lo si applica.
+   * Le foto, al contrario, sono intercambiabili: se una cade troppo vicina a uno stacco o a
+   * un'altra foto già tenuta, il preset la esclude dal video (selectPhotosAvoidingCrowding) invece
+   * di spostarla altrove a raccontare un punto del percorso che non è quello vero. È il modo in cui
+   * un preset "ottimizza la presenza delle foto": spegnendole dove serve, non ricollocandole.
    */
   const applyFullPreset = (pr: keyof typeof VIDEO_PRESETS) => {
     const cfg = VIDEO_PRESETS[pr]
 
     setVideoOrientation(cfg.orientation); setVideoFps(30)
     switchStyle(cfg.styleIdx)
+    setZoomIntro(cfg.zoomIntro); setZoomFollow(cfg.zoomFollow); setZoomOutro(cfg.zoomOutro)
     setVideoHookFastIntro(cfg.fastIntro)
     setVideoSpeedKmS(cfg.speedKmS)
 
@@ -1298,31 +1322,42 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
     const nextInterludes: InterludeSetting[] = DEFAULT_INTERLUDES.map(iv => {
       const enabled = cfg.interludeKinds.includes(iv.kind)
-      return { ...iv, enabled, seconds: enabled ? recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind]) : iv.seconds }
+      return {
+        ...iv, enabled,
+        // Il più vicino possibile all'inizio senza incollarsi al fotogramma zero, dove la
+        // telecamera sta ancora atterrando dall'intro aereo.
+        atP: iv.kind === 'visione' ? VISION_START_ATP : iv.atP,
+        seconds: enabled ? recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind]) : iv.seconds,
+      }
     })
 
-    // Distanziamento: foto (posizione reale, non spostata) + stacchi appena accesi, in un'unica
-    // lista — è la stessa che l'editor mostra sulla mappa, vedi timelineItems.
-    const photoTimelineItems: TimelineItem[] = carouselPhotoTimings.map(t => ({
-      id: `photo:${t.id}`, kind: 'photo' as const, atP: t.progress, label: '', seconds: cfg.photoDurationSec,
-    }))
+    // La velocità appena scelta non è ancora nello stato (setVideoSpeedKmS qui sopra non ha
+    // ancora fatto effetto: React applica gli aggiornamenti dopo che questa funzione è tornata) —
+    // usare videoEstimate.routeSec userebbe quindi ancora il ritmo del preset PRECEDENTE. Il volo
+    // in secondi va ricalcolato qui con la velocità del preset che si sta applicando, la stessa
+    // formula di computeVideoBudget.
+    const routeSecForPreset = Math.max(MIN_ROUTE_SEC, (totalDistanceM / 1000) / clampSpeed(cfg.speedKmS))
+
+    // Gli stacchi si distanziano SOLO fra loro (declutterItems): un preset può accenderne più di
+    // uno vicino all'inizio (la Visione più il primo dato), e su un percorso corto vanno comunque
+    // sfalsati. Le foto non entrano in questo passo — vedi il commento sulla funzione.
     const enabledBeats: TimelineItem[] = nextInterludes
       .filter(iv => iv.enabled)
       .map(iv => ({ id: `beat:${iv.kind}`, kind: 'interlude' as const, atP: iv.atP, label: '', seconds: iv.seconds }))
-    const declutteredAtP = declutterItems([...photoTimelineItems, ...enabledBeats], videoEstimate.routeSec, MIN_ITEM_GAP_SEC)
+    const declutteredBeats = declutterItems(enabledBeats, routeSecForPreset, MIN_ITEM_GAP_SEC)
 
     setVideoInterludes(nextInterludes.map(iv => {
-      const p = declutteredAtP.get(`beat:${iv.kind}`)
+      const p = declutteredBeats.get(`beat:${iv.kind}`)
       return p === undefined ? iv : { ...iv, atP: p }
     }))
-    setVideoPhotoAtP(() => {
-      const next: Record<string, number> = {}
-      for (const t of carouselPhotoTimings) {
-        const p = declutteredAtP.get(`photo:${t.id}`)
-        if (p !== undefined) next[t.id] = p
-      }
-      return next
-    })
+
+    // Le foto restano alla loro posizione vera (nessun override): quelle troppo vicine a uno
+    // stacco, o a un'altra foto già tenuta, escono dal video invece di essere spostate.
+    setVideoPhotoAtP({})
+    const occupiedAtP = enabledBeats.map(b => declutteredBeats.get(b.id) ?? b.atP)
+    setVideoExcludedPhotoIds(selectPhotosAvoidingCrowding(
+      routePhotos.map(p => ({ id: p.id, atP: p.progress })), occupiedAtP, routeSecForPreset, MIN_ITEM_GAP_SEC,
+    ))
   }
 
   const carouselEstimatedSec = videoPhotoStyle === 'carousel' ? videoEstimate.total : null

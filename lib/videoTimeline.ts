@@ -160,3 +160,37 @@ export function declutterItems(
   }
   return result
 }
+
+/**
+ * Quali foto tenere quando lo spazio vicino agli stacchi — o vicino a un'altra foto — non basta
+ * per tutte.
+ *
+ * Diverso da declutterItems: quello sposta, questo esclude. Uno stacco cade dove il preset l'ha
+ * deliberatamente messo (la Visione d'insieme, per esempio, il più vicino possibile all'inizio del
+ * percorso): spostarlo per fare posto a una foto qualunque tradirebbe la scelta. La foto è invece
+ * intercambiabile — se il momento in cui è stata scattata è troppo vicino a un'altra pausa, il
+ * video ne fa a meno, senza spostarla altrove a raccontare un punto del percorso che non è quello
+ * vero.
+ *
+ * Le posizioni "occupate" (gli stacchi, poi ogni foto tenuta) fanno da riferimento per quelle dopo:
+ * su un tratto fitto di scatti ravvicinati si tengono i primi utili e si scartano quelli che
+ * arriverebbero troppo a ridosso, invece di scartarli a caso.
+ */
+export function selectPhotosAvoidingCrowding(
+  photos: { id: string; atP: number }[], occupiedAtP: number[], routeSeconds: number, minGapSec: number,
+): Set<string> {
+  const excluded = new Set<string>()
+  if (routeSeconds <= 0) return excluded
+
+  const kept = occupiedAtP.map(p => p * routeSeconds)
+  const sorted = photos.slice().sort((a, b) => a.atP - b.atP)
+  for (const photo of sorted) {
+    const sec = photo.atP * routeSeconds
+    if (kept.some(k => Math.abs(k - sec) < minGapSec)) {
+      excluded.add(photo.id)
+    } else {
+      kept.push(sec)
+    }
+  }
+  return excluded
+}
