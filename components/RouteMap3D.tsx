@@ -7,7 +7,7 @@ import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
   Download, Share2, ChevronLeft, ChevronRight, ImagePlus,
   Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy, MapPin, Compass, ChevronUp,
-  Zap, Minus, Leaf, SlidersHorizontal,
+  Zap, Minus, Leaf, SlidersHorizontal, Lock, LockOpen,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
@@ -568,7 +568,7 @@ interface Props {
   distanceMeters?: number
   elevationGain?: number
   pois?: PoiItem[]
-  initialVideoState?: 'idle' | 'config'
+  initialVideoState?: 'idle' | 'presets' | 'config'
   dtmProfile?: TrailDtmProfile
   /** Punteggio TEI già calcolato (activity.linkedBeautyScore) — usato dalla modalità Illustrativo. */
   beautyScore?: BeautyScore
@@ -1019,6 +1019,24 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [videoPhotoAtP,   setVideoPhotoAtP]  = useState<Record<string, number>>({})
   // Foto in attesa di conferma di eliminazione — vedi il bottone a due tempi nell'elenco foto.
   const [pendingDeletePhotoId, setPendingDeletePhotoId] = useState<string|null>(null)
+  // Le foto nascono BLOCCATE sulla mappa (di default nessuna qui dentro = tutte bloccate): un
+  // trascinamento involontario del pallino sbagliato è più facile da fare che da notare, perché
+  // sposta la foto di pochi metri e il video sembra comunque plausibile. Sbloccare è un gesto
+  // esplicito dall'elenco foto (icona lucchetto), non un default. Vedi RouteLeafletEditor.tsx per
+  // come `locked` diventa "draggable: false" sul marker vero.
+  const [unlockedPhotoIds, setUnlockedPhotoIds] = useState<Set<string>>(new Set())
+  const togglePhotoLock = (id: string) => setUnlockedPhotoIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  // Quale riga dell'elenco foto mostra il lucchetto (e l'eventuale ripristino): compare solo dopo
+  // aver toccato la foto, non su tutte le righe insieme — altrimenti l'elenco raddoppierebbe di
+  // icone per un comando che si usa raramente.
+  const [activePhotoRowId, setActivePhotoRowId] = useState<string|null>(null)
+  // Foto per cui è stato chiesto il ripristino alla posizione originale: la conferma (Annulla /
+  // Ripristina) segue lo stesso schema a due tempi della cancellazione qui sopra.
+  const [pendingResetPhotoId, setPendingResetPhotoId] = useState<string|null>(null)
   // Foto escluse dal video (di default nessuna, cioè tutte incluse) — non persistito: è una
   // preferenza per-generazione, come videoPreset/videoSpeedKmS/ecc., non un dato della foto stessa.
   const [videoExcludedPhotoIds, setVideoExcludedPhotoIds] = useState<Set<string>>(new Set())
@@ -1237,6 +1255,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return {
         id: `photo:${t.id}`, kind: 'photo' as const, atP: t.progress,
         label: src?.caption?.trim() || 'Foto', seconds: photoDurationSec,
+        // Bloccata finché non la si sblocca esplicitamente dall'elenco foto — vedi
+        // unlockedPhotoIds. Gli stacchi non hanno questo campo: restano sempre trascinabili.
+        locked: !unlockedPhotoIds.has(t.id),
       }
     })
     const beats = videoInterludes
@@ -1247,7 +1268,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         label: INTERLUDE_LABEL[i.kind], seconds: i.seconds, interludeKind: i.kind,
       }))
     return [...photos, ...beats]
-  }, [carouselPhotoTimings, routePhotos, photoDurationSec, videoInterludes, videoMode, interludeFitPreview])
+  }, [carouselPhotoTimings, routePhotos, photoDurationSec, videoInterludes, videoMode, interludeFitPreview, unlockedPhotoIds])
 
   // Velocità iniziale tarata sul percorso: un valore fisso darebbe un video di dieci secondi su un
   // giro da 2 km e di quattro minuti su uno da 25. Si imposta una sola volta per percorso — dopo
@@ -4443,10 +4464,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <div className="space-y-2">
                   {routePhotos.map(photo=>{
                     const included = !videoExcludedPhotoIds.has(photo.id)
+                    const locked = !unlockedPhotoIds.has(photo.id)
+                    const moved = videoPhotoAtP[photo.id]!=null
+                    const active = activePhotoRowId===photo.id
                     return (
                       <div key={photo.id} className={`bg-stone-100 rounded-xl p-2 flex items-start gap-2.5 ${included?'':'opacity-45'}`}>
                         <div className="relative shrink-0">
-                          <img src={photo.url} alt="" className="w-11 h-11 rounded-lg object-cover"/>
+                          <button onClick={()=>setActivePhotoRowId(active?null:photo.id)}
+                            title="Sposta o ripristina questa foto" className="block">
+                            <img src={photo.url} alt="" className={`w-11 h-11 rounded-lg object-cover ${active?'ring-2 ring-forest-500':''}`}/>
+                          </button>
                           {photo.hasExifGps&&(
                             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-forest-500 flex items-center justify-center" title="GPS automatico">
                               <Check className="w-2 h-2 text-white"/>
@@ -4471,9 +4498,45 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                             placeholder="Testo della polaroid…"
                             className="w-full bg-transparent text-stone-900 text-[11px] font-medium placeholder:text-stone-400 focus:outline-none border-b border-stone-300 focus:border-stone-500 pb-0.5 mb-1.5"
                           />
+                          {/* Lucchetto e ripristino: fuori dal flusso di default, compaiono solo per
+                              la foto appena toccata — vedi il commento su activePhotoRowId. Bloccare
+                              di nuovo dopo aver spostato non tocca la posizione già scelta: il
+                              lucchetto impedisce trascinamenti FUTURI, non annulla quelli fatti. */}
+                          {active && (
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <button onClick={()=>togglePhotoLock(photo.id)}
+                                className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${
+                                  locked ? 'bg-stone-200 text-stone-600 hover:bg-stone-300' : 'bg-forest-600 text-white hover:bg-forest-700'}`}>
+                                {locked ? <Lock className="w-3 h-3"/> : <LockOpen className="w-3 h-3"/>}
+                                {locked ? 'Bloccata' : 'Sbloccata: trascinala sulla mappa'}
+                              </button>
+                              {moved && pendingResetPhotoId!==photo.id && (
+                                <button onClick={()=>setPendingResetPhotoId(photo.id)} title="Ripristina la posizione originale"
+                                  className="flex items-center justify-center w-6 h-6 rounded-lg bg-stone-200 text-stone-600 hover:bg-stone-300 shrink-0">
+                                  <RotateCcw className="w-3 h-3"/>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          {active && pendingResetPhotoId===photo.id && (
+                            <div className="mb-1.5 rounded-lg bg-terra-50 border border-terra-200 px-2 py-1.5">
+                              <p className="text-terra-800 text-[10px] leading-relaxed mb-1">Ripristinare questa foto dov’è stata scattata?</p>
+                              <div className="flex items-center gap-1">
+                                <button onClick={()=>setPendingResetPhotoId(null)}
+                                  className="text-[10px] font-semibold text-stone-500 hover:text-stone-800 px-1 py-0.5">Annulla</button>
+                                <button onClick={()=>{
+                                  const id=photo.id
+                                  setPendingResetPhotoId(null)
+                                  setVideoPhotoAtP(prev=>{ const {[id]:_drop, ...rest}=prev; return rest })
+                                }}
+                                  className="text-[10px] font-bold text-white bg-terra-600 hover:bg-terra-700 rounded-lg px-1.5 py-0.5">Ripristina</button>
+                              </div>
+                            </div>
+                          )}
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-stone-500">
-                              {videoPhotoAtP[photo.id]!=null
+                            <span className="text-[10px] text-stone-500 flex items-center gap-1">
+                              {locked && <Lock className="w-2.5 h-2.5 text-stone-400" aria-label="Bloccata"/>}
+                              {moved
                                 ? <span className="text-terra-700">spostata al {Math.round(videoPhotoAtP[photo.id]*100)}%</span>
                                 : `${Math.round(photo.progress*100)}%`}
                             </span>
