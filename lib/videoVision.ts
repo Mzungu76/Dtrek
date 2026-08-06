@@ -404,11 +404,16 @@ export function centerOfBounds(bounds: LatLonBounds): { lat: number; lon: number
 // comportamento di un palo vero, senza dipendere da una matrice che da qui non so verificare.
 
 /** Lunghezza del filo a inclinazione radente, in unità di un fotogramma da 1080 (va scalata per
- *  `sc`). È l'"altezza standard" chiesta, espressa dove conta: nell'inquadratura. */
-export const VISION_MARKER_LIFT_PX = 76
+ *  `sc`). È l'"altezza standard" chiesta, espressa dove conta: nell'inquadratura.
+ *
+ *  Il volo segue a pitch fisso 48° (vedi planShots in components/RouteMap3D.tsx), quindi in
+ *  pratica il filo vale quasi sempre 0,74 di questo numero — il valore va scelto pensando a QUELLO,
+ *  non al caso limite radente. Prima valeva 76: a 48° dava ~56 px su un fotogramma 1080, un
+ *  cartello che si notava a stento. */
+export const VISION_MARKER_LIFT_PX = 170
 /** Sotto questa lunghezza il cartello si accartoccia sul proprio punto e non si capisce più che
  *  cosa stia indicando: succede quando la telecamera guarda quasi a picco. */
-export const VISION_MARKER_MIN_LIFT_PX = 24
+export const VISION_MARKER_MIN_LIFT_PX = 60
 
 /** Lunghezza del filo per l'inclinazione corrente della telecamera. */
 export function visionMarkerLiftPx(pitchDeg: number, sc: number): number {

@@ -2111,16 +2111,16 @@ export function drawVisionMarker(
     ctx.beginPath(); ctx.arc(m.groundX, m.groundY, 2 * sc, 0, Math.PI * 2)
     ctx.fillStyle = color; ctx.fill()
 
-    ctx.font = `700 ${Math.round(15 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
+    ctx.font = `700 ${Math.round(23 * sc)}px system-ui,-apple-system,Segoe UI,sans-serif`
     const label = m.qualifier ? `${m.qualifier.toUpperCase()} · ${m.name}` : m.name
     const text = ellipsize(ctx, label, maxLabelWidth)
     const textW = ctx.measureText(text).width
-    const padX = 10 * sc, padY = 6 * sc, dotR = 3.4 * sc, gap = 6 * sc, textH = 15 * sc
+    const padX = 13 * sc, padY = 9 * sc, dotR = 4.6 * sc, gap = 8 * sc, textH = 23 * sc
     const chipW = textW + padX * 2 + dotR * 2 + gap
     const chipH = textH + padY * 2
     // Ancorata sopra il capo del filo, non sul punto stesso: il testo deve galleggiare sul
     // cartello, non stargli sopra come un'ombra.
-    const chipX = m.headX - chipW / 2, chipY = m.headY - chipH - 9 * sc
+    const chipX = m.headX - chipW / 2, chipY = m.headY - chipH - 11 * sc
     ctx.fillStyle = 'rgba(8,14,10,0.5)'
     rrect(ctx, chipX, chipY, chipW, chipH, chipH / 2); ctx.fill()
     ctx.beginPath(); ctx.arc(chipX + padX + dotR, chipY + chipH / 2, dotR, 0, Math.PI * 2)
