@@ -53,9 +53,13 @@ const INTERLUDE_TINT: Record<InterludeKind, string> = {
 export interface TimelineEditorItem extends TimelineItem {
   thumbUrl?: string
   interludeKind?: InterludeKind
-  /** Solo le foto la usano davvero (vedi il commento sul lucchetto in RouteMap3D.tsx): uno stacco
-   *  non ha una posizione "originale" da proteggere, quindi resta sempre trascinabile. */
+  /** Solo le foto le usano davvero (vedi il commento sul lucchetto in RouteMap3D.tsx): uno stacco
+   *  non ha una posizione "originale" da proteggere, quindi resta sempre trascinabile e senza
+   *  pallini di stato. */
   locked?: boolean
+  /** La foto è stata spostata dal punto dove è stata scattata (o dal punto assegnato la prima
+   *  volta): mostra sempre il pallino di ripristino sulla mappa, non solo nell'elenco. */
+  moved?: boolean
 }
 
 interface Props {
@@ -69,11 +73,19 @@ interface Props {
   shape?: TrackShape
   roundTrip?: boolean
   onMove: (id: string, atP: number) => void
+  /** Lucchetto toccato sulla mappa: blocca/sblocca SUL POSTO, senza passare dall'elenco foto. */
+  onToggleLock?: (id: string) => void
+  /** Pallino di ripristino toccato e confermato nel popup che apre: vedi openResetConfirm. */
+  onReset?: (id: string) => void
 }
+
+const LOCK_BADGE_CLASS = 'rle-lock-badge'
+const RESET_BADGE_CLASS = 'rle-reset-badge'
 
 function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L.DivIcon {
   const isPhoto = it.kind === 'photo'
-  const locked = isPhoto && it.locked
+  const locked = isPhoto && !!it.locked
+  const moved = isPhoto && !!it.moved
   const tint = isPhoto ? '#3f3a33' : (INTERLUDE_TINT[it.interludeKind ?? 'numeri'] ?? '#3f3a33')
   const glyph = isPhoto ? '▣' : INTERLUDE_GLYPH[it.interludeKind ?? 'numeri']
   const size = isPhoto ? 30 : 28
@@ -84,22 +96,96 @@ function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L
     : `box-shadow:0 1px 4px rgba(0,0,0,0.25);`
   const bg = isPhoto ? '#3f3a33' : tint
   const fg = isPhoto ? '#ffffff' : 'rgba(20,18,15,0.9)'
-  // Il lucchetto sul pallino è l'unico modo di sapere, guardando la MAPPA (non l'elenco foto), che
-  // quella foto non si sposta finché non la si sblocca da lì — vedi il commento in RouteMap3D.tsx.
-  const lockBadge = locked
-    ? `<div style="position:absolute;right:-3px;bottom:-3px;width:14px;height:14px;border-radius:50%;background:#c05a17;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1;color:#fff">🔒</div>`
+  // Il lucchetto sul pallino è SEMPRE presente per una foto (chiuso o aperto) e si tocca
+  // direttamente: è il modo di bloccare/sbloccare senza passare dall'elenco. Zona di tocco più
+  // larga dell'icona vera (24px invece di 14) per non far fallire il tocco su schermi piccoli —
+  // vedi bindBadgeHandlers per come diventa cliccabile.
+  const lockBadge = isPhoto
+    ? `<div class="${LOCK_BADGE_CLASS}" style="position:absolute;right:-9px;bottom:-9px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+         <span style="width:16px;height:16px;border-radius:50%;background:${locked ? '#c05a17' : '#277134'};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.35)">${locked ? '🔒' : '🔓'}</span>
+       </div>`
+    : ''
+  // Il ripristino è SEMPRE visibile quando la foto non è più al suo punto originale, bloccata o
+  // no: è un'informazione ("questa non è dove l'hai scattata"), non solo un comando per chi
+  // l'ha appena sbloccata.
+  const resetBadge = moved
+    ? `<div class="${RESET_BADGE_CLASS}" style="position:absolute;left:-9px;top:-9px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+         <span style="width:16px;height:16px;border-radius:50%;background:#38bdf8;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.35)">↺</span>
+       </div>`
     : ''
   return Lmod.divIcon({
     html: `<div style="position:relative;width:${size}px;height:${size}px">
              <div style="width:100%;height:100%;border-radius:50%;background:${bg};border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${fg};${ring};cursor:${locked ? 'default' : 'grab'}">${glyph}</div>
-             ${lockBadge}
+             ${lockBadge}${resetBadge}
            </div>`,
-    iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: '',
+    // L'icona vera resta 30px, ma iconSize è quella che Leaflet usa per il riquadro cliccabile
+    // dell'INTERO marker: allargata di 18px (9 per lato) per includere i due pallini che ora
+    // sporgono dagli angoli, altrimenti un tocco sul lucchetto — fuori dal riquadro originale —
+    // non arriverebbe a nessun elemento e il badge sembrerebbe morto.
+    iconSize: isPhoto ? [size + 18, size + 18] : [size, size],
+    iconAnchor: isPhoto ? [(size + 18) / 2, (size + 18) / 2] : [size / 2, size / 2],
+    className: '',
+  })
+}
+
+/**
+ * Ricollega i gestori dei pallini lucchetto/ripristino dopo OGNI setIcon: divIcon sostituisce il
+ * nodo DOM del marker da zero ad ogni chiamata, quindi qualunque listener attaccato prima sparisce
+ * insieme al nodo vecchio — va rifatto ogni volta, non solo alla creazione.
+ *
+ * stopPropagation su mousedown/touchstart, non solo su click: Leaflet.Draggable avvia il
+ * trascinamento al mousedown sull'intero elemento icona, prima che un click abbia la possibilità
+ * di distinguere "hai toccato il lucchetto" da "hai toccato il pallino". Senza fermarlo lì,
+ * toccare il lucchetto sposterebbe comunque la foto di qualche pixel prima di sbloccarla.
+ */
+function bindBadgeHandlers(
+  Lmod: typeof L, m: L.Marker,
+  handlers: { onToggleLock?: () => void; onReset?: () => void },
+) {
+  const el = m.getElement()
+  if (!el) return
+  const stop = (ev: Event) => Lmod.DomEvent.stopPropagation(ev)
+
+  const lockEl = el.querySelector<HTMLElement>(`.${LOCK_BADGE_CLASS}`)
+  if (lockEl && handlers.onToggleLock) {
+    lockEl.addEventListener('mousedown', stop)
+    lockEl.addEventListener('touchstart', stop, { passive: true })
+    lockEl.addEventListener('click', ev => { ev.stopPropagation(); handlers.onToggleLock!() })
+  }
+  const resetEl = el.querySelector<HTMLElement>(`.${RESET_BADGE_CLASS}`)
+  if (resetEl && handlers.onReset) {
+    resetEl.addEventListener('mousedown', stop)
+    resetEl.addEventListener('touchstart', stop, { passive: true })
+    resetEl.addEventListener('click', ev => { ev.stopPropagation(); openResetConfirm(m, handlers.onReset!) })
+  }
+}
+
+/**
+ * Popup di conferma ancorato al marker stesso: "ripristinare?" con Annulla/Ripristina, la stessa
+ * domanda posta in due tempi già in uso nell'elenco foto, ma qui accanto al pallino invece che in
+ * una lista — non serve aprire l'elenco per disfare uno spostamento fatto per errore sulla mappa.
+ */
+function openResetConfirm(m: L.Marker, onConfirm: () => void) {
+  const html = `
+    <div style="font:12px/1.4 -apple-system,system-ui,sans-serif;max-width:170px">
+      <p style="margin:0 0 8px;color:#332e27">Ripristinare questa foto dov'è stata scattata?</p>
+      <div style="display:flex;gap:6px;justify-content:flex-end">
+        <button class="rle-reset-cancel" style="font:700 11px system-ui;background:#eeece5;color:#5e564c;border:none;border-radius:8px;padding:5px 9px;cursor:pointer">Annulla</button>
+        <button class="rle-reset-confirm" style="font:700 11px system-ui;background:#c05a17;color:#fff;border:none;border-radius:8px;padding:5px 9px;cursor:pointer">Ripristina</button>
+      </div>
+    </div>`
+  m.bindPopup(html, { closeButton: true, className: 'rle-popup', offset: [0, -6] }).openPopup()
+  const popupEl = m.getPopup()?.getElement()
+  if (!popupEl) return
+  popupEl.querySelector<HTMLElement>('.rle-reset-cancel')?.addEventListener('click', () => m.closePopup())
+  popupEl.querySelector<HTMLElement>('.rle-reset-confirm')?.addEventListener('click', () => {
+    m.closePopup()
+    onConfirm()
   })
 }
 
 export default function RouteLeafletEditor({
-  trackPoints, items, routeSeconds, shape: trackShape, roundTrip, onMove, fill,
+  trackPoints, items, routeSeconds, shape: trackShape, roundTrip, onMove, onToggleLock, onReset, fill,
 }: Props) {
   const mapElRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -111,6 +197,10 @@ export default function RouteLeafletEditor({
   const leafletRef = useRef<typeof L | null>(null)
   const onMoveRef = useRef(onMove)
   onMoveRef.current = onMove
+  const onToggleLockRef = useRef(onToggleLock)
+  onToggleLockRef.current = onToggleLock
+  const onResetRef = useRef(onReset)
+  onResetRef.current = onReset
 
   const [mapReady, setMapReady] = useState(false)
   // Anteprima live dell'affollamento durante un trascinamento in corso: senza, il cerchio arancio
@@ -215,6 +305,11 @@ export default function RouteLeafletEditor({
       const pt = gpsPoints[Math.min(Math.max(idx, 0), gpsPoints.length - 1)]
       if (!pt) continue
 
+      const badgeHandlers = it.kind === 'photo' ? {
+        onToggleLock: onToggleLockRef.current ? () => onToggleLockRef.current!(it.id) : undefined,
+        onReset: onResetRef.current ? () => onResetRef.current!(it.id) : undefined,
+      } : undefined
+
       let m = markersRef.current.get(it.id)
       if (!m) {
         m = Lmod.marker([pt.lat, pt.lon], { icon: markerIcon(Lmod, it, crowded0.has(it.id)), draggable: !it.locked })
@@ -231,6 +326,7 @@ export default function RouteLeafletEditor({
           onMoveRef.current(it.id, p)
         })
         markersRef.current.set(it.id, m)
+        if (badgeHandlers) bindBadgeHandlers(Lmod, m, badgeHandlers)
       } else if (dragPreview && dragPreview[it.id] !== undefined) {
         // In trascinamento attivo: la posizione la possiede Leaflet stesso (Draggable la muove dai
         // delta del mouse rispetto al punto di partenza), non `it.atP` — che è ancora quello di
@@ -242,6 +338,9 @@ export default function RouteLeafletEditor({
         // Idempotente: enable/disable su uno stato già corrente non fa nulla di visibile, quindi
         // richiamarlo ogni volta che `items` cambia (non ad ogni tick) resta economico.
         if (it.locked) m.dragging?.disable(); else m.dragging?.enable()
+        // setIcon appena sopra ha sostituito il nodo DOM: i gestori dei pallini vanno ricollegati,
+        // sempre, non solo alla creazione — vedi il commento su bindBadgeHandlers.
+        if (badgeHandlers) bindBadgeHandlers(Lmod, m, badgeHandlers)
       }
     }
 
@@ -269,7 +368,14 @@ export default function RouteLeafletEditor({
       const was = prev.has(it.id), is = next.has(it.id)
       if (was === is) continue
       const m = markersRef.current.get(it.id)
-      if (m) m.setIcon(markerIcon(Lmod, it, is))
+      if (!m) continue
+      m.setIcon(markerIcon(Lmod, it, is))
+      if (it.kind === 'photo') {
+        bindBadgeHandlers(Lmod, m, {
+          onToggleLock: onToggleLockRef.current ? () => onToggleLockRef.current!(it.id) : undefined,
+          onReset: onResetRef.current ? () => onResetRef.current!(it.id) : undefined,
+        })
+      }
     }
     lastCrowdedRef.current = next
   }, [crowding, mapReady, items])
@@ -331,7 +437,8 @@ export default function RouteLeafletEditor({
           <div className="rounded-xl bg-white/97 border border-stone-200 shadow-lg px-3 py-2.5 space-y-2">
             <p className="text-stone-700 text-[11px] leading-relaxed">
               Trascina i pallini per decidere dove cade ogni foto e ogni stacco: si agganciano da soli al punto
-              del percorso più vicino. Una foto con il lucchetto va prima sbloccata dall&apos;elenco foto qui sotto.
+              del percorso più vicino. Il lucchetto su una foto la blocca o la sblocca — toccalo per cambiare;
+              il pallino ↺, quando compare, riporta la foto dov&apos;è stata scattata.
               {roundTrip && ' Il percorso è un andata e ritorno: il video mostra la sola andata, quindi tutto va posizionato su quella.'}
             </p>
             {interludeItems.length > 0 && (
