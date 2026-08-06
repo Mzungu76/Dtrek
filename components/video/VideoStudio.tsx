@@ -16,6 +16,13 @@
  * sempre visibile mentre si regola. Le spiegazioni non stanno più nel flusso: ogni comando che ne
  * ha una porta un «?», e il testo compare solo se lo si chiede.
  *
+ * Le icone sono vere (GROUP_ICON, lucide) e non più i caratteri unicode di prima: su Android quei
+ * caratteri cadevano spesso su un ripiego generico del font, illeggibile come simbolo. Otto gruppi
+ * in tutto (erano fino a tredici — vedi i commenti di merge in RouteMap3D.tsx), ordinati SETUP
+ * prima e CONTENUTI dopo: si decide prima il contenitore del video (formato, ritmo, mappa,
+ * schermo, effetti), poi cosa ci si mette sopra (momenti, foto, contenuti aggiuntivi) — nella
+ * colonnina dall'alto in basso, sullo schermo largo nei due binari.
+ *
  * Su schermo largo la colonnina si apre da sola nei due binari già in uso: a SINISTRA ciò che si
  * posa in un punto del percorso, a DESTRA ciò che vale per tutto il video. Verde per il posizionale,
  * terra per il globale — la distinzione più difficile da spiegare a parole, quindi la si fa vedere.
@@ -25,10 +32,26 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { X, Play, HelpCircle } from 'lucide-react'
+import {
+  X, Play, HelpCircle, Circle,
+  Milestone, Image, BookOpen, Clapperboard, Gauge, Map, LayoutDashboard, Wand2,
+} from 'lucide-react'
 import { visibleGroups, type StudioControl, type StudioGroup, type StudioBudgetPart } from '@/lib/videoStudio'
 
 type Rail = 'route' | 'global'
+
+// Un'icona vera per gruppo, non più il carattere unicode di prima (◎ ▭ ⛰ …): su Android quei
+// caratteri cadevano spesso su un ripiego generico del font — un rombo, un triangolo indistinto —
+// che non diceva nulla di cosa il gruppo facesse. Chiave = id del gruppo (vedi RouteMap3D.tsx),
+// non `glyph`: `glyph` resta nei dati solo come slug stabile, il disegno vive tutto qui.
+const GROUP_ICON: Record<string, typeof Circle> = {
+  momenti: Milestone, foto: Image, contenuti: BookOpen,
+  video: Clapperboard, ritmo: Gauge, mappa: Map, schermo: LayoutDashboard, effetti: Wand2,
+}
+function GroupIcon({ id, className }: { id: string; className?: string }) {
+  const Icon = GROUP_ICON[id] ?? Circle
+  return <Icon className={className} />
+}
 
 interface Props {
   title: string
@@ -210,11 +233,14 @@ export default function VideoStudio({
   const routeGroups = visibleGroups(positionalGroups)
   const settingGroups = visibleGroups(globalGroups)
 
-  // Una sola colonnina: prima gli strumenti che si posano sul percorso, poi quelli che valgono per
-  // tutto il video, separati da una riga. `null` = nessuna scheda aperta, cioè mappa intera.
+  // Una sola colonnina: prima le funzioni di SETUP del video (formato, ritmo, mappa, schermo,
+  // effetti — terra), poi quelle che riguardano i CONTENUTI che ci si posano sopra (momenti, foto,
+  // contenuti — verde), separati da una riga. Si decide prima il contenitore, poi cosa ci va
+  // dentro: è l'ordine in cui le scelte dipendono l'una dall'altra, non un'abitudine visiva.
+  // `null` = nessuna scheda aperta, cioè mappa intera.
   const railTools: { group: StudioGroup; rail: Rail }[] = [
-    ...routeGroups.map(g => ({ group: g, rail: 'route' as Rail })),
     ...settingGroups.map(g => ({ group: g, rail: 'global' as Rail })),
+    ...routeGroups.map(g => ({ group: g, rail: 'route' as Rail })),
   ]
   const [openToolId, setOpenToolId] = useState<string | null>(null)
   const [showGenerate, setShowGenerate] = useState(false)
@@ -291,7 +317,7 @@ export default function VideoStudio({
           {routeGroups.map(g => (
             <section key={g.id}>
               <p className="text-stone-700 text-[11px] font-bold mb-2.5 flex items-center gap-1.5">
-                <span className="text-stone-400">{g.glyph}</span>{g.label}
+                <GroupIcon id={g.id} className="w-3.5 h-3.5 text-stone-400" />{g.label}
               </p>
               <GroupView g={g} accent="route" />
             </section>
@@ -308,7 +334,7 @@ export default function VideoStudio({
           {settingGroups.map(g => (
             <section key={g.id}>
               <p className="text-stone-700 text-[11px] font-bold mb-2.5 flex items-center gap-1.5">
-                <span className="text-stone-400">{g.glyph}</span>{g.label}
+                <GroupIcon id={g.id} className="w-3.5 h-3.5 text-stone-400" />{g.label}
               </p>
               <GroupView g={g} accent="global" />
             </section>
@@ -331,11 +357,11 @@ export default function VideoStudio({
                 {prevRail && prevRail !== rail && <span className="w-6 h-px bg-stone-300 my-0.5" />}
                 <button onClick={() => setOpenToolId(active ? null : group.id)}
                   title={group.label} aria-label={group.label} aria-pressed={active}
-                  className={`w-11 h-11 rounded-xl flex items-center justify-center text-[17px] leading-none shadow-sm border transition-colors ${
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-sm border transition-colors ${
                     active
                       ? (rail === 'route' ? 'bg-forest-600 border-forest-700 text-white' : 'bg-terra-600 border-terra-700 text-white')
                       : 'bg-white/95 border-stone-200 text-stone-600 hover:bg-white'}`}>
-                  {group.glyph}
+                  <GroupIcon id={group.id} className="w-[18px] h-[18px]" />
                 </button>
               </div>
             )

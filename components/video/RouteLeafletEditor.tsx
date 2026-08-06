@@ -201,6 +201,15 @@ export default function RouteLeafletEditor({
             onMoveRef.current(it.id, p)
           })
           markersRef.current.set(it.id, m)
+        } else if (dragPreview && dragPreview[it.id] !== undefined) {
+          // In trascinamento: la posizione del marker la possiede Leaflet stesso (Draggable la
+          // muove dai delta del mouse rispetto al punto di partenza), non `it.atP` — che è ancora
+          // quello di PRIMA del trascinamento, il prop non si aggiorna finché non si rilascia. Un
+          // setLatLng qui lo riporterebbe alla posizione vecchia ad ogni ricalcolo dell'affollamento
+          // (che avviene ad ogni evento 'drag', vedi sotto), cioè un salto indietro più volte al
+          // secondo: il marker sembrerebbe incollato sul posto invece che trascinabile. Si aggiorna
+          // solo l'anello di affollamento, mai la posizione, finché non arriva il dragend.
+          m.setIcon(markerIcon(Lmod, it, crowded))
         } else {
           m.setLatLng([pt.lat, pt.lon])
           m.setIcon(markerIcon(Lmod, it, crowded))
@@ -213,7 +222,10 @@ export default function RouteLeafletEditor({
       })
     })
     return () => { cancelled = true }
-    // crowding dipende da items+routeSeconds, già nelle dep; gpsPoints deriva da trackPoints.
+    // crowding dipende da items+routeSeconds+dragPreview, già nelle dep (o coperta da crowding,
+    // che cambia referenza ad ogni variazione di dragPreview): l'effetto si ririesegue comunque
+    // ad ogni evento 'drag', e legge dragPreview fresco dalla stessa closure. gpsPoints deriva da
+    // trackPoints.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, mapReady, crowding])
 
