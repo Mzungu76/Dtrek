@@ -1,30 +1,31 @@
 'use client'
 
 /**
- * components/video/VideoStudio.tsx — il percorso al centro, i comandi attorno.
+ * components/video/VideoStudio.tsx — il percorso sotto tutto, gli strumenti al bordo.
  *
- * Sostituisce il wizard a cinque passi. Quello chiedeva di ricordare, fra un passo e l'altro, dove
- * cadevano le cose decise prima: si accendeva uno stacco al passo 4 senza vedere che sarebbe finito
- * sopra una foto scelta al passo 3, ed è esattamente così che nascevano le sovrapposizioni. Qui la
- * mappa non si perde mai di vista, e ogni comando ha un effetto visibile nel momento in cui lo si
- * tocca.
+ * Sostituisce il wizard a cinque passi, e poi la sua prima disposizione (mappa in una fascia, due
+ * linguette e un cassetto sotto). Quella disposizione aveva un difetto misurabile: sul telefono la
+ * mappa stava a un quarto dello schermo e il resto era prosa — istruzioni, avviso di affollamento,
+ * descrizione del gruppo — con DUE livelli di linguette da attraversare prima di arrivare a un
+ * comando. Si regolava un video guardando tutto tranne il video.
  *
- * Due binari, e la divisione non è di comodo: a SINISTRA ciò che si posa in un punto del percorso
- * (stacchi, foto, didascalie), a DESTRA ciò che vale per tutto il video (formato, ritmo, effetti).
- * È la distinzione più difficile da spiegare a parole in questo strumento, quindi la si fa vedere
- * invece di spiegarla — verde per il posizionale, terra per il globale, e la posizione sullo
- * schermo che ripete la stessa cosa.
+ * Qui la mappa è il fondo, a pieno schermo, e non viene MAI ridimensionata: tutto il resto le
+ * galleggia sopra e al più la copre in parte. Gli strumenti sono una colonnina di icone sul bordo
+ * destro — dove il pollice arriva senza spostare la presa — e la scheda di ciascuno si apre
+ * accanto, stretta e alta al massimo tre quinti, così che la fascia bassa del percorso resti
+ * sempre visibile mentre si regola. Le spiegazioni non stanno più nel flusso: ogni comando che ne
+ * ha una porta un «?», e il testo compare solo se lo si chiede.
  *
- * Su telefono i due binari diventano i due sommari di un cassetto che sale dal basso: la logica non
- * cambia, cambia solo quanto se ne vede per volta. Era il motivo per cui questa disposizione è
- * stata scelta fra le tre proposte — le altre due, collassando, perdevano il proprio senso.
+ * Su schermo largo la colonnina si apre da sola nei due binari già in uso: a SINISTRA ciò che si
+ * posa in un punto del percorso, a DESTRA ciò che vale per tutto il video. Verde per il posizionale,
+ * terra per il globale — la distinzione più difficile da spiegare a parole, quindi la si fa vedere.
  *
  * I controlli arrivano descritti come dati (lib/videoStudio.ts): qui c'è solo il layout e il modo
  * di disegnarli.
  */
 
 import { useState, type ReactNode } from 'react'
-import { X, Play, ChevronUp } from 'lucide-react'
+import { X, Play, HelpCircle } from 'lucide-react'
 import { visibleGroups, type StudioControl, type StudioGroup, type StudioBudgetPart } from '@/lib/videoStudio'
 
 type Rail = 'route' | 'global'
@@ -32,7 +33,7 @@ type Rail = 'route' | 'global'
 interface Props {
   title: string
   onClose: () => void
-  /** La mappa Leaflet col percorso e i pallini trascinabili. */
+  /** La mappa Leaflet col percorso e i pallini trascinabili: sta sotto tutto, a pieno schermo. */
   mapSlot: ReactNode
   positionalGroups: StudioGroup[]
   globalGroups: StudioGroup[]
@@ -43,17 +44,52 @@ interface Props {
   onDismissError?: () => void
 }
 
+// ── Spiegazione a richiesta ──────────────────────────────────────────────────
+// Il «?» esiste perché ogni riga di aiuto sempre visibile costa due righe di schermo a un comando
+// che ne occupa una: sommate, erano più alte della mappa.
+
+function Hint({ text, accent }: { text: string; accent: Rail }) {
+  const [open, setOpen] = useState(false)
+  const tint = accent === 'route' ? 'text-forest-600' : 'text-terra-600'
+  return (
+    <>
+      <button onClick={() => setOpen(o => !o)} aria-label="Spiegazione" aria-expanded={open}
+        className={`shrink-0 align-middle transition-colors ${open ? tint : 'text-stone-400 hover:text-stone-600'}`}>
+        <HelpCircle className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <p className="basis-full mt-1 text-stone-600 text-[11px] leading-relaxed bg-stone-100 rounded-lg px-2.5 py-1.5">
+          {text}
+        </p>
+      )}
+    </>
+  )
+}
+
+/** Riga «etichetta + eventuale ?»: il ? sta sempre in fondo al titolo, mai in mezzo al comando. */
+function LabelRow({ label, hint, accent }: { label: string; hint?: string; accent: Rail }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mb-2">
+      <p className="text-stone-500 text-[10px] font-bold tracking-[0.12em]">{label.toUpperCase()}</p>
+      {hint && <Hint text={hint} accent={accent} />}
+    </div>
+  )
+}
+
 // ── Disegno di un singolo controllo ──────────────────────────────────────────
 
-function ControlView({ c, accent }: { c: StudioControl; accent: 'route' | 'global' }) {
-  const onColor = accent === 'route' ? 'bg-forest-500' : 'bg-terra-500'
-  const onRing  = accent === 'route' ? 'border-forest-400/60 bg-forest-500/20' : 'border-terra-400/60 bg-terra-500/20'
-  const onText  = accent === 'route' ? 'text-forest-300' : 'text-terra-300'
+function ControlView({ c, accent }: { c: StudioControl; accent: Rail }) {
+  const onColor = accent === 'route' ? 'bg-forest-600' : 'bg-terra-600'
+  const onRing  = accent === 'route' ? 'border-forest-500 bg-forest-50' : 'border-terra-500 bg-terra-50'
+  const onText  = accent === 'route' ? 'text-forest-700' : 'text-terra-700'
 
   switch (c.kind) {
     case 'note':
       return (
-        <p className={`text-[11px] leading-relaxed ${c.tone === 'warn' ? 'text-amber-300/90' : 'text-white/35'}`}>
+        <p className={`text-[11px] leading-relaxed ${
+          c.tone === 'warn'
+            ? 'text-terra-800 bg-terra-50 border border-terra-200 rounded-lg px-2.5 py-1.5'
+            : 'text-stone-500'}`}>
           {c.text}
         </p>
       )
@@ -61,94 +97,98 @@ function ControlView({ c, accent }: { c: StudioControl; accent: 'route' | 'globa
     case 'cards':
       return (
         <div>
-          {c.label && <p className="text-white/45 text-[10px] font-bold tracking-[0.12em] mb-2">{c.label.toUpperCase()}</p>}
-          <div className="space-y-2">
+          {c.label && <LabelRow label={c.label} hint={c.hint} accent={accent} />}
+          <div className="space-y-1.5">
             {c.options.map(o => (
               <button key={o.value} onClick={() => c.onPick(o.value)} disabled={o.disabled}
                 className={`w-full text-left rounded-xl px-3 py-2.5 border transition-colors disabled:opacity-40 ${
-                  c.value === o.value ? onRing : 'bg-white/7 border-transparent hover:bg-white/10'}`}>
-                <p className={`text-[13px] font-bold ${c.value === o.value ? onText : 'text-white'}`}>{o.label}</p>
-                {o.sub && <p className="text-white/45 text-[11px] mt-0.5 leading-snug">{o.sub}</p>}
+                  c.value === o.value ? onRing : 'bg-stone-100 border-transparent hover:bg-stone-200'}`}>
+                <p className={`text-[13px] font-bold ${c.value === o.value ? onText : 'text-stone-900'}`}>{o.label}</p>
+                {o.sub && <p className="text-stone-500 text-[11px] mt-0.5 leading-snug">{o.sub}</p>}
               </button>
             ))}
           </div>
-          {c.hint && <p className="text-white/30 text-[11px] mt-1.5 leading-relaxed">{c.hint}</p>}
+          {!c.label && c.hint && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5"><Hint text={c.hint} accent={accent} /></div>
+          )}
         </div>
       )
 
     case 'segmented':
       return (
         <div>
-          {c.label && <p className="text-white/45 text-[10px] font-bold tracking-[0.12em] mb-2">{c.label.toUpperCase()}</p>}
+          {c.label && <LabelRow label={c.label} hint={c.hint} accent={accent} />}
           <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${c.columns ?? Math.min(3, c.options.length)}, minmax(0,1fr))` }}>
             {c.options.map(o => (
               <button key={o.value} onClick={() => c.onPick(o.value)} disabled={o.disabled}
                 className={`py-2 px-1.5 rounded-lg flex flex-col items-center gap-0.5 transition-colors disabled:opacity-30 ${
-                  c.value === o.value ? `${onColor} text-white` : 'bg-white/10 text-white/70 hover:bg-white/18'}`}>
-                {o.color && <span className="w-3.5 h-3.5 rounded-full mb-0.5" style={{ background: o.color }} />}
+                  c.value === o.value ? `${onColor} text-white` : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}>
+                {o.color && <span className="w-3.5 h-3.5 rounded-full mb-0.5 ring-1 ring-black/10" style={{ background: o.color }} />}
                 <span className="text-[11px] font-bold leading-none">{o.label}</span>
-                {o.sub && <span className="text-[9px] opacity-65 leading-none mt-0.5">{o.sub}</span>}
+                {o.sub && <span className="text-[9px] opacity-70 leading-none mt-0.5">{o.sub}</span>}
               </button>
             ))}
           </div>
-          {c.hint && <p className="text-white/30 text-[11px] mt-1.5 leading-relaxed">{c.hint}</p>}
+          {!c.label && c.hint && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5"><Hint text={c.hint} accent={accent} /></div>
+          )}
         </div>
       )
 
     case 'toggle':
       return (
-        <div className={c.disabled ? 'opacity-40' : ''}>
-          <label className={`flex items-start gap-2 ${c.disabled ? '' : 'cursor-pointer'}`}>
-            <input type="checkbox" checked={c.value} disabled={c.disabled}
-              onChange={e => c.onToggle(e.target.checked)}
-              className={`w-4 h-4 mt-0.5 shrink-0 ${accent === 'route' ? 'accent-forest-500' : 'accent-terra-500'}`} />
-            <span className="min-w-0">
-              <span className="text-white text-[12px] font-semibold block leading-snug">{c.label}</span>
-              {(c.disabled && c.disabledReason)
-                ? <span className="text-white/35 text-[10px] block mt-0.5">{c.disabledReason}</span>
-                : c.hint && <span className="text-white/30 text-[11px] block mt-0.5 leading-relaxed">{c.hint}</span>}
-            </span>
-          </label>
+        <div className={c.disabled ? 'opacity-45' : ''}>
+          <div className="flex flex-wrap items-start gap-x-1.5">
+            <label className={`flex items-start gap-2 flex-1 min-w-0 ${c.disabled ? '' : 'cursor-pointer'}`}>
+              <input type="checkbox" checked={c.value} disabled={c.disabled}
+                onChange={e => c.onToggle(e.target.checked)}
+                className={`w-4 h-4 mt-0.5 shrink-0 ${accent === 'route' ? 'accent-forest-600' : 'accent-terra-600'}`} />
+              <span className="text-stone-900 text-[12px] font-semibold leading-snug min-w-0">{c.label}</span>
+            </label>
+            {(c.disabled && c.disabledReason)
+              ? <span className="basis-full text-stone-500 text-[10px] pl-6 mt-0.5">{c.disabledReason}</span>
+              : c.hint && <Hint text={c.hint} accent={accent} />}
+          </div>
         </div>
       )
 
     case 'slider':
       return (
-        <div>
-          <div className="flex items-center gap-2.5">
-            <span className="text-white/50 text-[11px] shrink-0 min-w-[4.5rem]">{c.label}</span>
-            <input type="range" min={c.min} max={c.max} step={c.step} value={c.value}
-              onChange={e => c.onChange(+e.target.value)}
-              className={`flex-1 h-1 rounded-full cursor-pointer ${accent === 'route' ? 'accent-forest-400' : 'accent-terra-400'}`} />
-            <span className="text-white text-[11px] font-bold tabular-nums shrink-0 text-right min-w-[3.4rem]">{c.display}</span>
-          </div>
-          {c.hint && <p className="text-white/30 text-[11px] mt-1 leading-relaxed">{c.hint}</p>}
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <span className="text-stone-500 text-[11px] shrink-0 min-w-[4.5rem]">{c.label}</span>
+          <input type="range" min={c.min} max={c.max} step={c.step} value={c.value}
+            onChange={e => c.onChange(+e.target.value)}
+            className={`flex-1 min-w-[6rem] h-1 rounded-full cursor-pointer ${accent === 'route' ? 'accent-forest-600' : 'accent-terra-600'}`} />
+          <span className="text-stone-900 text-[11px] font-bold font-mono tabular-nums shrink-0 text-right min-w-[3.4rem]">{c.display}</span>
+          {c.hint && <Hint text={c.hint} accent={accent} />}
         </div>
       )
 
     case 'chips':
       return (
         <div>
-          {c.label && <p className="text-white/45 text-[10px] font-bold tracking-[0.12em] mb-2">{c.label.toUpperCase()}</p>}
-          <div className="flex flex-wrap gap-1.5">
+          {c.label && <LabelRow label={c.label} hint={c.hint} accent={accent} />}
+          <div className="flex flex-wrap items-center gap-1.5">
             {c.options.map(o => (
               <button key={o.id} onClick={() => o.onToggle(!o.value)} disabled={o.disabled}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-30 ${
-                  o.value ? `${onColor} text-white` : 'bg-white/10 text-white/60 hover:bg-white/18'}`}>
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-35 ${
+                  o.value ? `${onColor} text-white` : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>
                 {o.label}
               </button>
             ))}
+            {!c.label && c.hint && <Hint text={c.hint} accent={accent} />}
           </div>
-          {c.hint && <p className="text-white/30 text-[11px] mt-1.5 leading-relaxed">{c.hint}</p>}
         </div>
       )
 
     case 'custom':
       return (
         <div>
-          {c.label && <p className="text-white/45 text-[10px] font-bold tracking-[0.12em] mb-2">{c.label.toUpperCase()}</p>}
+          {c.label && <LabelRow label={c.label} hint={c.hint} accent={accent} />}
           {c.render() as ReactNode}
-          {c.hint && <p className="text-white/30 text-[11px] mt-1.5 leading-relaxed">{c.hint}</p>}
+          {!c.label && c.hint && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5"><Hint text={c.hint} accent={accent} /></div>
+          )}
         </div>
       )
   }
@@ -157,9 +197,7 @@ function ControlView({ c, accent }: { c: StudioControl; accent: 'route' | 'globa
 function GroupView({ g, accent }: { g: StudioGroup; accent: Rail }) {
   return (
     <div className="space-y-3.5">
-      {g.controls.map(c => (
-        <ControlView key={c.id} c={c} accent={accent === 'route' ? 'route' : 'global'} />
-      ))}
+      {g.controls.map(c => <ControlView key={c.id} c={c} accent={accent} />)}
     </div>
   )
 }
@@ -172,19 +210,21 @@ export default function VideoStudio({
   const routeGroups = visibleGroups(positionalGroups)
   const settingGroups = visibleGroups(globalGroups)
 
-  // Su schermo largo i binari mostrano tutti i gruppi uno sotto l'altro; su telefono uno per volta.
-  const [mobileRail, setMobileRail] = useState<Rail>('route')
-  const [mobileGroupId, setMobileGroupId] = useState<string | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(true)
+  // Una sola colonnina: prima gli strumenti che si posano sul percorso, poi quelli che valgono per
+  // tutto il video, separati da una riga. `null` = nessuna scheda aperta, cioè mappa intera.
+  const railTools: { group: StudioGroup; rail: Rail }[] = [
+    ...routeGroups.map(g => ({ group: g, rail: 'route' as Rail })),
+    ...settingGroups.map(g => ({ group: g, rail: 'global' as Rail })),
+  ]
+  const [openToolId, setOpenToolId] = useState<string | null>(null)
   const [showGenerate, setShowGenerate] = useState(false)
 
-  const mobileGroups = mobileRail === 'route' ? routeGroups : settingGroups
-  const activeGroup = mobileGroups.find(g => g.id === mobileGroupId) ?? mobileGroups[0]
+  const openTool = railTools.find(t => t.group.id === openToolId) ?? null
 
   const DurationBar = (
     <div className="flex items-center gap-3 min-w-0">
       <div className="min-w-0 flex-1">
-        <div className="flex h-1.5 rounded-full overflow-hidden bg-white/10">
+        <div className="flex h-1.5 rounded-full overflow-hidden bg-stone-200">
           {budget.parts.map(p => (
             <div key={p.key} title={`${p.label}: ${Math.round(p.sec)}s`}
               style={{ width: `${(p.sec / Math.max(1, budget.totalSec)) * 100}%`, background: p.color }} />
@@ -192,78 +232,83 @@ export default function VideoStudio({
         </div>
         <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5">
           {budget.parts.map(p => (
-            <span key={p.key} className="flex items-center gap-1 text-[9.5px] text-white/40">
+            <span key={p.key} className="flex items-center gap-1 text-[9.5px] text-stone-500">
               <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color }} />
-              {p.label} {Math.round(p.sec)}s
+              {p.label} <span className="font-mono tabular-nums">{Math.round(p.sec)}s</span>
             </span>
           ))}
         </div>
       </div>
       <div className="text-right shrink-0">
-        <p className="text-white/40 text-[9px] font-bold tracking-[0.12em] leading-none">DURATA</p>
-        <p className={`text-lg font-black tabular-nums leading-none mt-0.5 ${budget.over ? 'text-terra-300' : 'text-white'}`}>
+        <p className="text-stone-500 text-[9px] font-bold tracking-[0.12em] leading-none">DURATA</p>
+        <p className={`text-lg font-black font-mono tabular-nums leading-none mt-0.5 ${budget.over ? 'text-terra-600' : 'text-stone-900'}`}>
           {budget.totalLabel}
         </p>
       </div>
     </div>
   )
 
+  const RailHeader = ({ rail }: { rail: Rail }) => (
+    <div className="flex items-center gap-2 mb-3">
+      <span className={`w-2 h-2 rounded-full ${rail === 'route' ? 'bg-forest-600' : 'bg-terra-600'}`} />
+      <p className={`text-[10px] font-bold tracking-[0.14em] ${rail === 'route' ? 'text-forest-700' : 'text-terra-700'}`}>
+        {rail === 'route' ? 'SUL PERCORSO' : 'TUTTO IL VIDEO'}
+      </p>
+    </div>
+  )
+
   return (
-    <div className="fixed inset-0 z-30 bg-stone-950 flex flex-col pointer-events-auto">
+    <div className="fixed inset-0 z-30 bg-stone-50 flex flex-col pointer-events-auto">
 
       {/* Intestazione */}
-      <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-white/10">
+      <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-stone-200 bg-white">
         <div className="min-w-0 flex-1">
-          <p className="text-terra-400 text-[9px] font-bold tracking-[0.16em]">STUDIO VIDEO</p>
-          <h2 className="text-white font-bold text-sm leading-tight truncate">{title}</h2>
+          <p className="text-terra-600 text-[9px] font-bold tracking-[0.16em]">STUDIO VIDEO</p>
+          <h2 className="text-stone-900 font-display font-bold text-sm leading-tight truncate">{title}</h2>
         </div>
         <button onClick={() => setShowGenerate(true)}
-          className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-500 hover:bg-forest-400 text-white text-[12px] font-bold transition-colors">
+          className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 text-white text-[12px] font-bold transition-colors">
           <Play className="w-3.5 h-3.5" /> Genera
         </button>
-        <button onClick={onClose} className="shrink-0 text-white/45 hover:text-white"><X className="w-5 h-5" /></button>
+        <button onClick={onClose} className="shrink-0 text-stone-500 hover:text-stone-900" aria-label="Chiudi lo studio">
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
       {error && (
-        <div className="shrink-0 mx-4 mt-2.5 rounded-xl bg-red-500/12 border border-red-400/40 px-3.5 py-2.5 flex items-start gap-2.5">
-          <span className="text-red-300 text-sm leading-none mt-0.5">⚠</span>
-          <p className="text-red-100 text-[12px] leading-relaxed flex-1">{error}</p>
-          {onDismissError && <button onClick={onDismissError} className="text-red-200/60 hover:text-red-100 shrink-0"><X className="w-4 h-4" /></button>}
+        <div className="shrink-0 mx-4 mt-2.5 rounded-xl bg-red-50 border border-red-300 px-3.5 py-2.5 flex items-start gap-2.5">
+          <span className="text-red-600 text-sm leading-none mt-0.5">⚠</span>
+          <p className="text-red-800 text-[12px] leading-relaxed flex-1">{error}</p>
+          {onDismissError && <button onClick={onDismissError} className="text-red-400 hover:text-red-700 shrink-0"><X className="w-4 h-4" /></button>}
         </div>
       )}
 
       {/* ── Schermo largo: binario · mappa · binario ─────────────────────────── */}
       <div className="hidden lg:grid flex-1 min-h-0" style={{ gridTemplateColumns: '272px minmax(0,1fr) 304px' }}>
 
-        <aside className="min-h-0 overflow-y-auto border-r border-white/10 px-4 py-4 space-y-6">
-          <div className="flex items-center gap-2 sticky -top-4 -mt-4 pt-4 pb-2 bg-stone-950 z-10">
-            <span className="w-2 h-2 rounded-full bg-forest-500" />
-            <p className="text-forest-300 text-[10px] font-bold tracking-[0.14em]">SUL PERCORSO</p>
-          </div>
+        <aside className="min-h-0 overflow-y-auto border-r border-stone-200 bg-white px-4 py-4 space-y-6">
+          <div className="sticky -top-4 -mt-4 pt-4 pb-1 bg-white z-10"><RailHeader rail="route" /></div>
           {routeGroups.map(g => (
             <section key={g.id}>
-              <p className="text-white/60 text-[11px] font-bold mb-2.5 flex items-center gap-1.5">
-                <span className="text-white/35">{g.glyph}</span>{g.label}
+              <p className="text-stone-700 text-[11px] font-bold mb-2.5 flex items-center gap-1.5">
+                <span className="text-stone-400">{g.glyph}</span>{g.label}
               </p>
               <GroupView g={g} accent="route" />
             </section>
           ))}
         </aside>
 
-        <main className="min-h-0 flex flex-col">
-          <div className="flex-1 min-h-0 p-3">{mapSlot}</div>
-          <div className="shrink-0 px-4 py-2.5 border-t border-white/10">{DurationBar}</div>
+        <main className="min-h-0 flex flex-col bg-stone-100">
+          <div className="flex-1 min-h-0">{mapSlot}</div>
+          <div className="shrink-0 px-4 py-2.5 border-t border-stone-200 bg-white">{DurationBar}</div>
         </main>
 
-        <aside className="min-h-0 overflow-y-auto border-l border-white/10 px-4 py-4 space-y-6">
-          <div className="flex items-center gap-2 sticky -top-4 -mt-4 pt-4 pb-2 bg-stone-950 z-10">
-            <span className="w-2 h-2 rounded-full bg-terra-500" />
-            <p className="text-terra-300 text-[10px] font-bold tracking-[0.14em]">TUTTO IL VIDEO</p>
-          </div>
+        <aside className="min-h-0 overflow-y-auto border-l border-stone-200 bg-white px-4 py-4 space-y-6">
+          <div className="sticky -top-4 -mt-4 pt-4 pb-1 bg-white z-10"><RailHeader rail="global" /></div>
           {settingGroups.map(g => (
             <section key={g.id}>
-              <p className="text-white/60 text-[11px] font-bold mb-2.5 flex items-center gap-1.5">
-                <span className="text-white/35">{g.glyph}</span>{g.label}
+              <p className="text-stone-700 text-[11px] font-bold mb-2.5 flex items-center gap-1.5">
+                <span className="text-stone-400">{g.glyph}</span>{g.label}
               </p>
               <GroupView g={g} accent="global" />
             </section>
@@ -271,61 +316,68 @@ export default function VideoStudio({
         </aside>
       </div>
 
-      {/* ── Telefono: mappa piena, cassetto dal basso ────────────────────────── */}
-      <div className="lg:hidden flex-1 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0 p-2">{mapSlot}</div>
+      {/* ── Telefono e tablet: mappa piena, strumenti al bordo ───────────────── */}
+      <div className="lg:hidden relative flex-1 min-h-0">
+        {/* La mappa non viene mai ridimensionata: sta sotto, intera, e le schede la coprono in parte. */}
+        <div className="absolute inset-0 z-0">{mapSlot}</div>
 
-        <div className="shrink-0 bg-stone-900 border-t border-white/10 rounded-t-2xl">
-          <div className="px-4 pt-2.5 pb-2">{DurationBar}</div>
-
-          <div className="px-3 pb-2 flex items-center gap-2">
-            <div className="flex-1 grid grid-cols-2 gap-1.5">
-              {(['route', 'global'] as Rail[]).map(r => (
-                <button key={r} onClick={() => { setMobileRail(r); setMobileGroupId(null); setSheetOpen(true) }}
-                  className={`py-2 rounded-lg text-[11px] font-bold transition-colors ${
-                    mobileRail === r && sheetOpen
-                      ? (r === 'route' ? 'bg-forest-500 text-white' : 'bg-terra-500 text-white')
-                      : 'bg-white/10 text-white/60 hover:bg-white/18'}`}>
-                  {r === 'route' ? 'Sul percorso' : 'Tutto il video'}
+        {/* Colonnina degli strumenti, sul bordo destro */}
+        <div className="absolute right-2 top-2 bottom-2 z-20 flex flex-col items-end justify-start gap-1.5 overflow-y-auto">
+          {railTools.map(({ group, rail }, i) => {
+            const active = openToolId === group.id
+            const prevRail = railTools[i - 1]?.rail
+            return (
+              <div key={group.id} className="flex flex-col items-end gap-1.5">
+                {prevRail && prevRail !== rail && <span className="w-6 h-px bg-stone-300 my-0.5" />}
+                <button onClick={() => setOpenToolId(active ? null : group.id)}
+                  title={group.label} aria-label={group.label} aria-pressed={active}
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center text-[17px] leading-none shadow-sm border transition-colors ${
+                    active
+                      ? (rail === 'route' ? 'bg-forest-600 border-forest-700 text-white' : 'bg-terra-600 border-terra-700 text-white')
+                      : 'bg-white/95 border-stone-200 text-stone-600 hover:bg-white'}`}>
+                  {group.glyph}
                 </button>
-              ))}
-            </div>
-            <button onClick={() => setSheetOpen(o => !o)}
-              className="shrink-0 w-9 h-9 rounded-lg bg-white/10 text-white/60 hover:bg-white/18 flex items-center justify-center"
-              aria-label={sheetOpen ? 'Chiudi i comandi' : 'Apri i comandi'}>
-              <ChevronUp className={`w-4 h-4 transition-transform ${sheetOpen ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-
-          {sheetOpen && (
-            <div className="max-h-[42vh] overflow-y-auto px-4 pb-4">
-              <div className="flex gap-1.5 overflow-x-auto pb-2.5 -mx-1 px-1">
-                {mobileGroups.map(g => (
-                  <button key={g.id} onClick={() => setMobileGroupId(g.id)}
-                    className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors ${
-                      activeGroup?.id === g.id ? 'bg-white/22 text-white' : 'bg-white/8 text-white/55 hover:bg-white/14'}`}>
-                    <span className="opacity-50 mr-1">{g.glyph}</span>{g.label}
-                  </button>
-                ))}
               </div>
-              {activeGroup && <GroupView g={activeGroup} accent={mobileRail} />}
+            )
+          })}
+        </div>
+
+        {/* Scheda dello strumento aperto: stretta, accanto alla colonnina */}
+        {openTool && (
+          <div className="absolute right-16 top-2 z-20 w-[min(20rem,calc(100vw-5.5rem))] max-h-[60%] flex flex-col
+                          bg-white rounded-2xl border border-stone-200 shadow-xl overflow-hidden">
+            <div className="shrink-0 flex items-center gap-2 px-3.5 py-2.5 border-b border-stone-200">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${openTool.rail === 'route' ? 'bg-forest-600' : 'bg-terra-600'}`} />
+              <p className="text-stone-900 text-[12px] font-bold flex-1 min-w-0 truncate">{openTool.group.label}</p>
+              <button onClick={() => setOpenToolId(null)} className="text-stone-400 hover:text-stone-800 shrink-0" aria-label="Chiudi la scheda">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          )}
+            <div className="overflow-y-auto px-3.5 py-3">
+              <GroupView g={openTool.group} accent={openTool.rail} />
+            </div>
+          </div>
+        )}
+
+        {/* Durata: fascia sottile in fondo, sopra la mappa */}
+        {/* left-14 lascia libero l'angolo dove la mappa tiene i pulsanti dello zoom. */}
+        <div className="absolute left-14 right-16 bottom-2 z-10 rounded-2xl bg-white/92 backdrop-blur-sm border border-stone-200 shadow-sm px-3.5 py-2">
+          {DurationBar}
         </div>
       </div>
 
       {/* ── Cassetto finale: riepilogo e avvio ───────────────────────────────── */}
       {showGenerate && (
-        <div className="absolute inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-end sm:items-center sm:justify-center"
+        <div className="absolute inset-0 z-40 bg-stone-900/40 backdrop-blur-sm flex items-end sm:items-center sm:justify-center"
           onClick={() => setShowGenerate(false)}>
-          <div className="w-full sm:max-w-lg bg-stone-900 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[88vh] flex flex-col"
+          <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[88vh] flex flex-col"
             onClick={e => e.stopPropagation()}>
-            <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/10">
+            <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-stone-200">
               <div>
-                <p className="text-terra-400 text-[9px] font-bold tracking-[0.16em]">PRIMA DI GENERARE</p>
-                <h3 className="text-white font-bold text-base leading-tight">Riepilogo</h3>
+                <p className="text-terra-600 text-[9px] font-bold tracking-[0.16em]">PRIMA DI GENERARE</p>
+                <h3 className="text-stone-900 font-display font-bold text-base leading-tight">Riepilogo</h3>
               </div>
-              <button onClick={() => setShowGenerate(false)} className="text-white/45 hover:text-white"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowGenerate(false)} className="text-stone-400 hover:text-stone-900"><X className="w-5 h-5" /></button>
             </div>
             <div className="overflow-y-auto px-5 py-4 space-y-5">{generatePanel}</div>
           </div>

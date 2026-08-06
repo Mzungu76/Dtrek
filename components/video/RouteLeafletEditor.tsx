@@ -60,14 +60,18 @@ interface Props {
 
 function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L.DivIcon {
   const isPhoto = it.kind === 'photo'
-  const tint = isPhoto ? '#f1ede2' : (INTERLUDE_TINT[it.interludeKind ?? 'numeri'] ?? '#f1ede2')
+  const tint = isPhoto ? '#3f3a33' : (INTERLUDE_TINT[it.interludeKind ?? 'numeri'] ?? '#3f3a33')
   const glyph = isPhoto ? '▣' : INTERLUDE_GLYPH[it.interludeKind ?? 'numeri']
   const size = isPhoto ? 30 : 28
-  const ring = crowded ? `box-shadow:0 0 0 3px rgba(251,191,36,0.85), 0 2px 8px rgba(0,0,0,0.5);` : `box-shadow:0 2px 8px rgba(0,0,0,0.5);`
-  const bg = isPhoto ? 'rgba(15,23,20,0.94)' : tint
-  const fg = isPhoto ? tint : 'rgba(10,15,12,0.92)'
+  // Su fondo chiaro l'ombra nera pesante di prima sporcava la mappa: basta un bordo bianco a
+  // staccare il pallino, come i segnaposto delle schede.
+  const ring = crowded
+    ? `box-shadow:0 0 0 3px rgba(217,114,32,0.9), 0 1px 4px rgba(0,0,0,0.25);`
+    : `box-shadow:0 1px 4px rgba(0,0,0,0.25);`
+  const bg = isPhoto ? '#3f3a33' : tint
+  const fg = isPhoto ? '#ffffff' : 'rgba(20,18,15,0.9)'
   return Lmod.divIcon({
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:2px solid ${isPhoto ? tint : 'rgba(0,0,0,0.4)'};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${fg};${ring};cursor:grab">${glyph}</div>`,
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${fg};${ring};cursor:grab">${glyph}</div>`,
     iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: '',
   })
 }
@@ -89,6 +93,9 @@ export default function RouteLeafletEditor({
   // Anteprima live dell'affollamento durante un trascinamento in corso: senza, il cerchio giallo
   // comparirebbe solo a rilascio avvenuto, cioè un istante troppo tardi per essere una guida.
   const [dragPreview, setDragPreview] = useState<Record<string, number> | null>(null)
+  // Istruzioni e dettaglio dell'affollamento: chiusi di partenza, si aprono solo se chiesti.
+  const [showHelp, setShowHelp] = useState(false)
+  const [showCrowdDetail, setShowCrowdDetail] = useState(false)
 
   const gpsPoints = trackPoints.filter(p => p.lat != null && p.lon != null) as { lat: number; lon: number }[]
   const coords: [number, number][] = gpsPoints.map(p => [p.lat, p.lon])
@@ -107,24 +114,31 @@ export default function RouteLeafletEditor({
     let cancelled = false
     import('leaflet').then(Lmod => {
       if (cancelled || !mapElRef.current) return
-      const map = Lmod.map(mapElRef.current, { zoomControl: true }).setView(coords[0], 13)
+      // I pulsanti dello zoom scendono in basso a sinistra: in alto a sinistra ci sta ora il «?»
+      // con le istruzioni e la pastiglia dell'affollamento, e due comandi sovrapposti nello stesso
+      // angolo sono il modo più rapido per farne toccare uno per l'altro.
+      const map = Lmod.map(mapElRef.current, { zoomControl: false }).setView(coords[0], 13)
+      Lmod.control.zoom({ position: 'bottomleft' }).addTo(map)
       mapRef.current = map
-      // Voyager, non "dark": le tile scure spegnevano il rilievo e i toponimi proprio nella vista
-      // in cui servono a capire DOVE si sta mettendo uno stacco, e su un pannello già scuro il
-      // risultato era una macchia nera con sopra una riga verde. Voyager è la via di mezzo —
-      // mid-tone, mostra il terreno, ed è tarata per far risaltare le linee di percorso.
-      Lmod.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=voyager', {
+      // Positron, non "voyager" e tanto meno "dark": qui la mappa è il FONDO di tutto lo studio, e
+      // sopra ci galleggiano schede bianche e pastiglie. Un fondo mid-tone le faceva sembrare
+      // ritagli incollati; positron è quasi senza colore, così l'unica cosa satura della vista
+      // resta ciò che si sta davvero disponendo — il tracciato e i pallini.
+      Lmod.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=positron', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
         maxZoom: 19,
       }).addTo(map)
 
-      const poly = Lmod.polyline(coords, { color: '#52b586', weight: 4, opacity: 0.9 }).addTo(map)
+      // Doppia linea: una fascia bianca sotto e il verde sopra. Su tile chiarissime una linea sola
+      // si confonde con le strade, che qui sono grigie della stessa larghezza.
+      Lmod.polyline(coords, { color: '#ffffff', weight: 8, opacity: 0.9 }).addTo(map)
+      const poly = Lmod.polyline(coords, { color: '#277134', weight: 4, opacity: 1 }).addTo(map)
       map.fitBounds(poly.getBounds(), { padding: [32, 32] })
 
       for (const arrow of computeDirectionArrows(coords, ARROW_SPACING_M)) {
         const icon = Lmod.divIcon({
           html: `<div style="transform:rotate(${arrow.bearing}deg);width:${ARROW_ICON_PX}px;height:${ARROW_ICON_PX}px;display:flex;align-items:center;justify-content:center">
-                   <svg width="${ARROW_SVG_PX}" height="${ARROW_SVG_PX}" viewBox="0 0 24 24" fill="#52b586" stroke="#0a100c" stroke-width="2.5"><path d="M12 2 L20 20 L12 15 L4 20 Z"/></svg>
+                   <svg width="${ARROW_SVG_PX}" height="${ARROW_SVG_PX}" viewBox="0 0 24 24" fill="#277134" stroke="#ffffff" stroke-width="2.5"><path d="M12 2 L20 20 L12 15 L4 20 Z"/></svg>
                  </div>`,
           iconSize: [ARROW_ICON_PX, ARROW_ICON_PX], iconAnchor: [ARROW_ICON_PX / 2, ARROW_ICON_PX / 2], className: '',
         })
@@ -205,41 +219,83 @@ export default function RouteLeafletEditor({
 
   if (gpsPoints.length < 2) {
     return (
-      <p className="text-white/40 text-[11px] leading-relaxed">
+      <p className="text-stone-500 text-[11px] leading-relaxed p-3">
         Il tracciato non ha abbastanza punti con coordinate per disegnare la mappa.
       </p>
     )
   }
 
+  const interludeItems = items.filter(i => i.kind === 'interlude')
+  const crowdedCount = crowding.ids.size
+
   return (
-    <div className={fill ? 'h-full flex flex-col min-h-0' : undefined}>
-      <div ref={mapElRef}
-        className={`w-full rounded-2xl overflow-hidden border border-white/10 ${fill ? 'flex-1 min-h-0' : ''}`}
-        style={fill ? undefined : { height: 340 }} />
-      <p className="text-white/30 text-[11px] mt-2 leading-relaxed">
-        Trascina i pallini sulla mappa per decidere dove cade ogni foto e ogni stacco — si agganciano da soli al punto del percorso più vicino.
-        {roundTrip && ' Il percorso è un andata e ritorno: il video mostra la sola andata, quindi tutto va posizionato su quella.'}
-      </p>
-      {crowding.pairs.length > 0 && (
-        <div className="mt-2 rounded-xl bg-amber-500/12 border border-amber-400/35 px-3.5 py-2.5">
-          <p className="text-amber-200 text-[11px] leading-relaxed">
-            {crowding.pairs.length === 1
-              ? `Due elementi cadono a ${crowding.pairs[0].apartSec.toFixed(1)}s l'uno dall'altro`
-              : `${crowding.pairs.length} coppie di elementi cadono a meno di ${MIN_ITEM_GAP_SEC}s l'una dall'altra`}
-            {' '}(cerchiati in giallo): il video si fermerebbe due volte di fila senza percorso in mezzo. Allontanali per dare respiro al montaggio.
-          </p>
+    <div className={`relative ${fill ? 'h-full w-full' : 'rounded-2xl overflow-hidden border border-stone-200'}`}
+      style={fill ? undefined : { height: 340 }}>
+      <div ref={mapElRef} className="absolute inset-0" />
+
+      {/* ── Sovrapposti, in alto a sinistra ──────────────────────────────────────
+          Istruzioni e legenda NON stanno più nel flusso sotto la mappa: erano tre paragrafi che
+          costavano più spazio della mappa stessa e che si rileggono una volta sola. Qui c'è un «?»
+          che le tiene, e una pastiglia che dice in due parole l'unica cosa da correggere. */}
+      <div className="absolute top-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[min(20rem,calc(100%-1rem))]">
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => { setShowHelp(h => !h); setShowCrowdDetail(false) }}
+            aria-label="Come si usa la mappa" aria-expanded={showHelp}
+            className={`w-8 h-8 rounded-full shadow-sm border flex items-center justify-center text-[13px] font-bold transition-colors ${
+              showHelp ? 'bg-forest-600 border-forest-700 text-white' : 'bg-white/95 border-stone-200 text-stone-600 hover:bg-white'}`}>
+            ?
+          </button>
+
+          {crowdedCount > 0 && (
+            <button onClick={() => { setShowCrowdDetail(d => !d); setShowHelp(false) }}
+              aria-expanded={showCrowdDetail}
+              className="flex items-center gap-1.5 h-8 pl-2 pr-2.5 rounded-full bg-terra-600 text-white shadow-sm border border-terra-700">
+              <span className="w-2 h-2 rounded-full bg-white/90 shrink-0" />
+              <span className="text-[11px] font-bold whitespace-nowrap">
+                <span className="font-mono">{crowdedCount}</span> troppo vicini
+              </span>
+            </button>
+          )}
         </div>
-      )}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5">
-        {items.filter(i => i.kind === 'interlude').map(i => (
-          <span key={i.id} className="flex items-center gap-1.5 text-[10px] text-white/45">
-            <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-extrabold text-stone-900"
-              style={{ background: INTERLUDE_TINT[i.interludeKind ?? 'numeri'] }}>
-              {INTERLUDE_GLYPH[i.interludeKind ?? 'numeri']}
-            </span>
-            {i.label}
-          </span>
-        ))}
+
+        {showCrowdDetail && (
+          <div className="rounded-xl bg-white/97 border border-terra-200 shadow-lg px-3 py-2.5">
+            <p className="text-stone-700 text-[11px] leading-relaxed">
+              {crowding.pairs.length === 1
+                ? `Due elementi cadono a ${crowding.pairs[0].apartSec.toFixed(1)}s l'uno dall'altro`
+                : `${crowding.pairs.length} coppie cadono a meno di ${MIN_ITEM_GAP_SEC}s l'una dall'altra`}
+              {' '}(cerchiati in arancio): il video si fermerebbe due volte di fila senza percorso in mezzo.
+              Allontanali per dare respiro al montaggio.
+            </p>
+          </div>
+        )}
+
+        {showHelp && (
+          <div className="rounded-xl bg-white/97 border border-stone-200 shadow-lg px-3 py-2.5 space-y-2">
+            <p className="text-stone-700 text-[11px] leading-relaxed">
+              Trascina i pallini per decidere dove cade ogni foto e ogni stacco: si agganciano da soli al punto
+              del percorso più vicino.
+              {roundTrip && ' Il percorso è un andata e ritorno: il video mostra la sola andata, quindi tutto va posizionato su quella.'}
+            </p>
+            {interludeItems.length > 0 && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5 border-t border-stone-200">
+                <span className="flex items-center gap-1.5 text-[10px] text-stone-500 mt-1.5">
+                  <span className="w-3.5 h-3.5 rounded-full bg-[#3f3a33] text-white flex items-center justify-center text-[9px] font-extrabold">▣</span>
+                  Foto
+                </span>
+                {interludeItems.map(i => (
+                  <span key={i.id} className="flex items-center gap-1.5 text-[10px] text-stone-500 mt-1.5">
+                    <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-extrabold text-stone-900"
+                      style={{ background: INTERLUDE_TINT[i.interludeKind ?? 'numeri'] }}>
+                      {INTERLUDE_GLYPH[i.interludeKind ?? 'numeri']}
+                    </span>
+                    {i.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
