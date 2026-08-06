@@ -5,6 +5,9 @@ const PROVIDERS: Record<string, string> = {
   voyager: 'https://a.basemaps.cartocdn.com/rastertiles/voyager',
   // CartoDB Dark Matter — free, no key
   dark:    'https://a.basemaps.cartocdn.com/dark_all',
+  // CartoDB Positron — chiarissima e quasi senza colore: tutto ciò che si posa sopra (tracciato,
+  // pallini di foto e stacchi) resta l'unica cosa satura della vista. È il fondo dell'editor.
+  positron: 'https://a.basemaps.cartocdn.com/light_all',
   // OSM standard — fallback
   light:   'https://tile.openstreetmap.org',
 }
