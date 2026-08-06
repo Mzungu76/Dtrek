@@ -47,7 +47,7 @@ import type { BeautyScore } from '@/lib/beautyScore'
 import type { WikiPage } from '@/lib/wikipedia'
 import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { classifyTrackShape } from '@/lib/geoUtils'
-import RouteTimelineEditor, { type TimelineEditorItem } from '@/components/video/RouteTimelineEditor'
+import RouteLeafletEditor, { type TimelineEditorItem } from '@/components/video/RouteLeafletEditor'
 import { estimateVegetationBelt } from '@/lib/vegetationBelt'
 import {
   coverRect, rrect, lerp, lerpAngle, shortestAngleTo, distM, smoothArray, clamp01,
@@ -4563,16 +4563,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   </div>
                 )}
 
-                {/* Il percorso come figura: dove cade ogni foto e ogni stacco, e come spostarli.
-                    Sta qui, prima dell'elenco degli stacchi, perché è la vista che rende leggibile
-                    tutto quello che viene dopo — accendere uno stacco senza vedere dove finisce era
-                    proprio il modo in cui foto e pannelli si accavallavano. */}
+                {/* Il percorso vero, su mappa Leaflet (la stessa delle schede): dove cade ogni
+                    foto e ogni stacco, e come spostarli trascinandoli. Sta qui, prima dell'elenco
+                    degli stacchi, perché è la vista che rende leggibile tutto quello che viene
+                    dopo — accendere uno stacco senza vedere dove finisce era proprio il modo in
+                    cui foto e pannelli si accavallavano. */}
                 <div>
                   <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">DOVE CADONO LE COSE</p>
                   <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                    Il tuo percorso visto dall&apos;alto, senza mappa. Trascina foto e stacchi lungo la linea per decidere dove il video si ferma.
+                    Trascina foto e stacchi sulla mappa per decidere dove il video si ferma.
                   </p>
-                  <RouteTimelineEditor
+                  <RouteLeafletEditor
                     trackPoints={trackPoints}
                     routeSeconds={videoEstimate.routeSec}
                     shape={timelineTrackShape}
@@ -4654,13 +4655,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                                   Questo pannello ha parecchio da leggere: sopra i 7s però diventa una pausa, quindi il contenuto viene comunque mostrato in forma ridotta.
                                 </p>
                               )}
-                              <div className="flex items-center gap-2">
-                                <span className="text-white/45 text-[10px] w-14 shrink-0">quando</span>
-                                <input type="range" min={5} max={95} step={1} value={Math.round(iv.atP*100)}
-                                  onChange={e=>patch({atP:+e.target.value/100})}
-                                  className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
-                                <span className="text-white/70 text-[10px] font-bold w-8 text-right">{Math.round(iv.atP*100)}%</span>
-                              </div>
+                              {/* La posizione ("quando") si decide trascinando il pallino sulla
+                                  mappa qui sopra, non con uno slider: uno slider e la mappa che
+                                  cambia insieme sarebbero due comandi per la stessa cosa. */}
                             </div>
                           )}
                         </div>
