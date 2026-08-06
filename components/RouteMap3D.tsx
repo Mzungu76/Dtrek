@@ -7,6 +7,7 @@ import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
   Download, Share2, ChevronLeft, ChevronRight, ImagePlus,
   Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy, MapPin, Compass, ChevronUp,
+  Zap, Minus, Leaf, SlidersHorizontal,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
@@ -50,6 +51,7 @@ import { classifyTrackShape } from '@/lib/geoUtils'
 import { declutterItems, selectPhotosAvoidingCrowding, MIN_ITEM_GAP_SEC, type TimelineItem } from '@/lib/videoTimeline'
 import RouteLeafletEditor, { INTERLUDE_GLYPH, type TimelineEditorItem } from '@/components/video/RouteLeafletEditor'
 import VideoStudio from '@/components/video/VideoStudio'
+import VideoPresetPicker, { type PresetPickerEntry } from '@/components/video/VideoPresetPicker'
 import type { StudioControl, StudioGroup } from '@/lib/videoStudio'
 import { estimateVegetationBelt } from '@/lib/vegetationBelt'
 import {
@@ -85,7 +87,12 @@ const SPEEDS = [
 // libero subito dopo, ed è lì — non qui — che si decide il video vero.
 interface FullPresetConfig {
   label: string
+  /** Riga breve: formato e ritmo in tre parole, quella che comparirà accanto al nome. */
   desc: string
+  /** Paragrafo per la pagina di scelta preset — DEVE bastare da solo a far capire se questo è il
+   *  preset giusto, perché lì non c'è nient'altro (nessuna mappa, nessuna anteprima) a cui
+   *  appoggiarsi: dice modalità, cosa mostra e cosa tace, per chi è pensato. */
+  long: string
   orientation: '9:16' | '4:5' | '1:1' | '1.91:1' | '16:9'
   styleIdx: number
   /** Zoom d'apertura, di seguimento e di chiusura — vedi planShots/shotCamera. Non un dettaglio
@@ -120,9 +127,10 @@ interface FullPresetConfig {
 // cartografica, ed è quella che regge meglio la compressione di un video. Minimo resta su Outdoor
 // apposta: è l'unico preset pensato per essere il più neutro possibile, e uno sfondo fotografico è
 // l'opposto della neutralità.
-const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', FullPresetConfig> = {
+const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' | 'manuale', FullPresetConfig> = {
   veloce: {
     label: 'Racconto veloce', desc: '9:16 · ritmo social · il tuo ricordo',
+    long: 'Il tuo ricordo raccontato per i social: verticale, ritmo veloce, il pin con cuore e battito se hai la fascia cardio. Foto in carosello brevi, traguardi e stelline all’arrivo. Nessuno stacco — non c’è tempo per fermarsi a leggere. Pensato per Reels e Storie: si guarda in pochi secondi, non si studia.',
     orientation: '9:16', styleIdx: 1, zoomIntro: 11.5, zoomFollow: 14.5, zoomOutro: 8.5,
     speedKmS: 0.55, fastIntro: true,
     grading: 'contrast(1.12) saturate(1.32) brightness(1.04)',
@@ -136,6 +144,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
   },
   epico: {
     label: 'Racconto epico', desc: '9:16 · disteso · il tuo ricordo',
+    long: 'Il tuo ricordo, disteso: il percorso scorre lento, quasi senza dati a schermo — solo il titolo — con luce coerente con l’ora e alone del tracciato in evidenza. Le foto restano ferme più a lungo, il pin porta solo scia e ombra, senza cuore né numeri. Non è pensato per scorrere veloce: è un video da rivedere con calma.',
     orientation: '9:16', styleIdx: 1, zoomIntro: 8.5, zoomFollow: 12.5, zoomOutro: 6.5,
     speedKmS: 0.10, fastIntro: false,
     grading: 'contrast(1.04) saturate(1.15) brightness(1.01)',
@@ -149,6 +158,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
   },
   guida: {
     label: 'Guida del percorso', desc: '4:5 · spiega il sentiero',
+    long: 'Descrive il sentiero a chi non l’ha ancora fatto: apre con uno sguardo d’insieme sul percorso, spiega i numeri e il profilo altimetrico, mostra i luoghi principali con una loro foto. Nessun dato personale — niente pin, niente cuore, niente fatica. Pensato per far conoscere un percorso, non per raccontare la tua uscita: usa la modalità Descrizione del percorso.',
     orientation: '4:5', styleIdx: 1, zoomIntro: 10, zoomFollow: 13.5, zoomOutro: 7.5,
     speedKmS: 0.30, fastIntro: true,
     grading: 'contrast(1.06) saturate(1.15) brightness(1.02)',
@@ -162,6 +172,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
   },
   minimo: {
     label: 'Minimo', desc: '1:1 · solo percorso e foto',
+    long: 'Solo il percorso e le tue foto: nessuno stacco, nessun dato a schermo, nessun tocco scenico, niente pin. La versione più pulita che un preset sa fare, con un formato quadrato pensato per restare neutro ovunque lo pubblichi. Se vuoi togliere ancora qualcosa parti da qui, non da un preset più ricco a cui spegnere tutto a mano.',
     orientation: '1:1', styleIdx: 0, zoomIntro: 10.5, zoomFollow: 13.8, zoomOutro: 7.5,
     speedKmS: 0.28, fastIntro: true,
     grading: 'contrast(1) saturate(1) brightness(1)',
@@ -175,6 +186,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
   },
   natura: {
     label: 'Natura e luoghi', desc: '1:1 · disteso · l’ambiente intorno',
+    long: 'Racconta l’ambiente attraversato più che la prestazione: stacchi su vegetazione e luoghi, ritmo lento per lasciare respirare il paesaggio, luce reale sul terreno e nessun alone artificiale sul tracciato. Include anche i luoghi meno noti, non solo quelli con una foto già pronta. Pensato per un percorso dove il paesaggio è il motivo per cui l’hai fatto.',
     orientation: '1:1', styleIdx: 1, zoomIntro: 9.5, zoomFollow: 13, zoomOutro: 7,
     speedKmS: 0.15, fastIntro: false,
     grading: 'contrast(1.05) saturate(1.22) brightness(1.02)',
@@ -185,6 +197,20 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', 
     hud: { title: true, stats: false, progress: false, elev: false, marks: false, odo: false, mini: false },
     scenic: { miles: false, peak: false, stars: false },
     loopEnding: true, routeColorKey: 'verde', routeGlow: false, sunLight: true,
+  },
+  manuale: {
+    label: 'Manuale', desc: '9:16 · nessuna scelta imposta',
+    long: 'Nessuna scelta imposta: si apre lo studio con il percorso e le tue foto, se le hai già posizionate — tutto il resto (stacchi, dati a schermo, pin, effetti) parte spento. Da qui componi il video comando per comando, nei due gruppi di controlli. È il punto di partenza giusto se nessuno dei preset sopra ti convince davvero, o se vuoi costruire qualcosa che nessuno dei cinque prevede.',
+    orientation: '9:16', styleIdx: 0, zoomIntro: 10.5, zoomFollow: 13.8, zoomOutro: 7.5,
+    speedKmS: 0.35, fastIntro: true,
+    grading: 'contrast(1) saturate(1) brightness(1)',
+    mode: 'ricordo', photoStyle: 'classic', photoDurationSec: 3, hyperlapse: false,
+    interludeKinds: [],
+    showPois: false, poiRequireImage: true, poiIncludeSensitive: false,
+    showUserPin: false, pinFx: { heart: false, effort: false, trail: false, shadow: false },
+    hud: { title: false, stats: false, progress: false, elev: false, marks: false, odo: false, mini: false },
+    scenic: { miles: false, peak: false, stars: false },
+    loopEnding: false, routeColorKey: 'arancione', routeGlow: true, sunLight: true,
   },
 } as const
 
@@ -214,7 +240,7 @@ const POI_NOTABILITY_TIER: Record<PoiType, 0|1|2> = {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type VideoState = 'idle' | 'config' | 'preparing' | 'rendering' | 'finalizing' | 'done'
+type VideoState = 'idle' | 'presets' | 'config' | 'preparing' | 'rendering' | 'finalizing' | 'done'
 
 /** Massimo/minimo di una serie numerica SENZA lo spread `Math.max(...arr)`.
  *
@@ -275,7 +301,7 @@ const WIZARD_STEPS = [
   { id: 'effetti',  title: 'Effetti',  sub: 'Dati a schermo e tocchi scenici' },
   { id: 'genera',   title: 'Genera',   sub: 'Il tempo, il riepilogo, l’avvio' },
 ] as const
-type VideoPreset = 'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' | 'custom'
+type VideoPreset = 'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' | 'manuale' | 'custom'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
 type PlacingStep = 'pos'
 
@@ -698,6 +724,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Video config
   const [videoState,        setVideoState]       = useState<VideoState>(initialVideoState ?? 'idle')
   const [videoStep,         setVideoStep]        = useState(0)   // passo corrente del wizard, vedi WIZARD_STEPS
+  // Dove torna la "X" della pagina preset: 'idle' se ci si è arrivati aprendo lo studio da capo
+  // (annullare deve chiudere tutto), 'config' se ci si è arrivati da "Cambia preset" dentro lo
+  // studio (annullare deve tornare al lavoro in corso, non buttarlo via).
+  const [presetPickerBack,  setPresetPickerBack] = useState<'idle'|'config'>('idle')
   // Velocità del cursore lungo il tracciato, in km di percorso per secondo di video: è QUESTO il
   // parametro che si imposta. La durata del video non si sceglie più, è la somma delle parti —
   // vedi lib/videoBudget.ts. Il valore iniziale si adatta al percorso (effetto più sotto): fisso
@@ -1868,11 +1898,28 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   // ── Post-production helpers ───────────────────────────────────────────────────
 
-  // Le inquadrature si calcolano una volta all'apertura del wizard: ricalcolarle ad ogni passo
-  // cancellerebbe l'ordine che l'utente ha eventualmente cambiato a mano nel passo "Percorso".
+  // "Crea video" non apre più direttamente lo studio: prima si passa dalla scelta del preset (o
+  // di Manuale). Uno stato a sé invece di un overlay dentro 'config' — lo studio presume un
+  // carattere già scelto (applyFullPreset già passato), la pagina dei preset no.
   function openVideoWizard() {
-    setShotPlan(planShots(gpsRef.current, zoomIntro, zoomFollow))
-    setVideoStep(0); setVideoState('config')
+    setPresetPickerBack('idle')
+    setVideoState('presets')
+  }
+
+  /** Applica il preset scelto (o Manuale, che è un preset come gli altri — vedi VIDEO_PRESETS) e
+   *  apre lo studio. Le inquadrature si calcolano qui, non dentro applyFullPreset: dipendono dallo
+   *  zoom del preset, che React non ha ancora messo in stato nel momento in cui applyFullPreset
+   *  ritorna (stesso motivo per cui applyFullPreset ricalcola da sé il tempo di volo — vedi il suo
+   *  commento). Da qui in poi l'utente può comunque cambiare inquadrature a mano: il calcolo è un
+   *  punto di partenza, non si ripete più finché non si sceglie un altro preset.
+   */
+  function choosePreset(pr: keyof typeof VIDEO_PRESETS) {
+    const cfg = VIDEO_PRESETS[pr]
+    setVideoPreset(pr)
+    applyFullPreset(pr)
+    setShotPlan(planShots(gpsRef.current, cfg.zoomIntro, cfg.zoomFollow))
+    setVideoStep(0)
+    setVideoState('config')
   }
   const goToStep = (i: number) => setVideoStep(Math.max(0, Math.min(WIZARD_STEPS.length - 1, i)))
 
@@ -4229,6 +4276,26 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         <StreetViewPanel lat={streetViewPos[0]} lon={streetViewPos[1]} title={title} onClose={()=>setShowStreetView(false)}/>
       )}
 
+      {/* ══ SCELTA PRESET — la porta d'ingresso allo studio, vedi VideoPresetPicker.tsx ═══ */}
+      {videoState==='presets'&&(
+        <VideoPresetPicker
+          title={(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'Percorso')}
+          routeHasPhotos={routePhotos.length>0}
+          onClose={()=>setVideoState(presetPickerBack)}
+          onChoose={key=>choosePreset(key as keyof typeof VIDEO_PRESETS)}
+          entries={([
+            { key:'veloce',  icon:Zap },
+            { key:'epico',   icon:Mountain },
+            { key:'guida',   icon:Compass },
+            { key:'natura',  icon:Leaf },
+            { key:'minimo',  icon:Minus },
+            { key:'manuale', icon:SlidersHorizontal },
+          ] as const).map(({key,icon}):PresetPickerEntry => ({
+            key, icon, label:VIDEO_PRESETS[key].label, desc:VIDEO_PRESETS[key].desc, long:VIDEO_PRESETS[key].long,
+          }))}
+        />
+      )}
+
       {/* ══ VIDEO CONFIG ════════════════════════════════════════════════════════ */}
       {/* ══ WIZARD VIDEO ═════════════════════════════════════════════════════════
           Un unico foglio a passi invece dei due elenchi "Impostazioni" + "Montaggio":
@@ -4257,7 +4324,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         const isIllustrativoUi = videoMode==='illustrativo'
         const speedBand = speedBandFor(videoSpeedKmS)
 
-        // ── Binario di sinistra: ciò che si posa in un punto del percorso ──────────
+        // ── Binario di sinistra: i CONTENUTI — ciò che si posa in un punto del percorso ─────
+        // Ordine e raggruppamento pensati per la colonnina a icona (Studio video, opzione A):
+        // Momenti (stacchi + Visione, che condividono lo stesso meccanismo — la telecamera si
+        // ferma), Foto, Contenuti (Luoghi + Didascalie). Erano 5 gruppi possibili, ora 3.
         const positionalGroups: StudioGroup[] = []
 
         {
@@ -4303,16 +4373,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               })
             }
           }
-          positionalGroups.push({ id:'stacchi', label:'Stacchi', glyph:'◎', controls })
-        }
-
-        // La Visione ha impostazioni proprie (cosa nominare, il velo topografico) che valgono solo
-        // quando è accesa: mostrarle sempre riempirebbe il binario di comandi senza effetto.
-        if (videoInterludes.find(i=>i.kind==='visione')?.enabled && visionFeatures.length>0) {
-          positionalGroups.push({
-            id:'visione', label:'Visione d’insieme', glyph:'◉',
-            controls: [
-              { kind:'chips', id:'vision-cats', label:'Cosa nominare',
+          // Le impostazioni proprie della Visione (cosa nominare, il velo topografico) valgono
+          // solo quando è accesa: in coda allo stesso gruppo, non un gruppo a parte — mostrarle
+          // sempre riempirebbe la colonna di comandi senza effetto.
+          if (videoInterludes.find(i=>i.kind==='visione')?.enabled && visionFeatures.length>0) {
+            controls.push(
+              { kind:'chips', id:'vision-cats', label:'Visione — cosa nominare',
                 options:(Object.keys(VISION_CATEGORY_LABEL) as VisionCategory[]).map(cat=>({
                   id:cat,
                   label:`${VISION_CATEGORY_LABEL[cat]}${visionCategories.includes(cat)&&visionFeatures.filter(f=>f.category===cat).length>0?` · ${visionFeatures.filter(f=>f.category===cat).length}`:''}`,
@@ -4324,8 +4390,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 hint:'Le tile dello stile outdoor sfumate sopra il satellitare: fa affiorare corsi d’acqua e sentieri che sotto la vegetazione non si vedono.' },
               { kind:'note', id:'vision-list',
                 text:`Verranno nominati: ${visionFeatures.map(f=>f.name).join(' · ')}.` },
-            ],
-          })
+            )
+          }
+          positionalGroups.push({ id:'momenti', label:'Momenti', glyph:'momenti', controls })
         }
 
         {
@@ -4445,12 +4512,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               )}
             </div>
           )})
-          positionalGroups.push({ id:'foto', label:'Foto', glyph:'▣', controls })
+          positionalGroups.push({ id:'foto', label:'Foto', glyph:'foto', controls })
         }
 
         if (isIllustrativoUi) {
+          // Luoghi (quali POI mostrare) + Didascalie (quale frase, dove): due decisioni diverse
+          // ma stesso posto — cose scritte SUL percorso invece che sul video intero — quindi un
+          // solo gruppo, con le didascalie in coda ed etichettate a parte per restare leggibili.
           positionalGroups.push({
-            id:'luoghi', label:'Luoghi', glyph:'◆',
+            id:'contenuti', label:'Contenuti', glyph:'contenuti',
             controls: [
               { kind:'toggle', id:'poi-show', label:'Schede dei luoghi',
                 value: videoShowPois, disabled:(pois?.length??0)===0,
@@ -4465,11 +4535,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   value: videoPoiIncludeSensitive, onToggle:setVideoPoiIncludeSensitive,
                   hint:'Spento, restano puntini senza nome. Un video fatto per girare porta gente: è così che certi posti si rovinano.' },
               ] : []),
-            ],
-          })
-          positionalGroups.push({
-            id:'didascalie', label:'Didascalie', glyph:'✎',
-            controls: [{ kind:'custom', id:'captions', render:()=>(
+              { kind:'custom', id:'captions', label:'Didascalie', render:()=>(
               <div>
                 {videoCaptions.length===0?(
                   <p className="text-stone-500 text-[11px] leading-relaxed">Nessuna didascalia: questo percorso non ha una guida da cui ricavarle.</p>
@@ -4508,14 +4574,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   })}
                 </>)}
               </div>
-            )}],
+            )},
+            ],
           })
         }
 
-        // ── Binario di destra: ciò che vale per tutto il video ─────────────────────
+        // ── Binario di destra: il SETUP — ciò che vale per tutto il video ──────────────────
+        // Ordine: prima le decisioni che condizionano tutto il resto (a cosa serve, formato),
+        // poi il ritmo con cui si guarda (velocità + inquadrature), poi l'aspetto (mappa,
+        // schermo), infine i tocchi facoltativi (pin ed effetti). Erano 8 gruppi possibili, ora 5.
         const globalGroups: StudioGroup[] = [
-          { id:'scopo', label:'A cosa serve', glyph:'◉', controls:[
-            { kind:'cards', id:'mode', value: videoMode,
+          { id:'video', label:'Video', glyph:'video', controls:[
+            { kind:'cards', id:'mode', label:'A cosa serve', value: videoMode,
               options:[
                 {value:'ricordo',      label:'Il mio ricordo', sub:'La tua uscita: il pin con la tua foto, la fatica, le tue immagini.'},
                 {value:'illustrativo', label:'Far conoscere il percorso', sub:'Il sentiero che si presenta: i luoghi col loro nome e i punteggi. Senza dati personali.'},
@@ -4530,17 +4600,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               ? [{ kind:'note' as const, id:'no-pois', tone:'warn' as const,
                    text:'Su questo percorso non risultano punti di interesse: il video resterà una descrizione di numeri e punteggi.' }]
               : []),
-          ]},
-
-          { id:'formato', label:'Formato', glyph:'▭', controls:[
-            { kind:'cards', id:'preset', label:'Preimpostazioni', value: videoPreset,
-              options:(['veloce','epico','guida','minimo','natura'] as const).map(pr=>({
-                value:pr, label:VIDEO_PRESETS[pr].label, sub:VIDEO_PRESETS[pr].desc })),
-              onPick:v=>{
-                const pr = v as keyof typeof VIDEO_PRESETS
-                setVideoPreset(pr); applyFullPreset(pr)
-              },
-              hint:'Un carattere completo — modalità, stacchi, luoghi, pin ed effetti, dati a schermo — non solo formato e ritmo. Da qui aggiusti singolarmente quello che vuoi nei due binari.' },
+            // Il preset si sceglie prima di entrare qui (vedi la pagina dei preset): questo è
+            // solo il richiamo a quale carattere è attivo ora, con la via per cambiarlo senza
+            // uscire dallo studio e perdere il lavoro fatto nel frattempo.
+            { kind:'custom', id:'preset-current', label:'Preset', render:()=>(
+              <div className="flex items-center justify-between gap-2 bg-stone-100 rounded-xl px-3 py-2.5">
+                <span className="text-stone-700 text-[12px] font-semibold">
+                  {videoPreset==='custom' ? 'Personalizzato' : VIDEO_PRESETS[videoPreset as keyof typeof VIDEO_PRESETS].label}
+                </span>
+                <button onClick={()=>{setPresetPickerBack('config');setVideoState('presets')}}
+                  className="text-terra-700 hover:text-terra-800 text-[11px] font-bold underline underline-offset-2 shrink-0">
+                  Cambia preset
+                </button>
+              </div>
+            )},
             { kind:'segmented', id:'orient', label:'Proporzioni', value: videoOrientation, columns:3,
               options:[
                 {value:'9:16',   label:'9:16',   sub:'Reels'},
@@ -4559,12 +4632,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               hint:'60 fps rende il movimento più fluido ma allunga il tempo di generazione.' }] : []),
           ]},
 
-          { id:'ritmo', label:'Ritmo', glyph:'◷', controls:[
+          { id:'ritmo', label:'Ritmo e camera', glyph:'ritmo', controls:[
             { kind:'slider', id:'speed', label:'velocità',
               value: sliderFromSpeed(videoSpeedKmS), min:0, max:1, step:0.001,
               display: formatSpeed(videoSpeedKmS),
               onChange:v=>{ setVideoSpeedKmS(speedFromSlider(v)); setVideoPreset('custom') },
               hint:`${speedBand.label}. ${speedBand.desc}` },
+            { kind:'slider', id:'z-in',  label:'zoom iniziale', value:zoomIntro,  min:7,  max:14, step:0.5, display:zoomIntro.toFixed(1),  onChange:setZoomIntro },
+            { kind:'slider', id:'z-mid', label:'zoom percorso', value:zoomFollow, min:10, max:16, step:0.5, display:zoomFollow.toFixed(1), onChange:setZoomFollow },
+            { kind:'slider', id:'z-out', label:'zoom finale',   value:zoomOutro,  min:5,  max:12, step:0.5, display:zoomOutro.toFixed(1),  onChange:setZoomOutro },
             { kind:'note', id:'ritmo-note',
               text:`Il percorso scorre in ~${Math.round(est.routeSec)}s${est.stillSec>0?`, più ${Math.round(est.stillSec)}s a telecamera ferma fra foto e pannelli`:''}.` },
             { kind:'toggle', id:'fast-intro', label:'Intro aerea più rapida',
@@ -4574,31 +4650,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               text:`${Math.round(est.stillSec)}s su ${est.total}s (${est.stillPct}%) sono a telecamera ferma: il video rischia di sembrare più una presentazione che un viaggio.` }] : []),
             ...(est.photos>est.stops ? [{ kind:'note' as const, id:'grouped',
               text:`${est.photos} foto raggruppate in ${est.stops} soste: quelle vicine si aprono insieme.` }] : []),
-          ]},
-
-          { id:'mappa', label:'Mappa e tracciato', glyph:'⛰', controls:[
-            { kind:'segmented', id:'mapstyle', label:'Stile mappa', value:String(styleIdx), columns:STYLES.length,
-              options:STYLES.map((s,i)=>({value:String(i), label:s.label})),
-              onPick:v=>switchStyle(+v) },
-            { kind:'segmented', id:'routecolor', label:'Colore del tracciato', value:routeColorKey, columns:4,
-              options:(Object.keys(ROUTE_COLORS) as RouteColorKey[]).map(k=>({
-                value:k, label:ROUTE_COLORS[k].label, color:ROUTE_COLORS[k].hex })),
-              onPick:v=>setRouteColorKey(v as RouteColorKey) },
-            { kind:'toggle', id:'glow', label:'Alone attorno al tracciato',
-              value: routeGlowEnabled, onToggle:setRouteGlowEnabled,
-              hint:'Stacca il percorso dal terreno anche dove ci passa sopra qualcosa di simile per tinta — un sentiero già disegnato, una radura chiara, la neve.' },
-            { kind:'toggle', id:'sun', label:'Ombre coerenti con l’ora',
-              value: videoSunLightEnabled, onToggle:setVideoSunLightEnabled,
-              hint: hikeTimeWindow.real
-                ? 'Il rilievo è illuminato dal sole nella posizione che aveva davvero durante l’escursione.'
-                : 'Questa traccia non ha orari: la luce è una stima plausibile per stagione e latitudine, non l’ora reale.' },
-          ]},
-
-          { id:'camera', label:'Inquadrature', glyph:'◫', controls:[
-            { kind:'slider', id:'z-in',  label:'zoom iniziale', value:zoomIntro,  min:7,  max:14, step:0.5, display:zoomIntro.toFixed(1),  onChange:setZoomIntro },
-            { kind:'slider', id:'z-mid', label:'zoom percorso', value:zoomFollow, min:10, max:16, step:0.5, display:zoomFollow.toFixed(1), onChange:setZoomFollow },
-            { kind:'slider', id:'z-out', label:'zoom finale',   value:zoomOutro,  min:5,  max:12, step:0.5, display:zoomOutro.toFixed(1),  onChange:setZoomOutro },
-            { kind:'custom', id:'shots', label:'Sequenza', render:()=>(
+            { kind:'custom', id:'shots', label:'Sequenza inquadrature', render:()=>(
               <div className="space-y-1.5">
                 {shotPlan.map((shot,idx)=>(
                   <div key={shot.id} className="flex items-center gap-2 bg-stone-100 rounded-lg px-2 py-1.5">
@@ -4626,7 +4678,25 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             )},
           ]},
 
-          { id:'schermo', label:'Dati a schermo', glyph:'▤', controls:[
+          { id:'mappa', label:'Mappa e tracciato', glyph:'mappa', controls:[
+            { kind:'segmented', id:'mapstyle', label:'Stile mappa', value:String(styleIdx), columns:STYLES.length,
+              options:STYLES.map((s,i)=>({value:String(i), label:s.label})),
+              onPick:v=>switchStyle(+v) },
+            { kind:'segmented', id:'routecolor', label:'Colore del tracciato', value:routeColorKey, columns:4,
+              options:(Object.keys(ROUTE_COLORS) as RouteColorKey[]).map(k=>({
+                value:k, label:ROUTE_COLORS[k].label, color:ROUTE_COLORS[k].hex })),
+              onPick:v=>setRouteColorKey(v as RouteColorKey) },
+            { kind:'toggle', id:'glow', label:'Alone attorno al tracciato',
+              value: routeGlowEnabled, onToggle:setRouteGlowEnabled,
+              hint:'Stacca il percorso dal terreno anche dove ci passa sopra qualcosa di simile per tinta — un sentiero già disegnato, una radura chiara, la neve.' },
+            { kind:'toggle', id:'sun', label:'Ombre coerenti con l’ora',
+              value: videoSunLightEnabled, onToggle:setVideoSunLightEnabled,
+              hint: hikeTimeWindow.real
+                ? 'Il rilievo è illuminato dal sole nella posizione che aveva davvero durante l’escursione.'
+                : 'Questa traccia non ha orari: la luce è una stima plausibile per stagione e latitudine, non l’ora reale.' },
+          ]},
+
+          { id:'schermo', label:'Dati a schermo', glyph:'schermo', controls:[
             { kind:'chips', id:'hud', options:[
               { id:'title',    label:'Titolo',       value:videoShowTitle,    onToggle:setVideoShowTitle },
               { id:'stats',    label:'Statistiche',  value:videoShowStats,    onToggle:setVideoShowStats },
@@ -4638,20 +4708,22 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             ]},
           ]},
 
-          { id:'pin', label:'Il tuo pin', glyph:'◈', hidden: isIllustrativoUi, controls:[
-            { kind:'toggle', id:'pin-show', label:'Mostra il pin con la tua foto',
-              value: videoShowUserPin, onToggle:setShowUserPin,
-              hint: videoShowUserPin ? undefined : 'Senza pin il video racconta il percorso invece di te. Gli effetti qui sotto sono legati al pin e restano spenti.' },
-            { kind:'chips', id:'pin-fx', options:[
-              { id:'heart',  label:'Cuore + BPM',        value:videoHeartEffectEnabled,    onToggle:setVideoHeartEffectEnabled,    disabled:!hasBodyData||!videoShowUserPin },
-              { id:'effort', label:'Pin dalla fatica',   value:videoPinEffortColorEnabled, onToggle:setVideoPinEffortColorEnabled, disabled:!hasBodyData||!videoShowUserPin },
-              { id:'trail',  label:'Scia',               value:videoTrailEnabled,          onToggle:setVideoTrailEnabled,          disabled:!videoShowUserPin },
-              { id:'shadow', label:'Ombra in salita',    value:videoSlopeShadowEnabled,    onToggle:setVideoSlopeShadowEnabled,    disabled:!videoShowUserPin },
-            ], hint: hasBodyData ? undefined : 'Cuore e colore dalla fatica hanno bisogno dei dati della fascia cardio, che questa traccia non ha.' },
-          ]},
-
-          { id:'scenici', label:'Tocchi scenici', glyph:'✦', controls:[
-            { kind:'chips', id:'fx', options:[
+          // Il pin (con i suoi effetti) esiste solo in modalità Ricordo: nascosto per intero in
+          // Illustrativo sarebbe un gruppo vuoto, quindi qui è la lista dei suoi controlli a
+          // essere condizionale, non il gruppo — i tocchi scenici restano comunque disponibili.
+          { id:'effetti', label:'Effetti', glyph:'effetti', controls:[
+            ...(!isIllustrativoUi ? [
+              { kind:'toggle' as const, id:'pin-show', label:'Mostra il pin con la tua foto',
+                value: videoShowUserPin, onToggle:setShowUserPin,
+                hint: videoShowUserPin ? undefined : 'Senza pin il video racconta il percorso invece di te. Gli effetti qui sotto sono legati al pin e restano spenti.' },
+              { kind:'chips' as const, id:'pin-fx', label:'Effetti del pin', options:[
+                { id:'heart',  label:'Cuore + BPM',        value:videoHeartEffectEnabled,    onToggle:setVideoHeartEffectEnabled,    disabled:!hasBodyData||!videoShowUserPin },
+                { id:'effort', label:'Pin dalla fatica',   value:videoPinEffortColorEnabled, onToggle:setVideoPinEffortColorEnabled, disabled:!hasBodyData||!videoShowUserPin },
+                { id:'trail',  label:'Scia',               value:videoTrailEnabled,          onToggle:setVideoTrailEnabled,          disabled:!videoShowUserPin },
+                { id:'shadow', label:'Ombra in salita',    value:videoSlopeShadowEnabled,    onToggle:setVideoSlopeShadowEnabled,    disabled:!videoShowUserPin },
+              ], hint: hasBodyData ? undefined : 'Cuore e colore dalla fatica hanno bisogno dei dati della fascia cardio, che questa traccia non ha.' },
+            ] : []),
+            { kind:'chips', id:'fx', label: isIllustrativoUi ? undefined : 'Tocchi scenici', options:[
               { id:'miles', label:'Traguardi %',    value:videoMilestonesEnabled,   onToggle:setVideoMilestonesEnabled },
               { id:'peak',  label:'Quota massima',  value:videoPeakMomentEnabled,   onToggle:setVideoPeakMomentEnabled },
               { id:'stars', label:'Stelline arrivo',value:videoArrivalStarsEnabled, onToggle:setVideoArrivalStarsEnabled },
