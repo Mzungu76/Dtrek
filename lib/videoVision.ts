@@ -451,3 +451,45 @@ export function metersPerPixelAt(lat: number, worldSize: number): number {
 }
 
 const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * 6378137
+
+/** Un cartello e il punto a terra che lo riguarda, in pixel del fotogramma. */
+export interface VisionMarkerAnchor { key: string; groundX: number; groundY: number }
+
+/**
+ * Sposta lateralmente la TESTA dei cartelli rimasti sulla mappa quando i loro piedi cadono troppo
+ * vicini sullo schermo — senza, restano impilati uno sopra l'altro col filo verticale, illeggibili
+ * ogni volta che due cose annotate sono fisicamente vicine lungo il percorso (una cascata e gli
+ * scavi accanto, per esempio: capita spesso, non è il caso raro).
+ *
+ * Il piede (`groundX`, non toccato qui) resta esattamente sul punto vero — è quello che rende il
+ * filo credibile come "un palo piantato lì". Solo la testa si allontana, e lo fa in VENTAGLIO
+ * attorno al centro del gruppo che si sta accavallando, non tutta nella stessa direzione: un
+ * gruppo di quattro cartelli vicini si apre simmetricamente, come cartelli veri disposti attorno a
+ * un incrocio, invece di accodarsi da un lato.
+ *
+ * Punti isolati (nessun vicino entro `minGapPx`) non vengono toccati: il filo resta verticale,
+ * com'era prima — la deviazione è la RISPOSTA all'affollamento, non un tratto stilistico fisso.
+ */
+export function declutterVisionMarkerHeads(
+  anchors: VisionMarkerAnchor[], minGapPx: number,
+): Map<string, number> {
+  const result = new Map<string, number>()
+  const sorted = anchors.slice().sort((a, b) => a.groundX - b.groundX)
+
+  let i = 0
+  while (i < sorted.length) {
+    let j = i
+    while (j + 1 < sorted.length && sorted[j + 1].groundX - sorted[j].groundX < minGapPx) j++
+    const cluster = sorted.slice(i, j + 1)
+    if (cluster.length === 1) {
+      result.set(cluster[0].key, cluster[0].groundX)
+    } else {
+      const center = cluster.reduce((a, p) => a + p.groundX, 0) / cluster.length
+      const span = (cluster.length - 1) * minGapPx
+      const start = center - span / 2
+      cluster.forEach((p, k) => result.set(p.key, start + k * minGapPx))
+    }
+    i = j + 1
+  }
+  return result
+}
