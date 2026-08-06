@@ -47,6 +47,9 @@ export interface TimelineEditorItem extends TimelineItem {
 
 interface Props {
   trackPoints: TrackPoint[]
+  /** Riempie il contenitore invece di prendersi un'altezza fissa — lo studio le dà tutto lo spazio
+   *  che avanza fra i due binari, la scheda del wizard una fascia. */
+  fill?: boolean
   items: TimelineEditorItem[]
   /** Secondi di solo volo: serve a dire in SECONDI quanto due elementi sono vicini. */
   routeSeconds: number
@@ -70,7 +73,7 @@ function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L
 }
 
 export default function RouteLeafletEditor({
-  trackPoints, items, routeSeconds, shape: trackShape, roundTrip, onMove,
+  trackPoints, items, routeSeconds, shape: trackShape, roundTrip, onMove, fill,
 }: Props) {
   const mapElRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -106,7 +109,11 @@ export default function RouteLeafletEditor({
       if (cancelled || !mapElRef.current) return
       const map = Lmod.map(mapElRef.current, { zoomControl: true }).setView(coords[0], 13)
       mapRef.current = map
-      Lmod.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=dark', {
+      // Voyager, non "dark": le tile scure spegnevano il rilievo e i toponimi proprio nella vista
+      // in cui servono a capire DOVE si sta mettendo uno stacco, e su un pannello già scuro il
+      // risultato era una macchia nera con sopra una riga verde. Voyager è la via di mezzo —
+      // mid-tone, mostra il terreno, ed è tarata per far risaltare le linee di percorso.
+      Lmod.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=voyager', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
         maxZoom: 19,
       }).addTo(map)
@@ -205,8 +212,10 @@ export default function RouteLeafletEditor({
   }
 
   return (
-    <div>
-      <div ref={mapElRef} className="w-full rounded-2xl overflow-hidden border border-white/10" style={{ height: 340 }} />
+    <div className={fill ? 'h-full flex flex-col min-h-0' : undefined}>
+      <div ref={mapElRef}
+        className={`w-full rounded-2xl overflow-hidden border border-white/10 ${fill ? 'flex-1 min-h-0' : ''}`}
+        style={fill ? undefined : { height: 340 }} />
       <p className="text-white/30 text-[11px] mt-2 leading-relaxed">
         Trascina i pallini sulla mappa per decidere dove cade ogni foto e ogni stacco — si agganciano da soli al punto del percorso più vicino.
         {roundTrip && ' Il percorso è un andata e ritorno: il video mostra la sola andata, quindi tutto va posizionato su quella.'}
