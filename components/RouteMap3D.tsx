@@ -1255,9 +1255,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return {
         id: `photo:${t.id}`, kind: 'photo' as const, atP: t.progress,
         label: src?.caption?.trim() || 'Foto', seconds: photoDurationSec,
-        // Bloccata finché non la si sblocca esplicitamente dall'elenco foto — vedi
-        // unlockedPhotoIds. Gli stacchi non hanno questo campo: restano sempre trascinabili.
+        // Bloccata finché non la si sblocca esplicitamente — dall'elenco foto o dal lucchetto
+        // sulla mappa stessa, vedi unlockedPhotoIds. Gli stacchi non hanno questo campo: restano
+        // sempre trascinabili.
         locked: !unlockedPhotoIds.has(t.id),
+        // Spostata rispetto a dove è stata scattata: mostra sempre il pallino di ripristino sulla
+        // mappa, bloccata o no.
+        moved: videoPhotoAtP[t.id] != null,
       }
     })
     const beats = videoInterludes
@@ -1268,7 +1272,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         label: INTERLUDE_LABEL[i.kind], seconds: i.seconds, interludeKind: i.kind,
       }))
     return [...photos, ...beats]
-  }, [carouselPhotoTimings, routePhotos, photoDurationSec, videoInterludes, videoMode, interludeFitPreview, unlockedPhotoIds])
+  }, [carouselPhotoTimings, routePhotos, photoDurationSec, videoInterludes, videoMode, interludeFitPreview, unlockedPhotoIds, videoPhotoAtP])
 
   // Velocità iniziale tarata sul percorso: un valore fisso darebbe un video di dieci secondi su un
   // giro da 2 km e di quattro minuti su uno da 25. Si imposta una sola volta per percorso — dopo
@@ -4915,6 +4919,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   } else {
                     setVideoPhotoAtP(prev => ({ ...prev, [id.slice(6)]: atP }))
                   }
+                }}
+                onToggleLock={id=>togglePhotoLock(id.slice(6))}
+                onReset={id=>{
+                  const photoId = id.slice(6)
+                  setVideoPhotoAtP(prev => { const { [photoId]: _drop, ...rest } = prev; return rest })
                 }}
               />
             }
