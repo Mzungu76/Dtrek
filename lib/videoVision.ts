@@ -34,6 +34,12 @@ const TRAIL_SEPARATION_M = 60
 const TRAIL_MIN_SEPARATE_FRACTION = 0.35
 /** Un POI più lontano di così dal tracciato non lo si incontra camminando. */
 const POI_RELEVANCE_M = 400
+/** Sotto questa distanza fra i punti VERI di due feature (non la loro proiezione sul percorso, il
+ *  punto che ciascuna effettivamente segna) le linee guida convergono nello stesso angolo di
+ *  schermo — un incrocio con una cascata, gli scavi accanto e la strada che ci passa in mezzo sono
+ *  tre cose diverse ma un solo posto: annotarle tutte e tre affastella tre linee l'una sull'altra
+ *  invece di raccontare tre punti distinti del percorso. */
+const MIN_FEATURE_SEPARATION_M = 220
 
 export interface VisionSourceLine {
   id: number
@@ -175,6 +181,14 @@ export function selectVisionFeatures(
   // Distribuzione lungo il percorso: sei etichette tutte nello stesso angolo della mappa sono
   // illeggibili anche se sono le sei più importanti. Si accetta una feature solo se il punto di
   // traccia che la riguarda non è troppo vicino a quello di una già accettata.
+  //
+  // Due controlli, non uno: il primo (sull'INDICE del punto di traccia più vicino) non basta da
+  // solo — su un tratto che il tracciato percorre lentamente e a curve (un canyon, un guado) tanti
+  // punti di traccia diversi possono cadere tutti vicino allo stesso luogo reale, quindi due
+  // feature possono superare quel controllo pur segnando praticamente lo stesso posto. Il secondo
+  // (sulla distanza VERA fra i punti che le feature segnano, non fra le loro proiezioni sul
+  // tracciato) è quello che intercetta il caso — proprio quello di uno sbocco di canyon con una
+  // cascata, degli scavi e una strada tutti a pochi metri l'uno dall'altro.
   const minSeparation = Math.max(1, Math.floor(route.length / (max * 2)))
   const chosen: VisionFeature[] = []
   const takenIdx: number[] = []
@@ -182,6 +196,7 @@ export function selectVisionFeatures(
     if (chosen.length >= max) break
     const { idx } = nearestOnRoute(f.lat, f.lon, route)
     if (takenIdx.some(t => Math.abs(t - idx) < minSeparation)) continue
+    if (chosen.some(c => haversineM(c.lat, c.lon, f.lat, f.lon) < MIN_FEATURE_SEPARATION_M)) continue
     takenIdx.push(idx)
     chosen.push(f)
   }

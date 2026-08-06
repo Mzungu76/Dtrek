@@ -3763,6 +3763,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   const pt = mapC.project([lo, la])
                   return { x: (pt.x * dprV - crV.sx) * kx, y: (pt.y * dprV - crV.sy) * ky }
                 }
+                // 360·sc2 fisso troncava "Cascate di Monte Gelato" o "Strada della Fornace" a metà
+                // anche su un fotogramma verticale da 1080px, dove restava mezzo schermo vuoto fra
+                // l'etichetta e il bordo opposto: un'etichetta per lato può usare fino a poco meno
+                // della metà del fotogramma senza mai toccare l'altro lato. Il tetto assoluto
+                // (520·sc2) serve solo sui formati molto larghi (16:9), dove metà frame è comunque
+                // più di quanto un nome debba mai occupare.
+                const visionLabelWidth = Math.round(Math.max(220 * sc2, Math.min(outW * 0.42, 520 * sc2)))
                 const laid = layoutVisionCallouts(visionCallouts, project, {
                   width: outW, height: outH,
                   insets: {
@@ -3771,7 +3778,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     top: safeInsets.top + Math.round(124 * sc2), bottom: safeInsets.bottom + Math.round(70 * sc2),
                     left: safeInsets.left + Math.round(14 * sc2), right: safeInsets.right + Math.round(14 * sc2),
                   },
-                  labelWidth: Math.round(360 * sc2),
+                  labelWidth: visionLabelWidth,
                   // Alzato con la dimensione del testo: qualificatore, nome e sottolineatura
                   // occupano ora più spazio in verticale, e righe troppo fitte li farebbero
                   // toccare fra un'etichetta e la successiva.
@@ -3792,7 +3799,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     name: c.feature.name, qualifier: c.feature.qualifier,
                     anchorX: c.anchorX, anchorY: c.anchorY,
                     labelX: c.labelX, labelY: c.labelY, side: c.side, order: c.order,
-                  }, VISION_CATEGORY_COLOR[c.feature.category] ?? '#fff', localT, Math.round(360 * sc2))
+                  }, VISION_CATEGORY_COLOR[c.feature.category] ?? '#fff', localT, visionLabelWidth)
                   ctx.globalAlpha = 1
                 }
               }
