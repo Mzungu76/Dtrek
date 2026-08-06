@@ -39,7 +39,7 @@ import {
   selectVisionFeatures, layoutVisionCallouts, recommendedVisionSeconds,
   DEFAULT_VISION_CATEGORIES, VISION_CATEGORY_LABEL, MAX_VISION_CALLOUTS, VISION_CAMERA_SECONDS,
   boundsOfRoute, fitZoomForBounds, centerOfBounds,
-  visionMarkerEdgeFade, visionMarkerLiftPx, metersPerPixelAt,
+  visionMarkerEdgeFade, visionMarkerLiftPx, metersPerPixelAt, declutterVisionMarkerHeads,
   type VisionCategory, type VisionSourceLine, type VisionFeature,
 } from '@/lib/videoVision'
 import { suggestCaptions, activeCaptionAt, type CaptionCandidate } from '@/lib/videoCaptions'
@@ -3472,7 +3472,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // La posizione a terra viene da map.project(), che tiene conto del rilievo ed è la stessa
         // chiamata che qualche riga più sotto piazza correttamente le etichette DURANTE lo stacco:
         // se funziona lì funziona qui. Il filo sopra di essa è lungo quanto lo sarebbe un palo
-        // verticale a questa inclinazione — vedi visionMarkerLiftPx in lib/videoVision.ts.
+        // verticale a questa inclinazione — vedi visionMarkerLiftPx in lib/videoVision.ts — ma la
+        // testa del filo si allontana dal piede quando un altro cartello è troppo vicino
+        // (declutterVisionMarkerHeads): senza, due punti annotati vicini lungo il percorso
+        // finivano con le targhette impilate l'una sull'altra, entrambe illeggibili.
         if (visionRevealedRef.current && !interlude && introP === undefined && outroP === undefined
             && stopZoomTNow <= 0.001 && visionCallouts.length > 0 && mapRef.current) {
           const mapV = mapRef.current
@@ -3487,24 +3490,35 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           const centerV = mapV.getCenter()
           const mPerPxV = metersPerPixelAt(centerV.lat, vtV?.worldSize ?? (512 * Math.pow(2, mapV.getZoom())))
           const maxDistM = Math.max(vtV?.width ?? 512, vtV?.height ?? 512) * mPerPxV * 4
+
+          // Prima passata: solo le proiezioni a terra, per tutti i cartelli — serve l'insieme
+          // completo prima di poter dire chi è troppo vicino a chi.
+          const grounded: { f: VisionFeature; groundX: number; groundY: number }[] = []
           for (const f of visionCallouts) {
-            let targetA = 0
-            let gOut: { x: number; y: number } | null = null
-            if (distM(centerV.lat, centerV.lng, f.lat, f.lon) <= maxDistM) {
-              const g = mapV.project([f.lon, f.lat])
-              gOut = { x: (g.x * dprV2 - crF.sx) * kxV, y: (g.y * dprV2 - crF.sy) * kyV }
-              // Si valuta la visibilità sulla targhetta, non sul piede: è quella che si legge.
-              targetA = visionMarkerEdgeFade(gOut.x, gOut.y - liftV, outW, outH, edgeMargin)
-            }
+            if (distM(centerV.lat, centerV.lng, f.lat, f.lon) > maxDistM) continue
+            const g = mapV.project([f.lon, f.lat])
+            grounded.push({ f, groundX: (g.x * dprV2 - crF.sx) * kxV, groundY: (g.y * dprV2 - crF.sy) * kyV })
+          }
+          // Sotto questa distanza fra due piedi le targhette (≈240·sc2 di larghezza) si toccano.
+          const headXByKey = declutterVisionMarkerHeads(
+            grounded.map(g => ({ key: g.f.key, groundX: g.groundX, groundY: g.groundY })),
+            Math.round(210 * sc2),
+          )
+
+          for (const g of grounded) {
+            const headX = headXByKey.get(g.f.key) ?? g.groundX
+            const headY = g.groundY - liftV
+            // Si valuta la visibilità sulla targhetta, non sul piede: è quella che si legge.
+            const targetA = visionMarkerEdgeFade(headX, headY, outW, outH, edgeMargin)
             // Filtrato nel tempo come la telecamera: un cartello che entra o esce dall'inquadratura
             // di scatto sembrerebbe un HUD, non un elemento della scena.
-            const alphaV = lerp(visionMarkerAlphaRef.current.get(f.key) ?? 0, targetA, 0.14)
-            visionMarkerAlphaRef.current.set(f.key, alphaV)
-            if (alphaV > 0.01 && gOut) {
+            const alphaV = lerp(visionMarkerAlphaRef.current.get(g.f.key) ?? 0, targetA, 0.14)
+            visionMarkerAlphaRef.current.set(g.f.key, alphaV)
+            if (alphaV > 0.01) {
               drawVisionMarker(ctx, sc2, {
-                headX: gOut.x, headY: gOut.y - liftV, groundX: gOut.x, groundY: gOut.y,
-                name: f.name, qualifier: f.qualifier,
-              }, VISION_CATEGORY_COLOR[f.category] ?? '#fff', alphaV, Math.round(240 * sc2))
+                headX, headY, groundX: g.groundX, groundY: g.groundY,
+                name: g.f.name, qualifier: g.f.qualifier,
+              }, VISION_CATEGORY_COLOR[g.f.category] ?? '#fff', alphaV, Math.round(240 * sc2))
             }
           }
         }
@@ -3749,6 +3763,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   const pt = mapC.project([lo, la])
                   return { x: (pt.x * dprV - crV.sx) * kx, y: (pt.y * dprV - crV.sy) * ky }
                 }
+                // 360·sc2 fisso troncava "Cascate di Monte Gelato" o "Strada della Fornace" a metà
+                // anche su un fotogramma verticale da 1080px, dove restava mezzo schermo vuoto fra
+                // l'etichetta e il bordo opposto: un'etichetta per lato può usare fino a poco meno
+                // della metà del fotogramma senza mai toccare l'altro lato. Il tetto assoluto
+                // (520·sc2) serve solo sui formati molto larghi (16:9), dove metà frame è comunque
+                // più di quanto un nome debba mai occupare.
+                const visionLabelWidth = Math.round(Math.max(220 * sc2, Math.min(outW * 0.42, 520 * sc2)))
                 const laid = layoutVisionCallouts(visionCallouts, project, {
                   width: outW, height: outH,
                   insets: {
@@ -3757,7 +3778,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     top: safeInsets.top + Math.round(124 * sc2), bottom: safeInsets.bottom + Math.round(70 * sc2),
                     left: safeInsets.left + Math.round(14 * sc2), right: safeInsets.right + Math.round(14 * sc2),
                   },
-                  labelWidth: Math.round(360 * sc2),
+                  labelWidth: visionLabelWidth,
                   // Alzato con la dimensione del testo: qualificatore, nome e sottolineatura
                   // occupano ora più spazio in verticale, e righe troppo fitte li farebbero
                   // toccare fra un'etichetta e la successiva.
@@ -3778,7 +3799,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     name: c.feature.name, qualifier: c.feature.qualifier,
                     anchorX: c.anchorX, anchorY: c.anchorY,
                     labelX: c.labelX, labelY: c.labelY, side: c.side, order: c.order,
-                  }, VISION_CATEGORY_COLOR[c.feature.category] ?? '#fff', localT, Math.round(360 * sc2))
+                  }, VISION_CATEGORY_COLOR[c.feature.category] ?? '#fff', localT, visionLabelWidth)
                   ctx.globalAlpha = 1
                 }
               }

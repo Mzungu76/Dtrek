@@ -34,6 +34,12 @@ const TRAIL_SEPARATION_M = 60
 const TRAIL_MIN_SEPARATE_FRACTION = 0.35
 /** Un POI più lontano di così dal tracciato non lo si incontra camminando. */
 const POI_RELEVANCE_M = 400
+/** Sotto questa distanza fra i punti VERI di due feature (non la loro proiezione sul percorso, il
+ *  punto che ciascuna effettivamente segna) le linee guida convergono nello stesso angolo di
+ *  schermo — un incrocio con una cascata, gli scavi accanto e la strada che ci passa in mezzo sono
+ *  tre cose diverse ma un solo posto: annotarle tutte e tre affastella tre linee l'una sull'altra
+ *  invece di raccontare tre punti distinti del percorso. */
+const MIN_FEATURE_SEPARATION_M = 220
 
 export interface VisionSourceLine {
   id: number
@@ -175,6 +181,14 @@ export function selectVisionFeatures(
   // Distribuzione lungo il percorso: sei etichette tutte nello stesso angolo della mappa sono
   // illeggibili anche se sono le sei più importanti. Si accetta una feature solo se il punto di
   // traccia che la riguarda non è troppo vicino a quello di una già accettata.
+  //
+  // Due controlli, non uno: il primo (sull'INDICE del punto di traccia più vicino) non basta da
+  // solo — su un tratto che il tracciato percorre lentamente e a curve (un canyon, un guado) tanti
+  // punti di traccia diversi possono cadere tutti vicino allo stesso luogo reale, quindi due
+  // feature possono superare quel controllo pur segnando praticamente lo stesso posto. Il secondo
+  // (sulla distanza VERA fra i punti che le feature segnano, non fra le loro proiezioni sul
+  // tracciato) è quello che intercetta il caso — proprio quello di uno sbocco di canyon con una
+  // cascata, degli scavi e una strada tutti a pochi metri l'uno dall'altro.
   const minSeparation = Math.max(1, Math.floor(route.length / (max * 2)))
   const chosen: VisionFeature[] = []
   const takenIdx: number[] = []
@@ -182,6 +196,7 @@ export function selectVisionFeatures(
     if (chosen.length >= max) break
     const { idx } = nearestOnRoute(f.lat, f.lon, route)
     if (takenIdx.some(t => Math.abs(t - idx) < minSeparation)) continue
+    if (chosen.some(c => haversineM(c.lat, c.lon, f.lat, f.lon) < MIN_FEATURE_SEPARATION_M)) continue
     takenIdx.push(idx)
     chosen.push(f)
   }
@@ -451,3 +466,45 @@ export function metersPerPixelAt(lat: number, worldSize: number): number {
 }
 
 const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * 6378137
+
+/** Un cartello e il punto a terra che lo riguarda, in pixel del fotogramma. */
+export interface VisionMarkerAnchor { key: string; groundX: number; groundY: number }
+
+/**
+ * Sposta lateralmente la TESTA dei cartelli rimasti sulla mappa quando i loro piedi cadono troppo
+ * vicini sullo schermo — senza, restano impilati uno sopra l'altro col filo verticale, illeggibili
+ * ogni volta che due cose annotate sono fisicamente vicine lungo il percorso (una cascata e gli
+ * scavi accanto, per esempio: capita spesso, non è il caso raro).
+ *
+ * Il piede (`groundX`, non toccato qui) resta esattamente sul punto vero — è quello che rende il
+ * filo credibile come "un palo piantato lì". Solo la testa si allontana, e lo fa in VENTAGLIO
+ * attorno al centro del gruppo che si sta accavallando, non tutta nella stessa direzione: un
+ * gruppo di quattro cartelli vicini si apre simmetricamente, come cartelli veri disposti attorno a
+ * un incrocio, invece di accodarsi da un lato.
+ *
+ * Punti isolati (nessun vicino entro `minGapPx`) non vengono toccati: il filo resta verticale,
+ * com'era prima — la deviazione è la RISPOSTA all'affollamento, non un tratto stilistico fisso.
+ */
+export function declutterVisionMarkerHeads(
+  anchors: VisionMarkerAnchor[], minGapPx: number,
+): Map<string, number> {
+  const result = new Map<string, number>()
+  const sorted = anchors.slice().sort((a, b) => a.groundX - b.groundX)
+
+  let i = 0
+  while (i < sorted.length) {
+    let j = i
+    while (j + 1 < sorted.length && sorted[j + 1].groundX - sorted[j].groundX < minGapPx) j++
+    const cluster = sorted.slice(i, j + 1)
+    if (cluster.length === 1) {
+      result.set(cluster[0].key, cluster[0].groundX)
+    } else {
+      const center = cluster.reduce((a, p) => a + p.groundX, 0) / cluster.length
+      const span = (cluster.length - 1) * minGapPx
+      const start = center - span / 2
+      cluster.forEach((p, k) => result.set(p.key, start + k * minGapPx))
+    }
+    i = j + 1
+  }
+  return result
+}
