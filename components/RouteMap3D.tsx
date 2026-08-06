@@ -47,7 +47,9 @@ import type { BeautyScore } from '@/lib/beautyScore'
 import type { WikiPage } from '@/lib/wikipedia'
 import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { classifyTrackShape } from '@/lib/geoUtils'
-import RouteLeafletEditor, { type TimelineEditorItem } from '@/components/video/RouteLeafletEditor'
+import RouteLeafletEditor, { INTERLUDE_GLYPH, type TimelineEditorItem } from '@/components/video/RouteLeafletEditor'
+import VideoStudio from '@/components/video/VideoStudio'
+import type { StudioControl, StudioGroup } from '@/lib/videoStudio'
 import { estimateVegetationBelt } from '@/lib/vegetationBelt'
 import {
   coverRect, rrect, lerp, lerpAngle, shortestAngleTo, distM, smoothArray, clamp01,
@@ -4003,1035 +4005,560 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           Un unico foglio a passi invece dei due elenchi "Impostazioni" + "Montaggio":
           intestazione fissa con il passo corrente, corpo scorrevole, piè di pagina fisso con
           avanti/indietro. I passi seguono la timeline del video — vedi WIZARD_STEPS. */}
-      {videoState==='config'&&!placingPhoto&&!previewingCarousel&&(
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-end z-20 pointer-events-auto">
-          <div className="w-full bg-stone-900/97 rounded-t-3xl shadow-2xl max-h-[92vh] flex flex-col">
+      {/* ══ STUDIO VIDEO — il percorso al centro, i comandi attorno ══════════════
+          Sostituisce il wizard a cinque passi. Quello chiedeva di ricordare, fra un passo e
+          l'altro, dove cadevano le cose decise prima: si accendeva uno stacco senza vedere che
+          sarebbe finito sopra una foto scelta due passi addietro, ed è così che nascevano le
+          sovrapposizioni segnalate. Qui la mappa non si perde mai di vista.
 
-            {/* Intestazione fissa: dove sono, quanto manca */}
-            <div className="px-5 pt-5 pb-3.5 border-b border-white/10 shrink-0">
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="min-w-0">
-                  <p className="text-terra-400 text-[10px] font-bold tracking-[0.14em] mb-0.5">
-                    PASSO {videoStep+1} DI {WIZARD_STEPS.length}
-                  </p>
-                  <h2 className="text-white font-bold text-lg leading-tight">{WIZARD_STEPS[videoStep].title}</h2>
-                  <p className="text-white/45 text-xs mt-0.5 leading-snug">{WIZARD_STEPS[videoStep].sub}</p>
+          I comandi sono DESCRITTI (lib/videoStudio.ts) e disegnati da VideoStudio: qui resta solo
+          il legame fra ciascuno e lo stato che governa, che è l'unica cosa che questo file sa e
+          quel componente no. */}
+      {videoState==='config'&&!placingPhoto&&!previewingCarousel&&(()=>{
+
+        const est = videoEstimate
+        const budgetParts = [
+          { key:'intro', label:'intro',   sec: est.introSec,     color:'#64748b' },
+          { key:'volo',  label:'volo',    sec: est.routeSec,     color:'#22c55e' },
+          { key:'foto',  label:'soste',   sec: est.photoSec,     color:'#f59e0b' },
+          { key:'beat',  label:'stacchi', sec: est.interludeSec, color:'#38bdf8' },
+          { key:'fine',  label:'finale',  sec: est.outroSec,     color:'#64748b' },
+        ].filter(p=>p.sec>0.05)
+
+        const isIllustrativoUi = videoMode==='illustrativo'
+        const speedBand = speedBandFor(videoSpeedKmS)
+
+        // ── Binario di sinistra: ciò che si posa in un punto del percorso ──────────
+        const positionalGroups: StudioGroup[] = []
+
+        {
+          const controls: StudioControl[] = [{
+            kind:'note', id:'beats-intro',
+            text: isIllustrativoUi
+              ? 'Il volo si ferma e un pannello resta a schermo il tempo di essere letto. Trascina il pallino sulla mappa per scegliere dove.'
+              : 'Gli stacchi che commentano i dati appartengono alla modalità Illustrativo. La Visione no: non commenta l’escursione, spiega il percorso.',
+          }]
+          for (const iv of videoInterludes) {
+            if (!isIllustrativoUi && iv.kind!=='visione') continue
+            const unavailable =
+              (iv.kind==='tei'    && !beautyScore?.categories?.length) ||
+              (iv.kind==='avvisi' && normalizeGuideNotices(guide?.notices).length===0) ||
+              (iv.kind==='luoghi' && (pois?.length ?? 0)===0) ||
+              (iv.kind==='visione' && visionFeatures.length===0)
+            const advised = recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind])
+            const patch = (change: Partial<InterludeSetting>) =>
+              setVideoInterludes(prev => prev.map(x => x.kind===iv.kind ? {...x,...change} : x))
+            controls.push({
+              kind:'toggle', id:`beat-${iv.kind}`,
+              label:`${INTERLUDE_GLYPH[iv.kind]}  ${INTERLUDE_LABEL[iv.kind]}`,
+              value: iv.enabled && !unavailable,
+              disabled: unavailable,
+              disabledReason: 'dati non disponibili su questo percorso',
+              hint: iv.enabled && !unavailable ? undefined : `consigliati ${advised}s`,
+              // Accendendolo si parte dalla durata consigliata invece che da un numero fisso uguale
+              // per tutti: è la scelta giusta quasi sempre, e resta spostabile col cursore.
+              onToggle: v => patch(v ? {enabled:true, seconds:advised} : {enabled:false}),
+            })
+            if (iv.enabled && !unavailable) {
+              controls.push({
+                kind:'slider', id:`beat-${iv.kind}-sec`, label:'durata',
+                value: iv.seconds, min:3, max:8, step:0.5, display:`${iv.seconds}s`,
+                onChange: v => patch({seconds:v}),
+                hint: Math.abs(iv.seconds-advised)>=0.5
+                  ? (iv.seconds<advised
+                      ? `A ${iv.seconds}s non si fa in tempo a leggerlo: ne servono ${advised}.`
+                      : `Bastano ${advised}s: oltre diventa una pausa.`)
+                  : (interludeIsDense(iv.kind, interludeContent[iv.kind])
+                      ? 'Ha parecchio da leggere: sopra i 7s diventa una pausa, quindi il contenuto viene mostrato in forma ridotta.'
+                      : undefined),
+              })
+            }
+          }
+          positionalGroups.push({ id:'stacchi', label:'Stacchi', glyph:'◎', controls })
+        }
+
+        // La Visione ha impostazioni proprie (cosa nominare, il velo topografico) che valgono solo
+        // quando è accesa: mostrarle sempre riempirebbe il binario di comandi senza effetto.
+        if (videoInterludes.find(i=>i.kind==='visione')?.enabled && visionFeatures.length>0) {
+          positionalGroups.push({
+            id:'visione', label:'Visione d’insieme', glyph:'◉',
+            controls: [
+              { kind:'chips', id:'vision-cats', label:'Cosa nominare',
+                options:(Object.keys(VISION_CATEGORY_LABEL) as VisionCategory[]).map(cat=>({
+                  id:cat,
+                  label:`${VISION_CATEGORY_LABEL[cat]}${visionCategories.includes(cat)&&visionFeatures.filter(f=>f.category===cat).length>0?` · ${visionFeatures.filter(f=>f.category===cat).length}`:''}`,
+                  value: visionCategories.includes(cat),
+                  onToggle:(v:boolean)=>setVisionCategories(prev=> v ? [...prev,cat] : prev.filter(c=>c!==cat)),
+                })) },
+              { kind:'toggle', id:'vision-veil', label:'Velo topografico',
+                value: visionTopoVeil, onToggle:setVisionTopoVeil,
+                hint:'Le tile dello stile outdoor sfumate sopra il satellitare: fa affiorare corsi d’acqua e sentieri che sotto la vegetazione non si vedono.' },
+              { kind:'note', id:'vision-list',
+                text:`Verranno nominati: ${visionFeatures.map(f=>f.name).join(' · ')}.` },
+            ],
+          })
+        }
+
+        {
+          const controls: StudioControl[] = [
+            { kind:'cards', id:'photo-style', label:'Come appaiono',
+              value: videoPhotoStyle,
+              options:[
+                {value:'classic',  label:'Classico',  sub:'Schermo intero, telecamera ferma'},
+                {value:'carousel', label:'Carosello', sub:'Il pin della foto si apre in primo piano'},
+              ],
+              onPick:v=>setVideoPhotoStyle(v as 'classic'|'carousel') },
+            { kind:'slider', id:'photo-dur',
+              label: videoPhotoStyle==='classic' ? 'polaroid' : 'sosta',
+              value: photoDurationSec, min:3, max:10, step:0.5, display:`${photoDurationSec.toFixed(1)}s`,
+              onChange:setPhotoDurationSec },
+          ]
+          if (videoPhotoStyle==='carousel') {
+            controls.push({
+              kind:'toggle', id:'hyperlapse', label:'Energia sui tratti lunghi (hyperlapse)',
+              value: videoHyperlapseEnabled, onToggle:setVideoHyperlapseEnabled,
+              hint:'Un leggero effetto di velocità solo dove il tratto fra due foto è più lungo.' })
+            if (routePhotos.length>0) {
+              controls.push({ kind:'custom', id:'carousel-preview', render:()=>(
+                <button onClick={()=>{
+                  reset()
+                  carouselTraveledMRef.current = 0; carouselNextPhotoRef.current = 0; carouselStopUntilRef.current = null
+                  setPreviewingCarousel(true); setIsPlaying(true)
+                }}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[12px] font-semibold transition-colors">
+                  <Play className="w-3.5 h-3.5"/> Anteprima carosello
+                </button>
+              )})
+            }
+          }
+          controls.push({ kind:'custom', id:'photo-list', label:`Foto del percorso (${routePhotos.length})`, render:()=>(
+            <div>
+              <label className={`flex items-center gap-1.5 text-[11px] font-semibold text-terra-400 hover:text-terra-300 cursor-pointer mb-2 ${photoBeingAdded?'opacity-50 pointer-events-none':''}`}>
+                {photoBeingAdded?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ImagePlus className="w-3.5 h-3.5"/>}
+                Aggiungi foto
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload}/>
+              </label>
+              {routePhotos.length===0?(
+                <div className="border border-dashed border-white/15 rounded-xl p-4 text-center">
+                  <p className="text-white/35 text-[12px]">Nessuna foto</p>
+                  <p className="text-white/22 text-[10px] mt-1">GPS automatico da EXIF</p>
                 </div>
-                <button onClick={()=>setVideoState('idle')} className="text-white/45 hover:text-white shrink-0 -mt-0.5"><X className="w-5 h-5"/></button>
-              </div>
-              {/* Barra dei passi, cliccabile: si può tornare indietro senza rifare tutto */}
-              <div className="flex gap-1.5">
-                {WIZARD_STEPS.map((s,i)=>(
-                  <button key={s.id} onClick={()=>goToStep(i)} title={s.title}
-                    className={`flex-1 h-1.5 rounded-full transition-colors ${i===videoStep?'bg-terra-400':i<videoStep?'bg-forest-500':'bg-white/15 hover:bg-white/25'}`}/>
-                ))}
-              </div>
+              ):(
+                <div className="space-y-2">
+                  {routePhotos.map(photo=>{
+                    const included = !videoExcludedPhotoIds.has(photo.id)
+                    return (
+                      <div key={photo.id} className={`bg-white/7 rounded-xl p-2 flex items-start gap-2.5 ${included?'':'opacity-45'}`}>
+                        <div className="relative shrink-0">
+                          <img src={photo.url} alt="" className="w-11 h-11 rounded-lg object-cover"/>
+                          {photo.hasExifGps&&(
+                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-forest-500 flex items-center justify-center" title="GPS automatico">
+                              <Check className="w-2 h-2 text-white"/>
+                            </span>
+                          )}
+                          <button onClick={()=>togglePhotoIncluded(photo.id)}
+                            title={included?'Escludi dal video':'Includi nel video'}
+                            className={`absolute -top-1 -left-1 w-4 h-4 rounded-full flex items-center justify-center border-2 border-white/80 transition-colors ${included?'bg-forest-500':'bg-white/20'}`}>
+                            {included&&<Check className="w-2.5 h-2.5 text-white"/>}
+                          </button>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <input
+                            value={photo.caption}
+                            onChange={e=>setRoutePhotos(prev=>prev.map(p=>p.id===photo.id?{...p,caption:e.target.value}:p))}
+                            onBlur={e=>{
+                              const caption=e.target.value
+                              updateActivityPhoto(activityId!,photo.id,{caption}).catch(()=>{
+                                setShareToast('Errore: didascalia non salvata'); setTimeout(()=>setShareToast(''),3000)
+                              })
+                            }}
+                            placeholder="Testo della polaroid…"
+                            className="w-full bg-transparent text-white text-[11px] font-medium placeholder:text-white/28 focus:outline-none border-b border-white/12 focus:border-white/35 pb-0.5 mb-1.5"
+                          />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-white/40">
+                              {videoPhotoAtP[photo.id]!=null
+                                ? <span className="text-terra-300">spostata al {Math.round(videoPhotoAtP[photo.id]*100)}%</span>
+                                : `${Math.round(photo.progress*100)}%`}
+                            </span>
+                            {pendingDeletePhotoId===photo.id ? (
+                              <span className="ml-auto flex items-center gap-1">
+                                <button onClick={()=>setPendingDeletePhotoId(null)}
+                                  className="text-[10px] font-semibold text-white/45 hover:text-white/80 px-1 py-0.5">Annulla</button>
+                                <button onClick={()=>{
+                                  const id=photo.id
+                                  setPendingDeletePhotoId(null)
+                                  setRoutePhotos(prev=>prev.filter(p=>p.id!==id));photoImgsRef.current.delete(id)
+                                  setVideoExcludedPhotoIds(prev=>{ if(!prev.has(id)) return prev; const next=new Set(prev); next.delete(id); return next })
+                                  removeActivityPhoto(activityId!,id).catch(()=>{
+                                    setShareToast('Errore: eliminazione foto non riuscita'); setTimeout(()=>setShareToast(''),3000)
+                                  })
+                                }}
+                                  className="text-[10px] font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg px-1.5 py-0.5">Elimina</button>
+                              </span>
+                            ) : (
+                              <button onClick={()=>setPendingDeletePhotoId(photo.id)} title="Elimina questa foto"
+                                className="ml-auto text-white/25 hover:text-red-400 transition-colors p-1 -m-1">
+                                <X className="w-3 h-3"/>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )})}
+                </div>
+              )}
+              {Object.keys(videoPhotoAtP).length > 0 && (
+                <button onClick={()=>setVideoPhotoAtP({})}
+                  className="mt-2 text-terra-300/90 hover:text-terra-200 text-[10px] font-semibold underline underline-offset-2">
+                  Rimetti {Object.keys(videoPhotoAtP).length===1?'la foto spostata dov’è stata scattata':'le foto spostate dove sono state scattate'}
+                </button>
+              )}
+            </div>
+          )})
+          positionalGroups.push({ id:'foto', label:'Foto', glyph:'▣', controls })
+        }
 
-              {/* Durata totale, sempre in vista in OGNI passo — è il senso del nuovo modello: non
-                  si imposta una durata, la si compone, quindi ogni opzione accesa o spenta deve
-                  avere un effetto visibile nel momento in cui la si tocca, non alla fine.
-                  La barra sotto il numero mostra DI COSA è fatta: è lì che si legge cosa togliere
-                  per accorciare, cosa che il solo numero non può dire. */}
-              {(()=>{
-                const est = videoEstimate
-                const parts: { key: string; label: string; sec: number; color: string }[] = [
-                  { key:'intro', label:'intro',   sec: est.introSec,     color:'#64748b' },
-                  { key:'volo',  label:'volo',    sec: est.routeSec,     color:'#22c55e' },
-                  { key:'foto',  label:'soste',   sec: est.photoSec,     color:'#f59e0b' },
-                  { key:'beat',  label:'stacchi', sec: est.interludeSec, color:'#38bdf8' },
-                  { key:'fine',  label:'finale',  sec: est.outroSec,     color:'#64748b' },
-                ].filter(p=>p.sec>0.05)
-                const over = est.total > 60
-                return (
-                  <div className="mt-3">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-white/45 text-[10px] font-bold tracking-[0.14em]">DURATA TOTALE</span>
-                      <span className={`text-lg font-black tabular-nums leading-none ${over?'text-terra-300':'text-white'}`}>
-                        {formatTotal(est.totalSec)}
-                      </span>
+        if (isIllustrativoUi) {
+          positionalGroups.push({
+            id:'luoghi', label:'Luoghi', glyph:'◆',
+            controls: [
+              { kind:'toggle', id:'poi-show', label:'Schede dei luoghi',
+                value: videoShowPois, disabled:(pois?.length??0)===0,
+                disabledReason:'nessun punto di interesse su questo percorso',
+                onToggle:setVideoShowPois,
+                hint: videoShowPois ? `Non aggiungono tempo al video: vengono mostrati i ${Math.min(MAX_VIDEO_POIS, pois?.length??0)} più rilevanti vicino al percorso.` : undefined },
+              ...(videoShowPois ? [
+                { kind:'toggle' as const, id:'poi-img', label:'Solo luoghi con una foto',
+                  value: videoPoiRequireImage, onToggle:setVideoPoiRequireImage,
+                  hint:'Un nome e un’icona non raccontano niente che il segnaposto non dica già.' },
+                { kind:'toggle' as const, id:'poi-sens', label:'Includi luoghi sensibili',
+                  value: videoPoiIncludeSensitive, onToggle:setVideoPoiIncludeSensitive,
+                  hint:'Spento, restano puntini senza nome. Un video fatto per girare porta gente: è così che certi posti si rovinano.' },
+              ] : []),
+            ],
+          })
+          positionalGroups.push({
+            id:'didascalie', label:'Didascalie', glyph:'✎',
+            controls: [{ kind:'custom', id:'captions', render:()=>(
+              <div>
+                {videoCaptions.length===0?(
+                  <p className="text-white/35 text-[11px] leading-relaxed">Nessuna didascalia: questo percorso non ha una guida da cui ricavarle.</p>
+                ):(<>
+                  <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
+                    Frasi prese dalla guida. <span className="text-white/60">Rileggile prima di pubblicare</span>: le ha scritte l&apos;AI, e finiscono in un video che poi gira.
+                  </p>
+                  {videoCaptions.map((c, idx) => {
+                    const patch = (change: Partial<CaptionCandidate>) =>
+                      setVideoCaptions(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
+                    return (
+                      <div key={c.id} className="mb-2.5">
+                        <label className="flex items-start gap-2 cursor-pointer mb-1">
+                          <input type="checkbox" checked={c.enabled}
+                            onChange={e=>patch({enabled:e.target.checked})} className="w-4 h-4 accent-forest-500 mt-0.5"/>
+                          <span className="text-white/45 text-[10px] font-semibold uppercase tracking-wider">
+                            {c.source==='il_percorso'?'Il percorso':c.source==='luoghi'?'Luoghi':c.source==='natura'?'Natura':'Guida'}
+                          </span>
+                        </label>
+                        {c.enabled&&(
+                          <div className="pl-6">
+                            <textarea value={c.text} rows={2} maxLength={110}
+                              onChange={e=>patch({text:e.target.value})}
+                              className="w-full bg-white/7 rounded-xl px-2.5 py-1.5 text-white text-[11px] font-medium outline-none focus:bg-white/10 border border-transparent focus:border-white/20 resize-none"/>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-white/45 text-[10px] w-12 shrink-0">quando</span>
+                              <input type="range" min={5} max={95} step={1} value={Math.round(c.atP*100)}
+                                onChange={e=>patch({atP:+e.target.value/100})}
+                                className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
+                              <span className="text-white/70 text-[10px] font-bold w-8 text-right">{Math.round(c.atP*100)}%</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </>)}
+              </div>
+            )}],
+          })
+        }
+
+        // ── Binario di destra: ciò che vale per tutto il video ─────────────────────
+        const globalGroups: StudioGroup[] = [
+          { id:'scopo', label:'A cosa serve', glyph:'◉', controls:[
+            { kind:'cards', id:'mode', value: videoMode,
+              options:[
+                {value:'ricordo',      label:'Il mio ricordo', sub:'La tua uscita: il pin con la tua foto, la fatica, le tue immagini.'},
+                {value:'illustrativo', label:'Far conoscere il percorso', sub:'Il sentiero che si presenta: i luoghi col loro nome e i punteggi. Senza dati personali.'},
+              ],
+              onPick:v=>{
+                setVideoMode(v as 'ricordo'|'illustrativo')
+                // Il pin è il soggetto di un ricordo e un intruso in una descrizione.
+                setShowUserPin(v==='ricordo')
+                if (v==='illustrativo') setVideoShowPois(true)
+              } },
+            ...(isIllustrativoUi && (pois?.length??0)===0
+              ? [{ kind:'note' as const, id:'no-pois', tone:'warn' as const,
+                   text:'Su questo percorso non risultano punti di interesse: il video resterà una descrizione di numeri e punteggi.' }]
+              : []),
+          ]},
+
+          { id:'formato', label:'Formato', glyph:'▭', controls:[
+            { kind:'segmented', id:'preset', label:'Preimpostazioni', value: videoPreset, columns:3,
+              options:(['reels','feed45','feed11','epico','snappy'] as const).map(pr=>({
+                value:pr, label:VIDEO_PRESETS[pr].label, sub:VIDEO_PRESETS[pr].desc.split(' · ')[1] })),
+              onPick:v=>{
+                const pr = v as keyof typeof VIDEO_PRESETS
+                setVideoPreset(pr); applyPresetPacing(pr)
+                switchStyle(VIDEO_PRESETS[pr].styleIdx)
+                setVideoOrientation(VIDEO_PRESETS[pr].orientation); setVideoFps(30)
+              },
+              hint:'Un punto di partenza, non un vincolo: sovrascrive proporzioni, ritmo e stile, e da lì aggiusti quello che vuoi.' },
+            { kind:'segmented', id:'orient', label:'Proporzioni', value: videoOrientation, columns:3,
+              options:[
+                {value:'9:16',   label:'9:16',   sub:'Reels'},
+                {value:'4:5',    label:'4:5',    sub:'Feed'},
+                {value:'1:1',    label:'1:1',    sub:'Quadrato'},
+                {value:'1.91:1', label:'1.91:1', sub:'Orizz.'},
+                {value:'16:9',   label:'16:9',   sub:'YouTube'},
+              ],
+              onPick:v=>setVideoOrientation(v as '9:16'|'4:5'|'1:1'|'1.91:1'|'16:9'),
+              hint:(videoOrientation==='9:16'||videoOrientation==='4:5')
+                ? 'Sui formati verticali la grafica resta dentro i margini che Instagram e TikTok coprono con didascalia e pulsanti.' : undefined },
+            ...(videoOrientation==='9:16' ? [{
+              kind:'segmented' as const, id:'fps', label:'Fluidità', value:String(videoFps), columns:2,
+              options:[{value:'30',label:'30 fps'},{value:'60',label:'60 fps', sub:'Reels'}],
+              onPick:(v:string)=>setVideoFps(+v as 30|60),
+              hint:'60 fps rende il movimento più fluido ma allunga il tempo di generazione.' }] : []),
+          ]},
+
+          { id:'ritmo', label:'Ritmo', glyph:'◷', controls:[
+            { kind:'slider', id:'speed', label:'velocità',
+              value: sliderFromSpeed(videoSpeedKmS), min:0, max:1, step:0.001,
+              display: formatSpeed(videoSpeedKmS),
+              onChange:v=>{ setVideoSpeedKmS(speedFromSlider(v)); setVideoPreset('custom') },
+              hint:`${speedBand.label}. ${speedBand.desc}` },
+            { kind:'note', id:'ritmo-note',
+              text:`Il percorso scorre in ~${Math.round(est.routeSec)}s${est.stillSec>0?`, più ${Math.round(est.stillSec)}s a telecamera ferma fra foto e pannelli`:''}.` },
+            { kind:'toggle', id:'fast-intro', label:'Intro aerea più rapida',
+              value: videoHookFastIntro, onToggle:setVideoHookFastIntro,
+              hint:`Un’apertura lunga è il motivo principale per cui si scorre via: attiva, il volo iniziale dura ${INTRO_FAST_SEC}s invece di ${INTRO_SEC}s.` },
+            ...(est.stillPct>45 ? [{ kind:'note' as const, id:'too-still', tone:'warn' as const,
+              text:`${Math.round(est.stillSec)}s su ${est.total}s (${est.stillPct}%) sono a telecamera ferma: il video rischia di sembrare più una presentazione che un viaggio.` }] : []),
+            ...(est.photos>est.stops ? [{ kind:'note' as const, id:'grouped',
+              text:`${est.photos} foto raggruppate in ${est.stops} soste: quelle vicine si aprono insieme.` }] : []),
+          ]},
+
+          { id:'mappa', label:'Mappa e tracciato', glyph:'⛰', controls:[
+            { kind:'segmented', id:'mapstyle', label:'Stile mappa', value:String(styleIdx), columns:STYLES.length,
+              options:STYLES.map((s,i)=>({value:String(i), label:s.label})),
+              onPick:v=>switchStyle(+v) },
+            { kind:'segmented', id:'routecolor', label:'Colore del tracciato', value:routeColorKey, columns:4,
+              options:(Object.keys(ROUTE_COLORS) as RouteColorKey[]).map(k=>({
+                value:k, label:ROUTE_COLORS[k].label, color:ROUTE_COLORS[k].hex })),
+              onPick:v=>setRouteColorKey(v as RouteColorKey) },
+            { kind:'toggle', id:'glow', label:'Alone attorno al tracciato',
+              value: routeGlowEnabled, onToggle:setRouteGlowEnabled,
+              hint:'Stacca il percorso dal terreno anche dove ci passa sopra qualcosa di simile per tinta — un sentiero già disegnato, una radura chiara, la neve.' },
+            { kind:'toggle', id:'sun', label:'Ombre coerenti con l’ora',
+              value: videoSunLightEnabled, onToggle:setVideoSunLightEnabled,
+              hint: hikeTimeWindow.real
+                ? 'Il rilievo è illuminato dal sole nella posizione che aveva davvero durante l’escursione.'
+                : 'Questa traccia non ha orari: la luce è una stima plausibile per stagione e latitudine, non l’ora reale.' },
+          ]},
+
+          { id:'camera', label:'Inquadrature', glyph:'◫', controls:[
+            { kind:'slider', id:'z-in',  label:'zoom iniziale', value:zoomIntro,  min:7,  max:14, step:0.5, display:zoomIntro.toFixed(1),  onChange:setZoomIntro },
+            { kind:'slider', id:'z-mid', label:'zoom percorso', value:zoomFollow, min:10, max:16, step:0.5, display:zoomFollow.toFixed(1), onChange:setZoomFollow },
+            { kind:'slider', id:'z-out', label:'zoom finale',   value:zoomOutro,  min:5,  max:12, step:0.5, display:zoomOutro.toFixed(1),  onChange:setZoomOutro },
+            { kind:'custom', id:'shots', label:'Sequenza', render:()=>(
+              <div className="space-y-1.5">
+                {shotPlan.map((shot,idx)=>(
+                  <div key={shot.id} className="flex items-center gap-2 bg-white/7 rounded-lg px-2 py-1.5">
+                    <GripVertical className="w-3.5 h-3.5 text-white/25 shrink-0"/>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-[11px] font-semibold truncate">{shot.label}</p>
+                      <p className="text-white/38 text-[9px]">
+                        {Math.round(shot.startP*100)}%→{Math.round(shot.endP*100)}% ·{' '}
+                        {{'follow':'Seguimento','orbit-cw':'Orbita ↻','orbit-ccw':'Orbita ↺','side-left':'Lat. sx','side-right':'Lat. dx','overhead':'Zenitale'}[shot.bearingMode]}
+                      </p>
                     </div>
-                    <div className="mt-1.5 flex h-1.5 rounded-full overflow-hidden bg-white/10">
-                      {parts.map(pt=>(
-                        <div key={pt.key} title={`${pt.label}: ${Math.round(pt.sec)}s`}
-                          style={{ width:`${(pt.sec/Math.max(1,est.totalSec))*100}%`, background:pt.color }}/>
-                      ))}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                      {parts.map(pt=>(
-                        <span key={pt.key} className="flex items-center gap-1 text-[10px] text-white/45">
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:pt.color}}/>
-                          {pt.label} {Math.round(pt.sec)}s
-                        </span>
-                      ))}
+                    <div className="flex gap-1">
+                      <button disabled={idx===0} onClick={()=>moveShot(shot.id,-1)}
+                        className="w-6 h-6 rounded bg-white/10 flex items-center justify-center text-white/60 hover:bg-white/20 disabled:opacity-20">
+                        <ChevronLeft className="w-3 h-3"/>
+                      </button>
+                      <button disabled={idx===shotPlan.length-1} onClick={()=>moveShot(shot.id,1)}
+                        className="w-6 h-6 rounded bg-white/10 flex items-center justify-center text-white/60 hover:bg-white/20 disabled:opacity-20">
+                        <ChevronRight className="w-3 h-3"/>
+                      </button>
                     </div>
                   </div>
-                )
-              })()}
+                ))}
+              </div>
+            )},
+          ]},
+
+          { id:'schermo', label:'Dati a schermo', glyph:'▤', controls:[
+            { kind:'chips', id:'hud', options:[
+              { id:'title',    label:'Titolo',       value:videoShowTitle,    onToggle:setVideoShowTitle },
+              { id:'stats',    label:'Statistiche',  value:videoShowStats,    onToggle:setVideoShowStats },
+              { id:'progress', label:'Progresso',    value:videoShowProgress, onToggle:setVideoShowProgress },
+              { id:'elev',     label:'Quote',        value:videoElevMarkersEnabled, onToggle:setVideoElevMarkersEnabled, disabled:altitudeSeries.length<=2 },
+              { id:'marks',    label:'Tacche foto',  value:videoPhotoMarksEnabled,  onToggle:setVideoPhotoMarksEnabled },
+              { id:'odo',      label:'Contachilometri', value:videoOdometerEnabled, onToggle:setVideoOdometerEnabled },
+              { id:'mini',     label:'Mini-mappa',   value:videoMiniMapEnabled,     onToggle:setVideoMiniMapEnabled },
+            ]},
+          ]},
+
+          { id:'pin', label:'Il tuo pin', glyph:'◈', hidden: isIllustrativoUi, controls:[
+            { kind:'toggle', id:'pin-show', label:'Mostra il pin con la tua foto',
+              value: videoShowUserPin, onToggle:setShowUserPin,
+              hint: videoShowUserPin ? undefined : 'Senza pin il video racconta il percorso invece di te. Gli effetti qui sotto sono legati al pin e restano spenti.' },
+            { kind:'chips', id:'pin-fx', options:[
+              { id:'heart',  label:'Cuore + BPM',        value:videoHeartEffectEnabled,    onToggle:setVideoHeartEffectEnabled,    disabled:!hasBodyData||!videoShowUserPin },
+              { id:'effort', label:'Pin dalla fatica',   value:videoPinEffortColorEnabled, onToggle:setVideoPinEffortColorEnabled, disabled:!hasBodyData||!videoShowUserPin },
+              { id:'trail',  label:'Scia',               value:videoTrailEnabled,          onToggle:setVideoTrailEnabled,          disabled:!videoShowUserPin },
+              { id:'shadow', label:'Ombra in salita',    value:videoSlopeShadowEnabled,    onToggle:setVideoSlopeShadowEnabled,    disabled:!videoShowUserPin },
+            ], hint: hasBodyData ? undefined : 'Cuore e colore dalla fatica hanno bisogno dei dati della fascia cardio, che questa traccia non ha.' },
+          ]},
+
+          { id:'scenici', label:'Tocchi scenici', glyph:'✦', controls:[
+            { kind:'chips', id:'fx', options:[
+              { id:'miles', label:'Traguardi %',    value:videoMilestonesEnabled,   onToggle:setVideoMilestonesEnabled },
+              { id:'peak',  label:'Quota massima',  value:videoPeakMomentEnabled,   onToggle:setVideoPeakMomentEnabled },
+              { id:'stars', label:'Stelline arrivo',value:videoArrivalStarsEnabled, onToggle:setVideoArrivalStarsEnabled },
+            ]},
+            { kind:'toggle', id:'loop', label:'Chiusura ad anello',
+              value: videoLoopEnding, onToggle:setVideoLoopEnding,
+              hint:'L’ultimo fotogramma è uguale al primo: Reels e TikTok riavvolgono da soli, e il video riparte senza stacco.' },
+            { kind:'note', id:'always-on',
+              text:'Sempre attivi, senza toccare nulla: movimento lento sulle foto · titolo e dato forte sull’apertura · percorso che si colora avanzando · schermata finale con le statistiche · camera fluida.' },
+          ]},
+        ]
+
+        // ── Cassetto finale ────────────────────────────────────────────────────────
+        const effects = [
+          !videoShowUserPin&&'Senza pin utente',
+          routeColorKey!==DEFAULT_ROUTE_COLOR&&`Tracciato ${ROUTE_COLORS[routeColorKey].label.toLowerCase()}`,
+          !routeGlowEnabled&&'Senza alone',
+          videoSunLightEnabled&&(hikeTimeWindow.real?'Ombre all’ora vera':'Ombre (ora stimata)'),
+          isIllustrativoUi&&videoPoiRequireImage&&'Solo luoghi con foto',
+          videoLoopEnding&&'Chiusura ad anello',
+          videoElevMarkersEnabled&&'Quote sul percorso',
+          videoHeartEffectEnabled&&'Cuore 3D + BPM',
+          videoPinEffortColorEnabled&&'Pin dalla fatica',
+          videoTrailEnabled&&'Scia',
+          videoSlopeShadowEnabled&&'Ombra in salita',
+          videoMilestonesEnabled&&'Traguardi %',
+          videoPeakMomentEnabled&&'Quota max',
+          videoArrivalStarsEnabled&&'Stelline',
+          videoPhotoMarksEnabled&&'Tacche foto',
+          videoOdometerEnabled&&'Numeri a rullo',
+          videoMiniMapEnabled&&'Mini-mappa',
+          videoHyperlapseEnabled&&videoPhotoStyle==='carousel'&&'Hyperlapse',
+        ].filter(Boolean) as string[]
+
+        const beatsForMode = isIllustrativoUi ? videoInterludes : videoInterludes.filter(i=>i.kind==='visione')
+        const onBeats = beatsForMode.filter(i=>i.enabled && interludeFitPreview.has(i.kind))
+        const rows: [string,string][] = [
+          ['Modalità', isIllustrativoUi?'Descrizione del percorso':'Il mio ricordo'],
+          ['Formato', `${videoOrientation} · ${videoFps} fps`],
+          ['Ritmo', `${speedBand.label.toLowerCase()} · ${formatSpeed(videoSpeedKmS)}`],
+          ['Stile foto', videoPhotoStyle==='classic'?'Classico':'Carosello'],
+          ['Foto incluse', est.photos===0?'nessuna':`${est.photos}${est.stops<est.photos?` in ${est.stops} soste`:''}`],
+          ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
+          ['Durata reale', `~${est.total}s${est.stillPct>0?` · ${est.stillPct}% fermo`:''}`],
+        ]
+        if (isIllustrativoUi) {
+          rows.push(['Luoghi con foto', `${(poiWiki ?? []).filter(e=>!!e.wiki.thumbnail).length}`])
+          rows.push(['Didascalie', `${videoCaptions.filter(c=>c.enabled&&c.text.trim()).length}`])
+        }
+
+        const generatePanel = (
+          <>
+            <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+              {rows.map(([k,v],i)=>(
+                <div key={k} className={`flex items-center justify-between px-3.5 py-2.5 ${i>0?'border-t border-white/8':''}`}>
+                  <span className="text-white/50 text-xs">{k}</span>
+                  <span className="text-white text-xs font-semibold text-right ml-3">{v}</span>
+                </div>
+              ))}
             </div>
 
-            {/* Esito di un tentativo fallito. Non un toast che sparisce dopo qualche secondo: il
-                messaggio dice cosa cambiare ("riduci la durata", "escludi quella foto") e deve
-                restare leggibile mentre lo si cambia davvero. */}
-            {videoError&&(
-              <div className="mx-5 mt-4 rounded-xl bg-red-500/12 border border-red-400/40 px-3.5 py-3 flex items-start gap-2.5 shrink-0">
-                <span className="text-red-300 text-sm leading-none mt-0.5">⚠</span>
-                <p className="text-red-100 text-[12px] leading-relaxed flex-1">{videoError}</p>
-                <button onClick={()=>setVideoError('')} className="text-red-200/60 hover:text-red-100 shrink-0"><X className="w-4 h-4"/></button>
+            <div>
+              <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
+              {effects.length===0?(
+                <p className="text-white/35 text-xs">Nessuno — il video sarà pulito e sobrio.</p>
+              ):(
+                <div className="flex flex-wrap gap-1.5">
+                  {effects.map(e=>(
+                    <span key={e} className="text-[10px] font-semibold text-forest-200 bg-forest-500/20 border border-forest-500/30 rounded-lg px-2 py-1">{e}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {est.total>60&&(
+              <div className="rounded-xl px-3.5 py-2.5 bg-terra-500/15 border border-terra-500/35">
+                <p className="text-terra-300 text-xs font-semibold">~{est.total}s: oltre il limite dei 60s di Instagram.</p>
+                <p className="text-white/40 text-[11px] mt-1 leading-relaxed">Puoi generarlo lo stesso — su YouTube non è un problema, e su Reels resta pubblicabile ma con meno distribuzione.</p>
               </div>
             )}
 
-            {/* Corpo scorrevole */}
-            <div className="px-5 py-5 overflow-y-auto flex-1 space-y-6">
-
-              {/* ── PASSO 1 · FORMATO ───────────────────────────────────────────── */}
-              {videoStep===0&&(<>
-                {/* La scelta che condiziona tutte le altre: di chi parla il video */}
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">A COSA SERVE QUESTO VIDEO</p>
-                  <div className="space-y-2">
-                    {([
-                      {id:'ricordo' as const, label:'Il mio ricordo', desc:'La tua uscita: il pin con la tua foto, la fatica, le tue immagini.'},
-                      {id:'illustrativo' as const, label:'Far conoscere il percorso', desc:'Il sentiero che si presenta: i luoghi con il loro nome e i punteggi. Senza dati personali.'},
-                    ]).map(opt=>(
-                      <button key={opt.id} onClick={()=>{
-                        setVideoMode(opt.id)
-                        // Il pin è il soggetto di un ricordo e un intruso in una descrizione:
-                        // lo si allinea alla modalità (e con lui gli effetti che gli stanno addosso).
-                        setShowUserPin(opt.id==='ricordo')
-                        if (opt.id==='illustrativo') setVideoShowPois(true)
-                      }}
-                        className={`w-full text-left rounded-xl px-3.5 py-3 border transition-colors ${
-                          videoMode===opt.id ? 'bg-forest-500/20 border-forest-400/60' : 'bg-white/7 border-transparent hover:bg-white/10'
-                        }`}>
-                        <p className={`text-sm font-bold ${videoMode===opt.id?'text-forest-300':'text-white'}`}>{opt.label}</p>
-                        <p className="text-white/45 text-[11px] mt-0.5 leading-snug">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                  {videoMode==='illustrativo'&&(pois?.length??0)===0&&(
-                    <p className="text-terra-300 text-[11px] mt-2 leading-relaxed">
-                      Su questo percorso non risultano punti di interesse: il video resterà una descrizione di numeri e punteggi.
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-white/45 text-[11px] font-semibold tracking-wider">FORMATO INSTAGRAM</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['reels','feed45','feed11'] as const).map(pr=>(
-                      <button key={pr} onClick={()=>{
-                        setVideoPreset(pr)
-                        applyPresetPacing(pr)
-                        switchStyle(VIDEO_PRESETS[pr].styleIdx)
-                        setVideoOrientation(VIDEO_PRESETS[pr].orientation)
-                        setVideoFps(30)
-                      }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-forest-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                        <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
-                        <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-white/45 text-[11px] font-semibold tracking-wider pt-1">STILE CINEMATICO</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['epico','snappy'] as const).map(pr=>(
-                      <button key={pr} onClick={()=>{
-                        setVideoPreset(pr)
-                        applyPresetPacing(pr)
-                        switchStyle(VIDEO_PRESETS[pr].styleIdx)
-                        setVideoOrientation(VIDEO_PRESETS[pr].orientation)
-                        setVideoFps(30)
-                      }} className={`py-3 rounded-xl flex flex-col items-center transition-all ${videoPreset===pr?'bg-forest-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                        <span className="text-sm font-bold">{VIDEO_PRESETS[pr].label}</span>
-                        <span className="text-[10px] opacity-65 mt-0.5">{VIDEO_PRESETS[pr].desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={()=>setVideoPreset('custom')} className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${videoPreset==='custom'?'bg-white/25 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                    Personalizzato — scelgo io tutto
-                  </button>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">PROPORZIONI</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([
-                      {key:'9:16',   sub:'Reels/Story'},
-                      {key:'4:5',    sub:'Feed verticale'},
-                      {key:'1:1',    sub:'Feed quadrato'},
-                      {key:'1.91:1', sub:'Feed orizzontale'},
-                      {key:'16:9',   sub:'YouTube/PC'},
-                    ] as const).map(({key,sub})=>(
-                      <button key={key} onClick={()=>setVideoOrientation(key as any)}
-                        className={`py-2.5 rounded-xl flex flex-col items-center transition-all ${videoOrientation===key?'bg-forest-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                        <span className="text-sm font-bold">{key}</span>
-                        <span className="text-[9px] opacity-60 mt-0.5">{sub}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {(videoOrientation==='9:16'||videoOrientation==='4:5')&&(
-                    <p className="text-white/30 text-[11px] mt-2 leading-relaxed">
-                      Sui formati verticali la grafica resta dentro i margini che Instagram e TikTok coprono con didascalia e pulsanti.
-                    </p>
-                  )}
-                </div>
-
-                {videoOrientation==='9:16'&&(
-                  <div>
-                    <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">FLUIDITÀ</p>
-                    <div className="flex gap-2">
-                      {([30,60] as const).map(fps=>(
-                        <button key={fps} onClick={()=>setVideoFps(fps)}
-                          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${videoFps===fps?'bg-forest-500 text-white':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                          {fps} fps{fps===60?' · Reels':''}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-white/30 text-[11px] mt-2 leading-relaxed">60 fps rende il movimento più fluido ma allunga il tempo di generazione.</p>
-                  </div>
-                )}
-              </>)}
-
-              {/* ── PASSO 2 · PERCORSO ──────────────────────────────────────────── */}
-              {videoStep===1&&(<>
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">STILE MAPPA</p>
-                  <div className="flex gap-2">
-                    {STYLES.map((s,i)=>(
-                      <button key={s.label} onClick={()=>switchStyle(i)}
-                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${styleIdx===i?'bg-white text-stone-900':'bg-white/10 text-white/70 hover:bg-white/20'}`}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-3 tracking-wider">ZOOM CINEMATICO</p>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/55 text-xs w-28 shrink-0">Zoom iniziale</span>
-                      <input type="range" min={7} max={14} step={0.5} value={zoomIntro} onChange={e=>setZoomIntro(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
-                      <span className="text-white text-xs font-bold w-8 text-right">{zoomIntro.toFixed(1)}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/55 text-xs w-28 shrink-0">Zoom percorso</span>
-                      <input type="range" min={10} max={16} step={0.5} value={zoomFollow} onChange={e=>setZoomFollow(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
-                      <span className="text-white text-xs font-bold w-8 text-right">{zoomFollow.toFixed(1)}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/55 text-xs w-28 shrink-0">Zoom finale</span>
-                      <input type="range" min={5} max={12} step={0.5} value={zoomOutro} onChange={e=>setZoomOutro(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
-                      <span className="text-white text-xs font-bold w-8 text-right">{zoomOutro.toFixed(1)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">INQUADRATURE</p>
-                  <div className="space-y-2">
-                    {shotPlan.map((shot,idx)=>(
-                      <div key={shot.id} className="flex items-center gap-2 bg-white/7 rounded-xl px-3 py-2.5">
-                        <GripVertical className="w-4 h-4 text-white/25 shrink-0"/>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm font-semibold truncate">{shot.label}</p>
-                          <p className="text-white/38 text-[10px]">
-                            {Math.round(shot.startP*100)}%→{Math.round(shot.endP*100)}% ·{' '}
-                            {{'follow':'Seguimento','orbit-cw':'Orbita ↻','orbit-ccw':'Orbita ↺','side-left':'Lat. sx','side-right':'Lat. dx','overhead':'Zenitale'}[shot.bearingMode]}
-                          </p>
-                        </div>
-                        <div className="flex gap-1">
-                          <button disabled={idx===0} onClick={()=>moveShot(shot.id,-1)}
-                            className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center text-white/60 hover:bg-white/20 disabled:opacity-20">
-                            <ChevronLeft className="w-3.5 h-3.5"/>
-                          </button>
-                          <button disabled={idx===shotPlan.length-1} onClick={()=>moveShot(shot.id,1)}
-                            className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center text-white/60 hover:bg-white/20 disabled:opacity-20">
-                            <ChevronRight className="w-3.5 h-3.5"/>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>)}
-
-              {/* ── PASSO 3 · FOTO ──────────────────────────────────────────────── */}
-              {videoStep===2&&(<>
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">COME APPAIONO LE FOTO</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      {id:'classic' as const,  label:'Classico',  desc:'Schermo intero, telecamera ferma'},
-                      {id:'carousel' as const, label:'Carosello', desc:'Il pin della foto si apre in primo piano'},
-                    ]).map(opt=>(
-                      <button key={opt.id} onClick={()=>setVideoPhotoStyle(opt.id)}
-                        className={`text-left rounded-xl px-3 py-2.5 border transition-colors ${
-                          videoPhotoStyle===opt.id ? 'bg-forest-500/20 border-forest-400/60' : 'bg-white/7 border-transparent hover:bg-white/10'
-                        }`}>
-                        <p className={`text-sm font-semibold ${videoPhotoStyle===opt.id?'text-forest-300':'text-white'}`}>{opt.label}</p>
-                        <p className="text-white/40 text-[10px] mt-0.5 leading-snug">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                  {videoPhotoStyle==='carousel'&&routePhotos.length>0&&(
-                    <button
-                      onClick={()=>{
-                        reset()
-                        carouselTraveledMRef.current = 0; carouselNextPhotoRef.current = 0; carouselStopUntilRef.current = null
-                        setPreviewingCarousel(true); setIsPlaying(true)
-                      }}
-                      className="mt-2.5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors">
-                      <Play className="w-3.5 h-3.5"/> Anteprima carosello
-                    </button>
-                  )}
-                  {videoPhotoStyle==='carousel'&&carouselEstimatedSec!==null&&(
-                    <p className="text-white/40 text-[10px] mt-2 text-center">
-                      Durata stimata del video: <span className="text-white/70 font-semibold">~{carouselEstimatedSec}s</span> — conseguenza della sosta per foto e del ritmo di viaggio, non un traguardo fisso.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">
-                    {videoPhotoStyle==='classic' ? 'DURATA POLAROID' : 'SOSTA SU OGNI FOTO'}
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <input type="range" min={3} max={10} step={0.5} value={photoDurationSec} onChange={e=>setPhotoDurationSec(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
-                    <span className="text-white text-sm font-bold w-16 text-right">{photoDurationSec.toFixed(1)}s / foto</span>
-                  </div>
-                </div>
-
-                {videoPhotoStyle==='carousel'&&(
-                  <div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={videoHyperlapseEnabled} onChange={e=>setVideoHyperlapseEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Energia sui tratti lunghi (hyperlapse)</span>
-                    </label>
-                    <p className="text-white/30 text-[10px] mt-1 pl-6">Un leggero effetto di velocità solo dove il tratto tra due foto è più lungo.</p>
-                  </div>
-                )}
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-white/45 text-[11px] font-semibold tracking-wider">
-                      FOTO DEL PERCORSO {routePhotos.length>0&&<span className="text-terra-400">({routePhotos.length})</span>}
-                    </p>
-                    <label className={`flex items-center gap-1.5 text-xs font-semibold text-terra-400 hover:text-terra-300 cursor-pointer transition-colors ${photoBeingAdded?'opacity-50 pointer-events-none':''}`}>
-                      {photoBeingAdded?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ImagePlus className="w-3.5 h-3.5"/>}
-                      Aggiungi
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload}/>
-                    </label>
-                  </div>
-                  {routePhotos.length===0?(
-                    <div className="border border-dashed border-white/15 rounded-xl p-5 text-center">
-                      <p className="text-white/35 text-sm">Nessuna foto</p>
-                      <p className="text-white/22 text-xs mt-1">GPS automatico da EXIF · tocca il percorso per posizionare</p>
-                    </div>
-                  ):(
-                    <div className="space-y-2.5">
-                      {routePhotos.map(photo=>{
-                        const included = !videoExcludedPhotoIds.has(photo.id)
-                        return (
-                        <div key={photo.id} className={`bg-white/7 rounded-xl p-2.5 transition-opacity ${included?'':'opacity-45'}`}>
-                          <div className="flex items-start gap-3">
-                            <div className="relative shrink-0">
-                              <img src={photo.url} alt="" className="w-14 h-14 rounded-lg object-cover"/>
-                              {photo.hasExifGps&&(
-                                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-forest-500 flex items-center justify-center" title="GPS automatico">
-                                  <Check className="w-2.5 h-2.5 text-white"/>
-                                </span>
-                              )}
-                              <button onClick={()=>togglePhotoIncluded(photo.id)}
-                                title={included?'Escludi dal video':'Includi nel video'}
-                                className={`absolute -top-1 -left-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white/80 transition-colors ${included?'bg-forest-500':'bg-white/20'}`}>
-                                {included&&<Check className="w-3 h-3 text-white"/>}
-                              </button>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <input
-                                value={photo.caption}
-                                onChange={e=>setRoutePhotos(prev=>prev.map(p=>p.id===photo.id?{...p,caption:e.target.value}:p))}
-                                onBlur={e=>{
-                                  const caption=e.target.value
-                                  updateActivityPhoto(activityId!,photo.id,{caption}).catch(()=>{
-                                    setShareToast('Errore: didascalia non salvata'); setTimeout(()=>setShareToast(''),3000)
-                                  })
-                                }}
-                                placeholder="Testo della polaroid…"
-                                className="w-full bg-transparent text-white text-xs font-medium placeholder:text-white/28 focus:outline-none border-b border-white/12 focus:border-white/35 pb-0.5 mb-2"
-                              />
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {!photo.hasExifGps&&(
-                                  <button onClick={()=>setPlacingPhoto({id:photo.id,step:'pos'})}
-                                    className="flex items-center gap-1 text-[10px] font-semibold text-terra-400 hover:text-terra-300 bg-terra-500/15 rounded-lg px-2 py-1 transition-colors">
-                                    <Navigation className="w-3 h-3"/>
-                                    {photo.progress!==0.5?`${Math.round(photo.progress*100)}% ✓`:'Posiziona'}
-                                  </button>
-                                )}
-                                {photo.hasExifGps&&(
-                                  <span className="text-[10px] text-forest-300 font-medium">📍 {Math.round(photo.progress*100)}%</span>
-                                )}
-                                {/* Eliminazione a due tempi: il primo tocco chiede conferma al
-                                    posto della crocetta, il secondo elimina. Una crocetta da 14 px
-                                    che cancella per sempre una foto al primo tocco è troppo facile
-                                    da centrare per sbaglio, soprattutto su un telefono. */}
-                                {pendingDeletePhotoId===photo.id ? (
-                                  <span className="ml-auto flex items-center gap-1">
-                                    <button onClick={()=>setPendingDeletePhotoId(null)}
-                                      className="text-[10px] font-semibold text-white/45 hover:text-white/80 px-1.5 py-1 transition-colors">
-                                      Annulla
-                                    </button>
-                                    <button onClick={()=>{
-                                      const id=photo.id
-                                      setPendingDeletePhotoId(null)
-                                      setRoutePhotos(prev=>prev.filter(p=>p.id!==id));photoImgsRef.current.delete(id)
-                                      setVideoExcludedPhotoIds(prev=>{ if(!prev.has(id)) return prev; const next=new Set(prev); next.delete(id); return next })
-                                      removeActivityPhoto(activityId!,id).catch(()=>{
-                                        setShareToast('Errore: eliminazione foto non riuscita'); setTimeout(()=>setShareToast(''),3000)
-                                      })
-                                    }}
-                                      className="text-[10px] font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg px-2 py-1 transition-colors">
-                                      Elimina
-                                    </button>
-                                  </span>
-                                ) : (
-                                  <button onClick={()=>setPendingDeletePhotoId(photo.id)}
-                                    title="Elimina questa foto"
-                                    className="ml-auto text-white/25 hover:text-red-400 transition-colors p-1 -m-1">
-                                    <X className="w-3.5 h-3.5"/>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )})}
-                    </div>
-                  )}
-                </div>
-              </>)}
-
-              {/* ── PASSO 4 · EFFETTI ───────────────────────────────────────────── */}
-              {videoStep===3&&(<>
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">DATI A SCHERMO</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      {l:'Titolo',v:videoShowTitle,s:setVideoShowTitle,ok:true},
-                      {l:'Statistiche',v:videoShowStats,s:setVideoShowStats,ok:true},
-                      {l:'Progresso',v:videoShowProgress,s:setVideoShowProgress,ok:true},
-                      {l:'Quote sul percorso',v:videoElevMarkersEnabled,s:setVideoElevMarkersEnabled,ok:altitudeSeries.length>2},
-                      {l:'POI',v:videoShowPois,s:setVideoShowPois,ok:(pois?.length??0)>0},
-                    ].map(item=>(
-                      <button key={item.l} onClick={()=>item.ok&&item.s(v=>!v)} disabled={!item.ok}
-                        className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${!item.ok?'opacity-30 cursor-not-allowed bg-white/5 text-white/40':item.v?'bg-white text-stone-900':'bg-white/10 text-white/60 hover:bg-white/20'}`}>
-                        {item.l}
-                        {!item.ok&&<span className="block text-[10px] font-normal opacity-60">non disponibile</span>}
-                      </button>
-                    ))}
-                  </div>
-                  {videoElevMarkersEnabled&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">La quota compare come numero nei punti che contano (il più alto, il più basso, i cambi di pendenza), con la freccia della salita — al posto del vecchio grafico altimetrico, illeggibile a schermo piccolo.</p>}
-                  {videoShowPois&&<p className="text-white/30 text-[11px] mt-2 leading-relaxed">I punti di interesse non aggiungono tempo al video (a differenza delle foto) — vengono mostrati i {Math.min(MAX_VIDEO_POIS, pois?.length??0)} più rilevanti vicino al percorso.</p>}
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">IL TUO PIN</p>
-                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input type="checkbox" checked={videoShowUserPin}
-                      onChange={e=>setShowUserPin(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Mostra il pin con la tua foto</span>
-                  </label>
-                  {!videoShowUserPin&&(
-                    <p className="text-white/30 text-[11px] mb-2 pl-6 leading-relaxed">
-                      Senza pin il video racconta il percorso invece di te. Gli effetti qui sotto sono legati al pin e restano spenti.
-                    </p>
-                  )}
-                  {/* Tutto ciò che segue vive addosso al pin: senza, non ha nulla a cui attaccarsi */}
-                  <div className={videoShowUserPin?'':'opacity-40 pointer-events-none'}>
-                    <label className={`flex items-center gap-2 mb-2 ${hasBodyData&&videoShowUserPin?'cursor-pointer':'opacity-40'}`}>
-                      <input type="checkbox" checked={videoHeartEffectEnabled} disabled={!hasBodyData||!videoShowUserPin}
-                        onChange={e=>setVideoHeartEffectEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Cuore 3D che batte + BPM</span>
-                    </label>
-                    <label className={`flex items-center gap-2 mb-2 ${hasBodyData&&videoShowUserPin?'cursor-pointer':'opacity-40'}`}>
-                      <input type="checkbox" checked={videoPinEffortColorEnabled} disabled={!hasBodyData||!videoShowUserPin}
-                        onChange={e=>setVideoPinEffortColorEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Pin colorato dalla fatica</span>
-                    </label>
-                    {videoPinEffortColorEnabled&&hasBodyData&&videoShowUserPin&&(
-                      <p className="text-white/30 text-[11px] mb-2 pl-6 leading-relaxed">Gettone e foto virano insieme: celeste a riposo → verde → ambra → rosso nel punto di massimo sforzo.</p>
-                    )}
-                    <label className={`flex items-center gap-2 mb-2 ${videoShowUserPin?'cursor-pointer':''}`}>
-                      <input type="checkbox" checked={videoTrailEnabled} disabled={!videoShowUserPin}
-                        onChange={e=>setVideoTrailEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Scia luminosa dietro al pin</span>
-                    </label>
-                    <label className={`flex items-center gap-2 ${videoShowUserPin?'cursor-pointer':''}`}>
-                      <input type="checkbox" checked={videoSlopeShadowEnabled} disabled={!videoShowUserPin}
-                        onChange={e=>setVideoSlopeShadowEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Ombra che si allunga in salita</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">VISIONE D&rsquo;INSIEME</p>
-                  <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                    Poco dopo la partenza il volo si allarga fino a inquadrare tutto il percorso, orientato a nord.
-                    Sopra il satellitare affiora ciò che la vegetazione nasconde, e le cose caratteristiche vengono nominate una alla volta.
-                    Si accende e si spegne dallo stacco &laquo;{INTERLUDE_LABEL.visione}&raquo; qui sopra.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 mb-2.5">
-                    {(Object.keys(VISION_CATEGORY_LABEL) as VisionCategory[]).map(cat => {
-                      const on = visionCategories.includes(cat)
-                      const count = visionFeatures.filter(f => f.category === cat).length
-                      return (
-                        <button
-                          key={cat}
-                          onClick={() => setVisionCategories(prev => on ? prev.filter(c => c !== cat) : [...prev, cat])}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors border ${
-                            on ? 'bg-white/15 border-white/40 text-white' : 'bg-transparent border-white/10 text-white/40'
-                          }`}
-                        >
-                          {VISION_CATEGORY_LABEL[cat]}{on && count > 0 ? ` · ${count}` : ''}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <label className="flex items-start gap-2 mb-2.5 cursor-pointer">
-                    <input type="checkbox" checked={visionTopoVeil}
-                      onChange={e=>setVisionTopoVeil(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                    <span className="text-white text-xs font-semibold leading-snug">
-                      Velo topografico
-                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
-                        La mappa outdoor sfuma sopra il satellitare per la durata dello stacco: impluvi, curve di livello e sentieri già mappati tornano visibili. Il satellitare resta riconoscibile sotto.
-                      </span>
-                    </span>
-                  </label>
-                  {visionFeatures.length > 0 ? (
-                    <p className="text-forest-300/80 text-[11px] leading-relaxed">
-                      Verranno nominati: {visionFeatures.map(f => f.name).join(' · ')}.
-                    </p>
-                  ) : (
-                    <p className="text-terra-300/85 text-[11px] leading-relaxed">
-                      Qui OpenStreetMap non ha corsi d&apos;acqua, sentieri o luoghi con un nome vicino al tracciato: senza niente da nominare la Visione viene saltata.
-                    </p>
-                  )}
-                </div>
-
-                {videoMode==='illustrativo'&&(
-                  <div>
-                    <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">SCHEDE DEI LUOGHI</p>
-                    <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                      I luoghi si presentano uno alla volta, in una sola casella a schermo.
-                      Fontane, panchine e aree picnic restano segnaposti sulla mappa: sono troppi e troppo fitti per meritarsi una scheda.
-                    </p>
-                    <label className="flex items-start gap-2 mb-2 cursor-pointer">
-                      <input type="checkbox" checked={videoPoiRequireImage}
-                        onChange={e=>setVideoPoiRequireImage(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                      <span className="text-white text-xs font-semibold leading-snug">
-                        Solo luoghi con una foto da Wikipedia
-                        <span className="block text-white/35 text-[11px] font-normal mt-0.5">
-                          Una scheda con la foto del posto racconta qualcosa; un nome accanto a un&apos;icona ripete il segnaposto che c&apos;è già sulla mappa.
-                        </span>
-                      </span>
-                    </label>
-                    {(() => {
-                      const withImg = (poiWiki ?? []).filter(e => !!e.wiki.thumbnail).length
-                      if (withImg > 0) return (
-                        <p className="text-forest-300/80 text-[11px] mb-2 pl-6 leading-relaxed">
-                          Su questo percorso {withImg === 1 ? 'c\u2019è 1 luogo con foto' : `ce ne sono ${withImg} con foto`}.
-                        </p>
-                      )
-                      return (
-                        <p className="text-terra-300/85 text-[11px] mb-2 pl-6 leading-relaxed">
-                          Qui nessun luogo ha una foto su Wikipedia: con questa opzione attiva non comparirà nessuna scheda.
-                          Il resto del video (stacchi, punteggi, percorso) funziona comunque.
-                        </p>
-                      )
-                    })()}
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="checkbox" checked={videoPoiIncludeSensitive}
-                        onChange={e=>setVideoPoiIncludeSensitive(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                      <span className="text-white text-xs font-semibold leading-snug">
-                        Nomina anche grotte, rovine, siti archeologici e sorgenti
-                        <span className="block text-white/35 text-[11px] font-normal mt-0.5">
-                          Spento, questi restano puntini senza nome. Un video fatto per girare porta gente: è così che certi posti si rovinano.
-                        </span>
-                      </span>
-                    </label>
-                  </div>
-                )}
-
-                {/* Il percorso vero, su mappa Leaflet (la stessa delle schede): dove cade ogni
-                    foto e ogni stacco, e come spostarli trascinandoli. Sta qui, prima dell'elenco
-                    degli stacchi, perché è la vista che rende leggibile tutto quello che viene
-                    dopo — accendere uno stacco senza vedere dove finisce era proprio il modo in
-                    cui foto e pannelli si accavallavano. */}
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">DOVE CADONO LE COSE</p>
-                  <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                    Trascina foto e stacchi sulla mappa per decidere dove il video si ferma.
-                  </p>
-                  <RouteLeafletEditor
-                    trackPoints={trackPoints}
-                    routeSeconds={videoEstimate.routeSec}
-                    shape={timelineTrackShape}
-                    roundTrip={timelineTrackShape==='out_and_back'}
-                    items={timelineItems}
-                    onMove={(id, atP) => {
-                      if (id.startsWith('beat:')) {
-                        const kind = id.slice(5) as InterludeKind
-                        setVideoInterludes(prev => prev.map(x => x.kind===kind ? {...x, atP} : x))
-                      } else {
-                        setVideoPhotoAtP(prev => ({ ...prev, [id.slice(6)]: atP }))
-                      }
-                    }}
-                  />
-                  {Object.keys(videoPhotoAtP).length > 0 && (
-                    <button onClick={()=>setVideoPhotoAtP({})}
-                      className="mt-2 text-terra-300/90 hover:text-terra-200 text-[10px] font-semibold underline underline-offset-2">
-                      Rimetti le {Object.keys(videoPhotoAtP).length===1?'foto spostata':'foto spostate'} dove {Object.keys(videoPhotoAtP).length===1?'è stata scattata':'sono state scattate'}
-                    </button>
-                  )}
-                </div>
-
-                {(
-                  <div>
-                    <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">STACCHI</p>
-                    <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                      {videoMode==='illustrativo'
-                        ? 'Il volo si ferma e un pannello resta a schermo il tempo di essere letto. La durata consigliata è calcolata su quanto c\u2019è davvero da leggere in quel pannello, su questo percorso.'
-                        : 'Gli stacchi che commentano i dati appartengono alla modalità Illustrativo. La Visione no: non commenta l\u2019escursione, spiega il percorso — e serve anche quando stai raccontando la tua uscita.'}
-                    </p>
-                    {videoInterludes.map((iv, idx) => {
-                      // Fuori dall'Illustrativo l'unico stacco disponibile è la Visione — vedi
-                      // interludeSettingsForMode nella generazione, che applica la stessa regola.
-                      if (videoMode!=='illustrativo' && iv.kind!=='visione') return null
-                      const unavailable =
-                        (iv.kind==='tei'    && !beautyScore?.categories?.length) ||
-                        (iv.kind==='avvisi' && normalizeGuideNotices(guide?.notices).length===0) ||
-                        (iv.kind==='luoghi' && (pois?.length ?? 0)===0) ||
-                        (iv.kind==='visione' && visionFeatures.length===0)
-                      const patch = (change: Partial<InterludeSetting>) =>
-                        setVideoInterludes(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
-                      const advised = recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind])
-                      const dense = interludeIsDense(iv.kind, interludeContent[iv.kind])
-                      const offAdvice = Math.abs(iv.seconds - advised) >= 0.5
-                      return (
-                        <div key={iv.kind} className={`mb-2.5 ${unavailable?'opacity-40':''}`}>
-                          <label className={`flex items-center gap-2 ${unavailable?'':'cursor-pointer'}`}>
-                            <input type="checkbox" checked={iv.enabled && !unavailable} disabled={unavailable}
-                              onChange={e=>{
-                                // Attivandolo si parte dalla durata consigliata invece che da un numero
-                                // fisso uguale per tutti: è la scelta giusta nella grande maggioranza
-                                // dei casi, e resta comunque spostabile col cursore qui sotto.
-                                patch(e.target.checked ? {enabled:true, seconds:advised} : {enabled:false})
-                              }} className="w-4 h-4 accent-forest-500"/>
-                            <span className="text-white text-xs font-semibold">{INTERLUDE_LABEL[iv.kind]}</span>
-                            {unavailable
-                              ? <span className="text-white/35 text-[10px]">— dati non disponibili</span>
-                              : <span className="text-white/30 text-[10px]">· consigliati {advised}s</span>}
-                          </label>
-                          {iv.enabled&&!unavailable&&(
-                            <div className="pl-6 mt-1.5 space-y-1.5">
-                              <div className="flex items-center gap-2">
-                                <span className="text-white/45 text-[10px] w-14 shrink-0">durata</span>
-                                <input type="range" min={3} max={8} step={0.5} value={iv.seconds}
-                                  onChange={e=>patch({seconds:+e.target.value})}
-                                  className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
-                                <span className="text-white/70 text-[10px] font-bold w-8 text-right">{iv.seconds}s</span>
-                              </div>
-                              {offAdvice&&(
-                                <button onClick={()=>patch({seconds:advised})}
-                                  className="text-terra-300/90 hover:text-terra-200 text-[10px] font-semibold underline underline-offset-2">
-                                  {iv.seconds < advised
-                                    ? `Sotto il consigliato: a ${iv.seconds}s non si fa in tempo a leggerlo — porta a ${advised}s`
-                                    : `Sopra il consigliato: bastano ${advised}s — porta a ${advised}s`}
-                                </button>
-                              )}
-                              {dense&&(
-                                <p className="text-white/30 text-[10px] leading-relaxed">
-                                  Questo pannello ha parecchio da leggere: sopra i 7s però diventa una pausa, quindi il contenuto viene comunque mostrato in forma ridotta.
-                                </p>
-                              )}
-                              {/* La posizione ("quando") si decide trascinando il pallino sulla
-                                  mappa qui sopra, non con uno slider: uno slider e la mappa che
-                                  cambia insieme sarebbero due comandi per la stessa cosa. */}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                    {(() => {
-                      // Ora si confronta col TOTALE vero, non più con la durata del solo volo: è il
-                      // totale che l'utente vede in cima, ed è rispetto a quello che "metà video di
-                      // pannelli fermi" significa qualcosa.
-                      const secs = videoEstimate.beatSec
-                      if (secs > videoEstimate.totalSec * 0.4) return (
-                        <p className="text-terra-300/85 text-[11px] mt-1 leading-relaxed">
-                          {Math.round(secs)}s di pannelli fermi su {formatTotal(videoEstimate.totalSec)} di video: rischia di essere più una presentazione che un viaggio.
-                        </p>
-                      )
-                      return null
-                    })()}
-                  </div>
-                )}
-
-                {videoMode==='illustrativo'&&(
-                  <div>
-                    <p className="text-white/45 text-[11px] font-semibold mb-1 tracking-wider">DIDASCALIE DALLA GUIDA</p>
-                    {videoCaptions.length===0?(
-                      <p className="text-white/35 text-[11px] leading-relaxed">
-                        {guide?.text
-                          ? 'Nella guida non ci sono frasi abbastanza brevi da stare a schermo.'
-                          : 'Questa escursione non ha una guida: le didascalie sono disponibili solo sui percorsi che ne avevano una.'}
-                      </p>
-                    ):(<>
-                      <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                        Frasi prese dalla guida. <span className="text-white/60">Rileggile prima di pubblicare</span>: le ha scritte l&apos;AI, e finiscono in un video che poi gira.
-                      </p>
-                      {videoCaptions.map((c, idx) => {
-                        const patch = (change: Partial<CaptionCandidate>) =>
-                          setVideoCaptions(prev => prev.map((x,i)=>i===idx?{...x,...change}:x))
-                        return (
-                          <div key={c.id} className="mb-2.5">
-                            <label className="flex items-start gap-2 cursor-pointer mb-1">
-                              <input type="checkbox" checked={c.enabled}
-                                onChange={e=>patch({enabled:e.target.checked})} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                              <span className="text-white/45 text-[10px] font-semibold uppercase tracking-wider">
-                                {c.source==='il_percorso'?'Il percorso':c.source==='luoghi'?'Luoghi':c.source==='natura'?'Natura':'Guida'}
-                              </span>
-                            </label>
-                            {c.enabled&&(
-                              <div className="pl-6">
-                                <textarea
-                                  value={c.text} rows={2} maxLength={110}
-                                  onChange={e=>patch({text:e.target.value})}
-                                  className="w-full bg-white/7 rounded-xl px-3 py-2 text-white text-xs font-medium outline-none focus:bg-white/10 border border-transparent focus:border-white/20 resize-none"
-                                />
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-white/45 text-[10px] w-14 shrink-0">quando</span>
-                                  <input type="range" min={5} max={95} step={1} value={Math.round(c.atP*100)}
-                                    onChange={e=>patch({atP:+e.target.value/100})}
-                                    className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
-                                  <span className="text-white/70 text-[10px] font-bold w-8 text-right">{Math.round(c.atP*100)}%</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </>)}
-                  </div>
-                )}
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">MOMENTI LUNGO IL CAMMINO</p>
-                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input type="checkbox" checked={videoMilestonesEnabled}
-                      onChange={e=>setVideoMilestonesEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Traguardi 25/50/75% del percorso</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={videoPeakMomentEnabled}
-                      onChange={e=>setVideoPeakMomentEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Quota massima raggiunta</span>
-                  </label>
-                  <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
-                    Un lampo e la quota in grande nel punto più alto del tracciato. Non lo chiamiamo &quot;vetta&quot;: il punto più alto di un giro non è quasi mai una cima.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">LUCE</p>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" checked={videoSunLightEnabled}
-                      onChange={e=>setVideoSunLightEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                    <span className="text-white text-xs font-semibold leading-snug">
-                      Ombre del sole all&apos;ora vera
-                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
-                        Il rilievo viene illuminato da dove stava davvero il sole, e la luce avanza col cursore: se sei partito all&apos;alba, nel video le ombre si accorciano e girano come quel giorno. Col sole basso diventano più lunghe e più calde.
-                      </span>
-                    </span>
-                  </label>
-                  {videoSunLightEnabled && (() => {
-                    const fmt = (t: number) => new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-                    const day = new Date(hikeTimeWindow.start).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })
-                    return hikeTimeWindow.real ? (
-                      <p className="text-forest-300/80 text-[11px] mt-1.5 pl-6 leading-relaxed">
-                        Dagli orari della traccia: {day}, dalle {fmt(hikeTimeWindow.start)} alle {fmt(hikeTimeWindow.end)}.
-                      </p>
-                    ) : (
-                      <p className="text-terra-300/85 text-[11px] mt-1.5 pl-6 leading-relaxed">
-                        Questa traccia non ha orari: la luce è quella del {day} verso le {fmt(hikeTimeWindow.start)}, una stima plausibile per stagione e latitudine, non l&apos;ora reale.
-                      </p>
-                    )
-                  })()}
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">IL TRACCIATO</p>
-                  <div className="flex gap-2 mb-3">
-                    {(Object.keys(ROUTE_COLORS) as RouteColorKey[]).map(k => (
-                      <button
-                        key={k}
-                        onClick={() => setRouteColorKey(k)}
-                        title={ROUTE_COLORS[k].label}
-                        className={`flex-1 flex flex-col items-center gap-1.5 py-2 rounded-xl border transition-colors ${
-                          routeColorKey === k ? 'border-white/70 bg-white/10' : 'border-white/10 hover:border-white/25'
-                        }`}
-                      >
-                        <span
-                          className="w-full h-1.5 rounded-full"
-                          style={{
-                            background: ROUTE_COLORS[k].hex,
-                            boxShadow: routeGlowEnabled ? `0 0 7px 1px ${ROUTE_COLORS[k].hex}` : 'none',
-                          }}
-                        />
-                        <span className={`text-[10px] font-semibold ${routeColorKey === k ? 'text-white' : 'text-white/45'}`}>
-                          {ROUTE_COLORS[k].label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" checked={routeGlowEnabled}
-                      onChange={e=>setRouteGlowEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                    <span className="text-white text-xs font-semibold leading-snug">
-                      Alone attorno al tracciato
-                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
-                        Una sfumatura dello stesso colore sotto la linea: stacca il percorso dal terreno anche dove ci passa sopra qualcosa di simile per tinta — un sentiero già disegnato, una radura chiara, la neve.
-                      </span>
-                    </span>
-                  </label>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">IL FINALE</p>
-                  <p className="text-white/35 text-[11px] mb-2.5 leading-relaxed">
-                    L&apos;inquadratura d&apos;insieme si raddrizza sempre col nord in alto, come una cartina: è quella che si guarda per capire dove si è stati.
-                  </p>
-                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input type="checkbox" checked={videoArrivalStarsEnabled}
-                      onChange={e=>setVideoArrivalStarsEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Stelline all&apos;arrivo</span>
-                  </label>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" checked={videoLoopEnding}
-                      onChange={e=>setVideoLoopEnding(e.target.checked)} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                    <span className="text-white text-xs font-semibold leading-snug">
-                      Chiusura ad anello
-                      <span className="block text-white/35 text-[11px] font-normal mt-0.5">
-                        La telecamera torna all&apos;inquadratura d&apos;apertura e la schermata di chiusura sfuma via con lei: l&apos;ultimo fotogramma è uguale al primo. Reels e TikTok riavvolgono da soli, e così il video riparte senza stacco.
-                      </span>
-                    </span>
-                  </label>
-                </div>
-
-                <div>
-                  <p className="text-white/45 text-[11px] font-semibold mb-2.5 tracking-wider">TOCCHI IN PIÙ</p>
-                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input type="checkbox" checked={videoPhotoMarksEnabled}
-                      onChange={e=>setVideoPhotoMarksEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Tacche delle foto sulla barra di avanzamento</span>
-                  </label>
-                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input type="checkbox" checked={videoOdometerEnabled}
-                      onChange={e=>setVideoOdometerEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Numeri a rullo (contachilometri)</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={videoMiniMapEnabled}
-                      onChange={e=>setVideoMiniMapEnabled(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                    <span className="text-white text-xs font-semibold">Mini-mappa d&apos;insieme in un angolo</span>
-                  </label>
-                </div>
-
-                <div className="bg-white/5 rounded-xl px-3 py-2.5 border border-white/8">
-                  <p className="text-white/45 text-[10px] font-semibold uppercase tracking-wider mb-1">Sempre attivi, senza toccare nulla</p>
-                  <p className="text-white/38 text-[10px] leading-relaxed">
-                    ✦ Movimento lento sulle foto &nbsp;·&nbsp; ✦ Titolo e dato forte sull&apos;apertura &nbsp;·&nbsp; ✦ Percorso che si colora avanzando &nbsp;·&nbsp; ✦ Schermata finale con le statistiche &nbsp;·&nbsp; ✦ Camera fluida
-                  </p>
-                </div>
-              </>)}
-
-              {/* ── PASSO 5 · GENERA ────────────────────────────────────────────── */}
-              {videoStep===4&&(()=>{
-                const includedPhotoCount = videoEstimate.photos
-                const est = videoEstimate.total
-                const over = est > 60
-                const effects = [
-                  !videoShowUserPin&&'Senza pin utente',
-                  routeColorKey!==DEFAULT_ROUTE_COLOR&&`Tracciato ${ROUTE_COLORS[routeColorKey].label.toLowerCase()}`,
-                  !routeGlowEnabled&&'Senza alone',
-                  videoSunLightEnabled&&(hikeTimeWindow.real?'Ombre all\u2019ora vera':'Ombre (ora stimata)'),
-                  videoMode==='illustrativo'&&videoPoiRequireImage&&'Solo luoghi con foto',
-                  videoLoopEnding&&'Chiusura ad anello',
-                  videoElevMarkersEnabled&&'Quote sul percorso',
-                  videoHeartEffectEnabled&&'Cuore 3D + BPM',
-                  videoPinEffortColorEnabled&&'Pin dalla fatica',
-                  videoTrailEnabled&&'Scia',
-                  videoSlopeShadowEnabled&&'Ombra in salita',
-                  videoMilestonesEnabled&&'Traguardi %',
-                  videoPeakMomentEnabled&&'Quota max',
-                  videoArrivalStarsEnabled&&'Stelline',
-                  videoPhotoMarksEnabled&&'Tacche foto',
-                  videoOdometerEnabled&&'Numeri a rullo',
-                  videoMiniMapEnabled&&'Mini-mappa',
-                  videoHyperlapseEnabled&&videoPhotoStyle==='carousel'&&'Hyperlapse',
-                ].filter(Boolean) as string[]
-                const rows: [string,string][] = [
-                  ['Modalità', videoMode==='ricordo'?'Il mio ricordo':'Descrizione del percorso'],
-                  ['Formato', `${videoOrientation} · ${videoFps} fps`],
-                  ['Ritmo', videoHookFastIntro?'intro rapida':'intro estesa'],
-                  ['Stile foto', videoPhotoStyle==='classic'?'Classico':'Carosello'],
-                  ['Foto incluse', includedPhotoCount===0?'nessuna':`${includedPhotoCount}${videoEstimate.stops<includedPhotoCount?` in ${videoEstimate.stops} soste`:''}`],
-                  ['Durata reale', `~${est}s${videoEstimate.stillPct>0?` · ${videoEstimate.stillPct}% fermo`:''}`],
-                ]
-                // Fuori dall'Illustrativo l'unico stacco candidato è la Visione — stessa regola di
-                // interludeSettingsForMode in goToRendering. Prima questa riga compariva solo in
-                // Illustrativo, quindi in "Il mio ricordo" la Visione restava fuori dal riepilogo
-                // anche quando accesa: non si vedeva né che ci sarebbe stata né che sarebbe mancata.
-                const beatsForMode = videoMode==='illustrativo' ? videoInterludes : videoInterludes.filter(i=>i.kind==='visione')
-                // Tutti quelli accesi CON contenuto: nessuno viene più scartato per spazio, quindi
-                // questa riga è il montaggio vero e non una previsione che potrebbe smentirsi.
-                const onBeats = beatsForMode.filter(i=>i.enabled && interludeFitPreview.has(i.kind))
-                rows.splice(5, 0,
-                  ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
-                )
-                if (videoMode==='illustrativo') {
-                  rows.splice(6, 0,
-                    ['Luoghi con foto', `${(poiWiki ?? []).filter(e=>!!e.wiki.thumbnail).length}`],
-                    ['Didascalie', `${videoCaptions.filter(c=>c.enabled&&c.text.trim()).length}`],
-                  )
-                }
-                return (<>
-                  <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
-                    {rows.map(([k,v],i)=>(
-                      <div key={k} className={`flex items-center justify-between px-3.5 py-2.5 ${i>0?'border-t border-white/8':''}`}>
-                        <span className="text-white/50 text-xs">{k}</span>
-                        <span className="text-white text-xs font-semibold text-right ml-3">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Ultima leva sul tempo, messa qui apposta: tutto quello che allunga o accorcia
-                      il totale è già stato deciso nei passi precedenti, e questo slider è l'unico
-                      comando che resta — un ritocco fine, non un bersaglio da centrare. Nessun
-                      tetto: se il totale non piace si torna indietro e si spegne qualcosa, non lo
-                      si forza con la velocità. */}
-                  <div>
-                    <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">VELOCITÀ DEL CURSORE</p>
-                    <p className="text-white/30 text-[11px] mb-3 leading-relaxed">
-                      L&apos;ultimo ritocco: quanto percorso scorre in un secondo di video. Il totale qui sopra è la somma di tutto ciò che hai acceso nei passi precedenti — se non ti piace, torna indietro e cambia cosa accendere; questo slider serve solo ad affinare il ritmo di quello che hai scelto.
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <input type="range" min={0} max={1} step={0.001}
-                        value={sliderFromSpeed(videoSpeedKmS)}
-                        onChange={e=>{ setVideoSpeedKmS(speedFromSlider(+e.target.value)); setVideoPreset('custom') }}
-                        className="flex-1 h-1.5 rounded-full accent-terra-400 cursor-pointer"/>
-                      <span className="text-white text-xs font-bold tabular-nums w-[4.8rem] text-right">{formatSpeed(videoSpeedKmS)}</span>
-                    </div>
-                    {(()=>{ const band = speedBandFor(videoSpeedKmS); return (
-                      <p className="text-[11px] mt-1.5 leading-relaxed">
-                        <span className="text-terra-300 font-semibold">{band.label}.</span>{' '}
-                        <span className="text-white/40">{band.desc}</span>
-                      </p>
-                    )})()}
-                    <p className="text-white/40 text-[11px] mt-1.5 leading-relaxed">
-                      Il percorso scorre in ~{Math.round(videoEstimate.routeSec)}s{videoEstimate.stillSec>0?`, più ${Math.round(videoEstimate.stillSec)}s a telecamera ferma fra foto e pannelli`:''}.
-                    </p>
-
-                    <label className="flex items-center gap-2 cursor-pointer mt-4">
-                      <input type="checkbox" checked={videoHookFastIntro} onChange={e=>setVideoHookFastIntro(e.target.checked)} className="w-4 h-4 accent-forest-500"/>
-                      <span className="text-white text-xs font-semibold">Intro aerea più rapida</span>
-                    </label>
-                    <p className="text-white/30 text-[11px] mt-1 pl-6 leading-relaxed">
-                      Un&apos;apertura lunga è il motivo principale per cui si scorre via: attiva, il volo iniziale dura {INTRO_FAST_SEC}s invece di {INTRO_SEC}s.
-                    </p>
-
-                    {(()=>{
-                      const tooStill = videoEstimate.stillPct > 45
-                      const grouped = videoEstimate.photos > videoEstimate.stops
-                      if (!tooStill && !grouped) return null
-                      return (
-                        <div className={`mt-3 rounded-xl px-3.5 py-2.5 ${tooStill ? 'bg-terra-500/15 border border-terra-500/35' : 'bg-white/5'}`}>
-                          {grouped&&(
-                            <p className="text-forest-300/80 text-[11px] leading-relaxed">
-                              {videoEstimate.photos} foto raggruppate in {videoEstimate.stops} soste: quelle vicine si aprono insieme.
-                            </p>
-                          )}
-                          {tooStill && (
-                            <p className={`text-terra-300/85 text-[11px] leading-relaxed ${grouped?'mt-1':''}`}>
-                              {Math.round(videoEstimate.stillSec)}s su {videoEstimate.total}s ({videoEstimate.stillPct}%) sono a telecamera ferma fra foto e pannelli: il video rischia di sembrare più una presentazione che un viaggio.
-                            </p>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  </div>
-
-                  <div>
-                    <p className="text-white/45 text-[11px] font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
-                    {effects.length===0?(
-                      <p className="text-white/35 text-xs">Nessuno — il video sarà pulito e sobrio. Puoi tornare al passo <button onClick={()=>goToStep(3)} className="text-terra-400 font-semibold hover:text-terra-300">Effetti</button> per aggiungerne.</p>
-                    ):(
-                      <div className="flex flex-wrap gap-1.5">
-                        {effects.map(e=>(
-                          <span key={e} className="text-[10px] font-semibold text-forest-200 bg-forest-500/20 border border-forest-500/30 rounded-lg px-2 py-1">{e}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {over&&(
-                    <div className="rounded-xl px-3.5 py-2.5 bg-terra-500/15 border border-terra-500/35">
-                      <p className="text-terra-300 text-xs font-semibold">~{est}s: oltre il limite dei 60s di Instagram.</p>
-                      <p className="text-white/40 text-[11px] mt-1 leading-relaxed">Puoi generarlo lo stesso — su YouTube non è un problema, e su Reels resta pubblicabile ma con meno distribuzione.</p>
-                    </div>
-                  )}
-
-                  <div>
-                    <button onClick={()=>startRendering(true)} className="w-full py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-2">
-                      <Sparkles className="w-3.5 h-3.5"/> Anteprima veloce
-                    </button>
-                    <p className="text-white/30 text-[11px] mt-1.5 text-center leading-relaxed">
-                      Genera solo pochi secondi centrali: serve a controllare l&apos;effetto prima di aspettare il video intero.
-                    </p>
-                  </div>
-
-                  <p className="text-white/25 text-[10px] text-center leading-relaxed">
-                    MP4 · H.264/VP9 · {videoFps} fps · rendering fotogramma per fotogramma.<br/>
-                    Tieni l&apos;app in primo piano fino alla fine.
-                  </p>
-                </>)
-              })()}
-
+            <div className="space-y-2">
+              <button onClick={()=>startRendering()}
+                className="w-full py-3.5 rounded-2xl bg-terra-600 hover:bg-terra-700 text-white font-bold flex items-center justify-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-white animate-pulse"/>
+                Genera il video
+              </button>
+              <button onClick={()=>startRendering(true)}
+                className="w-full py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-2">
+                <Sparkles className="w-3.5 h-3.5"/> Anteprima veloce
+              </button>
+              <p className="text-white/30 text-[11px] text-center leading-relaxed">
+                L&apos;anteprima genera solo pochi secondi centrali: serve a controllare l&apos;effetto prima di aspettare il video intero.
+              </p>
             </div>
 
-            {/* Piè di pagina fisso: la navigazione resta sempre a portata di pollice */}
-            <div className="px-5 py-4 border-t border-white/10 shrink-0 flex gap-3">
-              {videoStep===0?(
-                <button onClick={()=>setVideoState('idle')} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">Annulla</button>
-              ):(
-                <button onClick={()=>goToStep(videoStep-1)} className="flex-1 py-3.5 rounded-2xl bg-white/10 text-white font-semibold hover:bg-white/20">← Indietro</button>
-              )}
-              {videoStep<WIZARD_STEPS.length-1?(
-                <button onClick={()=>goToStep(videoStep+1)} className="flex-[2] py-3.5 rounded-2xl bg-forest-500 hover:bg-forest-600 text-white font-bold">
-                  Avanti · {WIZARD_STEPS[videoStep+1].title} →
-                </button>
-              ):(
-                <button onClick={()=>startRendering()} className="flex-[2] py-3.5 rounded-2xl bg-terra-600 hover:bg-terra-700 text-white font-bold flex items-center justify-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-white animate-pulse"/>
-                  Genera il video
-                </button>
-              )}
-            </div>
+            <p className="text-white/25 text-[10px] text-center leading-relaxed">
+              MP4 · H.264/VP9 · {videoFps} fps · rendering fotogramma per fotogramma.<br/>
+              Tieni l&apos;app in primo piano fino alla fine.
+            </p>
+          </>
+        )
 
-          </div>
-        </div>
-      )}
+        return (
+          <VideoStudio
+            title={(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'Percorso')}
+            onClose={()=>setVideoState('idle')}
+            error={videoError||undefined}
+            onDismissError={()=>setVideoError('')}
+            budget={{ parts:budgetParts, totalSec:est.totalSec, totalLabel:formatTotal(est.totalSec), over:est.total>60 }}
+            positionalGroups={positionalGroups}
+            globalGroups={globalGroups}
+            generatePanel={generatePanel}
+            mapSlot={
+              <RouteLeafletEditor
+                fill
+                trackPoints={trackPoints}
+                routeSeconds={est.routeSec}
+                shape={timelineTrackShape}
+                roundTrip={timelineTrackShape==='out_and_back'}
+                items={timelineItems}
+                onMove={(id, atP) => {
+                  if (id.startsWith('beat:')) {
+                    const kind = id.slice(5) as InterludeKind
+                    setVideoInterludes(prev => prev.map(x => x.kind===kind ? {...x, atP} : x))
+                  } else {
+                    setVideoPhotoAtP(prev => ({ ...prev, [id.slice(6)]: atP }))
+                  }
+                }}
+              />
+            }
+          />
+        )
+      })()}
 
       {/* ══ PHOTO PLACEMENT — click on route ════════════════════════════════════ */}
       {videoState==='config'&&placingPhoto?.step==='pos'&&(
