@@ -111,3 +111,52 @@ export function findCrowding(items: TimelineItem[], routeSeconds: number, minApa
  *  del "respiro" di planInterludes: l'editor e il montaggio automatico devono giudicare uguale,
  *  altrimenti l'editor dichiara buona una disposizione che il montaggio poi contesta. */
 export const MIN_ITEM_GAP_SEC = 4
+
+/**
+ * Sistema automaticamente ciò che findCrowding si limita a segnalare: dato un insieme di elementi
+ * (foto e stacchi, insieme) restituisce le posizioni minime necessarie a rispettare il respiro fra
+ * l'uno e l'altro, senza toccare l'ordine in cui cadono lungo il percorso.
+ *
+ * Usato quando si applica un preset: un preset accende stacchi in punti fissi (0.06, 0.22, 0.50…)
+ * pensati per un percorso "medio", ma le foto vere hanno posizioni proprie — e le due cose insieme
+ * possono benissimo cadere a un secondo l'una dall'altra su un anello corto. Ricalcolare a mano
+ * ogni volta è il lavoro che il preset dovrebbe risparmiare, non aggiungere.
+ *
+ * Algoritmo in due passate, lo stesso usato per il collocamento di etichette che non devono
+ * sovrapporsi: si lavora in SECONDI (non in frazione di percorso, per lo stesso motivo di
+ * findCrowding — il fastidio è nel tempo, non nella distanza), si scorre in avanti spingendo ogni
+ * elemento troppo vicino al precedente subito dopo di lui, poi si torna indietro nel caso l'ultimo
+ * elemento sia stato spinto oltre la fine del percorso. Non è la disposizione più elegante
+ * possibile (quella richiederebbe una redistribuzione globale, non giustificata per una manciata
+ * di elementi), ma è quella che sposta ciascuno il MENO possibile dalla sua posizione di partenza.
+ */
+export function declutterItems(
+  items: TimelineItem[], routeSeconds: number, minGapSec: number,
+): Map<string, number> {
+  const result = new Map<string, number>()
+  if (routeSeconds <= 0 || items.length === 0) {
+    for (const it of items) result.set(it.id, it.atP)
+    return result
+  }
+
+  const sorted = items.slice().sort((a, b) => a.atP - b.atP)
+  const sec = sorted.map(it => it.atP * routeSeconds)
+
+  for (let i = 1; i < sec.length; i++) {
+    if (sec[i] - sec[i - 1] < minGapSec) sec[i] = sec[i - 1] + minGapSec
+  }
+  // La passata in avanti può aver spinto l'ultimo elemento oltre la fine del percorso: si
+  // riporta dentro e si ripropaga all'indietro, così l'eccesso si redistribuisce verso l'inizio
+  // invece di restare tutto accatastato in fondo.
+  if (sec[sec.length - 1] > routeSeconds) {
+    sec[sec.length - 1] = routeSeconds
+    for (let i = sec.length - 2; i >= 0; i--) {
+      if (sec[i + 1] - sec[i] < minGapSec) sec[i] = sec[i + 1] - minGapSec
+    }
+  }
+
+  for (let i = 0; i < sorted.length; i++) {
+    result.set(sorted[i].id, Math.max(0, Math.min(1, sec[i] / routeSeconds)))
+  }
+  return result
+}

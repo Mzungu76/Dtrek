@@ -47,6 +47,7 @@ import type { BeautyScore } from '@/lib/beautyScore'
 import type { WikiPage } from '@/lib/wikipedia'
 import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { classifyTrackShape } from '@/lib/geoUtils'
+import { declutterItems, MIN_ITEM_GAP_SEC, type TimelineItem } from '@/lib/videoTimeline'
 import RouteLeafletEditor, { INTERLUDE_GLYPH, type TimelineEditorItem } from '@/components/video/RouteLeafletEditor'
 import VideoStudio from '@/components/video/VideoStudio'
 import type { StudioControl, StudioGroup } from '@/lib/videoStudio'
@@ -69,19 +70,106 @@ const SPEEDS = [
   { label: '3×', v: 3   },
 ]
 
-// I preset non fissano più una durata, nemmeno indirettamente: nel nuovo modello non esiste un
-// bersaglio da raggiungere, la durata è semplicemente la somma di tutto ciò che l'utente accende
-// (vedi lib/videoBudget.ts), e sarà lui a deciderla togliendo o aggiungendo. Un preset qui suggerisce
-// solo un PUNTO DI PARTENZA per la velocità del cursore — coerente col suo carattere editoriale
-// ("Snappy" parte veloce, "Epico" parte lento — vedi SPEED_BANDS in lib/videoBudget.ts per cosa
-// vuol dire in pratica) — che resta un suggerimento: lo slider in fondo al wizard lo sovrascrive
-// in qualunque momento, ed è lì che si decide il tempo vero.
-const VIDEO_PRESETS = {
-  reels:  { speedKmS: 0.55, fastIntro: true,  styleIdx: 1, orientation: '9:16'   as const, label: 'Reels',    desc: '9:16 · ritmo social',  grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  feed45: { speedKmS: 0.55, fastIntro: true,  styleIdx: 1, orientation: '4:5'    as const, label: 'Feed 4:5', desc: '4:5 · ritmo social',   grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  feed11: { speedKmS: 0.55, fastIntro: true,  styleIdx: 1, orientation: '1:1'    as const, label: 'Feed 1:1', desc: '1:1 · ritmo social',   grading: 'contrast(1.08) saturate(1.25) brightness(1.03)' },
-  epico:  { speedKmS: 0.18, fastIntro: false, styleIdx: 0, orientation: '9:16'   as const, label: 'Epico',    desc: '9:16 · disteso',        grading: 'contrast(1.05) saturate(1.18) brightness(1.02)' },
-  snappy: { speedKmS: 1.1,  fastIntro: true,  styleIdx: 1, orientation: '9:16'   as const, label: 'Snappy',   desc: '9:16 · corto e teso',   grading: 'contrast(1.12) saturate(1.38) brightness(1.04)' },
+// I preset non fissano una durata, nemmeno indirettamente: la durata è la somma di tutto ciò che
+// l'utente accende (vedi lib/videoBudget.ts), e sarà lui a deciderla togliendo o aggiungendo.
+//
+// Non sono più varianti di formato ("Reels", "Feed 4:5", "Feed 1:1" impostavano solo proporzioni e
+// velocità, lasciando decine di leve manuali — modalità, stacchi, luoghi, pin ed effetti, dati a
+// schermo): sono CARATTERI di video, ciascuno un punto di vista coerente su cosa mostrare e cosa
+// tacere. Applicarne uno imposta tutto quello che gli appartiene; ciò che resta acceso dopo è
+// sempre e solo la scelta dell'utente, non un residuo dimenticato del preset precedente — vedi
+// applyFullPreset più sotto, che azzera esplicitamente ogni leva invece di limitarsi ad accenderne
+// alcune.
+//
+// Tutto qui è un punto di PARTENZA, non un vincolo: ogni singolo comando nei due binari resta
+// libero subito dopo, ed è lì — non qui — che si decide il video vero.
+interface FullPresetConfig {
+  label: string
+  desc: string
+  orientation: '9:16' | '4:5' | '1:1' | '1.91:1' | '16:9'
+  styleIdx: number
+  speedKmS: number
+  fastIntro: boolean
+  grading: string
+  mode: 'ricordo' | 'illustrativo'
+  photoStyle: 'classic' | 'carousel'
+  photoDurationSec: number
+  hyperlapse: boolean
+  interludeKinds: InterludeKind[]
+  showPois: boolean
+  poiRequireImage: boolean
+  poiIncludeSensitive: boolean
+  showUserPin: boolean
+  pinFx: { heart: boolean; effort: boolean; trail: boolean; shadow: boolean }
+  hud: { title: boolean; stats: boolean; progress: boolean; elev: boolean; marks: boolean; odo: boolean; mini: boolean }
+  scenic: { miles: boolean; peak: boolean; stars: boolean }
+  loopEnding: boolean
+  routeColorKey: RouteColorKey
+  routeGlow: boolean
+  sunLight: boolean
+}
+
+const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura', FullPresetConfig> = {
+  veloce: {
+    label: 'Racconto veloce', desc: '9:16 · ritmo social · il tuo ricordo',
+    orientation: '9:16', styleIdx: 1, speedKmS: 0.55, fastIntro: true,
+    grading: 'contrast(1.12) saturate(1.32) brightness(1.04)',
+    mode: 'ricordo', photoStyle: 'carousel', photoDurationSec: 3, hyperlapse: true,
+    interludeKinds: [],
+    showPois: false, poiRequireImage: true, poiIncludeSensitive: false,
+    showUserPin: true, pinFx: { heart: true, effort: true, trail: true, shadow: true },
+    hud: { title: true, stats: true, progress: true, elev: false, marks: false, odo: false, mini: false },
+    scenic: { miles: true, peak: false, stars: true },
+    loopEnding: true, routeColorKey: 'arancione', routeGlow: true, sunLight: true,
+  },
+  epico: {
+    label: 'Racconto epico', desc: '9:16 · disteso · il tuo ricordo',
+    orientation: '9:16', styleIdx: 0, speedKmS: 0.10, fastIntro: false,
+    grading: 'contrast(1.04) saturate(1.15) brightness(1.01)',
+    mode: 'ricordo', photoStyle: 'classic', photoDurationSec: 6, hyperlapse: false,
+    interludeKinds: [],
+    showPois: false, poiRequireImage: true, poiIncludeSensitive: false,
+    showUserPin: true, pinFx: { heart: false, effort: false, trail: true, shadow: true },
+    hud: { title: true, stats: false, progress: false, elev: false, marks: false, odo: false, mini: false },
+    scenic: { miles: false, peak: true, stars: false },
+    loopEnding: true, routeColorKey: 'arancione', routeGlow: true, sunLight: true,
+  },
+  guida: {
+    label: 'Guida del percorso', desc: '4:5 · spiega il sentiero',
+    orientation: '4:5', styleIdx: 0, speedKmS: 0.30, fastIntro: true,
+    grading: 'contrast(1.06) saturate(1.15) brightness(1.02)',
+    mode: 'illustrativo', photoStyle: 'carousel', photoDurationSec: 4, hyperlapse: false,
+    interludeKinds: ['visione', 'numeri', 'profilo', 'luoghi'],
+    showPois: true, poiRequireImage: true, poiIncludeSensitive: false,
+    showUserPin: false, pinFx: { heart: false, effort: false, trail: false, shadow: false },
+    hud: { title: true, stats: true, progress: true, elev: false, marks: false, odo: true, mini: false },
+    scenic: { miles: true, peak: false, stars: false },
+    loopEnding: false, routeColorKey: 'verde', routeGlow: true, sunLight: false,
+  },
+  minimo: {
+    label: 'Minimo', desc: '1:1 · solo percorso e foto',
+    orientation: '1:1', styleIdx: 0, speedKmS: 0.28, fastIntro: true,
+    grading: 'contrast(1) saturate(1) brightness(1)',
+    mode: 'ricordo', photoStyle: 'classic', photoDurationSec: 4, hyperlapse: false,
+    interludeKinds: [],
+    showPois: false, poiRequireImage: true, poiIncludeSensitive: false,
+    showUserPin: false, pinFx: { heart: false, effort: false, trail: false, shadow: false },
+    hud: { title: false, stats: false, progress: false, elev: false, marks: false, odo: false, mini: false },
+    scenic: { miles: false, peak: false, stars: false },
+    loopEnding: false, routeColorKey: 'blu', routeGlow: false, sunLight: true,
+  },
+  natura: {
+    label: 'Natura e luoghi', desc: '1:1 · disteso · l’ambiente intorno',
+    orientation: '1:1', styleIdx: 1, speedKmS: 0.15, fastIntro: false,
+    grading: 'contrast(1.05) saturate(1.22) brightness(1.02)',
+    mode: 'illustrativo', photoStyle: 'carousel', photoDurationSec: 5, hyperlapse: false,
+    interludeKinds: ['visione', 'natura', 'luoghi'],
+    showPois: true, poiRequireImage: true, poiIncludeSensitive: true,
+    showUserPin: false, pinFx: { heart: false, effort: false, trail: false, shadow: false },
+    hud: { title: true, stats: false, progress: false, elev: false, marks: false, odo: false, mini: false },
+    scenic: { miles: false, peak: false, stars: false },
+    loopEnding: true, routeColorKey: 'verde', routeGlow: false, sunLight: true,
+  },
 } as const
 
 
@@ -168,7 +256,7 @@ const WIZARD_STEPS = [
   { id: 'effetti',  title: 'Effetti',  sub: 'Dati a schermo e tocchi scenici' },
   { id: 'genera',   title: 'Genera',   sub: 'Il tempo, il riepilogo, l’avvio' },
 ] as const
-type VideoPreset = 'reels' | 'feed45' | 'feed11' | 'epico' | 'snappy' | 'custom'
+type VideoPreset = 'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' | 'custom'
 type BearingMode = 'follow' | 'orbit-cw' | 'orbit-ccw' | 'side-left' | 'side-right' | 'overhead'
 type PlacingStep = 'pos'
 
@@ -1112,15 +1200,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     return [...photos, ...beats]
   }, [carouselPhotoTimings, routePhotos, photoDurationSec, videoInterludes, videoMode, interludeFitPreview])
 
-  /** Applica il carattere di un preset: solo un punto di partenza per la velocità, coerente col
-   *  suo ritmo editoriale — non un bersaglio da raggiungere. Da qui l'utente parte e aggiusta con
-   *  lo slider in fondo al wizard, che resta l'unico comando reale sul tempo. */
-  const applyPresetPacing = (pr: keyof typeof VIDEO_PRESETS) => {
-    const cfg = VIDEO_PRESETS[pr]
-    setVideoHookFastIntro(cfg.fastIntro)
-    setVideoSpeedKmS(cfg.speedKmS)
-  }
-
   // Velocità iniziale tarata sul percorso: un valore fisso darebbe un video di dieci secondi su un
   // giro da 2 km e di quattro minuti su uno da 25. Si imposta una sola volta per percorso — dopo
   // comanda l'utente, e non va sovrascritta a ogni foto aggiunta o opzione accesa.
@@ -1151,6 +1230,100 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       visione: { items: Math.max(1, visionFeatures.length), proseWords: 0 },
     }
   }, [guide?.notices, altitudeSeries, trackPoints, beautyScore, pois, videoEstimate.stops, visionFeatures.length])
+
+  /**
+   * Applica un CARATTERE di video, non solo un formato: modalità, stacchi, luoghi, pin ed effetti,
+   * dati a schermo, colore e luce del tracciato — vedi il commento su VIDEO_PRESETS per il perché.
+   *
+   * Ogni leva del preset viene impostata esplicitamente, comprese quelle spente: cambiare preset
+   * da "Racconto veloce" a "Minimo" deve spegnere il pin, non lasciarlo acceso perché il preset
+   * precedente lo aveva acceso e questo non lo nomina. Un preset che si limitasse ad accendere le
+   * proprie leve lascerebbe residui del preset scelto prima — la cosa che un preset dovrebbe
+   * evitare, non causare.
+   *
+   * Gli stacchi vanno riaccesi ricalcolando la durata sul contenuto REALE (recommendedInterludeSeconds
+   * con interludeContent), non con un numero fisso uguale per tutti i percorsi — la stessa regola
+   * che vale quando si accende uno stacco a mano nel binario.
+   *
+   * Infine tutto ciò che finisce sulla mappa — foto incluse più gli stacchi appena accesi — passa
+   * da declutterItems (lib/videoTimeline.ts): un preset accende stacchi in punti pensati per un
+   * percorso medio, ma le foto vere hanno posizioni proprie, e le due cose insieme possono cadere
+   * a un secondo l'una dall'altra su un anello corto. Il preset distanzia da solo invece di lasciare
+   * la pastiglia "troppo vicini" accesa nel momento stesso in cui lo si applica.
+   */
+  const applyFullPreset = (pr: keyof typeof VIDEO_PRESETS) => {
+    const cfg = VIDEO_PRESETS[pr]
+
+    setVideoOrientation(cfg.orientation); setVideoFps(30)
+    switchStyle(cfg.styleIdx)
+    setVideoHookFastIntro(cfg.fastIntro)
+    setVideoSpeedKmS(cfg.speedKmS)
+
+    setVideoMode(cfg.mode)
+    setVideoShowPois(cfg.showPois)
+    setVideoPoiRequireImage(cfg.poiRequireImage)
+    setVideoPoiIncludeSensitive(cfg.poiIncludeSensitive)
+
+    setVideoPhotoStyle(cfg.photoStyle)
+    setPhotoDurationSec(cfg.photoDurationSec)
+    setVideoHyperlapseEnabled(cfg.hyperlapse)
+
+    setShowUserPin(cfg.showUserPin)
+    setVideoHeartEffectEnabled(cfg.pinFx.heart)
+    setVideoPinEffortColorEnabled(cfg.pinFx.effort)
+    setVideoTrailEnabled(cfg.pinFx.trail)
+    setVideoSlopeShadowEnabled(cfg.pinFx.shadow)
+
+    setVideoShowTitle(cfg.hud.title)
+    setVideoShowStats(cfg.hud.stats)
+    setVideoShowProgress(cfg.hud.progress)
+    setVideoElevMarkersEnabled(cfg.hud.elev)
+    setVideoPhotoMarksEnabled(cfg.hud.marks)
+    setVideoOdometerEnabled(cfg.hud.odo)
+    setVideoMiniMapEnabled(cfg.hud.mini)
+
+    setVideoMilestonesEnabled(cfg.scenic.miles)
+    setVideoPeakMomentEnabled(cfg.scenic.peak)
+    setVideoArrivalStarsEnabled(cfg.scenic.stars)
+
+    setVideoLoopEnding(cfg.loopEnding)
+    setRouteColorKey(cfg.routeColorKey)
+    setRouteGlowEnabled(cfg.routeGlow)
+    setVideoSunLightEnabled(cfg.sunLight)
+
+    if (cfg.interludeKinds.includes('visione')) {
+      setVisionCategories(DEFAULT_VISION_CATEGORIES)
+      setVisionTopoVeil(true)
+    }
+
+    const nextInterludes: InterludeSetting[] = DEFAULT_INTERLUDES.map(iv => {
+      const enabled = cfg.interludeKinds.includes(iv.kind)
+      return { ...iv, enabled, seconds: enabled ? recommendedInterludeSeconds(iv.kind, interludeContent[iv.kind]) : iv.seconds }
+    })
+
+    // Distanziamento: foto (posizione reale, non spostata) + stacchi appena accesi, in un'unica
+    // lista — è la stessa che l'editor mostra sulla mappa, vedi timelineItems.
+    const photoTimelineItems: TimelineItem[] = carouselPhotoTimings.map(t => ({
+      id: `photo:${t.id}`, kind: 'photo' as const, atP: t.progress, label: '', seconds: cfg.photoDurationSec,
+    }))
+    const enabledBeats: TimelineItem[] = nextInterludes
+      .filter(iv => iv.enabled)
+      .map(iv => ({ id: `beat:${iv.kind}`, kind: 'interlude' as const, atP: iv.atP, label: '', seconds: iv.seconds }))
+    const declutteredAtP = declutterItems([...photoTimelineItems, ...enabledBeats], videoEstimate.routeSec, MIN_ITEM_GAP_SEC)
+
+    setVideoInterludes(nextInterludes.map(iv => {
+      const p = declutteredAtP.get(`beat:${iv.kind}`)
+      return p === undefined ? iv : { ...iv, atP: p }
+    }))
+    setVideoPhotoAtP(() => {
+      const next: Record<string, number> = {}
+      for (const t of carouselPhotoTimings) {
+        const p = declutteredAtP.get(`photo:${t.id}`)
+        if (p !== undefined) next[t.id] = p
+      }
+      return next
+    })
+  }
 
   const carouselEstimatedSec = videoPhotoStyle === 'carousel' ? videoEstimate.total : null
 
@@ -4304,16 +4477,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           ]},
 
           { id:'formato', label:'Formato', glyph:'▭', controls:[
-            { kind:'segmented', id:'preset', label:'Preimpostazioni', value: videoPreset, columns:3,
-              options:(['reels','feed45','feed11','epico','snappy'] as const).map(pr=>({
-                value:pr, label:VIDEO_PRESETS[pr].label, sub:VIDEO_PRESETS[pr].desc.split(' · ')[1] })),
+            { kind:'cards', id:'preset', label:'Preimpostazioni', value: videoPreset,
+              options:(['veloce','epico','guida','minimo','natura'] as const).map(pr=>({
+                value:pr, label:VIDEO_PRESETS[pr].label, sub:VIDEO_PRESETS[pr].desc })),
               onPick:v=>{
                 const pr = v as keyof typeof VIDEO_PRESETS
-                setVideoPreset(pr); applyPresetPacing(pr)
-                switchStyle(VIDEO_PRESETS[pr].styleIdx)
-                setVideoOrientation(VIDEO_PRESETS[pr].orientation); setVideoFps(30)
+                setVideoPreset(pr); applyFullPreset(pr)
               },
-              hint:'Un punto di partenza, non un vincolo: sovrascrive proporzioni, ritmo e stile, e da lì aggiusti quello che vuoi.' },
+              hint:'Un carattere completo — modalità, stacchi, luoghi, pin ed effetti, dati a schermo — non solo formato e ritmo. Da qui aggiusti singolarmente quello che vuoi nei due binari.' },
             { kind:'segmented', id:'orient', label:'Proporzioni', value: videoOrientation, columns:3,
               options:[
                 {value:'9:16',   label:'9:16',   sub:'Reels'},
