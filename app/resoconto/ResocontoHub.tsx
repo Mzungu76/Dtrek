@@ -697,7 +697,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       {show3D && activity && (
         <RouteMap3D trackPoints={activity.trackPoints} title={activity.title ?? activity.notes}
           onClose={() => { setShow3D(false); setOpenVideoWizard(false) }} plannedTrackPoints={activity.linkedPlannedTrackPoints}
-          activityId={activity.id} initialVideoState={openVideoWizard ? 'config' : 'idle'}
+          activityId={activity.id} initialVideoState={openVideoWizard ? 'presets' : 'idle'}
           distanceMeters={activity.distanceMeters} elevationGain={activity.elevationGain} pois={pois} dtmProfile={dtmProfile}
           beautyScore={activity.linkedBeautyScore}
           poiWiki={activity.poiWiki?.length ? activity.poiWiki : poiWiki}

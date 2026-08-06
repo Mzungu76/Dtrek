@@ -14,6 +14,16 @@
  *
  * Stesso contratto (props) di RouteTimelineEditor, apposta: chi lo monta non deve sapere quale dei
  * due sta usando.
+ *
+ * DUE effetti separati, non uno, per un motivo di prestazioni misurato: durante un trascinamento
+ * Leaflet emette l'evento 'drag' più volte al secondo, e ogni tick aggiorna l'ANTEPRIMA
+ * dell'affollamento (vedi crowding più sotto). La prima versione aveva un solo effetto con
+ * `crowding` fra le dipendenze: ogni tick ricreava quindi l'icona E richiamava setLatLng/bindTooltip
+ * su OGNI marcatore della mappa, non solo su quello trascinato — su un percorso con molte foto,
+ * abbastanza lavoro da far sembrare il trascinamento incollato e a scatti. Ora un effetto pesante
+ * (posizioni, tooltip, creazione/rimozione) reagisce solo a `items` — un cambio vero, non
+ * un'anteprima — e uno leggero reagisce a `crowding` aggiornando SOLO l'anello dei marcatori il cui
+ * stato di affollamento è davvero cambiato da un tick all'altro.
  */
 
 import 'leaflet/dist/leaflet.css'
@@ -43,6 +53,9 @@ const INTERLUDE_TINT: Record<InterludeKind, string> = {
 export interface TimelineEditorItem extends TimelineItem {
   thumbUrl?: string
   interludeKind?: InterludeKind
+  /** Solo le foto la usano davvero (vedi il commento sul lucchetto in RouteMap3D.tsx): uno stacco
+   *  non ha una posizione "originale" da proteggere, quindi resta sempre trascinabile. */
+  locked?: boolean
 }
 
 interface Props {
@@ -60,6 +73,7 @@ interface Props {
 
 function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L.DivIcon {
   const isPhoto = it.kind === 'photo'
+  const locked = isPhoto && it.locked
   const tint = isPhoto ? '#3f3a33' : (INTERLUDE_TINT[it.interludeKind ?? 'numeri'] ?? '#3f3a33')
   const glyph = isPhoto ? '▣' : INTERLUDE_GLYPH[it.interludeKind ?? 'numeri']
   const size = isPhoto ? 30 : 28
@@ -70,8 +84,16 @@ function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L
     : `box-shadow:0 1px 4px rgba(0,0,0,0.25);`
   const bg = isPhoto ? '#3f3a33' : tint
   const fg = isPhoto ? '#ffffff' : 'rgba(20,18,15,0.9)'
+  // Il lucchetto sul pallino è l'unico modo di sapere, guardando la MAPPA (non l'elenco foto), che
+  // quella foto non si sposta finché non la si sblocca da lì — vedi il commento in RouteMap3D.tsx.
+  const lockBadge = locked
+    ? `<div style="position:absolute;right:-3px;bottom:-3px;width:14px;height:14px;border-radius:50%;background:#c05a17;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1;color:#fff">🔒</div>`
+    : ''
   return Lmod.divIcon({
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${fg};${ring};cursor:grab">${glyph}</div>`,
+    html: `<div style="position:relative;width:${size}px;height:${size}px">
+             <div style="width:100%;height:100%;border-radius:50%;background:${bg};border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${fg};${ring};cursor:${locked ? 'default' : 'grab'}">${glyph}</div>
+             ${lockBadge}
+           </div>`,
     iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: '',
   })
 }
@@ -82,15 +104,16 @@ export default function RouteLeafletEditor({
   const mapElRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Map<string, L.Marker>>(new Map())
-  const itemsRef = useRef(items)
-  itemsRef.current = items
-  const routeSecondsRef = useRef(routeSeconds)
-  routeSecondsRef.current = routeSeconds
+  // Popolato una volta sola all'init della mappa, riletto sincrono da entrambi gli effetti dei
+  // marcatori: un `import('leaflet').then(...)` ad ogni tick di trascinamento — anche se il modulo
+  // è già in cache — è un giro di microtask in più che l'effetto leggero qui sotto non si può
+  // permettere.
+  const leafletRef = useRef<typeof L | null>(null)
   const onMoveRef = useRef(onMove)
   onMoveRef.current = onMove
 
   const [mapReady, setMapReady] = useState(false)
-  // Anteprima live dell'affollamento durante un trascinamento in corso: senza, il cerchio giallo
+  // Anteprima live dell'affollamento durante un trascinamento in corso: senza, il cerchio arancio
   // comparirebbe solo a rilascio avvenuto, cioè un istante troppo tardi per essere una guida.
   const [dragPreview, setDragPreview] = useState<Record<string, number> | null>(null)
   // Istruzioni e dettaglio dell'affollamento: chiusi di partenza, si aprono solo se chiesti.
@@ -103,9 +126,13 @@ export default function RouteLeafletEditor({
   const liveItems = dragPreview
     ? items.map(it => (dragPreview[it.id] !== undefined ? { ...it, atP: dragPreview[it.id] } : it))
     : items
-  // Memorizzato su items+dragPreview (non su liveItems, ricreato a ogni render): senza, l'effetto
-  // dei marker sotto — che dipende da crowding — ridisegnerebbe tutti i pallini a ogni render del
-  // genitore, non solo quando la disposizione cambia davvero.
+  // Memorizzato su items+dragPreview (non su liveItems, ricreato a ogni render): la dipendenza
+  // pesante (creazione/posizione dei marker, vedi sotto) non guarda più `crowding`, ma l'effetto
+  // leggero sì — e ricalcolarlo ad ogni render invece che solo quando items o dragPreview cambiano
+  // davvero vorrebbe dire perdere il confronto "chi è cambiato da un tick all'altro" su cui si
+  // basa: senza questo memo, `crowding.ids` sarebbe un Set NUOVO ad ogni render anche a contenuto
+  // identico, e l'effetto leggero — che si fida della referenza per capire quando girare —
+  // finirebbe comunque per rifare il lavoro ad ogni render invece che solo ai tick di drag veri.
   const crowding = useMemo(() => findCrowding(liveItems, routeSeconds, MIN_ITEM_GAP_SEC), [items, dragPreview, routeSeconds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── init una volta ──────────────────────────────────────────────────────────
@@ -114,6 +141,7 @@ export default function RouteLeafletEditor({
     let cancelled = false
     import('leaflet').then(Lmod => {
       if (cancelled || !mapElRef.current) return
+      leafletRef.current = Lmod
       // I pulsanti dello zoom scendono in basso a sinistra: in alto a sinistra ci sta ora il «?»
       // con le istruzioni e la pastiglia dell'affollamento, e due comandi sovrapposti nello stesso
       // angolo sono il modo più rapido per farne toccare uno per l'altro.
@@ -169,65 +197,82 @@ export default function RouteLeafletEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackPoints.length])
 
-  // ── marker di foto e stacchi: si ridisegnano quando cambia l'elenco, non a ogni fotogramma ──
+  // ── marker di foto e stacchi: creazione, rimozione, posizione, blocco/sblocco ──────────────
+  // Reagisce SOLO a `items` (un cambio vero — foto spostata e rilasciata, stacco acceso, foto
+  // sbloccata) e non a `crowding`: è il lavoro pesante (setLatLng, bindTooltip, dragging
+  // enable/disable), e ripeterlo ad ogni tick di trascinamento è esattamente quello che rendeva lo
+  // spostamento lento — vedi il commento in testa al file.
   useEffect(() => {
-    if (!mapReady || !mapRef.current) return
-    let cancelled = false
-    import('leaflet').then(Lmod => {
-      if (cancelled || !mapRef.current) return
-      const map = mapRef.current
-      const seen = new Set<string>()
+    const Lmod = leafletRef.current
+    if (!mapReady || !mapRef.current || !Lmod) return
+    const map = mapRef.current
+    const seen = new Set<string>()
+    const crowded0 = crowding.ids
 
-      for (const it of items) {
-        seen.add(it.id)
-        const idx = Math.round(it.atP * (gpsPoints.length - 1))
-        const pt = gpsPoints[Math.min(Math.max(idx, 0), gpsPoints.length - 1)]
-        if (!pt) continue
-        const crowded = crowding.ids.has(it.id)
+    for (const it of items) {
+      seen.add(it.id)
+      const idx = Math.round(it.atP * (gpsPoints.length - 1))
+      const pt = gpsPoints[Math.min(Math.max(idx, 0), gpsPoints.length - 1)]
+      if (!pt) continue
 
-        let m = markersRef.current.get(it.id)
-        if (!m) {
-          m = Lmod.marker([pt.lat, pt.lon], { icon: markerIcon(Lmod, it, crowded), draggable: true })
-            .addTo(map)
-          m.on('drag', () => {
-            const ll = m!.getLatLng()
-            const p = progressFromLatLng(trackPoints, ll.lat, ll.lng)
-            setDragPreview(prev => ({ ...(prev ?? {}), [it.id]: p }))
-          })
-          m.on('dragend', () => {
-            const ll = m!.getLatLng()
-            const p = progressFromLatLng(trackPoints, ll.lat, ll.lng)
-            setDragPreview(prev => { if (!prev) return prev; const { [it.id]: _drop, ...rest } = prev; return rest })
-            onMoveRef.current(it.id, p)
-          })
-          markersRef.current.set(it.id, m)
-        } else if (dragPreview && dragPreview[it.id] !== undefined) {
-          // In trascinamento: la posizione del marker la possiede Leaflet stesso (Draggable la
-          // muove dai delta del mouse rispetto al punto di partenza), non `it.atP` — che è ancora
-          // quello di PRIMA del trascinamento, il prop non si aggiorna finché non si rilascia. Un
-          // setLatLng qui lo riporterebbe alla posizione vecchia ad ogni ricalcolo dell'affollamento
-          // (che avviene ad ogni evento 'drag', vedi sotto), cioè un salto indietro più volte al
-          // secondo: il marker sembrerebbe incollato sul posto invece che trascinabile. Si aggiorna
-          // solo l'anello di affollamento, mai la posizione, finché non arriva il dragend.
-          m.setIcon(markerIcon(Lmod, it, crowded))
-        } else {
-          m.setLatLng([pt.lat, pt.lon])
-          m.setIcon(markerIcon(Lmod, it, crowded))
-        }
+      let m = markersRef.current.get(it.id)
+      if (!m) {
+        m = Lmod.marker([pt.lat, pt.lon], { icon: markerIcon(Lmod, it, crowded0.has(it.id)), draggable: !it.locked })
+          .addTo(map)
+        m.on('drag', () => {
+          const ll = m!.getLatLng()
+          const p = progressFromLatLng(trackPoints, ll.lat, ll.lng)
+          setDragPreview(prev => ({ ...(prev ?? {}), [it.id]: p }))
+        })
+        m.on('dragend', () => {
+          const ll = m!.getLatLng()
+          const p = progressFromLatLng(trackPoints, ll.lat, ll.lng)
+          setDragPreview(prev => { if (!prev) return prev; const { [it.id]: _drop, ...rest } = prev; return rest })
+          onMoveRef.current(it.id, p)
+        })
+        markersRef.current.set(it.id, m)
+      } else if (dragPreview && dragPreview[it.id] !== undefined) {
+        // In trascinamento attivo: la posizione la possiede Leaflet stesso (Draggable la muove dai
+        // delta del mouse rispetto al punto di partenza), non `it.atP` — che è ancora quello di
+        // PRIMA del trascinamento, il prop non si aggiorna finché non si rilascia. Non si tocca.
+      } else {
+        m.setLatLng([pt.lat, pt.lon])
+        m.setIcon(markerIcon(Lmod, it, crowded0.has(it.id)))
         m.bindTooltip(it.label, { direction: 'top', offset: [0, -16] })
+        // Idempotente: enable/disable su uno stato già corrente non fa nulla di visibile, quindi
+        // richiamarlo ogni volta che `items` cambia (non ad ogni tick) resta economico.
+        if (it.locked) m.dragging?.disable(); else m.dragging?.enable()
       }
+    }
 
-      markersRef.current.forEach((m, id) => {
-        if (!seen.has(id)) { m.remove(); markersRef.current.delete(id) }
-      })
+    markersRef.current.forEach((m, id) => {
+      if (!seen.has(id)) { m.remove(); markersRef.current.delete(id) }
     })
-    return () => { cancelled = true }
-    // crowding dipende da items+routeSeconds+dragPreview, già nelle dep (o coperta da crowding,
-    // che cambia referenza ad ogni variazione di dragPreview): l'effetto si ririesegue comunque
-    // ad ogni evento 'drag', e legge dragPreview fresco dalla stessa closure. gpsPoints deriva da
-    // trackPoints.
+    // crowding.ids serve solo all'icona iniziale di un marker appena creato: quella corrente (non
+    // un'anteprima di trascinamento, che a un marker appena creato non può comunque riguardare) è
+    // la scelta giusta anche se non è nelle dep — l'effetto leggero sotto la tiene aggiornata da lì
+    // in avanti. gpsPoints deriva da trackPoints, già in dep tramite `items` di norma stabile.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, mapReady, crowding])
+  }, [items, mapReady])
+
+  // ── anello di affollamento: leggero, reagisce ad OGNI tick di trascinamento ─────────────────
+  // Unico lavoro qui: capire quali marker hanno CAMBIATO stato di affollamento da un tick
+  // all'altro e aggiornare solo la loro icona. Su un trascinamento tipico sono 0-2 marker, non
+  // tutti quelli sulla mappa — la differenza che rende lo spostamento di nuovo fluido.
+  const lastCrowdedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const Lmod = leafletRef.current
+    if (!mapReady || !Lmod) return
+    const prev = lastCrowdedRef.current
+    const next = crowding.ids
+    for (const it of items) {
+      const was = prev.has(it.id), is = next.has(it.id)
+      if (was === is) continue
+      const m = markersRef.current.get(it.id)
+      if (m) m.setIcon(markerIcon(Lmod, it, is))
+    }
+    lastCrowdedRef.current = next
+  }, [crowding, mapReady, items])
 
   if (gpsPoints.length < 2) {
     return (
@@ -286,7 +331,7 @@ export default function RouteLeafletEditor({
           <div className="rounded-xl bg-white/97 border border-stone-200 shadow-lg px-3 py-2.5 space-y-2">
             <p className="text-stone-700 text-[11px] leading-relaxed">
               Trascina i pallini per decidere dove cade ogni foto e ogni stacco: si agganciano da soli al punto
-              del percorso più vicino.
+              del percorso più vicino. Una foto con il lucchetto va prima sbloccata dall&apos;elenco foto qui sotto.
               {roundTrip && ' Il percorso è un andata e ritorno: il video mostra la sola andata, quindi tutto va posizionato su quella.'}
             </p>
             {interludeItems.length > 0 && (
