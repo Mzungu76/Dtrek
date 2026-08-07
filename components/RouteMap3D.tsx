@@ -7,7 +7,7 @@ import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
   Download, Share2, ImagePlus,
   Loader2, Check, Navigation, Layers, Sparkles, Copy, MapPin, Compass, ChevronUp,
-  Zap, Minus, Leaf, SlidersHorizontal, Lock, LockOpen,
+  Zap, Minus, Leaf, SlidersHorizontal, Lock, LockOpen, Bookmark,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
 import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
@@ -120,6 +120,45 @@ interface FullPresetConfig {
   routeColorKey: RouteColorKey
   routeGlow: boolean
   sunLight: boolean
+}
+
+/** La "ricetta" di un preset senza il testo che lo presenta nella pagina di scelta — è la parte
+ *  che applyVideoConfig sa applicare, e quella che serve per ricordare le ultime impostazioni
+ *  usate o per salvarne una versione propria: entrambe sono un preset senza nome e senza scheda. */
+type VideoConfig = Omit<FullPresetConfig, 'label' | 'desc' | 'long'>
+
+/** Preset personale salvato dall'utente: stessa ricetta di un VideoConfig, con nome e id per
+ *  comparire nella pagina di scelta insieme ai preset di serie — vedi CUSTOM_PRESETS_KEY. */
+interface CustomPreset {
+  id: string
+  label: string
+  cfg: VideoConfig
+  fps: 30 | 60
+  savedAt: number
+}
+
+// Chiavi di localStorage per lo Studio Video. Locali al browser e non all'account apposta: sono
+// comodità di editing (com'era rimasto, quali preset personali) non dati del percorso — non hanno
+// bisogno di sincronizzarsi fra dispositivi, e tenerle fuori dal server evita una scrittura di
+// rete a ogni chiusura dello studio.
+const LAST_VIDEO_SETTINGS_KEY = 'dtrek-video-last-settings'
+const CUSTOM_VIDEO_PRESETS_KEY = 'dtrek-video-custom-presets'
+
+function loadLastVideoSettings(): { cfg: VideoConfig; fps: 30 | 60 } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(LAST_VIDEO_SETTINGS_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function loadCustomVideoPresets(): CustomPreset[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_VIDEO_PRESETS_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch { return [] }
 }
 
 // Satellite (styleIdx 1) è la mappa di default per quattro preset su cinque: è la mappa che
@@ -1015,6 +1054,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [captionData,    setCaptionData]    = useState<{caption:string;hashtags:string}|null>(null)
   const [captionLoading, setCaptionLoading] = useState(false)
   const [captionCopied,  setCaptionCopied]  = useState(false)
+  // Form inline "salva come preset personale" — vedi il controllo 'preset-current' più sotto.
+  const [savingPresetOpen, setSavingPresetOpen] = useState(false)
+  const [savingPresetName, setSavingPresetName] = useState('')
 
   // Post-production
   const [routePhotos,     setRoutePhotos]    = useState<RoutePhoto[]>([])
@@ -1343,10 +1385,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
    * di spostarla altrove a raccontare un punto del percorso che non è quello vero. È il modo in cui
    * un preset "ottimizza la presenza delle foto": spegnendole dove serve, non ricollocandole.
    */
-  const applyFullPreset = (pr: keyof typeof VIDEO_PRESETS) => {
-    const cfg = VIDEO_PRESETS[pr]
-
-    setVideoOrientation(cfg.orientation); setVideoFps(30)
+  /** Applica una ricetta (preset di serie, ultime impostazioni o preset personale — sono la stessa
+   *  forma, vedi VideoConfig) senza toccare i fps: quelli sono una scelta a parte, non fanno parte
+   *  del carattere del video, e chi chiama decide se riportarli anche loro. */
+  const applyVideoConfig = (cfg: VideoConfig) => {
+    setVideoOrientation(cfg.orientation)
     switchStyle(cfg.styleIdx)
     setZoomIntro(cfg.zoomIntro); setZoomFollow(cfg.zoomFollow); setZoomOutro(cfg.zoomOutro)
     setVideoHookFastIntro(cfg.fastIntro)
@@ -1428,6 +1471,80 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       routePhotos.map(p => ({ id: p.id, atP: p.progress })), occupiedAtP, routeSecForPreset, MIN_ITEM_GAP_SEC,
     ))
   }
+
+  /** Preset di serie: sempre 30fps, come prima — i 60fps sono un'opzione manuale per il 9:16, non
+   *  parte del carattere di nessun preset. */
+  const applyFullPreset = (pr: keyof typeof VIDEO_PRESETS) => {
+    applyVideoConfig(VIDEO_PRESETS[pr])
+    setVideoFps(30)
+  }
+
+  /** Cattura lo stato attuale nella stessa forma di un preset di serie: usato per ricordare le
+   *  ultime impostazioni alla chiusura dello studio, e per salvarne una versione con nome. */
+  const captureCurrentVideoConfig = useCallback((): VideoConfig => ({
+    orientation: videoOrientation, styleIdx, zoomIntro, zoomFollow, zoomOutro,
+    speedKmS: videoSpeedKmS, fastIntro: videoHookFastIntro,
+    grading: 'contrast(1) saturate(1) brightness(1)',
+    mode: videoMode, photoStyle: videoPhotoStyle, photoDurationSec, hyperlapse: videoHyperlapseEnabled,
+    interludeKinds: videoInterludes.filter(iv => iv.enabled).map(iv => iv.kind),
+    showPois: videoShowPois, poiRequireImage: videoPoiRequireImage, poiIncludeSensitive: videoPoiIncludeSensitive,
+    showUserPin: videoShowUserPin,
+    pinFx: { heart: videoHeartEffectEnabled, effort: videoPinEffortColorEnabled, trail: videoTrailEnabled, shadow: videoSlopeShadowEnabled },
+    hud: { title: videoShowTitle, stats: videoShowStats, progress: videoShowProgress, elev: videoElevMarkersEnabled, marks: videoPhotoMarksEnabled, odo: videoOdometerEnabled, mini: videoMiniMapEnabled },
+    scenic: { miles: videoMilestonesEnabled, peak: videoPeakMomentEnabled, stars: videoArrivalStarsEnabled },
+    loopEnding: videoLoopEnding, routeColorKey, routeGlow: routeGlowEnabled, sunLight: videoSunLightEnabled,
+  }), [videoOrientation, styleIdx, zoomIntro, zoomFollow, zoomOutro, videoSpeedKmS, videoHookFastIntro,
+      videoMode, videoPhotoStyle, photoDurationSec, videoHyperlapseEnabled, videoInterludes,
+      videoShowPois, videoPoiRequireImage, videoPoiIncludeSensitive, videoShowUserPin,
+      videoHeartEffectEnabled, videoPinEffortColorEnabled, videoTrailEnabled, videoSlopeShadowEnabled,
+      videoShowTitle, videoShowStats, videoShowProgress, videoElevMarkersEnabled, videoPhotoMarksEnabled, videoOdometerEnabled, videoMiniMapEnabled,
+      videoMilestonesEnabled, videoPeakMomentEnabled, videoArrivalStarsEnabled,
+      videoLoopEnding, routeColorKey, routeGlowEnabled, videoSunLightEnabled])
+
+  /** Salva lo stato corrente come "ultime impostazioni": richiamato alla chiusura dello studio,
+   *  non a ogni modifica — non serve altro, e scrivere localStorage a ogni tocco di slider
+   *  sarebbe lavoro sprecato per un valore che conta solo quando si riapre lo studio. */
+  const saveLastVideoSettings = useCallback(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const payload: { cfg: VideoConfig; fps: 30 | 60 } = { cfg: captureCurrentVideoConfig(), fps: videoFps }
+      window.localStorage.setItem(LAST_VIDEO_SETTINGS_KEY, JSON.stringify(payload))
+    } catch {}
+  }, [captureCurrentVideoConfig, videoFps])
+
+  const [customPresets, setCustomPresets] = useState<CustomPreset[]>([])
+  useEffect(() => { setCustomPresets(loadCustomVideoPresets()) }, [])
+
+  const saveCustomPreset = useCallback((label: string) => {
+    const trimmed = label.trim()
+    if (!trimmed) return
+    const entry: CustomPreset = {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      label: trimmed, cfg: captureCurrentVideoConfig(), fps: videoFps, savedAt: Date.now(),
+    }
+    setCustomPresets(prev => {
+      const next = [...prev, entry]
+      try { window.localStorage.setItem(CUSTOM_VIDEO_PRESETS_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+    setShareToast('Preset salvato'); setTimeout(() => setShareToast(''), 2500)
+  }, [captureCurrentVideoConfig, videoFps])
+
+  const deleteCustomPreset = useCallback((id: string) => {
+    setCustomPresets(prev => {
+      const next = prev.filter(p => p.id !== id)
+      try { window.localStorage.setItem(CUSTOM_VIDEO_PRESETS_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }, [])
+
+  /** Chiude lo studio salvando prima lo stato corrente, così la prossima volta si può ripartire da
+   *  qui invece che da un preset scelto daccapo — vedi "Le tue ultime impostazioni" nella pagina
+   *  di scelta preset. */
+  const closeVideoStudio = useCallback(() => {
+    saveLastVideoSettings()
+    setVideoState('idle')
+  }, [saveLastVideoSettings])
 
   const carouselEstimatedSec = videoPhotoStyle === 'carousel' ? videoEstimate.total : null
 
@@ -4322,24 +4439,50 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       )}
 
       {/* ══ SCELTA PRESET — la porta d'ingresso allo studio, vedi VideoPresetPicker.tsx ═══ */}
-      {videoState==='presets'&&(
+      {videoState==='presets'&&(()=>{
+        const lastSettings = loadLastVideoSettings()
+        return (
         <VideoPresetPicker
           title={(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'Percorso')}
           routeHasPhotos={routePhotos.length>0}
           onClose={()=>setVideoState(presetPickerBack)}
-          onChoose={key=>choosePreset(key as keyof typeof VIDEO_PRESETS)}
-          entries={([
-            { key:'veloce',  icon:Zap },
-            { key:'epico',   icon:Mountain },
-            { key:'guida',   icon:Compass },
-            { key:'natura',  icon:Leaf },
-            { key:'minimo',  icon:Minus },
-            { key:'manuale', icon:SlidersHorizontal },
-          ] as const).map(({key,icon}):PresetPickerEntry => ({
-            key, icon, label:VIDEO_PRESETS[key].label, desc:VIDEO_PRESETS[key].desc, long:VIDEO_PRESETS[key].long,
-          }))}
+          onChoose={key=>{
+            if (key==='resume-last') {
+              if (!lastSettings) return
+              setVideoPreset('custom'); applyVideoConfig(lastSettings.cfg); setVideoFps(lastSettings.fps)
+              setVideoStep(0); setVideoState('config')
+              return
+            }
+            if (key.startsWith('custom:')) {
+              const p = customPresets.find(c => c.id === key.slice(7))
+              if (!p) return
+              setVideoPreset('custom'); applyVideoConfig(p.cfg); setVideoFps(p.fps)
+              setVideoStep(0); setVideoState('config')
+              return
+            }
+            choosePreset(key as keyof typeof VIDEO_PRESETS)
+          }}
+          onRemove={id=>deleteCustomPreset(id.slice(7))}
+          entries={[
+            ...(lastSettings ? [{
+              key:'resume-last', icon:RotateCcw,
+              label:'Le tue ultime impostazioni',
+              desc:`${lastSettings.cfg.orientation} · dove avevi lasciato`,
+              long:'Riprende esattamente da come avevi lasciato lo studio l’ultima volta, su qualunque percorso — salvato in automatico ogni volta che lo chiudi.',
+            }] : []),
+            ...(['veloce','epico','guida','natura','minimo','manuale'] as const).map((key):PresetPickerEntry => ({
+              key, icon:{veloce:Zap,epico:Mountain,guida:Compass,natura:Leaf,minimo:Minus,manuale:SlidersHorizontal}[key],
+              label:VIDEO_PRESETS[key].label, desc:VIDEO_PRESETS[key].desc, long:VIDEO_PRESETS[key].long,
+            })),
+            ...customPresets.map((p):PresetPickerEntry => ({
+              key:`custom:${p.id}`, icon:Bookmark, removable:true,
+              label:p.label, desc:`${p.cfg.orientation} · preset personale`,
+              long:'Preset salvato da te, con tutte le impostazioni di quando l’hai creato — pronto da riusare su qualsiasi percorso.',
+            })),
+          ]}
         />
-      )}
+        )
+      })()}
 
       {/* ══ VIDEO CONFIG ════════════════════════════════════════════════════════ */}
       {/* ══ WIZARD VIDEO ═════════════════════════════════════════════════════════
@@ -4691,14 +4834,41 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             // solo il richiamo a quale carattere è attivo ora, con la via per cambiarlo senza
             // uscire dallo studio e perdere il lavoro fatto nel frattempo.
             { kind:'custom', id:'preset-current', label:'Preset', render:()=>(
-              <div className="flex items-center justify-between gap-2 bg-stone-100 rounded-xl px-3 py-2.5">
-                <span className="text-stone-700 text-[12px] font-semibold">
-                  {videoPreset==='custom' ? 'Personalizzato' : VIDEO_PRESETS[videoPreset as keyof typeof VIDEO_PRESETS].label}
-                </span>
-                <button onClick={()=>{setPresetPickerBack('config');setVideoState('presets')}}
-                  className="text-terra-700 hover:text-terra-800 text-[11px] font-bold underline underline-offset-2 shrink-0">
-                  Cambia preset
-                </button>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2 bg-stone-100 rounded-xl px-3 py-2.5">
+                  <span className="text-stone-700 text-[12px] font-semibold">
+                    {videoPreset==='custom' ? 'Personalizzato' : VIDEO_PRESETS[videoPreset as keyof typeof VIDEO_PRESETS].label}
+                  </span>
+                  <button onClick={()=>{setPresetPickerBack('config');setVideoState('presets')}}
+                    className="text-terra-700 hover:text-terra-800 text-[11px] font-bold underline underline-offset-2 shrink-0">
+                    Cambia preset
+                  </button>
+                </div>
+                {savingPresetOpen ? (
+                  <div className="flex items-center gap-1.5">
+                    <input autoFocus value={savingPresetName} onChange={e=>setSavingPresetName(e.target.value)}
+                      onKeyDown={e=>{
+                        if(e.key==='Enter'&&savingPresetName.trim()){ saveCustomPreset(savingPresetName); setSavingPresetOpen(false); setSavingPresetName('') }
+                        if(e.key==='Escape'){ setSavingPresetOpen(false); setSavingPresetName('') }
+                      }}
+                      placeholder="Nome del preset…" maxLength={40}
+                      className="flex-1 min-w-0 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-stone-900 text-[12px] outline-none focus:border-forest-400"/>
+                    <button onClick={()=>{ if(savingPresetName.trim()){ saveCustomPreset(savingPresetName); setSavingPresetOpen(false); setSavingPresetName('') } }}
+                      disabled={!savingPresetName.trim()}
+                      className="shrink-0 px-3 py-1.5 rounded-lg bg-forest-500 hover:bg-forest-600 disabled:opacity-40 text-white text-[11px] font-bold">
+                      Salva
+                    </button>
+                    <button onClick={()=>{setSavingPresetOpen(false);setSavingPresetName('')}}
+                      className="shrink-0 px-2 py-1.5 rounded-lg text-stone-400 hover:text-stone-700 text-[11px] font-semibold">
+                      Annulla
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={()=>{setSavingPresetOpen(true);setSavingPresetName('')}}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11.5px] font-semibold transition-colors">
+                    <Bookmark className="w-3.5 h-3.5"/> Salva come preset personale
+                  </button>
+                )}
               </div>
             )},
             { kind:'segmented', id:'orient', label:'Proporzioni', value: videoOrientation, columns:3,
@@ -4892,7 +5062,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         return (
           <VideoStudio
             title={(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'Percorso')}
-            onClose={()=>setVideoState('idle')}
+            onClose={closeVideoStudio}
             error={videoError||undefined}
             onDismissError={()=>setVideoError('')}
             budget={{ parts:budgetParts, totalSec:est.totalSec, totalLabel:formatTotal(est.totalSec), over:est.total>60 }}
@@ -5152,7 +5322,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <div className="flex gap-2.5">
               <button onClick={()=>{setVideoState('config');setVideoStep(WIZARD_STEPS.length-1);setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null);setVideoPreviewUrl(null)}}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">← Impostazioni</button>
-              <button onClick={()=>{setVideoState('idle');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null);setVideoPreviewUrl(null)}}
+              <button onClick={()=>{closeVideoStudio();setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null);setVideoPreviewUrl(null)}}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">Chiudi</button>
             </div>
           </div>

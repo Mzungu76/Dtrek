@@ -20,7 +20,7 @@
  * lo stesso principio che regge ogni preset dall'inizio di questo file di regia.
  */
 
-import { X } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export interface PresetPickerEntry {
@@ -29,6 +29,9 @@ export interface PresetPickerEntry {
   desc: string
   long: string
   icon: LucideIcon
+  /** Preset personale: mostra un pulsante di eliminazione a parte, per non doverlo aprire (e
+   *  quindi lasciare lo studio) solo per liberarsene. */
+  removable?: boolean
 }
 
 interface Props {
@@ -37,9 +40,12 @@ interface Props {
   entries: PresetPickerEntry[]
   onChoose: (key: string) => void
   onClose: () => void
+  /** Cestino su un'entry `removable`: riceve la sua `key` così com'è (comprensiva di eventuale
+   *  prefisso, tipo "custom:") — chi lo passa decide come interpretarla. */
+  onRemove?: (key: string) => void
 }
 
-export default function VideoPresetPicker({ title, routeHasPhotos, entries, onChoose, onClose }: Props) {
+export default function VideoPresetPicker({ title, routeHasPhotos, entries, onChoose, onClose, onRemove }: Props) {
   return (
     <div className="fixed inset-0 z-30 bg-stone-50 flex flex-col pointer-events-auto">
 
@@ -66,19 +72,28 @@ export default function VideoPresetPicker({ title, routeHasPhotos, entries, onCh
             {entries.map(e => {
               const Icon = e.icon
               return (
-                <button key={e.key} onClick={() => onChoose(e.key)}
-                  className="w-full text-left bg-white border border-stone-200 hover:border-forest-300 hover:bg-forest-50/40 rounded-2xl px-4 py-3.5 flex items-start gap-3.5 transition-colors">
-                  <span className="shrink-0 w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600">
-                    <Icon className="w-[18px] h-[18px]" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline gap-2 flex-wrap">
-                      <span className="font-display font-bold text-stone-900 text-[15px]">{e.label}</span>
-                      <span className="text-stone-400 text-[10.5px] font-mono">{e.desc}</span>
+                <div key={e.key} className="relative">
+                  <button onClick={() => onChoose(e.key)}
+                    className="w-full text-left bg-white border border-stone-200 hover:border-forest-300 hover:bg-forest-50/40 rounded-2xl px-4 py-3.5 flex items-start gap-3.5 transition-colors">
+                    <span className="shrink-0 w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600">
+                      <Icon className="w-[18px] h-[18px]" />
                     </span>
-                    <span className="block text-stone-500 text-[12.5px] leading-relaxed mt-1">{e.long}</span>
-                  </span>
-                </button>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2 flex-wrap pr-7">
+                        <span className="font-display font-bold text-stone-900 text-[15px]">{e.label}</span>
+                        <span className="text-stone-400 text-[10.5px] font-mono">{e.desc}</span>
+                      </span>
+                      <span className="block text-stone-500 text-[12.5px] leading-relaxed mt-1">{e.long}</span>
+                    </span>
+                  </button>
+                  {e.removable && onRemove && (
+                    <button onClick={ev => { ev.stopPropagation(); onRemove(e.key) }}
+                      aria-label={`Elimina il preset "${e.label}"`}
+                      className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-stone-400 hover:text-terra-700 hover:bg-terra-50">
+                      <Trash2 className="w-[15px] h-[15px]" />
+                    </button>
+                  )}
+                </div>
               )
             })}
           </div>
