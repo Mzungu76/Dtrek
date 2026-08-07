@@ -14,7 +14,7 @@ export function PrintPhotoGrid({ photos }: { photos: RoutePhoto[] }) {
                 style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8 }} />
               <span style={{
                 position: 'absolute', top: 6, left: 6,
-                width: 18, height: 18, background: '#f59e0b', color: 'white',
+                width: 18, height: 18, background: '#c05a17', color: 'white',
                 borderRadius: '50%', display: 'flex', alignItems: 'center',
                 justifyContent: 'center', fontSize: 8, fontWeight: 'bold',
                 border: '2px solid white',
@@ -23,7 +23,7 @@ export function PrintPhotoGrid({ photos }: { photos: RoutePhoto[] }) {
               </span>
             </div>
             {ph.caption && (
-              <p style={{ fontSize: 9, color: '#78716c', fontStyle: 'italic',
+              <p style={{ fontSize: 9, color: '#a9a18e', fontStyle: 'italic',
                 marginTop: 4, textAlign: 'center', lineHeight: 1.4 }}>
                 {i + 1}. {ph.caption}
               </p>

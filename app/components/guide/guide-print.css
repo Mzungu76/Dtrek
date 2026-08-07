@@ -3,7 +3,13 @@
    same three fonts (and the same terra/forest/stone palette) as the on-screen guide
    (components/guida/SectionCard.tsx, MagazineBody.tsx), so the PDF reads as the same document
    instead of a separately-designed one. --font-lora stays loaded (app/layout.tsx) but unused here
-   now — kept in case a future print-only accent wants it back. */
+   now — kept in case a future print-only accent wants it back.
+
+   Colori: niente variabile CSS per la palette (solo i font la espongono, vedi sopra), quindi i
+   grigi qui sotto sono i valori esadecimali di lib/designTokens.ts scritti a mano — INK (#2c2520),
+   STONE[400/500/700/800] (#a9a18e/#978e7a/#73695c/#5e564c), HAIRLINE (#dcd8cc). Prima erano quattro
+   grigi inventati (#1C1C1C, #2D2D2D, #3D3D3D, #44403c), un bordo a sé (#e8e4de) e due quasi-bianchi
+   quasi identici (#fafaf8, #f8f7f4) — nessuno dei quali un colore della palette DTrek. */
 
 /* ============================================
    DTREK GUIDE — Magazine Layout CSS
@@ -13,7 +19,7 @@
 /* ROOT */
 .guide-root {
   font-family: var(--font-body), 'DM Sans', sans-serif;
-  color: #1C1C1C;
+  color: #2c2520;
   background: white;
 }
 
@@ -187,7 +193,7 @@
   font-family: var(--font-display), Georgia, serif;
   font-size: 26px;
   font-weight: 700;
-  color: #1C1C1C;
+  color: #2c2520;
   margin: 0 0 22px;
   line-height: 1.2;
 }
@@ -197,7 +203,7 @@
   height: 220px;
   border-radius: 4px;
   overflow: hidden;
-  border: 0.5px solid #e8e4de;
+  border: 0.5px solid #dcd8cc;
   margin-bottom: 24px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.10);
 }
@@ -212,8 +218,8 @@
 .guide-overview-statgrid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  border-top: 0.5px solid #e8e4de;
-  border-bottom: 0.5px solid #e8e4de;
+  border-top: 0.5px solid #dcd8cc;
+  border-bottom: 0.5px solid #dcd8cc;
   margin-bottom: 22px;
 }
 
@@ -224,7 +230,7 @@
   justify-content: center;
   gap: 3px;
   padding: 14px 4px;
-  border-right: 0.5px solid #e8e4de;
+  border-right: 0.5px solid #dcd8cc;
 }
 
 .guide-overview-statgrid > div:last-child { border-right: none; }
@@ -233,7 +239,7 @@
   font-family: var(--font-barlow), sans-serif;
   font-size: 19px;
   font-weight: 700;
-  color: #1C1C1C;
+  color: #2c2520;
   line-height: 1.0;
 }
 
@@ -241,7 +247,7 @@
   font-family: var(--font-barlow), sans-serif;
   font-size: 8px;
   font-weight: 600;
-  color: #888;
+  color: #978e7a;
   letter-spacing: 1.5px;
   text-transform: uppercase;
   line-height: 1.0;
@@ -260,7 +266,7 @@
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #1C1C1C;
+  color: #2c2520;
   white-space: nowrap;
 }
 
@@ -278,12 +284,109 @@
   background: linear-gradient(90deg, #378d44, #d97220, #813619);
 }
 
+/* ============================================================
+   ASSESSMENT — badge difficoltà + adattamento + rischi/consigli, sulla pagina "a colpo
+   d'occhio". Prima esisteva solo nel jsPDF ritirato (vedi GuideAssessment.tsx).
+   ============================================================ */
+.guide-assessment {
+  padding: 16px 0;
+  border-top: 0.5px solid #dcd8cc;
+  margin-bottom: 22px;
+}
+
+.guide-assessment-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.guide-assessment-badge {
+  flex-shrink: 0;
+  color: white;
+  font-family: var(--font-barlow), sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 3px;
+}
+
+.guide-assessment-bar-wrap {
+  flex: 1;
+}
+
+.guide-assessment-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #dcd8cc;
+  overflow: hidden;
+}
+
+.guide-assessment-bar > div {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.guide-assessment-bar-label {
+  display: block;
+  font-family: var(--font-barlow), sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  color: #73695c;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 5px;
+}
+
+.guide-assessment-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.guide-assessment-col-title {
+  font-family: var(--font-barlow), sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #73695c;
+  margin: 0 0 6px;
+}
+
+.guide-assessment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.guide-assessment-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-family: var(--font-body), sans-serif;
+  font-size: 9.5px;
+  line-height: 1.55;
+  color: #5e564c;
+  margin: 0 0 6px;
+}
+
+.guide-assessment-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
 .guide-overview-toc {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 20px;
   padding: 18px 0;
-  border-top: 0.5px solid #e8e4de;
+  border-top: 0.5px solid #dcd8cc;
   margin-bottom: 22px;
 }
 
@@ -306,7 +409,7 @@
   font-family: var(--font-body), sans-serif;
   font-size: 10.5px;
   font-weight: 500;
-  color: #2D2D2D;
+  color: #5e564c;
 }
 
 .guide-overview-highlights {
@@ -314,15 +417,15 @@
   flex-wrap: wrap;
   gap: 8px;
   padding-top: 18px;
-  border-top: 0.5px solid #e8e4de;
+  border-top: 0.5px solid #dcd8cc;
 }
 
 .guide-overview-hlchip {
   display: flex;
   align-items: center;
   gap: 7px;
-  background: #fafaf8;
-  border: 0.5px solid #e8e4de;
+  background: #f8f7f4;
+  border: 0.5px solid #dcd8cc;
   border-radius: 20px;
   padding: 5px 12px 5px 5px;
 }
@@ -342,7 +445,7 @@
   font-family: var(--font-body), sans-serif;
   font-size: 9.5px;
   font-weight: 600;
-  color: #1C1C1C;
+  color: #2c2520;
 }
 
 /* ============================================================
@@ -353,8 +456,8 @@
   width: 100%;
   height: 130px;
   border-radius: 3px;
-  background: #fafaf8;
-  border: 0.5px solid #e8e4de;
+  background: #f8f7f4;
+  border: 0.5px solid #dcd8cc;
   margin-bottom: 16px;
   padding: 10px 0 8px;
   box-sizing: border-box;
@@ -373,7 +476,7 @@
   font-weight: 600;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #a8a29e;
+  color: #a9a18e;
   text-align: center;
   margin-top: 4px;
 }
@@ -405,11 +508,23 @@
   font-family: var(--font-display), Georgia, serif;
   font-size: 24px;
   font-weight: 700;
-  color: #1C1C1C;
+  color: #2c2520;
   margin: 0;
   letter-spacing: 0;
   line-height: 1.15;
   text-transform: none;
+}
+
+/* Riga esplicativa sotto il titolo — vedi lib/guideSections.ts, GuideSectionDef.subtitle. Prima
+   scartata: la sezione mostrava solo occhiello + titolo (lo stesso testo due volte), qui completa
+   lo stesso schema a tre livelli già usato a schermo (components/editorial/SectionCard.tsx). */
+.guide-section-subtitle {
+  font-family: var(--font-body), sans-serif;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: #978e7a;
+  margin: 4px 0 0;
+  line-height: 1.4;
 }
 
 .guide-section-accent-line {
@@ -432,7 +547,7 @@
   font-size: 13.5px;
   font-weight: 400;
   line-height: 1.7;
-  color: #44403c;
+  color: #5e564c;
   margin: 0 0 18px 0;
   text-align: left;
   border-left: 2.5px solid #c05a17;
@@ -447,7 +562,7 @@
   font-weight: 400;
   line-height: 1.70;
   text-align: justify;
-  color: #2D2D2D;
+  color: #5e564c;
   margin: 0 0 9px 0;
 }
 
@@ -489,7 +604,7 @@
   font-size: 8px;
   font-weight: 400;
   font-style: italic;
-  color: #AAA;
+  color: #a9a18e;
   line-height: 1.3;
   margin-top: 4px;
 }
@@ -510,18 +625,18 @@
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 
-.guide-section-text-3col {
-  column-count: 3;
-  column-gap: 20px;
-}
-
+/* Era a 3 colonne CSS (column-count:3): incompatibile con l'impaginatore, che misura i blocchi
+   dall'alto verso il basso — con le colonne, i `bottom` dei blocchi in colonne diverse sono
+   interlacciati sull'asse verticale, quindi il punto di taglio calcolato cade in mezzo al testo di
+   una delle colonne. Una sola colonna, larga quanto le altre sezioni (~690px): niente più fiumi
+   bianchi da giustificazione stretta (era anche il difetto segnalato a parte). */
 .guide-section-text-3col p {
   font-family: var(--font-body), sans-serif;
   font-size: 10.5px;
   font-weight: 400;
   line-height: 1.70;
   text-align: justify;
-  color: #2D2D2D;
+  color: #5e564c;
   margin: 0 0 9px 0;
 }
 
@@ -565,7 +680,7 @@
   font-weight: 400;
   line-height: 1.6;
   font-style: italic;
-  color: #3D3D3D;
+  color: #73695c;
   margin: 0;
 }
 
@@ -612,6 +727,77 @@
   line-height: 1.6;
   color: #92400e;
   margin: 0;
+}
+
+/* ============================================================
+   AVVISI "VERIFICATO ONLINE" — vedi lib/guideNotices.ts. Stessa gravità/colore della vista a
+   schermo (GuideReader.tsx, NOTICE_SEVERITY_STYLE), non più assenti dal PDF (B14).
+   ============================================================ */
+.guide-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border-radius: 3px;
+  border: 0.5px solid;
+  break-inside: avoid;
+}
+
+.guide-notice-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.guide-notice-text {
+  font-family: var(--font-body), sans-serif;
+  font-size: 9.5px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.guide-notice-source {
+  font-family: var(--font-body), sans-serif;
+  font-size: 8px;
+  font-style: italic;
+  margin: 3px 0 0;
+  word-break: break-all;
+}
+
+.guide-notice-danger  { background: #fef2f2; border-color: #fecaca; }
+.guide-notice-danger  .guide-notice-dot  { background: #dc2626; }
+.guide-notice-danger  .guide-notice-text { color: #7f1d1d; }
+.guide-notice-danger  .guide-notice-source { color: #b91c1c; }
+
+.guide-notice-warning { background: #fffbeb; border-color: #fde68a; }
+.guide-notice-warning .guide-notice-dot  { background: #f59e0b; }
+.guide-notice-warning .guide-notice-text { color: #92400e; }
+.guide-notice-warning .guide-notice-source { color: #b45309; }
+
+.guide-notice-info    { background: #f0f9ff; border-color: #bae6fd; }
+.guide-notice-info    .guide-notice-dot  { background: #0369a1; }
+.guide-notice-info    .guide-notice-text { color: #0c4a6e; }
+.guide-notice-info    .guide-notice-source { color: #0369a1; }
+
+.guide-sources-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 18px;
+}
+
+.guide-source-chip {
+  font-family: var(--font-body), sans-serif;
+  font-size: 8.5px;
+  color: #73695c;
+  background: #f8f7f4;
+  border: 0.5px solid #dcd8cc;
+  border-radius: 20px;
+  padding: 3px 10px;
+  word-break: break-all;
 }
 
 /* ============================================================
@@ -686,7 +872,7 @@
   font-family: var(--font-display), Georgia, serif;
   font-size: 30px;
   font-weight: 700;
-  color: #1C1C1C;
+  color: #2c2520;
   margin: 0 0 16px;
   line-height: 1.15;
 }
@@ -697,7 +883,7 @@
   font-weight: 400;
   line-height: 1.75;
   text-align: justify;
-  color: #2D2D2D;
+  color: #5e564c;
   margin: 0 0 16px;
 }
 
@@ -722,7 +908,7 @@
 
 .guide-poi-card {
   break-inside: avoid;
-  border: 0.5px solid #e8e4de;
+  border: 0.5px solid #dcd8cc;
   border-radius: 4px;
   overflow: hidden;
 }
@@ -772,7 +958,7 @@
   font-family: var(--font-display), Georgia, serif;
   font-size: 14px;
   font-weight: 600;
-  color: #1C1C1C;
+  color: #2c2520;
   margin: 0 0 5px;
   line-height: 1.2;
 }
@@ -783,7 +969,7 @@
   font-weight: 400;
   line-height: 1.55;
   text-align: justify;
-  color: #3D3D3D;
+  color: #73695c;
   margin: 0 0 8px;
 }
 
@@ -792,7 +978,7 @@
   font-size: 8px;
   font-weight: 400;
   font-style: italic;
-  color: #888;
+  color: #978e7a;
   line-height: 1.0;
 }
 
@@ -832,6 +1018,15 @@
 
 .guide-knowbox-icon { font-size: 11px; }
 
+/* Rombo CSS al posto del carattere ◆ — vedi GuideKnowBox.tsx */
+.guide-icon-diamond {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
 .guide-knowbox-label {
   font-family: var(--font-barlow), sans-serif;
   font-size: 7px;
@@ -847,7 +1042,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   line-height: 1.0;
-  color: #1C1C1C;
+  color: #2c2520;
 }
 
 .guide-knowbox-text {
@@ -856,7 +1051,7 @@
   font-weight: 400;
   line-height: 1.6;
   font-style: italic;
-  color: #3D3D3D;
+  color: #73695c;
   margin: 0;
 }
 
@@ -871,8 +1066,8 @@
 }
 
 .guide-poi-grid-card {
-  background: #fafaf8;
-  border: 0.5px solid #e8e4de;
+  background: #f8f7f4;
+  border: 0.5px solid #dcd8cc;
   border-radius: 3px;
   padding: 14px 12px;
   display: flex;
@@ -883,13 +1078,13 @@
   break-inside: avoid;
 }
 
-.guide-poi-grid-icon { font-size: 22px; }
+.guide-poi-grid-icon { font-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
 
 .guide-poi-grid-name {
   font-family: var(--font-barlow), sans-serif;
   font-size: 9px;
   font-weight: 700;
-  color: #1C1C1C;
+  color: #2c2520;
   line-height: 1.2;
 }
 
@@ -911,7 +1106,7 @@
   font-size: 7.5px;
   font-weight: 400;
   font-style: italic;
-  color: #888;
+  color: #978e7a;
   line-height: 1.0;
 }
 

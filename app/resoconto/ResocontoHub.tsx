@@ -20,7 +20,6 @@ import { formatDuration } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
 import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
-import { exportActivityPdf } from '@/utils/pdfExport'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { findSimilarActivities } from '@/lib/stats'
@@ -30,7 +29,7 @@ import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import {
-  FileSpreadsheet, FileText, Map, FileDown,
+  FileSpreadsheet, FileText, Map,
   Route, TrendingUp, Clock, Flame,
   Pencil, Trash2, Loader2, Share2, Box, Images, Film, Camera, X,
   Star, Car,
@@ -518,9 +517,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
           <button onClick={() => exportActivityToGpx(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <Map className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta GPX</span>
           </button>
-          <button onClick={() => exportActivityPdf(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
-            <FileDown className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta PDF</span>
-          </button>
+          {/* "Esporta PDF" (jsPDF, utils/pdfExport/activity.ts) ritirato in Fase 4: duplicava, con
+              uno stile diverso, il PDF già ottenibile da "Pubblica"/"Scarica PDF" dentro il
+              resoconto (ReportReader.tsx) — ora l'unico motore, vedi renderReportPdf.ts. */}
         </div>
 
         <div className="pt-1 mt-1 border-t border-stone-200">

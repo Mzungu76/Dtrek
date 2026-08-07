@@ -1,9 +1,11 @@
 import GuideCover from './GuideCover'
 import GuideOverview from './GuideOverview'
-import GuideSection from './GuideSection'
+import GuideSection, { type GuideSectionPhoto } from './GuideSection'
 import GuidePOICard, { type POICardData } from './GuidePOICard'
 import GuidePOISpotlight from './GuidePOISpotlight'
 import GuidePOIIndex from './GuidePOIIndex'
+import type { GuideNotice } from '@/lib/guideNotices'
+import type { HikeAssessment } from '@/lib/hikeAssessment'
 import './guide-print.css'
 
 export interface GuideData {
@@ -30,13 +32,26 @@ export interface GuideData {
     maxEle: number
   }
   sections: {
-    primadiPartire: { text: string; photo?: string }
-    ilPercorso:     { text: string; photo?: string }
+    primadiPartire: { text: string; photo?: GuideSectionPhoto }
+    ilPercorso:     { text: string; photo?: GuideSectionPhoto }
+    /** Tre sezioni assenti dal PDF prima di questa fase (B14): mappate solo a schermo, mai qui —
+     *  "Verificato online" porta con sé avvisi/fonti (vedi notices/sources sotto), le altre due
+     *  sono testo semplice come "Consigli finali". */
+    verificato?:    { text: string }
+    datiSicurezza?: { text: string }
+    suMisura?:      { text: string }
     iLuoghi?:       { text: string }
-    laNatura?:      { text: string; photo?: string }
-    sapori?:        { text: string; photo?: string }
+    laNatura?:      { text: string; photo?: GuideSectionPhoto }
+    sapori?:        { text: string; photo?: GuideSectionPhoto }
     consigliFinali: { text: string }
   }
+  /** Avvisi trovati dalla ricerca web di Giulia (vedi lib/guideNotices.ts) — mostrati nella
+   *  sezione "Verificato online", stessi dati della vista a schermo. */
+  notices?: GuideNotice[]
+  sources?: { title: string }[]
+  /** Badge difficoltà + punteggio di adattamento personalizzato + rischi/consigli (lib/
+   *  hikeAssessment.ts) — vedi GuideAssessment.tsx sulla pagina "a colpo d'occhio". */
+  assessment?: HikeAssessment
   pois: POICardData[]
 }
 
@@ -78,6 +93,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
       <div className="guide-print-page">
         <GuideSection
           title="PRIMA DI PARTIRE"
+          subtitle="Equipaggiamento, stagione ideale e orario di partenza consigliati per questo percorso."
           text={sections.primadiPartire.text}
           photo={sections.primadiPartire.photo}
           layout="photo-left"
@@ -88,6 +104,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
       <div className="guide-print-page">
         <GuideSection
           title="IL PERCORSO"
+          subtitle="Il racconto del tracciato: atmosfera, panorami, cosa si prova a camminarci."
           text={sections.ilPercorso.text}
           photo={sections.ilPercorso.photo}
           layout="photo-right"
@@ -96,10 +113,49 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         />
       </div>
 
+      {sections.verificato && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="VERIFICATO ONLINE"
+            subtitle="Chiusure, allerte e aggiornamenti trovati online per questo percorso, con le fonti consultate."
+            text={sections.verificato.text}
+            layout="full-width"
+            accentColor="#0f6e94"
+            notices={data.notices}
+            sources={data.sources}
+          />
+        </div>
+      )}
+
+      {sections.datiSicurezza && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="DATI E SICUREZZA"
+            subtitle="Un commento a voce su rischi, difficoltà e punteggi di sicurezza già mostrati sopra."
+            text={sections.datiSicurezza.text}
+            layout="full-width"
+            accentColor="#73695c"
+          />
+        </div>
+      )}
+
+      {sections.suMisura && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="SU MISURA PER TE"
+            subtitle="Quanto questo percorso è in linea con le tue capacità e preferenze personali."
+            text={sections.suMisura.text}
+            layout="full-width"
+            accentColor="#9f4315"
+          />
+        </div>
+      )}
+
       {sections.iLuoghi && (
         <div className="guide-print-page">
           <GuideSection
             title="I LUOGHI DA NON PERDERE"
+            subtitle="Storia, leggende e curiosità dei punti di interesse lungo il tracciato."
             text={sections.iLuoghi.text}
             layout="full-width"
             accentColor="#813619"
@@ -126,6 +182,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         <div className="guide-print-page">
           <GuideSection
             title="LA NATURA INTORNO A TE"
+            subtitle="Flora, fauna e geologia che potresti incontrare, in base alla stagione."
             text={sections.laNatura.text}
             photo={sections.laNatura.photo}
             layout="photo-right"
@@ -138,6 +195,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         <div className="guide-print-page">
           <GuideSection
             title="SAPORI E TRADIZIONI"
+            subtitle="Gastronomia locale, tradizioni e prodotti tipici della zona."
             text={sections.sapori.text}
             photo={sections.sapori.photo}
             layout="photo-left"
@@ -149,6 +207,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
       <div className="guide-print-page">
         <GuideSection
           title="CONSIGLI FINALI"
+          subtitle="Sicurezza, segnaletica, varianti e contatti utili per l'escursione."
           text={sections.consigliFinali.text}
           layout="full-width"
           accentColor="#5e564c"

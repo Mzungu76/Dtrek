@@ -12,7 +12,9 @@ export default function GuideKnowBox({ title, text, color = '#c05a17' }: Props) 
       <div className="guide-knowbox-accent" style={{ background: color }} />
       <div className="guide-knowbox-inner">
         <p className="guide-knowbox-header">
-          <span className="guide-knowbox-icon" style={{ color }}>◆</span>
+          {/* Era il carattere ◆: reso in modo non deterministico da html2canvas (dipende dal font
+              di sistema della macchina che genera il PDF). Una forma CSS non ha questo problema. */}
+          <span className="guide-icon-diamond" style={{ background: color }} />
           <span className="guide-knowbox-label" style={{ color }}>LO SAPEVI?</span>
           {title && (
             <span className="guide-knowbox-title">{title.toUpperCase()}</span>

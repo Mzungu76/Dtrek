@@ -42,7 +42,7 @@ import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import { PhotoGallery } from '@/app/resoconto/[id]/PhotoGallery'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { PrintPhotoGrid } from '@/app/resoconto/[id]/PrintPhotoGrid'
-import { HiddenPdfRoot } from '@/app/resoconto/[id]/HiddenPdfRoot'
+import { renderReportPdfBlob, downloadReportPdf } from '@/app/resoconto/[id]/renderReportPdf'
 import ReportHero from './ReportHero'
 import ReportStatsStrip from './ReportStatsStrip'
 import PhotoShowcase from './PhotoShowcase'
@@ -52,7 +52,7 @@ import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import {
   Pencil, Loader2, BookOpen, Share2, Copy, Link2Off, ExternalLink,
-  Layers, RefreshCw, Heart, Zap, Flame,
+  Layers, RefreshCw, Heart, Zap, Flame, Download,
 } from 'lucide-react'
 
 /** Distribuisce le foto tra i capitoli narrativi in base alla loro progressione lungo il
@@ -183,6 +183,7 @@ export default function ReportReader({
   const [showPublish,   setShowPublish]   = useState(false)
   const [copyOk,        setCopyOk]        = useState(false)
   const [publishing,    setPublishing]    = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [publishError,  setPublishError]  = useState<string | null>(null)
   const [questionnaireStatus, setQuestionnaireStatus] = useState<'none' | 'in_progress' | 'completed' | 'skipped'>('none')
   const [questionnaireCounts, setQuestionnaireCounts] = useState({ answered: 0, total: 0 })
@@ -498,6 +499,15 @@ export default function ReportReader({
   const hasGps = gpsPoints.length > 0
   const dateISO = activity.startTime.slice(0, 10)
 
+  // Stessi dati per la pubblicazione e per lo scarico locale — un solo motore (renderReportPdf.ts,
+  // che monta HiddenPdfRoot fuori schermo solo per il tempo della cattura), non più due documenti
+  // diversi per lo stesso resoconto.
+  const reportPdfParams = () => ({
+    activity, heroPhoto,
+    dateStr: format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it }),
+    sections, photos, poiWikiEntries,
+  })
+
   const publishPdf = async () => {
     setPublishing(true); setPublishError(null)
     try {
@@ -506,26 +516,7 @@ export default function ReportReader({
       const { data: { user } } = await sb.auth.getUser()
       if (!user) throw new Error('Non autenticato')
 
-      const { paginateToPdf, nextLayout } = await import('@/lib/pdfPaginate')
-      const printRoot = document.getElementById('resoconto-print-root')
-      if (!printRoot) throw new Error('Layout non trovato')
-
-      const host = document.createElement('div')
-      host.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
-      const clone = printRoot.cloneNode(true) as HTMLElement
-      // Nessun font-family qui: lo imposta HiddenPdfRoot con i token del brand. Prima questa riga
-      // forzava Georgia su tutto il documento, sovrascrivendo la tipografia dell'app.
-      clone.style.cssText = 'width:794px;background:#fff'
-      host.appendChild(clone)
-      document.body.appendChild(host)
-      await nextLayout()
-
-      let blob: Blob
-      try {
-        blob = await paginateToPdf([clone])
-      } finally {
-        document.body.removeChild(host)
-      }
+      const blob = await renderReportPdfBlob(reportPdfParams())
 
       const { uploadReportPdf } = await import('@/lib/pdfUpload')
       const url = await uploadReportPdf(user.id, id, blob)
@@ -540,6 +531,17 @@ export default function ReportReader({
       setPublishError(String(e))
     } finally {
       setPublishing(false)
+    }
+  }
+
+  const downloadPdf = async () => {
+    setDownloadingPdf(true); setPublishError(null)
+    try {
+      await downloadReportPdf(reportPdfParams())
+    } catch (e) {
+      setPublishError(String(e))
+    } finally {
+      setDownloadingPdf(false)
     }
   }
 
@@ -969,11 +971,15 @@ export default function ReportReader({
                           </>
                         ) : (
                           <>
-                            <p className="text-xs text-stone-500 italic">Genera un PDF con le foto e pubblicalo online.</p>
+                            <p className="text-xs text-stone-500 italic">Genera un PDF con le foto e pubblicalo online, oppure scaricalo senza pubblicarlo.</p>
                             {publishError && <p className="text-xs text-red-500">{publishError}</p>}
                             <button disabled={publishing} onClick={publishPdf}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-display font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
                               {publishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione PDF…</> : <><Share2 className="w-3.5 h-3.5" /> Genera e pubblica</>}
+                            </button>
+                            <button disabled={downloadingPdf} onClick={downloadPdf}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-600 text-xs font-display font-bold uppercase tracking-wide hover:bg-stone-50 disabled:opacity-50 transition-colors">
+                              {downloadingPdf ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione PDF…</> : <><Download className="w-3.5 h-3.5" /> Scarica PDF</>}
                             </button>
                           </>
                         )}
@@ -986,10 +992,6 @@ export default function ReportReader({
           </div>
         </div>
       </div>
-
-      {hasContent && (
-        <HiddenPdfRoot activity={activity} heroPhoto={heroPhoto} dateStr={format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })} sections={sections} photos={photos} />
-      )}
 
       {lightboxIndex != null && (
         <PhotoLightbox photos={photos} index={lightboxIndex} onNavigate={setLightboxIndex} onClose={() => setLightboxIndex(null)} />

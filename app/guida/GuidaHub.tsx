@@ -41,7 +41,6 @@ import {
   Navigation, Download,
   Calendar as CalendarIcon,
 } from 'lucide-react'
-import PdfExportButton from '@/components/PdfExportButton'
 import { exportPlannedHikeToGpx } from '@/utils/exportGpx'
 import { useUserPrefs } from '@/lib/useUserPrefs'
 import { useHasAiAccess } from './useHasAiAccess'
@@ -129,6 +128,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [showFloraGallery, setShowFloraGallery] = useState(false)
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
+  const [exportingGuidePdf, setExportingGuidePdf] = useState(false)
   const [showPendingActions, setShowPendingActions] = useState(false)
   const [favoritesFilter, setFavoritesFilter] = useState(false)
   // "Prossima uscita": sottosezione dei preferiti, non un filtro a sé — vedi RouteHub.tsx per il
@@ -581,6 +581,22 @@ export default function GuidaHub({ id }: { id?: string }) {
     updatePlannedMeta(routeItem.id, { favorite: next })
   }
   const saveNotes = async () => { await patch({ userNotes: notesVal }); setEditNotes(false) }
+  // Stesso export DOM-based della guida a schermo (GuideReader.tsx), non più il documento jsPDF a
+  // sé (utils/pdfExport/planned.ts, ritirato in Fase 4): erano due PDF diversi per lo stesso
+  // percorso. cachedGuide è lo stesso testo che GuideReader tiene in stato — qui, fuori dal
+  // lettore, si legge direttamente dall'hike persistito.
+  const handleExportGuidePdf = async () => {
+    if (!hike || exportingGuidePdf) return
+    setExportingGuidePdf(true)
+    try {
+      const { exportGuidePdf } = await import('@/utils/pdfExport')
+      await exportGuidePdf(hike, hike.cachedGuide ?? '')
+    } catch (err) {
+      console.error('Export PDF guida fallito:', err)
+    } finally {
+      setExportingGuidePdf(false)
+    }
+  }
   const saveTitle = async () => {
     const trimmed = titleVal.trim()
     if (!trimmed) return
@@ -869,9 +885,18 @@ export default function GuidaHub({ id }: { id?: string }) {
     }
 
     // strumenti
+    const hasGuideText = (hike.cachedGuide ?? '').trim().length > 50
     return (
       <div className="px-4 py-4 space-y-1">
-        <PdfExportButton variant="planned" data={hike} label="Esporta PDF" className={`w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left text-sm font-medium ${textPrimary}`} />
+        <button
+          onClick={handleExportGuidePdf}
+          disabled={!hasGuideText || exportingGuidePdf}
+          title={hasGuideText ? undefined : 'Apri prima la guida per generarla'}
+          className={`w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left text-sm font-medium disabled:opacity-40 disabled:hover:bg-transparent ${textPrimary}`}
+        >
+          {exportingGuidePdf ? <Loader2 className="w-4 h-4 text-stone-400/60 animate-spin" /> : <Download className="w-4 h-4 text-stone-400/60" />}
+          {exportingGuidePdf ? 'Genero PDF…' : 'Esporta PDF'}
+        </button>
         <button
           onClick={() => exportPlannedHikeToGpx(hike)}
           disabled={!hike.trackPoints?.length && !hike.routePolyline?.length}

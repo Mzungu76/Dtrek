@@ -18,7 +18,7 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
   const streaks = computeStreaks(activities)
 
   // Header
-  doc.setFillColor(22, 78, 50); doc.rect(0, 0, 210, 32, 'F')
+  doc.setFillColor(...FOREST); doc.rect(0, 0, 210, 32, 'F')
   txt(doc, 'DTrek', M, 9, { size: 12, bold: true, color: WHITE })
   txt(doc, 'Statistiche & Record Personali', M, 14, { size: 7.5, color: [180, 240, 180] as [number,number,number] })
   txt(doc, `${activities.length} escursioni · aggiornato ${format(new Date(),'dd/MM/yyyy')}`, M, 27, { size: 8, color: [180, 240, 180] as [number,number,number] })
@@ -61,8 +61,8 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
     ['Dislivello maggiore',records.highestGain,      (a: ActivityMeta) => `${a.elevationGain.toFixed(0)} m D+`],
     ['Quota massima',      records.highestAlt,       (a: ActivityMeta) => `${a.altitudeMax.toFixed(0)} m slm`],
     ['Durata maggiore',    records.longestDuration,  (a: ActivityMeta) => formatDuration(a.totalTimeSeconds)],
-    ['Piu calorie',        records.mostCalories,     (a: ActivityMeta) => `${a.calories} kcal`],
-    ['FC piu alta',        records.highestHR,        (a: ActivityMeta) => `${a.maxHeartRate} bpm`],
+    ['Più calorie',        records.mostCalories,     (a: ActivityMeta) => `${a.calories} kcal`],
+    ['FC più alta',        records.highestHR,        (a: ActivityMeta) => `${a.maxHeartRate} bpm`],
   ] as [string, ActivityMeta|null, (a: ActivityMeta) => string][]
 
   doc.setFillColor(220, 252, 231); doc.rect(M, y, W, 6, 'F')
@@ -84,7 +84,7 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
 
   // Monthly bar chart
   if (y + 50 > 270) { doc.addPage(); y = 14 }
-  y = sectionBar(doc, 'Attivita Mensili (ultimi 12 mesi)', M, y, W, FOREST)
+  y = sectionBar(doc, 'Attività mensili (ultimi 12 mesi)', M, y, W, FOREST)
   const now = new Date()
   const monthlyBars = Array.from({length: 12}, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
@@ -93,7 +93,9 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
     const count = activities.filter(a => a.startTime.startsWith(key)).length
     return { label, value: count }
   })
-  const bImg = chartBar(monthlyBars, 540, 160, '#16a34a')
+  // Canvas nello stesso rapporto d'aspetto del riquadro d'incasso (W × 38mm ≈ 4,79:1) — prima era
+  // 540×160 (3,375:1) dentro un riquadro 182×38mm: +33% di stiramento orizzontale (B22).
+  const bImg = chartBar(monthlyBars, 720, 150, '#277134')
   if (bImg) { doc.addImage(bImg, 'PNG', M, y, W, 38); y += 41 }
 
   // Year bar chart
@@ -105,7 +107,7 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
     yearMap.set(yr, (yearMap.get(yr) ?? 0) + 1)
   })
   const yearBars = Array.from(yearMap.entries()).sort((a,b) => a[0]-b[0]).map(([yr, cnt]) => ({ label: String(yr), value: cnt }))
-  const yImg = chartBar(yearBars, 540, 160, '#0369a1')
+  const yImg = chartBar(yearBars, 720, 150, '#0369a1')
   if (yImg) { doc.addImage(yImg, 'PNG', M, y, W, 38); y += 41 }
 
   // Top 10 table
@@ -124,7 +126,7 @@ export async function exportStatsPdf(activities: ActivityMeta[]): Promise<void> 
   cols2.forEach(col => txt(doc, col.h, col.x+1, y+4, { size: 7.5, bold: true, color: FOREST }))
   y += 5.5
   top10.forEach((a, i) => {
-    if (y > 280) { doc.addPage(); y = 14 }
+    if (y > 270) { doc.addPage(); y = 14 }
     if (i%2===0) { doc.setFillColor(...STONE50); doc.rect(M, y, W, 5.5, 'F') }
     const cells = [
       String(i+1),

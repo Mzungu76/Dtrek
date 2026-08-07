@@ -9,6 +9,7 @@ import type { PoiItem }     from '@/lib/overpass'
 import { buildGuideContent } from './buildGuideContent'
 import { fetchRoutePhotos }  from './fetchRoutePhotos'
 import GuideTemplate         from '@/app/components/guide/GuideTemplate'
+import type { GuideSectionPhoto } from '@/app/components/guide/GuideSection'
 
 async function toDataUrl(url: string): Promise<string> {
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
@@ -30,12 +31,12 @@ async function toDataUrlSafe(url: string): Promise<string | undefined> {
  *  to html2canvas at capture time, which is what produced the vertically-stretched cover) and
  *  a small "whole route visible" overview mini-map (fit:'contain'). */
 async function buildMapImages(hike: PlannedHike): Promise<{ cover: string; mini: string }> {
-  const pts = (hike.trackPoints ?? [])
-    .filter(p => p.lat && p.lon)
-    .map(p => [p.lat!, p.lon!] as [number, number])
-  const step    = Math.max(1, Math.ceil(pts.length / 300))
-  const sampled = pts.length > 1
-    ? pts.filter((_, i) => i % step === 0)
+  // lib/downsamplePolyline.ts, non un campionamento a modulo scritto qui a mano (era la terza
+  // copia della stessa idea: le altre due, in utils/pdfExport/{activity,planned}.ts, sono state
+  // ritirate in questa fase insieme ai documenti jsPDF che le usavano).
+  const { downsamplePolyline } = await import('@/lib/downsamplePolyline')
+  const sampled = (hike.trackPoints?.length ?? 0) > 1
+    ? downsamplePolyline(hike.trackPoints!, 300)
     : (hike.routePolyline ?? []) as [number, number][]
 
   if (sampled.length < 2) return { cover: '', mini: '' }
@@ -51,8 +52,11 @@ async function buildMapImages(hike: PlannedHike): Promise<{ cover: string; mini:
   return { cover, mini }
 }
 
-/** Fetch Wikimedia Commons landscape photos near the route midpoint */
-async function fetchCoverPhotos(hike: PlannedHike): Promise<string[]> {
+/** Fetch Wikimedia Commons landscape photos near the route midpoint — url e credito insieme
+ *  (B16: prima il credito reale con l'autore veniva scartato qui e GuideSection.tsx mostrava
+ *  "© Wikimedia Commons" cablato, senza attribuzione nominale — una violazione di licenza per
+ *  foto CC-BY, che la richiedono esplicitamente). */
+async function fetchCoverPhotos(hike: PlannedHike): Promise<GuideSectionPhoto[]> {
   try {
     const pts = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
     const poly = (pts.length > 0 ? pts : hike.routePolyline ?? []) as { lat?: number; lon?: number }[] | [number, number][]
@@ -61,9 +65,12 @@ async function fetchCoverPhotos(hike: PlannedHike): Promise<string[]> {
     const mid = poly[midIdx]
     const [lat, lon] = Array.isArray(mid) ? mid : [mid.lat!, mid.lon!]
     if (!lat || !lon) return []
-    const photos  = await fetchRoutePhotos(lat, lon, 15000, 6)
-    const dataUrls = await Promise.all(photos.map(p => toDataUrlSafe(p.url)))
-    return dataUrls.filter((u): u is string => !!u)
+    const photos = await fetchRoutePhotos(lat, lon, 15000, 6)
+    const withDataUrls = await Promise.all(photos.map(async p => {
+      const url = await toDataUrlSafe(p.url)
+      return url ? { url, credit: p.credit } : null
+    }))
+    return withDataUrls.filter((p): p is GuideSectionPhoto => !!p)
   } catch {
     return []
   }

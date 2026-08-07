@@ -1,10 +1,13 @@
 'use client'
 import { useState } from 'react'
 import { FileDown, Loader2 } from 'lucide-react'
-import type { StoredActivity, ActivityMeta } from '@/lib/blobStore'
-import type { PlannedHike } from '@/lib/plannedStore'
+import type { ActivityMeta } from '@/lib/blobStore'
 
-type Variant = 'activity' | 'planned' | 'stats' | 'map'
+// 'activity' e 'planned' sono stati ritirati in Fase 4: producevano un secondo documento jsPDF,
+// fuori stile, per lo stesso oggetto già esportabile via template DOM (vedi GuidaHub.tsx per la
+// guida, ReportReader.tsx per il resoconto). 'stats' e 'map' restano — sono schede dati, non
+// documenti editoriali, e non hanno un equivalente DOM-based in questa fase.
+type Variant = 'stats' | 'map'
 
 interface BaseProps {
   variant: Variant
@@ -13,12 +16,10 @@ interface BaseProps {
   iconOnly?: boolean
 }
 
-interface ActivityProps extends BaseProps { variant: 'activity'; data: StoredActivity }
-interface PlannedProps  extends BaseProps { variant: 'planned';  data: PlannedHike }
-interface StatsProps    extends BaseProps { variant: 'stats';    data: ActivityMeta[] }
-interface MapProps      extends BaseProps { variant: 'map';      data: ActivityMeta[] }
+interface StatsProps { variant: 'stats'; data: ActivityMeta[] }
+interface MapProps    { variant: 'map';   data: ActivityMeta[] }
 
-type Props = ActivityProps | PlannedProps | StatsProps | MapProps
+type Props = BaseProps & (StatsProps | MapProps)
 
 export default function PdfExportButton({ variant, data, className, label, iconOnly }: Props) {
   const [busy, setBusy] = useState(false)
@@ -27,18 +28,12 @@ export default function PdfExportButton({ variant, data, className, label, iconO
     if (busy) return
     setBusy(true)
     try {
-      if (variant === 'activity') {
-        const { exportActivityPdf } = await import('@/utils/pdfExport')
-        await exportActivityPdf(data as StoredActivity)
-      } else if (variant === 'planned') {
-        const { exportPlannedPdf } = await import('@/utils/pdfExport')
-        await exportPlannedPdf(data as PlannedHike)
-      } else if (variant === 'stats') {
+      if (variant === 'stats') {
         const { exportStatsPdf } = await import('@/utils/pdfExport')
-        await exportStatsPdf(data as ActivityMeta[])
+        await exportStatsPdf(data)
       } else {
         const { exportMapPdf } = await import('@/utils/pdfExport')
-        await exportMapPdf(data as ActivityMeta[])
+        await exportMapPdf(data)
       }
     } catch (e) {
       console.error('PDF export error', e)
