@@ -34,10 +34,14 @@ export async function drawTiledMap(
   polylines: [number, number][][],
   canvasX: number, canvasY: number,
   canvasW: number, canvasH: number,
-  opts: { radius?: number; style?: string; fillCanvas?: boolean } = {},
+  opts: { radius?: number; style?: string; fillCanvas?: boolean; retina?: boolean } = {},
 ): Promise<TileCtx> {
-  const TILE_PX  = 256
-  const { radius = 0, style = 'dark', fillCanvas = false } = opts
+  const { radius = 0, style = 'dark', fillCanvas = false, retina = false } = opts
+  // Con le tile @2x il server manda 512px di pixel per lo stesso riquadro geografico: la griglia
+  // resta identica, cambia solo la densità. Senza, su un canvas da 1080px di lato una griglia di
+  // 4×5 tile viene ingrandita di circa una volta e mezza, ed è il motivo per cui i toponimi delle
+  // mappe condivise risultavano sfocati.
+  const TILE_PX = retina ? 512 : 256
 
   const allPts  = polylines.flat()
   const lats    = allPts.map(p => p[0]), lons = allPts.map(p => p[1])
@@ -83,7 +87,7 @@ export async function drawTiledMap(
       const py0 = Math.round(offY + (ty - tyMin)     * TILE_PX * scale)
       const px1 = Math.round(offX + (tx - txMin + 1) * TILE_PX * scale)
       const py1 = Math.round(offY + (ty - tyMin + 1) * TILE_PX * scale)
-      const p = loadImg(`/api/tile?z=${zoom}&x=${tx}&y=${ty}&style=${style}`)
+      const p = loadImg(`/api/tile?z=${zoom}&x=${tx}&y=${ty}&style=${style}${retina ? '&retina=1' : ''}`)
         .then(img => { ctx.drawImage(img, px0, py0, px1 - px0, py1 - py0) })
         .catch(() => { ctx.fillStyle = style === 'dark' ? '#1a1a2e' : '#e8e8e8'; ctx.fillRect(px0, py0, px1 - px0, py1 - py0) })
       fetches.push(p)

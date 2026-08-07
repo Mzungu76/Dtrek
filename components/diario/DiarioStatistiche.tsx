@@ -1,3 +1,4 @@
+import { FONT } from '@/lib/designTokens'
 import { Route, Mountain, Clock, Flame, Trophy, TrendingUp } from 'lucide-react'
 import { computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -51,7 +52,7 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
 
       {narrative && (
         <p className="pdf-block" style={{
-          fontFamily: 'Lora, serif', fontSize: 13, lineHeight: 1.8, color: '#4d4740',
+          fontFamily: FONT.lora, fontSize: 13, lineHeight: 1.8, color: '#4d4740',
           margin: '-20px 0 32px', fontStyle: 'italic',
         }}>
           {narrative}
@@ -61,7 +62,7 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
       {years.length > 1 && (
         <div className="pdf-block" style={{ marginBottom: 32 }}>
           <PillHeader label="Anno per anno" accent={GREEN} />
-          <table style={{ width: '100%', fontSize: 11, fontFamily: 'Arial, sans-serif', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', fontSize: 11, fontFamily: FONT.body, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ color: '#9ca3af', textTransform: 'uppercase', fontSize: 9, letterSpacing: 1 }}>
                 <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Anno</th>

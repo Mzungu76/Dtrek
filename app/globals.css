@@ -70,7 +70,7 @@ body {
 
 /* Stat card */
 .stat-badge {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.75rem;
   letter-spacing: 0.05em;
 }
@@ -100,7 +100,7 @@ body {
 .dtrek-arrow-pulse { animation: dtrekArrowPulse 1.8s ease-in-out infinite; }
 
 /* Chart tooltip */
-.recharts-tooltip-wrapper { font-family: 'DM Sans', sans-serif !important; font-size: 13px !important; }
+.recharts-tooltip-wrapper { font-family: var(--font-body), system-ui, sans-serif !important; font-size: 13px !important; }
 
 /* ── Print / PDF ── */
 @media print {

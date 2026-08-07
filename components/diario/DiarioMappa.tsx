@@ -1,3 +1,4 @@
+import { FONT } from '@/lib/designTokens'
 import dynamic from 'next/dynamic'
 import type { ActivityMeta } from '@/lib/blobStore'
 import { PageHeader } from './PageHeader'
@@ -38,7 +39,7 @@ export function DiarioMappa({ activities, mapImgUrl, mapsInteractive }: { activi
           {routes.slice(0, 8).map((r, i) => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 24, height: 3.5, background: PALETTE[i % PALETTE.length], borderRadius: 2 }} />
-              <span style={{ fontSize: 9, color: '#73695c', fontFamily: 'DM Sans, sans-serif' }}>
+              <span style={{ fontSize: 9, color: '#73695c', fontFamily: FONT.body }}>
                 {r.title || 'Percorso'}
               </span>
             </div>

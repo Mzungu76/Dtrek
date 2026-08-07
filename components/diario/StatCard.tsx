@@ -1,3 +1,4 @@
+import { FONT } from '@/lib/designTokens'
 import type { ReactNode } from 'react'
 import type { AccentTheme } from './types'
 
@@ -11,8 +12,8 @@ export function StatCard({ value, label, sub, icon, accent }: {
           {icon}
         </div>
       )}
-      <div style={{ fontSize: 22, fontWeight: 900, color: accent.text, fontFamily: 'Arial Black, sans-serif', lineHeight: 1.1 }}>{value}</div>
-      <div style={{ fontSize: 8, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 2, fontFamily: 'Arial, sans-serif', marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 500, color: accent.text, fontFamily: FONT.mono, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 8, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 2, fontFamily: FONT.barlow, marginTop: 4 }}>{label}</div>
       {sub && <div style={{ fontSize: 8, color: '#9ca3af', fontStyle: 'italic', marginTop: 2 }}>{sub}</div>}
     </div>
   )
