@@ -674,8 +674,10 @@ export default function ResocontoHub({ id }: { id?: string }) {
       )}
 
       {showShare && activity && (() => {
+        // Traccia PIENA, non ridotta a 250 punti: la mappa di condivisione ora è MapLibre
+        // (vettoriale), non più tile raster campionate — a differenza di quelle, non ha nulla da
+        // guadagnare da un tracciato più povero, e i tornanti restano fedeli.
         const polyline = activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
-        const step = Math.max(1, Math.ceil(polyline.length / 250))
         const altPts = activity.trackPoints.filter(p => p.altitudeMeters !== undefined).map(p => p.altitudeMeters!)
         const aStep = Math.max(1, Math.ceil(altPts.length / 140))
         const elevationProfile = altPts.length > 4 ? altPts.filter((_, i) => i % aStep === 0) : undefined
@@ -688,10 +690,10 @@ export default function ResocontoHub({ id }: { id?: string }) {
           altitudeMax: activity.altitudeMax, avgSpeedMs: activity.avgSpeedMs,
           maxSpeedMs: activity.maxSpeedMs, tags: activity.tags,
           userNotes: activity.userNotes, fileName: activity.fileName,
-          routePolyline: polyline.filter((_, i) => i % step === 0),
+          routePolyline: polyline,
           elevationProfile,
         }
-        return <ShareModal kind="activity" activity={actMeta} onClose={() => setShowShare(false)} />
+        return <ShareModal kind="activity" activity={actMeta} photos={photos} onClose={() => setShowShare(false)} />
       })()}
 
       {show3D && activity && (

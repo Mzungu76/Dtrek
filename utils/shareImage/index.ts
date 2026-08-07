@@ -4,7 +4,9 @@
 // every existing `@/utils/shareImage` import keeps working unchanged.
 
 export type { ShareFormat } from './canvasHelpers'
+export { FORMAT_DIMS } from './canvasHelpers'
 export { generateActivityImage, type ActivityShareOpts } from './activityImage'
 export { generateStatsImage, type StatsShareOpts } from './statsImage'
 export { generateComparisonImage, type ComparisonShareOpts } from './comparisonImage'
 export { generateMapImage, type MapShareOpts } from './mapImage'
+export { generateCarousel, type CarouselOpts, type CarouselSlide } from './carousel'
