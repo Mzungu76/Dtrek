@@ -128,36 +128,46 @@ interface FullPresetConfig {
 type VideoConfig = Omit<FullPresetConfig, 'label' | 'desc' | 'long'>
 
 /** Preset personale salvato dall'utente: stessa ricetta di un VideoConfig, con nome e id per
- *  comparire nella pagina di scelta insieme ai preset di serie — vedi CUSTOM_PRESETS_KEY. */
+ *  comparire nella pagina di scelta insieme ai preset di serie — vedi app/api/video-presets. */
 interface CustomPreset {
   id: string
   label: string
   cfg: VideoConfig
   fps: 30 | 60
-  savedAt: number
 }
 
-// Chiavi di localStorage per lo Studio Video. Locali al browser e non all'account apposta: sono
-// comodità di editing (com'era rimasto, quali preset personali) non dati del percorso — non hanno
-// bisogno di sincronizzarsi fra dispositivi, e tenerle fuori dal server evita una scrittura di
-// rete a ogni chiusura dello studio.
-const LAST_VIDEO_SETTINGS_KEY = 'dtrek-video-last-settings'
-const CUSTOM_VIDEO_PRESETS_KEY = 'dtrek-video-custom-presets'
-
-function loadLastVideoSettings(): { cfg: VideoConfig; fps: 30 | 60 } | null {
-  if (typeof window === 'undefined') return null
+// Salvate su Supabase (user_settings.video_last_settings e la tabella video_custom_presets — vedi
+// supabase/migrations/add_video_studio_presets.sql), non solo nel browser: seguono l'account,
+// quindi anche cambiando dispositivo si ritrova lo stesso punto in cui si era rimasti e gli stessi
+// preset personali. Entrambe le chiamate sono best-effort: chi non è autenticato, o una rete a
+// singhiozzo, non deve mai bloccare l'apertura o la chiusura dello studio — solo far mancare il
+// ricordo di questa sessione, non l'uso dello studio stesso.
+async function loadLastVideoSettings(): Promise<{ cfg: VideoConfig; fps: 30 | 60 } | null> {
   try {
-    const raw = window.localStorage.getItem(LAST_VIDEO_SETTINGS_KEY)
-    return raw ? JSON.parse(raw) : null
+    const res = await fetch('/api/video-settings', { credentials: 'include' })
+    if (!res.ok) return null
+    const json = await res.json()
+    return json.lastSettings ?? null
   } catch { return null }
 }
 
-function loadCustomVideoPresets(): CustomPreset[] {
-  if (typeof window === 'undefined') return []
+async function saveLastVideoSettingsRemote(cfg: VideoConfig, fps: 30 | 60): Promise<void> {
   try {
-    const raw = window.localStorage.getItem(CUSTOM_VIDEO_PRESETS_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
+    await fetch('/api/video-settings', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cfg, fps }),
+      keepalive: true,
+    })
+  } catch {}
+}
+
+async function loadCustomVideoPresets(): Promise<CustomPreset[]> {
+  try {
+    const res = await fetch('/api/video-presets', { credentials: 'include' })
+    if (!res.ok) return []
+    const json = await res.json()
+    return Array.isArray(json.presets) ? json.presets : []
   } catch { return [] }
 }
 
@@ -1501,42 +1511,58 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       videoMilestonesEnabled, videoPeakMomentEnabled, videoArrivalStarsEnabled,
       videoLoopEnding, routeColorKey, routeGlowEnabled, videoSunLightEnabled])
 
-  /** Salva lo stato corrente come "ultime impostazioni": richiamato alla chiusura dello studio,
-   *  non a ogni modifica — non serve altro, e scrivere localStorage a ogni tocco di slider
+  /** Salva lo stato corrente come "ultime impostazioni" su Supabase: richiamato alla chiusura
+   *  dello studio, non a ogni modifica — non serve altro, e scrivere a ogni tocco di slider
    *  sarebbe lavoro sprecato per un valore che conta solo quando si riapre lo studio. */
   const saveLastVideoSettings = useCallback(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const payload: { cfg: VideoConfig; fps: 30 | 60 } = { cfg: captureCurrentVideoConfig(), fps: videoFps }
-      window.localStorage.setItem(LAST_VIDEO_SETTINGS_KEY, JSON.stringify(payload))
-    } catch {}
+    void saveLastVideoSettingsRemote(captureCurrentVideoConfig(), videoFps)
   }, [captureCurrentVideoConfig, videoFps])
 
   const [customPresets, setCustomPresets] = useState<CustomPreset[]>([])
-  useEffect(() => { setCustomPresets(loadCustomVideoPresets()) }, [])
+  const refreshCustomPresets = useCallback(() => {
+    void loadCustomVideoPresets().then(setCustomPresets)
+  }, [])
+  useEffect(() => { refreshCustomPresets() }, [refreshCustomPresets])
 
-  const saveCustomPreset = useCallback((label: string) => {
+  // Le ultime impostazioni servono solo sulla pagina di scelta preset (per l'opzione "Le tue
+  // ultime impostazioni"): rilette ogni volta che ci si entra, non solo al montaggio, così una
+  // chiusura studio → riapertura nella STESSA sessione vede subito il salvataggio appena fatto.
+  const [lastVideoSettings, setLastVideoSettings] = useState<{ cfg: VideoConfig; fps: 30 | 60 } | null>(null)
+  useEffect(() => {
+    if (videoState !== 'presets') return
+    void loadLastVideoSettings().then(setLastVideoSettings)
+  }, [videoState])
+
+  const saveCustomPreset = useCallback(async (label: string) => {
     const trimmed = label.trim()
     if (!trimmed) return
-    const entry: CustomPreset = {
-      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-      label: trimmed, cfg: captureCurrentVideoConfig(), fps: videoFps, savedAt: Date.now(),
+    try {
+      const res = await fetch('/api/video-presets', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: trimmed, cfg: captureCurrentVideoConfig(), fps: videoFps }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? `Errore ${res.status}`)
+      setCustomPresets(prev => [...prev, json.preset as CustomPreset])
+      setShareToast('Preset salvato'); setTimeout(() => setShareToast(''), 2500)
+    } catch (e: any) {
+      setShareToast(e.message || 'Salvataggio del preset non riuscito'); setTimeout(() => setShareToast(''), 3000)
     }
-    setCustomPresets(prev => {
-      const next = [...prev, entry]
-      try { window.localStorage.setItem(CUSTOM_VIDEO_PRESETS_KEY, JSON.stringify(next)) } catch {}
-      return next
-    })
-    setShareToast('Preset salvato'); setTimeout(() => setShareToast(''), 2500)
   }, [captureCurrentVideoConfig, videoFps])
 
-  const deleteCustomPreset = useCallback((id: string) => {
-    setCustomPresets(prev => {
-      const next = prev.filter(p => p.id !== id)
-      try { window.localStorage.setItem(CUSTOM_VIDEO_PRESETS_KEY, JSON.stringify(next)) } catch {}
-      return next
-    })
-  }, [])
+  const deleteCustomPreset = useCallback(async (id: string) => {
+    setCustomPresets(prev => prev.filter(p => p.id !== id))
+    try {
+      const res = await fetch(`/api/video-presets/${id}`, { method: 'DELETE', credentials: 'include' })
+      if (!res.ok) throw new Error()
+    } catch {
+      // Cancellazione non confermata dal server: si ripristina l'elenco vero invece di lasciare
+      // il preset scomparso dallo schermo ma ancora presente su Supabase — inconsistenza silenziosa
+      // che al prossimo apri-chiudi dello studio sarebbe ricomparsa senza spiegazione.
+      refreshCustomPresets()
+    }
+  }, [refreshCustomPresets])
 
   /** Chiude lo studio salvando prima lo stato corrente, così la prossima volta si può ripartire da
    *  qui invece che da un preset scelto daccapo — vedi "Le tue ultime impostazioni" nella pagina
@@ -4440,7 +4466,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
       {/* ══ SCELTA PRESET — la porta d'ingresso allo studio, vedi VideoPresetPicker.tsx ═══ */}
       {videoState==='presets'&&(()=>{
-        const lastSettings = loadLastVideoSettings()
+        const lastSettings = lastVideoSettings
         return (
         <VideoPresetPicker
           title={(title??'').replace(/^dtrek[a-z0-9]+\s*[-–:·\s]*/i,'').trim()||(title??'Percorso')}
