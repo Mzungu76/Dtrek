@@ -7,24 +7,31 @@ import { jsonSchemaFormat } from '@/lib/aiJsonOutput'
 
 export const dynamic = 'force-dynamic'
 
-const SYSTEM = `Sei un esperto di marketing per Instagram specializzato in contenuti outdoor, hiking e avventura in montagna.
-Il tuo obiettivo è massimizzare engagement e reach.
+// Il prompt precedente chiedeva "hook potente", "massimizza engagement", "evocativo", "seconda
+// persona singolare", "call-to-action": esattamente la ricetta che produce il testo che chiunque
+// riconosce come scritto da una macchina — la frase a effetto staccata in cima, la domanda finta
+// in fondo, gli aggettivi che non descrivono niente. Qui si chiede l'opposto: la voce di chi è
+// tornato dal sentiero e scrive due righe sotto la propria foto.
+const SYSTEM = `Scrivi la didascalia che metterebbe sotto al proprio video una persona che ha appena fatto questa escursione. Parla in prima persona, di quello che ha fatto lei.
 
-Regole per la caption:
-- Prima riga: hook breve e potente (max 10 parole), deve far fermare il dito sullo scroll
-- Corpo: 2-3 frasi autentiche, evocative, in seconda persona singolare (tu)
-- Ultima riga: call-to-action leggera (domanda, invito, riflessione)
-- Emoji: max 4, solo dove aggiungono valore visivo, non decorativi
-- Lunghezza totale caption: 80-150 parole
-- Tono: autentico, appassionato, mai promozionale
+Come deve suonare:
+- Concreta: il posto, cosa si vede, come è andata. Un dettaglio vero vale più di tre aggettivi.
+- Asciutta: 2-4 frasi in tutto, 30-60 parole. Chi scrive davvero è breve.
+- Prima persona singolare ("sono salito", "ci ho messo"), mai rivolta al lettore ("scopri", "immagina", "sali con me").
+- I numeri del percorso entrano solo se aggiungono qualcosa, detti come li direbbe una persona ("nove chilometri e mezzo", "quasi mille di dislivello"), non come una scheda tecnica.
 
-Regole per gli hashtag:
-- 25-28 hashtag totali
-- Mix strategico: 8 molto generici (>1M post), 10 medi (100k-1M), 7 specifici/niche (<100k)
-- Metà in italiano, metà in inglese
-- Includi hashtag di comunità hiking italiane: #escursionismo #camminandoimparo #italiainmontagna
-- Includi hashtag internazionali performanti: #hikingitaly #trailrunning #alpinism
-- Includi hashtag per il tipo di contenuto: #reelsitalia #videooftheday #outdooradventure`
+Cosa NON fare, mai:
+- Nessuna frase a effetto isolata in apertura.
+- Nessuna domanda finale al lettore, nessun invito, nessuna morale ("a volte basta poco…", "la montagna insegna…").
+- Niente parole da brochure: mozzafiato, incredibile, magico, indimenticabile, avventura, esperienza unica, panorama da cartolina.
+- Niente trattini lunghi, niente frasi a tre membri ("non solo X, ma Y, e soprattutto Z"), niente maiuscole enfatiche.
+- Al massimo una emoji, e solo se cade naturale. Anche zero va benissimo — di norma è la scelta giusta.
+
+Per gli hashtag:
+- Da 8 a 12, non di più: un muro di hashtag si riconosce a colpo d'occhio come gonfiato.
+- Prima quelli del posto vero (zona, monte, parco, sentiero), poi due o tre generici di escursionismo.
+- In italiano, salvo un paio in inglese se il posto è noto anche fuori.
+- Niente hashtag di ingaggio (#reelsitalia, #videooftheday, #followme) e niente hashtag inventati lunghi come una frase.`
 
 interface CaptionOutput {
   caption: string
@@ -70,8 +77,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // videoFormat non entra più nel prompt: il formato del file non cambia cosa una persona scrive
+  // sotto la propria foto, e chiederlo al modello serviva solo a fargli dire "Reel".
   let title: string, distanceKm: number, elevationGain: number, maxAlt: number,
-      date: string | undefined, videoFormat: string
+      date: string | undefined
 
   try {
     const body = await req.json()
@@ -80,26 +89,24 @@ export async function POST(req: NextRequest) {
     elevationGain= Number(body.elevationGain) || 0
     maxAlt       = Number(body.maxAlt)        || 0
     date         = body.date
-    videoFormat  = body.videoFormat  ?? '9:16'
   } catch {
     return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
 
-  const isReel = videoFormat === '9:16'
   const difficulty = elevationGain > 1200 ? 'impegnativa' : elevationGain > 600 ? 'media difficoltà' : 'accessibile'
 
-  const userPrompt = `Genera caption e hashtag Instagram per questa escursione:
+  const userPrompt = `Escursione da raccontare:
 
-Titolo percorso: ${title}
+Percorso: ${title}
 Distanza: ${distanceKm.toFixed(1)} km
 Dislivello positivo: ${elevationGain} m
 Quota massima: ${maxAlt > 0 ? `${maxAlt} m slm` : 'non disponibile'}
-Difficoltà: ${difficulty}${date ? `\nData: ${date}` : ''}
-Formato video: ${isReel ? 'Reel verticale 9:16' : `Post ${videoFormat}`}
+Impegno: ${difficulty}${date ? `\nData: ${date}` : ''}
 
-La caption deve rispecchiare le specifiche tecniche del percorso (distanza, dislivello) in modo naturale, non come elenco.`
+Il nome del percorso dice dove siamo: usalo per ancorare gli hashtag al posto vero. Non serve
+citare tutti i numeri — prendine al massimo uno o due, quelli che dicono davvero com'è andata.`
 
   const client = new Anthropic({ apiKey })
 

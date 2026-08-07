@@ -57,9 +57,9 @@ export default function VideoPresetPicker({ title, routeHasPhotos, entries, onCh
         <div className="max-w-2xl mx-auto px-5 py-6">
           <h1 className="font-display font-bold text-stone-900 text-xl leading-tight">Che video vuoi fare?</h1>
           <p className="text-stone-500 text-[13px] mt-1.5 mb-6 leading-relaxed">
-            Ogni scelta imposta modalità, stacchi, dati a schermo ed effetti insieme — un carattere completo, non solo un formato.
-            Resta un punto di partenza: nello studio, dopo, puoi aggiustare qualunque cosa senza perdere le altre.
-            {!routeHasPhotos && ' Non hai ancora foto sul percorso: puoi aggiungerle anche dopo aver scelto.'}
+            Ogni preset imposta insieme formato, ritmo, stacchi, dati a schermo ed effetti. Dopo si apre lo studio,
+            dove ogni singola voce resta modificabile.
+            {!routeHasPhotos && ' Su questo percorso non ci sono ancora foto: si possono aggiungere anche dopo.'}
           </p>
 
           <div className="space-y-2.5">
